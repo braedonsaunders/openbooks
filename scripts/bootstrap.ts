@@ -200,7 +200,7 @@ function assertMigrationFilenameTransitionTargets(generated: readonly string[]):
         `[bootstrap] renamed migration ${transition.to.filename} is not published`,
       );
     }
-    const target = readFileSync(join(repoRoot, transition.to.filename), "utf8");
+    const target = readFileSync(join(migrationsDir, transition.to.filename), "utf8");
     if (sha256(target) !== transition.to.sha256) {
       throw new Error(
         `[bootstrap] renamed migration ${transition.to.filename} does not match its approved digest`,

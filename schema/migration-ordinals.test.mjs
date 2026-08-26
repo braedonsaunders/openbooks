@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
-const generatedDirectory = "schema/migrations/generated";
+const migrationsDirectory = "schema/migrations";
+const generatedDirectory = `${migrationsDirectory}/generated`;
 const bootstrapSource = readFileSync("scripts/bootstrap.ts", "utf8");
 
 function publishedMigrationFiles() {
@@ -39,13 +40,31 @@ async function bootstrapTransitionModule() {
   const convergence = bootstrapSource.match(
     /\/\/ BEGIN migration-filename-convergence-test-surface\n([\s\S]*?)\/\/ END migration-filename-convergence-test-surface/,
   )?.[1];
+  const targetValidation = bootstrapSource.match(
+    /function assertMigrationFilenameTransitionTargets\([\s\S]*?\n}\n/,
+  )?.[0];
   assert.ok(transitionTable, "bootstrap must publish exact migration filename transitions");
   assert.ok(convergence, "bootstrap must expose its ledger convergence implementation");
-  const javascript = `${transitionTable}\n${convergence}`
+  assert.ok(targetValidation, "bootstrap must expose its transition target validation");
+  const javascript = `
+    import { createHash } from "node:crypto";
+    import { readFileSync } from "node:fs";
+    import { join } from "node:path";
+    const repoRoot = ${JSON.stringify(process.cwd())};
+    const migrationsDir = join(repoRoot, "schema", "migrations");
+    function sha256(value) {
+      return createHash("sha256").update(value).digest("hex");
+    }
+    ${transitionTable}
+    export ${targetValidation}
+    ${convergence}
+  `
     .replace(
       /: ReadonlyArray<MigrationFilenameTransition>/g,
       "",
     )
+    .replace(/generated: readonly string\[\]/, "generated")
+    .replace(/\): void \{/, ") {")
     .replace(/client: MigrationLedgerClient/, "client")
     .replace(/\): Promise<void> \{/, ") {")
     .replace(
@@ -111,11 +130,22 @@ test("published migrations have unique, strictly increasing numeric ordinals", (
   );
 });
 
-test("renamed migrations retain the exact published bodies and digests", async () => {
+test("bootstrap resolves renamed migrations to their published bodies and digests", async () => {
   const files = new Set(publishedMigrationFiles());
-  const { APPROVED_MIGRATION_FILENAME_TRANSITIONS: transitions } =
-    await bootstrapTransitionModule();
+  const {
+    APPROVED_MIGRATION_FILENAME_TRANSITIONS: transitions,
+    assertMigrationFilenameTransitionTargets,
+  } = await bootstrapTransitionModule();
   assert.equal(transitions.length, 2);
+  assert.deepEqual(
+    transitions.map((transition) => transition.to.filename),
+    [
+      "generated/0035_terminal_failure_surfacing.sql",
+      "generated/0036_bank_statement_source_idempotency.sql",
+    ],
+  );
+  assert.doesNotThrow(() =>
+    assertMigrationFilenameTransitionTargets(publishedMigrationFiles()));
 
   for (const transition of transitions) {
     assert.equal(
@@ -127,7 +157,7 @@ test("renamed migrations retain the exact published bodies and digests", async (
     const target = transition.to.filename.replace("generated/", "");
     assert.ok(files.has(target), `${target} must be published`);
     const digest = createHash("sha256")
-      .update(readFileSync(`${generatedDirectory}/${target}`, "utf8"))
+      .update(readFileSync(`${migrationsDirectory}/${transition.to.filename}`, "utf8"))
       .digest("hex");
     assert.equal(digest, transition.to.sha256);
   }
