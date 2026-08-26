@@ -345,9 +345,10 @@ export async function assertCostingPolicyChangeAllowed(
  * Bring every open cost layer of an item onto its standard cost and post one
  * balanced revaluation entry (inventory asset vs variance account) per OWNING
  * legal entity, so issues relieve layers exactly at standard after a
- * controlled switch to standard costing and each entity's GL keeps equalling
- * its own layers. Returns one entry id per revalued entity (null when nothing
- * needed revaluing).
+ * controlled switch to standard costing — or after revising the standard cost
+ * of an item already costing standard (pass `memo` to label the revision) —
+ * and each entity's GL keeps equalling its own layers. Returns one entry id
+ * per revalued entity (null when nothing needed revaluing).
  */
 export async function revalueOpenLayersToStandardCost(
   tx: Runner,
@@ -358,6 +359,7 @@ export async function revalueOpenLayersToStandardCost(
     standardCost: string | null;
     assetAccountId: string;
     varianceAccountId: string | null;
+    memo?: string;
   },
 ): Promise<string[] | null> {
   if (p.standardCost == null) {
@@ -397,7 +399,7 @@ export async function revalueOpenLayersToStandardCost(
   const periodId = await periodForDate(orgId, date, tx);
   if (!periodId) throw new InventoryError(`no accounting period for ${date}`);
   const bookId = await primaryBookId(orgId, tx);
-  const memo = "Costing method revaluation to standard";
+  const memo = p.memo ?? "Costing method revaluation to standard";
   const entryIds: string[] = [];
   for (const [ownerSubsidiaryId, deltaUnits] of changed) {
     const currency = await subsidiaryCurrency(orgId, ownerSubsidiaryId, tx);
@@ -2366,10 +2368,12 @@ export interface BuildInput {
 
 /**
  * Build assemblies from their bill of materials: consume each component (by its
- * costing method) and produce the finished good at the summed component cost.
- * Posts DR finished-good inventory / CR each component's inventory account.
- * Requires a BOM (bom_components) and inventory profiles on the assembly and
- * every component; blocks a build short of any component.
+ * costing method) and produce the finished good at the summed component cost —
+ * or, under standard costing, at the finished good's own standard with the
+ * difference booked as a build variance. Posts DR finished-good inventory /
+ * CR each component's inventory account (+ a variance leg under standard
+ * costing). Requires a BOM (bom_components) and inventory profiles on the
+ * assembly and every component; blocks a build short of any component.
  */
 export async function buildAssembly(
   orgId: string,
@@ -2489,14 +2493,35 @@ export async function buildAssembly(
       perComponent.push({ itemId: c.itemId, cost, consumptions });
     }
 
+    // Standard costing values the finished good at ITS standard; the
+    // difference to the consumed components' carried cost is a production
+    // variance on the variance account — never a mis-valued finished layer
+    // (which would strand residual inventory value after a full issue).
+    const consumedTotal = totalCost;
+    let fgValue = consumedTotal;
+    let fgUnitCost = isZero(input.quantity)
+      ? "0"
+      : unitCostPerQuantity(consumedTotal, input.quantity)!;
+    if (assembly.costingMethod === "standard") {
+      fgUnitCost = assembly.standardCost ?? fgUnitCost;
+      fgValue = extendCost(input.quantity, fgUnitCost);
+    }
     const lines: JournalLineInput[] = [
       {
         accountId: assembly.assetAccountId,
-        amount: totalCost,
+        amount: fgValue,
         memo: input.memo ?? "Assembly build",
       },
       ...consumeLines,
     ];
+    const buildVariance = add(consumedTotal, neg(fgValue));
+    if (!isZero(buildVariance)) {
+      lines.push({
+        accountId: assembly.varianceAccountId ?? assembly.assetAccountId,
+        amount: buildVariance,
+        memo: "Build variance",
+      });
+    }
     const entryId = await postInventoryEntry(tx, {
       orgId,
       bookId,
@@ -2530,16 +2555,13 @@ export async function buildAssembly(
       );
     }
 
-    // Finished-good build movement + layer.
-    const unitCost = isZero(input.quantity)
-      ? "0"
-      : unitCostPerQuantity(totalCost, input.quantity)!;
+    // Finished-good build movement + layer (at the finished good's own value).
     const buildQuantity = persistReceiptMoney(input.quantity, "assembly build quantity");
     const buildMv = (await tx.execute<{ id: string }>(sql`
       insert into inventory_movements
         (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
       values (${orgId}, ${input.subsidiaryId}, ${input.assemblyItemId}, 'assembly_build', ${input.date}, ${input.stockLocationId},
-              ${buildQuantity}, ${unitCost}, ${totalCost}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
+              ${buildQuantity}, ${fgUnitCost}, ${fgValue}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
     await addLayerAtCost(
       tx,
@@ -2548,13 +2570,13 @@ export async function buildAssembly(
       input.assemblyItemId,
       input.stockLocationId,
       input.quantity,
-      unitCost,
+      fgUnitCost,
       assembly.costingMethod,
       buildMv.rows[0]!.id,
       input.date,
     );
 
-    return { movementId: buildMv.rows[0]!.id, entryId, value: totalCost };
+    return { movementId: buildMv.rows[0]!.id, entryId, value: fgValue };
   });
 }
 
@@ -3679,9 +3701,11 @@ function layerWeights(
 /**
  * Capitalize one freight/duty amount across several item+location targets.
  * Shares are apportioned by the basis (value, quantity, layer weight, or
- * explicit manual amounts that must sum to the total), each target's share
- * bumps its open cost layers, and ONE balanced entry posts DR each target's
- * inventory asset / CR the freight account.
+ * explicit manual amounts that must sum to the total); each target's share
+ * bumps its open cost layers — or, under standard costing, books to the
+ * item's variance account leaving its standard layers untouched — and ONE
+ * balanced entry posts DR each target's inventory (or variance) / CR the
+ * freight account.
  */
 export async function postLandedCostVoucher(
   orgId: string,
@@ -3838,50 +3862,73 @@ export async function postLandedCostVoucher(
                 ${manualAmount}, ${shareAmount}, ${actorId}, ${actorId})`);
       if (share === 0n) continue;
 
-      // Sub-apportion the share across the target's own layers on the same basis.
-      let weightsByLayer: Map<string, string> | undefined;
-      if (input.basis === "weight") {
-        weightsByLayer = new Map();
-        const w = (await tx.execute<{ cost_layer_id: string; weight: string }>(sql`
-          select cost_layer_id, weight from cost_layer_weights
-           where org_id = ${orgId} and cost_layer_id in (${joinIds(r.layers.map((l) => l.id))})`));
-        for (const row of w.rows)
-          weightsByLayer.set(row.cost_layer_id, row.weight);
-      }
-      const subShares = apportionUnits(
-        share,
-        layerWeights(
-          r.layers,
-          input.basis === "manual" ? "value" : input.basis,
-          weightsByLayer,
-        ),
-      );
-      for (let j = 0; j < r.layers.length; j++) {
-        const layerShare = subShares[j]!;
-        if (layerShare === 0n) continue;
-        const fragments = await revalueLayerExactly(
-          tx,
-          orgId,
-          r.layers[j]!,
-          layerShare,
-          actorId,
-          r.profile.costingMethod !== "moving_average",
+      if (r.profile.costingMethod === "standard") {
+        // Landed cost on a standard-cost item is a variance against the policy
+        // that governs its layers — never a silent layer revaluation. Layers
+        // must keep carrying exactly the item's standard so a later issue
+        // relieves them to zero instead of stranding residual inventory value
+        // in the GL. The allocation anchors to an open layer as evidence only;
+        // `basis = 'standard_variance'` marks that no layer value moved, so a
+        // reversal mirrors the journal without devaluing anything.
+        const allocationId = randomUUID();
+        allocationIds.push(allocationId);
+        await tx.execute(sql`
+          insert into landed_cost_allocations
+            (id, org_id, voucher_id, source_document_line_id, target_cost_layer_id,
+             basis, amount, journal_entry_id, created_by, updated_by)
+          values
+            (${allocationId}, ${orgId}, ${voucherId}, ${input.sourceDocumentLineId ?? null},
+             ${r.layers[0]!.id}, 'standard_variance', ${shareAmount}, null,
+             ${actorId}, ${actorId})`);
+      } else {
+        // Sub-apportion the share across the target's own layers on the same basis.
+        let weightsByLayer: Map<string, string> | undefined;
+        if (input.basis === "weight") {
+          weightsByLayer = new Map();
+          const w = (await tx.execute<{ cost_layer_id: string; weight: string }>(sql`
+            select cost_layer_id, weight from cost_layer_weights
+             where org_id = ${orgId} and cost_layer_id in (${joinIds(r.layers.map((l) => l.id))})`));
+          for (const row of w.rows)
+            weightsByLayer.set(row.cost_layer_id, row.weight);
+        }
+        const subShares = apportionUnits(
+          share,
+          layerWeights(
+            r.layers,
+            input.basis === "manual" ? "value" : input.basis,
+            weightsByLayer,
+          ),
         );
-        for (const fragment of fragments) {
-          const allocationId = randomUUID();
-          allocationIds.push(allocationId);
-          await tx.execute(sql`
-            insert into landed_cost_allocations
-              (id, org_id, voucher_id, source_document_line_id, target_cost_layer_id,
-               basis, amount, journal_entry_id, created_by, updated_by)
-            values
-              (${allocationId}, ${orgId}, ${voucherId}, ${input.sourceDocumentLineId ?? null},
-               ${fragment.layerId}, ${input.basis}, ${fragment.amount}, null,
-               ${actorId}, ${actorId})`);
+        for (let j = 0; j < r.layers.length; j++) {
+          const layerShare = subShares[j]!;
+          if (layerShare === 0n) continue;
+          const fragments = await revalueLayerExactly(
+            tx,
+            orgId,
+            r.layers[j]!,
+            layerShare,
+            actorId,
+            r.profile.costingMethod !== "moving_average",
+          );
+          for (const fragment of fragments) {
+            const allocationId = randomUUID();
+            allocationIds.push(allocationId);
+            await tx.execute(sql`
+              insert into landed_cost_allocations
+                (id, org_id, voucher_id, source_document_line_id, target_cost_layer_id,
+                 basis, amount, journal_entry_id, created_by, updated_by)
+              values
+                (${allocationId}, ${orgId}, ${voucherId}, ${input.sourceDocumentLineId ?? null},
+                 ${fragment.layerId}, ${input.basis}, ${fragment.amount}, null,
+                 ${actorId}, ${actorId})`);
+          }
         }
       }
       entryLines.push({
-        accountId: r.profile.assetAccountId,
+        accountId:
+          r.profile.costingMethod === "standard"
+            ? r.profile.varianceAccountId ?? r.profile.assetAccountId
+            : r.profile.assetAccountId,
         amount: shareAmount,
         memo: input.memo ?? `Landed cost ${documentNumber}`,
       });
@@ -4007,7 +4054,7 @@ export async function reverseLandedCostVoucher(
     const allocations = (await tx.execute<{
         id: string;
         target_cost_layer_id: string;
-        basis: "value" | "quantity" | "weight" | "manual";
+        basis: "value" | "quantity" | "weight" | "manual" | "standard_variance";
         amount: string;
         source_document_line_id: string | null;
         source_movement_id: string;
@@ -4058,6 +4105,12 @@ export async function reverseLandedCostVoucher(
     }
 
     for (const allocation of allocations.rows) {
+      if (allocation.basis === "standard_variance") {
+        // The voucher never embedded value in the layer (booked to variance
+        // under standard costing), so there is no subledger value to remove:
+        // the mirrored journal below alone unwinds the GL.
+        continue;
+      }
       await devalueLayerExactly(
         tx,
         orgId,

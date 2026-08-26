@@ -28,7 +28,10 @@ export const runtime = 'nodejs'
  * costingMethod and tracking are accounting policy: they are required verbatim
  * (never defaulted), and once an item holds cost layers or movements a change
  * needs a recostingAuthorization reason, with before/after audit evidence
- * either way.
+ * either way. Revising standardCost on an item already costing standard is a
+ * versioned policy event too: open layers are revalued onto the new standard
+ * and the delta posts to variance in the same transaction, recorded in the
+ * audit row's standardCostRevision evidence.
  *
  * Evidence contract: the policy mutation and its audit row commit or roll back
  * together (one transaction), and the audit row records the exact before and
@@ -177,12 +180,30 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         recostingAuthorization,
       )
       const authorizedFlip = assessment.changed && assessment.historyExisted
-      const revaluationEntryId =
+      // A standard-cost change on an item already costing standard is the
+      // same versioned policy event as a controlled switch onto standard:
+      // open layers must be revalued onto the new standard and the delta
+      // booked to variance atomically with the profile write, or the layers
+      // immediately disagree with the policy that governs them and issues
+      // strand residual inventory value in the GL.
+      const switchingToStandard =
         authorizedFlip && costingMethod === 'standard' && before?.costing_method !== 'standard'
+      const revisingStandardCost =
+        !switchingToStandard &&
+        before?.costing_method === 'standard' &&
+        costingMethod === 'standard' &&
+        before.standard_cost != null &&
+        standardCost != null &&
+        before.standard_cost !== standardCost
+      const revaluationEntryId =
+        switchingToStandard || revisingStandardCost
           ? await revalueOpenLayersToStandardCost(tx, orgId, actorId, id, {
               standardCost,
               assetAccountId,
               varianceAccountId,
+              ...(revisingStandardCost
+                ? { memo: 'Standard cost revision revaluation' }
+                : {}),
             })
           : null
 
@@ -230,6 +251,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       }
       if (authorizedFlip) {
         changes.revaluationEntryId = revaluationEntryId
+      }
+      if (revisingStandardCost) {
+        changes.standardCostRevision = {
+          from: before.standard_cost,
+          to: standardCost,
+          revaluationEntryIds: revaluationEntryId ?? [],
+        }
       }
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
