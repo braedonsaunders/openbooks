@@ -117,20 +117,30 @@ async function assertStockLocationAdmitsSubsidiary(
   stockLocationId: string,
   subsidiaryId: string,
 ): Promise<void> {
+  // Hold the warehouse row through the caller's transaction. A concurrent
+  // deactivation waits for in-flight movements, while a movement that arrives
+  // after deactivation re-reads the committed inactive row and refuses it.
+  // Share locks remain compatible across concurrent movements.
   const r = (await tx.execute<{
       code: string;
+      isActive: boolean;
       subsidiary_id: string | null;
       includeChildren: boolean;
     }>(sql`
-    select sl.code, l.subsidiary_id, l.subsidiary_include_children as "includeChildren"
+    select sl.code, sl.is_active as "isActive", l.subsidiary_id,
+           l.subsidiary_include_children as "includeChildren"
       from stock_locations sl
       join locations l on l.id = sl.location_id and l.org_id = sl.org_id
-     where sl.id = ${stockLocationId} and sl.org_id = ${orgId}`));
+     where sl.id = ${stockLocationId} and sl.org_id = ${orgId}
+     for share of sl`));
   const location = r.rows[0];
   if (!location) {
     throw new InventoryError(
       `stock location ${stockLocationId} does not belong to the organization`,
     );
+  }
+  if (!location.isActive) {
+    throw new InventoryError(`stock location "${location.code}" is inactive`);
   }
   if (
     !restrictionAdmits(ctx, location.subsidiary_id, location.includeChildren, subsidiaryId)
@@ -3220,6 +3230,11 @@ async function defaultStockLocation(
  * location resolves (line-level, else the single default). Shared by the
  * posting-rule account router and the receipt/issue hooks so they always agree
  * on which lines are inventory.
+ *
+ * A profiled item never becomes a non-inventory line merely because its
+ * warehouse is missing, inactive, foreign, or restricted to another legal
+ * entity. Refuse the document with the offending line named; movement code
+ * re-checks the same location under its own transaction before changing stock.
  */
 export async function loadDocumentInventoryLines(
   runner: Runner,
@@ -3229,25 +3244,56 @@ export async function loadDocumentInventoryLines(
   const fallback = await defaultStockLocation(runner, orgId);
   const r = (await runner.execute<{
       line_id: string;
+      line_number: number;
       item_id: string;
       quantity: string;
       amount: string;
       stock_location_id: string | null;
+      document_subsidiary_id: string | null;
       asset_account_id: string;
       received_not_billed_account_id: string | null;
       costing_method: InventoryProfile["costingMethod"];
     }>(sql`
-    select dl.id as line_id, dl.item_id, dl.quantity, dl.amount, dl.stock_location_id,
+    select dl.id as line_id, dl.line_number, dl.item_id, dl.quantity, dl.amount,
+           dl.stock_location_id, d.subsidiary_id as document_subsidiary_id,
            p.asset_account_id, p.received_not_billed_account_id, p.costing_method
       from document_lines dl
+      join documents d on d.id = dl.document_id and d.org_id = dl.org_id
       join item_inventory_profiles p on p.item_id = dl.item_id and p.org_id = dl.org_id
      where dl.document_id = ${documentId} and dl.org_id = ${orgId}
        and dl.item_id is not null and dl.quantity <> 0
      order by dl.line_number`));
+  if (r.rows.length === 0) return [];
+  const ctx = await loadSubsidiaryContext(runner, orgId);
+  const subsidiaryId = r.rows[0]!.document_subsidiary_id ?? ctx.rootId;
+  assertMovementOwner(ctx, subsidiaryId);
   const out: DocumentInventoryLine[] = [];
   for (const row of r.rows) {
     const loc = row.stock_location_id ?? fallback;
-    if (!loc) continue; // no location resolvable → treat as non-inventory
+    const lineLabel = `document line ${row.line_number} (item ${row.item_id})`;
+    if (!loc) {
+      throw new InventoryError(
+        `${lineLabel}: inventory item requires a stock location; ` +
+          "the organization does not have exactly one active stock location",
+      );
+    }
+    try {
+      await assertStockLocationAdmitsSubsidiary(
+        runner,
+        orgId,
+        ctx,
+        loc,
+        subsidiaryId,
+      );
+    } catch (error) {
+      if (error instanceof InventoryOwnershipError) {
+        throw new InventoryOwnershipError(`${lineLabel}: ${error.message}`);
+      }
+      if (error instanceof InventoryError) {
+        throw new InventoryError(`${lineLabel}: ${error.message}`);
+      }
+      throw error;
+    }
     out.push({
       lineId: row.line_id,
       itemId: row.item_id,

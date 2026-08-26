@@ -397,7 +397,7 @@ export async function loadDocument(id: string, orgId?: string) {
            l.unit_price, l.amount, l.cost_rate, l.bill_rate, l.cost_amount, l.bill_amount, l.is_billable,
            l.tax_code_id, l.tax_group_id, l.tax_input_amount, l.tax_amount,
            l.tax_overridden, l.department_id, l.project_id, l.location_id, l.class_id,
-           l.extra_dims, l.custom
+           l.stock_location_id, l.extra_dims, l.custom
       from document_lines l
      where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
      order by l.line_number
@@ -426,6 +426,8 @@ export interface DocumentLineInput extends BillLineInput {
   projectId?: string | null
   locationId?: string | null
   classId?: string | null
+  /** Warehouse used by inventory receipt or issue effects for this line. */
+  stockLocationId?: string | null
   extraDims?: Record<string, string | null>
   custom?: Record<string, unknown>
 }
@@ -713,7 +715,7 @@ export async function applyDocumentEdit(
   // without a partial write.
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
   let preparedLines:
-    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[]
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[]
     | null = null
   if (body.lines) {
     // Charge lines are NOT editable through the generic line editor, and this
@@ -795,6 +797,7 @@ export async function applyDocumentEdit(
         projectId: l.projectId ?? null,
         locationId: l.locationId ?? null,
         classId: l.classId ?? null,
+        stockLocationId: l.stockLocationId ?? null,
         extraDims: lineDims.cleaned,
         custom: lv.cleaned,
       })
@@ -865,12 +868,13 @@ export async function applyDocumentEdit(
             insert into document_lines (org_id, document_id, line_number, account_id, item_id, description,
                                         quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
                                         tax_amount, tax_overridden,
-                                        party_id, department_id, project_id, location_id, class_id, extra_dims, custom)
+                                        party_id, department_id, project_id, location_id, class_id,
+                                        stock_location_id, extra_dims, custom)
             values (${orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
                     ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
                     ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount}, ${l.taxAmount}, ${l.taxOverridden},
                     ${l.partyId}, ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId},
-                    ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
+                    ${l.stockLocationId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
             returning id
           `))
           await persistLineTaxComponents(tx, {
