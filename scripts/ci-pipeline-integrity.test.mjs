@@ -1,7 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { MAX_EXPLICIT_ANY, measuredExplicitAnys } from './check-explicit-any.mjs'
 
 /**
  * CI can only gate what it can fail on.
@@ -168,4 +170,55 @@ test('the integration canary fails on a recorded test failure, not only on a ski
   // the skip check and the zero-tests check and reports success.
   const source = readFileSync(join(WORKFLOW_DIR, 'test.yml'), 'utf8')
   assert.match(source, /not ok \\d\+ - /)
+})
+
+/**
+ * The last half of the ratchet problem.
+ *
+ * Both soft ceilings (`MAX_EXPLICIT_ANY` in check-explicit-any.mjs and
+ * `--max-warnings=` in the `lint` script) sat motionless through 231 commits
+ * while the real counts moved underneath them. A ceiling far above reality is
+ * not a ratchet: the gate stays green while hundreds of new violations land,
+ * then reports health it never measured. Raising a limit is a one-character
+ * edit, so contract tests are what stop it — no product test can observe a
+ * gate whose number simply got bigger instead of smaller.
+ */
+
+test('the explicit-any limit is not above the anys actually in the tree', () => {
+  // Measured live by the same walk the gate runs, so editing MAX_EXPLICIT_ANY
+  // upward fails here exactly like adding an `any` fails the gate itself: the
+  // only honest state is that the limit equals the count, and code fixes — not
+  // edits to the constant — are what let the count (and with it the limit) fall.
+  const measured = measuredExplicitAnys().total
+  assert.ok(
+    MAX_EXPLICIT_ANY <= measured,
+    `MAX_EXPLICIT_ANY is ${MAX_EXPLICIT_ANY} but this tree measures ${measured} explicit ` +
+      `anys. A ceiling above the real count gates nothing; tighten the limit to ${measured} ` +
+      `(or fix fewer). Model to copy: scripts/check-credential-fetch-redirects.mjs ships an empty baseline.`,
+  )
+})
+
+test('the lint warning ceiling is not above the warnings eslint actually emits', () => {
+  // Spawns the exact `npm run lint` command CI runs rather than re-deriving
+  // eslint's config in parallel — a second counting path would drift the same
+  // way the stale limits did.
+  const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
+  const limitMatch = /--max-warnings=(\d+)/.exec(scripts.lint)
+  assert.ok(limitMatch, `the lint script carries no measurable --max-warnings ceiling:\n${scripts.lint}`)
+
+  let output = ''
+  try {
+    output = execFileSync('npm', ['run', 'lint', '--silent'], { encoding: 'utf8' })
+  } catch (error) {
+    output = String(error.stdout ?? '') + String(error.stderr ?? '')
+    assert.fail(`npm run lint itself failed before the ceiling could be compared (${error.status})`)
+  }
+  const summary = /✖\s+\d+\s+problems\s+\((\d+) errors?, (\d+) warnings?\)/.exec(output)
+  const measured = summary ? Number(summary[2]) : 0
+
+  assert.ok(
+    Number(limitMatch[1]) <= measured,
+    `--max-warnings=${limitMatch[1]} exceeds the ${measured} warnings eslint actually emits. ` +
+      'A ceiling above the real count gates nothing; set it back to the measured total.',
+  )
 })
