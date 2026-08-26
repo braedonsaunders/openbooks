@@ -147,27 +147,83 @@ export async function runRecordFlows(
       }
       if (planIsEmpty(plan)) continue;
 
-      const run = (await db
-        .insert(schema.flowRuns)
-        .values({
-          orgId: ctx.orgId,
-          flowId: flow.id,
-          subjectKind,
-          subjectId,
-          trigger: event.kind,
-          status: "running",
-          // jsonb snapshot: strip non-serializable values (Dates → ISO).
-          context: JSON.parse(JSON.stringify(subject.values)) as Record<string, unknown>,
-          createdBy: ctx.userId ?? null,
-        })
-        .returning({ id: schema.flowRuns.id }))[0]!;
+      // Deterministic dispatch identity: when the caller supplies an
+      // occurrenceKey (close automations use their execution id), every flow
+      // run for this dispatch derives a per-flow key so a resumed attempt
+      // adopts the SAME run row — checkpoints and outbox keys then converge on
+      // once instead of double-firing (the scheduled-flows contract).
+      const occurrenceKey =
+        typeof event.occurrenceKey === "string" && event.occurrenceKey.length > 0
+          ? `${event.occurrenceKey}:${flow.id}`
+          : null;
+      let runId: string;
+      if (occurrenceKey) {
+        const [existing] = await db
+          .select({ id: schema.flowRuns.id })
+          .from(schema.flowRuns)
+          .where(eq(schema.flowRuns.occurrenceKey, occurrenceKey));
+        if (existing) {
+          // Resuming the crashed attempt's run: reopen it visibly while its
+          // remaining effects execute under the completed-checkpoint contract.
+          await db
+            .update(schema.flowRuns)
+            .set({ status: "running", error: null, finishedAt: null })
+            .where(and(eq(schema.flowRuns.id, existing.id), eq(schema.flowRuns.orgId, ctx.orgId)));
+          runId = existing.id;
+        } else {
+          const [inserted] = await db
+            .insert(schema.flowRuns)
+            .values({
+              orgId: ctx.orgId,
+              flowId: flow.id,
+              subjectKind,
+              subjectId,
+              trigger: event.kind,
+              status: "running",
+              context: JSON.parse(JSON.stringify(subject.values)) as Record<string, unknown>,
+              createdBy: ctx.userId ?? null,
+              occurrenceKey,
+            })
+            .onConflictDoNothing()
+            .returning({ id: schema.flowRuns.id });
+          if (!inserted) {
+            // Lost the unique-index race to a concurrent attempt of the same
+            // dispatch: adopt its row.
+            const [adopted] = await db
+              .select({ id: schema.flowRuns.id })
+              .from(schema.flowRuns)
+              .where(eq(schema.flowRuns.occurrenceKey, occurrenceKey));
+            if (!adopted) throw new Error(`flow occurrence ${occurrenceKey} lost its adoption target run`);
+            runId = adopted.id;
+          } else {
+            runId = inserted.id;
+          }
+        }
+      } else {
+        runId = (
+          await db
+            .insert(schema.flowRuns)
+            .values({
+              orgId: ctx.orgId,
+              flowId: flow.id,
+              subjectKind,
+              subjectId,
+              trigger: event.kind,
+              status: "running",
+              // jsonb snapshot: strip non-serializable values (Dates → ISO).
+              context: JSON.parse(JSON.stringify(subject.values)) as Record<string, unknown>,
+              createdBy: ctx.userId ?? null,
+            })
+            .returning({ id: schema.flowRuns.id })
+        )[0]!.id;
+      }
 
       let status: "completed" | "waiting" | "failed";
       let gatesCreated = 0;
       try {
         const res = await executeFlowPlan(ctx, adapter, {
-          flow: { id: flow.id, name: flow.name, subjectKind, graph: flow.graph },
-          runId: run.id,
+          flow: { id: flow.id, name: flow.name, subjectKind: subjectKind, graph: flow.graph },
+          runId,
           subjectId,
           plan,
           evalCtx,
@@ -182,22 +238,22 @@ export async function runRecordFlows(
             error: res.failed.length > 0 ? res.failed.join("; ") : null,
             finishedAt: status === "waiting" ? null : new Date(),
           })
-          .where(and(eq(schema.flowRuns.id, run.id), eq(schema.flowRuns.orgId, ctx.orgId)));
+          .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
         if (res.failed.length > 0) {
-          console.error(`[flows] run ${run.id} (flow "${flow.name}") failed:`, res.failed.join("; "));
+          console.error(`[flows] run ${runId} (flow "${flow.name}") failed:`, res.failed.join("; "));
         }
       } catch (e) {
         status = "failed";
         const reason = e instanceof Error ? e.message : String(e);
-        console.error(`[flows] run ${run.id} (flow "${flow.name}") crashed:`, e);
+        console.error(`[flows] run ${runId} (flow "${flow.name}") crashed:`, e);
         await db
           .update(schema.flowRuns)
           .set({ status: "failed", error: reason, finishedAt: new Date() })
-          .where(and(eq(schema.flowRuns.id, run.id), eq(schema.flowRuns.orgId, ctx.orgId)))
+          .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)))
           .catch(() => {});
       }
 
-      result.runs.push({ runId: run.id, flowId: flow.id, status, gatesCreated });
+      result.runs.push({ runId, flowId: flow.id, status, gatesCreated });
       result.gatesCreated += gatesCreated;
       if (status === "failed") result.failed = true;
     }
