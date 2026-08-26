@@ -24,6 +24,8 @@ const payrollCommitSelectionFenceMigrationPath =
   "schema/migrations/generated/0040_payroll_commit_selection_fence.sql";
 const wipPrebillSandboxWipeMigrationPath =
   "schema/migrations/generated/0043_sandbox_wip_prebill_wipe_guard.sql";
+const subsidiaryTreeGuardSerializationMigrationPath =
+  "schema/migrations/generated/0045_subsidiary_tree_guard_serialization.sql";
 const documentTenantForeignKeysMigrationPath =
   "schema/migrations/generated/0039_document_tenant_coherent_foreign_keys.sql";
 const ledgerTenantCoherenceMigrationPath =
@@ -70,6 +72,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0040_payroll_commit_selection_fence.sql",
     "0041_subscription_configuration_invariants.sql",
     "0043_sandbox_wip_prebill_wipe_guard.sql",
+    "0045_subsidiary_tree_guard_serialization.sql",
     "0046_account_posting_classification_serialization.sql",
   ]);
   assert.deepEqual(
@@ -436,6 +439,28 @@ test("journal posting serializes with period close through a shared advisory fen
     migration,
     /perform period_posting_fence\(new\.org_id, new\.period_id, new\.book_id\);\s*\n\s*if period_module_blocks_write/,
   );
+});
+
+test("subsidiary tree mutations serialize before their cycle recheck", () => {
+  const migration = readFileSync(subsidiaryTreeGuardSerializationMigrationPath, "utf8");
+  assert.match(
+    migration,
+    /CREATE OR REPLACE FUNCTION public\.subsidiary_tree_guard\(\) RETURNS trigger\s+LANGUAGE plpgsql VOLATILE/,
+  );
+  assert.match(
+    migration,
+    /pg_advisory_xact_lock\(\s*hashtextextended\('subsidiary-tree:' \|\| tree_org::text, 0\)\s*\)/,
+  );
+  assert.match(migration, /LEAST\(OLD\.org_id::text, NEW\.org_id::text\)::uuid/);
+  assert.match(migration, /GREATEST\(OLD\.org_id::text, NEW\.org_id::text\)::uuid/);
+  const fence = migration.indexOf("pg_advisory_xact_lock(");
+  const parentCheck = migration.indexOf("IF NEW.parent_id IS NOT NULL THEN");
+  assert.ok(fence >= 0 && fence < parentCheck, "the tree fence must precede every parent/cycle read");
+  assert.match(
+    migration,
+    /WITH RECURSIVE descendants AS[\s\S]*WHERE subsidiary\.org_id = NEW\.org_id/,
+  );
+  assert.match(migration, /COMMENT ON FUNCTION public\.subsidiary_tree_guard\(\) IS/);
 });
 
 test("ledger headers, lines, and trigger reads are tenant coherent", () => {

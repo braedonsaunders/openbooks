@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import type { PoolClient, QueryResult } from "pg";
 import { deriveConsolidatedRates, runAutoElimination, runOwnershipConsolidation } from "./consolidation.ts";
 import { db, pool, withOrgTransaction } from "./db.ts";
 import {
@@ -11,6 +12,216 @@ import {
 } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+type TreeUpdateResult = PromiseSettledResult<QueryResult>;
+
+const settleTreeUpdate = (promise: Promise<QueryResult>): Promise<TreeUpdateResult> =>
+  promise.then(
+    (value): TreeUpdateResult => ({ status: "fulfilled", value }),
+    (reason): TreeUpdateResult => ({ status: "rejected", reason }),
+  );
+
+async function openTreeTransaction(): Promise<{ client: PoolClient; pid: number }> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query("select set_config('app.bypass_rls', 'on', true)");
+    const backend = await client.query<{ pid: number }>("select pg_backend_pid() as pid");
+    return { client, pid: Number(backend.rows[0]!.pid) };
+  } catch (error) {
+    client.release(error as Error);
+    throw error;
+  }
+}
+
+/** Observe a deterministic interleaving: the second update either finishes
+ * (the vulnerable trigger) or parks behind the first transaction's tree fence. */
+async function observeTreeFence(
+  blockerPid: number,
+  waiterPid: number,
+  update: Promise<TreeUpdateResult>,
+): Promise<{ blocked: boolean; result?: TreeUpdateResult }> {
+  let result: TreeUpdateResult | undefined;
+  void update.then((settled) => {
+    result = settled;
+  });
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    if (result) return { blocked: false, result };
+    const lockState = await pool.query<{ blocked: boolean }>(
+      "select $1::int = any(pg_blocking_pids($2::int)) as blocked",
+      [blockerPid, waiterPid],
+    );
+    if (lockState.rows[0]?.blocked) return { blocked: true };
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timed out observing subsidiary tree fence for backend ${waiterPid}`);
+}
+
+/**
+ * Hold the first reparent open while the second starts on another session.
+ * The first transaction then commits, allowing the serialized second trigger
+ * to recheck the now-current tree before its own commit.
+ */
+async function raceTreeReparents(
+  orgId: string,
+  first: { subsidiaryId: string; parentId: string },
+  second: { subsidiaryId: string; parentId: string },
+): Promise<{ blocked: boolean; second: TreeUpdateResult }> {
+  const transactionA = await openTreeTransaction();
+  const transactionB = await openTreeTransaction();
+  let openA = true;
+  let openB = true;
+  try {
+    await transactionA.client.query(
+      "update subsidiaries set parent_id = $1 where org_id = $2 and id = $3",
+      [first.parentId, orgId, first.subsidiaryId],
+    );
+    const secondUpdate = settleTreeUpdate(
+      transactionB.client.query(
+        "update subsidiaries set parent_id = $1 where org_id = $2 and id = $3",
+        [second.parentId, orgId, second.subsidiaryId],
+      ),
+    );
+    const observation = await observeTreeFence(
+      transactionA.pid,
+      transactionB.pid,
+      secondUpdate,
+    );
+
+    await transactionA.client.query("commit");
+    openA = false;
+    const secondResult = observation.result ?? await secondUpdate;
+    if (secondResult.status === "fulfilled") {
+      await transactionB.client.query("commit");
+    } else {
+      await transactionB.client.query("rollback");
+    }
+    openB = false;
+    return { blocked: observation.blocked, second: secondResult };
+  } finally {
+    if (openA) await transactionA.client.query("rollback").catch(() => undefined);
+    if (openB) await transactionB.client.query("rollback").catch(() => undefined);
+    transactionA.client.release();
+    transactionB.client.release();
+  }
+}
+
+function assertCycleRejected(result: TreeUpdateResult): void {
+  assert.equal(result.status, "rejected", "one incompatible reparent must be rejected");
+  if (result.status === "rejected") {
+    assert.match(String(result.reason), /subsidiary hierarchy contains a cycle/);
+  }
+}
+
+test(
+  "subsidiary reparents serialize before cycle checks and preserve root invariants",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const [twoA, twoB, longA, longB, longC, validA, validB, validC, validD] =
+        Array.from({ length: 9 }, () => randomUUID()) as [
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+        ];
+      await db.execute(sql`
+      insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values
+        (${twoA}, ${org.orgId}, ${org.subsidiaryId}, 'Two A', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb),
+        (${twoB}, ${org.orgId}, ${org.subsidiaryId}, 'Two B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb),
+        (${longA}, ${org.orgId}, ${org.subsidiaryId}, 'Long A', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb),
+        (${longB}, ${org.orgId}, ${longA}, 'Long B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb),
+        (${longC}, ${org.orgId}, ${org.subsidiaryId}, 'Long C', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb),
+        (${validA}, ${org.orgId}, ${org.subsidiaryId}, 'Valid A', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb),
+        (${validB}, ${org.orgId}, ${org.subsidiaryId}, 'Valid B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb),
+        (${validC}, ${org.orgId}, ${org.subsidiaryId}, 'Valid C', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb),
+        (${validD}, ${org.orgId}, ${org.subsidiaryId}, 'Valid D', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+
+      const twoNode = await raceTreeReparents(
+        org.orgId,
+        { subsidiaryId: twoA, parentId: twoB },
+        { subsidiaryId: twoB, parentId: twoA },
+      );
+      assert.equal(
+        twoNode.blocked,
+        true,
+        "the second two-node reparent must wait for the org tree fence",
+      );
+      assertCycleRejected(twoNode.second);
+
+      const longer = await raceTreeReparents(
+        org.orgId,
+        { subsidiaryId: longA, parentId: longC },
+        { subsidiaryId: longC, parentId: longB },
+      );
+      assert.equal(
+        longer.blocked,
+        true,
+        "the second longer-cycle reparent must wait for the org tree fence",
+      );
+      assertCycleRejected(longer.second);
+
+      const valid = await raceTreeReparents(
+        org.orgId,
+        { subsidiaryId: validA, parentId: validB },
+        { subsidiaryId: validC, parentId: validD },
+      );
+      assert.equal(valid.blocked, true, "valid same-org reparents still serialize at storage");
+      assert.equal(
+        valid.second.status,
+        "fulfilled",
+        "independent valid reparents must both commit",
+      );
+
+      const parents = await db.execute<{ id: string; parent_id: string }>(sql`
+      select id::text as id, parent_id::text as parent_id
+        from subsidiaries
+       where org_id = ${org.orgId}
+         and id in (${twoA}, ${twoB}, ${longA}, ${longC}, ${validA}, ${validC})`);
+      assert.deepEqual(
+        new Map(parents.rows.map((row) => [row.id, row.parent_id])),
+        new Map([
+          [twoA, twoB],
+          [twoB, org.subsidiaryId],
+          [longA, longC],
+          [longC, org.subsidiaryId],
+          [validA, validB],
+          [validC, validD],
+        ]),
+      );
+
+      await assert.rejects(
+        db.execute(sql`
+          update subsidiaries set parent_id = ${validB} where id = ${org.subsidiaryId}`),
+        /the root subsidiary cannot be moved/,
+      );
+      await assert.rejects(
+        db.execute(sql`
+          update subsidiaries set is_active = false where id = ${org.subsidiaryId}`),
+        /the root subsidiary cannot be inactive/,
+      );
+      await assert.rejects(
+        db.execute(sql`delete from subsidiaries where id = ${org.subsidiaryId}`),
+        /the root subsidiary cannot be deleted/,
+      );
+      const root = await db.execute<{ parent_id: string | null; is_active: boolean }>(sql`
+      select parent_id::text as parent_id, is_active
+        from subsidiaries
+       where org_id = ${org.orgId} and id = ${org.subsidiaryId}`);
+      assert.deepEqual(root.rows[0], { parent_id: null, is_active: true });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /** Poll until some backend is waiting on an ungranted advisory lock. */
 async function waitForAdvisoryWait(): Promise<boolean> {

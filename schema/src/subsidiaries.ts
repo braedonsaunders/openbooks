@@ -23,7 +23,10 @@ import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers
  * and reports take a subsidiary context (a parent consolidates its subtree).
  *
  * Every org has exactly one ROOT subsidiary (parent_id null, enforced by a
- * partial unique index); single-subsidiary orgs never see any of this UI.
+ * partial unique index). The storage tree guard serializes every mutation for
+ * one org before it rechecks parentage, so concurrent reparents cannot create
+ * a cycle from individually valid snapshots. Single-subsidiary orgs never see
+ * any of this UI.
  * Elimination subsidiaries (`is_elimination`) hold only auto-elimination
  * entries and are included when — and only when — viewing consolidated.
  */
