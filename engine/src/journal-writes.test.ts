@@ -13,6 +13,7 @@ import { db } from "./db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
+  seedApprovalFlow,
   seedFlowActors,
 } from "./test-fixtures.ts";
 import { createScriptJournal, validateJournalInput, JournalWriteError } from "./journal-writes.ts";
@@ -221,6 +222,51 @@ test("an actor-less scheduled script posts under explicit system provenance", { 
     const entry = await db.execute(sql`
       select id from journal_entries where id = ${res.entryId!} and org_id = ${org.orgId}`);
     assert.equal(entry.rows.length, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+// --- fnd_mt97sc2t_null: post:true validation before any draft insert --------
+// The audited implementation committed its draft transaction FIRST and only
+// afterwards validated the actor/post request — every rejected post left an
+// orphan JE draft behind. This regression pins the audited scenario exactly:
+// a scheduled (null-actor) submission whose approval cannot route is rejected
+// with zero documents, lines, flow evidence, or ledger rows committed.
+
+test("a scheduled null-actor post:true that fails approval routing is rejected with zero drafts", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // A tenant journal-approval policy whose gate resolves from the SUBMITTER:
+    // a scheduled script submits as the system (null actor), so the gate
+    // resolves to zero assignees and the submission must fail closed.
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "journal",
+      mode: "any",
+      assignees: [{ type: "supervisor" }],
+    });
+    await assert.rejects(
+      createScriptJournal(
+        org.orgId,
+        null,
+        {
+          documentDate: org.date,
+          memo: "scheduled accrual",
+          lines: [
+            { accountId: org.accounts.deferred, amount: 40 },
+            { accountId: org.accounts.recognized, amount: -40 },
+          ],
+        },
+        { post: true },
+      ),
+      /approval could not be routed/,
+    );
+    const r = (await db.execute<{ docs: string; lines: string; gates: string; runs: string }>(sql`
+      select (select count(*) from documents where org_id = ${org.orgId})::text as docs,
+             (select count(*) from document_lines where org_id = ${org.orgId})::text as lines,
+             (select count(*) from flow_gates where org_id = ${org.orgId})::text as gates,
+             (select count(*) from flow_runs where org_id = ${org.orgId})::text as runs`));
+    assert.deepEqual(r.rows[0], { docs: "0", lines: "0", gates: "0", runs: "0" });
   } finally {
     await dropScratchOrg(org.orgId);
   }

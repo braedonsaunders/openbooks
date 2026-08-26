@@ -13,8 +13,10 @@ import {
   recoverStaleSchedulerOutbox,
 } from "./scheduler-outbox.ts";
 import {
+  claimDueScriptOccurrence,
   recoverLostScriptOccurrences,
   runDueScripts,
+  scanDueScripts,
   scriptOccurrenceKey,
 } from "./scheduler.ts";
 import { SCHEDULED_SCRIPT_SCHEDULER_IDENTITY } from "./scripting.ts";
@@ -321,6 +323,7 @@ type OccurrenceEventRow = {
   attempt?: number;
   scheduledFor?: string;
   job?: string;
+  occurrence?: string;
   markedBy?: string;
   cron?: string | null;
   nextRunAt?: string | null;
@@ -646,6 +649,93 @@ test("worker-written terminal evidence closes an orphaned occurrence without a r
     // A later tick neither resurrects nor re-retries it — eventually exactly once.
     await recoverLostScriptOccurrences(new Date(Date.now() + 16 * 60_000));
     assert.equal(await countScheduledRuns(scriptId), 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+// fnd_mt97sc1r_null regression — "durable claim before script execution": the
+// audited scheduler advanced user_scripts.next_run_at in its own committed
+// statement BEFORE any durable run/job existed, so a crash inside that window
+// silently skipped the occurrence forever (cursor gone, zero evidence).
+// The contract now is: the claim IS the commit — cursor advance and queued
+// dispatch-ledger row land in ONE statement, execution only ever happens
+// after that commit, so every intermediate crash either loses nothing or
+// duplicates nothing.
+test("the claim commits the cursor advance with its ledger row before any execution and cannot double-claim", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const scriptId = await seedDueScheduledScript(
+      org.orgId,
+      'function main(ctx) { return "recovered"; }',
+    );
+    const dueAt = new Date(Date.now() - 60_000);
+    await db.execute(sql`update user_scripts set next_run_at = ${dueAt} where id = ${scriptId}`);
+
+    const target = (await scanDueScripts()).find((s) => s.id === scriptId);
+    assert.ok(target, "the due scheduled script is scanned");
+
+    // The winning claim commits atomically: exactly one queued occurrence row
+    // exists together with the advanced cursor — and NO script has executed.
+    const claimed = await claimDueScriptOccurrence(target);
+    assert.ok(claimed, "exactly one scanner wins the claim");
+    assert.equal(claimed.occurrenceKey, scriptOccurrenceKey(scriptId, dueAt));
+    const occ = await loadOccurrence(scriptId);
+    assert.equal(occ.status, "queued");
+    assert.equal(occ.logs[0]?.event, "claimed");
+    assert.equal(occ.logs[0]?.attempt, 1);
+    assert.equal(occ.logs[0]?.scheduledFor, dueAt.toISOString());
+    assert.equal(occ.logs[0]?.occurrence, claimed.occurrenceKey);
+    assert.equal(
+      await countScheduledRuns(scriptId),
+      0,
+      "execution may never precede the durable claim",
+    );
+    const cursor = (
+      await db.execute<{ nextRunAt: Date | string }>(sql`
+        select next_run_at as "nextRunAt" from user_scripts where id = ${scriptId}
+      `)
+    ).rows[0]!.nextRunAt;
+    assert.ok(new Date(cursor).getTime() > dueAt.getTime(), "the cursor advanced with the claim");
+
+    // CRASH SIMULATION: this process dies here — dispatch never happens. A
+    // re-scanner replaying the SAME stale due snapshot must lose the CAS and
+    // must not insert a duplicate occurrence or move the cursor again.
+    const again = await claimDueScriptOccurrence(target);
+    assert.equal(again, null, "a losing claimant observes an empty claim");
+    const occurrences = (
+      await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from script_runs
+         where script_id = ${scriptId} and target_kind = 'scheduled_occurrence'
+      `)
+    ).rows[0]!.n;
+    assert.equal(occurrences, 1, "no duplicate dispatch-ledger rows");
+    const cursorAfterReclaim = (
+      await db.execute<{ nextRunAt: Date | string }>(sql`
+        select next_run_at as "nextRunAt" from user_scripts where id = ${scriptId}
+      `)
+    ).rows[0]!.nextRunAt;
+    assert.equal(new Date(cursorAfterReclaim).toISOString(), new Date(cursor).toISOString());
+
+    // Recovery re-dispatches the orphaned first attempt exactly once; the run
+    // loses nothing despite the crash window and can never double-fire.
+    await recoverLostScriptOccurrences(new Date(Date.now() + 16 * 60_000));
+    const recovered = await loadOccurrence(scriptId);
+    assert.equal(recovered.status, "ok");
+    assert.ok(recovered.logs.some((e) => e.event === "recover" && e.attempt === 2));
+    assert.ok(recovered.logs.some((e) => e.event === "ran_inline" && e.attempt === 2));
+    assert.equal(await countScheduledRuns(scriptId), 1, "zero loss, exactly one run");
+    const cursorAfterRecovery = (
+      await db.execute<{ nextRunAt: Date | string }>(sql`
+        select next_run_at as "nextRunAt" from user_scripts where id = ${scriptId}
+      `)
+    ).rows[0]!.nextRunAt;
+    assert.equal(new Date(cursorAfterRecovery).toISOString(), new Date(cursor).toISOString(), "recovery never re-arms the cursor");
+
+    // Later ticks neither resurrect nor re-fire the closed occurrence.
+    await recoverLostScriptOccurrences(new Date(Date.now() + 40 * 60_000));
+    assert.equal(await loadOccurrence(scriptId).then((o) => o.status), "ok");
+    assert.equal(await countScheduledRuns(scriptId), 1, "no duplicate run");
   } finally {
     await dropScratchOrg(org.orgId);
   }
