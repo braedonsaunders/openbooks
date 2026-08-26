@@ -51,6 +51,15 @@ function basicAuth(app: QboApp): string {
   return "Basic " + Buffer.from(`${app.clientId}:${app.clientSecret}`).toString("base64");
 }
 
+/** QBO credentials must never cross an HTTP redirect boundary. Even a
+ *  trusted Intuit origin can otherwise redirect a request (including its
+ *  Authorization header and POST body) to a host that was never allowlisted:
+ *  the token endpoints carry the client secret and refresh token, and every
+ *  API call carries the company bearer token. */
+function qboFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, redirect: "error" });
+}
+
 interface TokenResponse {
   access_token: string;
   refresh_token: string;
@@ -67,7 +76,7 @@ function toTokens(r: TokenResponse): QboTokens {
 
 /** Exchange an authorization code for the first token pair. */
 export async function exchangeCode(app: QboApp, code: string): Promise<QboTokens> {
-  const res = await fetch(TOKEN_URL, {
+  const res = await qboFetch(TOKEN_URL, {
     method: "POST",
     headers: { Authorization: basicAuth(app), "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: app.redirectUri }),
@@ -78,7 +87,7 @@ export async function exchangeCode(app: QboApp, code: string): Promise<QboTokens
 
 /** Refresh an expired access token (the refresh token may rotate). */
 export async function refreshTokens(app: QboApp, refreshToken: string): Promise<QboTokens> {
-  const res = await fetch(TOKEN_URL, {
+  const res = await qboFetch(TOKEN_URL, {
     method: "POST",
     headers: { Authorization: basicAuth(app), "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
@@ -115,7 +124,7 @@ export class QboClient {
     const url = new URL(`${apiBase(this.app.environment)}/v3/company/${this.realmId}/${path}`);
     url.searchParams.set("minorversion", MINOR_VERSION);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
+    const res = await qboFetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
     if (!res.ok) throw new Error(`QBO ${path} HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
     return (await res.json()) as T;
   }
