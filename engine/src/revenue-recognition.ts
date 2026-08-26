@@ -910,6 +910,35 @@ export async function createObligationsFromInvoice(
 // runRevenueRecognition — post due periods through the kernel
 // ---------------------------------------------------------------------------
 
+export interface RevenueRecognitionEntryIdentity {
+  contractNumber: string;
+  periodName: string;
+  obligationId: string;
+  bookId: string;
+  sequence: number;
+  lineId: string;
+}
+
+/**
+ * Stable identity for one recognition journal in the organization-wide entry
+ * number namespace. Full source ids are deliberate: one contract can carry
+ * several obligations, every obligation can have a schedule on several books,
+ * and percent-complete schedules can post several lines in one period.
+ */
+export function revenueRecognitionEntryNumber(
+  identity: RevenueRecognitionEntryIdentity,
+): string {
+  return [
+    "REV",
+    identity.contractNumber,
+    identity.periodName,
+    identity.obligationId,
+    identity.bookId,
+    identity.sequence,
+    identity.lineId,
+  ].join("-");
+}
+
 export interface RunRecognitionResult {
   posted: number;
   skipped: number;
@@ -1078,9 +1107,14 @@ export async function runRevenueRecognition(
           insert into journal_entries
             (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
           values (${orgId}, ${row.book_id}, ${row.subsidiary_id},
-                  ${row.method === "percent_complete"
-                    ? `REV-${row.contract_number}-${row.period_name}-${row.sequence}`
-                    : `REV-${row.contract_number}-${row.period_name}`},
+                  ${revenueRecognitionEntryNumber({
+                    contractNumber: row.contract_number,
+                    periodName: row.period_name,
+                    obligationId: row.obligation_id,
+                    bookId: row.book_id,
+                    sequence: row.sequence,
+                    lineId: row.line_id,
+                  })},
                   ${postingDate}, ${row.period_id},
                   ${`Revenue recognition — ${row.obligation_desc} (${row.period_name})`},
                   'draft', 'revenue_recognition', ${actorId}, ${actorId})
