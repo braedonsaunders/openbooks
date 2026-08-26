@@ -1204,7 +1204,7 @@ export async function payRunCalculationSource(
           on te.org_id = r.org_id and te.employee_party_id = employee.employee_party_id
          and te.status = 'approved'
          and te.worked_on between r.period_start and r.period_end
-         and (te.payroll_batch_ref is null or te.payroll_batch_ref = r.document_id)
+         and (te.payroll_batch_ref is null or te.payroll_batch_ref = r.document_id::text)
        where r.run_type not in ('bonus', 'retro')
        order by te.id
        ${entryRowLock}
