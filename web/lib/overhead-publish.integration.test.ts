@@ -64,12 +64,16 @@ test(
 
         // Department A publishes cleanly; department B then fails on its insert
         // (nonexistent department id violates the FK) AFTER A's statements ran.
+        // Drizzle wraps the driver error, so match through the cause chain.
         await assert.rejects(
           publishOverheadRates(org.orgId, actorId, '2026-09-01', [
             { departmentId: deptA, ratePerHour: '42.00' },
             { departmentId: randomUUID(), ratePerHour: '50.00' },
           ]),
-          /overhead_rates_department_id_fkey/,
+          (error) => {
+            const message = String(error?.cause?.message ?? error);
+            return /overhead_rates_department_id_fkey/.test(message);
+          },
         );
 
         // Nothing may stick: no closed rows, no deleted future row, no new
@@ -78,12 +82,14 @@ test(
           select department_id, category, rate_percent, effective_from, effective_to
             from overhead_rates
            where org_id = \${org.orgId}
-           order by department_id, effective_from
         \`);
+        // Department ids are random UUIDs; never rely on their sort order.
+        card.rows.sort((a, b) =>
+          (a.effective_from + a.category).localeCompare(b.effective_from + b.category));
         assert.deepEqual(card.rows, [
           { department_id: deptA, category: 'Baseline', rate_percent: '10.0000', effective_from: '2026-01-01', effective_to: null },
-          { department_id: deptA, category: 'Planned', rate_percent: '99.0000', effective_from: '2027-01-01', effective_to: null },
           { department_id: deptB, category: 'Baseline', rate_percent: '20.0000', effective_from: '2026-02-01', effective_to: null },
+          { department_id: deptA, category: 'Planned', rate_percent: '99.0000', effective_from: '2027-01-01', effective_to: null },
         ]);
         const audits = await db.execute(sql\`
           select count(*)::int as count from audit_log
@@ -150,12 +156,15 @@ test(
                  effective_from, effective_to
             from overhead_rates
            where org_id = \${org.orgId}
-           order by department_id, effective_from
         \`);
+        // Department ids are random UUIDs; never rely on their sort order.
+        const byRow = (a, b) =>
+          (a.effective_from + a.category).localeCompare(b.effective_from + b.category);
+        card.rows.sort(byRow);
         assert.deepEqual(card.rows, [
           { department_id: deptA, category: 'Baseline', method: 'standard', rate_kind: 'per_hour', rate_percent: '10.0000', effective_from: '2026-01-01', effective_to: '2026-08-31' },
-          { department_id: deptA, category: 'Published', method: 'standard', rate_kind: 'per_hour', rate_percent: '42.0000', effective_from: '2026-09-01', effective_to: null },
           { department_id: deptB, category: 'Baseline', method: 'standard', rate_kind: 'per_hour', rate_percent: '20.0000', effective_from: '2026-02-01', effective_to: '2026-08-31' },
+          { department_id: deptA, category: 'Published', method: 'standard', rate_kind: 'per_hour', rate_percent: '42.0000', effective_from: '2026-09-01', effective_to: null },
           { department_id: deptB, category: 'Published', method: 'standard', rate_kind: 'per_hour', rate_percent: '55.2500', effective_from: '2026-09-01', effective_to: null },
         ]);
 
