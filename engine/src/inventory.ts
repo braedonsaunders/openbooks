@@ -15,7 +15,6 @@ import {
 import {
   consumeFifo,
   extendCost,
-  issueMovingAverage,
   issueStandard,
   receiveStandard,
   type CostLayer,
@@ -150,6 +149,187 @@ async function resolveProfile(
     negativeCostBasis: p.negative_cost_basis,
     provisionalUnitCost: p.provisional_unit_cost,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Item costing profile policy changes
+// ---------------------------------------------------------------------------
+
+export type CostingMethod = InventoryProfile["costingMethod"];
+export type TrackingMode = InventoryProfile["tracking"];
+
+export type ItemInventoryProfileRow = {
+  id: string;
+  item_id: string;
+  costing_method: CostingMethod;
+  tracking: TrackingMode;
+  asset_account_id: string;
+  cogs_account_id: string;
+  adjustment_account_id: string | null;
+  variance_account_id: string | null;
+  received_not_billed_account_id: string | null;
+  standard_cost: string | null;
+  base_unit: string;
+  reorder_point: string | null;
+  preferred_stock_level: string | null;
+  allow_negative_inventory: boolean;
+  negative_cost_basis: InventoryProfile["negativeCostBasis"];
+  provisional_unit_cost: string | null;
+};
+
+export class CostingPolicyChangeBlockedError extends InventoryError {}
+
+const RE_COSTING_AUTHORIZATION_MIN_LENGTH = 5;
+const RE_COSTING_AUTHORIZATION_MAX_LENGTH = 500;
+
+export function parseCostingMethod(value: unknown): CostingMethod | null {
+  return value === "fifo" || value === "moving_average" || value === "standard"
+    ? value
+    : null;
+}
+
+export function parseTrackingMode(value: unknown): TrackingMode | null {
+  return value === "none" || value === "lot" || value === "serial"
+    ? value
+    : null;
+}
+
+export async function lockItemInventoryProfile(
+  tx: Runner,
+  orgId: string,
+  itemId: string,
+): Promise<ItemInventoryProfileRow | null> {
+  const r = (await tx.execute<ItemInventoryProfileRow>(sql`
+    select id, item_id, costing_method, tracking, asset_account_id, cogs_account_id,
+           adjustment_account_id, variance_account_id, received_not_billed_account_id,
+           standard_cost, base_unit, reorder_point, preferred_stock_level,
+           allow_negative_inventory, negative_cost_basis, provisional_unit_cost
+      from item_inventory_profiles
+     where org_id = ${orgId} and item_id = ${itemId}
+     for update`));
+  return r.rows[0] ?? null;
+}
+
+export interface CostingPolicyAssessment {
+  changed: boolean;
+  historyExisted: boolean;
+}
+
+/**
+ * A costing method or tracking mode is accounting policy (ASC 250 / IAS 8):
+ * once an item carries cost layers or posted movements, changing either needs
+ * an explicit reasoned re-costing authorization from the caller. Refuses the
+ * silent-policy hazard of defaulting, and refuses combinations the costing
+ * engine cannot consume.
+ */
+export async function assertCostingPolicyChangeAllowed(
+  tx: Runner,
+  orgId: string,
+  itemId: string,
+  current: ItemInventoryProfileRow | null,
+  next: { costingMethod: CostingMethod; tracking: TrackingMode },
+  recostingAuthorization: string | null,
+): Promise<CostingPolicyAssessment> {
+  if (next.tracking !== "none" && next.costingMethod === "moving_average") {
+    throw new InventoryError(
+      "lot/serial tracking is incompatible with blended moving-average layers",
+    );
+  }
+  const changed =
+    !current ||
+    current.costing_method !== next.costingMethod ||
+    current.tracking !== next.tracking;
+  if (!changed) return { changed: false, historyExisted: false };
+  const history = (await tx.execute<{ has_history: boolean }>(sql`
+    select exists(select 1 from cost_layers where org_id = ${orgId} and item_id = ${itemId})
+        or exists(select 1 from inventory_movements where org_id = ${orgId} and item_id = ${itemId})
+      as has_history`));
+  if (history.rows[0]?.has_history !== true) {
+    return { changed: true, historyExisted: false };
+  }
+  const reason = recostingAuthorization?.trim() ?? "";
+  if (
+    reason.length < RE_COSTING_AUTHORIZATION_MIN_LENGTH ||
+    reason.length > RE_COSTING_AUTHORIZATION_MAX_LENGTH
+  ) {
+    throw new CostingPolicyChangeBlockedError(
+      "changing the costing method or tracking of an item with inventory history requires an explicit re-costing authorization reason",
+    );
+  }
+  return { changed: true, historyExisted: true };
+}
+
+/**
+ * Bring every open cost layer of an item onto its standard cost and post one
+ * balanced revaluation entry (inventory asset vs variance account) so issues
+ * relieve layers exactly at standard after a controlled switch to standard
+ * costing. Returns the entry id, or null when nothing needed revaluing.
+ */
+export async function revalueOpenLayersToStandardCost(
+  tx: Runner,
+  orgId: string,
+  actorId: string | null,
+  itemId: string,
+  p: {
+    standardCost: string | null;
+    assetAccountId: string;
+    varianceAccountId: string | null;
+  },
+): Promise<string | null> {
+  if (p.standardCost == null) {
+    throw new InventoryError(
+      "a standard cost must be configured before switching this item to standard costing",
+    );
+  }
+  const layers = (await tx.execute<{
+      id: string;
+      remaining_quantity: string;
+      unit_cost: string;
+    }>(sql`
+    select id, remaining_quantity, unit_cost
+      from cost_layers
+     where org_id = ${orgId} and item_id = ${itemId} and remaining_quantity > 0
+     order by received_at, id
+     for update`));
+  let deltaUnits = 0n;
+  for (const layer of layers.rows) {
+    deltaUnits +=
+      toUnits(extendCost(layer.remaining_quantity, p.standardCost)) -
+      toUnits(extendCost(layer.remaining_quantity, layer.unit_cost));
+    await tx.execute(sql`
+      update cost_layers set unit_cost = ${p.standardCost}, updated_at = now(), updated_by = ${actorId}
+       where id = ${layer.id} and org_id = ${orgId}`);
+  }
+  if (deltaUnits === 0n) return null;
+
+  const date = await businessToday(orgId);
+  const periodId = await periodForDate(orgId, date, tx);
+  if (!periodId) throw new InventoryError(`no accounting period for ${date}`);
+  const bookId = await primaryBookId(orgId, tx);
+  const root = (await tx.execute<{ id: string }>(sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`));
+  if (!root.rows[0]) throw new InventoryError("no root subsidiary configured");
+  const subsidiaryId = root.rows[0].id;
+  const currency = await subsidiaryCurrency(orgId, subsidiaryId, tx);
+  const memo = "Costing method revaluation to standard";
+  return await postInventoryEntry(tx, {
+    orgId,
+    bookId,
+    subsidiaryId,
+    currency,
+    periodId,
+    date,
+    entryNumber: `INV-RCST-${date}-${itemId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
+    memo,
+    lines: [
+      { accountId: p.assetAccountId, amount: fromUnits(deltaUnits), memo },
+      {
+        accountId: p.varianceAccountId ?? p.assetAccountId,
+        amount: fromUnits(-deltaUnits),
+        memo,
+      },
+    ],
+  });
 }
 
 /** Primary accounting book id. */
@@ -1031,22 +1211,13 @@ async function consumeLayers(
   if (profile.costingMethod === "standard") {
     cost = issueStandard(quantity, profile.standardCost ?? onHand.unitCost);
     consumptions = planQuantityConsumption(layers, fromUnits(coveredUnits));
-  } else if (profile.costingMethod === "moving_average") {
-    const positiveValue = toUnits(onHand.value) > 0n ? onHand.value : "0";
-    const coveredCost = issueMovingAverage(
-      { quantity: fromUnits(availableUnits), value: positiveValue },
-      fromUnits(coveredUnits),
-    ).cost;
-    cost = add(coveredCost, extendCost(shortfallQuantity, provisionalUnitCost));
-    if (layers[0] && coveredUnits > 0n)
-      consumptions = [
-        {
-          layerId: layers[0].id,
-          quantity: fromUnits(coveredUnits),
-          unitCost: layers[0].unit_cost,
-        },
-      ];
   } else {
+    // FIFO and moving average both drain layers oldest-first at each layer's
+    // carried cost. A healthy moving-average position holds exactly one
+    // blended layer, so this prices at the pool average by construction; a
+    // position that still carries several strata after a controlled
+    // costing-method flip degrades the same way instead of charging the whole
+    // issue to layers[0] and driving it below zero (cost_layers_remaining).
     const r = consumeFifo(
       layers.map((l) => ({
         id: l.id,
