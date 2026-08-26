@@ -772,6 +772,8 @@
     "insights_publish": "Publicar na biblioteca compartilhada",
     "items_read": "Ver itens e serviços",
     "items_manage": "Criar e editar itens",
+    "items_post": "Lançar movimentações de estoque",
+    "items_reverse": "Estornar movimentações de estoque",
     "projects_read": "Ver projetos e apropriação de custos",
     "projects_manage": "Criar e editar projetos",
     "time_read": "Ver planilhas de horas",

@@ -772,6 +772,8 @@
     "insights_publish": "共有ライブラリに公開",
     "items_read": "品目とサービスを表示",
     "items_manage": "品目を作成および編集",
+    "items_post": "在庫変動を記帳",
+    "items_reverse": "在庫変動を取消",
     "projects_read": "プロジェクトと原価計算を表示",
     "projects_manage": "プロジェクトを作成および編集",
     "time_read": "タイムシートを表示",

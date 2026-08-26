@@ -752,6 +752,8 @@
     "insights_publish": "Publicar en la biblioteca compartida",
     "items_read": "Ver artículos y servicios",
     "items_manage": "Crear y editar artículos",
+    "items_post": "Contabilizar movimientos de inventario",
+    "items_reverse": "Revertir movimientos de inventario",
     "projects_read": "Ver proyectos y costeo de trabajos",
     "projects_manage": "Crear y editar proyectos",
     "time_read": "Ver hojas de horas",

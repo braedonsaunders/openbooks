@@ -796,6 +796,8 @@
     "insights_publish": "Publier dans la bibliothèque partagée",
     "items_read": "Consulter les articles et services",
     "items_manage": "Créer et modifier des articles",
+    "items_post": "Comptabiliser les mouvements de stock",
+    "items_reverse": "Contrepasser les mouvements de stock",
     "projects_read": "Consulter les projets et le coût de revient",
     "projects_manage": "Créer et modifier des projets",
     "time_read": "Consulter les feuilles de temps",

@@ -772,6 +772,8 @@
     "insights_publish": "发布到共享库",
     "items_read": "查看物料和服务",
     "items_manage": "创建并编辑物料",
+    "items_post": "过账库存变动",
+    "items_reverse": "冲销库存变动",
     "projects_read": "查看项目和作业成本核算",
     "projects_manage": "创建并编辑项目",
     "time_read": "查看工时单",
