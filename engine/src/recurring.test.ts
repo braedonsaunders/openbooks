@@ -90,7 +90,7 @@ test("generation is guarded per occurrence before anything is created", () => {
   const gen = source.indexOf("async function generateFromTemplate");
   const lock = source.indexOf("for update", gen);
   const replay = source.indexOf(
-    "findOccurrenceDocument(orgId, occurrence.scheduleId, occurrence.occurrenceOn)",
+    "findOccurrenceDocument(orgId, context.scheduleId, context.occurrenceOn)",
     gen,
   );
   const tplLoad = source.indexOf("select * from documents where id = ${templateId}", gen);

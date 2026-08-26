@@ -80,3 +80,7 @@ test('recurring schedule action failures display the generated-document conflict
     'This recurring schedule cannot be deleted because it has generated documents. Their source history must be preserved.',
   )
 })
+
+test('run now passes the authenticated user to recurring generation', () => {
+  assert.match(route, /runScheduleNow\(id,\s*authz\.user\.id\)/)
+})

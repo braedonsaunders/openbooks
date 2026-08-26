@@ -207,6 +207,19 @@ export interface OccurrenceKey {
   occurrenceOn: string;
 }
 
+type RecurringRunSource = "scheduler" | "run_now";
+
+/**
+ * Generation attribution is explicit at the private write boundary. Scheduled
+ * ticks have no human actor; authenticated Run Now calls carry the gate user.
+ * The immutable occurrence row retains the schedule/date source, while the
+ * document custom payload makes the invocation kind directly inspectable.
+ */
+interface GenerationContext extends OccurrenceKey {
+  actorId: string | null;
+  runSource: RecurringRunSource;
+}
+
 /**
  * The document an earlier attempt committed for this occurrence, if any.
  * Replaying it — rather than generating again — is what makes a retried tick
@@ -313,6 +326,8 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
         return generateFromTemplate(s.orgId, s.templateId, today, s.autoPost, {
           scheduleId: s.id,
           occurrenceOn: occurrenceDate,
+          actorId: null,
+          runSource: "scheduler",
         });
       });
     } catch (e) {
@@ -373,6 +388,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
  */
 export async function runScheduleNow(
   scheduleId: string,
+  actorId: string,
   asOf?: string,
 ): Promise<{ documentId: string; documentNumber: string; posted: boolean }> {
   const s = await withBypass(async () => {
@@ -388,6 +404,8 @@ export async function runScheduleNow(
     generateFromTemplate(row.orgId, row.templateId, today, row.autoPost, {
       scheduleId,
       occurrenceOn: today,
+      actorId,
+      runSource: "run_now",
     }),
   );
   await withBypass(async () => {
@@ -405,24 +423,22 @@ async function generateFromTemplate(
   templateId: string,
   documentDate: string,
   autoPost: boolean,
-  occurrence?: OccurrenceKey,
+  context: GenerationContext,
 ): Promise<{ documentId: string; documentNumber: string; posted: boolean }> {
   // Per-occurrence dedupe (see recurring_occurrence_documents). The caller's
   // withOrg transaction pins one connection, so the lock, the replay check, the
   // clone, and the guard insert below are one atomic unit.
-  if (occurrence) {
-    // Serialize concurrent generations for one schedule (a tick vs a "run now")
-    // exactly like billOne serializes invoice attempts on its subscription row:
-    // the loser waits here, then its replay check sees the winner's committed
-    // guard row instead of racing it to a duplicate document.
-    await db.execute(sql`
-      select id from recurring_schedules
-       where id = ${occurrence.scheduleId} and org_id = ${orgId}
-       for update
-    `);
-    const prior = await findOccurrenceDocument(orgId, occurrence.scheduleId, occurrence.occurrenceOn);
-    if (prior) return prior;
-  }
+  // Serialize concurrent generations for one schedule (a tick vs a "run now")
+  // exactly like billOne serializes invoice attempts on its subscription row:
+  // the loser waits here, then its replay check sees the winner's committed
+  // guard row instead of racing it to a duplicate document.
+  await db.execute(sql`
+    select id from recurring_schedules
+     where id = ${context.scheduleId} and org_id = ${orgId}
+     for update
+  `);
+  const prior = await findOccurrenceDocument(orgId, context.scheduleId, context.occurrenceOn);
+  if (prior) return prior;
 
   const tplRes = (await db.execute<Record<string, any>>(sql`
     select * from documents where id = ${templateId} and org_id = ${orgId}
@@ -475,14 +491,23 @@ async function generateFromTemplate(
   const dueDate = termDays != null ? addDays(documentDate, termDays) : null;
 
   const documentNumber = await nextNumber(orgId, tpl.kind, tpl.subsidiary_id ?? null);
+  const provenance = {
+    recurringScheduleId: context.scheduleId,
+    recurringOccurrenceOn: context.occurrenceOn,
+    recurringRunSource: context.runSource,
+    ...(context.actorId === null
+      ? { actorKind: "system", actorReason: "recurring schedule" }
+      : {}),
+  };
   const created = (await db.execute<{ id: string }>(sql`
     insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                            due_date, currency, status, project_id, department_id, location_id, class_id,
-                           billing_method, reference_number, memo, subtotal, tax_total, total, created_by)
+                           billing_method, reference_number, memo, subtotal, tax_total, total, custom, created_by)
     values (${orgId}, ${tpl.kind}, ${documentNumber}, ${tpl.party_id}, ${tpl.subsidiary_id},
             ${documentDate}, ${dueDate}, ${tpl.currency}, 'draft', ${tpl.project_id},
             ${tpl.department_id}, ${tpl.location_id}, ${tpl.class_id}, ${tpl.billing_method},
-            ${tpl.reference_number}, ${tpl.memo}, '0', '0', '0', ${tpl.created_by})
+            ${tpl.reference_number}, ${tpl.memo}, '0', '0', '0',
+            ${JSON.stringify(provenance)}::jsonb, ${context.actorId})
     returning id
   `));
   const newId = created.rows[0]!.id;
@@ -497,7 +522,7 @@ async function generateFromTemplate(
       values (${orgId}, ${newId}, ${l.line_number}, ${l.item_id}, ${l.account_id}, ${l.description},
             ${l.quantity}, ${l.unit}, ${l.unit_price}, ${l.amount}, ${l.tax_code_id},
             ${l.tax_amount ?? "0"}, ${l.department_id}, ${l.project_id}, ${l.location_id}, ${l.class_id},
-            ${l.party_id}, ${l.is_billable ?? false}, ${JSON.stringify(l.custom ?? {})}::jsonb, ${l.created_by})
+            ${l.party_id}, ${l.is_billable ?? false}, ${JSON.stringify(l.custom ?? {})}::jsonb, ${context.actorId})
     `);
     amounts.push(String(l.amount ?? "0"));
     taxes.push(String(l.tax_amount ?? "0"));
@@ -527,17 +552,18 @@ async function generateFromTemplate(
 
   let posted = false;
   if (autoPost) {
-    if (!tpl.created_by) {
-      throw new Error("recurring template has no attributable creator");
-    }
-    const actorId = String(tpl.created_by);
-    const submission = await submitAndReleaseIfUngated(tpl.kind, newId, actorId);
+    const submission = await submitAndReleaseIfUngated(tpl.kind, newId, context.actorId);
     if (submission.flowError) {
       throw new Error(`approval could not be routed: ${submission.flowError}`);
     }
     if (!submission.gated) {
       const deps = await controlDeps(orgId);
-      await postDocument(newId, deps);
+      await postDocument(newId, deps, {
+        audit: {
+          actorId: context.actorId,
+          source: context.runSource === "scheduler" ? "recurring_schedule" : "recurring_run_now",
+        },
+      });
       posted = true;
     }
   }
@@ -547,12 +573,10 @@ async function generateFromTemplate(
   // every future attempt for this key replays the document below instead of
   // re-posting it; the unique index backstops the invariant even under
   // unexpected concurrency.
-  if (occurrence) {
-    await db.execute(sql`
-      insert into recurring_occurrence_documents
-        (org_id, schedule_id, occurrence_on, document_id, created_by)
-      values (${orgId}, ${occurrence.scheduleId}, ${occurrence.occurrenceOn}, ${newId}, ${tpl.created_by})
-    `);
-  }
+  await db.execute(sql`
+    insert into recurring_occurrence_documents
+      (org_id, schedule_id, occurrence_on, document_id, created_by)
+    values (${orgId}, ${context.scheduleId}, ${context.occurrenceOn}, ${newId}, ${context.actorId})
+  `);
   return { documentId: newId, documentNumber, posted };
 }

@@ -282,12 +282,10 @@ export async function createScriptJournal(
     const submission = await submitAndReleaseIfUngated(
       "journal",
       docId.id,
-      // A null submitter is a system submission: every downstream use inside
-      // the flow engine is `actorId ?? doc.createdBy` over nullable uuid
-      // columns, so attribution degrades to the document's own creator — also
-      // null here — rather than inventing an identity. The wrapper's narrower
-      // `string` parameter type is widened at this one boundary.
-      actorId as string,
+      // A null submitter is a system submission. The flow engine retains null
+      // rather than inventing an identity, and any submitter-based approval
+      // target resolves empty so the submission fails closed.
+      actorId,
     );
     if (submission.flowError) {
       throw new JournalWriteError(`approval could not be routed: ${submission.flowError}`);
