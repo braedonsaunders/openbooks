@@ -302,10 +302,13 @@ export async function markReportDeliveryStarted(orgId: string, deliveryId: strin
   `);
 }
 
+// Only 'sending' (the state markReportDeliveryStarted set) may complete as
+// 'sent'; a stale retry/racing callback must not rewrite an enqueued, failed
+// or already-sent row into a second recorded send.
 export async function markReportDeliverySent(orgId: string, deliveryId: string, emailLogId: string, providerMessageId: string): Promise<void> {
   await db.execute(sql`
     update report_delivery_outbox set status='sent', email_log_id=${emailLogId}, provider_message_id=${providerMessageId},
-           sent_at=now(), error=null, updated_at=now() where id=${deliveryId} and org_id=${orgId}
+           sent_at=now(), error=null, updated_at=now() where id=${deliveryId} and org_id=${orgId} and status='sending'
   `);
 }
 
