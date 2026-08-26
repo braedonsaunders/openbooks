@@ -12,6 +12,11 @@ import {
   processDueSchedulerOutbox,
   recoverStaleSchedulerOutbox,
 } from "./scheduler-outbox.ts";
+import {
+  recoverLostScriptOccurrences,
+  runDueScripts,
+  scriptOccurrenceKey,
+} from "./scheduler.ts";
 import { SCHEDULER_OUTBOX_WORKER_IDENTITY, TERMINAL_FAILURE_LOG_EVENT } from "./terminal-failure.ts";
 import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
 
@@ -297,6 +302,164 @@ test("an undeliverable flow email retries visibly instead of sending garbage", {
     assert.equal(failedRow!.attemptCount, 1);
   } finally {
     await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Scheduled-script occurrence durability (engine/src/scheduler.ts). The claim
+// must commit a durable dispatch-ledger row together with the cursor advance,
+// dispatch must share one deterministic identity across Redis and inline
+// fallback, and recovery must retry a lost dispatch exactly once. Redis is
+// disabled in tests (packages/jobs config), so every case below exercises the
+// inline fallback path of the same identity.
+// ---------------------------------------------------------------------------
+
+type OccurrenceEventRow = {
+  event?: string;
+  attempt?: number;
+  scheduledFor?: string;
+  job?: string;
+};
+
+/** Open the scripts feature gate and seed one active scheduled script due now. */
+async function seedDueScheduledScript(orgId: string, source: string): Promise<string> {
+  const scriptId = randomUUID();
+  await db.execute(sql`
+    update orgs
+       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,scripts}', 'true'::jsonb)
+     where id = ${orgId}
+  `);
+  await db.execute(sql`
+    insert into user_scripts (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active)
+    values (${scriptId}, ${orgId}, ${`Scratch cron ${scriptId.slice(0, 8)}`}, 'scheduled', ${source},
+            '*/5 * * * *', ${new Date(Date.now() - 60_000)}, 2000, true)
+  `);
+  return scriptId;
+}
+
+async function loadOccurrence(
+  scriptId: string,
+): Promise<{ status: string; errorMessage: string | null; logs: OccurrenceEventRow[] }> {
+  const row = (
+    await db.execute<{ status: string; errorMessage: string | null; logs: OccurrenceEventRow[] }>(sql`
+      select status, error_message as "errorMessage", logs
+        from script_runs
+       where script_id = ${scriptId} and target_kind = 'scheduled_occurrence'
+    `)
+  ).rows[0];
+  assert.ok(row, `expected a dispatch-ledger row for script ${scriptId}`);
+  return row;
+}
+
+async function countScheduledRuns(scriptId: string): Promise<number> {
+  return (
+    await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from script_runs
+       where script_id = ${scriptId} and target_kind = 'scheduled'
+    `)
+  ).rows[0]!.n;
+}
+
+test("a scheduled-script claim commits its durable occurrence with the cursor advance", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const scriptId = await seedDueScheduledScript(
+      org.orgId,
+      'function main(ctx) { ob.log("tick"); return "done"; }',
+    );
+    const dueAt = new Date(Date.now() - 60_000);
+    await db.execute(sql`update user_scripts set next_run_at = ${dueAt} where id = ${scriptId}`);
+
+    await runDueScripts();
+
+    // The ledger row exists, carries the deterministic occurrence identity and
+    // the scheduled-for stamp, and reached a terminal state via the inline
+    // fallback that shares it.
+    const occ = await loadOccurrence(scriptId);
+    assert.equal(occ.status, "ok");
+    assert.equal(occ.logs[0]?.event, "claimed");
+    assert.equal(occ.logs[0]?.scheduledFor, dueAt.toISOString());
+    assert.ok(occ.logs.some((e) => e.event === "ran_inline"), "the inline fallback ran under the shared identity");
+
+    // Exactly one real scheduled-run audit row backs the occurrence.
+    assert.equal(await countScheduledRuns(scriptId), 1);
+
+    // The cron cursor advanced past the claimed tick — future schedule advance
+    // stays recoverable and due again on time.
+    const cursor = (
+      await db.execute<{ nextRunAt: Date }>(sql`
+        select next_run_at as "nextRunAt" from user_scripts where id = ${scriptId}
+      `)
+    ).rows[0]!.nextRunAt;
+    assert.ok(cursor > dueAt, "the cron cursor advanced past the claimed tick");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+// A crash between the claim commit and any dispatch leaves the exact state
+// crafted below; recovery must re-dispatch it eventually-exactly-once while
+// the already-advanced cursor stays advanced (the tick is not re-armed).
+// Equivalence note: concurrent scanners are serialized by the same single CAS
+// UPDATE … WHERE next_run_at = $old guard this claim performs (a losing tick
+// is just an empty claim), and the exhausted-retry loss is the identical
+// finalize transition recovery makes when no evidence arrives — only the
+// pre-state differs, so neither permutation needs its own scenario here.
+test("a crash-orphaned occurrence is recovered exactly once and the cursor is not skipped", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,scripts}', 'true'::jsonb)
+       where id = ${org.orgId}
+    `);
+    // A crash after the claim committed but before any dispatch — craft the
+    // exact state the atomic claim leaves behind, stale past the recovery
+    // window, with the cursor already advanced past the missed tick.
+    const crashedId = randomUUID();
+    const scheduledFor = new Date(Date.now() - 30 * 60_000);
+    const advancedTo = new Date(Date.now() + 3_600_000);
+    await db.execute(sql`
+      insert into user_scripts (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active)
+      values (${crashedId}, ${org.orgId}, ${`Scratch cron ${crashedId.slice(0, 8)}`}, 'scheduled',
+              'function main(ctx) { return "recovered"; }',
+              '*/5 * * * *', ${advancedTo}, 2000, true)
+    `);
+    await db.execute(sql`
+      insert into script_runs (org_id, script_id, target_kind, target_id, status, logs, at)
+      values (${org.orgId}, ${crashedId}, 'scheduled_occurrence', null, 'queued',
+              jsonb_build_array(jsonb_build_object(
+                'event', 'claimed',
+                'occurrence', ${scriptOccurrenceKey(crashedId, scheduledFor)}::text,
+                'scheduledFor', ${scheduledFor.toISOString()}::text,
+                'attempt', 1)),
+              ${scheduledFor})
+    `);
+
+    await recoverLostScriptOccurrences();
+
+    // The orphaned claim was re-dispatched exactly once (attempt 2) and the
+    // inline retry completed with terminal evidence on the SAME row.
+    const recovered = await loadOccurrence(crashedId);
+    assert.equal(recovered.status, "ok");
+    assert.ok(recovered.logs.some((e) => e.event === "recover" && e.attempt === 2), "recovery consumed attempt 2");
+    assert.ok(recovered.logs.some((e) => e.event === "ran_inline" && e.attempt === 2));
+    assert.equal(await countScheduledRuns(crashedId), 1);
+
+    // Recovery is not re-armed by later ticks — eventually exactly once.
+    await recoverLostScriptOccurrences(new Date(Date.now() + 16 * 60_000));
+    assert.equal(await countScheduledRuns(crashedId), 1, "no further executions after the single retry");
+
+    // The cursor keeps its claimed advance: the missed tick is recovered
+    // without being re-armed as due.
+    const cursor = (
+      await db.execute<{ nextRunAt: Date }>(sql`
+        select next_run_at as "nextRunAt" from user_scripts where id = ${crashedId}
+      `)
+    ).rows[0]!.nextRunAt;
+    assert.equal(new Date(cursor).toISOString(), advancedTo.toISOString());
+  } finally {
     await dropScratchOrg(org.orgId);
   }
 });
