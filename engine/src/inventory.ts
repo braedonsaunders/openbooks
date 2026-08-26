@@ -27,6 +27,7 @@ import {
 } from "./subsidiaries.ts";
 import { businessToday } from "./business-date.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
+import type { AssemblyBomRevisionEvidence } from "@openbooks/schema";
 
 /**
  * Inventory subledger. Quantity and value move ONLY through this engine:
@@ -445,6 +446,7 @@ async function resolveProfile(
   orgId: string,
   itemId: string,
   runner: Runner = db,
+  lock = false,
 ): Promise<InventoryProfile> {
   const r = (await runner.execute<{
       item_id: string;
@@ -463,7 +465,8 @@ async function resolveProfile(
     select item_id, costing_method, tracking, asset_account_id, cogs_account_id, adjustment_account_id,
            variance_account_id, standard_cost, base_unit, allow_negative_inventory,
            negative_cost_basis, provisional_unit_cost
-      from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}`));
+      from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}
+     ${lock ? sql`for share` : sql``}`));
   const p = r.rows[0];
   if (!p) throw new InventoryError(`item ${itemId} has no inventory profile`);
   if (p.tracking !== "none" && p.costing_method === "moving_average") {
@@ -932,6 +935,8 @@ export async function postInventoryEntry(
     entryNumber: string;
     memo: string;
     lines: JournalLineInput[];
+    /** Immutable structured source evidence for this inventory operation. */
+    custom?: Record<string, unknown>;
   },
 ): Promise<string> {
   const bal = sum(p.lines.map((l) => l.amount));
@@ -939,9 +944,9 @@ export async function postInventoryEntry(
     throw new InventoryError(`inventory entry does not balance (sum=${bal})`);
   const entryRes = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
-      (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
+      (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, custom, created_by, updated_by)
     values (${p.orgId}, ${p.bookId}, ${p.subsidiaryId}, ${p.entryNumber}, ${p.date}, ${p.periodId}, ${p.memo},
-            'draft', 'inventory', null, null)
+            'draft', 'inventory', ${JSON.stringify(p.custom ?? {})}::jsonb, null, null)
     returning id`));
   const eid = entryRes.rows[0]!.id;
   for (let i = 0; i < p.lines.length; i++) {
@@ -2624,6 +2629,11 @@ export interface BuildInput {
   memo?: string | null;
 }
 
+export interface AssemblyBuildResult extends MovementResult {
+  /** Content address of the exact BOM snapshot consumed by this build. */
+  bomRevision: `sha256:${string}`;
+}
+
 /**
  * Build assemblies from their bill of materials: consume each component (by its
  * costing method) and produce the finished good at the summed component cost —
@@ -2637,15 +2647,9 @@ export async function buildAssembly(
   orgId: string,
   actorId: string | null,
   input: BuildInput,
-): Promise<MovementResult> {
+): Promise<AssemblyBuildResult> {
   if (cmp(input.quantity, "0") <= 0)
     throw new InventoryError("build quantity must be positive");
-  const assembly = await resolveProfile(orgId, input.assemblyItemId);
-  if (assembly.tracking !== "none") {
-    throw new InventoryError(
-      "tracked assemblies require serial/lot build allocation evidence, which this operation does not accept",
-    );
-  }
   const period = await periodForDate(orgId, input.date);
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
@@ -2654,31 +2658,84 @@ export async function buildAssembly(
   const ctx = await loadSubsidiaryContext(db, orgId);
   assertMovementOwner(ctx, input.subsidiaryId);
 
-  const bom = (await db.execute<{ component_item_id: string; quantity_per: string }>(sql`
-    select component_item_id, quantity_per from bom_components
-     where org_id = ${orgId} and assembly_item_id = ${input.assemblyItemId} order by sort_order`));
-  if (bom.rows.length === 0)
-    throw new InventoryError("assembly has no bill of materials");
+  return await db.transaction(async (tx) => {
+    // There is no separately lockable BOM header. A SHARE table lock is the
+    // narrowest PostgreSQL primitive that excludes every INSERT/UPDATE/DELETE,
+    // including insertion of a new component for this assembly. It therefore
+    // gives the build one policy: a writer already in flight commits first and
+    // is re-read; a writer arriving later waits for this build to finish.
+    await tx.execute(sql`lock table bom_components in share mode`);
+    const bom = (await tx.execute<{
+      component_item_id: string;
+      quantity_per: string;
+      sort_order: number;
+    }>(sql`
+      select component_item_id, quantity_per, sort_order
+        from bom_components
+       where org_id = ${orgId} and assembly_item_id = ${input.assemblyItemId}
+       order by sort_order, component_item_id
+    `));
+    if (bom.rows.length === 0) {
+      throw new InventoryError("assembly has no bill of materials");
+    }
 
-  // Resolve each component: profile, required qty, cost.
-  const components: {
-    itemId: string;
-    profile: InventoryProfile;
-    reqQty: string;
-    onHand?: { quantity: string; value: string; unitCost: string };
-  }[] = [];
-  for (const c of bom.rows) {
-    const profile = await resolveProfile(orgId, c.component_item_id);
-    if (profile.tracking !== "none") {
+    const bomSnapshot = {
+      format: "openbooks.inventory-bom.v1" as const,
+      assemblyItemId: input.assemblyItemId,
+      components: bom.rows.map((component) => ({
+        componentItemId: component.component_item_id,
+        quantityPer: normalizeMoney(component.quantity_per),
+        sortOrder: component.sort_order,
+      })),
+    };
+    const bomRevision: `sha256:${string}` =
+      `sha256:${inventoryRequestHash(bomSnapshot)}`;
+    const bomEvidence: AssemblyBomRevisionEvidence = {
+      ...bomSnapshot,
+      revision: bomRevision,
+    };
+
+    // Lock every costing profile in UUID order before using any of them. A
+    // build can then never combine a BOM snapshot with a pre-transaction or
+    // concurrently revised costing policy.
+    const profileByItemId = new Map<string, InventoryProfile>();
+    const profileItemIds = [
+      input.assemblyItemId,
+      ...bom.rows.map((component) => component.component_item_id),
+    ]
+      .filter((itemId, index, all) => all.indexOf(itemId) === index)
+      .sort();
+    for (const itemId of profileItemIds) {
+      profileByItemId.set(itemId, await resolveProfile(orgId, itemId, tx, true));
+    }
+    const assembly = profileByItemId.get(input.assemblyItemId)!;
+    if (assembly.tracking !== "none") {
       throw new InventoryError(
-        `tracked component ${c.component_item_id} requires explicit serial/lot consumption evidence`,
+        "tracked assemblies require serial/lot build allocation evidence, which this operation does not accept",
       );
     }
-    const reqQty = extendCost(input.quantity, c.quantity_per); // quantity × quantity_per
-    components.push({ itemId: c.component_item_id, profile, reqQty });
-  }
 
-  return await db.transaction(async (tx) => {
+    // Resolve each component from the locked BOM and costing-profile snapshot.
+    const components: {
+      itemId: string;
+      profile: InventoryProfile;
+      reqQty: string;
+      onHand?: { quantity: string; value: string; unitCost: string };
+    }[] = [];
+    for (const component of bom.rows) {
+      const profile = profileByItemId.get(component.component_item_id)!;
+      if (profile.tracking !== "none") {
+        throw new InventoryError(
+          `tracked component ${component.component_item_id} requires explicit serial/lot consumption evidence`,
+        );
+      }
+      components.push({
+        itemId: component.component_item_id,
+        profile,
+        reqQty: extendCost(input.quantity, component.quantity_per),
+      });
+    }
+
     // A build touches every component plus the finished-good position.
     // Deterministic advisory locks make the availability check and all layer
     // updates one serializable operation without deadlocks between BOMs.
@@ -2790,6 +2847,7 @@ export async function buildAssembly(
       entryNumber: `INV-BUILD-${input.date}-${input.assemblyItemId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
       memo: input.memo ?? "Assembly build",
       lines,
+      custom: { assemblyBuild: bomEvidence },
     });
 
     // Component consume movements + layer draw-downs.
@@ -2834,7 +2892,12 @@ export async function buildAssembly(
       input.date,
     );
 
-    return { movementId: buildMv.rows[0]!.id, entryId, value: fgValue };
+    return {
+      movementId: buildMv.rows[0]!.id,
+      entryId,
+      value: fgValue,
+      bomRevision,
+    };
   });
 }
 
