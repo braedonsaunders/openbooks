@@ -84,6 +84,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0045_subsidiary_tree_guard_serialization.sql",
     "0046_account_posting_classification_serialization.sql",
     "0047_segment_value_hierarchy_serialization.sql",
+    "0049_payment_schedule_occurrence_durability.sql",
     "0050_ownership_policy_first_use_serialization.sql",
     "0051_effective_date_overlap_exclusion_constraints.sql",
   ]);

@@ -244,9 +244,18 @@ test("payment approval fails closed when the maker is not identified", () => {
     paymentOperationsSource,
     /if \(makerId === null\) throw new PaymentError\(`\$\{subject\} approval requires an identified \$\{maker\}`\)/,
   );
+  // Runs: a null submitter is a system submission (the payment scheduler) —
+  // its maker is the system itself, so the approval predicate lets any
+  // authenticated human through and the self-approval guard below rejects only
+  // a submitter approving their own run. Files still require an identified
+  // human maker: a system-generated file cannot be approved.
   assert.match(
     paymentOperationsSource,
-    /submitted_by is not null and submitted_by <> \$\{userId\}/,
+    /submitted_by is null\s+or submitted_by <> \$\{userId\}/,
+  );
+  assert.match(
+    paymentOperationsSource,
+    /the payment run submitter cannot approve the same run/,
   );
   assert.match(
     paymentOperationsSource,
@@ -550,22 +559,18 @@ test(
       );
       assert.ok(beforeMissingSubmitterAttempt);
       assert.equal(beforeMissingSubmitterAttempt.maker_by, null);
-      await assert.rejects(
-        withOrgContext(org.orgId, () =>
-          decidePaymentRun(unidentifiedRunId, org.orgId, approverId, "approve"),
-        ),
-        (error: Error) =>
-          error instanceof PaymentError
-          && error.message === "payment run approval requires an identified submitter",
+      // A null submitter is a system submission (the payment scheduler): the
+      // maker is the system itself, so any authenticated human is an
+      // independent checker and the approval succeeds.
+      await withOrgContext(org.orgId, () =>
+        decidePaymentRun(unidentifiedRunId, org.orgId, approverId, "approve"),
       );
-      // The refusal is causal and total: the named refusal fired because no
-      // users row identifies the maker, and afterwards not one column has
-      // moved — including the updated_at/updated_by stamp any partial write
-      // would have left behind — and no event exists.
-      const afterMissingSubmitterAttempt = await withOrgContext(org.orgId, () =>
+      const afterSystemSubmissionApproval = await withOrgContext(org.orgId, () =>
         paymentRunDecisionAuditSnapshot(org.orgId, unidentifiedRunId),
       );
-      assert.deepEqual(afterMissingSubmitterAttempt, beforeMissingSubmitterAttempt);
+      assert.equal(afterSystemSubmissionApproval?.status, "approved");
+      assert.equal(afterSystemSubmissionApproval?.maker_by, null);
+      assert.equal(afterSystemSubmissionApproval?.event_count, 1);
 
       await withOrgContext(org.orgId, () =>
         decidePaymentRun(runId, org.orgId, approverId, "approve"),
