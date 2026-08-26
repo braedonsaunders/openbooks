@@ -93,11 +93,23 @@ export interface DocPayload {
   lines: Record<string, any>[]
 }
 
+/** Any request that carries one exact revision token as fence evidence.
+ *  Documents name it expectedUpdatedAt; field tickets expectedRevision. */
+export type RevisionFencedRequest = {
+  path: string
+  method: 'PATCH' | 'POST'
+  body: Record<string, unknown>
+}
+
 export type DocumentSaveRequest<Method extends 'PATCH' | 'POST' = 'PATCH' | 'POST'> = {
   path: string
   method: Method
   body: Record<string, unknown> & { expectedUpdatedAt: string }
 }
+
+/** Client-side echo of the API's stale-write 409 contract (lib/documents). */
+export const DOCUMENT_CHANGED_AFTER_OPEN =
+  'this document changed after you opened it; reload and review the latest revision'
 
 /** The revision is an opaque value loaded from persisted document state. */
 export function persistedDocumentRevision(value: unknown): string {
@@ -113,28 +125,142 @@ export function buildDocumentSaveRequest(
   payload: Record<string, unknown>,
   isPosted: boolean,
   amendmentReason?: string,
+  /** Draft families whose PATCH lives on their own equally fenced route
+   *  (e.g. /api/expenses, /api/journals) instead of /api/documents. */
+  route: { basePath?: string } = {},
 ): DocumentSaveRequest {
+  const basePath = route.basePath ?? '/api/documents'
   const body = {
     ...payload,
     expectedUpdatedAt: persistedDocumentRevision(persistedRevision),
   }
   if (!isPosted) {
     return {
-      path: `/api/documents/${documentId}`,
+      path: `${basePath}/${documentId}`,
       method: 'PATCH',
       body,
     } satisfies DocumentSaveRequest<'PATCH'>
   }
   return {
-    path: `/api/documents/${documentId}/correct`,
+    path: `${basePath}/${documentId}/correct`,
     method: 'POST',
     body: { ...body, amendmentReason },
   } satisfies DocumentSaveRequest<'POST'>
 }
 
+/**
+ * The exact token a successful fenced save hands back to its caller, across
+ * both wire shapes this app returns: `{ doc: { updated_at } }` document
+ * payloads and the field-ticket payload whose revision rides at the top level.
+ */
 export function revisionFromSuccessfulDocumentSave(data: unknown): string {
-  const saved = data as { doc?: { updated_at?: unknown } }
-  return persistedDocumentRevision(saved?.doc?.updated_at)
+  const saved = data as { doc?: { updated_at?: unknown }; revision?: unknown }
+  return persistedDocumentRevision(saved?.doc?.updated_at ?? saved?.revision)
+}
+
+/** Identity + exact revision of a `{ doc }` draft payload (expenses,
+ *  journals). RSC props carry a lossy Date `updated_at`, so only a canonical
+ *  API read can mint a usable snapshot. */
+export function draftDocumentIdentity(payload: unknown): { documentId: string; revision: string } {
+  const doc = (payload as { doc?: Record<string, unknown> } | null)?.doc
+  if (!doc || doc.id == null || doc.id === '') throw new Error('DOCUMENT_ID_REQUIRED')
+  return { documentId: String(doc.id), revision: persistedDocumentRevision(doc.updated_at) }
+}
+
+/** Load a canonical draft payload and pin its exact persisted revision —
+ *  fail closed when the read fails or returns a lossy token (never guess). */
+export async function loadDraftDocumentSnapshot(
+  path: string,
+  fallbackMessage: string,
+  transport: typeof fetch = fetch,
+): Promise<PersistedDocumentSnapshot<DocPayload>> {
+  let res: Response
+  try {
+    res = await transport(path)
+  } catch {
+    throw new Error(fallbackMessage)
+  }
+  if (!res.ok) throw new Error(fallbackMessage)
+  const data = (await res.json()) as DocPayload
+  const identity = draftDocumentIdentity(data)
+  return { documentId: identity.documentId, revision: identity.revision, payload: data }
+}
+
+export type DocumentSaveOutcome<Data> =
+  | { ok: true; data: Data; revision: string }
+  | { ok: false; message: string; isConflict: boolean }
+
+/** Uniform result of one interactive editor's fenced mutation: a success
+ *  carries the refreshed exact token, conflicts carry the server's 409
+ *  message so the caller can run its reload flow. */
+export type FencedSaveResult<Saved> =
+  | { status: 'saved'; saved: Saved; revision: string }
+  | { status: 'conflict'; message: string }
+  | { status: 'error'; message: string }
+
+/** Execute one revision-fenced save request and classify its outcome: a
+ *  success carries the refreshed exact token, a failure keeps the server's
+ *  message and flags conflicts so callers can run their reload flow. */
+export async function executeDocumentSave<Data extends object = DocPayload>(
+  request: RevisionFencedRequest,
+  fallbackMessage: string,
+  transport: typeof fetch = fetch,
+): Promise<DocumentSaveOutcome<Data>> {
+  let res: Response
+  try {
+    res = await transport(request.path, {
+      method: request.method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request.body),
+    })
+  } catch {
+    return { ok: false, message: fallbackMessage, isConflict: false }
+  }
+  if (!res.ok) {
+    return { ok: false, ...(await readDocumentSaveFailure(res, fallbackMessage)) }
+  }
+  const data = (await res.json()) as Data
+  return { ok: true, data, revision: revisionFromSuccessfulDocumentSave(data) }
+}
+
+/**
+ * What a canonical read means for an already-open editor. A clean editor
+ * adopts the fresh snapshot wholesale. A dirty editor may keep its edits only
+ * while nothing actually moved server-side — it then pins the newer exact
+ * token under unchanged content. Content that drifted under active edits is a
+ * conflict: blessing stale edits with the newer token would recreate the
+ * silent last-write-wins this fence exists to prevent.
+ *
+ * Content comparison strips the revision itself (a Date in props can never
+ * equal its exact wire token) and compares everything else byte-stably.
+ */
+export type CanonicalDraftAdoption =
+  | { action: 'adopt'; snapshot: PersistedDocumentSnapshot<DocPayload> }
+  | { action: 'pin'; revision: string }
+  | { action: 'conflict'; snapshot: PersistedDocumentSnapshot<DocPayload> }
+
+function draftContentFingerprint(snapshot: PersistedDocumentSnapshot<DocPayload>): string {
+  const { updated_at: _revision, ...doc } = snapshot.payload.doc ?? {}
+  void _revision
+  return JSON.stringify({ doc, lines: snapshot.payload.lines })
+}
+
+export function reconcileCanonicalDraftRead(args: {
+  current: PersistedDocumentSnapshot<DocPayload>
+  incoming: PersistedDocumentSnapshot<DocPayload>
+  isDirty: boolean
+}): CanonicalDraftAdoption {
+  if (args.current.documentId !== args.incoming.documentId) {
+    return { action: 'conflict', snapshot: args.incoming }
+  }
+  if (!args.isDirty) return { action: 'adopt', snapshot: args.incoming }
+  if (
+    args.current.revision === args.incoming.revision ||
+    draftContentFingerprint(args.current) === draftContentFingerprint(args.incoming)
+  ) {
+    return { action: 'pin', revision: args.incoming.revision }
+  }
+  return { action: 'conflict', snapshot: args.incoming }
 }
 
 export type PersistedDocumentSnapshot<Payload> = {
