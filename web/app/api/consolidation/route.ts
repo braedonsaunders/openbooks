@@ -4,6 +4,7 @@ import {
   ConsolidationError,
   deriveConsolidatedRates,
   runAutoElimination,
+  runCombinedConsolidation,
   runOwnershipConsolidation,
 } from '@openbooks/engine/src/consolidation.ts'
 import { withOrgTransaction } from '@openbooks/engine/src/db.ts'
@@ -16,7 +17,9 @@ export const runtime = 'nodejs'
  * Consolidation actions, run from the Period Close page (multi-subsidiary orgs
  * only): derive the period's consolidated exchange rates from daily fx_rates,
  * or (re-)post the period's auto-elimination entry into the elimination
- * subsidiary. Both are idempotent per period. Gated by close.run — these are
+ * subsidiary. Both are idempotent per period, and the combined 'consolidate'
+ * action commits derivation + ownership + elimination as one atomic unit.
+ * Gated by close.run — these are
  * period-close controller actions, and by the multiSubsidiary feature so a
  * disabled consolidation module cannot be driven through this API.
  */
@@ -54,11 +57,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, ...result })
     }
     if (action === 'consolidate') {
-      const ratesWritten = await withOrgTransaction(user.orgId, () =>
-        deriveConsolidatedRates(user.orgId, periodId),
-      )
-      const ownership = await runOwnershipConsolidation(user.orgId, periodId, user.id)
-      const elimination = await runAutoElimination(user.orgId, periodId, user.id)
+      // One atomic unit: rates, ownership, and elimination commit together or
+      // not at all. A residual elimination failure must not leave derived
+      // rates and POSTED ownership journals durable while the client is told
+      // the command failed.
+      const { ratesWritten, ownership, elimination } = await runCombinedConsolidation(user.orgId, periodId, user.id)
       return NextResponse.json({ ok: true, ratesWritten, ownership, elimination })
     }
     const { entryId, lineCount } = await runAutoElimination(user.orgId, periodId, user.id)

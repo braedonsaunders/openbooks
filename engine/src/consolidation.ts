@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { CurrencyError, updateFxRate } from "./currencies.ts";
-import { db, schema } from "./db.ts";
+import { db } from "./db.ts";
 import { fromUnits, isZero, mulPercent, mulRate, neg, sum, toUnits } from "./money.ts";
 import { assertFinalKernelBalance } from "./posting.ts";
 import { loadSubsidiaryContext } from "./subsidiaries.ts";
@@ -13,11 +13,24 @@ import { loadSubsidiaryContext } from "./subsidiaries.ts";
  *    every currency pair the subsidiary tree needs. Manual overrides
  *    (source='manual') are never touched.
  *
+ *  - runOwnershipConsolidation: posts acquisition, NCI, and equity-method
+ *    adjustments into the elimination subsidiary. Re-runnable: prior
+ *    effective generations are reversed first.
+ *
  *  - runAutoElimination: at period close, reverses the period's activity on
  *    accounts flagged `eliminate` into the elimination subsidiary, so
  *    consolidated statements net intercompany balances to zero while every
  *    standalone view stays untouched. Re-runnable: it replaces the period's
  *    prior elimination entry.
+ *
+ *  - runCombinedConsolidation: the Period Close page's "consolidate" command —
+ *    rate derivation, ownership adjustments, and auto-elimination executed as
+ *    ONE REPEATABLE READ transaction. A failure in any phase rolls back the
+ *    derived rates, the ownership journals, and the elimination entry
+ *    together: the command either fully commits or fully aborts, never
+ *    half-applies durable ledger state while reporting failure. Every phase
+ *    is idempotent per period, so a retry (combined or per-phase) resumes
+ *    cleanly from committed data.
  *
  * Translation itself (statement-time current/average/historical application
  * + CTA plug) lives with the report resolvers; these functions own the data
@@ -25,6 +38,9 @@ import { loadSubsidiaryContext } from "./subsidiaries.ts";
  */
 
 export class ConsolidationError extends Error {}
+
+/** Anything a phase can run against: the pooled `db` or one open transaction. */
+type Runner = Pick<typeof db, "execute">;
 
 function persistDerivedFxRate(value: unknown): string {
   try {
@@ -49,9 +65,12 @@ type OwnershipInterest = {
 type AdjustmentLine = { accountId: string; amount: string; memo: string };
 
 /**
- * Post acquisition, NCI, and equity-method consolidation adjustments. Every
- * adjustment lives in the elimination subsidiary, is exact to ledger scale,
- * and is append-only on rerun (prior effective entries are reversed first).
+ * Transaction-parameterized ownership phase: decides and posts every
+ * acquisition/NCI/equity adjustment onto the caller's executor, so the
+ * combined command can hold derivation, ownership, and elimination in ONE
+ * transaction. The xact-scoped advisory lock stays here: it serializes
+ * generations per org/period whether this phase runs alone or inside the
+ * combined unit.
  *
  * Per-book semantics: the primary book is both the source AND the destination.
  * Period activity and acquisition-date equity are read from primary-book
@@ -59,171 +78,186 @@ type AdjustmentLine = { accountId: string; amount: string; memo: string };
  * adjustments and must never leak into the consolidated ledger — and every
  * produced entry lands in that same book.
  */
+async function runOwnershipConsolidationIn(
+  orgId: string,
+  periodId: string,
+  userId: string,
+  tx: Runner,
+): Promise<{ runId: string; entryIds: string[] }> {
+  if (!userId) throw new ConsolidationError("an attributable actor is required");
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ownership:${orgId}:${periodId}`},0))`);
+  const context = await loadSubsidiaryContext(tx, orgId);
+  const elimination = [...context.byId.values()].find((row) => row.isElimination && row.isActive);
+  if (!elimination) throw new ConsolidationError("no active elimination subsidiary for ownership adjustments");
+  const periodResult = (await tx.execute<{ id: string; starts_on: string; ends_on: string; name: string }>(sql`
+    select id, starts_on, ends_on, name from accounting_periods where id=${periodId} and org_id=${orgId}
+  `));
+  const period = periodResult.rows[0];
+  if (!period) throw new ConsolidationError(`period ${periodId} not found`);
+  const bookResult = (await tx.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id=${orgId} and is_primary and is_active limit 1
+  `));
+  const bookId = bookResult.rows[0]?.id;
+  if (!bookId) throw new ConsolidationError("no active primary accounting book is configured");
+  const interests = (await tx.execute<OwnershipInterest>(sql`
+    select * from subsidiary_ownership_interests
+     where org_id=${orgId} and is_active and effective_from <= ${period.ends_on}
+       and (effective_to is null or effective_to >= ${period.starts_on})
+     order by subsidiary_id, effective_from
+  `));
+  const run = (await tx.execute<{ id: string }>(sql`
+    insert into ownership_consolidation_runs (org_id,period_id,status,created_by,updated_by)
+    values (${orgId},${periodId},'running',${userId ?? null},${userId ?? null}) returning id
+  `));
+  const runId = run.rows[0]!.id;
+  const entryIds: string[] = [];
+  let sequence = 0;
+
+  const post = async (interestId: string, kind: "acquisition" | "nci_income" | "equity_income" | "reversal", lines: AdjustmentLine[], reverses?: string) => {
+    const material = lines.filter((line) => !isZero(line.amount));
+    if (material.length === 0) return null;
+    assertFinalKernelBalance(material.map((line) => ({ amount: line.amount, subsidiaryId: elimination.id })));
+    sequence++;
+    // run ids are uuidv7 (time-ordered): their LEADING bytes repeat for
+    // every run inside a ~50-day window, so the whole id must salt the
+    // entry number to keep reruns unique under journal_entries_org_number.
+    const inserted = (await tx.execute<{ id: string }>(sql`
+      insert into journal_entries
+        (org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,created_by)
+      values (${orgId},${bookId},${elimination.id},${`OWN-${period.name}-${runId}-${sequence}`},
+              ${period.ends_on},${periodId},${`Ownership consolidation ${kind}`},'draft','translation',${reverses ?? null},${userId ?? null})
+      returning id
+    `));
+    const entryId = inserted.rows[0]!.id;
+    for (let index = 0; index < material.length; index++) {
+      const line = material[index]!;
+      await tx.execute(sql`
+        insert into journal_lines
+          (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,memo)
+        values (${orgId},${entryId},${index + 1},${line.accountId},${elimination.id},${line.amount},
+                ${elimination.baseCurrency},${line.amount},1,${line.memo})
+      `);
+    }
+    await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${userId} where id=${entryId} and org_id=${orgId}`);
+    if (reverses) {
+      await tx.execute(sql`
+        update journal_entries
+           set status='reversed', updated_at=now(), updated_by=${userId}
+         where id=${reverses} and org_id=${orgId} and status='posted'
+      `);
+    }
+    await tx.execute(sql`
+      insert into ownership_consolidation_entries (org_id,run_id,interest_id,kind,journal_entry_id,created_by,updated_by)
+      values (${orgId},${runId},${interestId},${kind},${entryId},${userId ?? null},${userId ?? null})
+    `);
+    entryIds.push(entryId);
+    return entryId;
+  };
+
+  const prior = (await tx.execute<{ interest_id: string; id: string; entry_number: string }>(sql`
+    select oce.interest_id, je.id, je.entry_number
+      from ownership_consolidation_entries oce
+      join ownership_consolidation_runs r on r.id=oce.run_id and r.org_id=oce.org_id and r.period_id=${periodId}
+      join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted'
+     where oce.org_id=${orgId} and je.book_id=${bookId} and oce.kind<>'reversal' and je.reverses_entry_id is null
+       and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.org_id=${orgId} and rev.status='posted')
+  `));
+  for (const old of prior.rows) {
+    const oldLines = (await tx.execute<{ account_id: string; amount: string; memo: string | null }>(sql`select account_id,amount,memo from journal_lines where entry_id=${old.id} and org_id=${orgId} order by line_number`));
+    await post(old.interest_id, "reversal", oldLines.rows.map((line) => ({ accountId: line.account_id, amount: neg(line.amount), memo: `Reversal of ${old.entry_number}` })), old.id);
+  }
+
+  for (const interest of interests.rows) {
+    // Source scope = the destination book: only primary-book entries feed
+    // consolidated adjustments (alternate books keep their own ledgers).
+    const periodActivity = (await tx.execute<{ profit: string; distributions: string }>(sql`
+      select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
+             coalesce(sum(l.amount) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions
+       from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
+        join accounts a on a.id=l.account_id and a.org_id=l.org_id
+       where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
+         and l.subsidiary_id=${interest.subsidiary_id} and e.period_id=${periodId}
+    `));
+    const profit = periodActivity.rows[0]!.profit;
+    const distributions = periodActivity.rows[0]!.distributions;
+
+    if (interest.method === "full") {
+      const acquisitionExists = (await tx.execute(sql`
+        select 1 from ownership_consolidation_entries oce
+         join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted' and je.book_id=${bookId}
+        where oce.interest_id=${interest.id} and oce.kind='acquisition' and je.reverses_entry_id is null
+          and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.org_id=${orgId} and rev.status='posted') limit 1
+      `));
+      if (!acquisitionExists.rows[0] && interest.acquisition_date <= period.ends_on) {
+        const equity = (await tx.execute<{ account_id: string; amount: string }>(sql`
+          select l.account_id,coalesce(sum(l.amount),0)::text as amount
+            from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
+            join accounts a on a.id=l.account_id and a.org_id=l.org_id and a.type='equity'
+           where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
+             and l.subsidiary_id=${interest.subsidiary_id} and e.posting_date <= ${interest.acquisition_date}
+           group by l.account_id having sum(l.amount)<>0
+        `));
+        const translatedEquity = equity.rows.map((line) => ({ accountId: line.account_id, balance: mulRate(line.amount, interest.acquisition_rate) }));
+        const bookNetAssets = sum(translatedEquity.map((line) => neg(line.balance)));
+        const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
+        const nci = interest.nci_measurement === "fair_value"
+          ? interest.nci_fair_value!
+          : mulPercent(interest.fair_value_net_assets, nciPercent);
+        const fairValueAdjustment = fromUnits(toUnits(interest.fair_value_net_assets) - toUnits(bookNetAssets));
+        const goodwill = fromUnits(toUnits(interest.acquisition_cost) + toUnits(nci) - toUnits(interest.fair_value_net_assets));
+        await post(interest.id, "acquisition", [
+          ...translatedEquity.map((line) => ({ accountId: line.accountId, amount: neg(line.balance), memo: "Eliminate acquisition-date equity" })),
+          { accountId: interest.fair_value_adjustment_account_id!, amount: fairValueAdjustment, memo: "Fair-value net asset adjustment" },
+          { accountId: interest.goodwill_account_id!, amount: goodwill, memo: "Acquisition goodwill or bargain purchase" },
+          { accountId: interest.investment_account_id, amount: neg(interest.acquisition_cost), memo: "Eliminate parent investment" },
+          ...(interest.nci_equity_account_id ? [{ accountId: interest.nci_equity_account_id, amount: neg(nci), memo: "Recognize non-controlling interest" }] : []),
+        ]);
+      }
+      const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
+      const nciIncome = mulPercent(profit, nciPercent);
+      if (interest.nci_income_account_id && interest.nci_equity_account_id) {
+        await post(interest.id, "nci_income", [
+          { accountId: interest.nci_income_account_id!, amount: nciIncome, memo: "Allocate profit to non-controlling interests" },
+          { accountId: interest.nci_equity_account_id!, amount: neg(nciIncome), memo: "Accumulate non-controlling interest" },
+        ]);
+      }
+    } else if (interest.method === "equity") {
+      const shareProfit = mulPercent(profit, interest.ownership_percent);
+      const shareDistribution = mulPercent(distributions, interest.ownership_percent);
+      await post(interest.id, "equity_income", [
+        { accountId: interest.investment_account_id, amount: shareProfit, memo: "Equity-method share of profit" },
+        { accountId: interest.equity_income_account_id, amount: neg(shareProfit), memo: "Equity-method income" },
+        ...(interest.distribution_income_account_id ? [
+          { accountId: interest.investment_account_id, amount: neg(shareDistribution), memo: "Equity-method distribution reduces investment" },
+          { accountId: interest.distribution_income_account_id, amount: shareDistribution, memo: "Eliminate distribution income" },
+        ] : []),
+      ]);
+    }
+  }
+  await tx.execute(sql`update ownership_consolidation_runs set status='posted',finished_at=now(),updated_at=now() where id=${runId} and org_id=${orgId}`);
+  return { runId, entryIds };
+}
+
+/**
+ * Post acquisition, NCI, and equity-method consolidation adjustments. Every
+ * adjustment lives in the elimination subsidiary, is exact to ledger scale,
+ * and is append-only on rerun (prior effective entries are reversed first).
+ */
 export async function runOwnershipConsolidation(
   orgId: string,
   periodId: string,
   userId: string,
 ): Promise<{ runId: string; entryIds: string[] }> {
-  if (!userId) throw new ConsolidationError("an attributable actor is required");
   try {
     // REPEATABLE READ pins one snapshot for every deciding read (interests,
     // prior generations, per-interest activity): a source posting that commits
     // mid-run is excluded wholesale from this generation and absorbed by the
     // replacement on the next run, instead of tearing the generation
     // half-included under READ COMMITTED's per-statement snapshots.
-    return await db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ownership:${orgId}:${periodId}`},0))`);
-      const context = await loadSubsidiaryContext(tx, orgId);
-      const elimination = [...context.byId.values()].find((row) => row.isElimination && row.isActive);
-      if (!elimination) throw new ConsolidationError("no active elimination subsidiary for ownership adjustments");
-      const periodResult = (await tx.execute<{ id: string; starts_on: string; ends_on: string; name: string }>(sql`
-        select id, starts_on, ends_on, name from accounting_periods where id=${periodId} and org_id=${orgId}
-      `));
-      const period = periodResult.rows[0];
-      if (!period) throw new ConsolidationError(`period ${periodId} not found`);
-      const bookResult = (await tx.execute<{ id: string }>(sql`
-        select id from accounting_books where org_id=${orgId} and is_primary and is_active limit 1
-      `));
-      const bookId = bookResult.rows[0]?.id;
-      if (!bookId) throw new ConsolidationError("no active primary accounting book is configured");
-      const interests = (await tx.execute<OwnershipInterest>(sql`
-        select * from subsidiary_ownership_interests
-         where org_id=${orgId} and is_active and effective_from <= ${period.ends_on}
-           and (effective_to is null or effective_to >= ${period.starts_on})
-         order by subsidiary_id, effective_from
-      `));
-      const run = (await tx.execute<{ id: string }>(sql`
-        insert into ownership_consolidation_runs (org_id,period_id,status,created_by,updated_by)
-        values (${orgId},${periodId},'running',${userId ?? null},${userId ?? null}) returning id
-      `));
-      const runId = run.rows[0]!.id;
-      const entryIds: string[] = [];
-      let sequence = 0;
-
-      const post = async (interestId: string, kind: "acquisition" | "nci_income" | "equity_income" | "reversal", lines: AdjustmentLine[], reverses?: string) => {
-        const material = lines.filter((line) => !isZero(line.amount));
-        if (material.length === 0) return null;
-        assertFinalKernelBalance(material.map((line) => ({ amount: line.amount, subsidiaryId: elimination.id })));
-        sequence++;
-        // run ids are uuidv7 (time-ordered): their LEADING bytes repeat for
-        // every run inside a ~50-day window, so the whole id must salt the
-        // entry number to keep reruns unique under journal_entries_org_number.
-        const inserted = (await tx.execute<{ id: string }>(sql`
-          insert into journal_entries
-            (org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,created_by)
-          values (${orgId},${bookId},${elimination.id},${`OWN-${period.name}-${runId}-${sequence}`},
-                  ${period.ends_on},${periodId},${`Ownership consolidation ${kind}`},'draft','translation',${reverses ?? null},${userId ?? null})
-          returning id
-        `));
-        const entryId = inserted.rows[0]!.id;
-        for (let index = 0; index < material.length; index++) {
-          const line = material[index]!;
-          await tx.execute(sql`
-            insert into journal_lines
-              (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,memo)
-            values (${orgId},${entryId},${index + 1},${line.accountId},${elimination.id},${line.amount},
-                    ${elimination.baseCurrency},${line.amount},1,${line.memo})
-          `);
-        }
-        await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${userId} where id=${entryId} and org_id=${orgId}`);
-        if (reverses) {
-          await tx.execute(sql`
-            update journal_entries
-               set status='reversed', updated_at=now(), updated_by=${userId}
-             where id=${reverses} and org_id=${orgId} and status='posted'
-          `);
-        }
-        await tx.execute(sql`
-          insert into ownership_consolidation_entries (org_id,run_id,interest_id,kind,journal_entry_id,created_by,updated_by)
-          values (${orgId},${runId},${interestId},${kind},${entryId},${userId ?? null},${userId ?? null})
-        `);
-        entryIds.push(entryId);
-        return entryId;
-      };
-
-      const prior = (await tx.execute<{ interest_id: string; id: string; entry_number: string }>(sql`
-        select oce.interest_id, je.id, je.entry_number
-          from ownership_consolidation_entries oce
-          join ownership_consolidation_runs r on r.id=oce.run_id and r.org_id=oce.org_id and r.period_id=${periodId}
-          join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted'
-         where oce.org_id=${orgId} and je.book_id=${bookId} and oce.kind<>'reversal' and je.reverses_entry_id is null
-           and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.org_id=${orgId} and rev.status='posted')
-      `));
-      for (const old of prior.rows) {
-        const oldLines = (await tx.execute<{ account_id: string; amount: string; memo: string | null }>(sql`select account_id,amount,memo from journal_lines where entry_id=${old.id} and org_id=${orgId} order by line_number`));
-        await post(old.interest_id, "reversal", oldLines.rows.map((line) => ({ accountId: line.account_id, amount: neg(line.amount), memo: `Reversal of ${old.entry_number}` })), old.id);
-      }
-
-      for (const interest of interests.rows) {
-        // Source scope = the destination book: only primary-book entries feed
-        // consolidated adjustments (alternate books keep their own ledgers).
-        const periodActivity = (await tx.execute<{ profit: string; distributions: string }>(sql`
-          select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
-                 coalesce(sum(l.amount) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions
-           from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
-            join accounts a on a.id=l.account_id and a.org_id=l.org_id
-           where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
-             and l.subsidiary_id=${interest.subsidiary_id} and e.period_id=${periodId}
-        `));
-        const profit = periodActivity.rows[0]!.profit;
-        const distributions = periodActivity.rows[0]!.distributions;
-
-        if (interest.method === "full") {
-          const acquisitionExists = (await tx.execute(sql`
-            select 1 from ownership_consolidation_entries oce
-             join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted' and je.book_id=${bookId}
-            where oce.interest_id=${interest.id} and oce.kind='acquisition' and je.reverses_entry_id is null
-              and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.org_id=${orgId} and rev.status='posted') limit 1
-          `));
-          if (!acquisitionExists.rows[0] && interest.acquisition_date <= period.ends_on) {
-            const equity = (await tx.execute<{ account_id: string; amount: string }>(sql`
-              select l.account_id,coalesce(sum(l.amount),0)::text as amount
-                from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
-                join accounts a on a.id=l.account_id and a.org_id=l.org_id and a.type='equity'
-               where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
-                 and l.subsidiary_id=${interest.subsidiary_id} and e.posting_date <= ${interest.acquisition_date}
-               group by l.account_id having sum(l.amount)<>0
-            `));
-            const translatedEquity = equity.rows.map((line) => ({ accountId: line.account_id, balance: mulRate(line.amount, interest.acquisition_rate) }));
-            const bookNetAssets = sum(translatedEquity.map((line) => neg(line.balance)));
-            const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
-            const nci = interest.nci_measurement === "fair_value"
-              ? interest.nci_fair_value!
-              : mulPercent(interest.fair_value_net_assets, nciPercent);
-            const fairValueAdjustment = fromUnits(toUnits(interest.fair_value_net_assets) - toUnits(bookNetAssets));
-            const goodwill = fromUnits(toUnits(interest.acquisition_cost) + toUnits(nci) - toUnits(interest.fair_value_net_assets));
-            await post(interest.id, "acquisition", [
-              ...translatedEquity.map((line) => ({ accountId: line.accountId, amount: neg(line.balance), memo: "Eliminate acquisition-date equity" })),
-              { accountId: interest.fair_value_adjustment_account_id!, amount: fairValueAdjustment, memo: "Fair-value net asset adjustment" },
-              { accountId: interest.goodwill_account_id!, amount: goodwill, memo: "Acquisition goodwill or bargain purchase" },
-              { accountId: interest.investment_account_id, amount: neg(interest.acquisition_cost), memo: "Eliminate parent investment" },
-              ...(interest.nci_equity_account_id ? [{ accountId: interest.nci_equity_account_id, amount: neg(nci), memo: "Recognize non-controlling interest" }] : []),
-            ]);
-          }
-          const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
-          const nciIncome = mulPercent(profit, nciPercent);
-          if (interest.nci_income_account_id && interest.nci_equity_account_id) {
-            await post(interest.id, "nci_income", [
-              { accountId: interest.nci_income_account_id!, amount: nciIncome, memo: "Allocate profit to non-controlling interests" },
-              { accountId: interest.nci_equity_account_id!, amount: neg(nciIncome), memo: "Accumulate non-controlling interest" },
-            ]);
-          }
-        } else if (interest.method === "equity") {
-          const shareProfit = mulPercent(profit, interest.ownership_percent);
-          const shareDistribution = mulPercent(distributions, interest.ownership_percent);
-          await post(interest.id, "equity_income", [
-            { accountId: interest.investment_account_id, amount: shareProfit, memo: "Equity-method share of profit" },
-            { accountId: interest.equity_income_account_id, amount: neg(shareProfit), memo: "Equity-method income" },
-            ...(interest.distribution_income_account_id ? [
-              { accountId: interest.investment_account_id, amount: neg(shareDistribution), memo: "Equity-method distribution reduces investment" },
-              { accountId: interest.distribution_income_account_id, amount: shareDistribution, memo: "Eliminate distribution income" },
-            ] : []),
-          ]);
-        }
-      }
-      await tx.execute(sql`update ownership_consolidation_runs set status='posted',finished_at=now(),updated_at=now() where id=${runId} and org_id=${orgId}`);
-      return { runId, entryIds };
-    }, { isolationLevel: "repeatable read" });
+    return await db.transaction(
+      (tx) => runOwnershipConsolidationIn(orgId, periodId, userId, tx),
+      { isolationLevel: "repeatable read" },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await db.execute(sql`
@@ -235,8 +269,8 @@ export async function runOwnershipConsolidation(
 }
 
 /** Currency pairs needed to translate every subsidiary into every ancestor. */
-async function neededPairs(orgId: string): Promise<{ from: string; to: string }[]> {
-  const ctx = await loadSubsidiaryContext(db, orgId);
+async function neededPairs(orgId: string, runner: Runner): Promise<{ from: string; to: string }[]> {
+  const ctx = await loadSubsidiaryContext(runner, orgId);
   const pairs = new Map<string, { from: string; to: string }>();
   for (const s of ctx.byId.values()) {
     let p = s.parentId ? ctx.byId.get(s.parentId) : null;
@@ -258,16 +292,26 @@ async function neededPairs(orgId: string): Promise<{ from: string; to: string }[
  * Upserts source='derived' rows; rows a controller set to 'manual' are kept.
  */
 export async function deriveConsolidatedRates(orgId: string, periodId: string): Promise<number> {
-  const periodRes = (await db.execute<{ id: string; starts_on: string; ends_on: string; fiscal_year: number; period_number: number }>(sql`
+  return deriveConsolidatedRatesIn(orgId, periodId, db);
+}
+
+/**
+ * Transaction-parameterized derivation phase: writes the derived rows onto
+ * the caller's executor so the combined command can commit them together
+ * with the phases that consume them. Callers needing atomicity wrap this in
+ * their own transaction (the API does exactly that for 'derive-rates').
+ */
+async function deriveConsolidatedRatesIn(orgId: string, periodId: string, exec: Runner): Promise<number> {
+  const periodRes = (await exec.execute<{ id: string; starts_on: string; ends_on: string; fiscal_year: number; period_number: number }>(sql`
     select id, starts_on, ends_on, fiscal_year, period_number from accounting_periods
      where id = ${periodId} and org_id = ${orgId}`));
   const period = periodRes.rows[0];
   if (!period) throw new ConsolidationError(`period ${periodId} not found`);
 
-  const pairs = await neededPairs(orgId);
+  const pairs = await neededPairs(orgId, exec);
   let written = 0;
   for (const pair of pairs) {
-    const rates = (await db.execute<{ current: string | null; average: string | null; historical: string | null }>(sql`
+    const rates = (await exec.execute<{ current: string | null; average: string | null; historical: string | null }>(sql`
       select
         (select rate from fx_rates
           where org_id = ${orgId} and from_currency = ${pair.from} and to_currency = ${pair.to}
@@ -292,7 +336,7 @@ export async function deriveConsolidatedRates(orgId: string, periodId: string): 
     const current = persistDerivedFxRate(r.current);
     const average = persistDerivedFxRate(r.average ?? r.current);
     const historical = persistDerivedFxRate(r.historical ?? r.current);
-    await db.execute(sql`
+    await exec.execute(sql`
       insert into consolidated_fx_rates
         (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source)
       values (${orgId}, ${periodId}, ${pair.from}, ${pair.to},
@@ -331,8 +375,32 @@ export async function runAutoElimination(
   periodId: string,
   userId: string,
 ): Promise<{ entryId: string | null; lineCount: number }> {
+  // One elimination run per tenant/period at a time. Every read that decides
+  // what to reverse or create happens on ONE REPEATABLE READ snapshot inside
+  // the run's transaction: a source posting that commits mid-run is excluded
+  // wholesale from this generation and absorbed by the replacement on the
+  // next run (invalidate-and-retry), never half-torn into the totals.
+  return db.transaction(
+    (tx) => runAutoEliminationIn(orgId, periodId, userId, tx),
+    { isolationLevel: "repeatable read" },
+  );
+}
+
+/**
+ * Transaction-parameterized elimination phase: decides and posts the period's
+ * elimination entry onto the caller's executor, so the combined command can
+ * commit derivation, ownership, and elimination together. The xact-scoped
+ * advisory lock stays here: it serializes generations per org/period whether
+ * this phase runs alone or inside the combined unit.
+ */
+async function runAutoEliminationIn(
+  orgId: string,
+  periodId: string,
+  userId: string,
+  tx: Runner,
+): Promise<{ entryId: string | null; lineCount: number }> {
   if (!userId) throw new ConsolidationError("an attributable actor is required");
-  const ctx = await loadSubsidiaryContext(db, orgId);
+  const ctx = await loadSubsidiaryContext(tx, orgId);
   const elim = [...ctx.byId.values()].find((s) => s.isElimination && s.isActive);
   if (!elim) {
     throw new ConsolidationError(
@@ -340,22 +408,15 @@ export async function runAutoElimination(
     );
   }
 
-  return db.transaction(async (tx) => {
-  // One elimination run per tenant/period at a time. Every read that decides
-  // what to reverse or create happens after this transaction-scoped lock, on
-  // ONE REPEATABLE READ snapshot: a source posting that commits mid-run is
-  // excluded wholesale from this generation and absorbed by the replacement
-  // on the next run (invalidate-and-retry), never half-torn into the totals.
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`elimination:${orgId}:${periodId}`}, 0))`);
 
   const periodRes = (await tx.execute<{ ends_on: string; name: string }>(sql`
     select ends_on, name from accounting_periods where id = ${periodId} and org_id = ${orgId}`));
   const period = periodRes.rows[0];
   if (!period) throw new ConsolidationError(`period ${periodId} not found`);
-  const [book] = await tx
-    .select()
-    .from(schema.accountingBooks)
-    .where(sql`${schema.accountingBooks.orgId} = ${orgId} and ${schema.accountingBooks.isPrimary} = true`);
+  const bookRes = (await tx.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary limit 1`));
+  const book = bookRes.rows[0];
   if (!book) throw new ConsolidationError("no primary accounting book is configured");
 
   // Source scope = the destination book: only primary-book entries feed the
@@ -426,83 +487,118 @@ export async function runAutoElimination(
     );
   }
 
-    let lastReversalId: string | null = null;
-    for (const p of prior.rows) {
-      const rev = (await tx.execute<{ id: string }>(sql`
-        insert into journal_entries
-          (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
-           memo, status, origin, reverses_entry_id, created_by)
-        values (${orgId}, ${book.id}, ${elim.id}, ${`${p.entryNumber}-R`}, ${period.ends_on},
-                ${periodId}, ${`Reversal of ${p.entryNumber}`}, 'draft', 'intercompany', ${p.id}, ${userId ?? null})
-        returning id`));
-      const reversalId = rev.rows[0]!.id;
-      await tx.execute(sql`
-        insert into journal_lines
-          (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
-           currency, txn_amount, fx_rate, memo)
-        select org_id, ${reversalId}, line_number, account_id, subsidiary_id, -amount,
-               currency, -txn_amount, fx_rate, ${`Reversal of ${p.entryNumber}`}
-          from journal_lines where entry_id = ${p.id} and org_id = ${orgId}`);
-      await tx.execute(sql`
-        update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId}
-         where id = ${reversalId} and org_id = ${orgId}`);
-      await tx.execute(sql`
-        update journal_entries
-           set status = 'reversed', updated_at = now(), updated_by = ${userId}
-         where id = ${p.id} and org_id = ${orgId} and status = 'posted'
-      `);
-      lastReversalId = reversalId;
-    }
-    if (translatedActivity.length === 0) return { entryId: lastReversalId, lineCount: 0 };
-
-    // Reversed generations keep their rows (posted ledgers are never
-    // rewritten), so the replacement's number must advance past every prior
-    // generation to satisfy journal_entries_org_number.
-    const generations = (await tx.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries
-       where org_id = ${orgId} and period_id = ${periodId}
-         and book_id = ${book.id}
-         and subsidiary_id = ${elim.id} and origin = 'intercompany'
-         and reverses_entry_id is null
-         and entry_number like ${`ELIM-${period.name}%`}`));
-    const genN = (generations.rows[0]?.n ?? 0) + 1;
-    const elimEntryNumber = genN === 1 ? `ELIM-${period.name}` : `ELIM-${period.name}-${genN}`;
-    const ins = (await tx.execute<{ id: string }>(sql`
+  let lastReversalId: string | null = null;
+  for (const p of prior.rows) {
+    const rev = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
-         memo, status, origin, created_by)
-      values (${orgId}, ${book.id}, ${elim.id}, ${elimEntryNumber}, ${period.ends_on},
-              ${periodId}, ${`Auto-elimination ${period.name}`}, 'draft', 'intercompany', ${userId ?? null})
+         memo, status, origin, reverses_entry_id, created_by)
+      values (${orgId}, ${book.id}, ${elim.id}, ${`${p.entryNumber}-R`}, ${period.ends_on},
+              ${periodId}, ${`Reversal of ${p.entryNumber}`}, 'draft', 'intercompany', ${p.id}, ${userId ?? null})
       returning id`));
-    const entryId = ins.rows[0]!.id;
-
-    let n = 0;
-    for (const row of translatedActivity) {
-      n++;
-      await tx.execute(sql`
-        insert into journal_lines
-          (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
-           currency, txn_amount, fx_rate, memo)
-        values (${orgId}, ${entryId}, ${n}, ${row.accountId}, ${elim.id}, ${neg(row.total)},
-                ${elim.baseCurrency}, ${neg(row.total)}, 1,
-                ${`Eliminates ${ctx.byId.get(row.subsidiaryId)?.name ?? row.subsidiaryId}`})`);
-    }
+    const reversalId = rev.rows[0]!.id;
+    await tx.execute(sql`
+      insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
+         currency, txn_amount, fx_rate, memo)
+      select org_id, ${reversalId}, line_number, account_id, subsidiary_id, -amount,
+             currency, -txn_amount, fx_rate, ${`Reversal of ${p.entryNumber}`}
+        from journal_lines where entry_id = ${p.id} and org_id = ${orgId}`);
     await tx.execute(sql`
       update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId}
-       where id = ${entryId} and org_id = ${orgId}`);
+       where id = ${reversalId} and org_id = ${orgId}`);
     await tx.execute(sql`
-      insert into audit_log
-        (org_id, table_name, row_id, action, changes, actor_id, request_id)
-      values (
-        ${orgId}, 'journal_entries', ${entryId}, 'insert',
-        ${JSON.stringify({
-          mode: "auto_elimination",
-          periodId,
-          lineCount: translatedActivity.length,
-        })}::jsonb,
-        ${userId}, 'auto_elimination'
-      )
+      update journal_entries
+         set status = 'reversed', updated_at = now(), updated_by = ${userId}
+       where id = ${p.id} and org_id = ${orgId} and status = 'posted'
     `);
-    return { entryId, lineCount: n };
-  }, { isolationLevel: "repeatable read" });
+    lastReversalId = reversalId;
+  }
+  if (translatedActivity.length === 0) return { entryId: lastReversalId, lineCount: 0 };
+
+  // Reversed generations keep their rows (posted ledgers are never
+  // rewritten), so the replacement's number must advance past every prior
+  // generation to satisfy journal_entries_org_number.
+  const generations = (await tx.execute<{ n: number }>(sql`
+    select count(*)::int as n from journal_entries
+     where org_id = ${orgId} and period_id = ${periodId}
+       and book_id = ${book.id}
+       and subsidiary_id = ${elim.id} and origin = 'intercompany'
+       and reverses_entry_id is null
+       and entry_number like ${`ELIM-${period.name}%`}`));
+  const genN = (generations.rows[0]?.n ?? 0) + 1;
+  const elimEntryNumber = genN === 1 ? `ELIM-${period.name}` : `ELIM-${period.name}-${genN}`;
+  const ins = (await tx.execute<{ id: string }>(sql`
+    insert into journal_entries
+      (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
+       memo, status, origin, created_by)
+    values (${orgId}, ${book.id}, ${elim.id}, ${elimEntryNumber}, ${period.ends_on},
+            ${periodId}, ${`Auto-elimination ${period.name}`}, 'draft', 'intercompany', ${userId ?? null})
+    returning id`));
+  const entryId = ins.rows[0]!.id;
+
+  let n = 0;
+  for (const row of translatedActivity) {
+    n++;
+    await tx.execute(sql`
+      insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
+         currency, txn_amount, fx_rate, memo)
+      values (${orgId}, ${entryId}, ${n}, ${row.accountId}, ${elim.id}, ${neg(row.total)},
+              ${elim.baseCurrency}, ${neg(row.total)}, 1,
+              ${`Eliminates ${ctx.byId.get(row.subsidiaryId)?.name ?? row.subsidiaryId}`})`);
+  }
+  await tx.execute(sql`
+    update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId}
+     where id = ${entryId} and org_id = ${orgId}`);
+  await tx.execute(sql`
+    insert into audit_log
+      (org_id, table_name, row_id, action, changes, actor_id, request_id)
+    values (
+      ${orgId}, 'journal_entries', ${entryId}, 'insert',
+      ${JSON.stringify({
+        mode: "auto_elimination",
+        periodId,
+        lineCount: translatedActivity.length,
+      })}::jsonb,
+      ${userId}, 'auto_elimination'
+    )
+  `);
+  return { entryId, lineCount: n };
+}
+
+/**
+ * The Period Close page's combined "consolidate" command: refresh the
+ * period's derived consolidated rates, post ownership adjustments, and post
+ * auto-elimination — all inside ONE REPEATABLE READ transaction.
+ *
+ * This is the fix for the partial-commit command: previously each phase ran
+ * in its own transaction, so a residual failure in elimination returned 422
+ * while the derived rates and POSTED ownership journals stayed durable. Here
+ * a failure anywhere aborts every phase together — zero rate rows, zero
+ * ownership runs/links, zero journal entries/lines survive — and success
+ * commits all three atomically. The ownership and elimination advisory locks
+ * are acquired in a fixed order within the same transaction, so combined and
+ * per-phase invocations serialize without deadlock. Concurrent refreshes of
+ * the same period's derived rate rows surface Postgres's serialization error
+ * (40001) instead of silently interleaving — fail-closed and safe to retry,
+ * matching the isolation posture of the per-phase commands.
+ */
+export async function runCombinedConsolidation(
+  orgId: string,
+  periodId: string,
+  userId: string,
+): Promise<{
+  ratesWritten: number;
+  ownership: { runId: string; entryIds: string[] };
+  elimination: { entryId: string | null; lineCount: number };
+}> {
+  return db.transaction(
+    async (tx) => ({
+      ratesWritten: await deriveConsolidatedRatesIn(orgId, periodId, tx),
+      ownership: await runOwnershipConsolidationIn(orgId, periodId, userId, tx),
+      elimination: await runAutoEliminationIn(orgId, periodId, userId, tx),
+    }),
+    { isolationLevel: "repeatable read" },
+  );
 }
