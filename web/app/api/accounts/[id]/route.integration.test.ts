@@ -77,20 +77,24 @@ const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-/** Seed one summary account of a single shared type; returns its id. */
-async function seedSummaryAccount(orgId: string, number: string): Promise<string> {
+/** Seed one account of a single shared type; returns its id. */
+async function seedAccount(orgId: string, number: string, isSummary: boolean): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into accounts (id, org_id, number, name, type, is_summary, is_active,
                           eliminate, reconcilable, required_dimensions, custom,
                           subsidiary_include_children)
-    values (${id}, ${orgId}, ${number}, ${`Summary ${number}`}, 'asset_other', true, true,
+    values (${id}, ${orgId}, ${number}, ${`Account ${number}`}, 'asset_other', ${isSummary}, true,
             false, false, '[]'::jsonb, '{}'::jsonb, true)`);
   return id;
+}
+
+async function seedSummaryAccount(orgId: string, number: string): Promise<string> {
+  return seedAccount(orgId, number, true);
 }
 
 function patchRequest(body: unknown): Request {
@@ -127,6 +131,139 @@ async function auditCount(orgId: string, rowIds: string[]): Promise<number> {
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'accounts' and row_id in ${rowIds}`);
   return r.rows[0]!.n;
+}
+
+type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;
+
+async function openBypassClient(orgId: string): Promise<Client> {
+  const { Client } = await import("pg");
+  const client = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+  await client.connect();
+  await client.query("begin");
+  await client.query(
+    "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
+    [orgId],
+  );
+  return client;
+}
+
+async function seedJournalEntry(client: Client, org: ScratchOrg, label: string): Promise<string> {
+  const entryId = randomUUID();
+  await client.query(
+    `insert into journal_entries
+       (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+     values ($1, $2, $3, $4, $5, $6, $7, 'draft', 'manual')`,
+    [entryId, org.orgId, org.bookId, org.subsidiaryId, label, org.date, org.periodId],
+  );
+  return entryId;
+}
+
+async function insertBalancedLines(
+  client: Client,
+  org: ScratchOrg,
+  entryId: string,
+  accountId: string,
+): Promise<void> {
+  await client.query(
+    `insert into journal_lines
+       (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+        amount, currency, txn_amount, fx_rate)
+     values
+       ($1, $2, $3, 1, $4, $5, '10', 'CAD', '10', 1),
+       ($6, $2, $3, 2, $7, $5, '-10', 'CAD', '-10', 1)`,
+    [
+      randomUUID(),
+      org.orgId,
+      entryId,
+      accountId,
+      org.subsidiaryId,
+      randomUUID(),
+      org.accounts.clearing,
+    ],
+  );
+}
+
+async function waitForLock(
+  predicate: { pid?: number; queryPattern?: string },
+  settled: () => boolean,
+  failure: string,
+): Promise<void> {
+  for (let waited = 0; waited < 10_000; waited += 25) {
+    if (settled()) assert.fail(failure);
+    const blocked = await db.execute<{ n: number }>(sql`
+      select count(*)::int as n
+        from pg_stat_activity
+       where datname = current_database()
+         and wait_event_type = 'Lock'
+         and (${predicate.pid ?? null}::int is null or pid = ${predicate.pid ?? null})
+         and (${predicate.queryPattern ?? null}::text is null
+              or query ilike ${predicate.queryPattern ?? null})`);
+    if ((blocked.rows[0]?.n ?? 0) > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.fail(`timed out waiting for account/posting serialization: ${failure}`);
+}
+
+async function accountState(
+  orgId: string,
+  accountId: string,
+): Promise<{ type: string; is_summary: boolean; line_count: number }> {
+  const state = await db.execute<{ type: string; is_summary: boolean; line_count: number }>(sql`
+    select a.type, a.is_summary,
+           count(l.id)::int as line_count
+      from accounts a
+      left join journal_lines l on l.org_id = a.org_id and l.account_id = a.id
+     where a.org_id = ${orgId} and a.id = ${accountId}
+     group by a.id, a.type, a.is_summary`);
+  assert.ok(state.rows[0], "the raced account must still exist");
+  return state.rows[0]!;
+}
+
+async function postingWinsClassificationPatch(
+  org: ScratchOrg,
+  accountId: string,
+  body: { type?: string; isSummary?: boolean },
+  expected: { error: string; field: string },
+  label: string,
+): Promise<void> {
+  let poster: Client | null = await openBypassClient(org.orgId);
+  try {
+    const entryId = await seedJournalEntry(poster, org, label);
+    await insertBalancedLines(poster, org, entryId, accountId);
+
+    // The line trigger owns a row lock on the account until commit. PATCH has
+    // already observed `hasTransactions = false` because these lines are not
+    // committed, then must park its UPDATE behind that same lock.
+    let patchSettled = false;
+    const pendingPatch = PATCH(patchRequest(body), {
+      params: Promise.resolve({ id: accountId }),
+    }).finally(() => {
+      patchSettled = true;
+    });
+    await waitForLock(
+      { queryPattern: "%update accounts set%" },
+      () => patchSettled,
+      "the account edit completed against a stale no-lines snapshot",
+    );
+
+    await poster.query("commit");
+    await poster.end();
+    poster = null;
+
+    const response = await pendingPatch;
+    assert.equal(response.status, 422);
+    assert.deepEqual(await response.json(), expected);
+    assert.equal(
+      await auditCount(org.orgId, [accountId]),
+      0,
+      "a storage-refused classification edit must not leave audit evidence for a write that rolled back",
+    );
+  } finally {
+    if (poster) {
+      await poster.query("rollback").catch(() => undefined);
+      await poster.end().catch(() => undefined);
+    }
+  }
 }
 
 /**
@@ -247,3 +384,112 @@ test("concurrent valid reparents serialize on the hierarchy lock and both commit
     routeState.authz = null;
   }
 });
+
+// RED criterion for fnd_mt97h07k_qq4zuu: before the account/line storage
+// fence, the first two PATCHes below completed while an uncommitted first
+// journal line existed, then reclassified the committed history (or promoted
+// its account to summary). The summary-demotion control also failed before
+// the fence: its line read the old summary bit without waiting for the edit.
+test(
+  "account classification edits serialize with a concurrent first journal line",
+  { skip: !DB, timeout: 30_000 },
+  async () => {
+    const org = await createScratchOrg();
+    let editor: Client | null = null;
+    let poster: Client | null = null;
+    try {
+      const { adminId } = await seedFlowActors(org.orgId);
+      routeState.authz = {
+        user: { orgId: org.orgId, id: adminId },
+        permissions: new Set(),
+        allowedSubsidiaryIds: null,
+      };
+
+      const typeTarget = await seedAccount(org.orgId, "9301", false);
+      await postingWinsClassificationPatch(
+        org,
+        typeTarget,
+        { type: "expense" },
+        { error: "type_has_transactions", field: "type" },
+        "ACCOUNT-TYPE-RACE",
+      );
+      assert.deepEqual(await accountState(org.orgId, typeTarget), {
+        type: "asset_other",
+        is_summary: false,
+        line_count: 1,
+      });
+
+      const promotionTarget = await seedAccount(org.orgId, "9302", false);
+      await postingWinsClassificationPatch(
+        org,
+        promotionTarget,
+        { isSummary: true },
+        { error: "summary_has_transactions", field: "isSummary" },
+        "ACCOUNT-SUMMARY-RACE",
+      );
+      assert.deepEqual(await accountState(org.orgId, promotionTarget), {
+        type: "asset_other",
+        is_summary: false,
+        line_count: 1,
+      });
+
+      // Opposite lock direction: the summary -> posting transition owns the
+      // account row first. A direct journal-line writer must wait, re-read the
+      // committed posting state, and only then land the first balanced lines.
+      const demotionTarget = await seedAccount(org.orgId, "9303", true);
+      editor = await openBypassClient(org.orgId);
+      await editor.query(
+        "update accounts set is_summary = false where org_id = $1 and id = $2",
+        [org.orgId, demotionTarget],
+      );
+
+      poster = await openBypassClient(org.orgId);
+      const entryId = await seedJournalEntry(poster, org, "ACCOUNT-DEMOTION-RACE");
+      const backend = await poster.query<{ pid: number }>("select pg_backend_pid()::int as pid");
+      let insertionSettled = false;
+      let insertionError: unknown;
+      const pendingInsertion = insertBalancedLines(poster, org, entryId, demotionTarget)
+        .catch((error: unknown) => {
+          insertionError = error;
+        })
+        .finally(() => {
+          insertionSettled = true;
+        });
+      await waitForLock(
+        { pid: backend.rows[0]!.pid },
+        () => insertionSettled,
+        "the first line read an uncommitted summary classification instead of waiting",
+      );
+
+      await editor.query("commit");
+      await editor.end();
+      editor = null;
+      await pendingInsertion;
+      if (insertionError) throw insertionError;
+      await poster.query("commit");
+      await poster.end();
+      poster = null;
+      assert.deepEqual(await accountState(org.orgId, demotionTarget), {
+        type: "asset_other",
+        is_summary: false,
+        line_count: 1,
+      });
+
+      // Compatible metadata remains editable, and the route's audit row stays
+      // atomic with that successful update after journal history exists.
+      const metadata = await PATCH(patchRequest({ name: "Renamed posting account" }), {
+        params: Promise.resolve({ id: demotionTarget }),
+      });
+      assert.equal(metadata.status, 200);
+      assert.equal(await auditCount(org.orgId, [demotionTarget]), 1);
+    } finally {
+      routeState.authz = null;
+      for (const client of [poster, editor]) {
+        if (!client) continue;
+        await client.query("rollback").catch(() => undefined);
+        await client.end().catch(() => undefined);
+      }
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
