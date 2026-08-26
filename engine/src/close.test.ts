@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
@@ -721,3 +722,56 @@ test(
     }
   },
 );
+
+test("close automation claims carry lease fencing, stale takeover, and stage checkpoints", () => {
+  const engine = readFileSync(new URL("./close.ts", import.meta.url), "utf8");
+
+  // The claim books a random fencing token with its lock timestamp and the
+  // conflict contract that keeps concurrent schedulers single-fire.
+  assert.match(
+    engine,
+    /insert into close_automation_executions[\s\S]*?gen_random_uuid\(\), now\(\)[\s\S]*?on conflict \(rule_id, event_key\) do nothing returning id/,
+  );
+
+  // A crashed running claim is reclaimed by compare-and-set over its stored
+  // token: concurrent recoverers race cleanly and only one ever wins.
+  assert.match(engine, /CLOSE_AUTOMATION_STALE_CLAIM_MS/);
+  assert.match(
+    engine,
+    /attempt_count = attempt_count \+ 1,[\s\S]*?lease_token = gen_random_uuid\(\),[\s\S]*?locked_at = now\(\)/,
+  );
+  assert.match(
+    engine,
+    /and lease_token is not distinct from \$\{existing\.lease_token\}/,
+  );
+
+  // Every effect checkpoint and terminal transition must match the active
+  // token, so an attempt fenced by a takeover cannot corrupt the outcome.
+  assert.match(
+    engine,
+    /status = 'running'\s+and lease_token = \$\{args\.leaseToken\}/,
+  );
+  assert.match(engine, /CloseAutomationLeaseFencedError/);
+
+  // Non-idempotent unit effects commit with their stage checkpoint in one
+  // transaction; a resumed attempt skips what already committed.
+  assert.match(engine, /stageKey: `notify:\$\{user\.id\}`/);
+  assert.match(engine, /stages = stages \|\| \$\{JSON\.stringify\(/);
+
+  // The terminal status write and its audit event commit together so a crash
+  // between them cannot orphan a half-recorded outcome.
+  assert.match(engine, /["']automation\.completed["']/);
+  assert.match(engine, /["']automation\.failed["']/);
+});
+
+test("close automation execution schema carries the claim-lease columns", () => {
+  const schema = readFileSync(
+    new URL("../../schema/src/close.ts", import.meta.url),
+    "utf8",
+  );
+  const executions = schema.slice(schema.indexOf("closeAutomationExecutions"));
+  assert.match(executions, /leaseToken: uuid\("lease_token"\)/);
+  assert.match(executions, /lockedAt: timestamp\("locked_at", \{ withTimezone: true \}\)/);
+  assert.match(executions, /attemptCount: integer\("attempt_count"\)\.notNull\(\)\.default\(0\)/);
+  assert.match(executions, /stages: jsonb\("stages"\)\.notNull\(\)\.default\(\{\}\)/);
+});

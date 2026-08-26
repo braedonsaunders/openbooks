@@ -308,6 +308,11 @@ export type TriggerEvent = (
   // conditions can e.g. auto-approve system-generated records (source platform's
   // execution-context filters). Engine default when absent: 'api'.
   source?: FlowEventSource
+  // Optional durable identity for one logical dispatch. When present, every
+  // flow run created for this dispatch carries a derived occurrence key, so a
+  // resumed attempt (crash recovery) adopts the SAME run rows instead of
+  // duplicating the whole dispatch.
+  occurrenceKey?: string
 }
 
 // A reached gate carries its node id so the runtime can persist a `flow_gates`

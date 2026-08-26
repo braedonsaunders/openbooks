@@ -101,8 +101,8 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0054_bank_feed_attempt_watermark.sql",
     "0055_flow_scheduled_occurrence_durability.sql",
     "0056_script_run_actor.sql",
-  ]);
-  assert.deepEqual(
+    "0057_close_automation_claim_lease.sql",
+  ]);  assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
     ["environments.sql"],
   );

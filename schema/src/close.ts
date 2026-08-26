@@ -253,7 +253,11 @@ export const closeAutomationRules = pgTable(
 );
 
 /** Idempotent execution claims make event automation safe across retries and
- * horizontally scaled scheduler processes. */
+ * horizontally scaled scheduler processes. Each running claim holds a random
+ * fencing lease: a crashed claim is reclaimed (compare-and-set over the stored
+ * token) by the next firing of its event, and each non-idempotent unit effect
+ * commits in the same transaction as its `stages` checkpoint so a recovered
+ * attempt converges on exactly once instead of duplicating partial effects. */
 export const closeAutomationExecutions = pgTable(
   "close_automation_executions",
   {
@@ -269,6 +273,10 @@ export const closeAutomationExecutions = pgTable(
       .default("running"),
     error: text("error"),
     executedAt: timestamp("executed_at", { withTimezone: true }),
+    leaseToken: uuid("lease_token"),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    stages: jsonb("stages").notNull().default({}),
     ...auditColumns,
   },
   (t) => [

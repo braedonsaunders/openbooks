@@ -2710,8 +2710,180 @@ function calendarDaysBetween(fromIso: string, toIso: string): number {
   );
 }
 
-/** Execute tenant-authored close automation with an idempotent database claim.
- * A failed action is retained for audit and never reported as successful. */
+/**
+ * A silent claim is only safe while its holder lives. Running claims carry a
+ * random fencing lease (migration 0056): a crashed or hung worker's running
+ * row no longer blocks the event forever, because the next firing reclaims it
+ * by compare-and-set over the stored token once the lock outlives this window.
+ * The window is generous — long enough for a deep flow dispatch — but bounded,
+ * so one crash freezes partial effects for minutes instead of forever.
+ */
+export const CLOSE_AUTOMATION_STALE_CLAIM_MS = 15 * 60_000;
+
+/** Raised when the claim that backed an attempt lost its lease to a takeover.
+ * Aborted effect work rolls back with it; the replacement attempt owns the
+ * outcome from there, so a fenced loser records nothing. */
+export class CloseAutomationLeaseFencedError extends Error {
+  constructor(executionId: string) {
+    super(`close automation execution ${executionId} lost its lease and was fenced`);
+    this.name = "CloseAutomationLeaseFencedError";
+  }
+}
+
+type CloseAutomationClaim = {
+  executionId: string;
+  leaseToken: string;
+  stages: Record<string, unknown>;
+};
+
+async function readCloseExecutionStages(
+  orgId: string,
+  executionId: string,
+): Promise<Record<string, unknown>> {
+  const result = (await db.execute<{ stages: Record<string, unknown> }>(sql`
+    select stages from close_automation_executions
+     where id = ${executionId} and org_id = ${orgId}
+  `));
+  return (result.rows[0]?.stages ?? {}) as Record<string, unknown>;
+}
+
+/**
+ * Claim the (rule, event) execution row. Fresh events insert a running row
+ * with their own fencing token; an existing terminal row keeps its audit
+ * verdict; a live lease belongs to another scheduler and is respected; a stale
+ * (or pre-lease legacy) running claim is reclaimed exactly once via CAS over
+ * its stored token. Returns null when this firing must not proceed.
+ */
+async function claimCloseAutomationExecution(
+  context: CloseAutomationContext,
+  ruleId: string,
+): Promise<CloseAutomationClaim | null> {
+  const inserted = (await db.execute<{ id: string; lease_token: string }>(sql`
+    insert into close_automation_executions
+      (org_id, rule_id, run_id, task_id, trigger, event_key, status,
+       attempt_count, lease_token, locked_at, created_by, updated_by)
+    values (${context.orgId}, ${ruleId}, ${context.runId}, ${context.taskId ?? null}, ${context.trigger},
+            ${context.eventKey}, 'running', 0, gen_random_uuid(), now(),
+            ${context.actorId ?? null}, ${context.actorId ?? null})
+    on conflict (rule_id, event_key) do nothing returning id, lease_token
+  `));
+  let claimed = inserted.rows[0];
+  if (!claimed) {
+    const existing = (await db.execute<{
+      id: string;
+      status: "running" | "completed" | "failed";
+      lease_token: string | null;
+      reclaimable: boolean;
+    }>(sql`
+      select id, status, lease_token,
+             (status = 'running'
+              and (locked_at is null
+                   or locked_at < now() - (${CLOSE_AUTOMATION_STALE_CLAIM_MS} * interval '1 millisecond'))) as reclaimable
+        from close_automation_executions
+       where org_id = ${context.orgId} and rule_id = ${ruleId}
+         and event_key = ${context.eventKey}
+    `)).rows[0];
+    // Terminal rows keep their audit verdict; a live claim means another
+    // scheduler is mid-run right now. Only a stale lock is reclaimable (the
+    // comparison lives in SQL: executor timestamps arrive as raw strings).
+    if (!existing || !existing.reclaimable) return null;
+    // Compare-and-set over the crashed claim's stored token: concurrent
+    // recoverers race, exactly one wins the row, every other loser skips.
+    const takeover = (await db.execute<{ id: string; lease_token: string }>(sql`
+      update close_automation_executions
+         set attempt_count = attempt_count + 1,
+             lease_token = gen_random_uuid(),
+             locked_at = now(),
+             updated_at = now()
+       where id = ${existing.id} and org_id = ${context.orgId} and status = 'running'
+         and lease_token is not distinct from ${existing.lease_token}
+       returning id, lease_token
+    `)).rows[0];
+    if (!takeover) return null;
+    claimed = takeover;
+  }
+  return {
+    executionId: claimed.id,
+    leaseToken: claimed.lease_token,
+    // A recovered claim inherits whatever stage checkpoints earlier attempts
+    // already committed, so its effects finish instead of restarting.
+    stages: await readCloseExecutionStages(context.orgId, claimed.id),
+  };
+}
+
+/**
+ * Commit one non-idempotent unit effect together with its stage checkpoint in
+ * a single transaction, fenced on the active lease token. If the fence fails,
+ * the whole transaction (effect included) rolls back so a takeover cannot be
+ * double-applied; resuming callers see the checkpoint and skip what committed.
+ */
+async function commitCloseEffectStage(args: {
+  orgId: string;
+  executionId: string;
+  leaseToken: string;
+  stageKey: string;
+  effect: (tx: SqlExecutor) => Promise<void>;
+}): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const gate = (await tx.execute<{ done: boolean }>(sql`
+      select (stages ->> ${args.stageKey}) is not null as done
+        from close_automation_executions
+       where id = ${args.executionId} and org_id = ${args.orgId} and status = 'running'
+         and lease_token = ${args.leaseToken}
+    `)).rows[0];
+    if (!gate) throw new CloseAutomationLeaseFencedError(args.executionId);
+    if (gate.done) return false;
+    await args.effect(tx);
+    const stamped = await tx.execute(sql`
+      update close_automation_executions
+         set stages = stages || ${JSON.stringify({ [args.stageKey]: true })}::jsonb,
+             updated_at = now()
+       where id = ${args.executionId} and org_id = ${args.orgId} and status = 'running'
+         and lease_token = ${args.leaseToken}
+    `);
+    if ((stamped.rowCount ?? 0) !== 1)
+      throw new CloseAutomationLeaseFencedError(args.executionId);
+    return true;
+  });
+}
+
+/** Terminal transition plus its audit event commit atomically, fenced on the
+ * active token — a crash between them cannot orphan half-recorded outcomes. */
+async function finishCloseExecution(args: {
+  orgId: string;
+  runId: string;
+  taskId?: string | null;
+  actorId?: string | null;
+  executionId: string;
+  leaseToken: string;
+  outcome: "completed" | "failed";
+  error?: string;
+  payload: { ruleId: string; trigger: string; action: string };
+}): Promise<void> {
+  await db.transaction(async (tx) => {
+    const marked = await tx.execute(sql`
+      update close_automation_executions
+         set status = ${args.outcome},
+             error = ${args.outcome === "failed" ? args.error : null},
+             executed_at = now(), updated_at = now(), updated_by = ${args.actorId ?? null},
+             lease_token = null, locked_at = null
+       where id = ${args.executionId} and org_id = ${args.orgId} and status = 'running'
+         and lease_token = ${args.leaseToken}
+    `);
+    if ((marked.rowCount ?? 0) !== 1)
+      throw new CloseAutomationLeaseFencedError(args.executionId);
+    await tx.execute(sql`insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
+      values (${args.orgId}, ${args.runId}, ${args.taskId ?? null},
+              ${args.outcome === "completed" ? "automation.completed" : "automation.failed"},
+              ${args.actorId ?? null},
+              ${JSON.stringify({ ...args.payload, executionId: args.executionId, ...(args.error && args.outcome === "failed" ? { error: args.error } : {}) })}::jsonb)`);
+  });
+}
+
+/** Execute tenant-authored close automation with a leased, fenced database
+ * claim. A failed action is retained for audit and never reported as
+ * successful; a crashed attempt is recovered by stale takeover without
+ * duplicating the effects it already committed. */
 export async function runCloseAutomations(
   context: CloseAutomationContext,
 ): Promise<{ completed: number; failed: number }> {
@@ -2766,15 +2938,9 @@ export async function runCloseAutomations(
     )
       continue;
 
-    const claim = (await db.execute<{ id: string }>(sql`
-      insert into close_automation_executions
-        (org_id, rule_id, run_id, task_id, trigger, event_key, status, created_by, updated_by)
-      values (${context.orgId}, ${rule.id}, ${context.runId}, ${context.taskId ?? null}, ${context.trigger},
-              ${context.eventKey}, 'running', ${context.actorId ?? null}, ${context.actorId ?? null})
-      on conflict (rule_id, event_key) do nothing returning id
-    `));
-    const executionId = claim.rows[0]?.id;
-    if (!executionId) continue;
+    const claim = await claimCloseAutomationExecution(context, String(rule.id));
+    if (!claim) continue;
+    const executionId = claim.executionId;
     try {
       const config = (rule.config ?? {}) as Record<string, unknown>;
       if (rule.action === "notify") {
@@ -2804,10 +2970,21 @@ export async function runCloseAutomations(
             "notification automation resolved no recipients",
           );
         for (const user of users.values()) {
-          await db.execute(sql`insert into notifications (org_id, user_id, kind, title, body, href, created_by, updated_by)
-            values (${context.orgId}, ${user.id}, 'close', ${String(config.title ?? rule.name)},
-                    ${String(config.body ?? `${run.period_name} · ${run.book_name}`)}, ${`/close?run=${context.runId}`},
-                    ${context.actorId ?? null}, ${context.actorId ?? null})`);
+          // Each recipient's insert commits WITH its stage checkpoint: a crash
+          // mid fan-out resumes with the already-notified skipped instead of
+          // double-sending everyone after the crashed recipient.
+          await commitCloseEffectStage({
+            orgId: context.orgId,
+            executionId,
+            leaseToken: claim.leaseToken,
+            stageKey: `notify:${user.id}`,
+            effect: async (tx) => {
+              await tx.execute(sql`insert into notifications (org_id, user_id, kind, title, body, href, created_by, updated_by)
+                values (${context.orgId}, ${user.id}, 'close', ${String(config.title ?? rule.name)},
+                        ${String(config.body ?? `${run.period_name} · ${run.book_name}`)}, ${`/close?run=${context.runId}`},
+                        ${context.actorId ?? null}, ${context.actorId ?? null})`);
+            },
+          });
         }
       } else if (rule.action === "assign") {
         if (!context.taskId)
@@ -2910,11 +3087,23 @@ export async function runCloseAutomations(
         const hash = createHash("sha256")
           .update(canonicalJson(snapshot), "utf8")
           .digest("hex");
-        await db.execute(sql`insert into close_task_evidence
-          (org_id, run_id, task_id, evidence_type, reference_url, label, snapshot, content_hash, created_by, updated_by)
-          values (${context.orgId}, ${context.runId}, ${target.rows[0].id}, 'report',
-                  ${`/reports/${report}?period=${run.period_id}&book=${run.book_id}`}, ${String(config.label ?? report)},
-                  ${JSON.stringify(snapshot)}::jsonb, ${hash}, ${context.actorId ?? null}, ${context.actorId ?? null})`);
+        // The snapshot embeds wall-clock time, so re-running after a crash
+        // would record different bytes. The stage checkpoint (committed in the
+        // same transaction as the insert) makes the resumed attempt skip
+        // instead of double-recording evidence.
+        await commitCloseEffectStage({
+          orgId: context.orgId,
+          executionId,
+          leaseToken: claim.leaseToken,
+          stageKey: "report_evidence",
+          effect: async (tx) => {
+            await tx.execute(sql`insert into close_task_evidence
+            (org_id, run_id, task_id, evidence_type, reference_url, label, snapshot, content_hash, created_by, updated_by)
+            values (${context.orgId}, ${context.runId}, ${target.rows[0]!.id}, 'report',
+                    ${`/reports/${report}?period=${run.period_id}&book=${run.book_id}`}, ${String(config.label ?? report)},
+                    ${JSON.stringify(snapshot)}::jsonb, ${hash}, ${context.actorId ?? null}, ${context.actorId ?? null})`);
+          },
+        });
       } else if (rule.action === "start_flow") {
         const subjectKind =
           typeof config.subjectKind === "string" ? config.subjectKind : "";
@@ -2931,8 +3120,16 @@ export async function runCloseAutomations(
             "flow automation requires subjectKind, subjectId, and buttonId",
           );
         const { runRecordFlows } = await import("./flows/index.ts");
+        // The deterministic occurrence key makes a resumed attempt adopt the
+        // SAME flow runs (flows/run.ts insert-or-adopt, as with scheduled
+        // flows) instead of re-firing duplicate flows after a crash.
         const result = await runRecordFlows(
-          { kind: "manual", buttonId, source: "close_automation" },
+          {
+            kind: "manual",
+            buttonId,
+            source: "close_automation",
+            occurrenceKey: `${executionId}`,
+          },
           subjectKind,
           subjectId,
           {
@@ -2949,19 +3146,39 @@ export async function runCloseAutomations(
           `unsupported close automation action: ${rule.action}`,
         );
       }
-      await db.execute(sql`update close_automation_executions set status = 'completed', executed_at = now(),
-        updated_at = now(), updated_by = ${context.actorId ?? null} where id = ${executionId} and org_id = ${context.orgId}`);
-      await db.execute(sql`insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
-        values (${context.orgId}, ${context.runId}, ${context.taskId ?? null}, 'automation.completed', ${context.actorId ?? null},
-                ${JSON.stringify({ ruleId: rule.id, executionId, trigger: context.trigger, action: rule.action })}::jsonb)`);
+      await finishCloseExecution({
+        orgId: context.orgId,
+        runId: context.runId,
+        taskId: context.taskId,
+        actorId: context.actorId,
+        executionId,
+        leaseToken: claim.leaseToken,
+        outcome: "completed",
+        payload: { ruleId: String(rule.id), trigger: context.trigger, action: String(rule.action) },
+      });
       completed++;
     } catch (error) {
+      // Fenced means another attempt took the claim and owns the outcome from
+      // here — record nothing, count nothing, do not fight it.
+      if (error instanceof CloseAutomationLeaseFencedError) continue;
       const message = error instanceof Error ? error.message : String(error);
-      await db.execute(sql`update close_automation_executions set status = 'failed', error = ${message}, executed_at = now(),
-        updated_at = now(), updated_by = ${context.actorId ?? null} where id = ${executionId} and org_id = ${context.orgId}`);
-      await db.execute(sql`insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
-        values (${context.orgId}, ${context.runId}, ${context.taskId ?? null}, 'automation.failed', ${context.actorId ?? null},
-                ${JSON.stringify({ ruleId: rule.id, executionId, trigger: context.trigger, action: rule.action, error: message })}::jsonb)`);
+      try {
+        await finishCloseExecution({
+          orgId: context.orgId,
+          runId: context.runId,
+          taskId: context.taskId,
+          actorId: context.actorId,
+          executionId,
+          leaseToken: claim.leaseToken,
+          outcome: "failed",
+          error: message,
+          payload: { ruleId: String(rule.id), trigger: context.trigger, action: String(rule.action) },
+        });
+      } catch (completionError) {
+        if (!(completionError instanceof CloseAutomationLeaseFencedError))
+          throw completionError;
+        continue;
+      }
       failed++;
     }
   }
