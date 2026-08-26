@@ -68,6 +68,15 @@ const CTX = Symbol();
 export interface BankingContext {
   orgId: string;
   userId: string;
+  /**
+   * Durable job marker persisted as `audit_log.request_id` on the rows an
+   * engine-initiated write produces (e.g. `sftp-import:<scheduleId>` for a
+   * scheduled SFTP statement pull — see sftpImportAuditSource). Engine callers
+   * that have no background-job identity leave it unset, which persists null
+   * exactly as before. It names the JOB, never a human actor: attribution of
+   * people stays on `userId`.
+   */
+  requestId?: string | null;
   // prevents accidental structural-typing mixups with other {orgId,userId} bags
   [CTX]?: never;
 }
@@ -1122,10 +1131,10 @@ export async function importStatement(
     );
     await tx.execute(sql`
       insert into audit_log
-        (id, org_id, table_name, row_id, action, changes, actor_id)
+        (id, org_id, table_name, row_id, action, changes, actor_id, request_id)
       values
         (${evidence.auditId}, ${ctx.orgId}, 'bank_statements', ${statementId}, 'insert',
-         ${JSON.stringify(evidence.changes)}::jsonb, ${ctx.userId})
+         ${JSON.stringify(evidence.changes)}::jsonb, ${ctx.userId}, ${ctx.requestId ?? null})
     `);
     return {
       statementId,

@@ -22,9 +22,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Scoped run: activate-scan just this org's schedules and report this one.
     const owned = (await db.execute(sql`select id from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}`))
     if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    // The scan itself is engine-initiated (system-actor provenance); triggering
+    // it does not turn this operator into the statements' importer.
     const runs = await runDueSftpImports(user.orgId, id)
     const mine = runs.find((r) => r.scheduleId === id)
-    return NextResponse.json({ ok: true, result: mine ?? { scheduleId: id, filesSeen: 0, imported: 0, duplicates: 0, errors: [] } })
+    return NextResponse.json({ ok: true, result: mine ?? { scheduleId: id, filesSeen: 0, imported: 0, duplicates: 0, errors: [], files: [] } })
   }
   await db.execute(sql`
     update sftp_import_schedules set is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${user.id}
