@@ -14,6 +14,8 @@ const documentRevisionMonotonicMigrationPath =
   "schema/migrations/generated/0013_document_revision_monotonic.sql";
 const flowEmailOutboxMigrationPath =
   "schema/migrations/generated/0014_flow_email_outbox.sql";
+const documentTotalLineInvariantMigrationPath =
+  "schema/migrations/generated/0017_document_total_line_invariant.sql";
 const sandboxWipeGuardGucMigrationPath =
   "schema/migrations/generated/0019_sandbox_wipe_guard_guc.sql";
 const closePostingFenceMigrationPath =
@@ -44,6 +46,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0014_flow_email_outbox.sql",
     "0015_payment_instruction_posting_claim_fence.sql",
     "0016_gl_month_activity_book_id.sql",
+    "0017_document_total_line_invariant.sql",
     "0019_sandbox_wipe_guard_guc.sql",
     "0020_inventory_subsidiary_ownership.sql",
     "0022_close_posting_fence.sql",
@@ -232,6 +235,44 @@ test("transactional flow emails defer through the durable scheduler outbox", () 
   )?.[1];
   assert.ok(scopeCheck, "migration must (re)create the scheduler_outbox_scope check");
   assert.match(scopeCheck, /\(kind = 'flow_email'\) AND \(org_id IS NOT NULL\) AND \(subject_id IS NOT NULL\) AND \(payload IS NOT NULL\)/);
+});
+
+test("document header totals are enforced against the document's own lines", () => {
+  const migration = readFileSync(documentTotalLineInvariantMigrationPath, "utf8");
+  // One validator owns the commit-time assertion for commercial and
+  // journal-shaped documents.
+  assert.match(
+    migration,
+    /CREATE OR REPLACE FUNCTION public\.assert_document_totals_match_lines/,
+  );
+  assert.match(migration, /v_kind IN \('journal', 'pay_run'\)/);
+  // A line mutation refreshes the list header inside storage. This preserves
+  // native line-at-a-time writers without giving them authority to strand a
+  // stale denormalized total.
+  assert.match(
+    migration,
+    /CREATE TRIGGER document_lines_total_line_refresh/,
+  );
+  assert.match(
+    migration,
+    /AFTER INSERT OR DELETE OR UPDATE OF amount, tax_amount, document_id, org_id/,
+  );
+  // Both sides are then checked against the finished transaction shape, so an
+  // explicit contradictory header write still fails at COMMIT.
+  assert.match(migration, /CREATE CONSTRAINT TRIGGER documents_total_line_tieout/);
+  assert.match(migration, /AFTER INSERT OR UPDATE ON public\.documents/);
+  assert.match(
+    migration,
+    /CREATE CONSTRAINT TRIGGER document_lines_total_line_tieout/,
+  );
+  assert.match(
+    migration,
+    /AFTER INSERT OR UPDATE OR DELETE ON public\.document_lines/,
+  );
+  assert.match(migration, /DEFERRABLE INITIALLY DEFERRED/);
+  // Rollout heals the known legacy retainage drift from the lines themselves.
+  assert.match(migration, /WITH line_agg AS/);
+  assert.match(migration, /UPDATE public\.documents d/);
 });
 
 test("journal posting serializes with period close through a shared advisory fence", () => {
