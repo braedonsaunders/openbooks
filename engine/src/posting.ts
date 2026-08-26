@@ -862,18 +862,46 @@ export const RULES: Record<string, RuleFn> = {
     ];
   },
 
-  /** Transfer: DR one account, CR another, equal amounts (line 0 = to, line 1 = from). */
-  transfer: (doc, lines, deps) => {
-    const total = sum(lines.map((l) => l.amount));
+  /**
+   * Transfer: move ONE amount between two bank accounts (DR destination, CR
+   * source). Kernel contract — the same shape every native importer emits:
+   * exactly two ordered lines, line 0 = DESTINATION carrying the positive
+   * amount, line 1 = SOURCE naming only its account with a zero amount. The
+   * rule rejects anything else at the posting boundary — one or three legs,
+   * a nonzero source leg (equal OR differing amounts), duplicate accounts,
+   * non-positive amounts — so no caller (drawer, API, MCP) can post a
+   * transfer worth double its entered amount: summing both legs produced
+   * DR 200/CR 200 for a $100 transfer while still balancing.
+   */
+  transfer: (doc, lines) => {
+    if (lines.length !== 2)
+      throw new PostingError(
+        "transfer needs exactly two lines: the destination line carries the amount, the source line carries zero",
+      );
+    const dest = lines[0]!, src = lines[1]!;
+    if (!dest.accountId || !src.accountId)
+      throw new PostingError(
+        "transfer lines must name both the destination and the source account",
+      );
+    if (dest.accountId === src.accountId)
+      throw new PostingError(
+        "transfer destination and source must be different accounts",
+      );
+    if (toUnits(dest.amount) <= 0n)
+      throw new PostingError("transfer amount must be positive");
+    if (!isZero(src.amount))
+      throw new PostingError(
+        "transfer amount must ride exactly one line: the source leg must carry zero",
+      );
     return [
       {
-        accountId: lines[0]?.accountId ?? deps.control.bank,
-        amount: total,
+        accountId: dest.accountId,
+        amount: dest.amount,
         ...dims(doc),
       }, // debit destination
       {
-        accountId: lines[1]?.accountId ?? deps.control.bank,
-        amount: neg(total),
+        accountId: src.accountId,
+        amount: neg(dest.amount),
         ...dims(doc),
       }, // credit source
     ];
