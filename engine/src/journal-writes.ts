@@ -19,6 +19,13 @@ import { submitAndReleaseIfUngated } from "./flows/submit.ts";
  * Validation here is deliberately stricter than the UI's draft editor: a
  * script-created journal must be BALANCED at creation (signed amounts sum to
  * zero), because there is no human in the loop to fix an unbalanced draft.
+ *
+ * Atomicity contract of `post: true`: the draft rows, the approval submission,
+ * and the ledger entry are one transaction — a failure anywhere leaves zero
+ * documents and lines behind, never a hidden orphan draft. An actor-less
+ * caller (scheduled/bulk scripts have no signed-in user) posts under explicit
+ * system provenance instead of being refused after a draft was already
+ * committed.
  */
 
 export interface ScriptJournalLine {
@@ -69,6 +76,19 @@ function persistJournalLineAmount(value: unknown, line: number): string {
 const MAX_LINES = 200;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Provenance markers stamped onto documents.custom when a script journal is
+ * created without an attributable actor (scheduled/bulk scripts have no
+ * signed-in user). Mirrors the engine-wide convention (engine/src/email-config.ts):
+ * created_by stays null for a system actor while explicit markers carry the
+ * attribution evidence, so a null created_by always means "the system wrote
+ * this", never "nobody recorded who wrote it".
+ */
+const SYSTEM_PROVENANCE = Object.freeze({
+  actorKind: "system",
+  actorReason: "sandboxed script",
+});
 
 /**
  * Pure validation + normalization — exported separately so it unit-tests
@@ -131,10 +151,62 @@ export function validateJournalInput(input: ScriptJournalInput): {
 }
 
 /**
+ * Insert the numbered draft documents row + lines. Runs inside whatever
+ * transaction owns the operation: standalone for draft-only requests, or
+ * joined into the caller's pinned tenant transaction for post:true (db routes
+ * to the transaction connection inside withOrgTransaction).
+ */
+async function insertScriptDraft(
+  orgId: string,
+  subsidiaryId: string,
+  currency: string,
+  v: ReturnType<typeof validateJournalInput>,
+  byCode: Map<string, string>,
+  actorId: string | null,
+): Promise<{ id: string; documentNumber: string }> {
+  return db.transaction(async (tx) => {
+    // JE- sequence, same upsert the UI path uses (web/lib/bills.ts).
+    const seq = (await tx.execute(sql`
+      insert into number_sequences (org_id, document_kind, prefix)
+      values (${orgId}, 'journal', 'JE-')
+      on conflict on constraint sequences_org_kind_sub
+      do update set next_number = number_sequences.next_number + 1
+      where number_sequences.org_id = ${orgId}
+      returning prefix, next_number, padding`)) as any;
+    const s = seq.rows[0]!;
+    const documentNumber = `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
+
+    const ins = (await tx.execute(sql`
+      insert into documents (org_id, kind, document_number, subsidiary_id, document_date, currency,
+                             memo, reference_number, subtotal, tax_total, total, created_by, custom)
+      values (${orgId}, 'journal', ${documentNumber}, ${subsidiaryId}, ${v.documentDate}, ${currency},
+              ${v.memo}, ${v.referenceNumber}, ${v.totalDebits}, '0', ${v.totalDebits}, ${actorId},
+              ${JSON.stringify(actorId ? {} : SYSTEM_PROVENANCE)}::jsonb)
+      returning id`)) as any;
+    const id = String(ins.rows[0].id);
+
+    for (let i = 0; i < v.lines.length; i++) {
+      const l = v.lines[i]!;
+      const accountId = l.accountId ?? byCode.get(l.accountCode!)!;
+      await tx.execute(sql`
+        insert into document_lines (org_id, document_id, line_number, account_id, description,
+                                    quantity, unit_price, amount, department_id, project_id, custom)
+        values (${orgId}, ${id}, ${i + 1}, ${accountId}, ${l.description},
+                '1', ${l.amount}, ${l.amount}, ${l.departmentId}, ${l.projectId}, '{}')`);
+    }
+    const num = (await tx.execute(sql`select document_number from documents where id = ${id} and org_id = ${orgId}`)) as any;
+    return { id, documentNumber: String(num.rows[0].document_number) };
+  });
+}
+
+/**
  * Create a balanced draft journal from sandboxed code, optionally posting it.
  * Account codes resolve within the org; unknown/inactive accounts are refused.
  * post=true runs the real posting engine — every invariant it enforces
- * (closed period, balance kernel) applies unchanged.
+ * (closed period, balance kernel) applies unchanged — inside ONE transaction
+ * with the draft, so a refused post leaves zero documents and lines behind.
+ * A null actor (scheduled/bulk script) posts under explicit system provenance;
+ * an interactive actor is retained on created_by and every evidence row.
  */
 export async function createScriptJournal(
   orgId: string,
@@ -190,62 +262,52 @@ export async function createScriptJournal(
   if (!company.base_currency) {
     throw new JournalWriteError("root subsidiary has no configured functional currency");
   }
+  const subsidiaryId = company.subsidiary_id;
+  const baseCurrency = company.base_currency;
 
-  const docId = await db.transaction(async (tx) => {
-    // JE- sequence, same upsert the UI path uses (web/lib/bills.ts).
-    const seq = (await tx.execute(sql`
-      insert into number_sequences (org_id, document_kind, prefix)
-      values (${orgId}, 'journal', 'JE-')
-      on conflict on constraint sequences_org_kind_sub
-      do update set next_number = number_sequences.next_number + 1
-      where number_sequences.org_id = ${orgId}
-      returning prefix, next_number, padding`)) as any;
-    const s = seq.rows[0]!;
-    const documentNumber = `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
-
-    const ins = (await tx.execute(sql`
-      insert into documents (org_id, kind, document_number, subsidiary_id, document_date, currency,
-                             memo, reference_number, subtotal, tax_total, total, created_by)
-      values (${orgId}, 'journal', ${documentNumber}, ${company.subsidiary_id}, ${v.documentDate}, ${company.base_currency},
-              ${v.memo}, ${v.referenceNumber}, ${v.totalDebits}, '0', ${v.totalDebits}, ${actorId})
-      returning id`)) as any;
-    const id = String(ins.rows[0].id);
-
-    for (let i = 0; i < v.lines.length; i++) {
-      const l = v.lines[i]!;
-      const accountId = l.accountId ?? byCode.get(l.accountCode!)!;
-      await tx.execute(sql`
-        insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                    quantity, unit_price, amount, department_id, project_id, custom)
-        values (${orgId}, ${id}, ${i + 1}, ${accountId}, ${l.description},
-                '1', ${l.amount}, ${l.amount}, ${l.departmentId}, ${l.projectId}, '{}')`);
-    }
-    const num = (await tx.execute(sql`select document_number from documents where id = ${id} and org_id = ${orgId}`)) as any;
-    return { id, documentNumber: String(num.rows[0].document_number) };
-  });
-
-  if (!opts.post) return docId;
-
-  if (!actorId) {
-    throw new JournalWriteError("posting a script journal requires an attributable actor");
+  if (!opts.post) {
+    // A committed draft IS the documented successful outcome of a draft-only
+    // request; it stands alone in its own transaction.
+    return insertScriptDraft(orgId, subsidiaryId, baseCurrency, v, byCode, actorId);
   }
+
+  // post:true is ONE atomic unit: the numbered draft, its approval submission,
+  // and the ledger entry commit together or not at all. Committing the draft
+  // first made every later failure (missing actor, refused submission, closed
+  // period) leave a hidden orphan journal behind. An actor-less scheduled
+  // script now posts under explicit system provenance instead of being
+  // refused only after its draft had already been committed.
   const outcome = await withOrgTransaction(orgId, async () => {
-    const submission = await submitAndReleaseIfUngated("journal", docId.id, actorId);
+    const docId = await insertScriptDraft(orgId, subsidiaryId, baseCurrency, v, byCode, actorId);
+    const submission = await submitAndReleaseIfUngated(
+      "journal",
+      docId.id,
+      // A null submitter is a system submission: every downstream use inside
+      // the flow engine is `actorId ?? doc.createdBy` over nullable uuid
+      // columns, so attribution degrades to the document's own creator — also
+      // null here — rather than inventing an identity. The wrapper's narrower
+      // `string` parameter type is widened at this one boundary.
+      actorId as string,
+    );
     if (submission.flowError) {
       throw new JournalWriteError(`approval could not be routed: ${submission.flowError}`);
     }
-    if (submission.gated) return { approvalPending: true as const };
+    if (submission.gated) return { approvalPending: true as const, docId };
     const entryId = await postDocument(
       docId.id,
       { control: await loadRequiredControlAccounts(orgId) },
-      { deferEffects: true },
+      { deferEffects: true, audit: { actorId, source: "script" } },
     );
-    return { approvalPending: false as const, entryId };
+    return { approvalPending: false as const, entryId, docId };
   });
-  if (outcome.approvalPending) return { ...docId, approvalPending: true };
-  await runPostDocumentEffects(docId.id, "draft");
-  const entryId = outcome.entryId;
-  return { ...docId, entryId: String(entryId) };
+  if (outcome.approvalPending) return { ...outcome.docId, approvalPending: true };
+  // Effects fire after the atomic commit: after_post automation may itself
+  // post journals and must never nest inside this unit. The posting
+  // transaction already queued the effects outbox row, so a crash between
+  // commit and here leaves a durable retry for runPostDocumentEffects rather
+  // than lost or duplicated work — a rerun claims the same row once.
+  await runPostDocumentEffects(outcome.docId.id, "draft", { actorId });
+  return { ...outcome.docId, entryId: String(outcome.entryId) };
 }
 
 /** Drizzle schema re-export so callers can typecheck against documents. */
