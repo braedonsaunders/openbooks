@@ -758,6 +758,134 @@ test("concurrent double-resume of a stranded attempt posts exactly one journal e
 });
 
 /**
+ * Hosted-checkout concurrency: two simultaneous /pay/{token} requests for one
+ * invoice must not each drive the provider. The initiated-attempt reuse probe
+ * is only a control if two requests cannot pass it simultaneously — creation
+ * is serialized per link behind a transaction advisory lock taken BEFORE the
+ * probe or the un-undoable provider side effect. A concurrent pair therefore
+ * produces exactly one provider checkout call and one initiated attempt, and
+ * the loser resolves with the winner's live redirect URL instead of minting a
+ * second session or failing; a failed provider call rolls the lock back with
+ * its transaction, so nothing survives to block a genuine retry.
+ */
+test("concurrent hosted-checkout requests share one provider session for one invoice", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const fx = await seedAcceptance(org, "INV-PAY-CHECKOUT-RACE");
+
+    // Barrier at the stubbed PSP boundary: hold each caller until BOTH have
+    // arrived. Reaching the adapter implies that caller already missed the
+    // initiated-attempt reuse probe, so on pre-lock code this structurally
+    // guarantees both create sessions (neither can insert while parked).
+    // Post-lock only one request ever reaches the adapter — the other waits
+    // at the advisory lock — so the bounded wait expires and the single
+    // arrival completes alone before the loser re-probes inside the lock.
+    let releaseSecond!: () => void;
+    const secondArrival = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
+    let expireQuorum!: () => void;
+    const quorum = Promise.race([
+      secondArrival,
+      new Promise<void>((resolve) => {
+        expireQuorum = resolve;
+      }),
+    ]);
+    const quorumTimer = setTimeout(expireQuorum, 5_000);
+    quorumTimer.unref();
+    let providerCalls = 0;
+    const fetchFn = async () => {
+      const n = ++providerCalls;
+      if (n >= 2) releaseSecond();
+      else await quorum;
+      return {
+        status: 200,
+        json: async () => ({
+          id: `cs_checkout_race_${n}`,
+          url: `https://checkout.stripe.test/cs_checkout_race_${n}`,
+        }),
+      };
+    };
+    const returnUrl = "https://app.test/pay/" + fx.link.token;
+
+    const results = await Promise.all([
+      createCheckoutSession(fx.link.token, returnUrl, fetchFn),
+      createCheckoutSession(fx.link.token, returnUrl, fetchFn),
+    ]);
+
+    assert.equal(providerCalls, 1, "exactly one provider checkout call despite the concurrent pair");
+    // The winner's session is cs_checkout_race_1: arrival order assigns ids,
+    // and the first adapter arrival is whoever held the per-link lock.
+    assert.deepEqual(results, [
+      { redirectUrl: "https://checkout.stripe.test/cs_checkout_race_1" },
+      { redirectUrl: "https://checkout.stripe.test/cs_checkout_race_1" },
+    ]);
+
+    const attempts = (await db.execute<{ external_ref: string; status: string; amount: string; surcharge_amount: string; payload: Record<string, unknown> | null }>(sql`
+      select external_ref, status, amount, surcharge_amount, event_payload as payload
+        from payment_attempts
+       where org_id = ${org.orgId} and link_id = ${fx.link.id}
+    `));
+    assert.equal(attempts.rows.length, 1, "exactly one initiated attempt for the link despite the concurrent pair");
+    assert.deepEqual(
+      {
+        external_ref: attempts.rows[0]!.external_ref,
+        status: attempts.rows[0]!.status,
+        amount: attempts.rows[0]!.amount,
+        surcharge_amount: attempts.rows[0]!.surcharge_amount,
+        redirectUrl: attempts.rows[0]!.payload?.redirectUrl,
+      },
+      {
+        external_ref: "cs_checkout_race_1",
+        status: "initiated",
+        amount: "100.0000",
+        surcharge_amount: "3.0000",
+        redirectUrl: "https://checkout.stripe.test/cs_checkout_race_1",
+      },
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * The per-link lock rides the org transaction, so a failed provider call
+ * must leave no claim behind: the rolled-back checkout frees the link and a
+ * genuine retry creates its own live session.
+ */
+test("a failed provider checkout leaves the link free for a genuine retry", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const fx = await seedAcceptance(org, "INV-PAY-CHECKOUT-RETRY");
+    const returnUrl = "https://app.test/pay/" + fx.link.token;
+
+    await assert.rejects(
+      createCheckoutSession(fx.link.token, returnUrl, async () => ({
+        status: 500,
+        json: async () => ({ error: { message: "processor unavailable" } }),
+      })),
+      /stripe checkout failed: processor unavailable/,
+    );
+    const afterFailure = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from payment_attempts where org_id = ${org.orgId} and link_id = ${fx.link.id}
+    `));
+    assert.equal(afterFailure.rows[0]!.n, 0, "failed checkout leaves no attempt behind");
+
+    const retry = await createCheckoutSession(fx.link.token, returnUrl, async () => ({
+      status: 200,
+      json: async () => ({ id: "cs_retry_ok", url: "https://checkout.stripe.test/cs_retry_ok" }),
+    }));
+    assert.deepEqual(retry, { redirectUrl: "https://checkout.stripe.test/cs_retry_ok" });
+    const attempts = (await db.execute<{ external_ref: string; status: string }>(sql`
+      select external_ref, status from payment_attempts where org_id = ${org.orgId} and link_id = ${fx.link.id}
+    `));
+    assert.deepEqual(attempts.rows, [{ external_ref: "cs_retry_ok", status: "initiated" }]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
  * F1.3, partial progress: the crash landed after the receipt draft was
  * reserved but before it was built out and posted. Resume must reuse that
  * exact draft — never mint a second receipt for the same collection.
