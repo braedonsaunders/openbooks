@@ -8,7 +8,16 @@ import {
   type AppRecordsAdapter,
   type AppStorageAdapter,
 } from '@openbooks/engine/src/apps-runtime.ts'
+import {
+  executeAppInvocation,
+  deriveAppInvocationKey,
+  AppInvocationInFlightError,
+  AppInvocationRequestMismatchError,
+  type AppInvocationAuditRow,
+  type AppInvocationAttempt,
+} from '@openbooks/engine/src/apps-invocations.ts'
 import { createScriptJournal, type ScriptJournalInput } from '@openbooks/engine/src/journal-writes.ts'
+import { requestHash } from '@/lib/application/idempotency-core'
 import { parseManifest, validateBundle, contentTypeFor, type AppManifest } from './manifest'
 import { APP_CAPABILITIES } from './manifest'
 import { parseObjectSpecs, type ParsedObjects } from './objects'
@@ -360,43 +369,78 @@ export async function runBridgeMethod(opts: {
   if (opts.method.startsWith('platform.')) {
     const typeKey = String(opts.payload?.typeKey ?? '')
     const id = String(opts.payload?.id ?? '')
-    try {
-      let result: unknown
-      switch (opts.method) {
-        case 'platform.schema':
-          result = await platform.schema()
-          break
-        case 'platform.list':
-          result = await platform.list(typeKey, opts.payload?.options ?? {})
-          break
-        case 'platform.get':
-          result = await platform.get(typeKey, id)
-          break
-        case 'platform.create':
-          result = await platform.create(typeKey, opts.payload?.body ?? {})
-          break
-        case 'platform.update':
-          result = await platform.update(typeKey, id, opts.payload?.body ?? {})
-          break
-        case 'platform.delete':
-          result = await platform.delete(typeKey, id)
-          break
-        default:
-          return { ok: false, error: `unknown method: ${opts.method}`, status: 400 }
+    const units = platformBridgeUnits(opts.method)
+    const started = Date.now()
+    // The dispatch itself decides the terminal outcome; infrastructure faults
+    // REJECT and are recorded as refusal evidence by the envelope.
+    async function attemptDispatch(): Promise<AppInvocationAttempt> {
+      try {
+        let result: unknown
+        switch (opts.method) {
+          case 'platform.schema':
+            result = await platform.schema()
+            break
+          case 'platform.list':
+            result = await platform.list(typeKey, opts.payload?.options ?? {})
+            break
+          case 'platform.get':
+            result = await platform.get(typeKey, id)
+            break
+          case 'platform.create':
+            result = await platform.create(typeKey, opts.payload?.body ?? {})
+            break
+          case 'platform.update':
+            result = await platform.update(typeKey, id, opts.payload?.body ?? {})
+            break
+          case 'platform.delete':
+            result = await platform.delete(typeKey, id)
+            break
+          default:
+            return {
+              status: 'error',
+              error: `unknown method: ${opts.method}`,
+              logs: [],
+              units,
+              durationMs: Date.now() - started,
+            }
+        }
+        return { status: 'ok', response: result, logs: [], units, durationMs: Date.now() - started }
+      } catch (error) {
+        return {
+          status:
+            error instanceof AppPlatformError && error.status === 403 ? 'forbidden' : 'error',
+          error: (error as Error).message,
+          logs: [],
+          units,
+          durationMs: Date.now() - started,
+        }
       }
-      await logAppRun(app, opts, opts.method, 'ok', null, platformBridgeUnits(opts.method))
-      return { ok: true, result }
+    }
+    try {
+      const outcome = await executeAppInvocation({
+        orgId: opts.orgId,
+        actorId: opts.user.id,
+        appId: app.id,
+        versionId: app.activeVersionId,
+        endpoint: opts.method,
+        operation: `apps.${opts.method.replaceAll('.', '_')}`,
+        idempotencyKey: deriveAppInvocationKey({
+          method: opts.method,
+          typeKey,
+          id,
+          payload: opts.payload?.body ?? opts.payload?.options ?? null,
+        }),
+        requestHash: requestHash({ method: opts.method, typeKey, id, payload: opts.payload }),
+        run: attemptDispatch,
+        audit: insertAppRun,
+      })
+      if (outcome.attempt.status !== 'ok') {
+        const status = outcome.attempt.status === 'forbidden' ? 403 : 400
+        return { ok: false, error: outcome.attempt.error ?? outcome.attempt.status, status }
+      }
+      return { ok: true, result: outcome.attempt.response }
     } catch (error) {
-      const status = error instanceof AppPlatformError ? error.status : 400
-      await logAppRun(
-        app,
-        opts,
-        opts.method,
-        status === 403 ? 'forbidden' : 'error',
-        (error as Error).message,
-        platformBridgeUnits(opts.method),
-      )
-      return { ok: false, error: (error as Error).message, status }
+      return invocationRefusal(error)
     }
   }
 
@@ -419,6 +463,7 @@ export async function runBridgeMethod(opts: {
       sql`select content from app_files where org_id = ${opts.orgId} and version_id = ${app.activeVersionId} and path = ${endpoint.file} and kind = 'backend' limit 1`,
     )
     if (!src[0]) return { ok: false, error: 'endpoint source missing', status: 500 }
+    const handlerSource = src[0].content
 
     const adapters: AppHostAdapters = { storage: storageAdapter(opts.orgId, app.id) }
     if (recordsGranted) adapters.records = recordsAdapter(opts.orgId)
@@ -441,23 +486,39 @@ export async function runBridgeMethod(opts: {
         roles: opts.user.roles.map(({ key }) => key),
       },
     }
-    const run = await runAppEndpoint({ source: src[0].content, request, adapters })
-
-    // Log the run (best-effort — a logging failure must not fail the call).
+    // ONE invocation unit: claim an idempotency key, run the handler inside a
+    // savepoint of one tenant transaction, and commit every material effect
+    // (journal posts, platform CRUD, app storage) together with its app_runs
+    // audit row — or roll the whole thing back. A handler failure leaves zero
+    // effects; a lost-response retry replays the stored result without
+    // re-executing; an audit-write failure rolls everything back. The envelope
+    // lives in engine/src/apps-invocations.ts.
     try {
-      await db.execute(sql`
-        insert into app_runs (org_id, app_id, version_id, endpoint, status, units, logs, error_message, duration_ms, actor_id)
-        values (${opts.orgId}, ${app.id}, ${app.activeVersionId}, ${endpointName}, ${run.status}, ${run.units},
-                ${JSON.stringify(run.logs)}::jsonb, ${run.error ?? null}, ${run.durationMs}, ${opts.user.id})`)
-    } catch {
-      /* ignore */
+      const outcome = await executeAppInvocation({
+        orgId: opts.orgId,
+        actorId: opts.user.id,
+        appId: app.id,
+        versionId: app.activeVersionId,
+        endpoint: endpointName,
+        operation: `apps.call_backend.${endpointName}`,
+        idempotencyKey: deriveAppInvocationKey({
+          versionId: app.activeVersionId,
+          endpoint: endpointName,
+          body: opts.payload?.payload ?? null,
+        }),
+        requestHash: requestHash({ endpoint: endpointName, payload: opts.payload?.payload ?? null }),
+        run: () => runAppEndpoint({ source: handlerSource, request, adapters }),
+        audit: insertAppRun,
+      })
+      const run = outcome.attempt
+      if (run.status !== 'ok') {
+        const status = run.status === 'forbidden' ? 403 : run.status === 'timeout' ? 504 : 400
+        return { ok: false, error: run.error ?? run.status, status }
+      }
+      return { ok: true, result: run.response }
+    } catch (error) {
+      return invocationRefusal(error)
     }
-
-    if (run.status !== 'ok') {
-      const status = run.status === 'forbidden' ? 403 : run.status === 'timeout' ? 504 : 400
-      return { ok: false, error: run.error ?? run.status, status }
-    }
-    return { ok: true, result: run.response }
   }
 
   return { ok: false, error: `unknown method: ${opts.method}`, status: 400 }
@@ -470,22 +531,49 @@ function platformBridgeUnits(method: string): number {
   return 0
 }
 
-async function logAppRun(
-  app: AppRow,
-  opts: { orgId: string; user: SessionUser },
-  endpoint: string,
-  status: 'ok' | 'error' | 'timeout' | 'forbidden',
-  error: string | null,
-  units: number,
-): Promise<void> {
-  try {
-    await db.execute(sql`
-      insert into app_runs (org_id, app_id, version_id, endpoint, status, units, logs, error_message, duration_ms, actor_id)
-      values (${opts.orgId}, ${app.id}, ${app.activeVersionId}, ${endpoint}, ${status}, ${units}, '[]'::jsonb,
-              ${error}, 0, ${opts.user.id})`)
-  } catch {
-    // Run logging is best-effort and must never change the API result.
+/**
+ * Map envelope refusals to bridge results. A concurrent duplicate of one
+ * invocation key is a 409, as is key reuse with different input. Anything else
+ * (an app_runs write failure, claim-shape violation) is fail-closed: the whole
+ * transaction already rolled back inside the envelope, so nothing material is
+ * left behind — surface the real error instead of pretending success.
+ */
+function invocationRefusal(error: unknown): { ok: false; error: string; status: number } {
+  if (error instanceof AppInvocationInFlightError) {
+    return { ok: false, error: error.message, status: 409 }
   }
+  if (error instanceof AppInvocationRequestMismatchError) {
+    return { ok: false, error: error.message, status: 409 }
+  }
+  // Drizzle wraps driver errors; carry the cause chain so the operator sees
+  // WHY the invocation refused instead of a bare "failed query" wrapper.
+  const text = fullErrorMessage(error)
+  return { ok: false, error: text || 'app invocation failed', status: 500 }
+}
+
+function fullErrorMessage(error: unknown): string {
+  let current: unknown = error
+  let text = ''
+  let hops = 0
+  while (current instanceof Error && hops < 5) {
+    text += (hops ? ': ' : '') + current.message
+    current = (current as Error & { cause?: unknown }).cause
+    hops++
+  }
+  return text || String(error)
+}
+
+/**
+ * The ONLY writer of run evidence for App invocations, and it is load-bearing:
+ * it joins the invocation's own tenant transaction (db routes to the pinned
+ * connection), so its failure rolls back the very effects it audits instead of
+ * silently stripping them of provenance.
+ */
+async function insertAppRun(row: AppInvocationAuditRow): Promise<void> {
+  await db.execute(sql`
+    insert into app_runs (org_id, app_id, version_id, endpoint, status, units, logs, error_message, duration_ms, actor_id)
+    values (${row.orgId}, ${row.appId}, ${row.versionId}, ${row.endpoint}, ${row.status}, ${Math.round(row.units)},
+            ${JSON.stringify(row.logs)}::jsonb, ${row.errorMessage}, ${Math.round(row.durationMs)}, ${row.actorId})`)
 }
 
 // ---------------------------------------------------------------------------
