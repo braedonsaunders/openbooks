@@ -196,7 +196,11 @@ export const taxRates = pgTable(
     orgId: orgRef(),
     taxCodeId: uuid("tax_code_id").notNull(),
     ratePercent: money("rate_percent").notNull(),
+    /** Inclusive effective window start. Windows may not overlap within one
+     *  org/tax-code identity (storage constraint 0024). */
     effectiveFrom: date("effective_from").notNull(),
+    /** Inclusive end; null is open-ended. Windows may not overlap within one
+     *  org/tax-code identity (storage constraint 0024). */
     effectiveTo: date("effective_to"),
     ...auditColumns,
   },

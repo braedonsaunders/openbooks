@@ -38,6 +38,8 @@ const ledgerTenantCoherenceMigrationPath =
   "schema/migrations/generated/0038_ledger_tenant_coherent_foreign_keys.sql";
 const paymentSurchargeRuleUniquenessMigrationPath =
   "schema/migrations/generated/0023_payment_surcharge_rule_uniqueness.sql";
+const taxRateEffectiveRangeExclusionMigrationPath =
+  "schema/migrations/generated/0024_tax_rate_effective_range_exclusion.sql";
 const accountPostingClassificationSerializationMigrationPath =
   "schema/migrations/generated/0046_account_posting_classification_serialization.sql";
 const subscriptionConfigurationInvariantsMigrationPath =
@@ -77,6 +79,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0020_inventory_subsidiary_ownership.sql",
     "0022_close_posting_fence.sql",
     "0023_payment_surcharge_rule_uniqueness.sql",
+    "0024_tax_rate_effective_range_exclusion.sql",
     "0035_terminal_failure_surfacing.sql",
     "0036_bank_statement_source_idempotency.sql",
     "0038_ledger_tenant_coherent_foreign_keys.sql",
@@ -241,7 +244,10 @@ test("active payment surcharge windows cannot overlap within one pricing identit
     /ADD CONSTRAINT payment_surcharge_rules_no_active_overlap\s+EXCLUDE USING gist/,
   );
   assert.match(migration, /org_id WITH =/);
-  assert.match(migration, /COALESCE\(provider, '__all_providers__'::text\)\) WITH =/);
+  assert.match(
+    migration,
+    /COALESCE\(provider, '__all_providers__'::text\)\) WITH =/,
+  );
   assert.match(migration, /payment_method WITH =/);
   assert.match(migration, /daterange\(effective_from, effective_to, '\[\]'\)\) WITH &&/);
   assert.match(migration, /WHERE \(is_active\)/);
@@ -318,6 +324,39 @@ test("effective-date overlap guards are exclusion constraints, not racy triggers
   assert.match(migration, /RAISE NOTICE 'fair_value_prices repair/);
 });
 
+test("one effective tax-rate window per tax code is enforced by storage, not by the racy trigger read", () => {
+  const migration = readFileSync(taxRateEffectiveRangeExclusionMigrationPath, "utf8");
+
+  // The overlap trigger stays: it is what turns a duplicate write into the
+  // product's readable conflict message for every serial writer. Only its
+  // blind spot — mutually uncommitted windows — is covered here.
+  assert.doesNotMatch(migration, /DROP TRIGGER|DROP FUNCTION/);
+
+  // GiST needs uuid operator classes from btree_gist; omitting it silently
+  // would silently omit the invariant.
+  assert.match(migration, /CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public/);
+  assert.match(
+    migration,
+    /ADD CONSTRAINT tax_rates_effective_range_exclusion\s+EXCLUDE USING gist/,
+  );
+  // Identity columns key equality exactly like the trigger's WHERE clause.
+  assert.match(migration, /org_id WITH =/);
+  assert.match(migration, /tax_code_id WITH =/);
+  // The range constructor must accept exactly what
+  // effective_date_ranges_overlap accepts: inclusive bounds and an open-ended
+  // null effective_to folded onto 'infinity'. A plain daterange on a nullable
+  // effective_to would diverge from the product's own semantics.
+  assert.match(
+    migration,
+    /\(daterange\(effective_from, COALESCE\(effective_to, 'infinity'::date\), '\[\]'\)\) WITH &&/,
+  );
+  assert.match(
+    migration,
+    /COMMENT ON CONSTRAINT tax_rates_effective_range_exclusion/,
+  );
+  // The baseline keeps its published trigger untouched.
+  assert.match(baseline, /CREATE FUNCTION public\.tax_rates_no_overlap_guard/);
+});
 test("payroll commit has durable exact-source selection evidence", () => {
   const migration = readFileSync(payrollCommitSelectionFenceMigrationPath, "utf8");
   assert.match(migration, /ADD COLUMN calculation_source_snapshot jsonb/);
