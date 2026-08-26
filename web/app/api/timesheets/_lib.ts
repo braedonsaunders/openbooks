@@ -375,7 +375,7 @@ export async function setTimesheetWeekStatus(
   const week = weekStart(weekStartIso)
   // Explicit casts: an untyped `null` in a CASE makes postgres infer text for
   // the whole expression, which a uuid column rejects.
-  await db.execute(sql`
+  const updated = (await db.execute<{ id: string }>(sql`
     update timesheet_weeks
        set status = ${status},
            submitted_by = case when ${status} = 'submitted'
@@ -389,7 +389,11 @@ export async function setTimesheetWeekStatus(
            rejection_reason = ${rejectionReason ?? null}::text,
            updated_by = ${actorId}::uuid, updated_at = now()
      where org_id = ${orgId} and employee_party_id = ${ownedEmployee}
-       and week_start = ${week}::date`)
+       and week_start = ${week}::date
+     returning id`))
+  if (updated.rows.length !== 1) {
+    throw new Error('timesheet week not found')
+  }
 }
 
 export interface PickerOption {

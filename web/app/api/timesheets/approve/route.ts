@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { approveSubmittedTimeEntries } from '../../../../lib/time-approval'
-import { isIsoDate, loadWeek, pinTimesheetEmployee, setTimesheetWeekStatus, weekStart, weekWindow } from '../_lib'
+import { isIsoDate, loadWeek, pinTimesheetEmployee, weekStart } from '../_lib'
 
 export const runtime = 'nodejs'
 
@@ -35,19 +35,14 @@ export async function POST(req: Request) {
   const ownedEmployee = await pinTimesheetEmployee(orgId, body.employee)
   if (!ownedEmployee) return bad('Employee not found')
   const week = weekStart(body.week)
-  const days = weekWindow(week)
 
   try {
     await approveSubmittedTimeEntries({
       orgId,
       actorId: user.id,
       employeePartyId: ownedEmployee,
-      from: days[0]!,
-      to: days[6]!,
+      weekStart: week,
     })
-    // The header follows the entries, never leads them: if the financial
-    // effects above roll back, the week must not be left reading approved.
-    await setTimesheetWeekStatus(orgId, ownedEmployee, week, 'approved', user.id, null)
   } catch (error) {
     console.error('[timesheets/approve] approval transaction rolled back:', error)
     return NextResponse.json(

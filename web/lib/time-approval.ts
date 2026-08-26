@@ -1,9 +1,10 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrg } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { laborCostingSettings, snapshotLaborCostRates } from '@openbooks/engine/src/labor-costing.ts'
 import { applyOverheadForTime } from '@openbooks/engine/src/overhead-apply.ts'
 import { postProjectLaborCost } from '@openbooks/engine/src/project-recognition.ts'
+import { setTimesheetWeekStatus, weekWindow } from '../app/api/timesheets/_lib'
 import { snapshotTimeBillRates } from './item-rates'
 import { isFeatureEnabled } from './features'
 
@@ -33,20 +34,25 @@ export interface ApproveSubmittedTimeEntriesOptions {
   orgId: string
   actorId: string
   employeePartyId: string
-  from: string
-  to: string
+  weekStart: string
 }
 
 /**
- * Approve submitted time and materialize every configured accounting effect as
- * one tenant-scoped unit. Any snapshot or posting failure rolls the status
- * transition back, so approved time can never be committed without its
- * required financial evidence.
+ * Approve one submitted week and materialize every configured accounting
+ * effect as one tenant-scoped unit. The week header is the final write inside
+ * the same transaction: any snapshot, posting, or header failure rolls every
+ * approval write back together.
+ *
+ * `withOrgTransaction` participates in an ambient tenant transaction, so a
+ * flow-gate release keeps this work inside the gate decision's pinned unit
+ * while a direct API call gets the same request-sized boundary.
  */
 export async function approveSubmittedTimeEntries(
   options: ApproveSubmittedTimeEntriesOptions,
 ): Promise<string[]> {
-  return withOrg(options.orgId, async () => {
+  const days = weekWindow(options.weekStart)
+  const week = days[0]!
+  return withOrgTransaction(options.orgId, async () => {
     const approved = (await db.execute<{ id: string }>(sql`
       update time_entries
          set status = 'approved',
@@ -56,14 +62,22 @@ export async function approveSubmittedTimeEntries(
              updated_by = ${options.actorId}
        where org_id = ${options.orgId}
          and employee_party_id = ${options.employeePartyId}
-         and worked_on >= ${options.from}
-         and worked_on <= ${options.to}
+         and worked_on >= ${days[0]}
+         and worked_on <= ${days[6]}
          and status = 'submitted'
        returning id
     `))
 
     const ids = approved.rows.map((row) => row.id)
     await runTimeApprovalEffects(options.orgId, options.actorId, ids)
+    await setTimesheetWeekStatus(
+      options.orgId,
+      options.employeePartyId,
+      week,
+      'approved',
+      options.actorId,
+      null,
+    )
     return ids
   })
 }
