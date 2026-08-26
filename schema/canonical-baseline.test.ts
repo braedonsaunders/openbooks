@@ -20,6 +20,8 @@ const sandboxWipeGuardGucMigrationPath =
   "schema/migrations/generated/0019_sandbox_wipe_guard_guc.sql";
 const closePostingFenceMigrationPath =
   "schema/migrations/generated/0022_close_posting_fence.sql";
+const payrollCommitSelectionFenceMigrationPath =
+  "schema/migrations/generated/0040_payroll_commit_selection_fence.sql";
 const wipPrebillSandboxWipeMigrationPath =
   "schema/migrations/generated/0043_sandbox_wip_prebill_wipe_guard.sql";
 const documentTenantForeignKeysMigrationPath =
@@ -61,6 +63,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0036_bank_statement_source_idempotency.sql",
     "0038_ledger_tenant_coherent_foreign_keys.sql",
     "0039_document_tenant_coherent_foreign_keys.sql",
+    "0040_payroll_commit_selection_fence.sql",
     "0043_sandbox_wip_prebill_wipe_guard.sql",
   ]);
   assert.deepEqual(
@@ -106,6 +109,15 @@ test("active payment surcharge windows cannot overlap within one pricing identit
   assert.match(migration, /payment_method WITH =/);
   assert.match(migration, /daterange\(effective_from, effective_to, '\[\]'\)\) WITH &&/);
   assert.match(migration, /WHERE \(is_active\)/);
+});
+
+test("payroll commit has durable exact-source selection evidence", () => {
+  const migration = readFileSync(payrollCommitSelectionFenceMigrationPath, "utf8");
+  assert.match(migration, /ADD COLUMN calculation_source_snapshot jsonb/);
+  assert.match(migration, /ADD COLUMN calculation_source_digest text/);
+  assert.match(migration, /pay_runs_calculation_source_pair/);
+  assert.match(migration, /\^\[0-9a-f\]\{64\}\$/);
+  assert.match(migration, /openbooks_refresh_query_catalog/);
 });
 
 test("bank statement source evidence is mandatory after forward migrations", () => {

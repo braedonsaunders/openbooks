@@ -379,6 +379,15 @@ export const payRuns = pgTable(
     employerCostTotal: money("employer_cost_total").notNull().default("0"),
     employeeCount: integer("employee_count").notNull().default(0),
     calculatedAt: timestamp("calculated_at", { withTimezone: true }),
+    /**
+     * Canonical, versioned evidence of the exact time-entry population and
+     * effective wage/time-type/FX inputs that produced the calculated stubs.
+     * Commit re-derives and row-locks this population, compares its digest,
+     * and claims only the entry IDs recorded here.
+     */
+    calculationSourceSnapshot: jsonb("calculation_source_snapshot"),
+    /** SHA-256 of calculationSourceSnapshot's canonical JSON representation. */
+    calculationSourceDigest: text("calculation_source_digest"),
     /** Set by recordPayRunPayment: the DR-payable/CR-bank settlement entry. */
     paidAt: timestamp("paid_at", { withTimezone: true }),
     paidEntryId: uuid("paid_entry_id"),
@@ -393,6 +402,20 @@ export const payRuns = pgTable(
       .where(sql`run_type = 'regular'`),
     check("pay_runs_period_order", sql`${t.periodEnd} >= ${t.periodStart}`),
     check("pay_runs_pay_date", sql`${t.payDate} >= ${t.periodEnd}`),
+    check(
+      "pay_runs_calculation_source_pair",
+      sql`num_nonnulls(${t.calculationSourceSnapshot}, ${t.calculationSourceDigest}) in (0, 2)`,
+    ),
+    check(
+      "pay_runs_calculation_source_shape",
+      sql`${t.calculationSourceSnapshot} is null
+          or jsonb_typeof(${t.calculationSourceSnapshot}) = 'object'`,
+    ),
+    check(
+      "pay_runs_calculation_source_digest",
+      sql`${t.calculationSourceDigest} is null
+          or ${t.calculationSourceDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
   ],
 );
 

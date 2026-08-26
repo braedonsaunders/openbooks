@@ -929,7 +929,7 @@ test(
 );
 
 test(
-  "time approved after calculate makes the COMMIT itself refuse — nothing is claimed, recalculation pays each entry exactly once",
+  "live PostgreSQL regression proves time added after calculation makes commit stale, no time is marked paid, and recalculation then commit includes each eligible entry exactly once",
   { skip: !DB },
   async () => {
     // The route's freshness gate ran BEFORE `commitPayRun`, so the engine
@@ -1010,17 +1010,54 @@ test(
       const first = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(first.errors, []);
       assert.equal(first.gross, "1200.0000"); // 40h × $30
+      const source = ((await db.execute<{
+          snapshot: { timeEntries: unknown[]; claimEntryIds: string[] };
+          digest: string;
+        }>(sql`
+        select calculation_source_snapshot as snapshot,
+               calculation_source_digest as digest
+          from pay_runs
+         where org_id = ${org.orgId} and document_id = ${run.documentId}
+      `))).rows[0]!;
+      assert.equal(source.snapshot.timeEntries.length, 2);
+      assert.equal(source.snapshot.claimEntryIds.length, 2);
+      assert.match(source.digest, /^[0-9a-f]{64}$/);
 
       // THE DEFECT: time lands after Calculate, before Commit. Same employee,
       // same group the stub already priced — exactly the shape the claim
-      // update used to mark as paid sight unseen.
-      await addHours("2026-07-10");
-      await addHours("2026-07-14");
+      // update used to mark as paid sight unseen. Stamp both rows at the exact
+      // calculation instant: the old `updated_at > calculated_at` heuristic
+      // reports them unchanged, so only the exact source population can catch
+      // them. This is deterministic RED against the pre-fence implementation.
+      for (const workedOn of ["2026-07-10", "2026-07-14"]) {
+        await db.execute(sql`
+          insert into time_entries (
+            org_id, employee_party_id, worked_on, hours, status, is_billable,
+            billing_status, costing_basis, created_at, updated_at, created_by, updated_by
+          )
+          select ${org.orgId}, ${employeeId}, ${workedOn}, 20, 'approved', false,
+                 'unbilled', 'actual', calculated_at, calculated_at, ${actorId}, ${actorId}
+            from pay_runs
+           where org_id = ${org.orgId} and document_id = ${run.documentId}
+        `);
+      }
       assert.deepEqual(
         (await payRunStaleness(org.orgId, run.documentId)).reasons,
         ["time"],
         "the new time registers as staleness",
       );
+
+      const effectsBefore = ((await db.execute<{
+          stubs: number; audit: number; entitlements: number;
+        }>(sql`
+        select (select count(*)::int from pay_stubs
+                 where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}) as stubs,
+               (select count(*)::int from audit_log
+                 where org_id = ${org.orgId}) as audit,
+               (select count(*)::int from entitlement_ledger
+                 where org_id = ${org.orgId}
+                   and pay_run_document_id = ${run.documentId}) as entitlements
+      `))).rows[0]!;
 
       // The ENGINE refuses on its own — no route gate, no disabled button.
       await assert.rejects(
@@ -1043,6 +1080,22 @@ test(
          where org_id = ${org.orgId} and document_id = ${run.documentId}
       `))).rows[0]!.n;
       assert.equal(glAfterRefusal, 0);
+      const effectsAfter = ((await db.execute<{
+          stubs: number; audit: number; entitlements: number;
+        }>(sql`
+        select (select count(*)::int from pay_stubs
+                 where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}) as stubs,
+               (select count(*)::int from audit_log
+                 where org_id = ${org.orgId}) as audit,
+               (select count(*)::int from entitlement_ledger
+                 where org_id = ${org.orgId}
+                   and pay_run_document_id = ${run.documentId}) as entitlements
+      `))).rows[0]!;
+      assert.deepEqual(
+        effectsAfter,
+        effectsBefore,
+        "refusal creates no stub, audit, entitlement, or other downstream effect",
+      );
 
       // Recalculate — the stub now prices ALL four entries — and the SAME
       // direct engine call commits.
@@ -1145,14 +1198,14 @@ const settle = <T>(promise: Promise<T>): Promise<PromiseSettledResult<T>> =>
   );
 
 /**
- * Backends blocked mid-commit ON the time-claim UPDATE. That update sits
+ * Backends blocked mid-commit ON the source-selection lock. That lock sits
  * strictly BETWEEN the commit boundary's two freshness reads, so parking
  * there proves a commit already holds its row lock, has acquired whatever
  * fences exist for it, and has PASSED the first freshness gate — while the
- * second has not run yet. The claim text is the only statement in the commit
- * path naming `payroll_batch_ref`.
+ * second has not run yet. Both the canonical selection and exact-ID claim name
+ * `payroll_batch_ref`; either is safely inside that fenced interval.
  */
-async function parkedClaimBackends(): Promise<string[]> {
+async function parkedSelectionBackends(): Promise<string[]> {
   const claims = (await db.execute<{ pid: number }>(sql`
     select pid from pg_stat_activity
      where datname = current_database()
@@ -1247,7 +1300,7 @@ async function seedFencedRaceOrg(): Promise<{
     values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
             '4', 'accrue', true, ${actorId}, ${actorId})`);
   // Two approved entries inside EACH period: every run in these tests must
-  // have real time to price AND real rows the claim update must lock.
+  // have real time to price AND real rows the source selection must lock.
   for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-21", "2026-07-23"]) {
     await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
@@ -1272,7 +1325,7 @@ test(
     // unpredictably — so the test pins the interleaving:
     //
     //   1. a lock session holds every time entry, parking any commit that
-    //      reaches its claim update;
+    //      reaches its source-selection lock;
     //   2. a second session holds run B's rows so B cannot even start while
     //     A parks on the claim (proof A's freshness gate already ran);
     //   3. B is freed while A still sits parked, so B's gate reads a world in
@@ -1324,8 +1377,8 @@ test(
       // A parks ON its claim: past its row lock, past its first freshness
       // gate, holding every write short of the terminal one.
       await waitForInterleaving(
-        "run A to park on its time claim",
-        async () => (await parkedClaimBackends()).length >= 1,
+        "run A to park on its time selection",
+        async () => (await parkedSelectionBackends()).length >= 1,
       );
 
       // NOW free B, while A still sits parked: B's freshness gate will read a
@@ -1342,7 +1395,7 @@ test(
       await waitForInterleaving(
         "the second commit to pass its own freshness gate",
         async () => {
-          const parked = await parkedClaimBackends();
+          const parked = await parkedSelectionBackends();
           if (parked.length >= 2) {
             observed = "both commits were past their gates at once";
             return true;
@@ -1428,7 +1481,7 @@ test(
     // transaction opens, and once at the LAST moment before the terminal
     // write. The gap between those reads belongs to every other writer in the
     // database — this test lives inside that gap. A lock session held on the
-    // run's own time entries parks the commit ON its claim update, which sits
+    // run's own time entries parks the commit ON its source lock, which sits
     // strictly between the two gates: reaching it proves the first gate has
     // answered and the second has not run yet. A wage row edited exactly
     // there used to ride under the first answer forever — the old belt-and-
@@ -1455,8 +1508,8 @@ test(
       );
       const pending = settle(commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId }));
       await waitForInterleaving(
-        "the commit to pass its first freshness gate and park on the time claim",
-        async () => (await parkedClaimBackends()).length >= 1,
+        "the commit to pass its first freshness gate and park on the time selection",
+        async () => (await parkedSelectionBackends()).length >= 1,
       );
 
       // THE GAP. Configuration changes NOW — after the first freshness answer,

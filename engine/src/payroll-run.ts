@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { PayrollError } from "./payroll-error.ts";
@@ -38,7 +39,7 @@ import { effectivePayRateSql, payRateIsUsable } from "./payroll-rate.ts";
 // home for "how much of this component has the employee already taken".
 import { componentYearToDate as openingComponentYtd } from "./payroll-opening-balances.ts";
 import { effectiveFilingAccountSql } from "./payroll-filing.ts";
-import { laborCostingSettings } from "./labor-costing.ts";
+import { convertLaborWage, laborCostingSettings } from "./labor-costing.ts";
 import { businessToday } from "./business-date.ts";
 import {
   loadActiveDerivedRules,
@@ -948,35 +949,411 @@ async function storedTaxCertificates(
  * They agree because they are the same expression, not because someone kept
  * two copies in step.
  */
+interface PayrollFxSource {
+  id: string;
+  fromCurrency: string;
+  toCurrency: string;
+  asOf: string;
+  rate: string;
+  direction: "direct" | "inverse";
+  resolvedRate: string;
+}
+
+/**
+ * The exact FX observation used to translate a wage, on the calculating
+ * transaction rather than a pooled side read. The ordering is the same rule
+ * as laborFxRate; returning the source row lets the calculation fingerprint
+ * the rate instead of remembering only its rounded monetary consequence.
+ */
+async function resolvePayrollFxSource(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  from: string,
+  to: string,
+  onDate: string,
+): Promise<PayrollFxSource | null> {
+  if (from === to) return null;
+  const result = (await tx.execute<{
+      id: string; from_currency: string; to_currency: string; as_of: string;
+      rate: string; direction: "direct" | "inverse"; resolved_rate: string;
+    }>(sql`
+    select fx.id, fx.from_currency, fx.to_currency, fx.as_of::text as as_of,
+           fx.rate::text as rate,
+           case when fx.from_currency = ${from} and fx.to_currency = ${to}
+                then 'direct' else 'inverse' end as direction,
+           case when fx.from_currency = ${from} and fx.to_currency = ${to}
+                then fx.rate
+                else (1 / fx.rate)::numeric(19,10) end::text as resolved_rate
+      from fx_rates fx
+     where fx.org_id = ${orgId} and fx.rate_type = 'spot' and fx.as_of <= ${onDate}
+       and ((fx.from_currency = ${from} and fx.to_currency = ${to})
+         or (fx.from_currency = ${to} and fx.to_currency = ${from}))
+     order by fx.as_of desc,
+              case when fx.from_currency = ${from} and fx.to_currency = ${to}
+                   then 0 else 1 end
+     limit 1
+     for update
+  `));
+  const row = result.rows[0];
+  return row ? {
+    id: row.id,
+    fromCurrency: row.from_currency,
+    toCurrency: row.to_currency,
+    asOf: row.as_of,
+    rate: row.rate,
+    direction: row.direction,
+    resolvedRate: row.resolved_rate,
+  } : null;
+}
+
 async function resolvePayRate(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, onDate: string,
   /** Functional currency of the run (the run document's currency). */
   payCurrency: string | null,
 ): Promise<{ basis: "hour" | "year"; rate: string; annualHours: string; currency: string } | null> {
-  const r = (await tx.execute<{ basis: "hour" | "year"; rate: string; annual_hours: string; currency: string }>(sql`
+  const r = (await tx.execute<{
+      id: string; basis: "hour" | "year"; rate: string;
+      annual_hours: string; currency: string;
+    }>(sql`
     select * from ${effectivePayRateSql({
       org: sql`${orgId}`,
       employee: sql`${employeePartyId}`,
       onDate: sql`${onDate}`,
-      selectList: sql`w.basis, w.rate, w.annual_hours, w.currency`,
+      selectList: sql`w.id, w.basis, w.rate, w.annual_hours, w.currency`,
     })} as rate
   `));
-  const row = r.rows[0];
+  const selected = r.rows[0];
+  if (!selected) return null;
+  // Lock the exact version selected by the shared effective-rate rule. Under
+  // the calculation's repeatable-read snapshot a concurrent edit either
+  // waits behind this row or raises a serialization failure; it can never
+  // produce a stub from one version and fingerprint another.
+  const locked = (await tx.execute<{
+      basis: "hour" | "year"; rate: string; annual_hours: string; currency: string;
+    }>(sql`
+    select basis, rate::text as rate, annual_hours::text as annual_hours, currency
+      from labor_cost_rates
+     where org_id = ${orgId} and id = ${selected.id}
+     for update
+  `));
+  const row = locked.rows[0];
   if (!row) return null;
   const resolved = {
     basis: row.basis, rate: row.rate, annualHours: row.annual_hours, currency: row.currency,
   };
   if (!payCurrency || !row.currency || row.currency === payCurrency) return resolved;
 
-  const { convertLaborWage, laborFxRate } = await import("./labor-costing.ts");
-  const fxRate = await laborFxRate(orgId, row.currency, payCurrency, onDate);
-  if (!fxRate) {
+  const fxSource = await resolvePayrollFxSource(tx, orgId, row.currency, payCurrency, onDate);
+  if (!fxSource) {
     throw new PayrollError(
       `no spot rate for the wage ${row.currency}→${payCurrency} on or before ${onDate}`
       + " — enter one before this employee can be paid",
     );
   }
-  return { ...resolved, rate: convertLaborWage(row.rate, fxRate), currency: payCurrency };
+  return {
+    ...resolved,
+    rate: convertLaborWage(row.rate, fxSource.resolvedRate),
+    currency: payCurrency,
+  };
+}
+
+export interface PayRunCalculationSourceSnapshot {
+  version: 1;
+  timeEntries: {
+    id: string;
+    employeePartyId: string;
+    workedOn: string;
+    hours: string;
+    timeTypeId: string | null;
+    projectId: string | null;
+    departmentId: string | null;
+    isBillable: boolean;
+    createdAt: string;
+    updatedAt: string;
+    claimable: boolean;
+  }[];
+  timeTypes: {
+    id: string;
+    name: string;
+    classification: string;
+    costMultiplier: string;
+    excludeFromWages: boolean;
+    updatedAt: string;
+  }[];
+  payRates: {
+    employeePartyId: string;
+    payBasis: string;
+    runCurrency: string | null;
+    rateId: string | null;
+    basis: string | null;
+    rate: string | null;
+    annualHours: string | null;
+    currency: string | null;
+    effectiveFrom: string | null;
+    effectiveTo: string | null;
+    updatedAt: string | null;
+    fx: {
+      id: string;
+      fromCurrency: string;
+      toCurrency: string;
+      asOf: string;
+      rate: string;
+      direction: "direct" | "inverse";
+      resolvedRate: string;
+      updatedAt: string;
+    } | null;
+  }[];
+  claimEntryIds: string[];
+}
+
+type CalculationSourceRow = {
+  run_exists: boolean;
+  time_entries: PayRunCalculationSourceSnapshot["timeEntries"];
+  time_types: PayRunCalculationSourceSnapshot["timeTypes"];
+  pay_rates: PayRunCalculationSourceSnapshot["payRates"];
+  claim_entry_ids: string[];
+};
+
+/** Stable JSON independent of jsonb's object-key order. */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record).sort().map((key) =>
+    `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
+}
+
+export function payRunCalculationSourceDigest(
+  snapshot: PayRunCalculationSourceSnapshot,
+): string {
+  return createHash("sha256").update(canonicalJson(snapshot)).digest("hex");
+}
+
+export function parsePayRunCalculationSource(
+  value: unknown,
+): PayRunCalculationSourceSnapshot | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const snapshot = value as Partial<PayRunCalculationSourceSnapshot>;
+  if (snapshot.version !== 1
+      || !Array.isArray(snapshot.timeEntries)
+      || !Array.isArray(snapshot.timeTypes)
+      || !Array.isArray(snapshot.payRates)
+      || !Array.isArray(snapshot.claimEntryIds)) return null;
+  return snapshot as PayRunCalculationSourceSnapshot;
+}
+
+/**
+ * Re-derive the exact calculation population. The locked form is the commit
+ * fence: every existing source row is held through the exact-ID claim and the
+ * terminal transition. A new row that becomes visible after this statement's
+ * PostgreSQL snapshot is later than the fence and is never claimed by this
+ * run; every row visible at the fence must match the stored calculation.
+ *
+ * The three source CTEs deliberately share ONE SQL statement so their reads
+ * cannot be torn across READ COMMITTED snapshots. Calculation runs under
+ * REPEATABLE READ as an additional guarantee that these final evidence rows
+ * are the same versions its earlier per-stub reads consumed.
+ */
+export async function payRunCalculationSource(
+  orgId: string,
+  documentId: string,
+  executor: Pick<typeof db, "execute"> = db,
+  lockSources = false,
+): Promise<PayRunCalculationSourceSnapshot | null> {
+  const rowLock = lockSources ? sql`for update` : sql``;
+  const entryRowLock = lockSources ? sql`for update of te` : sql``;
+  const result = (await executor.execute<CalculationSourceRow>(sql`
+    with run_scope as materialized (
+      select r.org_id, r.document_id, r.period_start, r.period_end, r.run_type,
+             d.currency as run_currency
+        from pay_runs r
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+       where r.org_id = ${orgId} and r.document_id = ${documentId}
+    ),
+    stub_employees as materialized (
+      select s.employee_party_id, prof.pay_basis, r.period_end, r.run_currency
+        from run_scope r
+        join pay_stubs s
+          on s.org_id = r.org_id and s.pay_run_document_id = r.document_id
+        join employee_payroll_profiles prof
+          on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
+    ),
+    locked_entries as materialized (
+      select te.id, te.employee_party_id, te.worked_on, te.hours, te.time_type_id,
+             te.project_id, te.department_id, te.is_billable,
+             te.created_at, te.updated_at,
+             exists (
+               select 1
+                 from pay_stub_lines line
+                 join pay_stubs stub
+                   on stub.id = line.stub_id and stub.org_id = line.org_id
+                 join pay_components component
+                   on component.id = line.component_id and component.org_id = line.org_id
+                where stub.org_id = r.org_id
+                  and stub.pay_run_document_id = r.document_id
+                  and stub.employee_party_id = te.employee_party_id
+                  and component.system_key in ('base_pay', 'overtime')
+                  and line.hours is not null
+                  and line.time_type_id is not distinct from te.time_type_id
+                  and line.project_id is not distinct from te.project_id
+                  and line.department_id is not distinct from te.department_id
+             ) as claimable
+        from run_scope r
+        join stub_employees employee on true
+        join time_entries te
+          on te.org_id = r.org_id and te.employee_party_id = employee.employee_party_id
+         and te.status = 'approved'
+         and te.worked_on between r.period_start and r.period_end
+         and (te.payroll_batch_ref is null or te.payroll_batch_ref = r.document_id)
+       where r.run_type not in ('bonus', 'retro')
+       order by te.id
+       ${entryRowLock}
+    ),
+    locked_time_types as materialized (
+      select tt.id, tt.name, tt.classification, tt.cost_multiplier,
+             tt.exclude_from_wages, tt.updated_at
+        from time_types tt
+       where tt.org_id = ${orgId}
+         and exists (
+           select 1 from locked_entries entry where entry.time_type_id = tt.id
+         )
+       order by tt.id
+       ${rowLock}
+    ),
+    locked_rates as materialized (
+      select employee.employee_party_id, employee.pay_basis,
+             employee.run_currency,
+             wage.id as rate_id, wage.basis, wage.rate, wage.annual_hours,
+             wage.currency, wage.effective_from, wage.effective_to, wage.updated_at
+        from stub_employees employee
+        left join lateral (
+          select w.id, w.basis, w.rate, w.annual_hours, w.currency,
+                 w.effective_from, w.effective_to, w.updated_at
+            from labor_cost_rates w
+           where w.org_id = ${orgId}
+             and w.employee_party_id = employee.employee_party_id
+             and w.is_active and w.effective_from <= employee.period_end
+             and (w.effective_to is null or w.effective_to >= employee.period_end)
+           order by w.effective_from desc
+           limit 1
+           ${rowLock}
+        ) wage on true
+       order by employee.employee_party_id
+    ),
+    locked_fx as materialized (
+      select rate.employee_party_id,
+             fx.id, fx.from_currency, fx.to_currency, fx.as_of, fx.rate,
+             case when fx.from_currency = rate.currency
+                        and fx.to_currency = rate.run_currency
+                  then 'direct' else 'inverse' end as direction,
+             case when fx.from_currency = rate.currency
+                        and fx.to_currency = rate.run_currency
+                  then fx.rate
+                  else (1 / fx.rate)::numeric(19,10) end as resolved_rate,
+             fx.updated_at
+        from locked_rates rate
+        left join lateral (
+          select candidate.id, candidate.from_currency, candidate.to_currency,
+                 candidate.as_of, candidate.rate, candidate.updated_at
+            from fx_rates candidate
+           where candidate.org_id = ${orgId}
+             and candidate.rate_type = 'spot'
+             and candidate.as_of <= (select period_end from run_scope)
+             and rate.currency is distinct from rate.run_currency
+             and ((candidate.from_currency = rate.currency
+                   and candidate.to_currency = rate.run_currency)
+               or (candidate.from_currency = rate.run_currency
+                   and candidate.to_currency = rate.currency))
+           order by candidate.as_of desc,
+                    case when candidate.from_currency = rate.currency
+                              and candidate.to_currency = rate.run_currency
+                         then 0 else 1 end
+           limit 1
+           ${rowLock}
+        ) fx on true
+    )
+    select exists (select 1 from run_scope) as run_exists,
+           coalesce((
+             select jsonb_agg(jsonb_build_object(
+               'id', entry.id::text,
+               'employeePartyId', entry.employee_party_id::text,
+               'workedOn', entry.worked_on::text,
+               'hours', entry.hours::text,
+               'timeTypeId', entry.time_type_id::text,
+               'projectId', entry.project_id::text,
+               'departmentId', entry.department_id::text,
+               'isBillable', entry.is_billable,
+               'createdAt', to_char(entry.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+               'updatedAt', to_char(entry.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+               'claimable', entry.claimable
+             ) order by entry.id)
+               from locked_entries entry
+           ), '[]'::jsonb) as time_entries,
+           coalesce((
+             select jsonb_agg(jsonb_build_object(
+               'id', tt.id::text,
+               'name', tt.name,
+               'classification', tt.classification,
+               'costMultiplier', tt.cost_multiplier::text,
+               'excludeFromWages', tt.exclude_from_wages,
+               'updatedAt', to_char(tt.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+             ) order by tt.id)
+               from locked_time_types tt
+           ), '[]'::jsonb) as time_types,
+           coalesce((
+             select jsonb_agg(jsonb_build_object(
+               'employeePartyId', rate.employee_party_id::text,
+               'payBasis', rate.pay_basis,
+               'runCurrency', rate.run_currency,
+               'rateId', rate.rate_id::text,
+               'basis', rate.basis,
+               'rate', rate.rate::text,
+               'annualHours', rate.annual_hours::text,
+               'currency', rate.currency,
+               'effectiveFrom', rate.effective_from::text,
+               'effectiveTo', rate.effective_to::text,
+               'updatedAt', case when rate.updated_at is null then null else
+                 to_char(rate.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end,
+               'fx', case when fx.id is null then null else jsonb_build_object(
+                 'id', fx.id::text,
+                 'fromCurrency', fx.from_currency,
+                 'toCurrency', fx.to_currency,
+                 'asOf', fx.as_of::text,
+                 'rate', fx.rate::text,
+                 'direction', fx.direction,
+                 'resolvedRate', fx.resolved_rate::text,
+                 'updatedAt', to_char(fx.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+               ) end
+             ) order by rate.employee_party_id)
+               from locked_rates rate
+               left join locked_fx fx on fx.employee_party_id = rate.employee_party_id
+           ), '[]'::jsonb) as pay_rates,
+           coalesce((
+             select jsonb_agg(to_jsonb(entry.id::text) order by entry.id)
+               from locked_entries entry where entry.claimable
+           ), '[]'::jsonb) as claim_entry_ids
+  `));
+  const row = result.rows[0];
+  if (!row?.run_exists) return null;
+  return {
+    version: 1,
+    timeEntries: row.time_entries ?? [],
+    timeTypes: row.time_types ?? [],
+    payRates: row.pay_rates ?? [],
+    claimEntryIds: row.claim_entry_ids ?? [],
+  };
+}
+
+export function payRunCalculationSourceChanges(
+  stored: PayRunCalculationSourceSnapshot,
+  current: PayRunCalculationSourceSnapshot,
+): { time: boolean; timeTypes: boolean; wages: boolean } {
+  return {
+    time: canonicalJson(stored.timeEntries) !== canonicalJson(current.timeEntries)
+      || canonicalJson(stored.claimEntryIds) !== canonicalJson(current.claimEntryIds),
+    timeTypes: canonicalJson(stored.timeTypes) !== canonicalJson(current.timeTypes),
+    wages: canonicalJson(stored.payRates) !== canonicalJson(current.payRates),
+  };
 }
 
 /** One line of a stub, as `captureCalculatedStubs` hands it back. */
@@ -1395,15 +1772,26 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     }
     if (input.dryRun) throw new DryRunRollback(result);
 
+    const calculationSource = await payRunCalculationSource(
+      orgId,
+      documentId,
+      tx,
+      true,
+    );
+    if (!calculationSource) throw new PayrollError("pay run not found");
+    const calculationSourceDigest = payRunCalculationSourceDigest(calculationSource);
+
     await tx.execute(sql`
       update pay_runs set run_status = 'calculated', calculated_at = now(),
              gross_total = ${grossTotal}, net_total = ${netTotal},
              employer_cost_total = ${employerTotal}, employee_count = ${count},
+             calculation_source_snapshot = ${JSON.stringify(calculationSource)}::jsonb,
+             calculation_source_digest = ${calculationSourceDigest},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId}
     `);
     return result;
-  });
+  }, { isolationLevel: "repeatable read" });
 }
 
 /**
@@ -3043,7 +3431,7 @@ export async function commitPayRun(input: {
     // snapshot the claim below will run under. Dynamic import keeps the
     // payroll-run ↔ payroll-readiness cycle out of the engine's load order
     // (same idiom as the approval gate just below).
-    const { assertPayRunNotStale } =
+    const { assertPayRunNotStale, staleCalculationMessage } =
       await import("./payroll-readiness.ts");
     await assertPayRunNotStale(orgId, documentId, tx);
     // Money must not move before the run is approved. Dynamic import keeps the
@@ -3051,6 +3439,30 @@ export async function commitPayRun(input: {
     // flows/documents-adapter.ts → document-void.ts).
     const { assertPayRunApprovalReleased } = await import("./payroll-approval.ts");
     await assertPayRunApprovalReleased(orgId, documentId);
+
+    // Recompute and lock the canonical source population before producing a
+    // single GL line. Legacy calculated rows have no evidence and therefore
+    // require recalculation; a corrupt snapshot/digest pair fails the same
+    // closed way. Category-specific reasons preserve the wizard/API contract.
+    const storedSource = parsePayRunCalculationSource(run.calculation_source_snapshot);
+    const storedDigest = run.calculation_source_digest ?? null;
+    if (!storedSource || !storedDigest
+        || payRunCalculationSourceDigest(storedSource) !== storedDigest) {
+      throw new PayrollError(staleCalculationMessage(["selection"]));
+    }
+    const currentSource = await payRunCalculationSource(orgId, documentId, tx, true);
+    if (!currentSource) throw new PayrollError("pay run not found");
+    const changes = payRunCalculationSourceChanges(storedSource, currentSource);
+    const sourceReasons = [
+      changes.time ? "time" : null,
+      changes.timeTypes ? "timeTypes" : null,
+      changes.wages ? "wages" : null,
+    ].filter((reason): reason is string => reason !== null);
+    if (payRunCalculationSourceDigest(currentSource) !== storedDigest) {
+      throw new PayrollError(staleCalculationMessage(
+        sourceReasons.length > 0 ? sourceReasons : ["selection"],
+      ));
+    }
 
     const { legs, debitTotal } = await payRunGlLegs(tx, orgId, documentId);
 
@@ -3066,39 +3478,31 @@ export async function commitPayRun(input: {
       `);
     }
 
-    // Claim ONLY the time whose hours were actually priced onto this run's
-    // stubs. Claiming "every approved entry in the period for anyone with a
-    // stub" claimed hours the run never paid: a `bonus` run prices no time at
-    // all, yet committing one before the regular run marked the whole period's
-    // hours as paid — so every hourly employee then calculated at $0 while
-    // readiness still reported the hours as present.
-    //
-    // The match is the calculation's own grouping key (time type × project ×
-    // department, per employee), which is why a wage line for that group
-    // existing is exactly the statement "this run paid these hours". It
-    // therefore also excludes, correctly and without a special case: salaried
-    // employees (whose time is costed, never priced), time types flagged
-    // exclude_from_wages, and any group a `replace_component` adjustment
-    // overrode.
-    await tx.execute(sql`
-      update time_entries te set payroll_batch_ref = ${documentId}
-       where te.org_id = ${orgId} and te.status = 'approved'
+    // Claim the calculation's exact IDs — never a rediscovered employee/group
+    // population. The compare above proves these locked rows are unchanged;
+    // the update's own predicates and returned-ID equality are defense in
+    // depth against corruption or a future caller weakening that lock.
+    const claimed = (await tx.execute<{ id: string }>(sql`
+      with selected as (
+        select value::uuid as id
+          from jsonb_array_elements_text(
+            ${JSON.stringify(storedSource.claimEntryIds)}::jsonb
+          ) entry(value)
+      )
+      update time_entries te
+         set payroll_batch_ref = ${documentId}
+        from selected
+       where te.id = selected.id and te.org_id = ${orgId}
+         and te.status = 'approved'
          and te.worked_on between ${run.period_start} and ${run.period_end}
          and te.payroll_batch_ref is null
-         and exists (
-           select 1
-             from pay_stub_lines l
-             join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
-             join pay_components c on c.id = l.component_id and c.org_id = l.org_id
-            where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
-              and s.employee_party_id = te.employee_party_id
-              and c.system_key in ('base_pay', 'overtime')
-              and l.hours is not null
-              and l.time_type_id is not distinct from te.time_type_id
-              and l.project_id is not distinct from te.project_id
-              and l.department_id is not distinct from te.department_id
-          )
-    `);
+      returning te.id::text as id
+    `));
+    const expectedClaimIds = [...storedSource.claimEntryIds].sort();
+    const actualClaimIds = claimed.rows.map((row) => row.id).sort();
+    if (canonicalJson(actualClaimIds) !== canonicalJson(expectedClaimIds)) {
+      throw new PayrollError(staleCalculationMessage(["time"]));
+    }
     // Belt AND braces, deliberately — the same doctrine as the gate that
     // opened this transaction, now asked again at the LAST moment. The two
     // gates are separate statements and READ COMMITTED gives each its own
