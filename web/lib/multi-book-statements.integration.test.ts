@@ -17,6 +17,7 @@ test(
       import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
       import {
         createScratchOrg,
+        createScratchUser,
         dropScratchOrg,
       } from "./engine/src/test-fixtures.ts";
 
@@ -155,6 +156,101 @@ test(
           }
           const defaultTb = await trialBalance(scratch.date, undefined, scratch.orgId);
           assert.equal(defaultTb.find((r) => r.id === scratch.accounts.revenue)?.credits, "100.0000");
+
+          // Cash basis recognizes an accrual invoice through its settlement.
+          // The matrix rewrites line VALUES on cash basis: bank-backed entries
+          // count in full, and a settled accrual document enters at the settled
+          // share of its control leg — so revenue booked on an invoice
+          // (DR AR / CR revenue) must surface once a bank payment applies to
+          // it, instead of being dropped because neither entry alone carries
+          // both the bank line and the revenue line.
+          const actorId = await createScratchUser(scratch.orgId, "Tester", "accountant");
+          const cashRevenue = async () => {
+            const matrix = await statementMatrix({
+              types: PNL_TYPES, mode: "flow", period, periodLabel: "multibook",
+              basis: "cash",
+            });
+            return readerRevenue(matrix);
+          };
+          // Control: the direct bank-backed entry still reports on cash basis.
+          assert.equal(await cashRevenue(), "100.0000", "bank-backed entry reports on cash basis");
+
+          const invoiceId = randomUUID();
+          await db.execute(sql\`
+            insert into journal_entries
+              (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+               period_id, memo, status, origin)
+            values
+              (\${invoiceId}, \${scratch.orgId}, \${scratch.bookId}, \${scratch.subsidiaryId},
+               'MULTIBOOK-INV', \${scratch.date}, \${scratch.periodId},
+               'cash-basis invoice', 'draft', 'manual')\`);
+          await db.execute(sql\`
+            insert into journal_lines
+              (org_id, entry_id, line_number, account_id, subsidiary_id,
+               amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+            values
+              (\${scratch.orgId}, \${invoiceId}, 1, \${scratch.accounts.ar},
+               \${scratch.subsidiaryId}, '100.0000', 'CAD', '100.0000', '1',
+               \${scratch.customerId}, true),
+              (\${scratch.orgId}, \${invoiceId}, 2, \${scratch.accounts.revenue},
+               \${scratch.subsidiaryId}, '-100.0000', 'CAD', '-100.0000', '1',
+               \${scratch.customerId}, false)\`);
+          await db.execute(sql\`
+            update journal_entries set status = 'posted', posted_at = now()
+             where id = \${invoiceId}\`);
+          assert.equal(await cashRevenue(), "100.0000", "unpaid accrual invoice stays off cash basis");
+          assert.equal(
+            readerRevenue(await statementMatrix({
+              types: PNL_TYPES, mode: "flow", period, periodLabel: "multibook",
+            })),
+            "200.0000", "accrual books the invoice at once");
+
+          // Settle it: DR bank 100 / CR AR 100 applied to the invoice's open AR
+          // line. Cash-basis revenue must now recognize the settled invoice's
+          // revenue — before settlements pulled accrual documents onto cash
+          // basis this read only the bank entry's 100.
+          const paymentId = randomUUID();
+          await db.execute(sql\`
+            insert into journal_entries
+              (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+               period_id, memo, status, origin)
+            values
+              (\${paymentId}, \${scratch.orgId}, \${scratch.bookId}, \${scratch.subsidiaryId},
+               'MULTIBOOK-PAY', \${scratch.date}, \${scratch.periodId},
+               'cash-basis payment', 'draft', 'manual')\`);
+          await db.execute(sql\`
+            insert into journal_lines
+              (org_id, entry_id, line_number, account_id, subsidiary_id,
+               amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+            values
+              (\${scratch.orgId}, \${paymentId}, 1, \${scratch.accounts.bank},
+               \${scratch.subsidiaryId}, '100.0000', 'CAD', '100.0000', '1',
+               \${scratch.customerId}, false),
+              (\${scratch.orgId}, \${paymentId}, 2, \${scratch.accounts.ar},
+               \${scratch.subsidiaryId}, '-100.0000', 'CAD', '-100.0000', '1',
+               \${scratch.customerId}, true)\`);
+          await db.execute(sql\`
+            update journal_entries set status = 'posted', posted_at = now()
+             where id = \${paymentId}\`);
+          const [invoiceArLine] = (await db.execute(sql\`
+            select id from journal_lines
+             where org_id = \${scratch.orgId} and entry_id = \${invoiceId} and is_open_item\`)).rows.map((r) => r.id);
+          const [paymentArLine] = (await db.execute(sql\`
+            select id from journal_lines
+             where org_id = \${scratch.orgId} and entry_id = \${paymentId} and is_open_item\`)).rows.map((r) => r.id);
+          await db.execute(sql\`
+            insert into applications
+              (org_id, from_line_id, to_line_id, amount, source_amount,
+               source_transaction_amount, source_transaction_currency,
+               target_transaction_amount, target_transaction_currency,
+               settlement_rate, settlement_rate_source, settlement_rate_reference,
+               applied_on, created_by, updated_by)
+            values
+              (\${scratch.orgId}, \${paymentArLine}, \${invoiceArLine},
+               '100.0000', '100.0000', '100.0000', 'CAD', '100.0000', 'CAD',
+               1, 'same_currency', 'multi-book cash-basis regression',
+               \${scratch.date}, \${actorId}, \${actorId})\`);
+          assert.equal(await cashRevenue(), "200.0000", "paid accrual invoice recognizes revenue on cash basis");
         });
 
         // Migration atomicity: replaying 0016 inside a transaction that then

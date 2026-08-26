@@ -25,8 +25,9 @@ import {
  *
  * Sign convention matches web/lib/reports.ts: journal amounts are debit-
  * positive; credit-normal types are flipped so revenue/liabilities/equity read
- * positive. Basis: accrual = every posted line; cash = only lines on entries
- * that also touch a bank account (mirrors the cash-flow contra logic).
+ * positive. Basis: accrual = every posted line; cash = entries that move money
+ * through a bank account, PLUS accrual documents pulled in at their settled
+ * share through application-linked settlements (see statementMatrix).
  */
 
 export type StatementBreakout =
@@ -259,14 +260,19 @@ async function assertNoUntranslatedHistory(
 }
 
 /**
- * The summed amount expression. With translation rate sets in play, each line
- * is multiplied by the rate of THE PERIOD ITS ACTIVITY FALLS IN: flow columns
- * pick each posting date's average rate; balance columns translate at the
- * current rate as of the column's end date (`asOf`) — except equity accounts,
- * which use that period's historical rate. Subsidiaries not listed in `rates`
- * (functional currency already equals the target) multiply by 1.
+ * The rate × ownership multiplier applied to every line: with translation rate
+ * sets in play, each line is multiplied by the rate of THE PERIOD ITS ACTIVITY
+ * FALLS IN — flow columns pick each posting date's average rate; balance
+ * columns translate at the current rate as of the column's end date (`asOf`) —
+ * except equity accounts, which use that period's historical rate.
+ * Subsidiaries not listed in `rates` (functional currency already equals the
+ * target) multiply by 1. Shared by every basis.
  */
-function amountExpr(mode: StatementMode, subsidiary?: StatementSubsidiaryContext, asOf?: string): SQL {
+function translationMultiplier(
+  mode: StatementMode,
+  subsidiary?: StatementSubsidiaryContext,
+  asOf?: string,
+): SQL {
   const rates = subsidiary?.rates
   const weights = subsidiary?.weights
   let rateExpr = sql`1::numeric`
@@ -300,7 +306,7 @@ function amountExpr(mode: StatementMode, subsidiary?: StatementSubsidiaryContext
     for (const weight of weights) weightExpr = sql`${weightExpr} when ${weight.subsidiaryId}::uuid then ${weight.factor}::numeric`
     weightExpr = sql`${weightExpr} else 1 end`
   }
-  return sql`l.amount * (${rateExpr}) * (${weightExpr})`
+  return sql`(${rateExpr}) * (${weightExpr})`
 }
 
 /** One column's FILTER predicate: its date window + optional dimension slice. */
@@ -596,12 +602,71 @@ export async function statementMatrix(opts: {
     opts.mode === 'balance'
       ? sql`e.posting_date <= ${overallTo}`
       : sql`e.posting_date >= ${overallFrom} and e.posting_date <= ${overallTo}`
-  const cashFilter =
+  // Cash basis. Entries that themselves move money through a bank account
+  // report every line as-is. Accrual documents (invoices, bills) enter through
+  // their settlements instead: each live application whose source entry is
+  // bank-backed pulls the settled document's lines in proportionally to the
+  // settled share of its control leg — so partial payments recognize their
+  // share, multiple settlements sum to full recognition, and unapplying (a
+  // reversal or refund) withdraws it. The realized-FX entry a cross-currency
+  // settlement posted comes with its application. All of it is one statement,
+  // so a report always reads one consistent snapshot: a settlement committing
+  // concurrently is either wholly visible in a run or not at all, never
+  // half-applied. CTEs AND joins are cash-only — accrual statements must not
+  // reference them.
+  const cashCtes =
     basis === 'cash'
-      ? sql` and e.id in (
-          select l2.entry_id from journal_lines l2
-            join accounts a2 on a2.id = l2.account_id and a2.org_id = l2.org_id
-           where l2.org_id = ${orgId} and a2.type = 'asset_bank')`
+      ? sql`
+        ,
+        bank_entries as materialized (
+          select distinct bl.entry_id
+            from journal_lines bl
+            join accounts ba on ba.id = bl.account_id and ba.org_id = bl.org_id
+           where bl.org_id = ${orgId} and ba.type = 'asset_bank'
+        ),
+        cash_settled as materialized (
+          select ctl.entry_id,
+                 sum(app.amount)::numeric /
+                   nullif((select coalesce(sum(abs(cl.amount)), 0)
+                             from journal_lines cl
+                             join accounts ca on ca.id = cl.account_id and ca.org_id = cl.org_id
+                            where cl.entry_id = ctl.entry_id and cl.org_id = ctl.org_id
+                              and ca.type in ('asset_receivable', 'liability_payable')
+                              and cl.is_open_item), 0) as share
+            from applications app
+            join journal_lines ctl on ctl.id = app.to_line_id and ctl.org_id = app.org_id
+            join accounts cta on cta.id = ctl.account_id and cta.org_id = ctl.org_id
+            join journal_lines src on src.id = app.from_line_id and src.org_id = app.org_id
+           where app.org_id = ${orgId}
+             and app.unapplied_at is null
+             and cta.type in ('asset_receivable', 'liability_payable')
+             and exists (
+               select 1 from journal_lines sb
+                 join accounts sba on sba.id = sb.account_id and sba.org_id = sb.org_id
+                where sb.entry_id = src.entry_id and sb.org_id = src.org_id
+                  and sba.type = 'asset_bank')
+           group by ctl.entry_id, ctl.org_id
+        ),
+        settlement_fx_entries as materialized (
+          select distinct app.fx_gain_loss_entry_id as entry_id
+            from applications app
+            join journal_lines src on src.id = app.from_line_id and src.org_id = app.org_id
+           where app.org_id = ${orgId}
+             and app.unapplied_at is null
+             and app.fx_gain_loss_entry_id is not null
+             and exists (
+               select 1 from journal_lines sb
+                 join accounts sba on sba.id = sb.account_id and sba.org_id = sb.org_id
+                where sb.entry_id = src.entry_id and sb.org_id = src.org_id
+                  and sba.type = 'asset_bank')
+        )`
+      : sql``
+  const cashJoins =
+    basis === 'cash'
+      ? sql`
+            left join bank_entries bn on bn.entry_id = e.id
+            left join cash_settled cs on cs.entry_id = e.id
+            left join settlement_fx_entries sf on sf.entry_id = e.id`
       : sql``
 
   // Fast path: no line-level dimension slices, accrual basis, no per-line FX
@@ -673,13 +738,27 @@ export async function statementMatrix(opts: {
       }
     }
     // Flow columns share one posting-date-driven expression; balance columns
-    // each bind to the rate set covering their own end date.
+    // each bind to the rate set covering their own end date. Cash basis
+    // rewrites the line VALUE instead of filtering lines — bank-backed entries
+    // and settlement FX entries count in full, a settled document counts at
+    // its settled share (capped at whole), everything else contributes zero.
+    const cashLineValue =
+      basis === 'cash'
+        ? sql`(case
+                when bn.entry_id is not null or sf.entry_id is not null then l.amount
+                else l.amount * least(coalesce(cs.share, 0::numeric), 1::numeric)
+              end)`
+        : sql`l.amount`
     const amountByAsOf = new Map<string, SQL>()
     const amountFor = (col: AmountColumn): SQL => {
       const key = translationKind === 'balance' ? col.to : '*'
       let amount = amountByAsOf.get(key)
       if (!amount) {
-        amount = amountExpr(translationKind, opts.subsidiary, translationKind === 'balance' ? col.to : undefined)
+        amount = sql`${cashLineValue} * ${translationMultiplier(
+          translationKind,
+          opts.subsidiary,
+          translationKind === 'balance' ? col.to : undefined,
+        )}`
         amountByAsOf.set(key, amount)
       }
       return amount
@@ -699,12 +778,12 @@ export async function statementMatrix(opts: {
       with e as materialized (
         select id, posting_date from journal_entries e
          where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate} ${baseBook}
-      )
+      )${cashCtes}
       select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${filterCols}
         from accounts a
-        left join (journal_lines l join e on e.id = l.entry_id)
+        left join (journal_lines l join e on e.id = l.entry_id${cashJoins})
           on l.account_id = a.id and l.org_id = ${orgId}
-         and ${dimFilterSql(opts.dims, opts.subsidiary)}${cashFilter}
+         and ${dimFilterSql(opts.dims, opts.subsidiary)}
        where a.org_id = ${orgId}
        group by a.id
        order by a.number nulls last, a.name
