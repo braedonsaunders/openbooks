@@ -2006,7 +2006,13 @@ async function upsertLock(args: {
 
 /** Serialize every lock-state transition for one period and book, including
  * the close-run and controlled-reopen writers, so a scoped relaxation can
- * never interleave between an effective close check and its commit. */
+ * never interleave between an effective close check and its commit.
+ *
+ * This is also the EXCLUSIVE side of the close/posting fence: the kernel's
+ * je_guard takes the SHARED side of this exact key before every GL-period
+ * check (period_posting_fence, migration 0022) and holds it to commit, so an
+ * in-flight journal posting either commits before a close's final refresh or
+ * is rejected by the trigger after the locks flip to 'closed'. */
 function periodScopeAdvisoryLock(executor: SqlExecutor, orgId: string, periodId: string, bookId: string): Promise<unknown> {
   return executor.execute(sql`
     select pg_advisory_xact_lock(
@@ -2141,12 +2147,20 @@ export async function closeApprovedRun(
   runId: string,
   actorId: string,
 ): Promise<void> {
-  await refreshCloseRun(orgId, runId, actorId);
   await db.transaction(async (tx) => {
     const target = (await tx.execute<{ period_id: string; book_id: string }>(sql`
       select period_id, book_id from close_runs where id = ${runId} and org_id = ${orgId}`));
     if (!target.rows[0]) throw new CloseError("close run not found");
+    // Take the exclusive side of the close/posting fence BEFORE the final
+    // refresh. The kernel's je_guard holds the shared side across every
+    // posting's [period check -> commit] window, so from this point until
+    // commit no journal write can start, and any posting already in flight
+    // must commit before the refresh below re-reads the ledger: its activity
+    // is either fully evaluated by this close or rejected once these locks
+    // commit. Refreshing outside this fence (the old order) is exactly the
+    // race that let a posting commit after approval evidence was frozen.
     await periodScopeAdvisoryLock(tx, orgId, target.rows[0].period_id, target.rows[0].book_id);
+    await refreshCloseRun(orgId, runId, actorId);
     const run = (await tx.execute<{
         period_id: string;
         book_id: string;
