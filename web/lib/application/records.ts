@@ -252,6 +252,8 @@ export async function createApplicationRecord(
     operation: `records.${input.typeKey}.create`,
     idempotencyKey: input.idempotencyKey,
     request: input.body,
+    // The transport responds with the write result's own status; record it.
+    successStatus: (value) => value.status,
     execute: async () => applicationWriteValue(await createRecord(
       context.authz.user,
       scope.resolved,
@@ -281,6 +283,7 @@ export async function updateApplicationRecord(
     operation: `records.${input.typeKey}.update`,
     idempotencyKey: input.idempotencyKey,
     request: { id: input.id, body: input.body },
+    successStatus: (value) => value.status,
     execute: async () => applicationWriteValue(await updateRecord(
       context.authz.user,
       scope.resolved,
@@ -305,6 +308,7 @@ export async function deleteApplicationRecord(
     operation: `records.${input.typeKey}.delete`,
     idempotencyKey: input.idempotencyKey,
     request: { id: input.id },
+    successStatus: (value) => value.status,
     execute: async () => applicationWriteValue(await deleteRecord(
       context.authz.user,
       scope.resolved,
