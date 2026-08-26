@@ -42,6 +42,8 @@ const subscriptionConfigurationInvariantsMigrationPath =
   "schema/migrations/generated/0041_subscription_configuration_invariants.sql";
 const taxRateDomainConstraintsMigrationPath =
   "schema/migrations/generated/0042_tax_rate_domain_constraints.sql";
+const effectiveDateOverlapExclusionMigrationPath =
+  "schema/migrations/generated/0051_effective_date_overlap_exclusion_constraints.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -83,6 +85,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0046_account_posting_classification_serialization.sql",
     "0047_segment_value_hierarchy_serialization.sql",
     "0050_ownership_policy_first_use_serialization.sql",
+    "0051_effective_date_overlap_exclusion_constraints.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -233,6 +236,77 @@ test("active payment surcharge windows cannot overlap within one pricing identit
   assert.match(migration, /payment_method WITH =/);
   assert.match(migration, /daterange\(effective_from, effective_to, '\[\]'\)\) WITH &&/);
   assert.match(migration, /WHERE \(is_active\)/);
+});
+
+test("effective-date overlap guards are exclusion constraints, not racy triggers", () => {
+  const migration = readFileSync(effectiveDateOverlapExclusionMigrationPath, "utf8");
+
+  // One storage-side guard per former BEFORE-trigger guard; tax_rates (#28)
+  // and income_tax_rates (0002) are deliberately out of scope.
+  const excludedConstraints = [
+    "fair_value_prices_no_active_overlap",
+    "field_ticket_policies_no_active_overlap",
+    "item_rate_book_assignments_no_active_overlap",
+    "item_rate_versions_no_active_overlap",
+    "labor_cost_rates_no_active_overlap",
+    "overhead_rates_no_overlap",
+    "subsidiary_ownership_interests_no_active_overlap",
+    "tax_registrations_no_active_overlap",
+    "project_financial_profile_versions_no_overlap",
+  ];
+  for (const constraint of excludedConstraints) {
+    assert.match(
+      migration,
+      new RegExp(`ADD CONSTRAINT ${constraint}\\s+EXCLUDE USING gist`),
+    );
+    assert.match(migration, new RegExp(`COMMENT ON CONSTRAINT ${constraint}\\s`));
+  }
+  assert.match(migration, /daterange\(coalesce\(effective_from, '-infinity'::date\), effective_to, '\[\]'\)\) WITH &&/);
+  assert.match(migration, /coalesce\(lower\(job_title\), ''\)\) WITH =/);
+  assert.match(migration, /WHERE \(status = 'active'\)/);
+  assert.doesNotMatch(migration, /ALTER TABLE public\.tax_rates\b/);
+  assert.doesNotMatch(migration, /ALTER TABLE public\.income_tax_rates\b/);
+  assert.doesNotMatch(migration, /DROP TRIGGER tax_rates_no_overlap/);
+
+  // The six single-duty overlap triggers are gone; the three multi-duty
+  // triggers keep their other invariants and lose only the racy overlap read.
+  for (const retired of [
+    "fair_value_prices_no_overlap_guard",
+    "item_rate_book_assignments_no_overlap_guard",
+    "item_rate_versions_no_overlap_guard",
+    "labor_cost_rates_no_overlap_guard",
+    "overhead_rates_no_overlap_guard",
+    "tax_registrations_no_overlap_guard",
+  ]) {
+    assert.match(migration, new RegExp(`DROP FUNCTION public\\.${retired}\\(\\)`));
+  }
+  for (const replaced of [
+    "field_ticket_policy_guard",
+    "ownership_interest_guard",
+    "project_financial_profile_version_guard",
+  ]) {
+    const definition = migration.match(
+      new RegExp(
+        `CREATE FUNCTION public\\.${replaced}\\(\\) RETURNS trigger[\\s\\S]*?\\n\\$\\$;`,
+      ),
+    )?.[0];
+    assert.ok(definition, `0051 must replace ${replaced}`);
+    assert.doesNotMatch(
+      definition,
+      /effective_date_ranges_overlap|daterange\(existing\.|daterange\(v\./,
+      `${replaced} must delegate window exclusivity to its exclusion constraint`,
+    );
+  }
+  assert.match(migration, /used ownership policy is immutable/);
+  assert.match(migration, /published project financial profile versions are immutable/);
+
+  // Repairs run before the constraints they make satisfiable, and consolidation-
+  // referenced ownership policies are never silently rewritten.
+  const firstRepair = migration.search(/DO \$fair_value_prices_repair\$/);
+  const firstConstraint = migration.search(/ADD CONSTRAINT fair_value_prices_no_active_overlap/);
+  assert.ok(firstRepair >= 0 && firstRepair < firstConstraint);
+  assert.match(migration, /consolidation-used policies % and % overlap/);
+  assert.match(migration, /RAISE NOTICE 'fair_value_prices repair/);
 });
 
 test("payroll commit has durable exact-source selection evidence", () => {

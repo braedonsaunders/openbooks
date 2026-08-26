@@ -202,6 +202,8 @@ export const itemRateVersions = pgTable(
     id: id(),
     orgId: orgRef(),
     rateBookId: uuid("rate_book_id").notNull(),
+    /** Inclusive validity window. Active versions may not overlap within one
+     *  rate book (storage constraint 0051). */
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     status: text("status", { enum: ["draft", "active", "retired"] })
@@ -313,6 +315,8 @@ export const itemRateBookAssignments = pgTable(
     subsidiaryId: uuid("subsidiary_id"),
     locationId: uuid("location_id"),
     classId: uuid("class_id"),
+    /** Inclusive validity window. Active assignments may not overlap within
+     *  one full scope identity (storage constraint 0051). */
     effectiveFrom: date("effective_from"),
     effectiveTo: date("effective_to"),
     /** Usage date is the normal price-list behavior. Project-start locks a

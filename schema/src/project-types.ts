@@ -349,6 +349,8 @@ export const projectFinancialProfileVersions = pgTable(
     projectTypeId: uuid("project_type_id")
       .notNull()
       .references(() => projectTypes.id),
+    /** Inclusive policy window. Windows may not overlap within one project
+     *  type (storage constraint 0051). */
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     financialProfile: jsonb("financial_profile")

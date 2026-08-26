@@ -97,6 +97,8 @@ export const fairValuePrices = pgTable(
     unitPrice: money("unit_price").notNull(),
     lowValue: money("low_value"),
     highValue: money("high_value"),
+    /** Inclusive validity window. Active windows may not overlap within an
+     *  item/currency identity (storage constraint 0051). */
     effectiveFrom: date("effective_from"),
     effectiveTo: date("effective_to"),
     isActive: boolean("is_active").notNull().default(true),

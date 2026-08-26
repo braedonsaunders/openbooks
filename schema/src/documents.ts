@@ -541,6 +541,8 @@ export const overheadRates = pgTable("overhead_rates", {
   rateKind: text("rate_kind", { enum: ["per_hour", "percent"] }).notNull().default("per_hour"),
   /** The rate value — $/hour when rateKind=per_hour, a percentage when percent. */
   ratePercent: money("rate_percent").notNull(),
+  /** Inclusive validity window. Windows may not overlap within one
+   *  department/category/method/rate-kind identity (storage constraint 0051). */
   effectiveFrom: date("effective_from").notNull(),
   effectiveTo: date("effective_to"),
   ...auditColumns,
