@@ -225,7 +225,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     })
   } catch (error) {
     if (error instanceof PatchInvalid) return bad(error.code, error.field)
-    const message = error instanceof Error ? `${error.message} ${String((error as { cause?: unknown }).cause ?? '')}` : String(error)
+    const cause = error && typeof error === 'object' ? (error as { cause?: unknown }).cause : undefined
+    const constraint = cause && typeof cause === 'object'
+      ? (cause as { constraint?: unknown }).constraint
+      : undefined
+    const message = error instanceof Error ? `${error.message} ${String(cause ?? '')}` : String(error)
+    if (constraint === 'accounts_type_has_transactions' || message.includes('type cannot change after journal lines exist')) {
+      return bad('type_has_transactions', 'type')
+    }
+    if (constraint === 'accounts_summary_has_transactions' || message.includes('summary classification cannot change after journal lines exist')) {
+      return bad('summary_has_transactions', 'isSummary')
+    }
     if (message.includes('accounts_org_number')) return bad('number_in_use', 'number')
     if (message.includes('account_changed')) {
       return NextResponse.json({ error: 'account_changed' }, { status: 409 })

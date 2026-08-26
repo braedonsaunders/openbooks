@@ -30,6 +30,8 @@ const ledgerTenantCoherenceMigrationPath =
   "schema/migrations/generated/0038_ledger_tenant_coherent_foreign_keys.sql";
 const paymentSurchargeRuleUniquenessMigrationPath =
   "schema/migrations/generated/0023_payment_surcharge_rule_uniqueness.sql";
+const accountPostingClassificationSerializationMigrationPath =
+  "schema/migrations/generated/0046_account_posting_classification_serialization.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -65,6 +67,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0039_document_tenant_coherent_foreign_keys.sql",
     "0040_payroll_commit_selection_fence.sql",
     "0043_sandbox_wip_prebill_wipe_guard.sql",
+    "0046_account_posting_classification_serialization.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -74,6 +77,31 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
   assert.match(baseline, /CREATE FUNCTION public\.je_check_posted_balance/);
   assert.match(baseline, /CREATE POLICY org_isolation/);
   assert.match(baseline, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+});
+
+test("account classification edits serialize with first journal-line inserts", () => {
+  const migration = readFileSync(accountPostingClassificationSerializationMigrationPath, "utf8");
+
+  const lineGuard = migration.match(
+    /CREATE OR REPLACE FUNCTION public\.jl_check_account\(\) RETURNS trigger[\s\S]*?\$\$;/,
+  )?.[0];
+  assert.ok(lineGuard, "0046 must replace the direct journal-line account guard");
+  assert.match(lineGuard, /where id = new\.account_id and org_id = new\.org_id\s+for share/i);
+
+  const editGuard = migration.match(
+    /CREATE OR REPLACE FUNCTION public\.account_posting_classification_guard\(\) RETURNS trigger[\s\S]*?\$\$;/,
+  )?.[0];
+  assert.ok(editGuard, "0046 must add a storage guard for direct account edits");
+  assert.match(editGuard, /new\.type is distinct from old\.type/i);
+  assert.match(editGuard, /new\.is_summary is distinct from old\.is_summary/i);
+  assert.match(editGuard, /from journal_lines[\s\S]*org_id = old\.org_id[\s\S]*account_id = old\.id/i);
+  assert.match(editGuard, /constraint = 'accounts_type_has_transactions'/i);
+  assert.match(editGuard, /constraint = 'accounts_summary_has_transactions'/i);
+  assert.match(
+    migration,
+    /CREATE TRIGGER account_posting_classification_guard\s+BEFORE UPDATE OF type, is_summary ON public\.accounts/i,
+  );
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
 });
 
 test("document financial references are tenant-coherent without rewriting history", () => {
