@@ -1149,7 +1149,17 @@ test('the surfaces this test was written for are covered', () => {
   assert.match(
     read('app/api/banking/sftp/daemon/route.ts'),
     /guardFeaturePermission\('admin\.setup\.manage', 'bankFeeds'\)/,
-    'inbound SFTP daemon writes must refuse when Bank Feeds is off',
+    'tenant SFTP daemon reads (connection details) must refuse when Bank Feeds is off',
+  )
+  assert.doesNotMatch(
+    read('app/api/banking/sftp/daemon/route.ts'),
+    /export async function PATCH\(/,
+    'the global daemon is platform infrastructure — a tenant route must not expose its mutation',
+  )
+  assert.match(
+    read('app/api/platform/sftp/daemon/route.ts'),
+    /guardSuperAdmin\(/,
+    'global SFTP daemon mutation must sit behind the platform super-admin authority, not an org feature write',
   )
   assert.match(
     read('app/api/banking/sftp/schedules/route.ts'),

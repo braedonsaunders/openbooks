@@ -1,11 +1,15 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { loadDaemonConfig, updateDaemonConfig, hostKeyFingerprint } from '@openbooks/engine/src/sftp/manager.ts'
+import { loadDaemonConfig, hostKeyFingerprint } from '@openbooks/engine/src/sftp/manager.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
 
-/** SFTP daemon config + connection details for the UI (no env — all DB-backed). */
+/**
+ * Read-only connection details for the shared SFTP daemon (no env — all
+ * DB-backed). The daemon is one global listener serving every tenant, so its
+ * configuration is platform super-admin territory at /api/platform/sftp/daemon;
+ * this tenant surface only reports how to reach it.
+ */
 export async function GET(req: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
@@ -18,25 +22,4 @@ export async function GET(req: Request) {
     advertisedHost: cfg.advertisedHost,
     fingerprint: hostKeyFingerprint(cfg.hostKey),
   })
-}
-
-/** Configure the daemon (enable/disable, port, advertised host); restarts it live. */
-export async function PATCH(req: Request) {
-  const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
-  if (gate instanceof NextResponse) return gate
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { enabled?: boolean; port?: number; advertisedHost?: string | null }
-  if (body.port !== undefined && (!Number.isInteger(body.port) || body.port < 1 || body.port > 65535)) {
-    return NextResponse.json({ error: 'port must be between 1 and 65535' }, { status: 400 })
-  }
-  const cfg = await updateDaemonConfig(
-    {
-      enabled: body.enabled,
-      port: body.port,
-      advertisedHost: body.advertisedHost !== undefined ? (body.advertisedHost?.trim() || null) : undefined,
-    },
-    gate.user.id,
-  )
-  return NextResponse.json({ ok: true, enabled: cfg.enabled, port: cfg.port, advertisedHost: cfg.advertisedHost })
 }
