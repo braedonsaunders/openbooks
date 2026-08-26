@@ -383,6 +383,19 @@ const FX_RUN_STALE_AFTER = sql.raw("interval '30 minutes'");
 const FX_RUN_ABANDONED_MESSAGE =
   "abandoned: the synchronization process crashed or was killed before recording an outcome; the stalled run was reclaimed automatically";
 
+/** The storage-enforced single-running-provider conflict, anywhere in a cause chain. */
+function isFxRunInProgressConflict(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { code?: string; constraint?: string; cause?: unknown };
+    if (candidate.code === "23505" && candidate.constraint === "fx_provider_runs_one_running") {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}
+
 async function createRun(config: FxProviderConfigRow, trigger: FxRunTrigger, from: string, to: string, actorId?: string): Promise<string> {
   // Reclaim a crashed run's slot before claiming it: without this the partial
   // unique index turns one crash into a permanent synchronization outage.
@@ -401,7 +414,7 @@ async function createRun(config: FxProviderConfigRow, trigger: FxRunTrigger, fro
     `));
     return r.rows[0]!.id;
   } catch (error) {
-    if ((error as { code?: string }).code === "23505") throw new FxProviderError("an FX provider run is already in progress");
+    if (isFxRunInProgressConflict(error)) throw new FxProviderError("an FX provider run is already in progress");
     throw error;
   }
 }
