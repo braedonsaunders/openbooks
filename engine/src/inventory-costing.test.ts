@@ -178,7 +178,7 @@ async function assertGlEqualsLayers(org: ScratchOrg): Promise<void> {
   assert.equal(toUnits(gl), toUnits(layers), `inventory GL ${gl} != Σ layer value ${layers}`);
   const unbalanced = (await db.execute<{ entry_id: string; bal: string }>(sql`
     select entry_id, sum(amount) as bal from journal_lines
-     where org_id = ${orgId} group by entry_id having sum(amount) <> 0`));
+     where org_id = ${org.orgId} group by entry_id having sum(amount) <> 0`));
   assert.equal(unbalanced.rows.length, 0, `unbalanced entries: ${JSON.stringify(unbalanced.rows)}`);
 }
 
