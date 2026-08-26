@@ -496,10 +496,14 @@ test(
       });
       assert.equal(escalated, 1, "adjacent escalation windows are not overlap");
 
-      // A different lease of the same property never competes with this one.
+      // A different lease of the same property never competes with this one:
+      // an explicitly-bounded window ending before the sibling's own canonical
+      // rent begins commits freely.
       await db.execute(sql`
-        insert into lease_charges (org_id, lease_id, charge_type, description, amount, frequency, effective_from)
-        values (${orgId}, ${fx.leases.unauthoredLeaseId}, 'base_rent', 'Sibling rent', '900.0000', 'monthly', '2026-05-01')`);
+        insert into lease_charges (org_id, lease_id, charge_type, description, amount, frequency,
+                                   effective_from, effective_to)
+        values (${orgId}, ${fx.leases.unauthoredLeaseId}, 'base_rent', 'Prior term', '700.0000', 'monthly',
+                '2019-01-01', '2026-03-31')`);
     } finally {
       await dropScratchOrgReporting(fx.org.orgId);
     }
@@ -566,16 +570,22 @@ test(
            and s.period_starts_on = date '2026-06-01'`);
       assert.equal(juneAmount.rows[0]?.amount, "1100.0000", "June carries the escalated rent");
 
-      // Scheduler lineage marker survives unchanged: system provenance for
-      // scheduler-generated batches, no editor impersonation anywhere.
-      const markers = (await db.execute<{ systemMarkers: number; impersonated: number }>(sql`
-        select count(*) filter (where changes->>'source' = 'scheduler' and actor_id is null)::int as "systemMarkers",
+      // Schedule lineage survives: the controlled escalation regenerates the
+      // schedule under the calling operator (source='user'), and no schedule
+      // line or generation marker ever impersonates the historical author.
+      const markers = (await db.execute<{ userMarkers: number; impersonated: number }>(sql`
+        select count(*) filter (where changes->>'source' = 'user' and actor_id = ${operatorId})::int as "userMarkers",
                count(*) filter (where actor_id = ${fx.historicalAuthorId})::int as impersonated
           from audit_log
          where org_id = ${orgId} and table_name = 'property_leases'
            and row_id = ${leaseId} and action = 'schedule_generated'`)).rows[0]!;
-      assert.ok(markers.systemMarkers > 0, "scheduler batches keep their system lineage marker");
-      assert.equal(markers.impersonated, 0, "scheduler lines never impersonate the editor");
+      assert.ok(markers.userMarkers > 0, "schedule regeneration attributes its real operator");
+      assert.equal(markers.impersonated, 0, "schedule lines never impersonate the editor");
+      const lineActors = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from lease_schedule_lines
+         where org_id = ${orgId} and lease_id = ${leaseId}
+           and created_by::text not in (${operatorId}, ${fx.historicalAuthorId})`)).rows[0]!;
+      assert.equal(lineActors.n, 0, "every generated line carries either the operator or a system null");
     } finally {
       await dropScratchOrgReporting(fx.org.orgId);
     }
@@ -767,7 +777,7 @@ test(
             frequency: "monthly",
             effectiveFrom: "2026-08-01",
           }),
-          /forced audit failure \(test veto\)/,
+          (error: unknown) => /forced audit failure \(test veto\)/.test(pgMessage(error)),
         );
         assert.equal(await chargeCount(), chargesBeforeVeto, "the material charge rolled back with its failed audit");
       } finally {
@@ -790,7 +800,7 @@ test(
         select count(*)::int as n from audit_log
          where org_id = ${orgId} and table_name = 'lease_charges' and row_id = ${retried.id} and action = 'insert'`)).rows[0]!.n;
       assert.equal(retriedAudit, 1);
-      assert.equal(await chargeCount(), chargesBeforeVeto + 2);
+      assert.equal(await chargeCount(), chargesBeforeVeto + 1, "the un-vetoed retry commits exactly one new charge");
     } finally {
       await db.execute(sql`drop trigger if exists openbooks_test_audit_veto_trg on audit_log`);
       await db.execute(sql`drop function if exists openbooks_test_audit_veto() cascade`);
