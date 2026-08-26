@@ -8,6 +8,7 @@ import { CronExpressionParser } from "cron-parser";
 import { db, schema } from "./db.ts";
 import { runUserSql } from "./sqlapi.ts";
 import { createScriptJournal } from "./journal-writes.ts";
+import { actorHasPermission } from "./actor-permissions.ts";
 
 /**
  * User scripting: REAL JavaScript (ES2023), executed in a QuickJS sandbox —
@@ -37,7 +38,14 @@ import { createScriptJournal } from "./journal-writes.ts";
  *                            journal (engine/src/journal-writes.ts). post:true
  *                            runs the posting engine and is allowed only
  *                            outside before_* triggers (no posting reentrancy
- *                            while another document is mid-post).
+ *                            while another document is mid-post). The acting
+ *                            user needs gl.post for draft AND post — the same
+ *                            permission every HTTP journal boundary demands
+ *                            (fnd_mt97va1e_kiv9jd: an endpoint script may not
+ *                            launder a journal write past role permissions).
+ *                            Runs without a signed-in user (scheduled/bulk/
+ *                            engine triggers) keep the documented system-
+ *                            provenance path.
  *
  * Return contract (before_post only):
  *   return { set: { field: value } }  to mutate whitelisted header fields
@@ -133,6 +141,10 @@ export async function runScript(
 
     // Governed ledger write. post:true is refused inside before_* triggers —
     // the posting engine is already mid-flight for the triggering document.
+    // An attributed caller (endpoint scripts run under a signed-in user) must
+    // hold gl.post like they would at any HTTP journal boundary; the roles
+    // array on ctx is display data, so the live tenant authorization is
+    // re-resolved here rather than trusted from the context.
     const journalFn = vm.newAsyncifiedFunction(
       "__journal_create",
       async (inputH, postH) => {
@@ -142,6 +154,11 @@ export async function runScript(
             error: vm.newError(
               `journal.create: post:true is not allowed in ${ctx.trigger} (create a draft instead)`,
             ),
+          };
+        }
+        if (ctx.user?.id && !(await actorHasPermission(db, ctx.org.id, ctx.user.id, "gl.post"))) {
+          return {
+            error: vm.newError("journal.create: missing permission: gl.post"),
           };
         }
         try {

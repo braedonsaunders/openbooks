@@ -10,7 +10,9 @@ export const runtime = 'nodejs'
  * with trigger 'endpoint' and this slug runs in the QuickJS sandbox with
  * ctx.request = { method, query, body }; its main() return is the response
  * body. Callers authenticate as themselves and need scripts.execute; the
- * script sees the calling user in ctx.user.
+ * script sees the calling user in ctx.user. The engine runtime additionally
+ * gates ob.journal.create behind that user's gl.post, so invoking a restlet is
+ * never a way to write ledger entries past role permissions.
  */
 async function handle(req: Request, slug: string) {
   const gate = await guardFeaturePermission('scripts.execute', 'scripts')

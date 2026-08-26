@@ -193,7 +193,7 @@ JSON-serializable value, which becomes the response body; **after_post**,
 | **ob.query** | query(sqlText) → rows[] | Run a read-only **SELECT** and return rows |
 | **ob.record.load** | record.load(table, id) → row \\| null | Load one row by id |
 | **ob.search** | search(table, filters) → rows[] | Rows matching key=value filters (up to 1000) |
-| **ob.journal.create** | journal.create(input, opts?) → { id, documentNumber, entryId? } | Create a governed balanced journal; opts.post posts it |
+| **ob.journal.create** | journal.create(input, opts?) → { id, documentNumber, entryId? } | Create a governed balanced journal; opts.post posts it. Requires **gl.post** |
 
 **ob.query** runs raw PostgreSQL through a read-only database role inside a
 read-only transaction — standard SQL, no proprietary dialect — and is capped in
@@ -223,6 +223,12 @@ runs through the posting engine and every posting invariant (balance, open perio
 account validity) applies. Posting is refused from inside a **before_** trigger —
 create the draft there and post it from **after_post** or a later run. A sandbox
 can never write ledger tables directly.
+
+The acting user needs **gl.post** for both draft and post requests — endpoint
+scripts gate this against their caller's live role permissions (a **scripts.execute**
+holder without ledger rights is refused, exactly as if they had called the
+journal API directly), while actor-less runs such as scheduled scripts execute
+under explicit system provenance instead of any user's authority.
 
 ## The ob host API — app backends
 
