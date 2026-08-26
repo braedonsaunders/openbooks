@@ -1306,6 +1306,14 @@ test("a terminal transition fences a stale payment-run worker before downstream 
 
     const staleWorker = withOrgContext(org.orgId, () =>
       postPaymentRun(seeded.runId, org.orgId, actorId));
+    // Claim the worker's rejection the moment the worker exists: the fence
+    // can land while this test is still awaiting the parked blocker and the
+    // settlement below, and a handler attached only by the assert.rejects
+    // loses that race — reporting correct fencing as an unhandled rejection.
+    // The guard merely marks the original promise handled; the assertion
+    // underneath still judges that same promise, so the test keeps proving
+    // the stale worker dies with exactly this error.
+    staleWorker.catch(() => {});
     await waitForBlockedBy(blockerPid);
 
     // The bank return for the first instruction queues behind the parked
