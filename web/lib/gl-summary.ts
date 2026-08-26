@@ -3,7 +3,15 @@ import { sql, type SQL } from 'drizzle-orm'
 
 /**
  * Read-side of the gl_month_activity summary (maintained by the
- * openbooks_gl_activity_* journal triggers — see 0001_baseline.sql).
+ * openbooks_gl_activity_* journal triggers — see 0001_baseline.sql and
+ * 0016_gl_month_activity_book_id.sql).
+ *
+ * Every read is scoped to exactly ONE accounting book: journal entries carry a
+ * mandatory book_id and the summary keys it, so an unscoped read would fuse
+ * parallel books (primary + tax + IFRS…) into one silently double-counted
+ * total. Callers pass an explicit book; when none is given the org's primary
+ * book is substituted in-query, so a forgotten filter degrades to "primary
+ * book only", never to merged books.
  *
  * Statements are date-range aggregations over posted+reversed entries. The
  * summary answers any month-aligned span from ~thousands of rows; a report
@@ -45,13 +53,26 @@ const isMonthEnd = (d: string) => {
 }
 
 /**
+ * The book a statement reads, as an inline SQL value expression: the caller's
+ * explicit book when given, otherwise the org's primary book resolved
+ * in-query (never "all books"). An org without any primary book yields NULL,
+ * which matches no rows — an empty statement instead of a merged one.
+ */
+export function statementBookExpr(orgId: string | SQL, bookId?: string | null): SQL {
+  return bookId
+    ? sql`${bookId}::uuid`
+    : sql`(select b.id from accounting_books b where b.org_id = ${orgId} and b.is_primary order by b.created_at limit 1)`
+}
+
+/**
  * The union relation described above. `minDate` null means inception
  * (balance-mode statements). Callers pass every column boundary; boundaries
- * that are already month-aligned split nothing.
+ * that are already month-aligned split nothing. `bookId` scopes both legs to
+ * one accounting book (primary when omitted — see statementBookExpr).
  */
 export function glActivityBuckets(
   orgId: string,
-  opts: { minDate: string | null; maxDate: string; boundaries: ActivityBoundary[] },
+  opts: { minDate: string | null; maxDate: string; boundaries: ActivityBoundary[]; bookId?: string | null },
 ): SQL {
   const split = new Set<string>()
   const consider = (b: ActivityBoundary) => {
@@ -70,13 +91,14 @@ export function glActivityBuckets(
   const splitFilter = splitMonths.length
     ? sql`and g.month <> all(${`{${splitMonths.join(',')}}`}::date[])`
     : sql``
+  const book = sql`and g.book_id = ${statementBookExpr(orgId, opts.bookId)}`
 
   if (!splitMonths.length) {
     return sql`(
       select g.account_id, g.subsidiary_id, g.month as d,
              (g.debit_total - g.credit_total) as amount, g.debit_total, g.credit_total
         from gl_month_activity g
-       where g.org_id = ${orgId} ${summaryCaps}
+       where g.org_id = ${orgId} ${book} ${summaryCaps}
     )`
   }
 
@@ -88,13 +110,14 @@ export function glActivityBuckets(
     select g.account_id, g.subsidiary_id, g.month as d,
            (g.debit_total - g.credit_total) as amount, g.debit_total, g.credit_total
       from gl_month_activity g
-     where g.org_id = ${orgId} ${summaryCaps} ${splitFilter}
+     where g.org_id = ${orgId} ${book} ${summaryCaps} ${splitFilter}
     union all
     select l.account_id, l.subsidiary_id, e.posting_date as d,
            l.amount, greatest(l.amount, 0), greatest(-l.amount, 0)
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
        and e.status in ('posted', 'reversed') and (${ranges})
+       and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
      where l.org_id = ${orgId}
   )`
 }
@@ -137,21 +160,26 @@ export function glAccountMovement(opts: {
   accountIds: SQL
   asOf: SQL
   fromExpr?: SQL | null
+  /** Explicit book scope; the org's primary book when omitted. */
+  bookId?: string | null
 }): SQL {
   const { orgExpr, accountIds, asOf, fromExpr } = opts
   const lowerSummary = fromExpr ? sql`and g.month >= date_trunc('month', ${fromExpr})::date` : sql``
   const lowerLines = fromExpr ? sql`and e.posting_date >= ${fromExpr}` : sql``
+  const book = statementBookExpr(orgExpr, opts.bookId)
   return sql`(
     select coalesce(sum(x.amt), 0) as amount from (
       select (g.debit_total - g.credit_total) as amt
         from gl_month_activity g
        where g.org_id = ${orgExpr} and g.account_id in ${accountIds}
+         and g.book_id = ${book}
          and g.month < date_trunc('month', ${asOf})::date ${lowerSummary}
       union all
       select l.amount
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = ${orgExpr}
          and e.status in ('posted', 'reversed')
+         and e.book_id = ${book}
          and e.posting_date >= date_trunc('month', ${asOf})::date
          and e.posting_date <= ${asOf} ${lowerLines}
        where l.org_id = ${orgExpr} and l.account_id in ${accountIds}
