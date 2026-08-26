@@ -40,7 +40,10 @@ export const segmentDefinitions = pgTable(
 );
 
 /** Values for custom segment definitions. Built-in values stay authoritative
- * in their domain tables and are resolved through `storage_column`. */
+ * in their domain tables and are resolved through `storage_column`. The
+ * storage guard serializes hierarchy mutations per tenant and custom segment
+ * before rechecking parentage, so concurrent reparents cannot create a cycle
+ * from individually valid snapshots. */
 export const segmentValues = pgTable(
   "segment_values",
   {

@@ -26,6 +26,8 @@ const wipPrebillSandboxWipeMigrationPath =
   "schema/migrations/generated/0043_sandbox_wip_prebill_wipe_guard.sql";
 const subsidiaryTreeGuardSerializationMigrationPath =
   "schema/migrations/generated/0045_subsidiary_tree_guard_serialization.sql";
+const segmentValueHierarchySerializationMigrationPath =
+  "schema/migrations/generated/0047_segment_value_hierarchy_serialization.sql";
 const documentTenantForeignKeysMigrationPath =
   "schema/migrations/generated/0039_document_tenant_coherent_foreign_keys.sql";
 const ledgerTenantCoherenceMigrationPath =
@@ -74,6 +76,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0043_sandbox_wip_prebill_wipe_guard.sql",
     "0045_subsidiary_tree_guard_serialization.sql",
     "0046_account_posting_classification_serialization.sql",
+    "0047_segment_value_hierarchy_serialization.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -461,6 +464,28 @@ test("subsidiary tree mutations serialize before their cycle recheck", () => {
     /WITH RECURSIVE descendants AS[\s\S]*WHERE subsidiary\.org_id = NEW\.org_id/,
   );
   assert.match(migration, /COMMENT ON FUNCTION public\.subsidiary_tree_guard\(\) IS/);
+});
+
+test("segment value hierarchy mutations serialize before their cycle recheck", () => {
+  const migration = readFileSync(segmentValueHierarchySerializationMigrationPath, "utf8");
+  assert.match(
+    migration,
+    /CREATE OR REPLACE FUNCTION public\.segment_value_guard\(\) RETURNS trigger\s+LANGUAGE plpgsql VOLATILE/,
+  );
+  assert.match(
+    migration,
+    /pg_advisory_xact_lock\(\s*hashtextextended\('segment-value-tree:' \|\| tree_scope, 0\)\s*\)/,
+  );
+  assert.match(migration, /LEAST\(old_scope, new_scope\)/);
+  assert.match(migration, /GREATEST\(old_scope, new_scope\)/);
+  const fence = migration.indexOf("pg_advisory_xact_lock(");
+  const segmentCheck = migration.indexOf("SELECT is_hierarchical INTO v_hierarchical");
+  assert.ok(fence >= 0 && fence < segmentCheck, "the segment tree fence must precede every hierarchy read");
+  assert.match(
+    migration,
+    /WITH RECURSIVE descendants AS[\s\S]*WHERE value\.org_id = NEW\.org_id[\s\S]*AND value\.segment_id = NEW\.segment_id/,
+  );
+  assert.match(migration, /COMMENT ON FUNCTION public\.segment_value_guard\(\) IS/);
 });
 
 test("ledger headers, lines, and trigger reads are tenant coherent", () => {
