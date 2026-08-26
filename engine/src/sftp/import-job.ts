@@ -2,12 +2,14 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "../db.ts";
 import {
   BANK_STATEMENT_PARSER_VERSION,
+  SYSTEM_ACTOR_ID,
   importStatement,
   parseOfx,
   parseCsv,
   parseCamt053,
   parseBai2,
   parseMt940,
+  type BankingContext,
   type CsvMapping,
   type ParsedStatement,
   type ParsedStatementLine,
@@ -21,6 +23,12 @@ import { backendFor } from "./backend.ts";
  * account, then move each file to `<folder>/processed/`. Outbound delivery
  * writes a payment run's file into a server's `outbound/` folder for the bank
  * to fetch. Both reuse the SFTP backend (MinIO/local) and the format parsers.
+ *
+ * Import provenance: scans are engine-initiated, so every statement they write
+ * carries {@link SYSTEM_ACTOR_ID} as the actor (never the schedule author or an
+ * org id standing in for one) plus a durable `sftp-import:<scheduleId>` marker
+ * in `audit_log.request_id`. Interactive statement imports keep their real
+ * operator attribution; only this machine path is system-owned.
  */
 
 type Fmt = "auto" | "ofx" | "csv" | "camt053" | "bai2" | "mt940";
@@ -49,22 +57,49 @@ function parse(format: Exclude<Fmt, "auto">, text: string, mapping: CsvMapping |
   return { lines: parseCsv(text, mapping), meta: {} };
 }
 
+/**
+ * Durable provenance marker stamped into `audit_log.request_id` for every
+ * statement the scheduled SFTP pull imports: readers can always tell which
+ * schedule brought a statement in, independent of who (if anyone) is in the
+ * org, and the marker never references a human actor.
+ */
+export function sftpImportAuditSource(scheduleId: string): string {
+  return `sftp-import:${scheduleId}`;
+}
+
+/** Outcome of one watch-folder file within a scan. */
+export interface ScheduleFileOutcome {
+  file: string;
+  imported: number;
+  duplicates: number;
+  /** Statement ids created for this file (empty when deduped or failed). */
+  statementIds: string[];
+  error?: string;
+}
+
 export interface ScheduleRun {
   scheduleId: string;
   filesSeen: number;
   imported: number;
   duplicates: number;
   errors: string[];
+  files: ScheduleFileOutcome[];
 }
 type ScheduleRow = {
   id: string; org_id: string; account_id: string; format: Fmt; folder: string; csv_mapping: CsvMapping | null;
-  created_by: string | null; backend: string; bucket: string | null; root_prefix: string;
+  backend: string; bucket: string | null; root_prefix: string;
 };
 
 async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
   const backend = backendFor({ backend: s.backend, bucket: s.bucket, rootPrefix: s.root_prefix });
-  const ctx = { orgId: s.org_id, userId: s.created_by ?? s.org_id };
-  const result: ScheduleRun = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [] };
+  // Engine-initiated write provenance: a schedule scan is performed by the
+  // system itself — the bank machine file has no human importer and neither
+  // the schedule's author nor any org-scoped id may stand in as one
+  // ({@link SYSTEM_ACTOR_ID} is the documented non-user engine actor). The
+  // schedule identity travels on ctx.requestId so each audit row stays
+  // traceable back to the exact run/schedule that imported it.
+  const ctx: BankingContext = { orgId: s.org_id, userId: SYSTEM_ACTOR_ID, requestId: sftpImportAuditSource(s.id) };
+  const result: ScheduleRun = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [], files: [] };
   let entries: { name: string; isDir: boolean }[] = [];
   try { entries = await backend.list(s.folder); } catch (e) { result.errors.push(`list ${s.folder}: ${(e as Error).message}`); return result; }
 
@@ -72,6 +107,8 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
     if (e.isDir || e.name.startsWith(".")) continue;
     result.filesSeen++;
     const filePath = `${s.folder}/${e.name}`;
+    const outcome: ScheduleFileOutcome = { file: e.name, imported: 0, duplicates: 0, statementIds: [] };
+    result.files.push(outcome);
     try {
       const sourceBytes = await backend.read(filePath);
       const text = sourceBytes.toString("utf8");
@@ -99,10 +136,15 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
       );
       result.imported += res.imported;
       result.duplicates += res.duplicates;
+      outcome.imported = res.imported;
+      outcome.duplicates = res.duplicates;
+      if (res.statementId) outcome.statementIds.push(res.statementId);
       // archive the processed file so it isn't re-imported
       await backend.rename(filePath, `${s.folder}/processed/${e.name}`).catch(() => {});
     } catch (err) {
-      result.errors.push(`${e.name}: ${(err as Error).message}`);
+      const message = (err as Error).message;
+      result.errors.push(`${e.name}: ${message}`);
+      outcome.error = message;
     }
   }
   return result;
@@ -116,7 +158,7 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
   // these the connection layer denies by default and the scan sees nothing.
   const rows = await withBypassContext(() =>
     db.execute<ScheduleRow>(sql`
-    select sc.id, sc.org_id, sc.account_id, sc.format, sc.folder, sc.csv_mapping, sc.created_by,
+    select sc.id, sc.org_id, sc.account_id, sc.format, sc.folder, sc.csv_mapping,
            sv.backend, sv.bucket, sv.root_prefix
       from sftp_import_schedules sc
       join sftp_servers sv on sv.id = sc.sftp_server_id and sv.org_id = sc.org_id and sv.is_active
@@ -131,7 +173,7 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
   for (const s of rows.rows) {
     let run: ScheduleRun;
     try { run = await withOrgContext(s.org_id, () => runSchedule(s)); }
-    catch (e) { run = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [(e as Error).message] }; }
+    catch (e) { run = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [(e as Error).message], files: [] }; }
     runs.push(run);
     await withOrgContext(s.org_id, () =>
       db.execute(sql`
