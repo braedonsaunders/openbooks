@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "./db.ts";
+import { SYSTEM_ACTOR_ID } from "./banking.ts";
 import { inventoryFeatureEnabled } from "./inventory.ts";
 import { add, mul, normalizeMoney, toUnits } from "./money.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
@@ -130,7 +131,7 @@ interface SubscriptionComponentRow extends Record<string, unknown> {
 interface AmendmentReplayRow extends Record<string, unknown> { id: string; subscriptionId: string }
 interface BillingPreparationRow extends Record<string, unknown> {
   billingTiming: BillingTiming | null; termEndsOn: string | null; renewalPolicy: RenewalPolicy | null;
-  renewalTermMonths: number | null; createdBy: string | null;
+  renewalTermMonths: number | null;
 }
 interface BillingLifecycleRow extends Record<string, unknown> {
   contractRevision: number; billingTiming: BillingTiming; currentPeriodStart: string | null;
@@ -432,10 +433,42 @@ async function snapshot(orgId: string, subscriptionId: string) {
   return { lifecycle, components: components.rows };
 }
 
-export async function applyAmendment(orgId: string, actorId: string, request: AmendmentRequest): Promise<{ id: string; replayed: boolean }> {
-  return withOrg(orgId, async () => {
-    await assertEnabled(orgId);
+/**
+ * Provenance of an engine-initiated amendment (today, the scheduler's
+ * auto-renewal). The origin and run context are persisted inside the
+ * amendment's immutable request snapshot, so a background contract change is
+ * auditable from the amendment row itself — never attributed to whatever
+ * historic user happened to create the subscription.
+ */
+export interface SystemAmendmentSource {
+  origin: string;
+  detail?: Record<string, unknown>;
+}
+
+interface AmendmentCallOptions { system?: SystemAmendmentSource }
+
+export async function applyAmendment(orgId: string, actorId: string | null, request: AmendmentRequest, opts?: AmendmentCallOptions) {
+  return withOrg(orgId, async () => { await assertEnabled(orgId);
     if (!request.idempotencyKey.trim()) throw new AdvancedSubscriptionError("idempotency key is required");
+    // Every applied amendment names its actor on the row itself (the applied
+    // status constraint refuses NULL attribution). An interactive call needs a
+    // real authenticated gate user and may never borrow the engine's identity;
+    // a scheduler-generated renewal carries {@link SYSTEM_ACTOR_ID} plus its
+    // persisted source marker instead of a historic creator or a placeholder —
+    // coalescing with the recurring-schedule provenance contract (0777424f).
+    const systemSource = opts?.system ?? null;
+    let attributedBy: string;
+    if (systemSource) {
+      attributedBy = SYSTEM_ACTOR_ID;
+    } else if (actorId) {
+      if (actorId === SYSTEM_ACTOR_ID) throw new AdvancedSubscriptionError("an interactive amendment cannot carry the engine system actor");
+      attributedBy = actorId;
+    } else {
+      throw new AdvancedSubscriptionError("an authenticated amendment actor is required");
+    }
+    const requestSnapshot = systemSource
+      ? { ...request, source: { kind: "system", origin: systemSource.origin, ...(systemSource.detail ?? {}) } }
+      : request;
     const lock = (await db.execute(sql`select id from subscriptions where id = ${request.subscriptionId} and org_id = ${orgId} for update`));
     if (!lock.rows.length) throw new AdvancedSubscriptionError("subscription not found");
     const replay = (await db.execute<AmendmentReplayRow>(sql`
@@ -475,7 +508,7 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
     if (["remove_component", "change_component"].includes(request.type)) {
       await db.execute(sql`
         update subscription_components set effective_to = (${effectiveOn}::date - interval '1 day')::date,
-               updated_at = now(), updated_by = ${actorId}
+               updated_at = now(), updated_by = ${attributedBy}
          where org_id = ${orgId} and subscription_id = ${request.subscriptionId}
            and component_key = ${request.componentKey!} and effective_from <= ${effectiveOn}
            and (effective_to is null or effective_to >= ${effectiveOn})
@@ -492,7 +525,7 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
                 ${quantity ?? source.quantity ?? "1"}, ${unitPrice ?? source.unitPrice ?? "0"},
                 ${request.incomeAccountId !== undefined ? request.incomeAccountId : source.incomeAccountId ?? null},
                 ${request.itemId !== undefined ? request.itemId : source.itemId ?? null}, ${request.taxCodeId !== undefined ? request.taxCodeId : source.taxCodeId ?? null},
-                ${effectiveOn}, ${before.components.length}, ${actorId}, ${actorId})
+                ${effectiveOn}, ${before.components.length}, ${attributedBy}, ${attributedBy})
       `);
     }
     if (request.type === "change_term") {
@@ -500,33 +533,33 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
       const termStartsOn = before.lifecycle.termStartsOn;
       if (!termStartsOn) throw new AdvancedSubscriptionError("advanced lifecycle is not active");
       if (termEndsOn && termEndsOn < termStartsOn) throw new AdvancedSubscriptionError("term end cannot precede term start");
-      await db.execute(sql`update subscription_lifecycles set term_ends_on = ${termEndsOn}, renewal_on = ${termEndsOn}, updated_at = now(), updated_by = ${actorId} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
+      await db.execute(sql`update subscription_lifecycles set term_ends_on = ${termEndsOn}, renewal_on = ${termEndsOn}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
     }
     if (request.type === "change_timing") {
-      await db.execute(sql`update subscription_lifecycles set billing_timing = ${request.billingTiming!}, updated_at = now(), updated_by = ${actorId} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
+      await db.execute(sql`update subscription_lifecycles set billing_timing = ${request.billingTiming!}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
     }
     if (request.type === "renew") {
       const months = Math.trunc(request.renewalTermMonths ?? before.lifecycle.renewalTermMonths ?? 12);
       if (months < 1 || !before.lifecycle.termEndsOn) throw new AdvancedSubscriptionError("renewal requires a current term end and positive renewal term");
       const nextEnd = addMonths(before.lifecycle.termEndsOn, months);
-      await db.execute(sql`update subscription_lifecycles set term_starts_on = ${before.lifecycle.termEndsOn}, term_ends_on = ${nextEnd}, renewal_on = ${nextEnd}, renewal_term_months = ${months}, updated_at = now(), updated_by = ${actorId} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
+      await db.execute(sql`update subscription_lifecycles set term_starts_on = ${before.lifecycle.termEndsOn}, term_ends_on = ${nextEnd}, renewal_on = ${nextEnd}, renewal_term_months = ${months}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
     }
     if (request.type === "coterm") {
       if (!request.anchorSubscriptionId) throw new AdvancedSubscriptionError("an anchor subscription is required");
       const anchor = await subscriptionContext(orgId, request.anchorSubscriptionId);
       if (!anchor.lifecycleId || !anchor.termEndsOn) throw new AdvancedSubscriptionError("anchor subscription needs an advanced term end");
       assertCotermAllowed({ subscriptionId: request.subscriptionId, anchorSubscriptionId: request.anchorSubscriptionId, customerId: before.lifecycle.customerId, anchorCustomerId: anchor.customerId });
-      await db.execute(sql`update subscription_lifecycles set term_ends_on = ${anchor.termEndsOn}, renewal_on = ${anchor.termEndsOn}, coterm_anchor_subscription_id = ${request.anchorSubscriptionId}, updated_at = now(), updated_by = ${actorId} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
+      await db.execute(sql`update subscription_lifecycles set term_ends_on = ${anchor.termEndsOn}, renewal_on = ${anchor.termEndsOn}, coterm_anchor_subscription_id = ${request.anchorSubscriptionId}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
     }
-    await db.execute(sql`update subscription_lifecycles set contract_revision = contract_revision + 1, updated_at = now(), updated_by = ${actorId} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
+    await db.execute(sql`update subscription_lifecycles set contract_revision = contract_revision + 1, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
     const after = await snapshot(orgId, request.subscriptionId);
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into subscription_amendments
         (org_id, subscription_id, amendment_number, amendment_type, effective_on, status, idempotency_key,
          reason, request, before_snapshot, after_snapshot, applied_at, applied_by, created_by, updated_by)
       select ${orgId}, ${request.subscriptionId}, coalesce(max(amendment_number), 0) + 1, ${request.type}, ${effectiveOn},
-             'applied', ${request.idempotencyKey}, ${request.reason ?? null}, ${JSON.stringify(request)}::jsonb,
-             ${JSON.stringify(before)}::jsonb, ${JSON.stringify(after)}::jsonb, now(), ${actorId}, ${actorId}, ${actorId}
+             'applied', ${request.idempotencyKey}, ${request.reason ?? null}, ${JSON.stringify(requestSnapshot)}::jsonb,
+             ${JSON.stringify(before)}::jsonb, ${JSON.stringify(after)}::jsonb, now(), ${attributedBy}, ${attributedBy}, ${attributedBy}
         from subscription_amendments where org_id = ${orgId} and subscription_id = ${request.subscriptionId}
       returning id
     `));
@@ -568,16 +601,18 @@ export async function advancedSubscriptionWorkspace(orgId: string) {
 /**
  * Called by the recurring runner before it claims a due row. Subscriptions
  * without contract lifecycle configuration return true. Manual/no-renew
- * contracts stop at the boundary;
- * auto-renew contracts append the same immutable amendment as an interactive
- * renewal, using a deterministic idempotency key.
+ * contracts stop at the boundary; auto-renew contracts append the same
+ * immutable amendment an interactive renewal would, attributed to the
+ * documented engine system actor with a durable scheduler source marker in
+ * the amendment's request snapshot — never to the subscription's historic
+ * creator, and never refused when an imported subscription has no author —
+ * using a deterministic idempotency key.
  */
 export async function prepareAdvancedSubscriptionBilling(orgId: string, subscriptionId: string, dueOn: string): Promise<boolean> {
   return withOrg(orgId, async () => {
     const result = (await db.execute<BillingPreparationRow>(sql`
       select l.billing_timing as "billingTiming", l.term_ends_on as "termEndsOn",
-             l.renewal_policy as "renewalPolicy", l.renewal_term_months as "renewalTermMonths",
-             s.created_by as "createdBy"
+             l.renewal_policy as "renewalPolicy", l.renewal_term_months as "renewalTermMonths"
         from subscriptions s left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
        where s.id = ${subscriptionId} and s.org_id = ${orgId}
     `));
@@ -588,14 +623,15 @@ export async function prepareAdvancedSubscriptionBilling(orgId: string, subscrip
     if (action === "bill") return true;
     if (action === "stop") return false;
     if (!row.termEndsOn) return true;
-    if (!row.createdBy) throw new AdvancedSubscriptionError("automatic renewal needs an owning user");
-    await applyAmendment(orgId, row.createdBy, {
+    await applyAmendment(orgId, null, {
       subscriptionId,
       type: "renew",
       effectiveOn: row.termEndsOn,
       renewalTermMonths: row.renewalTermMonths ?? 12,
       idempotencyKey: `auto-renew:${subscriptionId}:${row.termEndsOn}`,
       reason: "Automatic renewal",
+    }, {
+      system: { origin: "subscription-billing-scheduler", detail: { dueOn } },
     });
     return true;
   });
