@@ -170,6 +170,21 @@ export function prorate(fullAmount: string, periodStart: string, periodEnd: stri
   return mulRatio(fullAmount, BigInt(remaining), BigInt(total));
 }
 
+/**
+ * Map a signed proration adjustment to the native AR document it must become:
+ * an upgrade charge stays a customer_invoice at its own sign; a downgrade must
+ * NEVER persist a negative invoice — credit memos are their own document kind,
+ * posted as DR income / CR AR off a positive total (every AR surface flips the
+ * sign by kind), so a negative adjustment becomes a customer_credit carrying
+ * the absolute amount. Zero stays an invoice; callers skip zero anyway.
+ * Pure — unit-tested.
+ */
+export function prorationDocument(adjustment: string): { kind: "customer_invoice" | "customer_credit"; amount: string } {
+  return toUnits(adjustment) < 0n
+    ? { kind: "customer_credit", amount: neg(adjustment) }
+    : { kind: "customer_invoice", amount: normalizeMoney(adjustment) };
+}
+
 async function resolveIncomeAccount(orgId: string, incomeAccountId: string | null): Promise<string> {
   if (incomeAccountId) return incomeAccountId;
   const def = (await db.execute<{ id: string }>(sql`
@@ -661,6 +676,7 @@ export async function changeSubscription(
     let invoiceId: string | null = null;
     let documentNumber: string | null = null;
     if (toUnits(adjustment) !== 0n) {
+      const doc = prorationDocument(adjustment);
       const gen = await createSubscriptionInvoice({
         orgId,
         actorId: subscriptionId,
@@ -672,11 +688,12 @@ export async function changeSubscription(
         taxCodeId: null,
         description: `Proration — plan change (${periodStart} → ${periodEnd})`,
         quantity: "1",
-        unitPrice: adjustment,
+        unitPrice: doc.amount,
         memo: "Subscription proration",
         invoiceDate: today,
         autoPost: false,
         applyTax: false,
+        documentKind: doc.kind,
       });
       invoiceId = gen.invoiceId;
       documentNumber = gen.documentNumber;

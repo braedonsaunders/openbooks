@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { advanceSubscription, monthlyRecurringRevenue, prorate } from "./subscription-billing.ts";
+import { advanceSubscription, monthlyRecurringRevenue, prorate, prorationDocument } from "./subscription-billing.ts";
 
 test("advanceSubscription steps by interval × count with month-end clamp", () => {
   assert.equal(advanceSubscription("2026-01-15", "monthly", 1), "2026-02-15");
@@ -30,6 +30,17 @@ test("prorate bills the remaining slice of a period exactly", () => {
   assert.equal(prorate("300", "2026-06-01", "2026-07-01", "2026-07-05"), "0.0000");
   // Degenerate period → zero, never a divide-by-zero.
   assert.equal(prorate("300", "2026-06-01", "2026-06-01", "2026-06-01"), "0.0000");
+});
+
+test("prorationDocument maps a signed adjustment to the native document it must become", () => {
+  // Downgrade → credit memo carrying the ABSOLUTE amount: credit memos store
+  // positive totals (posting.ts credits AR off the positive total; AR reports
+  // flip the sign by kind), so a negative amount on an invoice is never right.
+  assert.deepEqual(prorationDocument("-75"), { kind: "customer_credit", amount: "75.0000" });
+  assert.deepEqual(prorationDocument("-0.0001"), { kind: "customer_credit", amount: "0.0001" });
+  // Upgrade → ordinary invoice, unchanged.
+  assert.deepEqual(prorationDocument("50"), { kind: "customer_invoice", amount: "50.0000" });
+  assert.deepEqual(prorationDocument("0"), { kind: "customer_invoice", amount: "0.0000" });
 });
 
 test("the claim and the billing share one transaction, closing the crash-skip window", () => {
@@ -117,6 +128,33 @@ test("changeSubscription and prorateFirstInvoice serialize on the subscription r
     !/nextBillOn === firstBillOn && row\.currentPeriodStart === row\.startOn/.test(guardBlock),
     "must not treat the create-state schedule as already-prorated",
   );
+});
+
+test("a downgrade proration becomes a customer credit memo, never a negative invoice", () => {
+  // The defect: changeSubscription passed the signed adjustment straight into
+  // createSubscriptionInvoice with no documentKind, so a downgrade cut a
+  // customer_invoice with a negative total. Credit memos are their own native
+  // document (posting credits AR off a POSITIVE total; every AR surface flips
+  // the sign by kind), so a negative adjustment must become a customer_credit
+  // carrying the absolute amount — exactly how CAM reconciliations already do it.
+  const source = readFileSync(new URL("./subscription-billing.ts", import.meta.url), "utf8");
+  const fn = source.indexOf("export async function changeSubscription");
+  const next = source.indexOf("export async function prorateFirstInvoice");
+  const body = source.slice(fn, next);
+  const decision = body.indexOf("prorationDocument(adjustment)");
+  assert.ok(decision >= 0, "the signed adjustment is mapped through prorationDocument");
+  const create = body.indexOf("createSubscriptionInvoice({", decision);
+  assert.ok(create > decision, "the document decision precedes invoice creation");
+  const callBlock = body.slice(create, body.indexOf("invoiceId = gen.invoiceId", create));
+  assert.match(callBlock, /documentKind: doc\.kind/, "the cut document's kind comes from the credit decision");
+  assert.match(callBlock, /unitPrice: doc\.amount/, "the stored amount comes from the credit decision");
+  assert.doesNotMatch(callBlock, /unitPrice: adjustment/,
+    "the raw signed adjustment must never be persisted as an invoice line amount");
+
+  const helper = source.indexOf("export function prorationDocument");
+  const helperEnd = source.indexOf("\n}", helper);
+  const helperBody = source.slice(helper, helperEnd + 2);
+  assert.match(helperBody, /customer_credit/, "downgrades map to the native credit-memo kind");
 });
 
 test("changeSubscription persists quantity and priceOverride through canonicalDecimal then normalizeMoney", () => {
