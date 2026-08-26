@@ -23,6 +23,12 @@ const PUBLIC_SEGMENT_ROOTS = [
   "/pay",
   "/api/pay",
   "/api/payments/webhooks",
+  // External counterparty signing: /sign pages and /api/sign endpoints carry
+  // their own per-request HMAC token, verified inside every route
+  // (verifySigningToken + validateSigningRequest, fail-closed) — recipients
+  // have no account, so the session gate would 302 every signer to /login.
+  "/sign",
+  "/api/sign",
   // Worker-to-web seam: every /api/internal route authenticates itself with
   // the shared OPENBOOKS_INTERNAL_TOKEN header and fails closed without it.
   "/api/internal",
