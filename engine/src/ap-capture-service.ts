@@ -609,6 +609,7 @@ export async function materializeCapture(input: {
     // front also serializes this materialize against convertOrder on the
     // same order, so the two channels cannot overbill each other.
     const priceVariances: Array<{ lineIndex: number; expected: string; actual: string }> = [];
+    const poLineLocations = new Map<string, string | null>();
     if (item.purchase_order_id) {
       await tx.execute(sql`
         select id from document_lines
@@ -625,14 +626,18 @@ export async function materializeCapture(input: {
           unit_price: string;
           item_id: string | null;
           item_kind: string | null;
+          stock_location_id: string | null;
         }>(sql`
           select dl.id, dl.quantity::text as quantity, dl.quantity_billed::text as quantity_billed,
                  dl.quantity_fulfilled::text as quantity_fulfilled, dl.unit_price::text as unit_price,
-                 dl.item_id, i.kind as item_kind
+                 dl.item_id, i.kind as item_kind, dl.stock_location_id
             from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
            where dl.org_id = ${input.orgId} and dl.document_id = ${item.purchase_order_id}
         `)).rows.map((row) => [row.id, row]),
       );
+      for (const poLine of poLines.values()) {
+        poLineLocations.set(poLine.id, poLine.stock_location_id);
+      }
       capture.lines.forEach((line, lineIndex) => {
         if (!line.purchaseOrderLineId) return;
         const po = poLines.get(line.purchaseOrderLineId);
@@ -744,13 +749,20 @@ export async function materializeCapture(input: {
     const documentId = inserted.rows[0]!.id;
     for (let index = 0; index < capture.lines.length; index += 1) {
       const line = capture.lines[index]!;
+      // A PO-backed bill receives into the warehouse named by the locked PO
+      // line. Unlinked capture lines remain explicit-null and posting will
+      // require a resolvable warehouse before treating an item as inventory.
+      const stockLocationId = line.purchaseOrderLineId
+        ? poLineLocations.get(line.purchaseOrderLineId) ?? null
+        : null;
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
                                     quantity, unit, unit_price, amount, tax_amount, tax_overridden,
-                                    custom, created_by, updated_by)
+                                    stock_location_id, custom, created_by, updated_by)
         values (${input.orgId}, ${documentId}, ${index + 1}, ${line.itemId ?? null}, ${line.accountId ?? null},
                 ${line.description}, ${line.quantity}, ${line.unit}, ${line.unitPrice}, ${line.amount},
                 ${line.taxAmount}, ${cmp(line.taxAmount, "0") !== 0},
+                ${stockLocationId},
                 ${JSON.stringify({ apCaptureEvidence: { captureItemId: item.id, purchaseOrderLineId: line.purchaseOrderLineId ?? null } })}::jsonb,
                 ${input.actorId}, ${input.actorId})
       `);

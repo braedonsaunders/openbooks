@@ -38,7 +38,7 @@ import {
   seedFlowActors,
   type ScratchOrg,
 } from "./test-fixtures.ts";
-import { postDocument } from "./posting.ts";
+import { postDocument, PostingError } from "./posting.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -79,7 +79,7 @@ async function draftApprovedInventoryBill(
     quantity: string;
     unitPrice: string;
     amount: string;
-    stockLocationId?: string;
+    stockLocationId?: string | null;
   }>,
 ): Promise<string> {
   const documentId = randomUUID();
@@ -103,7 +103,7 @@ async function draftApprovedInventoryBill(
       values (${randomUUID()}, ${org.orgId}, ${documentId}, ${index + 1},
               ${line.itemId}, null, ${line.quantity}, ${line.unitPrice},
               ${line.amount}, '0', false, '0', '0',
-              ${line.stockLocationId ?? org.stockLocationId}, '{}'::jsonb,
+              ${line.stockLocationId === undefined ? org.stockLocationId : line.stockLocationId}, '{}'::jsonb,
               false)`);
   }
   return documentId;
@@ -246,6 +246,82 @@ test("vendor-bill receipt lines post atomically and a repaired bill retries clea
     assert.equal(
       toUnits(await glBalance(org.orgId, org.accounts.invAsset)),
       toUnits("35"),
+    );
+    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.clearing)), 0n);
+    await assertInvariant(org);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a vendor-bill inventory line without a resolvable stock location refuses posting and repairs cleanly", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const billId = await draftApprovedInventoryBill(org, [
+      {
+        itemId: org.items.fifo,
+        quantity: "10",
+        unitPrice: "2",
+        amount: "20",
+        stockLocationId: null,
+      },
+    ]);
+    const deps = {
+      control: {
+        ar: org.accounts.ar,
+        ap: org.accounts.ap,
+        bank: org.accounts.bank,
+      },
+    };
+
+    // MAIN and STAGE are both active, so no warehouse can be implied. Before
+    // this guard, the loader dropped line 1 and posted it as non-inventory.
+    await assert.rejects(
+      () => postDocument(billId, deps),
+      (error: unknown) =>
+        error instanceof PostingError &&
+        /document line 1/.test(error.message) &&
+        /requires a stock location/.test(error.message),
+    );
+    assert.deepEqual(await billInventoryResidue(org.orgId, billId), {
+      status: "approved",
+      movements: 0,
+      layers: 0,
+      sourceEntries: 0,
+      effectRows: 0,
+    });
+    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.ap)), 0n);
+    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.invAsset)), 0n);
+    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.clearing)), 0n);
+
+    // Resolving-location control: repairing the same line must post it as
+    // inventory, not merely make the refusal disappear.
+    await db.execute(sql`
+      update document_lines
+         set stock_location_id = ${org.stockLocationId}
+       where org_id = ${org.orgId} and document_id = ${billId}`);
+    assert.ok(await postDocument(billId, deps));
+    assert.deepEqual(await billInventoryResidue(org.orgId, billId), {
+      status: "posted",
+      movements: 1,
+      layers: 1,
+      sourceEntries: 1,
+      effectRows: 1,
+    });
+    const onHand = await getOnHand(
+      org.orgId,
+      org.items.fifo,
+      org.stockLocationId,
+    );
+    assert.equal(toUnits(onHand.quantity), toUnits("10"));
+    assert.equal(toUnits(onHand.value), toUnits("20"));
+    assert.equal(
+      toUnits(await glBalance(org.orgId, org.accounts.invAsset)),
+      toUnits("20"),
+    );
+    assert.equal(
+      toUnits(await glBalance(org.orgId, org.accounts.ap)),
+      toUnits("-20"),
     );
     assert.equal(toUnits(await glBalance(org.orgId, org.accounts.clearing)), 0n);
     await assertInvariant(org);
