@@ -1,3 +1,4 @@
+-- OpenBooks forward migration 0046_account_posting_classification_serialization.
 BEGIN;
 
 -- Account classification is part of every ledger line's durable meaning. A

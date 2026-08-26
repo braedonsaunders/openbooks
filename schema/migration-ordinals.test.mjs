@@ -224,3 +224,27 @@ test("digest mismatches and ambiguous old/new history fail closed", async () => 
   );
   assert.equal(ambiguous.updateCount, 0);
 });
+
+// Header comments must name their own file. Renamed migrations keep their
+// original header until a digest transition ships (their bytes are pinned by
+// APPROVED_MIGRATION_FILENAME_TRANSITIONS); their stale headers are mapped to
+// the current filename here. Every other migration must match exactly.
+test("migration header comments name their own file", () => {
+  const renamedTo = new Map([
+    ["0006_terminal_failure_surfacing", "0035_terminal_failure_surfacing.sql"],
+    ["0010_bank_statement_source_idempotency", "0036_bank_statement_source_idempotency.sql"],
+    ["0008_durable_work_lease_fencing", "0052_durable_work_lease_fencing.sql"],
+  ]);
+  const mismatches = [];
+  for (const file of publishedMigrationFiles()) {
+    if (file === "0001_baseline.sql") continue; // canonical baseline carries its own header prose
+    const header = readFileSync(`${generatedDirectory}/${file}`, "utf8")
+      .split("\n", 1)[0]
+      .replace(/^-- OpenBooks forward migration /, "")
+      .replace(/\.$/, "");
+    if (header === file.replace(/\.sql$/, "")) continue;
+    if (renamedTo.get(header) === file) continue;
+    mismatches.push(`${file}: header says ${header}`);
+  }
+  assert.deepEqual(mismatches, []);
+});

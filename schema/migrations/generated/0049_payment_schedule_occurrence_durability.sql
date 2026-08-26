@@ -1,4 +1,4 @@
--- OpenBooks forward migration 0048_payment_schedule_occurrence_durability.
+-- OpenBooks forward migration 0049_payment_schedule_occurrence_durability.
 --
 -- Applied exactly once by digest (scripts/bootstrap.ts reads every
 -- schema/migrations/generated/*.sql in filename order inside one tracked
