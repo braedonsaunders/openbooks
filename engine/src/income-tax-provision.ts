@@ -319,28 +319,59 @@ async function fiscalYearRange(
   return { from: r.rows[0].from, to: r.rows[0].to };
 }
 
-/** Blended enacted rate at a date: subsidiary-scoped rows win when present,
- *  else org-wide rows; stacked jurisdictions sum. */
-export async function enactedRatePercent(
+/** A blended enacted rate plus the jurisdictions that composed it, retained so
+ *  every provision run records exactly which rate configuration produced it. */
+export interface EnactedRate {
+  ratePercent: string;
+  jurisdictions: string[];
+}
+
+async function activeRatesAt(
   orgId: string,
   subsidiaryId: string | null,
   onDate: string,
-): Promise<string> {
-  const scoped = (await db.execute<{ rate: string }>(sql`
-    select coalesce(sum(rate_percent), 0)::text as rate from income_tax_rates
+): Promise<EnactedRate> {
+  const r = (await db.execute<{ rate: string; jurisdictions: string[] }>(sql`
+    select coalesce(sum(rate_percent), 0)::text as rate,
+           coalesce(jsonb_agg(distinct jurisdiction order by jurisdiction), '[]'::jsonb) as jurisdictions
+      from income_tax_rates
      where org_id = ${orgId} and is_active
        and effective_from <= ${onDate} and (effective_to is null or effective_to >= ${onDate})
-       and subsidiary_id = ${subsidiaryId}
+       and subsidiary_id is not distinct from ${subsidiaryId}
   `));
-  if (subsidiaryId && cmp(scoped.rows[0]?.rate ?? "0", "0") > 0)
-    return scoped.rows[0]!.rate;
-  const wide = (await db.execute<{ rate: string }>(sql`
-    select coalesce(sum(rate_percent), 0)::text as rate from income_tax_rates
-     where org_id = ${orgId} and is_active
-       and effective_from <= ${onDate} and (effective_to is null or effective_to >= ${onDate})
-       and subsidiary_id is null
-  `));
-  return wide.rows[0]?.rate ?? "0";
+  return {
+    ratePercent: r.rows[0]?.rate ?? "0",
+    jurisdictions: r.rows[0]?.jurisdictions ?? [],
+  };
+}
+
+/**
+ * Blended enacted rate at a date, or null when NO active rate row covers it:
+ * subsidiary-scoped rows win whenever any exist, else org-wide rows; stacked
+ * jurisdictions sum. Null is distinct from a genuine 0% combined rate — an
+ * unconfigured jurisdiction must fail the provision closed, never compute at
+ * zero silently. A negative blend is misconfiguration and throws here.
+ */
+export async function resolveEnactedRate(
+  orgId: string,
+  subsidiaryId: string | null,
+  onDate: string,
+): Promise<EnactedRate | null> {
+  let resolved: EnactedRate | null = null;
+  if (subsidiaryId) {
+    const scoped = await activeRatesAt(orgId, subsidiaryId, onDate);
+    if (scoped.jurisdictions.length > 0) resolved = scoped;
+  }
+  if (!resolved) {
+    const wide = await activeRatesAt(orgId, null, onDate);
+    if (wide.jurisdictions.length > 0) resolved = wide;
+  }
+  if (!resolved) return null;
+  if (cmp(resolved.ratePercent, "0") < 0)
+    throw new IncomeTaxProvisionError(
+      `the enacted income tax rates configured for ${resolved.jurisdictions.join(" + ")} as of ${onDate} blend to a negative rate (${resolved.ratePercent}%) — correct the income tax rate configuration`,
+    );
+  return resolved;
 }
 
 async function pretaxBookIncome(
@@ -572,18 +603,27 @@ export async function computeProvisionRun(
     // queries sequential on that client: concurrent client.query calls rely on
     // pg's deprecated implicit queueing and make execution order ambiguous.
     const pretax = await pretaxBookIncome(orgId, range.from, range.to);
-    const rate = await enactedRatePercent(
+    const resolvedRate = await resolveEnactedRate(
       orgId,
       subsidiaryId ?? null,
       range.to,
     );
+    if (!resolvedRate) {
+      const scope = subsidiaryId
+        ? (
+            (await db.execute<{ name: string }>(sql`
+              select name from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}
+            `))
+          ).rows[0]?.name ?? subsidiaryId
+        : "the organization";
+      throw new IncomeTaxProvisionError(
+        `no enacted income tax rate covers ${scope} for fiscal year ${fiscalYear} (period ending ${range.to}) — configure income tax rates before computing a provision`,
+      );
+    }
+    const rate = resolvedRate.ratePercent;
     const autoDiffs = await computeFixedAssetDifferences(orgId, range.to);
     const prior = await latestPostedBalances(orgId, fiscalYear);
     const framework = await orgTaxFramework(orgId);
-    if (cmp(rate, "0") <= 0)
-      throw new IncomeTaxProvisionError(
-        "no enacted income tax rate covers the fiscal year end — configure income tax rates first",
-      );
 
     const differences = [...autoDiffs, ...(opts.additionalDifferences ?? [])];
     const computation = buildProvision({
@@ -607,6 +647,7 @@ export async function computeProvisionRun(
       framework,
       pretaxBookIncome: pretax,
       enactedRatePercent: rate,
+      enactedRateJurisdictions: resolvedRate.jurisdictions,
       permanentDifferences: opts.permanentDifferences ?? [],
       lossCarryforwardUsed: opts.lossCarryforwardUsed ?? "0",
       taxableIncome: computation.taxableIncome,
