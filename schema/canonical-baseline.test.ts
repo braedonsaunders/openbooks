@@ -20,6 +20,8 @@ const sandboxWipeGuardGucMigrationPath =
   "schema/migrations/generated/0019_sandbox_wipe_guard_guc.sql";
 const closePostingFenceMigrationPath =
   "schema/migrations/generated/0022_close_posting_fence.sql";
+const wipPrebillSandboxWipeMigrationPath =
+  "schema/migrations/generated/0043_sandbox_wip_prebill_wipe_guard.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -50,6 +52,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0022_close_posting_fence.sql",
     "0035_terminal_failure_surfacing.sql",
     "0036_bank_statement_source_idempotency.sql",
+    "0043_sandbox_wip_prebill_wipe_guard.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -151,6 +154,20 @@ test("every effective sandbox-wipe guard reads the GUC the wipe source sets", ()
     );
     assert.doesNotMatch(body, /app\.sandbox_wipe/, `${functionName} retains the drifted GUC`);
   }
+});
+
+test("WIP pre-bill evidence is wipeable only through the scoped sandbox helper", () => {
+  const migration = readFileSync(wipPrebillSandboxWipeMigrationPath, "utf8");
+  const definition = migration.match(
+    /CREATE OR REPLACE FUNCTION public\.wip_prebill_event_append_only_guard\(\) RETURNS trigger[\s\S]*?\$\$;/,
+  )?.[0];
+  assert.ok(definition, "0043 must replace the deployed WIP pre-bill event guard");
+  assert.match(
+    definition,
+    /IF TG_OP = 'DELETE' AND public\.openbooks_sandbox_wipe_allowed\(OLD\.org_id\) THEN\s+RETURN OLD;/,
+  );
+  assert.doesNotMatch(definition, /current_setting\(/);
+  assert.match(definition, /RAISE EXCEPTION 'WIP prebill events are append-only'/);
 });
 
 test("an instruction's lifecycle fan-out can never cross payment runs", () => {
