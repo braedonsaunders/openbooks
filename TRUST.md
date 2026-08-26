@@ -261,12 +261,12 @@ repaired again.
 covered area at or above its published floor via `REGISTERED_FLOORS`; deleting
 a claim, or shrinking an area below what it publishes, fails validation until
 the floor is lowered deliberately, in the same commit, with a reason. Fixtures
-must chase the *default* configuration rather than the convenient one: for
-foreign currency that means an exchange table holding only one direction of
-the currency pair — forcing the kernel to synthesise its own ten-decimal
-inverse rate, exactly where per-line rounding residuals actually arise — not
-tidy two-decimal header rates under which no rounding happens and any figure
-would pass.
+must chase the inputs where rounding can actually occur rather than tidy ones
+where nothing can fail: the multi-line foreign-currency cases translate
+through ten-decimal inverse rates across three-leg entries whose per-line
+roundings genuinely miss zero, with the tax control line required to stay
+exactly at translated statutory tax — classes the original two-decimal,
+two-leg fixtures were structurally blind to.
 
 Full detail, including the shortfall text for every gap and partial:
 **[docs/trust/conformance-matrix.md](docs/trust/conformance-matrix.md)** and
