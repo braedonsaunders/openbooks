@@ -10,6 +10,12 @@ import { toast } from 'sonner'
 import { Mail, Plus, Send, Trash2 } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, cn } from '@openbooks/ui'
 import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
+import {
+  executeDocumentSave,
+  persistedDocumentRevision,
+  type FencedSaveResult,
+  type RevisionFencedRequest,
+} from '../../../components/document-drawer'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { PdfButton } from '../../../components/pdf-button'
@@ -87,6 +93,8 @@ export interface TicketPayload {
   projectId: string | null
   projectName: string
   foremanName: string
+  /** Exact optimistic-concurrency token — echo it back as expectedRevision. */
+  revision: string
   fieldTicket: {
     period: string
     periodStart: string
@@ -209,6 +217,43 @@ export interface FieldTicketDrawerProps {
   canCustomize?: boolean
   canManage: boolean
   initialMode?: DrawerMode
+}
+
+export type FieldTicketMutationInput = {
+  ticketId: string
+  revision: string
+  method: 'PATCH' | 'POST'
+  body: Record<string, unknown>
+  fallbackMessage?: string
+  transport?: typeof fetch
+}
+
+/**
+ * One revision-fenced field-ticket mutation — the exact routine the drawer's
+ * header/grid saves execute. The loaded exact token rides as expectedRevision
+ * (the route fences PATCH and save-grid behind it and ignores it elsewhere),
+ * a success hands back the refreshed token from the response, and a stale
+ * token surfaces as an explicit conflict for the caller's reload flow.
+ */
+export async function sendFieldTicketMutation(
+  input: FieldTicketMutationInput,
+): Promise<FencedSaveResult<TicketPayload>> {
+  const request: RevisionFencedRequest = {
+    path: `/api/field-tickets/${input.ticketId}`,
+    method: input.method,
+    body: { ...input.body, expectedRevision: persistedDocumentRevision(input.revision) },
+  }
+  const outcome = await executeDocumentSave<TicketPayload>(
+    request,
+    input.fallbackMessage ?? 'failed',
+    input.transport ?? fetch,
+  )
+  if (!outcome.ok) {
+    return outcome.isConflict
+      ? { status: 'conflict', message: outcome.message }
+      : { status: 'error', message: outcome.message }
+  }
+  return { status: 'saved', saved: outcome.data, revision: outcome.revision }
 }
 
 export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
@@ -348,6 +393,9 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   }, [editable, lineEquipment, lineItem, lineQty, lineRateUnit, projectId, visibleWindow.end])
 
   function applyPayload(j: TicketPayload) {
+    // Fail closed before adopting any server state: a revision-less payload
+    // could never fence this editor's next mutation.
+    persistedDocumentRevision(j.revision)
     setTicket(j)
     setCustomerName(j.customerName)
     setGrid(buildGrid(j.entries))
@@ -387,34 +435,50 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     }
   }
 
+  /**
+   * Reload the server's winning ticket state after a conflict. The stale
+   * editor cannot retry — it reviews the reloaded record instead, so a
+   * competing save can never be silently overwritten.
+   */
+  async function reloadTicketAfterConflict(): Promise<void> {
+    try {
+      const response = await fetch(`/api/field-tickets/${ticket.id}`)
+      if (!response.ok) throw new Error('failed')
+      applyPayload((await response.json()) as TicketPayload)
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
   async function call(
-    method: 'POST' | 'PATCH',
+    method: 'PATCH' | 'POST',
     payload: Record<string, unknown>,
     options: { preserveDraft?: boolean } = {},
   ): Promise<boolean> {
     setBusy(true)
     try {
-      const res = await fetch(`/api/field-tickets/${ticket.id}`, {
+      const result = await sendFieldTicketMutation({
+        ticketId: ticket.id,
+        revision: ticket.revision,
         method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: payload,
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      if (result.status !== 'saved') {
+        toast.error(result.message)
+        if (result.status === 'conflict') await reloadTicketAfterConflict()
+        return false
+      }
       if (options.preserveDraft) {
         // Some ticket operations persist immediately (header, grid, item
         // lines). Keep the other unsaved work area intact while refreshing
         // server-owned totals and snapshots.
-        setTicket(j)
-        setCustomerName(j.customerName)
+        setTicket(result.saved)
+        setCustomerName(result.saved.customerName)
       } else {
-        applyPayload(j)
+        applyPayload(result.saved)
       }
       router.refresh()
       return true
-    } catch (e) {
-      toast.error((e as Error).message)
-      return false
     } finally {
       setBusy(false)
     }

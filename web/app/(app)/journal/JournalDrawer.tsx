@@ -18,6 +18,15 @@ import { PdfButton } from '../../../components/pdf-button'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
 import { formatJournalAmount, journalAmountUnits, journalLineUnits } from '../../../lib/journal-amounts'
+import {
+  DOCUMENT_CHANGED_AFTER_OPEN,
+  buildDocumentSaveRequest,
+  executeDocumentSave,
+  loadDraftDocumentSnapshot,
+  reconcileCanonicalDraftRead,
+  type FencedSaveResult,
+  type PersistedDocumentSnapshot,
+} from '../../../components/document-drawer'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
@@ -107,6 +116,37 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
   for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
   for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
   return row
+}
+
+export type JournalDraftSaveInput = {
+  documentId: string
+  revision: string
+  payload: Record<string, unknown>
+  fallbackMessage: string
+  transport?: typeof fetch
+}
+
+/**
+ * One revision-fenced manual-journal save — the exact routine the drawer's
+ * Save button executes. The editor's exact revision rides as expectedUpdatedAt
+ * (the PATCH route refuses anything else), a success hands back the refreshed
+ * token from the save response, and a stale token surfaces as an explicit
+ * conflict for the caller's reload flow.
+ */
+export async function saveJournalDraft(input: JournalDraftSaveInput): Promise<FencedSaveResult<JournalPayload>> {
+  const outcome = await executeDocumentSave(
+    buildDocumentSaveRequest(input.documentId, input.revision, input.payload, false, undefined, {
+      basePath: '/api/journals',
+    }),
+    input.fallbackMessage,
+    input.transport ?? fetch,
+  )
+  if (!outcome.ok) {
+    return outcome.isConflict
+      ? { status: 'conflict', message: outcome.message }
+      : { status: 'error', message: outcome.message }
+  }
+  return { status: 'saved', saved: outcome.data as JournalPayload, revision: outcome.revision }
 }
 
 export function JournalDrawer({
@@ -257,40 +297,145 @@ export function JournalDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload])
 
-  /** Reset every field back to the loaded document (used by Cancel). */
-  function resetForm() {
-    setPartyId(doc.party_id ?? '')
-    setDocumentDate(doc.document_date ?? '')
-    setReferenceNumber(doc.reference_number ?? '')
-    setMemo(doc.memo ?? '')
-    setSubsidiaryId(doc.subsidiary_id ?? '')
-    setCustomValues(doc.custom ?? {})
-    setExtraDims(doc.extra_dims ?? {})
-    setRows(journal.lines.length > 0 ? journal.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine(), emptyLine()])
+  // -- optimistic-concurrency fence -----------------------------------------
+  // The journal PATCH route refuses any write without an exact revision token.
+  // RSC props carry updated_at as a lossy Date that can never satisfy that
+  // contract, so the canonical read below mints this editor's first usable
+  // token; every later token comes from a save response. Until one exists,
+  // saving fails closed instead of 409-ing.
+  const [documentRevision, setDocumentRevisionState] = useState<string | null>(null)
+  const documentRevisionRef = useRef<string | null>(null)
+  const seenPersistedRevisions = useRef(new Set<string>())
+  const draftBaseline = useRef<PersistedDocumentSnapshot<JournalPayload>>({
+    documentId: String(doc.id),
+    revision: '',
+    payload: journal,
+  })
+  const dirtyRef = useRef(dirty)
+  useEffect(() => {
+    dirtyRef.current = dirty
+  }, [dirty])
+  function setDocumentRevision(revision: string | null) {
+    documentRevisionRef.current = revision
+    setDocumentRevisionState(revision)
   }
+
+  /** Reset every field back to an explicit persisted payload (used by Cancel). */
+  function resetForm(source: JournalPayload) {
+    const sourceDoc = source.doc
+    setPartyId(sourceDoc.party_id ?? '')
+    setDocumentDate(sourceDoc.document_date ?? '')
+    setReferenceNumber(sourceDoc.reference_number ?? '')
+    setMemo(sourceDoc.memo ?? '')
+    setSubsidiaryId(sourceDoc.subsidiary_id ?? '')
+    setCustomValues(sourceDoc.custom ?? {})
+    setExtraDims(sourceDoc.extra_dims ?? {})
+    setRows(source.lines.length > 0 ? source.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine(), emptyLine()])
+  }
+
+  /** Adopt a reloaded snapshot as the editor's baseline (drops edits). */
+  function adoptReload(incoming: PersistedDocumentSnapshot<JournalPayload>) {
+    draftBaseline.current = incoming
+    seenPersistedRevisions.current.add(incoming.revision)
+    resetForm(incoming.payload)
+    setDocumentRevision(incoming.revision)
+    setDirty(false)
+    setSaveState('saved')
+    setMode('view')
+  }
+
+  /** Apply one canonical read: adopt when clean, pin the newer exact token
+   *  under dirty-but-unchanged content, reload-and-review when content moved. */
+  function applyCanonicalRead(
+    incoming: PersistedDocumentSnapshot<JournalPayload>,
+    notifyOnConflict = true,
+  ) {
+    const decision = reconcileCanonicalDraftRead({
+      current: draftBaseline.current,
+      incoming,
+      isDirty: dirtyRef.current,
+    })
+    if (decision.action === 'adopt') {
+      draftBaseline.current = decision.snapshot
+      seenPersistedRevisions.current.add(decision.snapshot.revision)
+      resetForm(decision.snapshot.payload)
+      setDocumentRevision(decision.snapshot.revision)
+    } else if (decision.action === 'pin') {
+      seenPersistedRevisions.current.add(decision.revision)
+      draftBaseline.current = { ...draftBaseline.current, revision: decision.revision }
+      setDocumentRevision(decision.revision)
+    } else {
+      // Dropping stale edits beats blessing them with the newer token — that
+      // would recreate the silent last-write-wins this fence exists to stop.
+      adoptReload(decision.snapshot)
+      if (notifyOnConflict) toast.error(DOCUMENT_CHANGED_AFTER_OPEN)
+    }
+  }
+
+  async function refreshFromServer(notifyOnConflict = true): Promise<void> {
+    applyCanonicalRead(
+      await loadDraftDocumentSnapshot(`/api/journals/${doc.id}`, t('postFailed')),
+      notifyOnConflict,
+    )
+  }
+
+  useEffect(() => {
+    let active = true
+    loadDraftDocumentSnapshot(`/api/journals/${doc.id}`, t('postFailed'))
+      .then((incoming) => {
+        if (active) applyCanonicalRead(incoming)
+      })
+      .catch(() => {
+        // Saves stay fenced off until a canonical read lands; the next save
+        // attempt retries it.
+      })
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc.id])
 
   async function save() {
     setBusy(true)
     setSaveState('saving')
-    const res = await fetch(`/api/journals/${doc.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+    if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
+    const revision = documentRevisionRef.current
+    if (revision == null) {
+      setSaveState('error')
+      toast.error(t('postFailed'))
+      setBusy(false)
+      return
+    }
+    const outcome = await saveJournalDraft({
+      documentId: String(doc.id),
+      revision,
+      payload,
+      fallbackMessage: t('postFailed'),
     })
-    if (res.ok) {
+    if (outcome.status === 'saved') {
+      const savedJournal = outcome.saved
+      draftBaseline.current = {
+        documentId: String(savedJournal.doc.id),
+        revision: outcome.revision,
+        payload: savedJournal,
+      }
+      seenPersistedRevisions.current.add(outcome.revision)
+      resetForm(savedJournal)
+      setDocumentRevision(outcome.revision)
       setSaveState('saved')
       setDirty(false)
       setMode('view')
       router.refresh()
     } else {
       setSaveState('error')
-      toast.error((await res.json()).error ?? t('postFailed'))
+      toast.error(outcome.message)
+      if (outcome.status === 'conflict') await refreshFromServer(false).catch(() => {})
     }
     setBusy(false)
   }
 
   function cancel() {
-    resetForm()
+    resetForm(draftBaseline.current.payload)
     setDirty(false)
     setSaveState('saved')
     setMode('view')
