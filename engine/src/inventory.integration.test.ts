@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import pg from "pg";
 import { sql } from "drizzle-orm";
@@ -7,12 +8,17 @@ import { db, env } from "./db.ts";
 import { fromUnits, toUnits } from "./money.ts";
 import {
   adjustInventory,
+  assertCostingPolicyChangeAllowed,
   buildAssembly,
+  CostingPolicyChangeBlockedError,
   createTransferOrder,
   ensureLot,
   ensureSerial,
   getOnHand,
   issueInventory,
+  lockItemInventoryProfile,
+  parseCostingMethod,
+  parseTrackingMode,
   postLandedCostVoucher,
   queryLotRecall,
   receiveInventory,
@@ -20,6 +26,7 @@ import {
   receiveTransferOrder,
   reverseInventoryMovement,
   reverseLandedCostVoucher,
+  revalueOpenLayersToStandardCost,
   shipTransferOrder,
   transferInventory,
 } from "./inventory.ts";
@@ -1049,4 +1056,159 @@ test("positive adjustment values stock at the average prevailing under the posit
   } finally {
     await dropScratchOrg(org.orgId);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Costing policy changes are controlled, and flipped multi-layer positions
+// degrade safely instead of violating cost_layers_remaining
+// ---------------------------------------------------------------------------
+
+test("costing method and tracking flips are guarded, revalued under standard, and multi-layer moving average stays consumable", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const sub = org.subsidiaryId;
+    const loc = org.stockLocationId;
+
+    await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo, stockLocationId: loc, quantity: "10", unitCost: "5",
+      subsidiaryId: sub, offsetAccountId: org.accounts.clearing, date: org.date,
+    });
+    await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo, stockLocationId: loc, quantity: "10", unitCost: "7",
+      subsidiaryId: sub, offsetAccountId: org.accounts.clearing, date: org.date,
+    });
+    const current = await lockItemInventoryProfile(db, org.orgId, org.items.fifo);
+    assert.equal(current?.costing_method, "fifo");
+    const flip = { costingMethod: "moving_average" as const, tracking: "none" as const };
+
+    await assert.rejects(
+      assertCostingPolicyChangeAllowed(db, org.orgId, org.items.fifo, current, flip, null),
+      CostingPolicyChangeBlockedError,
+    );
+    await assert.rejects(
+      assertCostingPolicyChangeAllowed(db, org.orgId, org.items.fifo, current, flip, "no"),
+      CostingPolicyChangeBlockedError,
+    );
+    const unchanged = await lockItemInventoryProfile(db, org.orgId, org.items.fifo);
+    assert.equal(unchanged?.costing_method, "fifo");
+
+    assert.deepEqual(
+      await assertCostingPolicyChangeAllowed(
+        db, org.orgId, org.items.fifo, current, flip,
+        "Adopt blended costing for the legacy strata per controller approval",
+      ),
+      { changed: true, historyExisted: true },
+    );
+    await db.execute(sql`
+      update item_inventory_profiles set costing_method = 'moving_average'
+       where org_id = ${org.orgId} and item_id = ${org.items.fifo}
+    `);
+
+    // The reported reproduction: issue 15 across two strata under moving
+    // average. It must price across layers exactly instead of charging all 15
+    // to layers[0] (which drove it to -5 and tripped check constraint 23514).
+    const degradedIssue = await issueInventory(org.orgId, null, {
+      itemId: org.items.fifo, stockLocationId: loc, quantity: "15",
+      subsidiaryId: sub, date: org.date,
+    });
+    assert.equal(toUnits(degradedIssue.value), toUnits("-85")); // 10x5 + 5x7
+    let onHand = await getOnHand(org.orgId, org.items.fifo, loc);
+    assert.equal(toUnits(onHand.quantity), toUnits("5"));
+    assert.equal(toUnits(onHand.value), toUnits("35"));
+    await assertInvariant(org);
+
+    // A controlled switch to standard revalues open layers onto the standard
+    // cost through one balanced variance entry.
+    const calendar = (await db.execute<{ id: string }>(sql`
+      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`));
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      select ${randomUUID()}, ${org.orgId},
+             extract(year from current_date)::int,
+             extract(month from current_date)::int,
+             to_char(current_date, 'YYYY-MM'),
+             date_trunc('month', current_date)::date,
+             (date_trunc('month', current_date) + interval '1 month - 1 day')::date,
+             false, ${calendar.rows[0]!.id}
+    `);
+    await db.execute(sql`
+      update item_inventory_profiles set standard_cost = '10'
+       where org_id = ${org.orgId} and item_id = ${org.items.fifo}
+    `);
+    const assetBefore = await glBalance(org.orgId, org.accounts.invAsset);
+    const varianceBefore = await glBalance(org.orgId, org.accounts.adjustment);
+    const revaluationEntryId = await db.transaction((tx) =>
+      revalueOpenLayersToStandardCost(tx, org.orgId, null, org.items.fifo, {
+        standardCost: "10",
+        assetAccountId: org.accounts.invAsset,
+        varianceAccountId: org.accounts.adjustment,
+      }));
+    assert.ok(revaluationEntryId);
+    onHand = await getOnHand(org.orgId, org.items.fifo, loc);
+    assert.equal(toUnits(onHand.value), toUnits("50"));
+    assert.equal(
+      toUnits(await glBalance(org.orgId, org.accounts.invAsset)) - toUnits(assetBefore),
+      toUnits("15"),
+    );
+    assert.equal(
+      toUnits(await glBalance(org.orgId, org.accounts.adjustment)) - toUnits(varianceBefore),
+      toUnits("-15"),
+    );
+    await assertInvariant(org);
+
+    // Standard issues now relieve layers exactly at standard.
+    const stdIssue = await issueInventory(org.orgId, null, {
+      itemId: org.items.fifo, stockLocationId: loc, quantity: "5",
+      subsidiaryId: sub, date: org.date,
+    });
+    assert.equal(toUnits(stdIssue.value), toUnits("-50"));
+    onHand = await getOnHand(org.orgId, org.items.fifo, loc);
+    assert.equal(toUnits(onHand.quantity), 0n);
+    assert.equal(toUnits(onHand.value), 0n);
+    await assertInvariant(org);
+
+    await assert.rejects(
+      assertCostingPolicyChangeAllowed(
+        db, org.orgId, org.items.fifo,
+        await lockItemInventoryProfile(db, org.orgId, org.items.fifo),
+        { costingMethod: "moving_average", tracking: "lot" },
+        "authorize despite incompatibility",
+      ),
+      /incompatible/,
+    );
+
+    assert.equal(parseCostingMethod(undefined), null);
+    assert.equal(parseCostingMethod(null), null);
+    assert.equal(parseCostingMethod(""), null);
+    assert.equal(parseCostingMethod("FIFO"), null);
+    assert.equal(parseCostingMethod(true), null);
+    assert.equal(parseTrackingMode("serial"), "serial");
+    assert.equal(parseTrackingMode("lot"), "lot");
+    assert.equal(parseTrackingMode("none"), "none");
+    assert.equal(parseTrackingMode(undefined), null);
+    assert.equal(parseTrackingMode("unknown"), null);
+    assert.equal(await lockItemInventoryProfile(db, org.orgId, org.items.service), null);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("the costing route requires explicit costing policies and maps blocked flips to 409", () => {
+  const route = readFileSync(
+    new URL("../../web/app/api/items/[id]/costing/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(route, /parseCostingMethod\(body\.costingMethod\)/);
+  assert.match(route, /parseTrackingMode\(body\.tracking\)/);
+  assert.match(route, /costingMethod must be one of fifo, moving_average, or standard/);
+  assert.doesNotMatch(route, /\?\s*'moving_average'/);
+  assert.doesNotMatch(route, /:\s*'moving_average'/);
+  assert.doesNotMatch(route, /\?\s*'none'/);
+  assert.match(route, /status: 422/);
+  assert.match(route, /CostingPolicyChangeBlockedError/);
+  assert.match(route, /status: 409/);
+  assert.match(route, /recostingAuthorization/);
+  assert.match(route, /before: before \?\? null/);
+  assert.match(route, /revalueOpenLayersToStandardCost/);
 });
