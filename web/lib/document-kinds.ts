@@ -8,12 +8,24 @@
 export type DocFamily = 'ap' | 'ar' | 'bank' | 'transfer' | 'gl'
 export type PermNamespace = 'ap' | 'ar' | 'gl'
 
+/**
+ * Period-close module whose lock governs posting this kind — mirrors
+ * engine/src/close.ts CLOSE_MODULES. Required on every registry entry so a
+ * new document kind cannot exist without an explicit close-module decision:
+ * engine/src/close.test.ts asserts closeModuleForDocument(kind) equals this
+ * field for every kind, so an unmapped kind fails typecheck here and CI there
+ * instead of silently posting under the GL lock alone.
+ */
+export type DocCloseModule = 'ar' | 'ap' | 'banking' | 'assets' | 'tax' | 'gl'
+
 export interface DocKindConfig {
   kind: string
   family: DocFamily
   numberPrefix: string
   /** Permission namespace driving create/read/post gates. */
   permNamespace: PermNamespace
+  /** Period-close module whose lock blocks posting this kind. */
+  closeModule: DocCloseModule
   /** next-intl namespace holding this kind's drawer + list copy. */
   i18n: 'ap' | 'ar' | 'banking'
   /** Party role for the header picker; null = no party field. */
@@ -44,37 +56,37 @@ export interface DocKindConfig {
 
 export const DOC_KINDS: Record<string, DocKindConfig> = {
   vendor_bill: {
-    kind: 'vendor_bill', family: 'ap', numberPrefix: 'BILL-', permNamespace: 'ap', i18n: 'ap',
+    kind: 'vendor_bill', closeModule: 'ap', family: 'ap', numberPrefix: 'BILL-', permNamespace: 'ap', i18n: 'ap',
     partyRole: 'vendor', accountTypes: null, hasTax: true, hasDueDate: true, hasReference: true,
     fundingSource: null, isOpenItem: true, showsBalance: false, directPost: false,
   },
   vendor_credit: {
-    kind: 'vendor_credit', family: 'ap', numberPrefix: 'VCRED-', permNamespace: 'ap', i18n: 'ap',
+    kind: 'vendor_credit', closeModule: 'ap', family: 'ap', numberPrefix: 'VCRED-', permNamespace: 'ap', i18n: 'ap',
     partyRole: 'vendor', accountTypes: null, hasTax: true, hasDueDate: true, hasReference: true,
     fundingSource: null, isOpenItem: true, showsBalance: false, directPost: false,
   },
   customer_invoice: {
-    kind: 'customer_invoice', family: 'ar', numberPrefix: 'INV-', permNamespace: 'ar', i18n: 'ar',
+    kind: 'customer_invoice', closeModule: 'ar', family: 'ar', numberPrefix: 'INV-', permNamespace: 'ar', i18n: 'ar',
     partyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: true, hasDueDate: true,
     hasReference: true, fundingSource: null, isOpenItem: true, showsBalance: true, directPost: false,
   },
   customer_credit: {
-    kind: 'customer_credit', family: 'ar', numberPrefix: 'CM-', permNamespace: 'ar', i18n: 'ar',
+    kind: 'customer_credit', closeModule: 'ar', family: 'ar', numberPrefix: 'CM-', permNamespace: 'ar', i18n: 'ar',
     partyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: true, hasDueDate: true,
     hasReference: true, fundingSource: null, isOpenItem: true, showsBalance: false, directPost: false,
   },
   card_charge: {
-    kind: 'card_charge', family: 'bank', numberPrefix: 'CC-', permNamespace: 'ap', i18n: 'banking',
+    kind: 'card_charge', closeModule: 'ap', family: 'bank', numberPrefix: 'CC-', permNamespace: 'ap', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: true, hasDueDate: false, hasReference: false,
     fundingSource: 'card', isOpenItem: false, showsBalance: false, directPost: true,
   },
   card_refund: {
-    kind: 'card_refund', family: 'bank', numberPrefix: 'CRF-', permNamespace: 'ap', i18n: 'banking',
+    kind: 'card_refund', closeModule: 'ap', family: 'bank', numberPrefix: 'CRF-', permNamespace: 'ap', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: true, hasDueDate: false, hasReference: false,
     fundingSource: 'card', isOpenItem: false, showsBalance: false, directPost: true,
   },
   check: {
-    kind: 'check', family: 'bank', numberPrefix: 'CHK-', permNamespace: 'ap', i18n: 'banking',
+    kind: 'check', closeModule: 'ap', family: 'bank', numberPrefix: 'CHK-', permNamespace: 'ap', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: true, hasDueDate: false, hasReference: true,
     fundingSource: 'bank', isOpenItem: false, showsBalance: false, directPost: true,
   },
@@ -83,12 +95,12 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
   // The destination bank is stored on doc.custom.controlAccountId and read by
   // the posting rule's controlOverride; falls back to the org default bank.
   deposit: {
-    kind: 'deposit', family: 'bank', numberPrefix: 'DEP-', permNamespace: 'gl', i18n: 'banking',
+    kind: 'deposit', closeModule: 'banking', family: 'bank', numberPrefix: 'DEP-', permNamespace: 'gl', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: true,
     fundingSource: 'bank', isOpenItem: false, showsBalance: false, directPost: true,
   },
   transfer: {
-    kind: 'transfer', family: 'transfer', numberPrefix: 'TRF-', permNamespace: 'gl', i18n: 'banking',
+    kind: 'transfer', closeModule: 'banking', family: 'transfer', numberPrefix: 'TRF-', permNamespace: 'gl', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: false,
     fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
   },
@@ -98,7 +110,7 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
   // CR cost pool (see the project_charge rule in engine/src/posting.ts). Internal
   // (no party); direct-post.
   project_charge: {
-    kind: 'project_charge', family: 'gl', numberPrefix: 'CHG-', permNamespace: 'gl', i18n: 'banking',
+    kind: 'project_charge', closeModule: 'gl', family: 'gl', numberPrefix: 'CHG-', permNamespace: 'gl', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: true,
     fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
   },
@@ -106,7 +118,7 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
   // Lines are machine-built by engine/src/payroll-run.ts commitPayRun — the
   // drawer never edits them; the payroll workspace is the editing surface.
   pay_run: {
-    kind: 'pay_run', family: 'gl', numberPrefix: 'PAY-', permNamespace: 'gl', i18n: 'banking',
+    kind: 'pay_run', closeModule: 'gl', family: 'gl', numberPrefix: 'PAY-', permNamespace: 'gl', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: false,
     fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
   },

@@ -28,31 +28,47 @@ export function periodLockBlocksPosting(
   );
 }
 
+/**
+ * Period-close module per document kind. The drawer kinds mirror
+ * web/lib/document-kinds.ts `closeModule` (a required registry field, so a
+ * new kind cannot be declared without a module decision); the parity test in
+ * close.test.ts fails if this map and that field ever drift. Kinds outside
+ * the drawer registry — payments, orders, expenses, manual journals — are
+ * decided here. An unknown kind is a hard failure: silently posting under
+ * the GL lock alone once let cheques, deposits, and transfers bypass their
+ * closed AP and banking locks.
+ */
+const DOCUMENT_CLOSE_MODULES = {
+  // Drawer registry kinds (web/lib/document-kinds.ts DOC_KINDS).
+  vendor_bill: "ap",
+  vendor_credit: "ap",
+  customer_invoice: "ar",
+  customer_credit: "ar",
+  card_charge: "ap",
+  card_refund: "ap",
+  check: "ap",
+  deposit: "banking",
+  transfer: "banking",
+  project_charge: "gl",
+  pay_run: "gl",
+  // Non-drawer kinds.
+  customer_payment: "ar",
+  vendor_payment: "ap",
+  expense_report: "ap",
+  sales_order: "ar",
+  purchase_order: "ap",
+  quote: "ar",
+  journal: "gl",
+} as const satisfies Record<string, CloseModule>;
+
 export function closeModuleForDocument(kind: string): CloseModule {
-  if (
-    [
-      "customer_invoice",
-      "customer_credit",
-      "customer_payment",
-      "sales_order",
-      "quote",
-    ].includes(kind)
-  )
-    return "ar";
-  if (
-    [
-      "vendor_bill",
-      "vendor_credit",
-      "vendor_payment",
-      "purchase_order",
-      "expense_report",
-      "cheque",
-      "card_charge",
-      "card_refund",
-    ].includes(kind)
-  )
-    return "ap";
-  return "gl";
+  const decided = (DOCUMENT_CLOSE_MODULES as Record<string, CloseModule>)[kind];
+  if (!decided) {
+    throw new CloseError(
+      `document kind "${kind}" has no period-close module decision; add it to DOCUMENT_CLOSE_MODULES and web/lib/document-kinds.ts`,
+    );
+  }
+  return decided;
 }
 
 /** Application-level companion to the Postgres guard. It supplies a precise,
