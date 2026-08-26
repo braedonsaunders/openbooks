@@ -1,4 +1,5 @@
-import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
@@ -12,8 +13,14 @@ import { auditColumns, id, orgRef } from "./helpers";
  * null and stamps explicit system provenance onto meta (actorKind 'system' +
  * actorReason). A null created_by therefore always means "the system sent
  * this", never "nobody recorded who sent it".
+ *
+ * One row per LOGICAL delivery: all queue attempts of a delivery share its
+ * `delivery_key` and append per-attempt evidence to meta.attempts. An attempt
+ * whose acceptance state cannot be proven (timeout after transmission,
+ * confirmation lost) parks the row in `uncertain` — reconciliation refuses a
+ * blind re-send while that question stands open.
  */
-export const EMAIL_LOG_STATUSES = ["queued", "sent", "failed", "suppressed"] as const;
+export const EMAIL_LOG_STATUSES = ["queued", "sent", "failed", "suppressed", "uncertain"] as const;
 
 /**
  * Who caused a message to be sent. A user actor is written to the canonical
@@ -32,6 +39,12 @@ export const emailLog = pgTable(
     orgId: orgRef(),
     /** BullMQ job id (dedupe / trace); null for direct sends. */
     jobId: text("job_id"),
+    /**
+     * Stable identity shared by every attempt of one logical delivery
+     * (packages/emails outcome.ts). Provider idempotency keys and wire headers
+     * are derived from it; unique so concurrent attempts claim one row.
+     */
+    deliveryKey: text("delivery_key"),
     /** Provider message id returned on success. */
     providerMessageId: text("provider_message_id"),
     /** Resolved provider used for this send (resend/smtp/…). */
@@ -53,6 +66,9 @@ export const emailLog = pgTable(
     index("email_log_org").on(t.orgId, t.createdAt),
     index("email_log_status").on(t.orgId, t.status, t.createdAt),
     index("email_log_job").on(t.jobId),
+    uniqueIndex("email_log_delivery_key")
+      .on(t.deliveryKey)
+      .where(sql`${t.deliveryKey} is not null`),
   ],
 );
 

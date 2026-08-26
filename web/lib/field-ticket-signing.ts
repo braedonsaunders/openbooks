@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
-import { sendVia } from '@openbooks/emails'
+import { deriveEmailDeliveryKey, sendVia } from '@openbooks/emails'
 import {
   insertEmailLog,
   markEmailFailed,
+  markEmailUncertain,
   markEmailSent,
   resolveOrgEmailTransport,
 } from '@openbooks/engine/src/email-config.ts'
@@ -91,14 +92,23 @@ export async function sendTicketForSignature(args: {
   `)
   let providerMessageId: string
   try {
-    const sent = await sendVia(transport, {
+    const outcome = await sendVia(transport, {
       to,
       subject,
       html,
       text,
       attachments: [{ filename: attachmentName, content: pdf.toString('base64'), contentType: 'application/pdf' }],
-    })
-    providerMessageId = sent.id
+      // The log row scope keeps this direct send's identity durable and
+      // distinct from every other send to the same mailbox.
+    }, { deliveryKey: deriveEmailDeliveryKey({ orgId: args.orgId, scope: `direct:${logId}`, to }) })
+    if (outcome.kind === 'sent') {
+      providerMessageId = outcome.providerMessageId
+    } else {
+      // Acceptance unknown: the request email may still arrive. Fail closed —
+      // the signing token is revoked and the log keeps its uncertainty.
+      await markEmailUncertain(args.orgId, logId, outcome.reason)
+      throw new Error(outcome.reason)
+    }
   } catch (e) {
     await markEmailFailed(args.orgId, logId, e instanceof Error ? e.message : String(e))
     await db.execute(sql`

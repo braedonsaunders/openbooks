@@ -65,7 +65,7 @@ export type PlatformEmail = {
   recipients: string[];
   subject: string;
   provider: string | null;
-  status: "queued" | "sent" | "failed" | "suppressed";
+  status: "queued" | "sent" | "failed" | "suppressed" | "uncertain";
   categoryKey: string | null;
   errorMessage: string | null;
   sentAt: string | Date | null;

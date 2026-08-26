@@ -179,7 +179,11 @@ const mockSources = new Map<string, string>([
           to: message.to,
           attachment: Buffer.from(message.attachments[0].content, 'base64'),
         })
-        return { id: 'provider-message-1' }
+        return { kind: 'sent', providerMessageId: 'provider-message-1' }
+      }
+
+      export function deriveEmailDeliveryKey() {
+        return \`obem_\${'a'.repeat(40)}\`
       }
     `,
   ],
@@ -194,6 +198,7 @@ const mockSources = new Map<string, string>([
       export async function insertEmailLog() { return 'email-log-1' }
       export async function markEmailSent() {}
       export async function markEmailFailed() {}
+      export async function markEmailUncertain() {}
     `,
   ],
   ['mock:business-date', `export async function businessToday() { return '2026-08-24' }`],

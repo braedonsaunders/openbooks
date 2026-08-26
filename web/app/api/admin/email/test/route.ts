@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
-import { sendVia, isValidEmailAddress } from '@openbooks/emails'
-import { insertEmailLog, markEmailFailed, markEmailSent, resolveOrgEmailTransport } from '@openbooks/engine/src/email-config.ts'
+import { deriveEmailDeliveryKey, sendVia, isValidEmailAddress } from '@openbooks/emails'
+import { insertEmailLog, markEmailFailed, markEmailSent, markEmailUncertain, resolveOrgEmailTransport } from '@openbooks/engine/src/email-config.ts'
 
 export const runtime = 'nodejs'
 
@@ -42,14 +42,20 @@ export async function POST(req: Request) {
     meta: { userId: gate.user.id },
   })
   try {
-    const { id } = await sendVia(transport, {
+    const outcome = await sendVia(transport, {
       to,
       subject,
       text: `This is a test email from OpenBooks, sent via ${transport.provider}.`,
       html: `<p>This is a test email from OpenBooks, sent via <strong>${transport.provider}</strong>.</p>`,
-    })
-    await markEmailSent(orgId, logId, id)
-    return NextResponse.json({ ok: true, provider: transport.provider, messageId: id })
+      // The log row scope keeps this direct send's identity durable.
+    }, { deliveryKey: deriveEmailDeliveryKey({ orgId, scope: `test:${logId}`, to }) })
+    if (outcome.kind === 'sent') {
+      await markEmailSent(orgId, logId, outcome.providerMessageId)
+      return NextResponse.json({ ok: true, provider: transport.provider, messageId: outcome.providerMessageId })
+    }
+    // The provider may have accepted the message; do not claim failure.
+    await markEmailUncertain(orgId, logId, outcome.reason)
+    return NextResponse.json({ error: outcome.reason }, { status: 422 })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'send failed'
     await markEmailFailed(orgId, logId, message)

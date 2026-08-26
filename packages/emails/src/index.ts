@@ -5,6 +5,7 @@
 export * from './providers'
 export * from './transport'
 export * from './delivery-input'
+export * from './outcome'
 export { sealSecret, unsealSecret, type SealedSecret } from './crypto'
 
 function esc(value: string | number | null | undefined): string {

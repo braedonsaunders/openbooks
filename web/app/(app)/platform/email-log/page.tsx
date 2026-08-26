@@ -36,6 +36,7 @@ const STATUSES: PlatformEmail["status"][] = [
   "sent",
   "failed",
   "suppressed",
+  "uncertain",
 ];
 
 function formatDate(value: string | Date | null): string {
@@ -52,6 +53,10 @@ function statusVariant(
   if (status === "sent") return "success";
   if (status === "failed") return "destructive";
   if (status === "queued") return "warning";
+  // Uncertain: the provider may have accepted the message — needs operator
+  // reconciliation before anything is re-sent. Show it as an alert, not a
+  // silent failure.
+  if (status === "uncertain") return "warning";
   return "secondary";
 }
 
@@ -80,7 +85,7 @@ export default async function PlatformEmailLogPage({
           <PageHeader
             back={{ href: "/platform", label: "Super Admin" }}
             title="Email log"
-            description="Cross-organization evidence for queued, sent, failed, and suppressed email."
+            description="Cross-organization evidence for queued, sent, failed, suppressed, and uncertain email."
           />
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput placeholder="Search subject, recipient, provider, or organization…" />
