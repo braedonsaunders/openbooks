@@ -14,6 +14,8 @@ const documentRevisionMonotonicMigrationPath =
   "schema/migrations/generated/0013_document_revision_monotonic.sql";
 const flowEmailOutboxMigrationPath =
   "schema/migrations/generated/0014_flow_email_outbox.sql";
+const sandboxWipeGuardGucMigrationPath =
+  "schema/migrations/generated/0019_sandbox_wipe_guard_guc.sql";
 const closePostingFenceMigrationPath =
   "schema/migrations/generated/0022_close_posting_fence.sql";
 
@@ -42,6 +44,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0014_flow_email_outbox.sql",
     "0015_payment_instruction_posting_claim_fence.sql",
     "0016_gl_month_activity_book_id.sql",
+    "0019_sandbox_wipe_guard_guc.sql",
     "0020_inventory_subsidiary_ownership.sql",
     "0022_close_posting_fence.sql",
   ]);
@@ -63,6 +66,88 @@ test("bank statement source evidence is mandatory after forward migrations", () 
     migration,
     /ALTER COLUMN raw_file_ref SET NOT NULL/,
   );
+});
+
+test("every effective sandbox-wipe guard reads the GUC the wipe source sets", () => {
+  const generatedDir = "schema/migrations/generated";
+  const migrationFiles = readdirSync(generatedDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+  const migrationSources = new Map(
+    migrationFiles.map((file) => [file, readFileSync(`${generatedDir}/${file}`, "utf8")]),
+  );
+  const migration = readFileSync(sandboxWipeGuardGucMigrationPath, "utf8");
+  const lifecycleSource = readFileSync("engine/src/sandbox/lifecycle.ts", "utf8");
+  const fixtureWipeSource = readFileSync("engine/src/test-fixtures.ts", "utf8");
+  const setterMatch = lifecycleSource.match(
+    /set_config\('([a-z0-9_.]+\.sandbox_wipe)', 'on', true\)/,
+  );
+  assert.ok(setterMatch, "sandbox lifecycle must set its wipe GUC explicitly");
+  const wipeGuc = setterMatch[1]!;
+  assert.match(
+    fixtureWipeSource,
+    new RegExp(`set_config\\('${wipeGuc.replaceAll(".", "\\.")}', 'on', true\\)`),
+    "scratch teardown must use the same wipe GUC as sandbox lifecycle",
+  );
+
+  const legacyGuardNames = new Set<string>();
+  for (const [file, source] of migrationSources) {
+    if (file >= "0019_sandbox_wipe_guard_guc.sql") continue;
+    for (const occurrence of source.matchAll(/current_setting\('app\.sandbox_wipe'/g)) {
+      const definitions = [
+        ...source.slice(0, occurrence.index).matchAll(
+          /CREATE(?: OR REPLACE)? FUNCTION public\.([a-z0-9_]+)\(/gi,
+        ),
+      ];
+      const functionName = definitions.at(-1)?.[1];
+      assert.ok(functionName, `${file} has a legacy wipe GUC outside a function body`);
+      legacyGuardNames.add(functionName);
+    }
+  }
+  assert.deepEqual([...legacyGuardNames].sort(), [
+    "subscription_amendment_immutable_guard",
+    "subscription_period_invoice_immutable_guard",
+    "subscription_plan_version_immutable_guard",
+    "subscription_version_component_immutable_guard",
+    "wip_prebill_event_append_only_guard",
+  ]);
+
+  for (const functionName of legacyGuardNames) {
+    const definition = migration.match(
+      new RegExp(
+        `CREATE OR REPLACE FUNCTION public\\.${functionName}\\(\\) RETURNS trigger[\\s\\S]*?\\$\\$;`,
+      ),
+    )?.[0];
+    assert.ok(definition, `0019 must replace legacy guard ${functionName}`);
+    assert.match(
+      definition,
+      new RegExp(`current_setting\\('${wipeGuc.replaceAll(".", "\\.")}'`),
+    );
+    assert.doesNotMatch(definition, /app\.sandbox_wipe/);
+  }
+
+  // Build the final function catalog in filename order. This checks guards
+  // that were already correct as well as the five repaired above, and catches
+  // a later forward migration that accidentally reintroduces another name.
+  const effectiveWipeBodies = new Map<string, string>();
+  const functionDefinition =
+    /CREATE(?: OR REPLACE)? FUNCTION public\.([a-z0-9_]+)\([^;]*?\)\s+RETURNS[\s\S]*?\s+AS (\$[a-z0-9_]*\$)([\s\S]*?)\2;/gi;
+  for (const source of migrationSources.values()) {
+    for (const match of source.matchAll(functionDefinition)) {
+      if (match[3]!.includes("sandbox_wipe")) effectiveWipeBodies.set(match[1]!, match[3]!);
+    }
+  }
+  assert.ok(effectiveWipeBodies.size > legacyGuardNames.size);
+  for (const [functionName, body] of effectiveWipeBodies) {
+    assert.match(
+      body,
+      new RegExp(
+        `(?:current_setting\\('${wipeGuc.replaceAll(".", "\\.")}'|openbooks_sandbox_wipe_allowed\\()`,
+      ),
+      `${functionName} must read the wipe source's GUC directly or through its canonical helper`,
+    );
+    assert.doesNotMatch(body, /app\.sandbox_wipe/, `${functionName} retains the drifted GUC`);
+  }
 });
 
 test("an instruction's lifecycle fan-out can never cross payment runs", () => {
