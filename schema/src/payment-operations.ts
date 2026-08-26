@@ -107,6 +107,38 @@ export const paymentSchedules = pgTable(
   ],
 );
 
+/**
+ * Durable per-occurrence ledger for scheduled payment runs: one row per due
+ * fire time of one schedule. The occurrence claim and its run link commit
+ * atomically with the run's creation transaction, so a crashed tick can never
+ * lose an occurrence or leave an unlinked draft run. A retried or concurrent
+ * tick resolves the same occurrence key to the same run instead of duplicating
+ * instructions, and submission state (`awaiting_submit` → `submitted` /
+ * `submit_failed` → `failed`) is recoverable from this row alone.
+ */
+export const paymentScheduleOccurrences = pgTable(
+  "payment_schedule_occurrences",
+  {
+    id: id(),
+    orgId: orgRef(),
+    scheduleId: uuid("schedule_id").notNull(),
+    /** The scheduled fire time this row claims (the schedule's due next_run_at). */
+    occurrenceAt: timestamp("occurrence_at", { withTimezone: true }).notNull(),
+    /** The run this occurrence created; null only for `completed` (no selection). */
+    paymentRunId: uuid("payment_run_id"),
+    status: text("status", {
+      enum: ["draft_created", "awaiting_submit", "submit_failed", "submitted", "completed", "failed"],
+    }).notNull(),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("payment_schedule_occurrences_once").on(t.orgId, t.scheduleId, t.occurrenceAt),
+    index("payment_schedule_occurrences_pending").on(t.status, t.occurrenceAt),
+  ],
+);
+
 /** Exact source composition of a run, including discounts and credits. */
 export const paymentRunItems = pgTable(
   "payment_run_items",

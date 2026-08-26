@@ -633,6 +633,17 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
     });
   }
 
+  // payment_schedules.last_payment_run_id ↔ payment_runs.source_schedule_id is
+  // a second genuine FK cycle (both DEFERRABLE). Break it the same way the
+  // time_entries nulling below breaks its cycle: clear the schedule-side link
+  // so generic passes can delete payment_schedule_occurrences (child of both),
+  // then the runs, then the schedules.
+  await db.transaction(async (tx) => {
+    await setTeardownGucs(tx);
+    await tx.execute(sql`update payment_schedules
+      set last_payment_run_id = null where org_id = ${orgId}`);
+  });
+
   // Generic passes over every non-core org_id table. Deleting a child never
   // violates an FK, so repeated passes clear whole dependency chains; what
   // stays blocked is (a) the interlocked core and (b) parents of the core,
@@ -653,8 +664,10 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
     for (const t of coreA) {
       if (t === "journal_entries") {
         // documents.posted_entry_id → journal_entries is the one genuine
-        // cycle; it is DEFERRABLE, so defer just it for the JE+document pair.
-        await tx.execute(sql`set constraints documents_posted_entry_id_fkey deferred`);
+        // cycle; documents.reversal_entry_id → journal_entries joins it
+        // whenever a payment reversal linked the pair. Both are DEFERRABLE,
+        // so defer exactly those two for the JE+document pass.
+        await tx.execute(sql`set constraints documents_posted_entry_id_fkey, documents_reversal_entry_id_fkey deferred`);
       }
       await tx.execute(sql`delete from ${qualified(t)} where org_id = ${orgId}`);
     }
