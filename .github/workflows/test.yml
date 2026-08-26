@@ -40,6 +40,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Test workflow contract
+        run: node --test scripts/test-workflow.test.mjs
       - name: Product-neutrality audit
         run: npm run check:product-neutrality
       - name: Typecheck every workspace
@@ -119,12 +121,13 @@ jobs:
         # DB-backed tests self-skip when OPENBOOKS_DB_URL is missing, which
         # would turn this job green while running nothing. Run one known
         # integration file and hard-fail if anything skipped or nothing ran.
+        shell: bash
         run: |
           # `tee` exits 0, so without pipefail a failing suite greens the step.
           set -o pipefail
           node --import tsx --test --test-force-exit --test-reporter=tap \
             engine/src/kernel-constraints.integration.test.ts 2>&1 | tee canary.tap
-          node -e 'const s=require("fs").readFileSync("canary.tap","utf8"); if (/# SKIP(?:\s|$)/im.test(s)) { console.error("FATAL: integration tests skipped — DB wiring is broken"); process.exit(1); } if (/^not ok \d+ - /m.test(s)) { console.error("FATAL: canary recorded a failing test"); process.exit(1); } if (!/^ok \d+ - /m.test(s)) { console.error("FATAL: canary ran zero tests"); process.exit(1); } console.log("canary ok: integration tests executed against the database");'
+          node -e 'const s=require("fs").readFileSync("canary.tap","utf8"); if (/# SKIP(?:\s|$)/im.test(s)) { console.error("FATAL: integration tests skipped — DB wiring is broken"); process.exit(1); } if (/^not ok \d+ - /m.test(s)) { console.error("FATAL: canary recorded a failing test"); process.exit(1); } if (!/^# fail 0$/m.test(s)) { console.error("FATAL: canary did not report zero failures"); process.exit(1); } if (!/^ok \d+ - /m.test(s)) { console.error("FATAL: canary ran zero tests"); process.exit(1); } console.log("canary ok: integration tests executed against the database");'
 
       - name: Full test suite (with database)
         run: npm test
@@ -217,6 +220,7 @@ jobs:
           # throws on import, and this job silently measured a smaller suite.
           NODE_ENV: test
           OPENBOOKS_TRUSTED_TEST_BYPASS: "1"
+        shell: bash
         run: |
           # `tee` exits 0, so without pipefail a failing suite greens the step.
           set -o pipefail
