@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withOrg } from "./db.ts";
 import { renderTemplate, runDunning, selectDueStage, type DunningStage } from "./dunning.ts";
 import { postDocument } from "./posting.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
@@ -65,6 +65,16 @@ test("dunning defers mail through the durable outbox inside the sent-claim trans
 });
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
+
+/** Drizzle wraps driver errors, so match against the whole `cause` chain. */
+function errorChainMatches(error: unknown, pattern: RegExp): boolean {
+  let current: unknown = error;
+  while (current instanceof Error) {
+    if (pattern.test(current.message)) return true;
+    current = (current as Error & { cause?: unknown }).cause;
+  }
+  return false;
+}
 
 /**
  * One overdue posted invoice under one active policy with a single stage at
@@ -160,6 +170,106 @@ test("a fired dunning stage commits its sent claim and its mail deferral togethe
     const after = await stagedNotice(invoiceId);
     assert.equal(after.logRows.length, 1);
     assert.equal(after.outboxRows.length, 1);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a failed claim write rolls the accepted mail job back with it and the retry delivers exactly once", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { invoiceId, stageId } = await seedOverdueInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+
+    // Force storage to fail AFTER the deferral was accepted (the scheduler_outbox
+    // row is already inserted) but BEFORE the transaction commits — the crash /
+    // COMMIT-failure window the atomicity contract exists for. `invoiceId` is a
+    // randomUUID generated above, so splicing it into the WHEN clause as a
+    // literal through sql.raw is injection-safe; CREATE TRIGGER cannot take
+    // bind parameters, so the plain sql template's placeholder form is off
+    // limits here.
+    try {
+      await db.execute(sql`drop trigger if exists dun_claim_fault_trg on dunning_log`);
+      await db.execute(sql`drop function if exists dun_claim_fault()`);
+      await db.execute(sql`
+        create function dun_claim_fault() returns trigger language plpgsql as $$
+        begin raise exception 'injected dunning claim failure'; end $$;`);
+      await db.execute(
+        sql.raw(`
+        create trigger dun_claim_fault_trg before insert on dunning_log
+          for each row when (new.document_id = '${invoiceId}'::uuid)
+          execute function dun_claim_fault()`),
+      );
+
+      await assert.rejects(() => runDunning("2026-07-10"), (error: unknown) =>
+        errorChainMatches(error, /injected dunning claim failure/),
+      );
+
+      // The accepted job must not survive the rolled-back transaction: nothing
+      // durable remains on either side of the pair.
+      const wiped = await stagedNotice(invoiceId);
+      assert.equal(wiped.outboxRows.length, 0, "queue acceptance must not outlive its transaction");
+      assert.equal(wiped.logRows.length, 0);
+    } finally {
+      await db.execute(sql`drop trigger if exists dun_claim_fault_trg on dunning_log`);
+      await db.execute(sql`drop function if exists dun_claim_fault()`);
+    }
+
+    // The next scheduler tick delivers exactly once: one delivered job and one
+    // immutable sent claim — never a second copy of the letter.
+    const retry = await runDunning("2026-07-10");
+    assert.equal(retry.sent, 1);
+    const paired = await stagedNotice(invoiceId);
+    assert.equal(paired.logRows.length, 1);
+    assert.equal(paired.outboxRows.length, 1);
+    assert.equal(paired.outboxRows[0]!.occurrenceKey, `dunning:${invoiceId}:${stageId}`);
+
+    // Immutable means immutable: the append-only guard rejects tampering with
+    // the committed claim. The guard yields to the test harness's RLS bypass,
+    // so the write must be attempted in a production-posture org transaction
+    // (bypass off) to reach it at all.
+    await assert.rejects(
+      () =>
+        withOrg(org.orgId, () =>
+          db.execute(sql`update dunning_log set detail = 'tampered' where document_id = ${invoiceId}`),
+        ),
+      (error: unknown) => errorChainMatches(error, /append-only/),
+    );
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("two concurrent ticks deliver one ladder rung exactly once", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { invoiceId, stageId } = await seedOverdueInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+
+    // Two overlapping scheduler ticks race for the same rung. The advisory
+    // xact lock serializes them, the loser's re-read sees the winner's
+    // committed claim, and exactly one letter is staged.
+    const ticks = await Promise.allSettled([
+      runDunning("2026-07-10"),
+      runDunning("2026-07-10"),
+    ]);
+    assert.deepEqual(ticks.map((t) => t.status), ["fulfilled", "fulfilled"]);
+    const sentTotal = ticks.reduce(
+      (total, t) => (t.status === "fulfilled" ? total + t.value.sent : total),
+      0,
+    );
+    assert.equal(sentTotal, 1);
+
+    const paired = await stagedNotice(invoiceId);
+    assert.equal(paired.logRows.length, 1);
+    assert.equal(paired.outboxRows.length, 1);
+    assert.equal(paired.outboxRows[0]!.occurrenceKey, `dunning:${invoiceId}:${stageId}`);
   } finally {
     await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
     await dropScratchOrg(org.orgId);
