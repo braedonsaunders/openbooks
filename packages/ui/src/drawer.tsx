@@ -36,6 +36,12 @@ let originalBodyOverflow: string | null = null
  * Slide-in drawer for sub-entity create/edit forms and mobile flyouts.
  * Portals to body, spring slide-in, backdrop fade, Esc + click-out + scroll lock.
  * Slides from the right by default; pass `side="left"` for nav-style flyouts.
+ *
+ * `title` is required: the panel is a `role="dialog"` and screen readers
+ * announce it by its heading, so a drawer cannot mount unnamed. Opening one
+ * whose title resolves empty fails closed rather than shipping an unnamed
+ * dialog; `web/lib/accessibility-contracts.test.ts` enforces the same
+ * contract statically over every call site.
  */
 export function Drawer({
   open,
@@ -56,7 +62,8 @@ export function Drawer({
 }: {
   open: boolean
   onClose: () => void
-  title?: React.ReactNode
+  /** Required accessible name for the dialog, rendered as its heading. */
+  title: React.ReactNode
   description?: React.ReactNode
   size?: DrawerSize
   side?: DrawerSide
@@ -83,6 +90,16 @@ export function Drawer({
   const t = useTranslations('common.actions')
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
+
+  // The dialog's accessible name is its own heading: aria-labelledby points at
+  // the h2 below. A drawer opened without usable title text never ships as an
+  // unnamed role=dialog — it fails closed here instead.
+  const hasAccessibleName =
+    title !== null && title !== undefined && title !== false && !(typeof title === 'string' && !title.trim())
+  if (open && !hasAccessibleName) {
+    throw new Error('Drawer: a non-empty title is required so the dialog exposes an accessible name.')
+  }
+  const headingId = React.useId()
 
   // Fullscreen toggle: every flyout can expand to the full viewport (source platform
   // "expand" affordance). Width animates via the max-width transition below;
@@ -209,6 +226,7 @@ export function Drawer({
             ref={panelRef}
             role="dialog"
             aria-modal="true"
+            aria-labelledby={headingId}
             tabIndex={-1}
             initial={{ x: side === 'left' ? '-100%' : '100%' }}
             animate={{ x: 0 }}
@@ -228,7 +246,7 @@ export function Drawer({
               <header className="flex items-center justify-between gap-4 border-b border-slate-200 px-6 py-4 dark:border-slate-800">
                 <div className="min-w-0 space-y-0.5">
                   {title ? (
-                    <h2 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
+                    <h2 id={headingId} className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
                       {title}
                     </h2>
                   ) : null}
@@ -363,7 +381,8 @@ export function UrlDrawer({
 }: {
   open: boolean
   closeHref: string
-  title?: React.ReactNode
+  /** Required accessible name for the dialog, rendered as its heading. */
+  title: React.ReactNode
   description?: React.ReactNode
   size?: DrawerSize
   children: React.ReactNode
