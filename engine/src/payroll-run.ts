@@ -2933,6 +2933,12 @@ async function payRunGlLegs(
  * Commit: materialize the balanced GL projection into document_lines and claim
  * the period's time entries. The document then posts through the standard
  * submit/post action (RULES.pay_run maps lines 1:1, signed, like a journal).
+ *
+ * Freshness is enforced HERE, on this transaction's own read — not only by
+ * the route's pre-flight and the wizard's disabled button. A run whose inputs
+ * changed after Calculate is refused before anything is written, which is
+ * what keeps newly approved time from being claimed by a stub that never
+ * priced it.
  */
 export async function commitPayRun(input: {
   orgId: string; documentId: string; actorId: string;
@@ -2952,6 +2958,14 @@ export async function commitPayRun(input: {
     if (run.doc_status !== "draft" && run.doc_status !== "approved") {
       throw new PayrollError("pay run document is not editable");
     }
+    // The freshness gate, asked ON THIS TRANSACTION so an engine caller that
+    // skips the route's pre-flight gets the same refusal, against the same
+    // snapshot the claim below will run under. Dynamic import keeps the
+    // payroll-run ↔ payroll-readiness cycle out of the engine's load order
+    // (same idiom as the approval gate just below).
+    const { assertPayRunNotStale, staleCalculationMessage } =
+      await import("./payroll-readiness.ts");
+    await assertPayRunNotStale(orgId, documentId, tx);
     // Money must not move before the run is approved. Dynamic import keeps the
     // module cycle out of the engine's load order (same idiom as
     // flows/documents-adapter.ts → document-void.ts).
@@ -3003,8 +3017,29 @@ export async function commitPayRun(input: {
               and l.time_type_id is not distinct from te.time_type_id
               and l.project_id is not distinct from te.project_id
               and l.department_id is not distinct from te.department_id
-         )
+          )
     `);
+    // Belt AND braces, deliberately. The freshness gate above and this
+    // re-check are two statements, and READ COMMITTED gives each its own
+    // snapshot: time approved in between would otherwise ride the claim
+    // update while no stub ever priced it — the exact defect this control
+    // exists to make impossible. Anything committed AFTER this statement
+    // stays unclaimed (never falsely marked paid) and is priced by the next
+    // calculation instead.
+    const lateTime = (await tx.execute<{ stale: boolean | null }>(sql`
+      select r.calculated_at is not null
+         and exists (
+           select 1 from time_entries t
+            where t.org_id = r.org_id and t.status = 'approved'
+              and t.worked_on between r.period_start and r.period_end
+              and t.updated_at > r.calculated_at
+         ) as stale
+        from pay_runs r
+       where r.org_id = ${orgId} and r.document_id = ${documentId}
+    `));
+    if (lateTime.rows[0]?.stale === true) {
+      throw new PayrollError(staleCalculationMessage(["time"]));
+    }
     await tx.execute(sql`
       update pay_runs set run_status = 'committed', updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId}

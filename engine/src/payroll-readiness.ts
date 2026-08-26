@@ -903,12 +903,17 @@ export const STALENESS_INPUT_CLASSES = [
  * reads this on every render and blocks the commit while it is stale, rather
  * than trusting anyone to remember to recalculate.
  *
+ * The optional executor lets the COMMIT BOUNDARY ask the same question on its
+ * own transaction's read (engine/src/payroll-run.ts) instead of trusting the
+ * route to have asked it first; defaulting to the module connection keeps
+ * every existing caller unchanged.
  */
 export async function payRunStaleness(
   orgId: string,
   documentId: string,
+  executor: Pick<typeof db, "execute"> = db,
 ): Promise<PayRunStaleness> {
-  const rows = (await db.execute<{
+  const rows = (await executor.execute<{
       calculated_at: Date | string | null; never_calculated: boolean;
       adjustments_changed: boolean; time_changed: boolean;
       wages_changed: boolean; roster_changed: boolean; employment_changed: boolean;
@@ -1060,6 +1065,15 @@ export async function payRunStaleness(
 }
 
 /**
+ * The one refusal sentence for committing past a calculation — shared by the
+ * API gate and the engine's own commit-time enforcement, so both boundaries
+ * say exactly the same thing to the operator.
+ */
+export const staleCalculationMessage = (reasons: readonly string[]): string =>
+  `the run's inputs changed after it was last calculated (${reasons.join(", ")})`
+  + " — recalculate before committing";
+
+/**
  * The commit-side half of the staleness control.
  *
  * `payRunStaleness` is what the wizard RENDERS — a banner and a disabled
@@ -1070,6 +1084,10 @@ export async function payRunStaleness(
  * are always ones a calculation produced against the inputs as they stand
  * now — never ones the operator edited past after Calculate ran.
  *
+ * The optional executor is how `commitPayRun` itself invokes this gate ON ITS
+ * OWN TRANSACTION (engine/src/payroll-run.ts), so even an engine caller that
+ * skips the route is refused, on the same snapshot the claim will run under.
+ *
  * A missing run and a never-calculated run are NOT this gate's question to
  * answer: both fall through to `commitPayRun`'s own state guards ("pay run
  * not found", "calculate the pay run before committing"), which name those
@@ -1079,13 +1097,11 @@ export async function payRunStaleness(
 export async function assertPayRunNotStale(
   orgId: string,
   documentId: string,
+  executor: Pick<typeof db, "execute"> = db,
 ): Promise<void> {
-  const { stale, reasons, calculatedAt } = await payRunStaleness(orgId, documentId);
+  const { stale, reasons, calculatedAt } = await payRunStaleness(orgId, documentId, executor);
   if (!stale || calculatedAt === null) return;
-  throw new PayrollError(
-    `the run's inputs changed after it was last calculated (${reasons.join(", ")})`
-      + " — recalculate before committing",
-  );
+  throw new PayrollError(staleCalculationMessage(reasons));
 }
 
 /** Net pay owed on one rail, and how many people are on it. */
