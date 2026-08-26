@@ -6,12 +6,14 @@ import { normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import {
   adjustInventory,
   buildAssembly,
+  executeIdempotentInventoryAction,
   issueInventory,
   postLandedCostVoucher,
   receiveInventory,
   reverseInventoryMovement,
   transferInventory,
   InventoryError,
+  InventoryIdempotencyConflictError,
   InventoryOwnershipError,
 } from '@openbooks/engine/src/inventory.ts'
 import { guardPermission } from '../../../../lib/authz'
@@ -27,6 +29,8 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 interface Body {
   action?: 'receive' | 'issue' | 'adjust' | 'transfer' | 'build' | 'landed' | 'reverse'
+  /** Stable retry identity; required — replay safety is enforced by the engine. */
+  idempotencyKey?: string
   movementId?: string
   itemId?: string
   stockLocationId?: string
@@ -52,6 +56,12 @@ function num(v: unknown): string | null {
  * Post an inventory movement through the kernel: receive (DR inventory / CR
  * offset), issue (DR COGS / CR inventory), or adjust (± vs the adjustment
  * account). Costing follows the item's profile.
+ *
+ * Every action is monetary, so each request MUST carry a stable
+ * `idempotencyKey` and is executed through the engine's canonical idempotency
+ * boundary: the same key + payload replays the stored result (serially and
+ * concurrently) with exactly one accounting unit, key reuse with different
+ * input conflicts (409), and a missing/invalid key fails closed (422).
  *
  * Each action is gated by its own authority from INVENTORY_ACTION_PERMISSIONS:
  * value-carrying movements demand the items.post monetary grant and reversal
@@ -94,15 +104,35 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'subsidiary not permitted' }, { status: 403 })
     }
     try {
-      const res = await reverseInventoryMovement(user.orgId, user.id, {
-        movementId: body.movementId,
-        reversalDate: body.date,
-        reason: body.memo,
-      })
-      return NextResponse.json({ ok: true, ...res })
+      const { value: res, replayed } = await executeIdempotentInventoryAction(
+        user.orgId,
+        user.id,
+        {
+          operation: 'inventory.reverse',
+          idempotencyKey: body.idempotencyKey,
+          request: {
+            movementId: body.movementId,
+            reversalDate: body.date,
+            reason: body.memo,
+          },
+          execute: () =>
+            reverseInventoryMovement(user.orgId, user.id, {
+              movementId: body.movementId!,
+              reversalDate: body.date!,
+              reason: body.memo!,
+            }),
+        },
+      )
+      return NextResponse.json({ ok: true, replayed, ...res })
     } catch (e: unknown) {
       const status =
-        e instanceof InventoryOwnershipError ? 403 : e instanceof InventoryError ? 422 : 500
+        e instanceof InventoryOwnershipError
+          ? 403
+          : e instanceof InventoryIdempotencyConflictError
+            ? 409
+            : e instanceof InventoryError
+              ? 422
+              : 500
       return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status })
     }
   }
@@ -136,7 +166,7 @@ export async function POST(req: Request) {
       if (!body.offsetAccountId || !isUuid(body.offsetAccountId)) {
         return NextResponse.json({ error: 'offset account required' }, { status: 422 })
       }
-      const res = await receiveInventory(user.orgId, user.id, {
+      const input = {
         itemId: body.itemId,
         stockLocationId: body.stockLocationId,
         quantity,
@@ -147,40 +177,86 @@ export async function POST(req: Request) {
         lotId: body.lotId && isUuid(body.lotId) ? body.lotId : undefined,
         serialId: body.serialId && isUuid(body.serialId) ? body.serialId : undefined,
         memo: body.memo ?? null,
-      })
-      return NextResponse.json({ ok: true, ...res })
+      }
+      const { value: res, replayed } = await executeIdempotentInventoryAction(
+        user.orgId,
+        user.id,
+        {
+          operation: 'inventory.receive',
+          idempotencyKey: body.idempotencyKey,
+          request: input,
+          execute: () => receiveInventory(user.orgId, user.id, input),
+        },
+      )
+      return NextResponse.json({ ok: true, replayed, ...res })
     }
     if (body.action === 'build') {
-      const res = await buildAssembly(user.orgId, user.id, {
+      const input = {
         assemblyItemId: body.itemId,
         quantity,
         stockLocationId: body.stockLocationId,
         subsidiaryId,
         date,
         memo: body.memo ?? null,
-      })
-      return NextResponse.json({ ok: true, ...res })
+      }
+      const { value: res, replayed } = await executeIdempotentInventoryAction(
+        user.orgId,
+        user.id,
+        {
+          operation: 'inventory.build',
+          idempotencyKey: body.idempotencyKey,
+          request: input,
+          execute: () => buildAssembly(user.orgId, user.id, input),
+        },
+      )
+      return NextResponse.json({ ok: true, replayed, ...res })
     }
     if (body.action === 'landed') {
       if (!body.offsetAccountId || !isUuid(body.offsetAccountId)) {
         return NextResponse.json({ error: 'freight account required' }, { status: 422 })
       }
-      const res = await postLandedCostVoucher(user.orgId, user.id, {
-        amount: quantity,
-        basis: body.basis === 'quantity' ? 'quantity' : 'value',
-        freightAccountId: body.offsetAccountId,
-        subsidiaryId,
-        voucherDate: date,
-        memo: body.memo ?? null,
-        targets: [{ itemId: body.itemId, stockLocationId: body.stockLocationId }],
+      const basis = body.basis === 'quantity' ? ('quantity' as const) : ('value' as const)
+      const { value: res, replayed } = await executeIdempotentInventoryAction(
+        user.orgId,
+        user.id,
+        {
+          operation: 'inventory.landed',
+          idempotencyKey: body.idempotencyKey,
+          request: {
+            amount: quantity,
+            basis,
+            freightAccountId: body.offsetAccountId,
+            subsidiaryId,
+            voucherDate: date,
+            memo: body.memo ?? null,
+            targets: [{ itemId: body.itemId, stockLocationId: body.stockLocationId }],
+          },
+          execute: () =>
+            postLandedCostVoucher(user.orgId, user.id, {
+              amount: quantity,
+              basis,
+              freightAccountId: body.offsetAccountId!,
+              subsidiaryId,
+              voucherDate: date,
+              memo: body.memo ?? null,
+              targets: [{ itemId: body.itemId!, stockLocationId: body.stockLocationId! }],
+            }),
+        },
+      )
+      return NextResponse.json({
+        ok: true,
+        replayed,
+        id: res.id,
+        documentNumber: res.documentNumber,
+        entryId: res.entryId,
+        value: quantity,
       })
-      return NextResponse.json({ ok: true, id: res.id, documentNumber: res.documentNumber, entryId: res.entryId, value: quantity })
     }
     if (body.action === 'transfer') {
       if (!body.toStockLocationId || !isUuid(body.toStockLocationId)) {
         return NextResponse.json({ error: 'destination location required' }, { status: 422 })
       }
-      const res = await transferInventory(user.orgId, user.id, {
+      const input = {
         itemId: body.itemId,
         fromStockLocationId: body.stockLocationId,
         toStockLocationId: body.toStockLocationId,
@@ -190,25 +266,46 @@ export async function POST(req: Request) {
         subsidiaryId,
         date,
         memo: body.memo ?? null,
-      })
-      return NextResponse.json({ ok: true, ...res })
+      }
+      const { value: res, replayed } = await executeIdempotentInventoryAction(
+        user.orgId,
+        user.id,
+        {
+          operation: 'inventory.transfer',
+          idempotencyKey: body.idempotencyKey,
+          request: input,
+          execute: () => transferInventory(user.orgId, user.id, input),
+        },
+      )
+      return NextResponse.json({ ok: true, replayed, ...res })
     }
     if (body.action === 'issue') {
-      const res = await issueInventory(user.orgId, user.id, {
+      const input = {
         itemId: body.itemId,
         stockLocationId: body.stockLocationId,
         quantity,
         subsidiaryId,
-        offsetAccountId: body.offsetAccountId && isUuid(body.offsetAccountId) ? body.offsetAccountId : undefined,
+        offsetAccountId:
+          body.offsetAccountId && isUuid(body.offsetAccountId) ? body.offsetAccountId : undefined,
         date,
         lotId: body.lotId && isUuid(body.lotId) ? body.lotId : undefined,
         serialId: body.serialId && isUuid(body.serialId) ? body.serialId : undefined,
         memo: body.memo ?? null,
-      })
-      return NextResponse.json({ ok: true, ...res })
+      }
+      const { value: res, replayed } = await executeIdempotentInventoryAction(
+        user.orgId,
+        user.id,
+        {
+          operation: 'inventory.issue',
+          idempotencyKey: body.idempotencyKey,
+          request: input,
+          execute: () => issueInventory(user.orgId, user.id, input),
+        },
+      )
+      return NextResponse.json({ ok: true, replayed, ...res })
     }
     // adjust: quantity is a signed delta
-    const res = await adjustInventory(user.orgId, user.id, {
+    const input = {
       itemId: body.itemId,
       stockLocationId: body.stockLocationId,
       quantityDelta: quantity,
@@ -218,13 +315,30 @@ export async function POST(req: Request) {
       date,
       unitCost: num(body.unitCost) ?? undefined,
       memo: body.memo ?? null,
-    })
-    return NextResponse.json({ ok: true, ...res })
+    }
+    const { value: res, replayed } = await executeIdempotentInventoryAction(
+      user.orgId,
+      user.id,
+      {
+        operation: 'inventory.adjust',
+        idempotencyKey: body.idempotencyKey,
+        request: input,
+        execute: () => adjustInventory(user.orgId, user.id, input),
+      },
+    )
+    return NextResponse.json({ ok: true, replayed, ...res })
   } catch (e: unknown) {
     // A cross-entity inventory attempt is refused as an authorization
-    // failure, mirroring the subsidiary permission gate above.
+    // failure, mirroring the subsidiary permission gate above; key reuse
+    // with different input is a conflict, not a validation miss.
     const status =
-      e instanceof InventoryOwnershipError ? 403 : e instanceof InventoryError ? 422 : 500
+      e instanceof InventoryOwnershipError
+        ? 403
+        : e instanceof InventoryIdempotencyConflictError
+          ? 409
+          : e instanceof InventoryError
+            ? 422
+            : 500
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status })
   }
 }
