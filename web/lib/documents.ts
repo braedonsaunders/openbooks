@@ -5,7 +5,7 @@ import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
-import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
+import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
 import { canonicalDecimal } from './exact-decimal'
 import { DOC_KINDS, DOC_KIND_FEATURE, docKindConfig, type DocKindConfig } from './document-kinds'
 import { featureEnabled, isFeatureEnabled, orgFeatureState } from './features'
@@ -15,6 +15,7 @@ import { resolveOrgId } from './org-scope'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { loadRequiredControlAccounts } from '@openbooks/engine/src/control-accounts.ts'
 import { isDocumentRevisionToken } from './api/registry-data'
+import { persistTaxQuote } from '@openbooks/engine/src/tax-rate-providers.ts'
 
 /**
  * Unified line-based posting-document machinery.
@@ -33,7 +34,7 @@ import { isDocumentRevisionToken } from './api/registry-data'
  * kind-agnostic.
  */
 
-export { computeBillTotals, taxProfileMap, nextDocumentNumber, type BillLineInput } from './bills'
+export { computeBillTotals, computeBillTotalsWithProvider, taxProfileMap, nextDocumentNumber, type BillLineInput } from './bills'
 export {
   DOC_KINDS,
   DOC_KIND_FEATURE,
@@ -715,7 +716,7 @@ export async function applyDocumentEdit(
   // without a partial write.
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
   let preparedLines:
-    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[]
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[]
     | null = null
   if (body.lines) {
     // Charge lines are NOT editable through the generic line editor, and this
@@ -745,9 +746,17 @@ export async function applyDocumentEdit(
     // the caller sent now either reaches computeBillTotals exactly as
     // submitted (the tax engine handles signed bases) or fails closed with a
     // 422 naming the offending line.
-    const computed = computeBillTotals(
+    const computed = await computeBillTotalsWithProvider(
       validateEditableDocumentLines(body.lines),
       await taxProfileMap(orgId, body.documentDate ?? current.documentDate),
+      {
+        orgId,
+        kind: current.kind,
+        currency: currency ?? (await db.execute<{ currency: string }>(sql`
+          select currency from documents where id = ${id} and org_id = ${orgId}`)).rows[0]?.currency ?? await orgBaseCurrency(orgId),
+        documentDate: body.documentDate ?? current.documentDate,
+        partyId: body.partyId !== undefined ? body.partyId : current.partyId,
+      },
     )
     totals = {
       subtotal: normalizeMoney(computed.subtotal),
@@ -792,6 +801,7 @@ export async function applyDocumentEdit(
         taxAmount: l.taxAmount,
         taxOverridden: l.taxOverridden === true,
         taxComponents: l.taxComponents,
+        providerQuote: l.providerQuote,
         partyId: l.partyId ?? null,
         departmentId: l.departmentId ?? null,
         projectId: l.projectId ?? null,
@@ -883,6 +893,21 @@ export async function applyDocumentEdit(
             components: l.taxComponents,
             actorId: userId,
           })
+          if (l.providerQuote) {
+            await persistTaxQuote(
+              orgId,
+              l.providerQuote.providerConfigId,
+              { ...l.providerQuote.request, documentLineId: inserted.rows[0]!.id },
+              l.providerQuote.result,
+              userId,
+              tx,
+            )
+            await tx.execute(sql`
+              update tax_rate_provider_configs
+                 set last_attempt_at = now(), last_success_at = now(), last_error = null
+               where id = ${l.providerQuote.providerConfigId} and org_id = ${orgId}
+            `)
+          }
         }
       }
 
