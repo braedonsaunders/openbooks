@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import type { EmailJobData } from "@openbooks/jobs";
-import { db, withBypassContext } from "./db.ts";
+import type { EmailJobData, EnqueueEmailData } from "@openbooks/jobs";
+import { db, type SqlExecutor, withBypassContext } from "./db.ts";
 import {
   logTerminalFailure,
   SCHEDULER_OUTBOX_WORKER_IDENTITY,
@@ -24,21 +24,37 @@ import {
  * transaction (a rollback discards it together with the flow's other
  * effects), and this worker delivers it later through the Redis queue. A
  * deterministic occurrence key makes replays of one effect collapse onto a
- * single row instead of duplicating sends.
+ * single row instead of duplicating sends, and the queued send itself carries
+ * a deterministic job id derived from the row identity (flowEmailJobId), so a
+ * worker that dies between enqueueing the provider call and marking success
+ * collapses its recovery retry onto the SAME queue job instead of sending a
+ * second copy of the customer's mail.
  *
  * Terminal failures are not silent: the single attempt whose failure reaches
  * MAX_SCHEDULER_OUTBOX_ATTEMPTS stamps terminal_failed_at / terminal_failed_by
  * on the row (exactly once — later attempts cannot exist because claims require
- * attempt_count < ceiling) and emits one structured
- * "scheduler.terminal_failure" log line plus one `openbooks.terminal_failures`
- * metric increment (see telemetry.ts). Crash recovery of a stale running row
- * that was already at the ceiling performs the same transition. Operators alert
- * on poison scans with:
+ * attempt_count < ceiling) and writes one append-only evidence row into
+ * scheduler_outbox_terminal_audit inside that same transaction, for crash
+ * recovery of an at-ceiling stale row exactly like ordinary exhaustion (see
+ * migration 0026_scheduler_outbox_terminal_audit.sql for the storage-side
+ * immutability guards and backfill). In addition to that structured
+ * "scheduler.terminal_failure" log line plus the
+ * `openbooks.terminal_failures` metric increment (see telemetry.ts), the
+ * evidence table now IS the independent durable record: terminal-stamped rows
+ * are frozen by storage — no rewrite and no delete without the authorized
+ * replay contract below. Operators alert on poison scans with:
  *
- *   select kind, id, org_id, error, attempt_count, terminal_failed_at,
- *          terminal_failed_by
- *     from scheduler_outbox where terminal_failed_at is not null
- *    order by terminal_failed_at desc;
+ *   select o.kind, o.id, o.org_id, o.error, o.attempt_count,
+ *          o.terminal_failed_at, o.terminal_failed_by, e.event, e.reason, e.at
+ *     from scheduler_outbox o
+ *     join scheduler_outbox_terminal_audit e on e.outbox_row_id = o.id
+ *    where o.terminal_failed_at is not null
+ *    order by e.at desc;
+ *
+ * Authorized remediation is replayTerminalSchedulerOutbox: it validates the
+ * operator, writes a replay_authorized evidence row carrying the verbatim
+ * before/after envelope, and only then clears the stamp under a
+ * transaction-scoped pin the storage guard enforces.
  *
  * (see terminal-failure.ts for the sibling report_runs /
  * report_delivery_outbox queries).
@@ -146,6 +162,67 @@ export function parseFlowEmailPayload(raw: unknown): FlowEmailPayload {
 }
 
 /**
+ * The Redis-side handoff for one durable flow_email row. Deterministic job ids
+ * (flowEmailJobId) make BullMQ collapse a post-enqueue/pre-mark crash onto the
+ * already-enqueued send instead of queueing a second one on stale-recovery
+ * retry; report-delivery.ts's generation ids follow the same contract.
+ */
+export type FlowEmailQueueEnqueuer = (
+  data: EnqueueEmailData,
+  options?: { jobId?: string },
+) => Promise<unknown>;
+
+/**
+ * The deterministic queue identity of one flow_email outbox row: a pure
+ * function of the row's primary key — the immutable per-effect identity every
+ * attempt shares — so a first send and its crash-gap retry collapse onto one
+ * queued job and BullMQ refuses to insert it twice.
+ */
+export function flowEmailJobId(outboxRowId: string): string {
+  return `flow-email|${outboxRowId}`;
+}
+
+/** Reach the shared BullMQ producer lazily so scan-only workers never load it. */
+async function enqueueFlowEmailJob(
+  data: EnqueueEmailData,
+  options?: { jobId?: string },
+): Promise<unknown> {
+  const { enqueueEmail } = await import("@openbooks/jobs");
+  return enqueueEmail(data, options);
+}
+
+/**
+ * Deliver one durable flow_email row through the Redis queue with a
+ * deterministic per-recipient job id derived from the row identity. The
+ * enqueuer is injectable for tests; production always uses the real queue.
+ */
+export async function deliverFlowEmail(
+  row: OutboxRow,
+  enqueue: FlowEmailQueueEnqueuer = enqueueFlowEmailJob,
+): Promise<void> {
+  if (!row.org_id) throw new Error("flow email is missing its organization");
+  // Validate again at the boundary: a payload that cannot be delivered as
+  // authored must fail this attempt loudly (retry → terminal failure with
+  // operator visibility), never send garbage.
+  const delivery = parseFlowEmailPayload(row.payload);
+  await enqueue(
+    {
+      orgId: row.org_id,
+      to: delivery.to,
+      subject: delivery.subject,
+      html: delivery.html,
+      text: delivery.text,
+      ...(delivery.attachments?.length ? { attachments: delivery.attachments } : {}),
+      ...(delivery.meta ? { meta: delivery.meta } : {}),
+    },
+    // One stable identity per row closes the DB/Redis crash gap: if the
+    // process dies between this enqueue and the PG success mark, the
+    // recovered row retries onto the same job instead of a duplicate send.
+    { jobId: flowEmailJobId(row.id) },
+  );
+}
+
+/**
  * Defer one rendered flow email through the durable outbox. The insert rides
  * whatever database transaction the caller owns (`db` routes to the ambient
  * pinned transaction), so a rolled-back business operation discards the
@@ -184,12 +261,69 @@ export class SchedulerOutboxLeaseFencedError extends Error {
   }
 }
 
+export class SchedulerOutboxReplayError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SchedulerOutboxReplayError";
+  }
+}
+
 export function schedulerOutboxBackoffMs(attemptCount: number): number {
   return Math.min(60 * 60_000, 60_000 * 2 ** Math.max(0, attemptCount - 1));
 }
 
 function errorMessage(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).slice(0, 1000);
+}
+
+/** The identity columns a terminal transition certifies, verbatim from the row
+ * it terminalizes — including org-less system scans, whose poison deserves
+ * evidence exactly like tenant poison. */
+type SchedulerOutboxEnvelope = {
+  id: string;
+  org_id: string | null;
+  kind: SchedulerOutboxKind;
+  subject_id: string | null;
+  occurrence_key: string;
+  attempt_count: number;
+};
+
+type TerminalEvidenceEvent = "terminal_failure" | "crash_recovery_terminal_failure";
+
+/**
+ * Append the independent durable record of one terminal transition. Must be
+ * awaited inside the SAME transaction as the stamping UPDATE (migration 0026):
+ * storage refuses a second evidence row for one occurrence and refuses to let
+ * terminalization commit without this insert.
+ */
+async function insertTerminalFailureEvidence(
+  tx: SqlExecutor,
+  event: TerminalEvidenceEvent,
+  row: SchedulerOutboxEnvelope,
+  fields: { statusBefore: string; reason: string; markedBy: string; at: Date },
+): Promise<void> {
+  await tx.execute(sql`
+    insert into scheduler_outbox_terminal_audit
+      (outbox_row_id, event, org_id, kind, subject_id, occurrence_key,
+       attempt_count, reason, marked_by, at, detail)
+    values (${row.id}, ${event}, ${row.org_id}, ${row.kind}, ${row.subject_id},
+            ${row.occurrence_key}, ${row.attempt_count}, ${fields.reason},
+            ${fields.markedBy}, ${fields.at},
+            ${JSON.stringify({
+              event: "scheduler_outbox_terminal_failure",
+              path: event === "terminal_failure" ? "exhaustion" : "crash_recovery",
+              before: { status: fields.statusBefore, attemptCount: row.attempt_count },
+              after: {
+                status: "failed",
+                attemptCount: row.attempt_count,
+                reason: fields.reason,
+                terminalFailedAt: fields.at,
+                terminalFailedBy: fields.markedBy,
+              },
+              kind: row.kind,
+              occurrenceKey: row.occurrence_key,
+            })}::jsonb)
+  `);
 }
 
 /** Insert the singleton scan rows once; later ticks claim and reuse them. */
@@ -219,40 +353,55 @@ export async function enqueueApprovalEscalation(input: {
 }
 
 /** Release crash-orphaned running rows so the next tick can retry. A recovered
- * row already at the attempt ceiling is terminal: stamp + log it here, because
- * the normal claim loop will never pick it up again to record the transition. */
+ * row already at the attempt ceiling is terminal: stamp it, write its
+ * append-only crash-recovery evidence in the same transaction, and log it
+ * here — because the normal claim loop will never pick that row up again to
+ * record the transition. */
 export async function recoverStaleSchedulerOutbox(now = new Date()): Promise<number> {
-  const recovered = (await db.execute<{
-    id: string;
-    org_id: string | null;
-    kind: SchedulerOutboxKind;
-    subject_id: string | null;
-    occurrence_key: string;
-    attempt_count: number;
-    becameTerminal: boolean;
-  }>(sql`
-    update scheduler_outbox
-       set status='failed',
-           error=coalesce(error, 'stale lock recovered after crash'),
-           locked_at=null,
-           lease_token=null,
-           next_attempt_at=${now},
-           terminal_failed_at = case when attempt_count >= ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
-                                     then coalesce(terminal_failed_at, ${now})
-                                     else terminal_failed_at end,
-           terminal_failed_by = case when attempt_count >= ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
-                                      and terminal_failed_at is null
-                                     then ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
-                                     else terminal_failed_by end,
-           updated_at=now()
-     where status='running'
-       and locked_at is not null
-       and locked_at < ${new Date(now.getTime() - STALE_SCHEDULER_OUTBOX_MS)}
-     returning id, org_id, kind, subject_id, occurrence_key, attempt_count, lease_token,
-               (attempt_count >= ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
-                and terminal_failed_by = ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
-                and terminal_failed_at = ${now}) as "becameTerminal"
-  `));
+  const recovered = await db.transaction(async (tx) => {
+    const result = (await tx.execute<{
+      id: string;
+      org_id: string | null;
+      kind: SchedulerOutboxKind;
+      subject_id: string | null;
+      occurrence_key: string;
+      attempt_count: number;
+      lease_token: string;
+      becameTerminal: boolean;
+    }>(sql`
+      update scheduler_outbox
+         set status='failed',
+             error=coalesce(error, 'stale lock recovered after crash'),
+             locked_at=null,
+             lease_token=null,
+             next_attempt_at=${now},
+             terminal_failed_at = case when attempt_count >= ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
+                                       then coalesce(terminal_failed_at, ${now})
+                                       else terminal_failed_at end,
+             terminal_failed_by = case when attempt_count >= ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
+                                       and terminal_failed_at is null
+                                       then ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
+                                       else terminal_failed_by end,
+             updated_at=now()
+       where status='running'
+         and locked_at is not null
+         and locked_at < ${new Date(now.getTime() - STALE_SCHEDULER_OUTBOX_MS)}
+       returning id, org_id, kind, subject_id, occurrence_key, attempt_count, lease_token,
+                 (attempt_count >= ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
+                  and terminal_failed_by = ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
+                  and terminal_failed_at = ${now}) as "becameTerminal"
+    `));
+    for (const row of result.rows) {
+      if (!row.becameTerminal) continue;
+      await insertTerminalFailureEvidence(tx, "crash_recovery_terminal_failure", row, {
+        statusBefore: "running",
+        reason: "stale lock recovered after crash at the attempt ceiling",
+        markedBy: SCHEDULER_OUTBOX_WORKER_IDENTITY,
+        at: now,
+      });
+    }
+    return result;
+  });
   for (const row of recovered.rows) {
     if (!row.becameTerminal) continue;
     logTerminalFailure({
@@ -272,21 +421,7 @@ export async function recoverStaleSchedulerOutbox(now = new Date()): Promise<num
 
 async function runOutboxWork(row: OutboxRow): Promise<void> {
   if (row.kind === "flow_email") {
-    if (!row.org_id) throw new Error("flow email is missing its organization");
-    // Validate again at the boundary: a payload that cannot be delivered as
-    // authored must fail this attempt loudly (retry → terminal failure with
-    // operator visibility), never send garbage.
-    const delivery = parseFlowEmailPayload(row.payload);
-    const { enqueueEmail } = await import("@openbooks/jobs");
-    await enqueueEmail({
-      orgId: row.org_id,
-      to: delivery.to,
-      subject: delivery.subject,
-      html: delivery.html,
-      text: delivery.text,
-      ...(delivery.attachments?.length ? { attachments: delivery.attachments } : {}),
-      ...(delivery.meta ? { meta: delivery.meta } : {}),
-    });
+    await deliverFlowEmail(row);
     return;
   }
   if (row.kind === "dunning") {
@@ -342,30 +477,43 @@ async function markFailed(row: OutboxRow, error: unknown, now: Date): Promise<vo
   // attempt_count was incremented by this row's claim, so it is the ordinal of
   // the attempt that just failed. Reaching the ceiling here is the one and
   // only transition to terminal; stamp it in the same statement that records
-  // the final failure so a crash between them is impossible.
+  // the final failure so a crash between them is impossible — and write the
+  // append-only evidence row inside that same transaction (migration 0026):
+  // terminalization cannot commit without durable evidence.
   const terminal = row.attempt_count >= MAX_SCHEDULER_OUTBOX_ATTEMPTS;
-  const marked = (await db.execute<{ becameTerminal: boolean }>(sql`
-    update scheduler_outbox
-       set status='failed',
-           error=${message},
-           locked_at=null,
-           lease_token=null,
-           finished_at=${now},
-           next_attempt_at=${new Date(now.getTime() + schedulerOutboxBackoffMs(row.attempt_count))},
-           terminal_failed_at = case when ${terminal}
-                                     then coalesce(terminal_failed_at, ${now})
-                                     else terminal_failed_at end,
-           terminal_failed_by = case when ${terminal} and terminal_failed_at is null
-                                     then ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
-                                     else terminal_failed_by end,
-           updated_at=now()
-     where id=${row.id} and lease_token=${row.lease_token} and status='running'
-     returning (${terminal}
-                and terminal_failed_by = ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
-                and terminal_failed_at = ${now}) as "becameTerminal"
-  `));
-  if (!marked.rows[0]) throw new SchedulerOutboxLeaseFencedError(row.id);
-  if (marked.rows[0]?.becameTerminal) {
+  const marked = await db.transaction(async (tx) => {
+    const result = await tx.execute<{ becameTerminal: boolean }>(sql`
+      update scheduler_outbox
+         set status='failed',
+             error=${message},
+             locked_at=null,
+             lease_token=null,
+             finished_at=${now},
+             next_attempt_at=${new Date(now.getTime() + schedulerOutboxBackoffMs(row.attempt_count))},
+             terminal_failed_at = case when ${terminal}
+                                       then coalesce(terminal_failed_at, ${now})
+                                       else terminal_failed_at end,
+             terminal_failed_by = case when ${terminal} and terminal_failed_at is null
+                                       then ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
+                                       else terminal_failed_by end,
+             updated_at=now()
+       where id=${row.id} and lease_token=${row.lease_token} and status='running'
+       returning (${terminal}
+                  and terminal_failed_by = ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
+                  and terminal_failed_at = ${now}) as "becameTerminal"
+    `);
+    if (result.rows[0]?.becameTerminal) {
+      await insertTerminalFailureEvidence(tx, "terminal_failure", row, {
+        statusBefore: "running",
+        reason: message,
+        markedBy: SCHEDULER_OUTBOX_WORKER_IDENTITY,
+        at: now,
+      });
+    }
+    return result.rows[0];
+  });
+  if (!marked) throw new SchedulerOutboxLeaseFencedError(row.id);
+  if (marked.becameTerminal) {
     logTerminalFailure({
       surface: "scheduler_outbox",
       kind: row.kind,
@@ -497,6 +645,121 @@ export async function listFailedSchedulerOutbox(limit = 100): Promise<Array<{
      where status='failed'
      order by coalesce(finished_at, updated_at) desc
      limit ${Math.max(1, Math.min(limit, 500))}
-  `));
+   `));
   return rows.rows;
+}
+
+/** Authorized remediation for poison work. The prior terminal envelope is
+ * copied into append-only audit evidence BEFORE the live row is reset for
+ * replay; the storage guard refuses to clear the stamps without that prior
+ * evidence visible in the same transaction, so an unevidenced reset commits
+ * nothing. Mirrors replayTerminalPostingEffect. */
+export async function replayTerminalSchedulerOutbox(input: {
+  orgId: string;
+  id: string;
+  actorId: string;
+  reason: string;
+  now?: Date;
+}): Promise<void> {
+  const reason = input.reason.trim();
+  if (reason.length < 10 || reason.length > 1000) {
+    throw new SchedulerOutboxReplayError("replay reason must be between 10 and 1000 characters");
+  }
+  const now = input.now ?? new Date();
+  await withBypassContext(() => db.transaction(async (tx) => {
+    const actor = await tx.execute<{ exists: boolean }>(sql`
+      select exists (
+        select 1 from users
+         where id=${input.actorId} and org_id=${input.orgId} and is_active
+      ) as exists
+    `);
+    if (!actor.rows[0]?.exists) {
+      throw new SchedulerOutboxReplayError("replay actor is not an active user in the organization");
+    }
+    const selected = await tx.execute<{
+      id: string;
+      org_id: string | null;
+      kind: SchedulerOutboxKind;
+      subject_id: string | null;
+      occurrence_key: string;
+      attempt_count: number;
+      error: string | null;
+      terminal_failed_at: Date | null;
+      terminal_failed_by: string | null;
+    }>(sql`
+      select id, org_id, kind, subject_id, occurrence_key, attempt_count,
+             error, terminal_failed_at, terminal_failed_by
+        from scheduler_outbox
+       where id=${input.id} and org_id=${input.orgId}
+         and terminal_failed_at is not null
+       for update
+    `);
+    const before = selected.rows[0];
+    if (!before) throw new SchedulerOutboxReplayError("only terminal-failed scheduler outbox rows can be replayed");
+    const evidence = await tx.execute<{ exists: boolean }>(sql`
+      select exists (
+        select 1 from scheduler_outbox_terminal_audit
+         where outbox_row_id=${input.id} and event <> 'replay_authorized'
+      ) as exists
+    `);
+    if (!evidence.rows[0]?.exists) {
+      throw new SchedulerOutboxReplayError("terminal failure has no durable evidence to replay");
+    }
+    // Evidence first, authorization pin second, reset last — the storage
+    // guard enforces this ordering by refusing the stamp-clearing UPDATE
+    // unless both precede it inside this transaction.
+    await insertSchedulerOutboxReplayAudit(tx, before, { reason, actorId: input.actorId, at: now });
+    await tx.execute(sql`
+      select set_config('openbooks.scheduler_outbox_replay_org', ${input.orgId}::text, true)
+    `);
+    const reset = await tx.execute(sql`
+      update scheduler_outbox
+         set status='pending', attempt_count=0, next_attempt_at=${now},
+             locked_at=null, lease_token=null, last_attempt_at=null,
+             finished_at=null, error=null,
+             terminal_failed_at=null, terminal_failed_by=null, updated_at=now()
+       where id=${input.id} and org_id=${input.orgId}
+         and terminal_failed_at is not null
+    `);
+    if (reset.rowCount !== 1) throw new SchedulerOutboxReplayError("the terminal row was not replayable");
+  }));
+}
+
+async function insertSchedulerOutboxReplayAudit(
+  tx: SqlExecutor,
+  before: {
+    id: string;
+    org_id: string | null;
+    kind: SchedulerOutboxKind;
+    subject_id: string | null;
+    occurrence_key: string;
+    attempt_count: number;
+    error: string | null;
+    terminal_failed_at: Date | null;
+    terminal_failed_by: string | null;
+  },
+  fields: { reason: string; actorId: string; at: Date },
+): Promise<void> {
+  await tx.execute(sql`
+    insert into scheduler_outbox_terminal_audit
+      (outbox_row_id, event, org_id, kind, subject_id, occurrence_key,
+       attempt_count, reason, marked_by, at, detail)
+    values (${before.id}, 'replay_authorized', ${before.org_id}, ${before.kind},
+            ${before.subject_id}, ${before.occurrence_key}, ${before.attempt_count},
+            ${fields.reason}, ${fields.actorId}, ${fields.at},
+            ${JSON.stringify({
+              event: "scheduler_outbox_replay_authorized",
+              reason: fields.reason,
+              before: {
+                status: "failed",
+                attemptCount: before.attempt_count,
+                error: before.error,
+                terminalFailedAt: before.terminal_failed_at,
+                terminalFailedBy: before.terminal_failed_by,
+              },
+              after: { status: "pending", attemptCount: 0, nextAttemptAt: fields.at },
+              kind: before.kind,
+              occurrenceKey: before.occurrence_key,
+            })}::jsonb)
+  `);
 }
