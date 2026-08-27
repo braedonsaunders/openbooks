@@ -232,6 +232,26 @@ async function resolveTaxAccounts(
   return { collected, paid };
 }
 
+/** Org-level tax fallbacks are loaded at the posting boundary, not trusted to
+ * every caller to copy from settings. Explicit caller values still win. */
+async function resolveOrgTaxAccounts(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+): Promise<{ taxCollected: string | undefined; taxPaid: string | undefined }> {
+  const r = await runner.execute<{
+    tax_collected: string | null;
+    tax_paid: string | null;
+  }>(sql`
+    select settings->'controlAccounts'->>'taxCollected' as tax_collected,
+           settings->'controlAccounts'->>'taxPaid' as tax_paid
+      from orgs
+     where id = ${orgId}`);
+  return {
+    taxCollected: r.rows[0]?.tax_collected ?? undefined,
+    taxPaid: r.rows[0]?.tax_paid ?? undefined,
+  };
+}
+
 async function resolveTaxComponents(
   runner: Pick<typeof db, "execute">,
   documentId: string,
@@ -483,6 +503,90 @@ function componentsForLine(
   return components;
 }
 
+/**
+ * Resolve a tax component's control account exactly as it was configured at
+ * posting time.  AP/AR are deliberately not valid fallbacks: a taxable line
+ * without a dedicated or org-level tax control account must fail closed before
+ * any journal or post-commit evidence is written.
+ */
+function taxControlAccount(
+  component: TaxPostingComponent,
+  deps: PostingDeps,
+  side: "collected" | "paid",
+): string | null {
+  const configured = side === "collected"
+    ? component.collectedAccountId ?? deps.taxCollectedByCode?.get(component.taxCodeId) ?? deps.control.taxCollected
+    : component.paidAccountId ?? deps.taxPaidByCode?.get(component.taxCodeId) ?? deps.control.taxPaid;
+  return configured && configured.length > 0 ? configured : null;
+}
+
+function assertTaxControlAccount(
+  component: TaxPostingComponent,
+  deps: PostingDeps,
+  side: "collected" | "paid" | "withholding",
+): string {
+  if (side === "withholding") {
+    if (!component.withholdingAccountId) {
+      throw new PostingError(
+        `withholding tax ${component.taxCodeId} has no withholding account`,
+      );
+    }
+    return component.withholdingAccountId;
+  }
+  const account = taxControlAccount(component, deps, side);
+  if (!account) {
+    throw new PostingError(
+      `${side} tax ${component.taxCodeId} has no configured tax control account`,
+    );
+  }
+  return account;
+}
+
+/** Validate every tax control leg before scripts, flows, or ledger writes. */
+function validateTaxControlAccounts(
+  doc: Doc,
+  lines: DocLine[],
+  deps: PostingDeps,
+): void {
+  const purchase = new Set([
+    "vendor_bill",
+    "vendor_credit",
+    "expense_report",
+    "check",
+    "card_charge",
+    "card_refund",
+  ]);
+  const sales = new Set(["customer_invoice", "customer_credit"]);
+  const side = purchase.has(doc.kind)
+    ? "purchase"
+    : sales.has(doc.kind)
+      ? "sales"
+      : null;
+  if (!side) return;
+
+  for (const line of lines) {
+    for (const component of componentsForLine(line, deps)) {
+      // A zero-value component produces no tax leg.  Nonzero taxable activity
+      // must always have an explicit, immutable control-account destination.
+      if (isZero(component.taxAmount)) continue;
+      if (component.calculationType === "withholding") {
+        assertTaxControlAccount(component, deps, "withholding");
+      } else if (side === "sales") {
+        if (component.calculationType !== "reverse_charge") {
+          assertTaxControlAccount(component, deps, "collected");
+        }
+      } else {
+        if (!isZero(component.recoverableAmount)) {
+          assertTaxControlAccount(component, deps, "paid");
+        }
+        if (component.calculationType === "reverse_charge") {
+          assertTaxControlAccount(component, deps, "collected");
+        }
+      }
+    }
+  }
+}
+
 function signed(amount: string, direction: 1 | -1): string {
   return direction === 1 ? amount : neg(amount);
 }
@@ -519,14 +623,9 @@ function purchaseTaxLines(
         ...taxControlDims(doc, line),
       };
       if (component.calculationType === "withholding") {
-        if (!component.withholdingAccountId) {
-          throw new PostingError(
-            `withholding tax ${component.taxCodeId} has no withholding account`,
-          );
-        }
         out.push({
           ...common,
-          accountId: component.withholdingAccountId,
+          accountId: assertTaxControlAccount(component, deps, "withholding"),
           amount: signed(neg(component.taxAmount), direction),
         });
         continue;
@@ -534,11 +633,7 @@ function purchaseTaxLines(
       if (!isZero(component.recoverableAmount)) {
         out.push({
           ...common,
-          accountId:
-            component.paidAccountId ??
-            deps.taxPaidByCode?.get(component.taxCodeId) ??
-            deps.control.taxPaid ??
-            deps.control.ap,
+          accountId: assertTaxControlAccount(component, deps, "paid"),
           amount: signed(component.recoverableAmount, direction),
         });
       }
@@ -548,11 +643,7 @@ function purchaseTaxLines(
       ) {
         out.push({
           ...common,
-          accountId:
-            component.collectedAccountId ??
-            deps.taxCollectedByCode?.get(component.taxCodeId) ??
-            deps.control.taxCollected ??
-            deps.control.ap,
+          accountId: assertTaxControlAccount(component, deps, "collected"),
           amount: signed(neg(component.taxAmount), direction),
         });
       }
@@ -578,24 +669,15 @@ function salesTaxLines(
       };
       if (component.calculationType === "reverse_charge") continue;
       if (component.calculationType === "withholding") {
-        if (!component.withholdingAccountId) {
-          throw new PostingError(
-            `withholding tax ${component.taxCodeId} has no withholding account`,
-          );
-        }
         out.push({
           ...common,
-          accountId: component.withholdingAccountId,
+          accountId: assertTaxControlAccount(component, deps, "withholding"),
           amount: signed(component.taxAmount, direction),
         });
       } else {
         out.push({
           ...common,
-          accountId:
-            component.collectedAccountId ??
-            deps.taxCollectedByCode?.get(component.taxCodeId) ??
-            deps.control.taxCollected ??
-            deps.control.ar,
+          accountId: assertTaxControlAccount(component, deps, "collected"),
           amount: signed(neg(component.taxAmount), direction),
         });
       }
@@ -1302,10 +1384,30 @@ export async function postDocument(
   }
   if (!deps.taxCollectedByCode && doc.kind !== "journal") {
     const tax = await resolveTaxAccounts(db, doc.orgId);
+    const fallback = await resolveOrgTaxAccounts(db, doc.orgId);
     deps = {
       ...deps,
+      control: {
+        ...deps.control,
+        taxCollected: deps.control.taxCollected ?? fallback.taxCollected,
+        taxPaid: deps.control.taxPaid ?? fallback.taxPaid,
+      },
       taxCollectedByCode: tax.collected,
       taxPaidByCode: tax.paid,
+    };
+  }
+  if (
+    doc.kind !== "journal" &&
+    (!deps.control.taxCollected || !deps.control.taxPaid)
+  ) {
+    const fallback = await resolveOrgTaxAccounts(db, doc.orgId);
+    deps = {
+      ...deps,
+      control: {
+        ...deps.control,
+        taxCollected: deps.control.taxCollected ?? fallback.taxCollected,
+        taxPaid: deps.control.taxPaid ?? fallback.taxPaid,
+      },
     };
   }
   if (!deps.taxComponentsByLine && doc.kind !== "journal") {
@@ -1376,6 +1478,11 @@ export async function postDocument(
     .from(schema.documentLines)
     .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
     .orderBy(asc(schema.documentLines.lineNumber));
+
+  // Fail closed before before_post scripts/flows can emit downstream evidence.
+  // The tax component snapshot and the resolved org fallback are the only
+  // authoritative destinations; AP/AR are never silently substituted.
+  validateTaxControlAccounts(doc, lines, deps);
 
   const rule = RULES[doc.kind];
   if (!rule)
@@ -2091,10 +2198,30 @@ export async function regenerateGlImpactTx(
   }
   if (!deps.taxCollectedByCode && doc.kind !== "journal") {
     const tax = await resolveTaxAccounts(tx, doc.orgId);
+    const fallback = await resolveOrgTaxAccounts(tx, doc.orgId);
     deps = {
       ...deps,
+      control: {
+        ...deps.control,
+        taxCollected: deps.control.taxCollected ?? fallback.taxCollected,
+        taxPaid: deps.control.taxPaid ?? fallback.taxPaid,
+      },
       taxCollectedByCode: tax.collected,
       taxPaidByCode: tax.paid,
+    };
+  }
+  if (
+    doc.kind !== "journal" &&
+    (!deps.control.taxCollected || !deps.control.taxPaid)
+  ) {
+    const fallback = await resolveOrgTaxAccounts(tx, doc.orgId);
+    deps = {
+      ...deps,
+      control: {
+        ...deps.control,
+        taxCollected: deps.control.taxCollected ?? fallback.taxCollected,
+        taxPaid: deps.control.taxPaid ?? fallback.taxPaid,
+      },
     };
   }
   if (!deps.taxComponentsByLine && doc.kind !== "journal") {
