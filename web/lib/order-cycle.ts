@@ -325,6 +325,22 @@ export async function fulfillSalesOrder(
          ${JSON.stringify(custom)}::jsonb, ${userId}, ${userId})
     `)
 
+    // Migration 0034 makes approved document lines immutable. Advancing
+    // quantity_fulfilled is operational shipment evidence, not an edit to the
+    // approved commercial source. The source header is locked for this
+    // transaction, so briefly reopen it while the shipment lines advance and
+    // restore approved before another caller can observe the transaction.
+    const reopenSourceForLineAdvances = source.status === 'approved'
+    if (reopenSourceForLineAdvances) {
+      const reopened = (await tx.execute<{ id: string }>(sql`
+        update documents
+           set status = 'draft', updated_by = ${userId}
+         where id = ${sourceId} and org_id = ${orgId} and status = 'approved'
+        returning id
+      `)).rows[0]
+      if (!reopened) throw new ConversionError('Sales order changed while it was being fulfilled', 409)
+    }
+
     let lineNumber = 1
     for (const { request, line } of selected) {
       const lineCustom = {
@@ -360,6 +376,16 @@ export async function fulfillSalesOrder(
         throw new ConversionError(`Sales-order line ${line.line_number} changed while it was being fulfilled`, 409)
       }
       lineNumber++
+    }
+
+    if (reopenSourceForLineAdvances) {
+      const restored = (await tx.execute<{ id: string }>(sql`
+        update documents
+           set status = 'approved', updated_by = ${userId}
+         where id = ${sourceId} and org_id = ${orgId} and status = 'draft'
+        returning id
+      `)).rows[0]
+      if (!restored) throw new ConversionError('Sales order changed while it was being fulfilled', 409)
     }
 
     await tx.execute(sql`
