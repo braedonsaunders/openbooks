@@ -58,6 +58,8 @@ const leaseBaseRentWindowExclusiveMigrationPath =
   "schema/migrations/generated/0060_lease_base_rent_window_exclusive.sql";
 const camPoolSourceAccountOverlapMigrationPath =
   "schema/migrations/generated/0061_cam_pool_source_account_overlap.sql";
+const recognitionEventsMigrationPath =
+  "schema/migrations/generated/0062_recognition_events.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -113,6 +115,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0059_email_delivery_identity_reconciliation.sql",
     "0060_lease_base_rent_window_exclusive.sql",
     "0061_cam_pool_source_account_overlap.sql",
+    "0062_recognition_events.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -994,5 +997,25 @@ test("bank-feed sync bookkeeping separates the attempt watermark from the succes
   // The attempt cursor is pure addition: no backfill, no data rewrite, and no
   // touch of last_sync_at (the success-only pull cursor sinceFor reads).
   assert.match(migration, /COMMENT ON COLUMN public\.bank_feed_connections\.last_attempt_at/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
+});
+
+test("recognition_events table stores milestone and usage recognition evidence", () => {
+  const migration = readFileSync(recognitionEventsMigrationPath, "utf8");
+
+  // Additive-only: a new table, no existing tables modified.
+  assert.match(migration, /CREATE TABLE public\.recognition_events/);
+  assert.match(migration, /obligation_id uuid NOT NULL/);
+  assert.match(migration, /period_month text NOT NULL/);
+  assert.match(migration, /amount numeric\(19,4\) NOT NULL/);
+  // FK to performance_obligations ensures events cannot reference deleted obligations.
+  assert.match(
+    migration,
+    /FOREIGN KEY \(obligation_id\)\s+REFERENCES public\.performance_obligations\s+\(id\)/,
+  );
+  // RLS scoped to the tenant.
+  assert.match(migration, /ALTER TABLE public\.recognition_events ENABLE ROW LEVEL SECURITY/);
+  assert.match(migration, /CREATE POLICY org_isolation ON public\.recognition_events/);
+  // No data rewrite.
   assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
 });
