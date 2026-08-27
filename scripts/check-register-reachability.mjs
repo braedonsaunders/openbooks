@@ -17,30 +17,32 @@
  *
  *   reachable      closing commit is an ancestor of main — verified shipped;
  *   unreachable    closing commit resolves but is not an ancestor of main —
- *                  new drift fails immediately; known drift is published in
- *                  BASELINE below, never silent;
+ *                  fails closed; BASELINE below records historical drift for
+ *                  diagnostics, never as an exemption;
  *   unresolvable   the reported closing commit is not a commit object in
  *                  this repository (the branch it lived on was never fetched
  *                  anywhere and its objects are gone);
  *   unattributed   the register does not say what closed the finding at all
  *                  — recording fixed without naming the fix is the defect's
- *                  root mechanism, so it needs a baseline entry to pass;
+ *                  root mechanism and fails closed;
  *   unverifiable   a shallow checkout (CI) cannot resolve historical
  *                  commits; reported loudly as PARTIAL PASS, never counted
  *                  as either verified or a violation.
  *
- * The ratchet cuts both ways, like every baseline gate in scripts/: an
- * unreachable entry NOT in BASELINE fails (new drift cannot slip in); a
- * BASELINE entry that has become reachable fails ("reachable now — remove
- * from baseline", so the backlog cannot rot into permanent amnesty); and a
- * BASELINE entry whose class changed fails (the tree or the register moved
- * underneath it — reconcile before trusting either).
+ * Every gap fails closed, while the ratchet still cuts both ways: a gap NOT in
+ * BASELINE is new drift; a BASELINE entry that has become reachable fails
+ * ("reachable now — remove from baseline", so stale metadata is visible); and
+ * a BASELINE entry whose class changed fails (the tree or the register moved
+ * underneath it — reconcile before trusting either). A machine-readable
+ * IRREDUCIBLE_REGISTER_ROWS_JSON record lists every unsupported row and the
+ * concrete evidence sources attempted for it.
  *
- * Ref choice: the register's contract is the integration branch main — the
- * ref the orchestrator pushes to origin as the goal's final act. Gating on
- * origin/main directly would fail every fix merged since the last push;
- * gating on main fails exactly what will not ship. Override with
- * OPENBOOKS_REGISTER_REF for ad-hoc probes.
+ * Ref choice: the register's contract is the active integration branch — the
+ * ref the orchestrator will push to origin as the goal's final act. In a BB
+ * worktree the local `main` ref can intentionally lag that integration tip,
+ * so the default is `origin/main`; a complete clone that has no remote-tracking
+ * ref falls back to local `main`. Override with OPENBOOKS_REGISTER_REF for
+ * ad-hoc probes.
  *
  * BASELINE provenance: published 2026-08-27 from the goal register
  * (statuses fixed/resolved) at remediation start, from a complete
@@ -48,7 +50,7 @@
  * report, else a hex token in the report that resolves to a commit object,
  * else the newest commit whose subject names the finding id, else no
  * attribution. At baseline 341 of 417 entries could not be verified as
- * shipped from main — that number is the honest size of the problem,
+ * shipped from the integration ref — that number is the honest size of the problem,
  * printed on every pass rather than amnestied. New findings recorded fixed
  * append to REGISTER with a closing commit; a finding whose fix reaches
  * main has its baseline entry removed in the same change.
@@ -57,7 +59,8 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-const CHECK_REF = process.env.OPENBOOKS_REGISTER_REF || "main";
+const REQUESTED_REF = process.env.OPENBOOKS_REGISTER_REF || null;
+const CHECK_REF = REQUESTED_REF || "origin/main";
 const BASELINE_DATE = "2026-08-27";
 
 const BASELINE_CLASSES = new Set(["unreachable", "unresolvable", "unattributed"]);
@@ -245,7 +248,7 @@ const REGISTER_DATA = [
   ["fnd_intake_pgarray_02", "39dd1e57532ba87120e55fe811a96f8e03877e6f"],
   ["fnd_intake_qpdf_01", "d776c26db6b417b473277667496155909c6c1997"],
   ["fnd_mt6g89d5_7irug4", null],
-  ["fnd_mt6g89iv_yul85n", null],
+  ["fnd_mt6g89iv_yul85n", "8a87a6abf1270f107b259527d956e3fa08af3c39"],
   ["fnd_mt6g89oj_cpk530", null],
   ["fnd_mt6g89ug_ggc4yz", "24211ac9"],
   ["fnd_mt6g8a0w_5o5636", "754b2ac7"],
@@ -263,16 +266,16 @@ const REGISTER_DATA = [
   ["fnd_mt6hpbam_wlas4k", null],
   ["fnd_mt6i7r1p_1xo2qh", null],
   ["fnd_mt6i7utw_utu7d9", null],
-  ["fnd_mt6i7zc8_h3i1pr", null],
-  ["fnd_mt6i83o7_vco023", null],
+  ["fnd_mt6i7zc8_h3i1pr", "3a08e4f7cfa3d753708b339a3191ccdc983198f7"],
+  ["fnd_mt6i83o7_vco023", "ee9acc41ef020c6757bd8b1eee3d049f0f64ac73"],
   ["fnd_mt6i8fd7_xriabg", null],
   ["fnd_mt6id2bd_yxdv3r", "647063294a0ce46e3c4c8c095b2e3a8f0d66fbb7"],
-  ["fnd_mt6il84e_uz7sfc", null],
-  ["fnd_mt6ivd1d_n5ue9v", null],
+  ["fnd_mt6il84e_uz7sfc", "e09312985ae1e29b61cf1da8279441bb2c3af9b6"],
+  ["fnd_mt6ivd1d_n5ue9v", "684792dea56f9cd40f239704350631c29809e591"],
   ["fnd_mt6j1xeu_89fmas", "dc9ecc1a5a1f6f440b2b60f1ec42da14e3ceeb8a"],
   ["fnd_mt6j2133_95m1mp", "bf15cbab0ae17b1337d085df8f13ca59e7ea220c"],
-  ["fnd_mt6j2avg_ne1rcc", null],
-  ["fnd_mt6j2li2_rrp3m0", null],
+  ["fnd_mt6j2avg_ne1rcc", "914960d7ab70428397266fe8080371a913f983fd"],
+  ["fnd_mt6j2li2_rrp3m0", "f32660848016e98ee95662b26efc799daf618ee0"],
   ["fnd_mt6njrkj_pa0rpu", null],
   ["fnd_mt6owepq_nisshr", "426847ee363e758ab9f274206d698f2d8ce5453c"],
   ["fnd_mt6r6w39_vvul18", null],
@@ -427,27 +430,27 @@ const REGISTER_DATA = [
   ["fnd_mt9fpr52_rw2w75", "58862ecc29c9747efe173d3ea39e8b1f6f4ed02b"],
   ["fnd_mt9fprbh_7xh58j", "7e37b2fab3ac4e262c552bfbb3cd61ffd0a7fcd9"],
   ["fnd_mt9fprht_sn2vu1", null],
-  ["fnd_mt9fpro7_lkwt8h", null],
+  ["fnd_mt9fpro7_lkwt8h", "07d594ff10eda35af9484768c1ccb30c52d32858"],
   ["fnd_mt9fpruk_hgnxn4", "dd74ddf58a71f2c3ad97c01b7cf8e5a740cd5094"],
-  ["fnd_mt9fps0x_cs9ajw", null],
+  ["fnd_mt9fps0x_cs9ajw", "7282ef15144bc50cae0df9a073a3a72517ab04fb"],
   ["fnd_mt9fps7a_pah0cu", "4e638a0490cd1b1361206e38df88624a7c13a3f4"],
-  ["fnd_mt9fpsdi_73g32s", null],
+  ["fnd_mt9fpsdi_73g32s", "92266c9e92426211981e04bb6b36147a02bd722f"],
   ["fnd_mt9fpsjw_hml958", "8b7572db97db4b6f1f06a2659a6938560666923f"],
   ["fnd_mt9fpsqk_xtbb78", null],
-  ["fnd_mt9fsq8o_7wq7ou", null],
+  ["fnd_mt9fsq8o_7wq7ou", "e7c5dca3ca22beb5eb59f5720a6e0680fb835ae7"],
   ["fnd_mt9fsqf6_5vb0ei", null],
-  ["fnd_mt9g73e2_v569uh", null],
+  ["fnd_mt9g73e2_v569uh", "813763a24677965626f66d27e5e08762fb3ee9a2"],
   ["fnd_mt9g73kl_oiyxc9", "7264f708c6dd334719a0c05a1755b493c5372bb9"],
   ["fnd_mt9g73r2_4sq96c", "77090c7f2761d5e891ef2554be2cd0e093a562d1"],
-  ["fnd_mt9g73xg_rxm7fn", null],
+  ["fnd_mt9g73xg_rxm7fn", "0680072480f2d8db5f9d9609cfe32a7090399fcf"],
   ["fnd_mt9g743u_w8y6mv", null],
   ["fnd_mt9g74ak_f6g1m2", "c57d40fe5b80221d26ad28faec2d3fa26eaaf681"],
   ["fnd_mt9g74gy_xp4y7b", null],
   ["fnd_mt9g74n9_uhjhvx", null],
-  ["fnd_mt9g74tv_6m8ncl", null],
+  ["fnd_mt9g74tv_6m8ncl", "265b1ffcfd1e73b7be66a8842723cbd034472f68"],
   ["fnd_mt9g750l_bsy8hh", "ab02fd34cc895811e950d4d0fef25b6ed0d0cd4e"],
   ["fnd_mt9g7571_fwdt2r", null],
-  ["fnd_mt9g8nwf_y9vc3f", null],
+  ["fnd_mt9g8nwf_y9vc3f", "081fdd9886b919da740743381837a3cda8c2698f"],
   ["fnd_mt9gig7v_teva9z", null],
   ["fnd_mt9gixnn_u8i2at", null],
   ["fnd_mt9gtpt2_pnld8t", null],
@@ -455,7 +458,7 @@ const REGISTER_DATA = [
   ["fnd_mt9gtq9f_kpswno", "7583964fc637885336f1c9f84e2986bf3c692a22"],
   ["fnd_mt9gtqhu_de48jd", "15eed974d7f1c94360503742e27dd6998ef05d07"],
   ["fnd_mt9gtqp9_vtj7m6", null],
-  ["fnd_mt9gtqwq_wtnaf0", null],
+  ["fnd_mt9gtqwq_wtnaf0", "af7b3ca86832f9d63db845d013e2ee6961d72da3"],
   ["fnd_mt9gtr4l_3htnbj", null],
   ["fnd_mt9gtrbp_ex4076", "6a5e2a23a3f87f6247f983856d4c0fbb0ea583ae"],
   ["fnd_mt9hq5r0_7wffwa", "7264f708c6dd334719a0c05a1755b493c5372bb9"],
@@ -463,7 +466,7 @@ const REGISTER_DATA = [
   ["fnd_mt9ivyyp_szb8nc", null],
   ["fnd_mt9jreit_487sxh", "7c15cc80bc4009647311180dc021f9f067a31738"],
   ["fnd_mt9jrpuy_4c7az9", null],
-  ["fnd_mt9kule9_ow7ox1", null],
+  ["fnd_mt9kule9_ow7ox1", "26744445ca04d077fd4f9c7f54bb1bf830e861b5"],
   ["fnd_mt9obj3a_s5rxb8", null],
   ["fnd_mt9q9e7u_816ci9", null],
   ["fnd_mta409jp_84yp5m", null],
@@ -491,10 +494,11 @@ const REGISTER_DATA = [
 ];
 
 /**
- * Published backlog at baseline: [finding id, class]. Each entry names a
- * finding recorded fixed whose fix was NOT verifiably reachable from main
- * on 2026-08-27 — visible here on every pass, owned by the register
- * backlog, removable only when its fix actually reaches main.
+ * Historical baseline metadata: [finding id, class]. Each entry names a
+ * finding recorded fixed whose fix was NOT verifiably reachable from the
+ * integration ref on 2026-08-27. These entries remain useful for class-drift
+ * diagnostics, but auditRegister treats them as violations; history gaps are
+ * never silently waived by retaining a baseline row.
  */
 const BASELINE_DATA = [
   ["fnd_018b450d_de435b", "unattributed"],
@@ -583,7 +587,6 @@ const BASELINE_DATA = [
   ["fnd_ff21970a_73f04b", "unattributed"],
   ["fnd_ff47a174_c9b691", "unattributed"],
   ["fnd_mt6g89d5_7irug4", "unattributed"],
-  ["fnd_mt6g89iv_yul85n", "unattributed"],
   ["fnd_mt6g89oj_cpk530", "unattributed"],
   ["fnd_mt6gk4yo_sh9m3d", "unattributed"],
   ["fnd_mt6grtkq_08ny3r", "unattributed"],
@@ -594,13 +597,7 @@ const BASELINE_DATA = [
   ["fnd_mt6hpbam_wlas4k", "unattributed"],
   ["fnd_mt6i7r1p_1xo2qh", "unattributed"],
   ["fnd_mt6i7utw_utu7d9", "unattributed"],
-  ["fnd_mt6i7zc8_h3i1pr", "unattributed"],
-  ["fnd_mt6i83o7_vco023", "unattributed"],
   ["fnd_mt6i8fd7_xriabg", "unattributed"],
-  ["fnd_mt6il84e_uz7sfc", "unattributed"],
-  ["fnd_mt6ivd1d_n5ue9v", "unattributed"],
-  ["fnd_mt6j2avg_ne1rcc", "unattributed"],
-  ["fnd_mt6j2li2_rrp3m0", "unattributed"],
   ["fnd_mt6njrkj_pa0rpu", "unattributed"],
   ["fnd_mt6r6w39_vvul18", "unattributed"],
   ["fnd_mt7nxp48_3iyi13", "unattributed"],
@@ -712,30 +709,19 @@ const BASELINE_DATA = [
   ["fnd_mt9f3fnu_tztsoy", "unattributed"],
   ["fnd_mt9f3fun_4nrtx5", "unattributed"],
   ["fnd_mt9fprht_sn2vu1", "unattributed"],
-  ["fnd_mt9fpro7_lkwt8h", "unattributed"],
-  ["fnd_mt9fps0x_cs9ajw", "unattributed"],
-  ["fnd_mt9fpsdi_73g32s", "unattributed"],
   ["fnd_mt9fpsqk_xtbb78", "unattributed"],
-  ["fnd_mt9fsq8o_7wq7ou", "unattributed"],
   ["fnd_mt9fsqf6_5vb0ei", "unattributed"],
-  ["fnd_mt9g73e2_v569uh", "unattributed"],
-  ["fnd_mt9g73xg_rxm7fn", "unattributed"],
   ["fnd_mt9g743u_w8y6mv", "unattributed"],
   ["fnd_mt9g74gy_xp4y7b", "unattributed"],
   ["fnd_mt9g74n9_uhjhvx", "unattributed"],
-  ["fnd_mt9g74tv_6m8ncl", "unattributed"],
   ["fnd_mt9g7571_fwdt2r", "unattributed"],
-  ["fnd_mt9g8nwf_y9vc3f", "unattributed"],
   ["fnd_mt9gig7v_teva9z", "unattributed"],
   ["fnd_mt9gixnn_u8i2at", "unattributed"],
   ["fnd_mt9gtpt2_pnld8t", "unattributed"],
   ["fnd_mt9gtqp9_vtj7m6", "unattributed"],
-  ["fnd_mt9gtqwq_wtnaf0", "unattributed"],
   ["fnd_mt9gtr4l_3htnbj", "unattributed"],
-  ["fnd_mt9hq5zf_n0e5c1", "unattributed"],
   ["fnd_mt9ivyyp_szb8nc", "unattributed"],
   ["fnd_mt9jrpuy_4c7az9", "unattributed"],
-  ["fnd_mt9kule9_ow7ox1", "unattributed"],
   ["fnd_mt9obj3a_s5rxb8", "unattributed"],
   ["fnd_mt9q9e7u_816ci9", "unattributed"],
   ["fnd_mta409jp_84yp5m", "unattributed"],
@@ -753,80 +739,25 @@ const BASELINE_DATA = [
   ["fnd_mtain7xv_n6lbj3", "unattributed"],
   ["fnd_mtbnpxsd_9e8npy", "unattributed"],
   ["fnd_mtbnqpsu_xt0hrx", "unattributed"],
-  ["fnd_069e20fb_aa8302", "unreachable"],
-  ["fnd_1c61887e_a94923", "unreachable"],
+  ["fnd_mt9hq5zf_n0e5c1", "unattributed"],
   ["fnd_24dfd85d_ff16d2", "unreachable"],
-  ["fnd_255eda65_3437e2", "unreachable"],
-  ["fnd_299f9d00_b8bb80", "unreachable"],
-  ["fnd_37932d26_500541", "unreachable"],
-  ["fnd_38aad0b8_0c6b88", "unreachable"],
-  ["fnd_3a3d9be5_bda2a6", "unreachable"],
   ["fnd_421d5f16_2b6657", "unreachable"],
   ["fnd_56e2f1d3_73d494", "unreachable"],
-  ["fnd_67b82c5b_7ecef2", "unreachable"],
-  ["fnd_6a582972_18e497", "unreachable"],
   ["fnd_6a5d52fa_a5a3a0", "unreachable"],
-  ["fnd_6ccfaed5_752f7a", "unreachable"],
-  ["fnd_6ec65665_e4848b", "unreachable"],
-  ["fnd_77376743_7fd96a", "unreachable"],
-  ["fnd_7a204369_c63b7d", "unreachable"],
   ["fnd_815b6d7d_de3a32", "unreachable"],
   ["fnd_82904c62_85f4ed", "unreachable"],
   ["fnd_84a1dbbb_832e7c", "unreachable"],
   ["fnd_8ae2ccb8_9a2063", "unreachable"],
   ["fnd_8af82a06_e94d88", "unreachable"],
-  ["fnd_9843aa70_2baa0d", "unreachable"],
-  ["fnd_9bad2b47_ba541e", "unreachable"],
-  ["fnd_a02c07d5_82fd6e", "unreachable"],
-  ["fnd_a08f4ac8_089cca", "unreachable"],
-  ["fnd_a639aeb0_318060", "unreachable"],
-  ["fnd_b6d6b92c_3c93b8", "unreachable"],
-  ["fnd_b99f4ba4_4a9211", "unreachable"],
-  ["fnd_cc43700e_ade620", "unreachable"],
-  ["fnd_d278f487_2a57a4", "unreachable"],
   ["fnd_d3eb5d98_28c85a", "unreachable"],
   ["fnd_d46f1bdf_6db94a", "unreachable"],
-  ["fnd_d506f57f_c2509f", "unreachable"],
-  ["fnd_da9f93cd_4ebc6b", "unreachable"],
-  ["fnd_dac13093_c06709", "unreachable"],
-  ["fnd_db990c34_58b0ad", "unreachable"],
-  ["fnd_dcf29488_68f38a", "unreachable"],
   ["fnd_ddae2dd2_92aed7", "unreachable"],
-  ["fnd_e9a0ec01_449310", "unreachable"],
   ["fnd_f3336505_de4203", "unreachable"],
   ["fnd_f40ce24a_881fae", "unreachable"],
-  ["fnd_f410d9a3_0b5665", "unreachable"],
   ["fnd_mt7nyxa_ns307", "unreachable"],
   ["fnd_mt7nyxa_tax307", "unreachable"],
-  ["fnd_mt7x08vi_q1kuuq", "unreachable"],
-  ["fnd_mt97dd9k_xl8bc6", "unreachable"],
-  ["fnd_mt97n01e_k0i905", "unreachable"],
-  ["fnd_mt97szcp_4st3jw", "unreachable"],
-  ["fnd_mt97tia0_suyr0b", "unreachable"],
-  ["fnd_mt97vtcu_qq1p6l", "unreachable"],
-  ["fnd_mt97wk5r_6qlleu", "unreachable"],
-  ["fnd_mt97wkcv_xyihvs", "unreachable"],
-  ["fnd_mt97x354_95wuji", "unreachable"],
-  ["fnd_mt97yzh2_g2elfn", "unreachable"],
-  ["fnd_mt981v1v_zf5ryu", "unreachable"],
   ["fnd_mt9844pt_0bwnsn", "unreachable"],
-  ["fnd_mt9844xu_b1ncd4", "unreachable"],
-  ["fnd_mt98zmzh_yr5vfd", "unreachable"],
-  ["fnd_mt990eqc_pogusd", "unreachable"],
-  ["fnd_mt9fpr52_rw2w75", "unreachable"],
-  ["fnd_mt9fprbh_7xh58j", "unreachable"],
-  ["fnd_mt9fpsjw_hml958", "unreachable"],
-  ["fnd_mt9g73r2_4sq96c", "unreachable"],
-  ["fnd_mt9g74ak_f6g1m2", "unreachable"],
-  ["fnd_mt9g750l_bsy8hh", "unreachable"],
-  ["fnd_mt9gtq0t_aacpui", "unreachable"],
-  ["fnd_mt9gtqhu_de48jd", "unreachable"],
-  ["fnd_mt9gtrbp_ex4076", "unreachable"],
-  ["fnd_mt9jreit_487sxh", "unreachable"],
-  ["fnd_mta409tl_1ql1n7", "unreachable"],
-  ["fnd_mtag55cv_zpbhuy", "unreachable"],
   ["fnd_mtbnparb_fnvdqh", "unreachable"],
-  ["fnd_mtbnqgz1_n95clg", "unreachable"],
   ["fnd_mtbnrwxh_xuh8t0", "unreachable"],
   ["fnd_mt6g89ug_ggc4yz", "unresolvable"],
   ["fnd_mt6g8a0w_5o5636", "unresolvable"],
@@ -848,11 +779,12 @@ export { CHECK_REF, BASELINE_DATE };
  * Classify every register entry against the tree. resolveRef maps a
  * reported ref to its commit sha (null when the object is absent from this
  * clone); isAncestor reports whether a resolved sha is an ancestor of the
- * check ref; partial marks a checkout that cannot resolve historical
- * objects (shallow CI) — unverifiable entries there are reported, never
- * silently trusted or failed.
+ * check ref; isEquivalent reports truthy for a squash-equivalent patch (or
+ * null when no equivalent patch exists); partial marks a checkout
+ * that cannot resolve historical objects (shallow CI) — unverifiable entries
+ * there are reported, never silently trusted or failed.
  */
-export function auditRegister({ register, baseline, resolveRef, isAncestor, partial = false }) {
+export function auditRegister({ register, baseline, resolveRef, isAncestor, isEquivalent = () => null, checkRef = CHECK_REF, partial = false }) {
   const integrity = [];
   const seen = new Set();
   for (const [id] of register) {
@@ -905,16 +837,28 @@ export function auditRegister({ register, baseline, resolveRef, isAncestor, part
       }
       continue;
     }
-    if (isAncestor(sha)) {
+    const ancestor = isAncestor(sha);
+    // A shallow clone cannot prove that a non-ancestor is absent from the
+    // full history. Do not let a truncated rev-list turn a valid historical
+    // fix into a false unreachable violation.
+    if (partial && !ancestor) {
+      counts.unverifiable += 1;
+      continue;
+    }
+    const equivalentSha = ancestor ? null : isEquivalent(sha);
+    if (ancestor || equivalentSha) {
       counts.reachable += 1;
       if (baseline.has(id)) {
-        staleBaseline.push({ id, ref: sha.slice(0, 8), was: baseline.get(id), detail: `closing commit ${sha.slice(0, 8)} is now reachable from ${CHECK_REF} — remove from baseline` });
+        const detail = equivalentSha
+          ? `closing commit ${sha.slice(0, 8)} has a squash-equivalent patch on ${checkRef} — remove from baseline`
+          : `closing commit ${sha.slice(0, 8)} is now reachable from ${checkRef} — remove from baseline`;
+        staleBaseline.push({ id, ref: sha.slice(0, 8), was: baseline.get(id), detail });
       }
       continue;
     }
     counts.unreachable += 1;
     const baselinedAs = baseline.get(id);
-    const detail = `closing commit ${sha.slice(0, 8)} is not an ancestor of ${CHECK_REF}`;
+    const detail = `closing commit ${sha.slice(0, 8)} is not an ancestor or squash-equivalent of ${checkRef}`;
     if (baselinedAs === "unreachable") {
       knownGaps.push({ id, entryClass: "unreachable", detail });
     } else if (baselinedAs) {
@@ -943,44 +887,158 @@ function resolveCommit(ref) {
   }
 }
 
+/**
+ * Ask git's deterministic patch-id comparison whether a reported commit was
+ * replayed on ref (normally by a squash merge). `git cherry` compares patches,
+ * not metadata, and its `-` marker means the commit's patch already exists on
+ * the upstream ref. Exact ancestry is checked separately and always wins.
+ */
+function isPatchEquivalent(ref, upstreamRef) {
+  try {
+    const lines = git("cherry", "-v", upstreamRef, ref).trim().split("\n");
+    return lines.some((line) => line.startsWith("- ") && line.split(/\s+/, 3)[1] === ref);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Preserve the evidence trail for rows that remain unsupported. A null
+ * register ref is not silently promoted from a similarly named worker branch:
+ * branch and subject searches are recorded as attempted sources, while only
+ * exact ancestry or deterministic patch-id equivalence can mark a row
+ * reachable. The result is emitted as one JSON record so CI and remediation
+ * tooling can consume the irreducible set without scraping prose.
+ */
+function collectAttributionEvidence({ register, checkRef, ancestors, equivalentCommits, shallow }) {
+  const refs = git("for-each-ref", "--format=%(refname)").split("\n").filter(Boolean);
+  const subjects = git("log", "--all", "--format=%H%x09%s", "--no-decorate")
+    .split("\n")
+    .map((line) => {
+      const separator = line.indexOf("\t");
+      return separator < 0 ? null : { sha: line.slice(0, separator), subject: line.slice(separator + 1) };
+    })
+    .filter(Boolean);
+  const branchStatus = new Map();
+  const statusForBranch = (ref) => {
+    if (branchStatus.has(ref)) return branchStatus.get(ref);
+    const tip = resolveCommit(ref);
+    const exactAncestor = Boolean(tip && ancestors.has(tip));
+    const patchEquivalent = Boolean(
+      tip && !exactAncestor && !shallow && (equivalentCommits.has(tip) || isPatchEquivalent(tip, checkRef)),
+    );
+    const status = { ref, tip, exactAncestor, patchEquivalent };
+    branchStatus.set(ref, status);
+    return status;
+  };
+
+  const evidence = new Map();
+  for (const [id, reportedRef] of register) {
+    const stem = id.split("_")[1];
+    const matchingBranches = refs
+      .filter((ref) => ref.includes(id) || ref.includes(`itm-${stem}-`))
+      .map(statusForBranch);
+    const matchingSubjects = subjects.filter(({ subject }) => subject.includes(id));
+    const resolvedSha = reportedRef ? resolveCommit(reportedRef) : null;
+    const exactAncestor = Boolean(resolvedSha && ancestors.has(resolvedSha));
+    const patchEquivalent = Boolean(resolvedSha && equivalentCommits.has(resolvedSha));
+    const attemptedSources = [];
+    if (reportedRef) attemptedSources.push("register-closing-ref");
+    else attemptedSources.push("register-attribution");
+    if (resolvedSha) attemptedSources.push("active-ref-ancestry");
+    if (resolvedSha && !exactAncestor && !shallow) attemptedSources.push("deterministic-patch-id");
+    if (matchingBranches.length > 0) attemptedSources.push("matching-branch-ref");
+    if (matchingSubjects.length > 0) attemptedSources.push("matching-commit-subject");
+    evidence.set(id, {
+      reportedRef,
+      resolvedSha,
+      exactAncestor,
+      patchEquivalent,
+      attemptedSources,
+      matchingBranches,
+      matchingSubjects,
+    });
+  }
+  return evidence;
+}
+
+function irreducibleRows(result, evidenceById, checkRef) {
+  const rows = [...result.newDrift, ...result.knownGaps, ...result.classDrift];
+  return rows.map((entry) => ({
+    id: entry.id,
+    category: entry.entryClass || entry.now,
+    detail: entry.detail,
+    checkRef,
+    evidence: evidenceById.get(entry.id) || null,
+  }));
+}
+
+function selectCheckRef() {
+  if (REQUESTED_REF) return REQUESTED_REF;
+  // BB worktrees can carry a stale local main while the active integration tip
+  // is the remote-tracking ref. Prefer that tip, but keep complete local clones
+  // without remotes usable.
+  return resolveCommit("origin/main") ? "origin/main" : "main";
+}
+
 function main() {
+  const checkRef = selectCheckRef();
   let shallow = false;
   try {
     shallow = git("rev-parse", "--is-shallow-repository").trim() === "true";
   } catch {
-    console.error(`FAIL: git is unavailable, so the register cannot be checked against ${CHECK_REF}.`);
+    console.error(`FAIL: git is unavailable, so the register cannot be checked against ${checkRef}.`);
     process.exitCode = 1;
     return;
   }
 
-  const mainSha = resolveCommit(CHECK_REF);
+  const mainSha = resolveCommit(checkRef);
   if (!mainSha) {
     if (shallow) {
       console.log(
-        `PARTIAL PASS: this shallow checkout has no ${CHECK_REF} ref, so 0/${REGISTER.size} register entries ` +
+        `PARTIAL PASS: this shallow checkout has no ${checkRef} ref, so 0/${REGISTER.size} register entries ` +
           `could be verified against the tree. Re-run with complete history for the real gate.`,
       );
       return;
     }
-    console.error(`FAIL: cannot resolve ${CHECK_REF} in a complete checkout — the register's contract ref is missing.`);
+    console.error(`FAIL: cannot resolve ${checkRef} in a complete checkout — the register's contract ref is missing.`);
     process.exitCode = 1;
     return;
   }
 
   // Ancestors of the check ref, computed once: rev-list is the exact
   // ancestry relation, and one pass beats one merge-base walk per entry.
-  const ancestors = new Set(git("rev-list", CHECK_REF).split("\n").filter(Boolean));
+  const ancestors = new Set(git("rev-list", checkRef).split("\n").filter(Boolean));
+  const equivalentCommits = new Set();
+  if (!shallow) {
+    for (const [, ref] of REGISTER) {
+      if (!ref) continue;
+      const sha = resolveCommit(ref);
+      if (!sha || ancestors.has(sha)) continue;
+      if (isPatchEquivalent(sha, checkRef)) equivalentCommits.add(sha);
+    }
+  }
+  const evidenceById = collectAttributionEvidence({
+    register: REGISTER,
+    checkRef,
+    ancestors,
+    equivalentCommits,
+    shallow,
+  });
   const result = auditRegister({
     register: REGISTER,
     baseline: BASELINE,
     resolveRef: resolveCommit,
     isAncestor: (sha) => ancestors.has(sha),
+    isEquivalent: (sha) => (equivalentCommits.has(sha) ? true : null),
+    checkRef,
     partial: shallow,
   });
 
   const { counts } = result;
   const violations =
     result.newDrift.length +
+    result.knownGaps.length +
     result.staleBaseline.length +
     result.classDrift.length +
     result.integrity.length +
@@ -996,8 +1054,21 @@ function main() {
       for (const line of result.bogusBaseline) console.error(`  ${line}`);
     }
     if (result.newDrift.length > 0) {
-      console.error(`FAIL: ${result.newDrift.length} finding(s) recorded fixed whose fix is not reachable from ${CHECK_REF} and not baselined:`);
+      console.error(`FAIL: ${result.newDrift.length} finding(s) recorded fixed whose fix is not reachable from ${checkRef} and not baselined:`);
       for (const entry of result.newDrift) console.error(`  ${entry.id} [${entry.entryClass}] ${entry.detail}`);
+    }
+    if (result.knownGaps.length > 0) {
+      console.error(
+        `FAIL: ${result.knownGaps.length} baselined register gap(s) remain; ` +
+          "the baseline records history, it does not waive reachability:",
+      );
+      for (const entryClass of ["unreachable", "unresolvable", "unattributed"]) {
+        const group = result.knownGaps.filter((gap) => gap.entryClass === entryClass);
+        if (group.length === 0) continue;
+        console.error(`  ${entryClass} (${group.length}):`);
+        for (const gap of group.slice(0, 5)) console.error(`    ${gap.id} — ${gap.detail}`);
+        if (group.length > 5) console.error(`    … ${group.length - 5} more`);
+      }
     }
     if (result.staleBaseline.length > 0) {
       console.error("FAIL: baseline entries now reachable:");
@@ -1007,6 +1078,20 @@ function main() {
       console.error("FAIL: baseline entries whose class changed:");
       for (const entry of result.classDrift) console.error(`  ${entry.id} was ${entry.was}, now ${entry.now} — ${entry.detail}`);
     }
+    const irreducible = irreducibleRows(result, evidenceById, checkRef);
+    if (irreducible.length > 0) {
+      const categoryCounts = irreducible.reduce((groups, row) => {
+        groups[row.category] = (groups[row.category] || 0) + 1;
+        return groups;
+      }, {});
+      console.error(
+        `IRREDUCIBLE_REGISTER_ROWS_JSON=${JSON.stringify({
+          checkRef,
+          categoryCounts,
+          rows: irreducible,
+        })}`,
+      );
+    }
     process.exitCode = 1;
     return;
   }
@@ -1014,7 +1099,7 @@ function main() {
   if (counts.unverifiable > 0) {
     console.log(
       `PARTIAL PASS: shallow checkout verified ${counts.reachable}/${REGISTER.size} register entries against ` +
-        `${CHECK_REF}; ${counts.unverifiable} could not be resolved without full history. ` +
+        `${checkRef}; ${counts.unverifiable} could not be resolved without full history. ` +
         `Re-run with complete history for the real gate.`,
     );
     return;
@@ -1024,7 +1109,7 @@ function main() {
     `${BASELINE.size} published gaps (baseline ${BASELINE_DATE}: ` +
     `${counts.unreachable} unreachable, ${counts.unresolvable} unresolvable, ${counts.unattributed} unattributed)`;
   console.log(
-    `PASS: ${counts.reachable}/${REGISTER.size} register entries verified reachable from ${CHECK_REF}; ` +
+    `PASS: ${counts.reachable}/${REGISTER.size} register entries verified reachable from ${checkRef}; ` +
       `${gaps}; 0 new drift.`,
   );
   console.log(`published gaps — baselined, owned by the register backlog (${BASELINE.size}):`);
