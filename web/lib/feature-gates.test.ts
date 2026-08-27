@@ -1196,6 +1196,21 @@ test('the surfaces this test was written for are covered', () => {
     'SFTP server create must refuse when Bank Feeds is off',
   )
   assert.match(
+    read('app/api/banking/sftp/route.ts'),
+    /assertTenantRootPrefix\(/,
+    'SFTP server create must derive/validate the physical root through the engine canonical tenant validator — never store a tenant-selected prefix verbatim',
+  )
+  assert.doesNotMatch(
+    read('app/api/banking/sftp/route.ts'),
+    /replace\(\^\\\/\+\|\\\/\+\$\/g/,
+    'the create route must not launder an absolute prefix by stripping leading slashes — absolute, encoded or cross-tenant prefixes must be refused',
+  )
+  assert.match(
+    read('app/api/banking/sftp/route.ts'),
+    /status: 400/,
+    'a root prefix outside the tenant namespace must be refused at creation, not rewritten or stored',
+  )
+  assert.match(
     read('app/api/banking/sftp/[id]/route.ts'),
     /guardFeaturePermission\('admin\.setup\.manage', 'bankFeeds'\)/,
     'SFTP server rotate/delete must refuse when Bank Feeds is off',
