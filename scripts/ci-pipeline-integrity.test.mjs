@@ -302,6 +302,132 @@ test('register reachability fails new drift, publishes baselined gaps, and rejec
   )
 })
 
+/**
+ * The golden-harness gate.
+ *
+ * Three consecutive audit rounds closed financial blockers while introducing
+ * new ledger defects at par: the FX residual that landed in a tax box and the
+ * widened variance-account hole were both INTRODUCED BY FIXES, and fix safety
+ * on the financial edit path did not improve across any of them. The gate that
+ * catches this class of break already exists — a seeded company driven through
+ * real activity by the business simulation, then the golden harness asserting
+ * the trial balance and the subledger↔GL and inventory tie-outs — but nothing
+ * bound that gate to the merge decision. trust.yml runs the harness, yet a
+ * pull request merges on the checks in test.yml, so a fix could merge with the
+ * harness red, or with the harness quietly dropped.
+ *
+ * So the requirement is pinned here, in the same contract suite that pins CI
+ * membership: any change to a financial edit path merges only through CI, and
+ * CI must run the golden harness — on a ledger carrying real sim activity,
+ * inside the same job as the full test suite, failing the job. A fix that
+ * breaks a ledger invariant must fail before merge, not at the next audit.
+ */
+
+const GOLDEN_HARNESS = /npm\s+--prefix\s+engine\s+run\s+--silent\s+harness\b/
+const SIM_PROVISION = /sim\s+--\s+provision\b/
+const SIM_RUN = /sim\s+--\s+run\b/
+const SCHEMA_BOOTSTRAP = /scripts\/bootstrap\.ts/
+
+/** Slice a workflow from a top-level `key:` to the next top-level key. */
+function topLevelBlock(source, key) {
+  const start = source.indexOf(`\n  ${key}:`)
+  if (start === -1) return ''
+  // Exactly two spaces of indent: `\n  ` alone also matches every deeper key.
+  const next = source.slice(start + 1).search(/\n {2}(?=\S)/)
+  return next === -1 ? source : source.slice(start, start + 1 + next)
+}
+
+/** The `- name:` step a command lives in, so step-level neutering is visible. */
+function stepAround(source, needle) {
+  const at = source.indexOf(needle)
+  const start = source.lastIndexOf('\n      - ', at)
+  const end = source.indexOf('\n      - ', at)
+  return source.slice(start, end === -1 ? undefined : end)
+}
+
+test('the merge-gating workflow runs the golden harness, after real activity, in the full-suite job', () => {
+  // test.yml is the workflow pull requests actually merge against, so this is
+  // where "runs the golden harness as part of its check command" has to hold.
+  const source = readFileSync(join(WORKFLOW_DIR, 'test.yml'), 'utf8')
+  const blocks = runBlocks(source)
+
+  const harness = blocks.filter((b) => GOLDEN_HARNESS.test(withoutComments(b.body)))
+  assert.equal(
+    harness.length,
+    1,
+    'the merge gate must run the golden harness exactly once; it is missing, duplicated, or renamed',
+  )
+  const harnessCode = withoutComments(harness[0].body)
+  assert.ok(
+    !toleratesFailure(harnessCode),
+    'a `||` fallback on the harness invocation is a statement that ledger invariants may fail here',
+  )
+  assert.match(
+    stepAround(source, harnessCode.trim().split('\n')[0]),
+    /manifest\.json/,
+    'the harness must run on the org the simulation provisioned (read from its manifest), not the pristine bootstrap tenant where every tie-out passes vacuously',
+  )
+  assert.ok(
+    !/continue-on-error/.test(stepAround(source, harnessCode.trim().split('\n')[0])),
+    'the harness step must not be advisory: continue-on-error converts the gate into a footnote',
+  )
+
+  // A harness over an untouched org proves nothing, so the simulation that
+  // drives real activity must run first, in order, with the schema loaded
+  // before either of them.
+  const provision = blocks.filter((b) => SIM_PROVISION.test(withoutComments(b.body)))
+  const simRun = blocks.filter((b) => SIM_RUN.test(withoutComments(b.body)))
+  const bootstraps = blocks.filter((b) => SCHEMA_BOOTSTRAP.test(withoutComments(b.body)))
+  assert.equal(provision.length, 1, 'the merge gate must drive the seeded company exactly once')
+  assert.equal(simRun.length, 1, 'the simulation must actually run the provisioned company, not only provision it')
+  assert.ok(
+    bootstraps.some((b) => b.line < provision[0].line),
+    'the schema must be bootstrapped before the simulation can provision anything',
+  )
+  assert.ok(
+    provision[0].line <= simRun[0].line && simRun[0].line < harness[0].line,
+    'ordering is the invariant: provision activity → run it → assert the ledger invariants',
+  )
+
+  // The simulation refuses to run without its explicit opt-in; pin it so the
+  // activity step cannot be silently disarmed by an env tidy-up.
+  const integration = topLevelBlock(source, 'integration')
+  assert.match(integration, /OPENBOOKS_SIM:\s*"1"/, 'the sim opt-in interlock must be set for the activity step')
+
+  // "as part of its check command": the harness rides in the same job as the
+  // full database-backed suite, so one green check covers both.
+  assert.ok(integration.includes('run: npm test'), 'this contract pins the integration job, the one that runs the full suite')
+  assert.ok(
+    integration.includes(harnessCode.trim().split('\n')[0]),
+    'the golden harness must run in the same job as the full suite, not in a workflow merges do not wait for',
+  )
+
+  // The gate only blocks merges while the workflow fires on pull requests.
+  const on = source.slice(source.indexOf('\non:'), source.indexOf('\njobs:'))
+  assert.match(on, /pull_request:/, 'test.yml must keep its pull_request trigger or the gate gates nothing')
+})
+
+test('the trust workflow keeps running the golden harness on pull requests too', () => {
+  // Defense in depth: trust.yml's invariants job is the original harness run
+  // and the source of the published evidence corpus. Dropping it — or its
+  // pull_request trigger — must fail here just like dropping the merge-gate
+  // copy above.
+  const source = readFileSync(join(WORKFLOW_DIR, 'trust.yml'), 'utf8')
+  const on = source.slice(source.indexOf('\non:'), source.indexOf('\njobs:'))
+  assert.match(on, /pull_request:/, 'trust.yml must keep its pull_request trigger')
+
+  const blocks = runBlocks(source)
+  const harness = blocks.filter((b) => GOLDEN_HARNESS.test(withoutComments(b.body)))
+  assert.equal(harness.length, 1, 'trust.yml must keep running the golden harness exactly once')
+  assert.ok(
+    !toleratesFailure(withoutComments(harness[0].body)),
+    'the evidence pipeline must not tolerate a failed harness invocation',
+  )
+  const provision = blocks.find((b) => SIM_PROVISION.test(withoutComments(b.body)))
+  assert.ok(provision, 'trust.yml must keep driving real activity before asserting invariants')
+  assert.ok(provision.line < harness[0].line, 'the harness must run after the simulation, not before it')
+})
+
 test('this tree passes the live register-reachability gate', () => {
   // Runs the exact command the npm test script runs, like the lint-ceiling
   // test above — re-deriving the git plumbing here would drift the same way.
