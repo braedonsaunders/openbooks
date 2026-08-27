@@ -39,6 +39,7 @@ export interface Checkpoint {
   /** Trial-balance total debits/credits and per-account balances (hashable). */
   trialBalance: { debits: string; credits: string; accounts: number };
   controlTieOut: { account: string; number: string | null; kind: string; gl: string; subledger: string; direct: string; diff: string }[];
+  inventoryTieOut: { subsidiary: string; account: string; number: string | null; methods: string; gl: string; subledger: string; diff: string }[];
   checks: Check[];
   timings: ReportTiming[];
   pass: boolean;
@@ -228,6 +229,86 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
     detail: `${controlTieOut.length} control accounts; worst |GL − subledger − directJE| = ${worstTie}`,
   });
 
+  // -- Inventory subledger ↔ GL tie-out per legal entity and control account.
+  // The inventory control accounts are the asset accounts on item costing
+  // profiles; every open cost layer they own must be ON the GL. This is the
+  // gate the AR/AP tie-out has but inventory never had: five separate
+  // variance-routing sites (revaluation without a variance account, receipt
+  // PPV, assembly build variance, landed cost under standard) can rewrite the
+  // layers while the asset account nets to zero or absorbs the difference,
+  // and only an exact per-entity tie-out notices. Valuation follows the same
+  // formula the product itself reports (Σ round(remaining × unit_cost) minus
+  // provisional-cost issues), so the check can only fail when the LEDGER is
+  // wrong, never when the arithmetic presentation differs. Rows are exact:
+  // ANY nonzero diff fails. GL legs are grouped by their stamped subsidiary
+  // (root-subsidiary rows whose line stamp was left null count as the root),
+  // and the costing methods sharing an account are listed in the row — an org
+  // that gives each method its own account gets one row per method/account.
+  const invTie = await all<{ subsidiary_id: string; subsidiary: string; number: string | null; account: string; methods: string; gl: string; subledger: string }>(sql`
+    with prof as materialized (
+      select p.item_id, p.asset_account_id
+        from item_inventory_profiles p
+       where p.org_id = ${orgId}),
+    layer_val as (
+      select ln.subsidiary_id, prof.asset_account_id,
+             sum(round(ln.remaining_quantity * ln.unit_cost, 4)) as value
+        from cost_layers ln
+        join prof on prof.item_id = ln.item_id
+       where ln.org_id = ${orgId}
+       group by ln.subsidiary_id, prof.asset_account_id),
+    prov_val as (
+      select mv.subsidiary_id, prof.asset_account_id,
+             sum(round(pc.remaining_quantity * pc.provisional_unit_cost, 4)) as value
+        from inventory_provisional_costs pc
+        join inventory_movements mv on mv.id = pc.issue_movement_id and mv.org_id = pc.org_id
+        join prof on prof.item_id = pc.item_id
+       where pc.org_id = ${orgId}
+       group by mv.subsidiary_id, prof.asset_account_id),
+    value_rows as (
+      select coalesce(l.subsidiary_id, p.subsidiary_id) as subsidiary_id,
+             coalesce(l.asset_account_id, p.asset_account_id) as account_id,
+             coalesce(l.value, 0) - coalesce(p.value, 0) as value
+        from layer_val l
+        full outer join prov_val p
+          on p.subsidiary_id = l.subsidiary_id and p.asset_account_id = l.asset_account_id),
+    gl as (
+      select coalesce(l.subsidiary_id, (select s.id from subsidiaries s where s.org_id = ${orgId} and s.parent_id is null order by s.created_at limit 1)) as subsidiary_id,
+             a.id as account_id, sum(l.amount) as bal
+        from accounts a
+        join journal_lines l on l.account_id = a.id and l.org_id = a.org_id
+        join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed')
+       where a.org_id = ${orgId}
+         and exists (select 1 from prof where prof.asset_account_id = a.id)
+       group by 1, 2),
+    pairs as (
+      select subsidiary_id, account_id from value_rows
+      union
+      select subsidiary_id, account_id from gl)
+    select pr.subsidiary_id, s.name as subsidiary, a.number, a.name as account,
+           (select string_agg(distinct p.costing_method, ',' order by p.costing_method)
+              from item_inventory_profiles p
+             where p.org_id = ${orgId} and p.asset_account_id = pr.account_id) as methods,
+           coalesce(v.value, 0)::text as subledger, coalesce(g.bal, 0)::text as gl
+      from pairs pr
+      join subsidiaries s on s.id = pr.subsidiary_id
+      join accounts a on a.id = pr.account_id
+      left join value_rows v on v.subsidiary_id = pr.subsidiary_id and v.account_id = pr.account_id
+      left join gl g on g.subsidiary_id = pr.subsidiary_id and g.account_id = pr.account_id
+     order by s.name, a.number`);
+  const inventoryTieOut = invTie.map((r) => {
+    const diff = toUnits(r.gl) - toUnits(r.subledger);
+    return { subsidiary: r.subsidiary, account: r.account, number: r.number, methods: r.methods ?? "", gl: r.gl, subledger: r.subledger, diff: fromUnits(diff) };
+  });
+  const worstInvTie = inventoryTieOut.reduce(
+    (worst, row) => cmp(abs(row.diff), worst) > 0 ? abs(row.diff) : worst,
+    "0.0000",
+  );
+  checks.push({
+    name: "inventory-subledger-gl-tieout",
+    ok: cmp(worstInvTie, "0.0000") === 0,
+    detail: `${inventoryTieOut.length} control-account/entity ties across ${new Set(inventoryTieOut.map((r) => r.methods)).size} method sets; worst |GL − Σ open layers| = ${worstInvTie}`,
+  });
+
   // -- Report-latency benchmark (the inception-to-cutoff aggregation hot path) -
   const bench = async (name: string, q: ReturnType<typeof sql>) => {
     const t0 = performance.now();
@@ -284,6 +365,6 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
     cutoff, cutoffSource,
     counts,
     trialBalance: { debits: tb.debits, credits: tb.credits, accounts: Number(tb.accounts) },
-    controlTieOut, checks, timings, pass,
+    controlTieOut, inventoryTieOut, checks, timings, pass,
   };
 }
