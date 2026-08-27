@@ -1,7 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { TaxFilingError, markTaxFilingFiled } from '@openbooks/engine/src/tax-filing.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -20,30 +19,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (filingReference.length > 200) return NextResponse.json({ error: 'reference is too long' }, { status: 422 })
 
   try {
-    const updated = await db.transaction(async (tx) => {
-      const before = (await tx.execute<{ status: 'prepared' | 'filed' }>(sql`
-        select status from tax_filings
-         where id = ${id} and org_id = ${gate.user.orgId} for update`))
-      if (!before.rows[0]) return null
-      if (before.rows[0].status !== 'prepared') throw new Error('already-filed')
-      const result = (await tx.execute<{ id: string; filed_at: string }>(sql`
-        update tax_filings
-           set status = 'filed', filing_reference = ${filingReference || null}, filed_at = now(),
-               updated_at = now(), updated_by = ${gate.user.id}
-         where id = ${id} and org_id = ${gate.user.orgId}
-        returning id, filed_at`))
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${gate.user.orgId}, 'tax_filings', ${id}, 'update',
-                ${JSON.stringify({ before: { status: 'prepared' }, after: { status: 'filed', filingReference: filingReference || null } })}::jsonb,
-                ${gate.user.id})`)
-      return result.rows[0]
-    })
-    if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    return NextResponse.json(updated)
+    const updated = await markTaxFilingFiled(gate.user.orgId, id, gate.user.id, filingReference || null)
+    return NextResponse.json({ id: updated.id, filed_at: updated.filedAt })
   } catch (error) {
-    if (error instanceof Error && error.message === 'already-filed') {
-      return NextResponse.json({ error: 'filing is already filed' }, { status: 409 })
+    if (error instanceof TaxFilingError) {
+      if (error.code === 'not-found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (error.code === 'already-filed') return NextResponse.json({ error: 'filing is already filed' }, { status: 409 })
+      // Stale or ungoverned: the state conflicts with what would be certified.
+      if (error.code === 'stale' || error.code === 'period-not-closed') {
+        return NextResponse.json({ error: error.message }, { status: 409 })
+      }
     }
     return NextResponse.json({ error: 'could not update filing' }, { status: 422 })
   }
