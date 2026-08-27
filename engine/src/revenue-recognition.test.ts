@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, type SqlExecutor } from "./db.ts";
 import { toUnits } from "./money.ts";
 import {
   allocateByRelativeSSP,
   apportion,
+  buildAllRecognitionSchedulesInTransaction,
   buildRecognitionSchedule,
   computeRecognitionSchedule,
   estimateVariableConsideration,
@@ -17,7 +18,7 @@ import {
   separateFinancingComponent,
   type RecognitionInput,
 } from "./revenue-recognition.ts";
-import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -695,6 +696,176 @@ test("milestone schedule rebuilds on new event and preserves posted history", { 
     const run2 = await runRevenueRecognition(org.orgId, "2026-12-31", actorId);
     assert.equal(run2.posted, 1);
     assert.equal(run2.totalAmount, "3000.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Multi-book percent-complete sync — atomic across every book (audit
+// fnd_mt982zsr_wd4f6o). A percent-complete override refresh must rebuild all
+// books' schedules inside one transaction: all books agree on one source
+// percent/contract value, and a failure between books leaves zero changes.
+// ---------------------------------------------------------------------------
+
+/** Reconstruct the literal SQL text from a drizzle query for test instrumentation. */
+function sqlText(query: unknown): string {
+  const chunks = (query as { queryChunks?: unknown[] } | null)?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
+  let out = "";
+  for (const c of chunks) {
+    if (c && typeof c === "object" && Array.isArray((c as { value?: unknown[] }).value)) {
+      out += ((c as { value: string[] }).value).join("");
+    }
+  }
+  return out;
+}
+
+/** A second active GL-posting book so the sync is genuinely multi-book. */
+async function addSecondBook(orgId: string, code: string): Promise<string> {
+  const bookId = randomUUID();
+  await db.execute(sql`
+    insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+    values (${bookId}, ${orgId}, ${code}, ${code + " Book"}, false, true, true)`);
+  return bookId;
+}
+
+/** Seed a contract + single percent_complete obligation directly. */
+async function seedPercentCompleteObligation(
+  org: ScratchOrg,
+  actorId: string,
+  percent: string,
+): Promise<{ contractId: string; obligationId: string }> {
+  const ruleId = randomUUID();
+  await db.execute(sql`
+    insert into recognition_rules
+      (id, org_id, code, name, method, is_forecast, recognition_periods, start_date_source, end_date_source,
+       period_offset, start_offset_days, initial_amount_percent, is_active)
+    values (${ruleId}, ${org.orgId}, 'POC', 'Percent complete', 'percent_complete', false, null,
+            'obligation', 'term', 0, 0, '0', true)`);
+  const contractId = randomUUID();
+  await db.execute(sql`
+    insert into revenue_contracts
+      (id, org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
+    values (${contractId}, ${org.orgId}, ${org.customerId}, 'POC-001', 'active', '2026-07-01', 'CAD', '1000', ${actorId}, ${actorId})`);
+  const obligationId = randomUUID();
+  await db.execute(sql`
+    insert into performance_obligations
+      (id, org_id, contract_id, description, recognition_rule_id, booked_amount, allocated_price,
+       recognition_starts_on, percent_complete, status, created_by, updated_by)
+    values (${obligationId}, ${org.orgId}, ${contractId}, 'Build phase', ${ruleId}, '1000', '1000',
+            '2026-07-01', ${percent}, 'open', ${actorId}, ${actorId})`);
+  return { contractId, obligationId };
+}
+
+interface BookLine {
+  bookId: string;
+  planned: string;
+  periodId: string;
+}
+
+/** Lines planned across every book for the obligation, with their book id. */
+async function scheduledLines(orgId: string, obligationId: string): Promise<BookLine[]> {
+  const r = await db.execute<{ book_id: string; planned_amount: string; period_id: string }>(sql`
+    select s.book_id, l.planned_amount, l.period_id
+      from recognition_schedule_lines l
+      join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+     where s.obligation_id = ${obligationId} and l.org_id = ${orgId}`);
+  return r.rows.map((row) => ({ bookId: row.book_id, planned: row.planned_amount, periodId: row.period_id }));
+}
+
+test("multi-book percent-complete sync plans every book from one source value", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = randomUUID();
+  const book2 = await addSecondBook(org.orgId, "SEC");
+  const { obligationId } = await seedPercentCompleteObligation(org, actorId, "40");
+  try {
+    // 40% of 1000 = 400, caught up in the as-of month (July, which has a period).
+    const results = await buildAllRecognitionSchedules(obligationId, org.orgId, actorId, "2026-07-15");
+    assert.equal(results.length, 2, "both books are scheduled");
+
+    const lines = await scheduledLines(org.orgId, obligationId);
+    assert.equal(lines.length, 2, "one unposted line per book");
+    const books = new Set(lines.map((l) => l.bookId));
+    assert.deepEqual(books, new Set([org.bookId, book2]), "every book has a line");
+    for (const l of lines) {
+      assert.equal(l.planned, "400.0000", "every book agrees on the 40% source value");
+    }
+
+    // A re-sync at a different percent must move EVERY book to the new value —
+    // all books agree on one source percent/contract value.
+    await db.execute(sql`
+      update performance_obligations set percent_complete = '70' where id = ${obligationId} and org_id = ${org.orgId}`);
+    await buildAllRecognitionSchedules(obligationId, org.orgId, actorId, "2026-07-15");
+    const after = await scheduledLines(org.orgId, obligationId);
+    assert.equal(after.length, 2);
+    for (const l of after) assert.equal(l.planned, "700.0000", "every book moved to 70%");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("forced crash between books during multi-book sync leaves zero changes", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = randomUUID();
+  const book2 = await addSecondBook(org.orgId, "SEC");
+  const { obligationId } = await seedPercentCompleteObligation(org, actorId, "40");
+  try {
+    // Commit a complete prior generation: both books planned at 40% (400).
+    await buildAllRecognitionSchedules(obligationId, org.orgId, actorId, "2026-07-15");
+    const before = await scheduledLines(org.orgId, obligationId);
+    assert.equal(before.length, 2);
+    for (const l of before) assert.equal(l.planned, "400.0000");
+
+    // Move the source value to 70% and attempt a rebuild that crashes AFTER the
+    // first book is written but BEFORE the second commits. Because the rebuild
+    // is now a single transaction across all books, the whole thing rolls back.
+    await db.execute(sql`
+      update performance_obligations set percent_complete = '70' where id = ${obligationId} and org_id = ${org.orgId}`);
+
+    let lineInserts = 0;
+    let faultError: unknown = null;
+    await db
+      .transaction(async (realTx) => {
+        const realTxTyped = realTx as SqlExecutor;
+        const faultTx: SqlExecutor = {
+          execute: ((query) => {
+            const r = realTxTyped.execute(query);
+            if (/insert into recognition_schedule_lines/i.test(sqlText(query))) {
+              lineInserts++;
+              // Throw while the second book's line is being written.
+              if (lineInserts === 2) throw new Error("FAULT between books");
+            }
+            return r;
+          }) as SqlExecutor["execute"],
+        };
+        await buildAllRecognitionSchedulesInTransaction(faultTx, obligationId, org.orgId, actorId, "2026-07-15");
+      })
+      .catch((e) => {
+        faultError = e;
+      });
+    assert.ok(faultError instanceof Error && /FAULT between books/.test(faultError.message),
+      `the rebuild must have been rejected by the injected fault (saw ${String(faultError)})`);
+
+    // Zero changes: the prior complete generation is fully intact, both books
+    // still at 40%. A partial-commit implementation would show book PRI at 70%.
+    const after = await scheduledLines(org.orgId, obligationId);
+    assert.equal(after.length, 2, "no book lost its schedule");
+    for (const l of after) {
+      assert.equal(l.planned, "400.0000", "no book moved to the failed 70% — atomic rollback");
+    }
+    assert.ok(
+      new Set(after.map((l) => l.bookId)).has(book2),
+      "the secondary book is still present and unchanged",
+    );
+
+    // Sanity: without the fault, a 70% rebuild updates BOTH books (the fix
+    // works, it was only the crash that rolled back).
+    await buildAllRecognitionSchedules(obligationId, org.orgId, actorId, "2026-07-15");
+    const committed = await scheduledLines(org.orgId, obligationId);
+    for (const l of committed) assert.equal(l.planned, "700.0000", "successful rebuild moves both books");
   } finally {
     await dropScratchOrg(org.orgId);
   }
