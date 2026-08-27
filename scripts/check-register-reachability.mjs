@@ -54,14 +54,24 @@
  * printed on every pass rather than amnestied. New findings recorded fixed
  * append to REGISTER with a closing commit; a finding whose fix reaches
  * main has its baseline entry removed in the same change.
+ *
+ * Live-register probes: set OPENBOOKS_REGISTER_JSON to an exported findings
+ * document or OPENBOOKS_REGISTER_DB to the ultragoal SQLite store. The latter
+ * reads goal_findings (fixed/resolved rows) and joins the latest integration
+ * commit before falling back to the verification note. A live source replaces
+ * the snapshot for that run; malformed or empty sources fail closed.
  */
 
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const REQUESTED_REF = process.env.OPENBOOKS_REGISTER_REF || null;
 const CHECK_REF = REQUESTED_REF || "origin/main";
 const BASELINE_DATE = "2026-08-27";
+const LIVE_REGISTER_JSON = process.env.OPENBOOKS_REGISTER_JSON || null;
+const LIVE_REGISTER_DB = process.env.OPENBOOKS_REGISTER_DB || null;
+const LIVE_REGISTER_THREAD = process.env.OPENBOOKS_REGISTER_THREAD_ID || null;
 
 const BASELINE_CLASSES = new Set(["unreachable", "unresolvable", "unattributed"]);
 
@@ -758,7 +768,6 @@ const BASELINE_DATA = [
   ["fnd_mt7nyxa_tax307", "unreachable"],
   ["fnd_mt9844pt_0bwnsn", "unreachable"],
   ["fnd_mtbnparb_fnvdqh", "unreachable"],
-  ["fnd_mtbnrwxh_xuh8t0", "unreachable"],
   ["fnd_mt6g89ug_ggc4yz", "unresolvable"],
   ["fnd_mt6g8a0w_5o5636", "unresolvable"],
   ["fnd_mt6gfs13_ujfk0k", "unresolvable"],
@@ -774,6 +783,100 @@ const BASELINE_DATA = [
 export const REGISTER = new Map(REGISTER_DATA);
 export const BASELINE = new Map(BASELINE_DATA);
 export { CHECK_REF, BASELINE_DATE };
+
+/**
+ * Parse an externally supplied register without weakening the checked-in
+ * fallback. The BB register lives in the ultragoal SQLite store, while CI
+ * jobs can pass an exported JSON document; both sources are deliberately
+ * opt-in so a normal clone remains dependency-free. Rows with a status field
+ * are restricted to findings recorded fixed or resolved.
+ */
+function parseLiveRegister(value, source) {
+  let rows = value;
+  if (rows && !Array.isArray(rows) && typeof rows === "object") {
+    rows = rows.findings || rows.register || rows.rows;
+  }
+  if (!Array.isArray(rows)) throw new Error(`${source} must contain a findings array`);
+
+  const parsed = [];
+  const seen = new Set();
+  for (const row of rows) {
+    const id = Array.isArray(row) ? row[0] : row?.id || row?.findingId || row?.finding_id;
+    const status = Array.isArray(row) ? null : row?.status;
+    if (status && status !== "fixed" && status !== "resolved") continue;
+    if (typeof id !== "string" || !/^fnd_[a-z0-9_]+$/.test(id)) {
+      throw new Error(`${source} contains an invalid finding id`);
+    }
+    if (seen.has(id)) throw new Error(`${source} contains duplicate finding ${id}`);
+    seen.add(id);
+
+    const ref = Array.isArray(row)
+      ? row[1] ?? null
+      : row?.closingRef ?? row?.closing_ref ?? row?.commitSha ?? row?.commit_sha ?? row?.ref ?? null;
+    if (ref !== null && (typeof ref !== "string" || !/^[0-9a-f]{7,40}$/.test(ref))) {
+      throw new Error(`${source} has an invalid closing ref for ${id}`);
+    }
+    parsed.push([id, ref]);
+  }
+  if (parsed.length === 0) throw new Error(`${source} contains no fixed or resolved findings`);
+  return new Map(parsed);
+}
+
+function refFromResolutionNote(note) {
+  if (typeof note !== "string") return null;
+  // Verification notes conventionally say "Commit <sha>" or "HEAD <sha>".
+  // Prefer those labels so a base commit mentioned later cannot be mistaken
+  // for the fix; fall back to the first standalone commit token.
+  const labelled = note.match(/\b(?:commit|head|sha)\s+([0-9a-f]{7,40})\b/i);
+  if (labelled) return labelled[1];
+  return note.match(/\b[0-9a-f]{7,40}\b/i)?.[0] || null;
+}
+
+function liveRegisterFromJson() {
+  let raw;
+  try {
+    raw = existsSync(LIVE_REGISTER_JSON) ? readFileSync(LIVE_REGISTER_JSON, "utf8") : LIVE_REGISTER_JSON;
+    return parseLiveRegister(JSON.parse(raw), "OPENBOOKS_REGISTER_JSON");
+  } catch (error) {
+    throw new Error(`cannot load OPENBOOKS_REGISTER_JSON: ${error.message}`);
+  }
+}
+
+function liveRegisterFromDatabase() {
+  const threadPredicate = LIVE_REGISTER_THREAD
+    ? `AND f.thread_id = '${LIVE_REGISTER_THREAD.replace(/'/g, "''")}'`
+    : "AND f.thread_id = (SELECT thread_id FROM goals ORDER BY updated_at DESC LIMIT 1)";
+  const query = `
+    SELECT f.id, f.status, f.resolution_note,
+      (SELECT i.commit_sha FROM goal_item_integrations i
+        WHERE i.thread_id = f.thread_id AND i.item_id = f.item_id AND i.commit_sha IS NOT NULL
+        ORDER BY i.recorded_at DESC LIMIT 1) AS integration_commit
+    FROM goal_findings f
+    WHERE f.status IN ('fixed', 'resolved') ${threadPredicate}
+    ORDER BY f.id;
+  `;
+  try {
+    const raw = execFileSync("sqlite3", ["-readonly", "-json", LIVE_REGISTER_DB, query], {
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const rows = JSON.parse(raw || "[]").map((row) => ({
+      id: row.id,
+      status: row.status,
+      closing_ref: row.integration_commit || refFromResolutionNote(row.resolution_note),
+    }));
+    return parseLiveRegister(rows, `OPENBOOKS_REGISTER_DB (${LIVE_REGISTER_DB})`);
+  } catch (error) {
+    throw new Error(`cannot load OPENBOOKS_REGISTER_DB: ${error.message}`);
+  }
+}
+
+function loadRegister() {
+  if (LIVE_REGISTER_JSON) return liveRegisterFromJson();
+  if (LIVE_REGISTER_DB) return liveRegisterFromDatabase();
+  return REGISTER;
+}
 
 /**
  * Classify every register entry against the tree. resolveRef maps a
@@ -982,6 +1085,14 @@ function selectCheckRef() {
 }
 
 function main() {
+  let register;
+  try {
+    register = loadRegister();
+  } catch (error) {
+    console.error(`FAIL: ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
   const checkRef = selectCheckRef();
   let shallow = false;
   try {
@@ -996,7 +1107,7 @@ function main() {
   if (!mainSha) {
     if (shallow) {
       console.log(
-        `PARTIAL PASS: this shallow checkout has no ${checkRef} ref, so 0/${REGISTER.size} register entries ` +
+        `PARTIAL PASS: this shallow checkout has no ${checkRef} ref, so 0/${register.size} register entries ` +
           `could be verified against the tree. Re-run with complete history for the real gate.`,
       );
       return;
@@ -1011,7 +1122,7 @@ function main() {
   const ancestors = new Set(git("rev-list", checkRef).split("\n").filter(Boolean));
   const equivalentCommits = new Set();
   if (!shallow) {
-    for (const [, ref] of REGISTER) {
+    for (const [, ref] of register) {
       if (!ref) continue;
       const sha = resolveCommit(ref);
       if (!sha || ancestors.has(sha)) continue;
@@ -1019,14 +1130,14 @@ function main() {
     }
   }
   const evidenceById = collectAttributionEvidence({
-    register: REGISTER,
+    register,
     checkRef,
     ancestors,
     equivalentCommits,
     shallow,
   });
   const result = auditRegister({
-    register: REGISTER,
+    register,
     baseline: BASELINE,
     resolveRef: resolveCommit,
     isAncestor: (sha) => ancestors.has(sha),
@@ -1098,7 +1209,7 @@ function main() {
 
   if (counts.unverifiable > 0) {
     console.log(
-      `PARTIAL PASS: shallow checkout verified ${counts.reachable}/${REGISTER.size} register entries against ` +
+      `PARTIAL PASS: shallow checkout verified ${counts.reachable}/${register.size} register entries against ` +
         `${checkRef}; ${counts.unverifiable} could not be resolved without full history. ` +
         `Re-run with complete history for the real gate.`,
     );
@@ -1109,7 +1220,7 @@ function main() {
     `${BASELINE.size} published gaps (baseline ${BASELINE_DATE}: ` +
     `${counts.unreachable} unreachable, ${counts.unresolvable} unresolvable, ${counts.unattributed} unattributed)`;
   console.log(
-    `PASS: ${counts.reachable}/${REGISTER.size} register entries verified reachable from ${checkRef}; ` +
+    `PASS: ${counts.reachable}/${register.size} register entries verified reachable from ${checkRef}; ` +
       `${gaps}; 0 new drift.`,
   );
   console.log(`published gaps — baselined, owned by the register backlog (${BASELINE.size}):`);
