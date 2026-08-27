@@ -12,6 +12,15 @@ import {
 import { createSandbox, deleteSandbox } from "./sandbox/lifecycle.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+/** Drizzle wraps driver errors (DrizzleQueryError), hiding the PostgreSQL
+ * message in `cause`; match the whole rendered chain so a trigger rejection
+ * stays assertable. */
+function pgMessage(error: unknown): string {
+  const cause = (error as { cause?: unknown }).cause;
+  return `${String(error)}\n${cause === undefined ? "" : String(cause)}`;
+}
+
 const migration = readFileSync(
   new URL(
     "../../schema/migrations/generated/0043_sandbox_wip_prebill_wipe_guard.sql",
@@ -86,7 +95,7 @@ test("a fresh-schema sandbox wipe fully clears WIP pre-bill events", { skip: !DB
           delete from wip_prebill_events
            where org_id = ${org.orgId} and id = ${eventId}`);
       }),
-      /WIP prebill events are append-only/,
+      (error: unknown) => pgMessage(error).includes("WIP prebill events are append-only"),
     );
     const preserved = await db.execute<{ count: number }>(sql`
       select count(*)::int as count
