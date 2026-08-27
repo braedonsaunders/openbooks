@@ -79,6 +79,27 @@ FAIL: 249 baselined register gap(s) remain; the baseline records history, it doe
 The command exits with status 1 because those 249 unsupported rows remain; the
 reachability class itself is zero.
 
+## Published evidence (2026-08-27 snapshot)
+
+The campaign register records **487 findings as fixed or resolved**. That is an
+aggregate of register statuses, not a verified assurance count. After the 18
+historical `unreachable` closures were reconciled to the integration commits
+that carry their fixes, the evidence-backed split is:
+
+| Disposition | Count | What the evidence proves |
+| --- | ---: | --- |
+| Demonstrably reachable | **238** | The recorded closing commit is an ancestor of the integration `main` ref, so the fix is verifiably shipped. |
+| Unresolvable | **10** | The reported closing ref is not a commit object in this checkout; the closure remains assertion-only. |
+| Legacy unattributed | **239** | These pre-0.25.0 findings were recorded before the register had a commit-attribution column; no closing commit was recorded, so the closure remains assertion-only. |
+
+Thus `238 + 10 + 239 = 487`: only 238 closures are demonstrably reachable,
+while 249 remain **UNVERIFIED**. The attribution cutoff for this publication is
+the 2026-08-27 snapshot; findings recorded before plugin 0.25.0 did not carry
+commit attribution. The 239 legacy rows are not retroactively attributed and
+are not waived. The checker remains fail-closed: any unresolvable, unattributed,
+or unreachable row keeps the command non-zero. Therefore, “487 fixed” must not
+be presented as fully verified assurance; it includes 249 assertion-only rows.
+
 The permanent shipping checks remain in the canonical suite: credential-fetch
 redirects, explicit-`any`, product neutrality, container security, CI
 integrity, and the conformance corpus. Those checks assert properties of the
