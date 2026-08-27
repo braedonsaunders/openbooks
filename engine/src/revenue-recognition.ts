@@ -39,6 +39,9 @@ export type RecognitionMethod =
   | "milestone"
   | "usage";
 
+/** A DB runner that can execute SQL (a pooled connection or an open transaction). */
+export type SqlExecutor = Pick<typeof db, "execute">;
+
 // ---------------------------------------------------------------------------
 // Date helpers (UTC, no wall-clock dependency)
 // ---------------------------------------------------------------------------
@@ -593,16 +596,16 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
 // ---------------------------------------------------------------------------
 
 /** Primary accounting book id (schedules are book-aware). */
-async function primaryBookId(orgId: string): Promise<string> {
-  const res = (await db.execute<{ id: string }>(sql`
+async function primaryBookId(orgId: string, runner: SqlExecutor = db): Promise<string> {
+  const res = (await runner.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`));
   if (!res.rows[0]) throw new Error("no primary accounting book");
   return res.rows[0].id;
 }
 
 /** Resolve the (non-adjustment) accounting period covering a date, or null. */
-async function periodForDate(orgId: string, date: string): Promise<string | null> {
-  const res = (await db.execute<{ id: string }>(sql`
+async function periodForDate(orgId: string, date: string, runner: SqlExecutor = db): Promise<string | null> {
+  const res = (await runner.execute<{ id: string }>(sql`
     select id from accounting_periods
      where org_id = ${orgId} and is_adjustment = false
        and starts_on <= ${date} and ends_on >= ${date}
@@ -627,15 +630,21 @@ export interface BuildRecognitionResult {
  * has already POSTED, and the catch-up delta is planned prospectively in the
  * `asOfDate` month (a percent change is a change in estimate — ASC 250 —
  * recognized in the current period, never restated to the contract start).
+ *
+ * The body runs against a caller-supplied executor (`tx`), so it can be folded
+ * into a larger transaction — see buildAllRecognitionSchedules, which rebuilds
+ * EVERY book inside one transaction so a multi-book percent-complete sync is
+ * atomic: a failure after the first book leaves no book changed.
  */
-export async function buildRecognitionSchedule(
+async function buildRecognitionScheduleTx(
+  tx: SqlExecutor,
   obligationId: string,
   orgId: string,
   actorId: string | null,
-  forBookId?: string,
+  bookId: string,
   asOfDate?: string,
 ): Promise<BuildRecognitionResult> {
-  const oblRes = (await db.execute<{
+  const oblRes = (await tx.execute<{
       id: string;
       allocated_price: string;
       recognition_starts_on: string | null;
@@ -667,73 +676,84 @@ export async function buildRecognitionSchedule(
   const endOn = o.recognition_ends_on ?? (o.end_date_source === "contract" ? o.contract_ends : null);
   const isPercentComplete = o.method === "percent_complete";
 
-  const bookId = forBookId ?? (await primaryBookId(orgId));
-
-  return await db.transaction(async (tx) => {
-    const existing = (await tx.execute<{ id: string }>(sql`
-      select id from recognition_schedules
-       where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`));
-    let scheduleId: string;
-    if (existing.rows[0]) {
-      scheduleId = existing.rows[0].id;
-      await tx.execute(sql`
-        update recognition_schedules
-           set total_amount = ${o.allocated_price}, updated_at = now(), updated_by = ${actorId}
-         where id = ${scheduleId} and org_id = ${orgId}`);
-    } else {
-      const ins = (await tx.execute<{ id: string }>(sql`
-        insert into recognition_schedules (org_id, obligation_id, book_id, total_amount, created_by, updated_by)
-        values (${orgId}, ${obligationId}, ${bookId}, ${o.allocated_price}, ${actorId}, ${actorId})
-        returning id`));
-      scheduleId = ins.rows[0]!.id;
-    }
-
-    const posted = (await tx.execute<{ period_id: string; planned_amount: string; sequence: number }>(sql`
-      select period_id, planned_amount, sequence from recognition_schedule_lines
-       where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is not null`));
-    const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
-    const postedToDate = sum(posted.rows.map((r) => r.planned_amount));
-    const nextSequence = posted.rows.reduce((a, r) => Math.max(a, r.sequence + 1), 0);
-
-    // Percent-complete: the catch-up delta lands in the as-of month (clamped to
-    // the term start), credited for everything this schedule already posted.
-    const plan = computeRecognitionSchedule({
-      total: o.allocated_price,
-      method: o.method,
-      startOn: isPercentComplete && asOfDate && asOfDate > startOn ? asOfDate : startOn,
-      endOn,
-      termPeriods: o.recognition_periods,
-      startOffsetDays: o.start_offset_days,
-      initialAmountPercent: o.initial_amount_percent,
-      periodOffset: o.period_offset,
-      percentComplete: o.percent_complete,
-      alreadyRecognized: isPercentComplete ? postedToDate : null,
-    });
-
+  const existing = (await tx.execute<{ id: string }>(sql`
+    select id from recognition_schedules
+     where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`));
+  let scheduleId: string;
+  if (existing.rows[0]) {
+    scheduleId = existing.rows[0].id;
     await tx.execute(sql`
-      delete from recognition_schedule_lines where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is null`);
+      update recognition_schedules
+         set total_amount = ${o.allocated_price}, updated_at = now(), updated_by = ${actorId}
+       where id = ${scheduleId} and org_id = ${orgId}`);
+  } else {
+    const ins = (await tx.execute<{ id: string }>(sql`
+      insert into recognition_schedules (org_id, obligation_id, book_id, total_amount, created_by, updated_by)
+      values (${orgId}, ${obligationId}, ${bookId}, ${o.allocated_price}, ${actorId}, ${actorId})
+      returning id`));
+    scheduleId = ins.rows[0]!.id;
+  }
 
-    const skippedMonths: string[] = [];
-    let lineCount = 0;
-    for (const p of plan) {
-      const periodId = await periodForDate(orgId, p.periodMonth);
-      if (!periodId) {
-        skippedMonths.push(p.periodMonth);
-        continue;
-      }
-      // A period that already recognized is closed to re-planning — EXCEPT for
-      // percent_complete, where later catch-ups legitimately post additional
-      // lines into the current period (distinct sequence numbers).
-      if (!isPercentComplete && postedPeriods.has(periodId)) continue;
-      if (isPercentComplete && isZero(p.planned)) continue;
-      await tx.execute(sql`
-        insert into recognition_schedule_lines
-          (org_id, schedule_id, period_id, sequence, planned_amount, created_by, updated_by)
-        values (${orgId}, ${scheduleId}, ${periodId}, ${nextSequence + p.sequence}, ${p.planned}, ${actorId}, ${actorId})`);
-      lineCount++;
-    }
-    return { scheduleId, lineCount, skippedMonths };
+  const posted = (await tx.execute<{ period_id: string; planned_amount: string; sequence: number }>(sql`
+    select period_id, planned_amount, sequence from recognition_schedule_lines
+     where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is not null`));
+  const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
+  const postedToDate = sum(posted.rows.map((r) => r.planned_amount));
+  const nextSequence = posted.rows.reduce((a, r) => Math.max(a, r.sequence + 1), 0);
+
+  // Percent-complete: the catch-up delta lands in the as-of month (clamped to
+  // the term start), credited for everything this schedule already posted.
+  const plan = computeRecognitionSchedule({
+    total: o.allocated_price,
+    method: o.method,
+    startOn: isPercentComplete && asOfDate && asOfDate > startOn ? asOfDate : startOn,
+    endOn,
+    termPeriods: o.recognition_periods,
+    startOffsetDays: o.start_offset_days,
+    initialAmountPercent: o.initial_amount_percent,
+    periodOffset: o.period_offset,
+    percentComplete: o.percent_complete,
+    alreadyRecognized: isPercentComplete ? postedToDate : null,
   });
+
+  await tx.execute(sql`
+    delete from recognition_schedule_lines where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is null`);
+
+  const skippedMonths: string[] = [];
+  let lineCount = 0;
+  for (const p of plan) {
+    const periodId = await periodForDate(orgId, p.periodMonth, tx);
+    if (!periodId) {
+      skippedMonths.push(p.periodMonth);
+      continue;
+    }
+    // A period that already recognized is closed to re-planning — EXCEPT for
+    // percent_complete, where later catch-ups legitimately post additional
+    // lines into the current period (distinct sequence numbers).
+    if (!isPercentComplete && postedPeriods.has(periodId)) continue;
+    if (isPercentComplete && isZero(p.planned)) continue;
+    await tx.execute(sql`
+      insert into recognition_schedule_lines
+        (org_id, schedule_id, period_id, sequence, planned_amount, created_by, updated_by)
+      values (${orgId}, ${scheduleId}, ${periodId}, ${nextSequence + p.sequence}, ${p.planned}, ${actorId}, ${actorId})`);
+    lineCount++;
+  }
+  return { scheduleId, lineCount, skippedMonths };
+}
+
+/**
+ * (Re)build the recognition schedule for an obligation on one book. Opens its
+ * own transaction, so a single-book build is always internally consistent.
+ */
+export async function buildRecognitionSchedule(
+  obligationId: string,
+  orgId: string,
+  actorId: string | null,
+  forBookId?: string,
+  asOfDate?: string,
+): Promise<BuildRecognitionResult> {
+  const bookId = forBookId ?? (await primaryBookId(orgId));
+  return db.transaction(async (tx) => buildRecognitionScheduleTx(tx, obligationId, orgId, actorId, bookId, asOfDate));
 }
 
 /** Build the recognition schedule on every GL-posting book (multi-book). */
@@ -743,11 +763,29 @@ export async function buildAllRecognitionSchedules(
   actorId: string | null,
   asOfDate?: string,
 ): Promise<BuildRecognitionResult[]> {
-  const books = (await db.execute<{ id: string }>(sql`
+  return db.transaction(async (tx) => buildAllRecognitionSchedulesInTransaction(tx, obligationId, orgId, actorId, asOfDate));
+}
+
+/**
+ * Build the schedule for an obligation on EVERY active GL-posting book inside
+ * a single transaction (`tx`). A multi-book percent-complete sync must be
+ * atomic: a failure after the first book leaves no book changed — every book
+ * agrees on one source percent/contract value or none of them move.
+ */
+export async function buildAllRecognitionSchedulesInTransaction(
+  tx: SqlExecutor,
+  obligationId: string,
+  orgId: string,
+  actorId: string | null,
+  asOfDate?: string,
+): Promise<BuildRecognitionResult[]> {
+  const books = (await tx.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_active and posts_gl
      order by is_primary desc, code`));
   const results: BuildRecognitionResult[] = [];
-  for (const b of books.rows) results.push(await buildRecognitionSchedule(obligationId, orgId, actorId, b.id, asOfDate));
+  for (const b of books.rows) {
+    results.push(await buildRecognitionScheduleTx(tx, obligationId, orgId, actorId, b.id, asOfDate));
+  }
   return results;
 }
 
@@ -897,11 +935,11 @@ export async function createObligationsFromInvoice(
         returning id`));
       if (insObl.rows[0]) obligationIds.push(insObl.rows[0].id);
     }
+    for (const oid of obligationIds) {
+      await buildAllRecognitionSchedulesInTransaction(tx, oid, orgId, actorId);
+    }
     return cId;
   });
-
-  // Build schedules outside the insert txn (each opens its own).
-  for (const oid of obligationIds) await buildAllRecognitionSchedules(oid, orgId, actorId);
 
   return { created: obligationIds.length, contractId, obligationIds };
 }
