@@ -514,7 +514,7 @@
       "owner": "Propriétaire",
       "scopes": "Portées",
       "scopesCount": "{count, plural, one {# permission} other {# permissions}}",
-      "fullScope": "Portée complète (hérite du propriétaire)",
+      "fullScope": "Aucune portée explicite",
       "lastUsed": "Dernière utilisation",
       "status": "Statut"
     },
@@ -542,9 +542,9 @@
       "createKey": "Créer la clé",
       "saveChanges": "Enregistrer",
       "scopesHeading": "Portées des permissions",
-      "scopesHint": "Sélectionnez les permissions accordées par cette clé. Laissez vide pour hériter de l'ensemble complet des permissions du propriétaire. Une clé n'accorde jamais plus que ce que son propriétaire possède.",
-      "fullScope": "Portée complète (hérite des permissions du propriétaire)",
-      "scopesCount": "{count, plural, one {# permission sélectionnée} other {# permissions sélectionnées}}"
+      "scopesHint": "Sélectionnez les permissions accordées par cette clé — au moins une est requise. Une clé n'accorde que ce qui est sélectionné ici, jamais l'ensemble complet des permissions du propriétaire.",
+      "scopesCount": "{count, plural, one {# permission sélectionnée} other {# permissions sélectionnées}}",
+      "scopesRequired": "Sélectionnez au moins une portée de permission."
     }
   },
   "settings": {

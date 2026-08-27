@@ -11,6 +11,7 @@ import {
 import { setRequestOrg } from "./request-org";
 import {
   PERMISSION_CATALOGUE,
+  isCataloguePermission,
   permissionSetCovers,
   resolveEffectivePermissions,
 } from "./permissions";
@@ -23,10 +24,12 @@ import { isFeatureEnabled } from "./features";
  *
  * source platform binds a token to a single role and inherits the whole role's
  * permission set — the role IS the scope. openbooks does better: each key
- * carries a SCOPED subset of permission keys (the same `module.action`
- * catalogue roles use). A request is allowed only when BOTH the key's scopes
- * AND the owner's effective permissions cover the required permission — the
- * intersection means a key never grants more than its owner can do.
+ * carries an explicit, non-empty SCOPED subset of permission keys (the same
+ * `module.action` catalogue roles use). A request is allowed only when BOTH
+ * the key's scopes AND the owner's effective permissions cover the required
+ * permission — the intersection means a key never grants more than its owner
+ * can do. There is no inherit marker: an omitted, empty, or malformed scope
+ * set resolves to nothing and the request is refused.
  *
  * The plaintext key is `ob_live_` + base64url(32 bytes), shown ONCE at
  * creation. At rest we keep the SHA-256 hash (for lookup) and a 4-char tail
@@ -182,16 +185,17 @@ export async function resolveApiKeyAuth(
 
   // Expand owner perms to concrete catalogue keys, then intersect with scopes.
   const expanded = expandToCatalogue(ownerPerms);
-  const scopes: string[] = Array.isArray(keyRow.scopes) ? keyRow.scopes : [];
+  // Fail closed on malformed or residual empty scope sets: storage rejects
+  // empty arrays outright (api_keys_scopes_non_empty) and scopes are exact
+  // catalogue keys only — never wildcards or an inherit marker. A key that
+  // cannot state at least one explicit catalogue permission authenticates
+  // nothing.
+  if (!Array.isArray(keyRow.scopes) || keyRow.scopes.length === 0) return null;
+  const scopeSet = new Set(keyRow.scopes.filter((s) => isCataloguePermission(s)));
+  if (scopeSet.size === 0) return null;
   const scopedSet = new Set<string>();
-  if (scopes.length === 0) {
-    // Empty scopes = inherit owner's full effective permission set.
-    for (const p of expanded) scopedSet.add(p);
-  } else {
-    const scopeSet = new Set(scopes);
-    for (const p of expanded) {
-      if (permissionSetCovers(scopeSet, p)) scopedSet.add(p);
-    }
+  for (const p of expanded) {
+    if (permissionSetCovers(scopeSet, p)) scopedSet.add(p);
   }
 
   const user: SessionUser = {

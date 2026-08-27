@@ -17,6 +17,11 @@ export const runtime = "nodejs";
  * owned by the creating user. The plaintext key is returned ONLY at creation
  * — at rest we keep the SHA-256 hash + a 4-char preview.
  *
+ * Scopes are the grant contract: every key must state at least one explicit
+ * catalogue permission. Omitted or empty scope sets are rejected (400), never
+ * defaulted to the owner's permission set — storage enforces the same
+ * invariant (api_keys_scopes_non_empty) for every other writer.
+ *
  * Suspending a key (`PATCH isActive=false`) is reversible through an explicit,
  * audited resume. Revocation (`DELETE`) is terminal: the stored credential
  * material is replaced with artifacts from a discarded secret, so the old
@@ -29,8 +34,9 @@ export const runtime = "nodejs";
  * and a one-time plaintext is returned only after its creation unit commits.
  */
 
+/** Normalize a scopes payload to catalogue keys, or null when invalid/empty. */
 function normalizeScopes(input: unknown): string[] | null {
-  if (!Array.isArray(input)) return null;
+  if (!Array.isArray(input) || input.length === 0) return null;
   const set = new Set<string>();
   for (const p of input) {
     if (typeof p !== "string" || !isCataloguePermission(p)) return null;
@@ -112,9 +118,14 @@ export async function POST(req: Request) {
   const name = body.name?.trim();
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
 
-  const scopes = normalizeScopes(body.scopes ?? []);
+  // An omitted or empty scope set is a rejected request, never a
+  // full-permission credential.
+  const scopes = normalizeScopes(body.scopes);
   if (!scopes) {
-    return NextResponse.json({ error: "scopes must be known catalogue keys" }, { status: 400 });
+    return NextResponse.json(
+      { error: "at least one scope is required; scopes must be known catalogue keys" },
+      { status: 400 },
+    );
   }
 
   const rate = parseRate(body.rateLimitPerMin);
@@ -206,9 +217,14 @@ export async function PATCH(req: Request) {
     fields.description = body.description.trim() || null;
   }
   if (body.scopes !== undefined) {
+    // Clearing scopes to [] would mint a key whose grant contract is empty;
+    // a key is narrowed or revoked, never blanked.
     const scopes = normalizeScopes(body.scopes);
     if (!scopes) {
-      return NextResponse.json({ error: "scopes must be known catalogue keys" }, { status: 400 });
+      return NextResponse.json(
+        { error: "at least one scope is required; scopes must be known catalogue keys" },
+        { status: 400 },
+      );
     }
     fields.scopes = scopes;
   }
