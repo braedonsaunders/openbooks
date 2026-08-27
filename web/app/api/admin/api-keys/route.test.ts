@@ -247,7 +247,7 @@ test('a forced audit failure leaves no created key or leaked plaintext behind', 
   reset()
   state.failOnText = 'insert into audit_log'
 
-  await assert.rejects(() => post({ name: 'doomed key', scopes: [] }), /forced storage failure/)
+  await assert.rejects(() => post({ name: 'doomed key', scopes: ['gl.read'] }), /forced storage failure/)
 
   assert.ok(
     state.executed.some((t) => t.includes('insert into api_keys')),
