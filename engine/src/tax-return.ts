@@ -1,7 +1,15 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { pool, type SqlExecutor } from "./db.ts";
 import { abs, add, fromUnits, neg, toUnits } from "./money.ts";
-import { clampTaxReturnWindow } from "./tax-nexus-ledger.ts";
+import { buildFilingCalendar, type FilingFrequency } from "./tax-nexus.ts";
+
+// A return is a statutory report, not a best-effort dashboard query.  Keep a
+// dedicated drizzle handle so computeTaxReturn can open a repeatable-read
+// snapshot even when its caller already owns a (read-committed) request
+// transaction (for example markTaxFilingFiled).
+const returnDb = drizzle({ client: pool });
+type TaxReturnRunner = SqlExecutor;
 
 /**
  * Configurable government tax return computation.
@@ -244,34 +252,86 @@ export interface TaxReturnResult {
  * tax applied to), then assembles computed boxes on top. Postings are counted
  * once posted and dated within [from, to].
  */
-export async function computeTaxReturn(
+async function clampTaxReturnWindowInSnapshot(
+  runner: TaxReturnRunner,
+  orgId: string,
+  formCode: string,
+  from: string,
+  to: string,
+): Promise<{ from: string; to: string }> {
+  const registrations = await runner.execute<{
+    jurisdiction_id: string;
+    jurisdiction_name: string;
+    jurisdiction_code: string;
+    country: string;
+    filing_frequency: FilingFrequency;
+    return_form_code: string | null;
+    registration_number: string | null;
+    effective_from: string | null;
+    effective_to: string | null;
+  }>(sql`
+    select r.jurisdiction_id, j.name as jurisdiction_name, j.code as jurisdiction_code,
+           j.country, r.filing_frequency, r.return_form_code, r.registration_number,
+           r.effective_from::text, r.effective_to::text
+      from tax_registrations r
+      join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
+     where r.org_id = ${orgId} and r.is_active
+  `);
+  const calendar = buildFilingCalendar(
+    registrations.rows.map((r) => ({
+      jurisdictionId: r.jurisdiction_id,
+      jurisdictionName: r.jurisdiction_name,
+      jurisdictionCode: r.jurisdiction_code,
+      country: r.country,
+      filingFrequency: r.filing_frequency,
+      returnFormCode: r.return_form_code,
+      registrationNumber: r.registration_number,
+      effectiveFrom: r.effective_from,
+      effectiveTo: r.effective_to,
+    })),
+    from,
+    to,
+  );
+  const match = calendar.find(
+    (o) =>
+      o.returnFormCode === formCode &&
+      o.periodStart <= to &&
+      o.periodEnd >= from,
+  );
+  return match
+    ? { from: match.reportableFrom, to: match.reportableTo }
+    : { from, to };
+}
+
+async function computeTaxReturnInSnapshot(
+  runner: TaxReturnRunner,
   orgId: string,
   formCode: string,
   from: string,
   to: string,
   adjustments: Record<string, string> = {},
 ): Promise<TaxReturnResult> {
-  const formRes = (await db.execute<{ name: string; submission_channel: string; watermark: string | null }>(sql`
+  const formRes = (await runner.execute<{ name: string; submission_channel: string; watermark: string | null }>(sql`
     select name, submission_channel, watermark
       from tax_return_forms
      where org_id = ${orgId} and code = ${formCode} and is_active limit 1`));
   const form = formRes.rows[0];
   if (!form) throw new TaxReturnError(`tax return form "${formCode}" is not configured`);
 
-  const window = await clampTaxReturnWindow(orgId, formCode, from, to);
+  const window = await clampTaxReturnWindowInSnapshot(runner, orgId, formCode, from, to);
   from = window.from;
   to = window.to;
 
   // Org control tax accounts — the fallback a tax code posts to when it has no
   // collected/paid account of its own.
-  const ctrlRes = (await db.execute<{ tax_collected: string | null; tax_paid: string | null }>(sql`
+  const ctrlRes = (await runner.execute<{ tax_collected: string | null; tax_paid: string | null }>(sql`
     select settings->'controlAccounts'->>'taxCollected' as tax_collected,
            settings->'controlAccounts'->>'taxPaid' as tax_paid
       from orgs where id = ${orgId}`));
   const orgTaxCollected = ctrlRes.rows[0]?.tax_collected ?? null;
   const orgTaxPaid = ctrlRes.rows[0]?.tax_paid ?? null;
 
-  const boxRes = (await db.execute<{
+  const boxRes = (await runner.execute<{
       line_code: string; label: string; sign: number; sequence: number;
       tax_code_id: string | null; basis: string | null; formula: string | null; pdf_field: string | null;
     }>(sql`
@@ -310,17 +370,53 @@ export async function computeTaxReturn(
     if (src.basis === "tax_collected" || src.basis === "tax_paid") {
       const orgFallback = src.basis === "tax_collected" ? orgTaxCollected : orgTaxPaid;
       const acctCol = src.basis === "tax_collected" ? sql`tc.collected_account_id` : sql`tc.paid_account_id`;
-      const r = (await db.execute<{ total: string }>(sql`
+      const r = (await runner.execute<{ total: string }>(sql`
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           join tax_codes tc on tc.id = l.tax_code_id and tc.org_id = l.org_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
            and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}
-           and l.account_id = coalesce(${acctCol}, ${orgFallback})`));
+           and (
+             -- Posted document tax lines carry the immutable component account
+             -- used by the kernel.  Match that evidence first so changing a
+             -- tax-code or org fallback account cannot rewrite old returns.
+             exists (
+               select 1
+                 from document_lines dl
+                 join document_line_tax_components c
+                   on c.document_line_id = dl.id and c.org_id = dl.org_id
+                 join documents sd
+                   on sd.id = dl.document_id and sd.org_id = dl.org_id
+                where dl.document_id = e.source_document_id
+                  and dl.org_id = l.org_id
+                  and c.tax_code_id = l.tax_code_id
+                  and (
+                    ${src.basis === "tax_collected" ? sql`c.collected_account_id = l.account_id` : sql`c.paid_account_id = l.account_id`}
+                    or (
+                      ${src.basis === "tax_collected" ? sql`c.collected_account_id is null and sd.kind in ('customer_invoice', 'customer_credit')` : sql`c.paid_account_id is null and sd.kind in ('vendor_bill', 'vendor_credit', 'expense_report', 'check', 'card_charge', 'card_refund')`}
+                    )
+                  )
+             )
+             or (
+               -- Legacy/manual tax journals have no component snapshot. Keep
+               -- their historical behaviour through the then-current mapping;
+               -- all document postings now require immutable evidence.
+               not exists (
+                 select 1
+                   from document_lines dl
+                   join document_line_tax_components c
+                     on c.document_line_id = dl.id and c.org_id = dl.org_id
+                  where dl.document_id = e.source_document_id
+                    and dl.org_id = l.org_id
+                    and c.tax_code_id = l.tax_code_id
+               )
+               and l.account_id = coalesce(${acctCol}, ${orgFallback})
+             )
+           )`));
       total = r.rows[0]?.total ?? "0";
     } else if (src.basis === "tax_amount") {
-      const r = (await db.execute<{ total: string }>(sql`
+      const r = (await runner.execute<{ total: string }>(sql`
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -328,13 +424,23 @@ export async function computeTaxReturn(
            and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}`));
       total = r.rows[0]?.total ?? "0";
     } else {
-      const r = (await db.execute<{ total: string }>(sql`
+      const r = (await runner.execute<{ total: string }>(sql`
         select coalesce(sum(dl.amount), 0)::text as total
           from document_lines dl
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-         where dl.org_id = ${orgId} and dl.tax_code_id = ${src.taxCodeId}
+         where dl.org_id = ${orgId}
            and d.status = 'posted'
-           and coalesce(d.posting_date, d.document_date) between ${from} and ${to}`));
+           and coalesce(d.posting_date, d.document_date) between ${from} and ${to}
+           and (
+             dl.tax_code_id = ${src.taxCodeId}
+             or exists (
+               select 1
+                 from document_line_tax_components c
+                where c.document_line_id = dl.id
+                  and c.org_id = dl.org_id
+                  and c.tax_code_id = ${src.taxCodeId}
+             )
+           )`));
       total = r.rows[0]?.total ?? "0";
     }
     glRaw.set(src.lineCode, add(glRaw.get(src.lineCode) ?? "0", total));
@@ -351,4 +457,23 @@ export async function computeTaxReturn(
     watermark: form.watermark,
     boxes,
   };
+}
+
+/**
+ * Compute a complete return from one pinned repeatable-read PostgreSQL
+ * snapshot.  The dedicated handle is intentional: callers such as filing
+ * verification may already be inside a request transaction whose isolation
+ * level was chosen before this function was reached.
+ */
+export async function computeTaxReturn(
+  orgId: string,
+  formCode: string,
+  from: string,
+  to: string,
+  adjustments: Record<string, string> = {},
+): Promise<TaxReturnResult> {
+  return returnDb.transaction(
+    (tx) => computeTaxReturnInSnapshot(tx, orgId, formCode, from, to, adjustments),
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
 }

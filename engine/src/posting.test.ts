@@ -275,6 +275,76 @@ test("tax profiles cannot post without cross-footing component evidence", () => 
   );
 });
 
+test("taxable sales and purchases fail closed when no tax control account exists", () => {
+  const baseDoc = {
+    id: "doc",
+    partyId: "party",
+    subsidiaryId: "sub",
+    currency: "CAD",
+    fxRate: "1",
+    custom: {},
+  } as unknown as PostingDocument;
+  const line = {
+    id: "line",
+    lineNumber: 1,
+    accountId: "detail",
+    amount: "100.0000",
+    taxAmount: "13.0000",
+    taxCodeId: "tax",
+  } as unknown as PostingDocumentLine;
+  const deps = {
+    control: { ar: "ar", ap: "ap", bank: "bank" },
+    taxComponentsByLine: new Map([["line", [{
+      taxCodeId: "tax",
+      sequence: 1,
+      taxAmount: "13.0000",
+      recoverableAmount: "13.0000",
+      nonrecoverableAmount: "0",
+      calculationType: "standard" as const,
+      collectedAccountId: null,
+      paidAccountId: null,
+      withholdingAccountId: null,
+    }]]]),
+  };
+  assert.throws(
+    () => RULES.customer_invoice!({ ...baseDoc, kind: "customer_invoice" }, [line], deps),
+    (error: Error) => error instanceof PostingError && /collected tax .*no configured/.test(error.message),
+  );
+  assert.throws(
+    () => RULES.vendor_bill!({ ...baseDoc, kind: "vendor_bill" }, [line], deps),
+    (error: Error) => error instanceof PostingError && /paid tax .*no configured/.test(error.message),
+  );
+});
+
+test("taxable lines use explicitly configured tax fallback accounts", () => {
+  const doc = {
+    id: "doc",
+    kind: "customer_invoice",
+    partyId: "party",
+    subsidiaryId: "sub",
+    currency: "CAD",
+    fxRate: "1",
+    custom: {},
+  } as unknown as PostingDocument;
+  const line = {
+    id: "line",
+    lineNumber: 1,
+    accountId: "income",
+    amount: "100.0000",
+    taxAmount: "13.0000",
+    taxCodeId: "tax",
+  } as unknown as PostingDocumentLine;
+  const projected = RULES.customer_invoice!(doc, [line], {
+    control: { ar: "ar", ap: "ap", bank: "bank", taxCollected: "tax-output" },
+    taxComponentsByLine: new Map([["line", [{
+      taxCodeId: "tax", sequence: 1, taxAmount: "13.0000", recoverableAmount: "0",
+      nonrecoverableAmount: "0", calculationType: "standard" as const,
+      collectedAccountId: null, paidAccountId: null, withholdingAccountId: null,
+    }]]]),
+  });
+  assert.equal(projected.at(-1)!.accountId, "tax-output");
+});
+
 const transferDoc = {
   id: "trf",
   kind: "transfer",
