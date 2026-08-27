@@ -8,7 +8,7 @@
 --
 -- Sections:
 --   1. Query-console function hardening (revoke PUBLIC file readers)
---   2. income_tax_rates effective-range overlap guard (+ data repair)
+--   2. income_tax_rates effective-range exclusion constraint (+ data repair)
 --   3. tax_rates effective-date uniqueness per code (+ data repair)
 --   4. journal_entries (org_id, entry_number) integrity (+ data repair)
 --   5. pay_application_lines.previous_materials_stored column
@@ -69,24 +69,54 @@ $query_console_file_access$;
 
 
 --
--- 2. income_tax_rates overlap guard.
+-- 2. income_tax_rates effective-range exclusion.
 --
--- Mirrors tax_rates_no_overlap_guard (0001_baseline.sql) adapted to this
--- table's scope: (org_id, coalesce(subsidiary_id, zero uuid), jurisdiction).
--- subsidiary_id NULL means org-wide (all subsidiaries), so it folds into the
--- same zero-uuid sentinel the baseline already uses for nullable scope keys
--- (entitlement_plan_limits_scope_from, labor_cost_rates_scope_from).
+-- Mirrors the 0051 convention (effective_date_overlap_exclusion_constraints)
+-- for this table's scope: (org_id, jurisdiction, coalesce(subsidiary_id, zero
+-- uuid)) plus date-range overlap. subsidiary_id NULL means org-wide (all
+-- subsidiaries), so it folds into the same zero-uuid sentinel 0051 already
+-- uses for nullable scope keys.
 --
--- DATA REPAIR FIRST — runs before the guard exists so live rows cannot fail
--- it. DESTRUCTIVE-ISH: deletes shadow duplicate rate rows and truncates
--- overlapping ranges; both steps are logged via NOTICE for audit evidence.
---   a) Within each scope + effective_from group keep the newest row (greatest
---      id) and delete the older shadow duplicates.
---   b) For survivors ordered by effective_from, close an open or overlapping
---      effective_to to the day before the next effective_from. Rows already
---      closed before their successor are untouched. next_from > effective_from
---      implies next_from - 1 >= effective_from, so the
---      income_tax_rates_valid_range check keeps holding.
+-- A BEFORE-trigger SELECT EXISTS check can never close the concurrency window:
+-- under READ COMMITTED two concurrent overlapping active-rate inserts for the
+-- same (org, jurisdiction, subsidiary) each see only committed rows, so both
+-- pass the check and both commit parallel statutory configuration. The racy
+-- guard is therefore retired here and replaced by a GiST exclusion constraint
+-- that arbitrates the race in the index: the second conflicting writer waits
+-- on the first transaction and is rejected with SQLSTATE 23P01 the moment it
+-- commits — for API, import, pack, and direct writes alike.
+--
+-- Rollout order mirrors 0051 and is intentional:
+--   1. retire the racy overlap check (the trigger is single-duty) so the data
+--      repair below cannot trip per-row trigger re-reads of rows the same
+--      repair statement is still closing;
+--   2. repair rows that only a lost race could have produced — DESTRUCTIVE-
+--      ISH: deletes shadow duplicate rate rows and truncates overlapping
+--      ranges; both steps are logged via NOTICE for audit evidence.
+--      a) Within each scope + effective_from group keep the newest row
+--         (greatest id) and delete the older shadow duplicates.
+--      b) For survivors ordered by effective_from, close an open or
+--         overlapping effective_to to the day before the next effective_from.
+--         Rows already closed before their successor are untouched.
+--         next_from > effective_from implies next_from - 1 >= effective_from,
+--         so the income_tax_rates_valid_range check keeps holding.
+--   3. add the constraint, which now sees a repaired, representable state.
+--
+-- The range constructor mirrors effective_date_ranges_overlap (0001_baseline)
+-- byte for byte: inclusive bounds on both sides, NULL effective_to open-ended
+-- as 'infinity'::date.
+
+-- UUID/text/date equality operator classes for GiST come from btree_gist.
+-- Mandatory for the same reason as 0023: silently omitting it would silently
+-- omit statutory-rate configuration invariants.
+CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
+
+-- Retired through IF EXISTS rather than bare DROP so the statement set is a
+-- no-op on databases where this revision is the first 0002 they ever ran, and
+-- a real retirement where the former digest installed the guard.
+DROP TRIGGER IF EXISTS income_tax_rates_no_overlap ON public.income_tax_rates;
+DROP FUNCTION IF EXISTS public.income_tax_rates_no_overlap_guard();
+
 DO $income_tax_rates_repair$
 DECLARE
   v_shadows_deleted integer := 0;
@@ -136,55 +166,35 @@ BEGIN
 END
 $income_tax_rates_repair$;
 
-CREATE OR REPLACE FUNCTION public.income_tax_rates_no_overlap_guard() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-begin
-  if not new.is_active then return new; end if;
-  if exists (
-    select 1
-      from public.income_tax_rates r
-     where r.id <> new.id
-       and r.org_id = new.org_id
-       and r.is_active
-       and r.jurisdiction = new.jurisdiction
-       and coalesce(r.subsidiary_id, '00000000-0000-0000-0000-000000000000'::uuid)
-         = coalesce(new.subsidiary_id, '00000000-0000-0000-0000-000000000000'::uuid)
-       and public.effective_date_ranges_overlap(r.effective_from, r.effective_to, new.effective_from, new.effective_to)
-  ) then
-    raise exception 'income tax rates overlap for jurisdiction % and subsidiary scope %',
-      new.jurisdiction, coalesce(new.subsidiary_id, '00000000-0000-0000-0000-000000000000'::uuid)
-      using errcode = '23P01';
-  end if;
-  return new;
-end $$;
-
--- Installed through a catalog check rather than bare CREATE TRIGGER so a
+-- Installed through a catalog check rather than a bare ADD CONSTRAINT so a
 -- re-run of this file is a no-op instead of an error.
-DO $income_tax_rates_trigger_install$
+DO $income_tax_rates_constraint_install$
 BEGIN
   IF NOT EXISTS (
     SELECT 1
-      FROM pg_catalog.pg_trigger t
-      JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
-      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      FROM pg_catalog.pg_constraint c
+      JOIN pg_catalog.pg_class t ON t.oid = c.conrelid
+      JOIN pg_catalog.pg_namespace n ON n.oid = t.relnamespace
      WHERE n.nspname = 'public'
-       AND c.relname = 'income_tax_rates'
-       AND t.tgname = 'income_tax_rates_no_overlap'
-       AND NOT t.tgisinternal
+       AND t.relname = 'income_tax_rates'
+       AND c.conname = 'income_tax_rates_no_active_overlap'
   ) THEN
-    CREATE TRIGGER income_tax_rates_no_overlap
-      BEFORE INSERT OR UPDATE OF org_id, jurisdiction, subsidiary_id, effective_from, effective_to, is_active
-      ON public.income_tax_rates
-      FOR EACH ROW EXECUTE FUNCTION public.income_tax_rates_no_overlap_guard();
+    ALTER TABLE public.income_tax_rates
+      ADD CONSTRAINT income_tax_rates_no_active_overlap
+      EXCLUDE USING gist (
+        org_id WITH =,
+        jurisdiction WITH =,
+        (coalesce(subsidiary_id, '00000000-0000-0000-0000-000000000000'::uuid)) WITH =,
+        (daterange(effective_from, coalesce(effective_to, 'infinity'::date), '[]')) WITH &&
+      )
+      WHERE (is_active);
   END IF;
 END
-$income_tax_rates_trigger_install$;
+$income_tax_rates_constraint_install$;
 
--- No supporting unique index: the tax_rates pattern this guard mirrors is
--- trigger-only in the canonical baseline (tax_rates carries no unique index
--- either), and an expression unique index over the coalesced scope would be a
--- second source of truth for the same invariant.
+COMMENT ON CONSTRAINT income_tax_rates_no_active_overlap
+  ON public.income_tax_rates IS
+  'openbooks:income_tax_rates_no_active_overlap:v1 - one active income-tax rate window per jurisdiction and subsidiary scope; a NULL subsidiary is org-wide and a NULL effective_to is open-ended';
 
 
 --
