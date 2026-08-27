@@ -1056,12 +1056,28 @@ async function importedTaxEvidence(
   return evidence;
 }
 
-/** Persist a synced document-line quantity or unit price through exact decimal then ledger money. Fail closed. */
+/** Persist a synced money field through exact decimal then ledger money. Fail closed. */
 function persistSyncLineMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);
   if (exact === null) throw new Error(`${label} must be an exact decimal`);
   try {
     return normalizeMoney(exact);
+  } catch {
+    throw new Error(`${label} must be an exact decimal`);
+  }
+}
+
+/**
+ * Persist a synced document-line quantity or unit price at the column's own
+ * numeric(28,8) scale. A quantity is not money: adapters emit it padded to
+ * eight places (`"1.00000000"`), the canonical change key reads it back at
+ * eight, and clamping it to ledger precision would both reject ordinary source
+ * lines and make every stored document look permanently amended. Fail closed —
+ * `normalizeDecimal` throws rather than drop a significant digit.
+ */
+export function persistSyncLineQuantity(value: unknown, label: string): string {
+  try {
+    return normalizeDecimal(String(value), 8);
   } catch {
     throw new Error(`${label} must be an exact decimal`);
   }
@@ -1095,9 +1111,9 @@ async function insertImportedLines(
         lineNumber: line.lineNumber,
         accountId: line.accountId,
         itemId: line.itemId,
-        quantity: persistSyncLineMoney(line.quantity ?? "1", "quantity"),
+        quantity: persistSyncLineQuantity(line.quantity ?? "1", "quantity"),
         unit: line.unit ?? null,
-        unitPrice: persistSyncLineMoney(line.unitPrice ?? line.amount, "unit price"),
+        unitPrice: persistSyncLineQuantity(line.unitPrice ?? line.amount, "unit price"),
         amount: persistSyncLineMoney(line.amount, "amount"),
         taxCodeId: effectiveTaxCodeId(line.taxAmount, line.taxCodeId),
         taxAmount: persistSyncLineMoney(line.taxAmount, "tax amount"),
