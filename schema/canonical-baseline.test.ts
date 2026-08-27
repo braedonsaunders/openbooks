@@ -48,6 +48,8 @@ const documentNumberSequenceGlobalityMigrationPath =
   "schema/migrations/generated/0032_document_number_sequence_globality.sql";
 const reportingFrameworkPolicyMigrationPath =
   "schema/migrations/generated/0033_reporting_framework_policy.sql";
+const documentLineImmutabilityMigrationPath =
+  "schema/migrations/generated/0034_document_line_immutability.sql";
 const accountPostingClassificationSerializationMigrationPath =
   "schema/migrations/generated/0046_account_posting_classification_serialization.sql";
 const subscriptionConfigurationInvariantsMigrationPath =
@@ -104,6 +106,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0029_sftp_username_global_unique.sql",
     "0032_document_number_sequence_globality.sql",
     "0033_reporting_framework_policy.sql",
+    "0034_document_line_immutability.sql",
     "0035_terminal_failure_surfacing.sql",
     "0036_bank_statement_source_idempotency.sql",
     "0038_ledger_tenant_coherent_foreign_keys.sql",
@@ -218,6 +221,29 @@ test("document numbering allocates from one org-wide sequence with monotonic saf
   assert.notEqual(updateTargets.length, 0);
   assert.deepEqual(updateTargets.filter((target) => target !== "number_sequences"), []);
   assert.match(migration, /DELETE FROM public\.number_sequences WHERE subsidiary_id IS NOT NULL/);
+});
+
+test("document lines are storage-immutable outside draft status", () => {
+  const migration = readFileSync(documentLineImmutabilityMigrationPath, "utf8");
+  const guard = migration.match(
+    /CREATE OR REPLACE FUNCTION public\.document_line_immutability_guard\(\) RETURNS trigger[\s\S]*?\$\$;/,
+  )?.[0];
+  assert.ok(guard, "0034 must install the document-line lifecycle guard");
+  assert.match(guard, /FROM public\.documents d/);
+  assert.match(guard, /ORDER BY d\.id\s+FOR UPDATE/);
+  assert.match(guard, /v_parent\.org_id IS DISTINCT FROM/);
+  assert.match(guard, /v_(?:old|new)_status IS DISTINCT FROM 'draft'/);
+  assert.match(guard, /openbooks_sandbox_wipe_allowed/);
+  assert.match(guard, /current_setting\('openbooks\.migration'/);
+  assert.match(guard, /current_setting\('openbooks\.amend'/);
+  assert.match(
+    migration,
+    /CREATE TRIGGER document_line_immutability\s+BEFORE INSERT OR DELETE OR UPDATE ON public\.document_lines/i,
+  );
+  // Replaying the forward file replaces the function and recreates one named
+  // trigger; it does not rewrite any document or line history.
+  assert.match(migration, /DROP TRIGGER IF EXISTS document_line_immutability/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE FROM)\s+public\.(?:documents|document_lines)/im);
 });
 
 test("CAM pools cannot bill one GL expense twice through shared sources", () => {

@@ -41,6 +41,9 @@ import { fieldTickets } from "./field-tickets";
  * tables. Posting produces exactly one journal entry (ledger.ts). Posted
  * documents are immutable; corrections are represented by linked reversal
  * entries so the original business record and GL evidence are never rewritten.
+ * The same rule is enforced for `document_lines` at storage level by migration
+ * 0034: ordinary line writes require a draft parent and the parent row is locked
+ * while its lifecycle status is checked.
  *
  * Concurrency: `updated_at` is the optimistic-concurrency revision token.
  * Readers project it through web/lib/documents.ts documentRevisionSql at full
@@ -213,6 +216,17 @@ export const documents = pgTable(
 
 export const documentLines = pgTable(
   "document_lines",
+  /**
+   * Financial source facts. Migration 0034_document_line_immutability installs
+   * the storage boundary: ordinary INSERT/UPDATE/DELETE is allowed only while
+   * the tenant-owned parent document is `draft`. The guard locks that parent
+   * before reading its status, so a line writer cannot race a posting status
+   * flip. Approved, posted, reversed, voided, and any future non-draft status
+   * remain byte-for-byte immutable; corrections use reversal, void, or an
+   * adjusting document. Sandbox teardown and the existing paired
+   * `openbooks.migration` + `openbooks.amend` maintenance replay are explicit
+   * trusted paths, while `openbooks.amend` alone is never an edit bypass.
+   */
   {
     id: id(),
     orgId: orgRef(),
