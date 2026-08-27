@@ -8,7 +8,7 @@ export const runtime = 'nodejs'
 
 /** Record the one-way prepared → filed transition and government reference. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('reports.create')
+  const gate = await guardPermission('compliance.file')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
