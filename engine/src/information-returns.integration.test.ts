@@ -12,7 +12,7 @@ import {
   updateFilingRecipient,
   voidFiling,
 } from "./information-returns.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "./test-fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -228,7 +228,7 @@ test(
       assert.deepEqual(after.paymentIds, [original.paymentId]);
       assert.equal((after.paymentIds as string[]).includes(late.paymentId), false);
     } finally {
-      await dropScratchOrg(org.orgId);
+      await dropScratchOrgReporting(org.orgId);
     }
   },
 );
@@ -279,7 +279,7 @@ test(
       `)).rows[0]!.recipient_snapshot;
       assert.deepEqual(frozen, before);
     } finally {
-      await dropScratchOrg(org.orgId);
+      await dropScratchOrgReporting(org.orgId);
     }
   },
 );
@@ -368,7 +368,7 @@ test("the filing lifecycle refuses to cross finalize/file and leaves frozen stor
     const filedAfter = await recipientRows(org.orgId, filingId);
     assert.deepEqual(snapshot(filedAfter), snapshot(after));
   } finally {
-    await dropScratchOrg(org.orgId);
+    await dropScratchOrgReporting(org.orgId);
   }
 });
 
@@ -405,7 +405,7 @@ test("finalize gates refuse without writing anything — no freeze, no audit tra
     );
     assert.deepEqual(await auditActions(org.orgId, draft.id), []);
   } finally {
-    await dropScratchOrg(org.orgId);
+    await dropScratchOrgReporting(org.orgId);
   }
 });
 
@@ -456,7 +456,7 @@ for (let round = 0; round < 10; round++) {
       }
       void recipientIds;
     } finally {
-      await dropScratchOrg(org.orgId);
+      await dropScratchOrgReporting(org.orgId);
     }
   });
 
@@ -502,7 +502,7 @@ for (let round = 0; round < 10; round++) {
            and row_id = ${recipientIds[0]!}`);
       assert.equal(recipientAudits.rows[0]!.n, edit.status === "fulfilled" ? 1 : 0);
     } finally {
-      await dropScratchOrg(org.orgId);
+      await dropScratchOrgReporting(org.orgId);
     }
   });
 }
@@ -568,7 +568,7 @@ test("every successful transition writes exactly one audit row, in one unit with
     assert.deepEqual(miscAudit.rows.map((r) => r.action), ["compute"]);
     assert.equal((miscAudit.rows[0]!.changes.after as { recipients: number }).recipients, 0);
   } finally {
-    await dropScratchOrg(org.orgId);
+  await dropScratchOrgReporting(org.orgId);
   }
 });
 
@@ -640,6 +640,6 @@ test("recipient edits keep the API contract: signed deltas over computed figures
       /not found/,
     );
   } finally {
-    await dropScratchOrg(org.orgId);
+    await dropScratchOrgReporting(org.orgId);
   }
 });
