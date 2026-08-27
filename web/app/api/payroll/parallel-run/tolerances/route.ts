@@ -9,6 +9,7 @@ import {
 } from '@openbooks/engine/src/payroll-parallel-run-store.ts'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { guardSubsidiaryScope } from '../../../../../lib/authz'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -16,6 +17,13 @@ export const runtime = 'nodejs'
 const KINDS = new Set(['earning', 'deduction', 'employer_contribution', 'total'])
 
 type ToleranceKind = 'earning' | 'deduction' | 'employer_contribution' | 'total'
+
+// Tolerances are one org-wide comparison policy, not subsidiary-owned rows.
+// Keep that exception explicit at every verb so a future subsidiary-scoped
+// tolerance cannot accidentally bypass the shared boundary.
+function guardToleranceScope(gate: Parameters<typeof guardSubsidiaryScope>[0]): NextResponse | null {
+  return guardSubsidiaryScope(gate, null, { orgWideNull: true })
+}
 
 /**
  * Per-component tolerance configuration.
@@ -31,6 +39,8 @@ type ToleranceKind = 'earning' | 'deduction' | 'employer_contribution' | 'total'
 export async function GET() {
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
   if (gate instanceof NextResponse) return gate
+  const denied = guardToleranceScope(gate)
+  if (denied) return denied
   return NextResponse.json({ tolerances: await parallelTolerances(gate.user.orgId) })
 }
 
@@ -44,6 +54,8 @@ interface ToleranceBody {
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
+  const denied = guardToleranceScope(gate)
+  if (denied) return denied
 
   let body: ToleranceBody
   try {
@@ -92,6 +104,8 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
+  const denied = guardToleranceScope(gate)
+  if (denied) return denied
   const params = new URL(req.url).searchParams
   const kind = params.get('kind')
   const slot = params.get('slot')
