@@ -1,18 +1,21 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
-import { businessToday } from "./business-date.ts";
+import { addCalendarDays, businessToday } from "./business-date.ts";
 import { cmp } from "./money.ts";
 import { enqueueFlowEmail } from "./scheduler-outbox.ts";
 
 /**
  * Dunning — automated collections over the AR subledger. For each active policy
- * the runner finds overdue open invoices, works out how many days past due each
- * is, and fires the single highest un-fired ladder stage whose offset that
- * invoice has crossed. Firing defers one reminder email through the durable
- * scheduler_outbox and writes an append-only dunning_log row; both inserts ride
- * this org's single transaction, so the send is atomic with the sent claim,
- * and the unique (document, stage) index on the log makes the whole thing
- * idempotent — re-running the scheduler never double-sends.
+ * the runner finds open documents inside the ladder's reach — overdue ones and,
+ * for negative-offset courtesy stages, documents approaching their due date —
+ * computes each one's signed distance from its due date (negative before it),
+ * and fires the single highest un-fired ladder stage whose offset the document
+ * has crossed, on that stage's exact configured day. Firing defers one
+ * reminder email through the durable scheduler_outbox and writes an
+ * append-only dunning_log row; both inserts ride this org's single
+ * transaction, so the send is atomic with the sent claim, and the unique
+ * (document, stage) index on the log makes the whole thing idempotent —
+ * re-running the scheduler never double-sends.
  *
  * Collections never touches the ledger — it is a communications layer, so it
  * lives outside the posting kernel entirely.
@@ -29,19 +32,36 @@ export type DunningStage = {
 };
 
 /**
- * Pick the one stage to fire for an invoice: the highest-sequence stage whose
- * offset the invoice has crossed and that has not already fired. Returning a
- * single stage (not every crossed threshold) means an invoice that has been
- * overdue for a while gets the most-recent notice, never a burst of back-dated
- * ones. Pure — unit-tested directly.
+ * Pick the one stage to fire for a document: the highest-sequence stage whose
+ * offset the document has crossed and that has not already fired.
+ * `daysOverdue` is signed — negative while the document is still before its
+ * due date.
+ *
+ * A stage becomes due on its exact configured day, `dueDate + offsetDays`.
+ * Negative offsets are courtesy rungs anchored BEFORE the due date and come
+ * due on that day regardless of the policy's grace period. Nonnegative rungs
+ * wait for grace — the ladder starts `grace` days after the due date, so rung
+ * `k` fires on day max(k, grace). Grace is nonnegative by definition: a
+ * negative configured value is a misconfiguration and is clamped to 0, never
+ * honored as "start dunning before the due date" — that is what negative
+ * offsets are for. Returning a single stage (not every crossed threshold)
+ * means a document that has been late for a while gets the most-recent
+ * notice, never a burst of back-dated ones. Pure — unit-tested directly.
  */
 export function selectDueStage(
   stages: DunningStage[],
   daysOverdue: number,
   firedStageIds: ReadonlySet<string>,
+  gracePeriodDays: number,
 ): DunningStage | null {
+  const grace = Math.max(0, gracePeriodDays);
   const candidates = stages
-    .filter((s) => daysOverdue >= s.offsetDays && !firedStageIds.has(s.id))
+    .filter((s) =>
+      s.offsetDays < 0
+        ? daysOverdue >= s.offsetDays
+        : daysOverdue >= Math.max(s.offsetDays, grace),
+    )
+    .filter((s) => !firedStageIds.has(s.id))
     .sort((a, b) => b.sequence - a.sequence);
   return candidates[0] ?? null;
 }
@@ -109,10 +129,25 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
             from dunning_stages where policy_id = ${policy.id} and org_id = ${orgId}
            order by sequence
         `));
-        if (!stageRows.rows.length) continue;
+        const stages = stageRows.rows;
+        if (!stages.length) continue;
 
-        // Overdue open documents of the policy's kind, with the live balance due
-        // reconstructed from un-reversed applications against the open-item leg.
+        // The earliest day any rung can reach, in signed days from the due
+        // date: a negative courtesy offset pulls the scan window BEFORE the
+        // due date, so documents that are not yet late must be scanned too.
+        const minOffset = Math.min(...stages.map((s) => s.offsetDays));
+        if (policy.gracePeriodDays < 0) {
+          console.warn(
+            `[dunning] policy ${policy.id} configures grace_period_days ${policy.gracePeriodDays} — grace is nonnegative and is honored as 0`,
+          );
+        }
+
+        // Open documents of the policy's kind inside the ladder's reach, with
+        // the live balance due reconstructed from un-reversed applications
+        // against the open-item leg. A stage comes due once
+        // `today >= dueDate + offsetDays`, so the loosest rung bounds the
+        // window: `dueDate <= today - minOffset` (an exact, inclusive bound —
+        // a rung configured for day k fires on day k, never k±1).
         //
         // `target_transaction_amount`, NOT `amount`: `documents.total` is in the
         // document's TRANSACTION currency while `applications.amount` is the
@@ -153,15 +188,19 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
                where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
             ) ap on true
            where d.org_id = ${orgId} and d.kind = ${policy.appliesToKind}
-             and d.status = 'posted' and d.due_date is not null and d.due_date < ${today}
+             and d.status = 'posted' and d.due_date is not null
+             and d.due_date <= ${addCalendarDays(today, -minOffset)}
            order by d.id
-        `));
+         `));
 
         for (const doc of docs.rows) {
           result.scanned += 1;
           if (cmp(doc.balanceDueBase, policy.minBalance) <= 0) continue;
+          // Signed days from the due date — negative while the document is
+          // still before it, which is exactly how courtesy rungs are reached.
+          // The grace gate lives inside selectDueStage, where it delays the
+          // post-due rungs without ever holding back a pre-due one.
           const daysOverdue = daysBetween(doc.dueDate, today);
-          if (daysOverdue < policy.gracePeriodDays) continue;
 
           const fired = (await db.execute<{ stageId: string }>(sql`
             select stage_id as "stageId" from dunning_log
@@ -169,7 +208,7 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
           `));
           const firedIds = new Set(fired.rows.map((r) => r.stageId));
 
-          const stage = selectDueStage(stageRows.rows, daysOverdue, firedIds);
+          const stage = selectDueStage(stages, daysOverdue, firedIds, policy.gracePeriodDays);
           if (!stage) continue;
 
           const vars = {
