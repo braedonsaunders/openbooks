@@ -350,6 +350,20 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "the corrective revision therefore creates no legacy-gap attestations "
       + "on that database and safely refreshes the evidence catalog comment.",
   },
+  {
+    filename: "generated/0002_kernel_hardening.sql",
+    from: "964952e28517abe607b4c6490b7ce1644addfaf4c011c16c8592bb65fa60bb46",
+    to: "b814bccaa12d21d425aee0fc940c43317b554bbceab0cb12a813f41d1034d156",
+    strategy: "reapply",
+    reason:
+      "corrective revision replaces the racy BEFORE-trigger SELECT EXISTS guard "
+      + "on income_tax_rates with a storage-side GiST exclusion constraint "
+      + "(income_tax_rates_no_active_overlap, mirroring 0051), so concurrent "
+      + "overlapping active-rate inserts can no longer both commit. The revision "
+      + "is deliberately idempotent against the old migration's successful state "
+      + "(retire the single-duty trigger, repair lost-race rows, then add the "
+      + "constraint) and replays cleanly on an already-bootstrapped database.",
+  },
 ];
 
 async function executeTrackedMigration(
