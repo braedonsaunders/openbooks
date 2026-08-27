@@ -64,7 +64,10 @@ export async function guardPayrollVendor(gate: Authz, partyId: string): Promise<
      where org_id = ${gate.user.orgId} and id = ${partyId}
   `)).rows
   if (rows.length !== 1) return notFound()
-  const denied = guardSubsidiaryScope(gate, rows[0]!.subsidiaryId)
+  // Remittance bills are posted to the active root entity. A null-subsidiary
+  // vendor is an org-wide party, so resolve it to that same root rather than
+  // accidentally allowing a bill for a root the caller cannot see.
+  const denied = await guardPayrollSubsidiaryOrRoot(gate, rows[0]!.subsidiaryId)
   return denied
 }
 
@@ -198,4 +201,25 @@ function notFound(): Response {
 // raw subsidiary id and turn an empty scope into an unrestricted query.
 export function payrollVisiblePartyFilter(gate: Authz) {
   return subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)
+}
+
+/**
+ * Pay schedules use the engine's explicit org-wide convention: a NULL
+ * subsidiary resolves to the active root legal entity. Preserve that fallback
+ * for a restricted caller only when the root itself is visible; an empty set
+ * remains deny-all.
+ */
+export function payrollVisibleScheduleFilter(gate: Authz) {
+  const allowed = gate.allowedSubsidiaryIds
+  if (allowed === null) return sql``
+  const ids = [...allowed]
+  if (ids.length === 0) return sql` and false`
+  return sql` and coalesce(
+    subsidiary_id,
+    (select root.id
+       from subsidiaries root
+      where root.org_id = ${gate.user.orgId}
+        and root.parent_id is null and root.is_active
+      order by root.created_at limit 1)
+  ) = any(${`{${ids.join(',')}}`}::uuid[])`
 }
