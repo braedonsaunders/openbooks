@@ -13,7 +13,7 @@ import {
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
-import { guardPayrollFilingAccounts } from '../subsidiary-scope'
+import { guardPayrollFilingAccounts, payrollVisibleScheduleFilter } from '../subsidiary-scope'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
@@ -152,7 +152,7 @@ export async function GET(req: Request) {
       db.execute(sql`
         select id, name, frequency from pay_schedules
          where org_id = ${gate.user.orgId} and is_active
-           ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
+           ${payrollVisibleScheduleFilter(gate)}
          order by name`),
     ]))
     return NextResponse.json({
