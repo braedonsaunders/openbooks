@@ -182,6 +182,52 @@ async function seedTaxDocument(
   return { documentId, lineId };
 }
 
+/** Seed one approved document whose tax profile has multiple components. */
+async function seedGroupedTaxDocument(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+  kind: "customer_invoice" | "vendor_bill",
+  number: string,
+  groupId: string,
+  amount: string,
+  components: TaxFixtureComponent[],
+): Promise<string> {
+  const documentId = randomUUID();
+  const lineId = randomUUID();
+  const accountId = kind === "customer_invoice" ? org.accounts.revenue : org.accounts.cogs;
+  const taxAmount = components.reduce((sum, component) => sum + Number(component.taxAmount), 0).toFixed(4);
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, posting_date, currency, fx_rate, subtotal, tax_total, total)
+      values (${documentId}, ${org.orgId}, ${kind}, 'draft', ${number}, ${org.subsidiaryId},
+              ${kind === "customer_invoice" ? org.customerId : org.vendorId}, ${org.date}, ${org.date},
+              'CAD', '1', ${amount}, ${taxAmount}, ${Number(amount) + Number(taxAmount)})`);
+    await tx.execute(sql`
+      insert into document_lines
+        (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
+         tax_amount, tax_group_id, quantity, unit_price)
+      values (${lineId}, ${org.orgId}, ${documentId}, 1, ${accountId}, ${amount},
+              ${amount}, ${taxAmount}, ${groupId}, '1', ${amount})`);
+    for (const component of components) {
+      await tx.execute(sql`
+        insert into document_line_tax_components
+          (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
+           tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
+           price_includes_tax, compound_on_previous, rounding_scale, collected_account_id,
+           paid_account_id, withholding_account_id, overridden)
+        values (${org.orgId}, ${lineId}, ${component.taxCodeId}, ${component.sequence},
+                ${component.ratePercent}, ${component.taxableAmount}, ${component.taxAmount},
+                ${component.recoverableAmount}, ${component.nonrecoverableAmount},
+                ${component.calculationType ?? "standard"}, false, false, 2,
+                ${component.collectedAccountId}, ${component.paidAccountId},
+                ${component.withholdingAccountId ?? null}, false)`);
+    }
+    await tx.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
+  });
+  return documentId;
+}
+
 test("taxable sales and purchases fail closed before journals or posting effects", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
@@ -322,6 +368,91 @@ test("posted tax returns use immutable accounts and include grouped-line bases",
        where id = ${org.orgId}`);
     const after = await computeTaxReturn(org.orgId, 'IMM-RETURN', org.date, org.date);
     assert.deepEqual(after.boxes, before.boxes);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("multi-code tax groups feed each taxable-base box exactly once", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const [saleCode1, saleCode2] = [randomUUID(), randomUUID()];
+    const [purchaseCode1, purchaseCode2] = [randomUUID(), randomUUID()];
+    await db.execute(sql`
+      insert into tax_codes
+        (id, org_id, code, name, calculation_type, collected_account_id, paid_account_id, is_active)
+      values
+        (${saleCode1}, ${org.orgId}, 'GROUP-SALE-1', 'Group sale 1', 'standard', ${org.accounts.taxOutput}, null, true),
+        (${saleCode2}, ${org.orgId}, 'GROUP-SALE-2', 'Group sale 2', 'standard', ${org.accounts.taxOutput}, null, true),
+        (${purchaseCode1}, ${org.orgId}, 'GROUP-PURCHASE-1', 'Group purchase 1', 'standard', null, ${org.accounts.taxInput}, true),
+        (${purchaseCode2}, ${org.orgId}, 'GROUP-PURCHASE-2', 'Group purchase 2', 'standard', null, ${org.accounts.taxInput}, true)`);
+
+    const saleGroupId = randomUUID();
+    const purchaseGroupId = randomUUID();
+    await db.execute(sql`
+      insert into tax_groups (id, org_id, code, name, is_active)
+      values
+        (${saleGroupId}, ${org.orgId}, 'GROUP-SALE', 'Grouped sale', true),
+        (${purchaseGroupId}, ${org.orgId}, 'GROUP-PURCHASE', 'Grouped purchase', true)`);
+    await db.execute(sql`
+      insert into tax_group_members (tax_group_id, tax_code_id, sequence)
+      values
+        (${saleGroupId}, ${saleCode1}, 1), (${saleGroupId}, ${saleCode2}, 2),
+        (${purchaseGroupId}, ${purchaseCode1}, 1), (${purchaseGroupId}, ${purchaseCode2}, 2)`);
+
+    const saleId = await seedGroupedTaxDocument(org, "customer_invoice", "GROUP-SALE", saleGroupId, "200.0000", [
+      {
+        taxCodeId: saleCode1, sequence: 1, ratePercent: "5", taxableAmount: "200.0000",
+        taxAmount: "10.0000", recoverableAmount: "10.0000", nonrecoverableAmount: "0.0000",
+        collectedAccountId: org.accounts.taxOutput, paidAccountId: null,
+      },
+      {
+        taxCodeId: saleCode2, sequence: 2, ratePercent: "10", taxableAmount: "200.0000",
+        taxAmount: "20.0000", recoverableAmount: "20.0000", nonrecoverableAmount: "0.0000",
+        collectedAccountId: org.accounts.taxOutput, paidAccountId: null,
+      },
+    ]);
+    const purchaseId = await seedGroupedTaxDocument(org, "vendor_bill", "GROUP-PURCHASE", purchaseGroupId, "150.0000", [
+      {
+        taxCodeId: purchaseCode1, sequence: 1, ratePercent: "5", taxableAmount: "150.0000",
+        taxAmount: "7.5000", recoverableAmount: "7.5000", nonrecoverableAmount: "0.0000",
+        collectedAccountId: null, paidAccountId: org.accounts.taxInput,
+      },
+      {
+        taxCodeId: purchaseCode2, sequence: 2, ratePercent: "10", taxableAmount: "150.0000",
+        taxAmount: "15.0000", recoverableAmount: "15.0000", nonrecoverableAmount: "0.0000",
+        collectedAccountId: null, paidAccountId: org.accounts.taxInput,
+      },
+    ]);
+    const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank };
+    await postDocument(saleId, { control });
+    await postDocument(purchaseId, { control });
+
+    const formCode = "GROUPED-RETURN";
+    await db.execute(sql`
+      insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${formCode}, 'Grouped return', 'portal_manual', true)`);
+    await db.execute(sql`
+      insert into tax_report_lines
+        (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
+      values
+        (${randomUUID()}, ${org.orgId}, ${formCode}, 'SALES_BASE', 'Sales base', ${saleCode1}, 'taxable_base', 1, 1),
+        (${randomUUID()}, ${org.orgId}, ${formCode}, 'SALES_BASE', 'Sales base', ${saleCode2}, 'taxable_base', 1, 2),
+        (${randomUUID()}, ${org.orgId}, ${formCode}, 'PURCHASE_BASE', 'Purchase base', ${purchaseCode1}, 'taxable_base', 1, 3),
+        (${randomUUID()}, ${org.orgId}, ${formCode}, 'PURCHASE_BASE', 'Purchase base', ${purchaseCode2}, 'taxable_base', 1, 4),
+        (${randomUUID()}, ${org.orgId}, ${formCode}, 'SALE_TAX_1', 'Sale tax 1', ${saleCode1}, 'tax_collected', -1, 5),
+        (${randomUUID()}, ${org.orgId}, ${formCode}, 'SALE_TAX_2', 'Sale tax 2', ${saleCode2}, 'tax_collected', -1, 6),
+        (${randomUUID()}, ${org.orgId}, ${formCode}, 'PURCHASE_TAX_1', 'Purchase tax 1', ${purchaseCode1}, 'tax_paid', 1, 7),
+        (${randomUUID()}, ${org.orgId}, ${formCode}, 'PURCHASE_TAX_2', 'Purchase tax 2', ${purchaseCode2}, 'tax_paid', 1, 8)`);
+
+    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+    const values = new Map(result.boxes.map((box) => [box.lineCode, box.value]));
+    assert.equal(values.get("SALES_BASE"), "200.0000");
+    assert.equal(values.get("PURCHASE_BASE"), "150.0000");
+    assert.equal(values.get("SALE_TAX_1"), "10.0000");
+    assert.equal(values.get("SALE_TAX_2"), "20.0000");
+    assert.equal(values.get("PURCHASE_TAX_1"), "7.5000");
+    assert.equal(values.get("PURCHASE_TAX_2"), "15.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }

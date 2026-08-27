@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { pool, type SqlExecutor } from "./db.ts";
 import { abs, add, fromUnits, neg, toUnits } from "./money.ts";
+import { uuidArray } from "./subsidiaries.ts";
 import { buildFilingCalendar, type FilingFrequency } from "./tax-nexus.ts";
 
 // A return is a statutory report, not a best-effort dashboard query.  Keep a
@@ -363,8 +364,16 @@ async function computeTaxReturnInSnapshot(
   //    paid (recoverable) account — scoping to the account keeps a "both" code
   //    from feeding its collected tax into an ITC box (and vice versa);
   //  - tax_amount: every tax line for the code (kept for non-split reports);
-  //  - taxable_base: the base the tax applied to.
+  //  - taxable_base: the base the tax applied to. Source codes are grouped per
+  //    box so a multi-code tax group contributes its document line once.
   const glRaw = new Map<string, string>();
+  const baseCodesByLineCode = new Map<string, string[]>();
+  for (const src of glSources) {
+    if (src.basis !== "taxable_base") continue;
+    const codes = baseCodesByLineCode.get(src.lineCode) ?? [];
+    codes.push(src.taxCodeId);
+    baseCodesByLineCode.set(src.lineCode, codes);
+  }
   for (const src of glSources) {
     let total: string;
     if (src.basis === "tax_collected" || src.basis === "tax_paid") {
@@ -424,26 +433,28 @@ async function computeTaxReturnInSnapshot(
            and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}`));
       total = r.rows[0]?.total ?? "0";
     } else {
-      const r = (await runner.execute<{ total: string }>(sql`
-        select coalesce(sum(dl.amount), 0)::text as total
-          from document_lines dl
-          join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-         where dl.org_id = ${orgId}
-           and d.status = 'posted'
-           and coalesce(d.posting_date, d.document_date) between ${from} and ${to}
-           and (
-             dl.tax_code_id = ${src.taxCodeId}
-             or exists (
-               select 1
-                 from document_line_tax_components c
-                where c.document_line_id = dl.id
-                  and c.org_id = dl.org_id
-                  and c.tax_code_id = ${src.taxCodeId}
-             )
-           )`));
-      total = r.rows[0]?.total ?? "0";
+      continue; // taxable_base sources are summed once per box below.
     }
     glRaw.set(src.lineCode, add(glRaw.get(src.lineCode) ?? "0", total));
+  }
+  for (const [lineCode, codes] of baseCodesByLineCode) {
+    const codeArray = uuidArray(codes);
+    const r = (await runner.execute<{ total: string }>(sql`
+      select coalesce(sum(dl.amount), 0)::text as total
+        from document_lines dl
+        join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+       where dl.org_id = ${orgId}
+         and d.status = 'posted'
+         and coalesce(d.posting_date, d.document_date) between ${from} and ${to}
+         and (
+           dl.tax_code_id = any(${codeArray}::uuid[])
+           or exists (
+             select 1 from document_line_tax_components c
+              where c.org_id = dl.org_id and c.document_line_id = dl.id
+                and c.tax_code_id = any(${codeArray}::uuid[])
+           )
+         )`));
+    glRaw.set(lineCode, add(glRaw.get(lineCode) ?? "0", r.rows[0]?.total ?? "0"));
   }
 
   const boxes = assembleReturn(boxDefs, glRaw, new Map(Object.entries(adjustments)));
