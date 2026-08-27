@@ -26,6 +26,7 @@ import {
   validateSubsidiaryRestrictions,
   type SubsidiaryContext,
 } from "./subsidiaries.ts";
+import { SYSTEM_ACTOR_ID } from "./banking.ts";
 import { businessToday } from "./business-date.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import type { AssemblyBomRevisionEvidence } from "@openbooks/schema";
@@ -3901,7 +3902,7 @@ async function returnVendorCreditInventoryLine(
     },
     "issue",
   );
-  await validateVendorReturnSource(
+  const sourceReceipt = await validateVendorReturnSource(
     runner,
     orgId,
     vendorId,
@@ -3909,6 +3910,23 @@ async function returnVendorCreditInventoryLine(
     line,
     true,
   );
+
+  // A serial receipt is exactly one unit and can therefore be fully reversed
+  // by this return. The serial lifecycle guard requires that exact source ->
+  // reversal edge before it allows the serial to become returned. Lot returns
+  // may be partial (and a source may be allocated by several credits), so they
+  // deliberately keep their immutable document-line evidence without claiming
+  // the source movement's one permitted reversal slot.
+  const reversesMovementId =
+    profile.tracking === "serial" ? sourceReceipt.id : null;
+  const reversalReason = reversesMovementId
+    ? `Vendor credit return of receipt ${reversesMovementId}`
+    : null;
+  // Reversal evidence is required to name an actor. A posting-effect replay
+  // may be system initiated, in which case use the documented engine actor
+  // rather than weakening the storage invariant with a null author.
+  const movementActorId =
+    reversesMovementId && actorId === null ? SYSTEM_ACTOR_ID : actorId;
 
   // Moving-average stock is one blended pool. Its immutable credit-line
   // evidence still identifies the commercial receipt, while the consumption
@@ -4006,14 +4024,16 @@ async function returnVendorCreditInventoryLine(
     insert into inventory_movements
       (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id,
        lot_id, serial_id, quantity, unit_cost, total_value, document_line_id,
-       journal_entry_id, idempotency_key, status, memo, created_by, updated_by)
+       journal_entry_id, idempotency_key, reverses_movement_id, reversal_reason,
+       status, memo, created_by, updated_by)
     values
       (${orgId}, ${subsidiaryId}, ${line.itemId}, 'return', ${date},
        ${line.stockLocationId}, ${line.selection.lotId}, ${line.selection.serialId},
        ${neg(quantity)}, ${unitCost}, ${neg(cost)}, ${line.lineId}, ${entryId},
-       ${inventoryPostingEffectKey(line.lineId, "return")}, 'posted',
+       ${inventoryPostingEffectKey(line.lineId, "return")}, ${reversesMovementId},
+       ${reversalReason}, 'posted',
        ${`Vendor return of receipt ${line.selection.sourceReceiptMovementId}`},
-       ${actorId}, ${actorId})
+       ${movementActorId}, ${movementActorId})
     returning id
   `)).rows[0]!;
   await recordConsumptions(
@@ -4028,7 +4048,7 @@ async function returnVendorCreditInventoryLine(
     await runner.execute(sql`
       update serials
          set status = 'returned', current_stock_location_id = null,
-             updated_at = now(), updated_by = ${actorId}
+             updated_at = now(), updated_by = ${movementActorId}
        where id = ${line.selection.serialId} and org_id = ${orgId}
     `);
   }
