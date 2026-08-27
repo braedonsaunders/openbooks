@@ -129,6 +129,8 @@ export const pspProviderConfigs = pgTable(
     provider: text("provider", { enum: PSP_PROVIDERS }).notNull(),
     displayName: text("display_name").notNull(),
     isEnabled: boolean("is_enabled").notNull().default(false),
+    /** Acceptance/settlement receipt account; migration 0037 pins tenant,
+     *  active postable asset_bank references at storage. */
     defaultBankAccountId: uuid("default_bank_account_id"),
     defaultFeeAccountId: uuid("default_fee_account_id"),
     defaultDisputeAccountId: uuid("default_dispute_account_id"),
@@ -143,6 +145,8 @@ export const pspProviderConfigs = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
+    /** Optional acceptance surcharge policy; migration 0037 requires an
+     *  active rule owned by this organization (and provider-compatible). */
     surchargeRuleId: uuid("surcharge_rule_id"),
     lastImportAt: timestamp("last_import_at", { withTimezone: true }),
     lastError: text("last_error"),
@@ -166,7 +170,8 @@ export const paymentSurchargeRules = pgTable(
     percent: money("percent"),
     fixedAmount: money("fixed_amount"),
     capAmount: money("cap_amount"),
-    /** Income account the surcharge posts to on receipt. */
+    /** Income-only posting target; migration 0037 enforces tenant ownership,
+     *  active/postable state, and the income account class. */
     feeIncomeAccountId: uuid("fee_income_account_id").notNull(),
     /** Null = every acceptance provider. */
     provider: text("provider", { enum: PSP_ACCEPTANCE_PROVIDERS }),
@@ -206,6 +211,8 @@ export const paymentLinks = pgTable(
     partyId: uuid("party_id").notNull(),
     subsidiaryId: uuid("subsidiary_id").notNull(),
     provider: text("provider", { enum: PSP_ACCEPTANCE_PROVIDERS }).notNull(),
+    /** Receipt bank; migration 0037 enforces tenant ownership and asset_bank
+     *  postability before a link can be stored. */
     bankAccountId: uuid("bank_account_id").notNull(),
     /** Invoice open balance at link creation (re-derived at checkout). */
     amount: money("amount").notNull(),

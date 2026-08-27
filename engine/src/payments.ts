@@ -337,6 +337,18 @@ export async function updateDraftPayment(
   const feeAmount = patch.feeAmount ?? custom.feeAmount ?? "0";
   const feeIncomeAccountId = patch.feeIncomeAccountId !== undefined ? patch.feeIncomeAccountId : (custom.feeIncomeAccountId ?? null);
 
+  const paymentReferenceIds = [
+    bankAccountId,
+    discountAccountId,
+    controlAccountId,
+    feeIncomeAccountId,
+  ].filter((value): value is string => value !== null && value !== undefined);
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (paymentReferenceIds.some((value) => !uuidPattern.test(value))) {
+    throw new PaymentError("payment accounting account must be a valid UUID");
+  }
+
   validateAllocationInputs(allocations);
   validateAllocationInputs(creditAllocations.map((a) => sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount)));
   const discountUnits = toUnits(discountAmount);
@@ -357,10 +369,17 @@ export async function updateDraftPayment(
   }
   if (discountAccountId || controlAccountId || feeIncomeAccountId) {
     const refs = [discountAccountId, controlAccountId, feeIncomeAccountId].filter(Boolean) as string[];
-    const validRefs = (await db.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${doc.orgId} and id in ${refs} and is_active and not is_summary
+    const uniqueRefs = [...new Set(refs)];
+    const validRefs = (await db.execute<{ id: string; type: string }>(sql`
+      select id, type from accounts where org_id = ${doc.orgId} and id in ${uniqueRefs} and is_active and not is_summary
     `));
-    if (validRefs.rows.length !== refs.length) throw new PaymentError("payment accounting account is invalid or inactive");
+    if (validRefs.rows.length !== uniqueRefs.length) throw new PaymentError("payment accounting account is invalid or inactive");
+    if (feeIncomeAccountId) {
+      const feeAccount = validRefs.rows.find((row) => row.id === feeIncomeAccountId);
+      if (!feeAccount || !["income", "income_other"].includes(feeAccount.type)) {
+        throw new PaymentError("fee income account must be an active income account");
+      }
+    }
   }
   if (partyId && partyId !== doc.partyId) {
     const party = (await db.execute<{ id: string }>(
