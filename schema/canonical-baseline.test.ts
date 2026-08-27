@@ -53,7 +53,7 @@ const effectiveDateOverlapExclusionMigrationPath =
 const emailDeliveryIdentityReconciliationMigrationPath =
   "schema/migrations/generated/0059_email_delivery_identity_reconciliation.sql";
 const emailDeliveryIdempotencyMigrationPath =
-  "schema/migrations/generated/0028_email_delivery_idempotency.sql";
+  "schema/migrations/generated/0063_email_delivery_idempotency.sql";
 const bankFeedAttemptWatermarkMigrationPath =
   "schema/migrations/generated/0054_bank_feed_attempt_watermark.sql";
 const scriptRunActorMigrationPath =
@@ -95,7 +95,6 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0023_payment_surcharge_rule_uniqueness.sql",
     "0024_tax_rate_effective_range_exclusion.sql",
     "0026_scheduler_outbox_terminal_audit.sql",
-    "0028_email_delivery_idempotency.sql",
     "0035_terminal_failure_surfacing.sql",
     "0036_bank_statement_source_idempotency.sql",
     "0038_ledger_tenant_coherent_foreign_keys.sql",
@@ -122,6 +121,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0060_lease_base_rent_window_exclusive.sql",
     "0061_cam_pool_source_account_overlap.sql",
     "0062_recognition_events.sql",
+    "0063_email_delivery_idempotency.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
