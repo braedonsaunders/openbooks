@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, type SqlExecutor } from "./db.ts";
 import { buildScheduleWithRunner } from "./depreciation.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
 import { orgReportingFramework } from "./reporting-framework.ts";
@@ -120,6 +120,17 @@ async function primaryBookId(orgId: string): Promise<string> {
 }
 
 /**
+ * Serialize remeasurement mutations on the authoritative asset row. This must
+ * be the first statement in the remeasurement transaction so a contender waits
+ * before reading carrying-value inputs and then re-reads the committed state.
+ */
+async function lockAssetRow(exec: SqlExecutor, orgId: string, assetId: string): Promise<void> {
+  const locked = (await exec.execute<{ id: string }>(sql`
+    select id from fixed_assets where org_id = ${orgId} and id = ${assetId} for update`));
+  if (!locked.rows[0]) throw new AssetLifecycleError("asset not found");
+}
+
+/**
  * Net signed remeasurement delta carried on an asset: the sum of every
  * un-reversed impairment (negative) and revaluation write-up (positive)
  * event. Remeasurements post against ACCUMULATED DEPRECIATION but never into
@@ -128,8 +139,12 @@ async function primaryBookId(orgId: string): Promise<string> {
  * measure off an overstated carrying amount, and a disposal would strand the
  * impairment credit on the accumulated-depreciation account.
  */
-async function netRemeasurementDelta(orgId: string, assetId: string): Promise<string> {
-  const r = (await db.execute<{ delta: string }>(sql`
+async function netRemeasurementDelta(
+  orgId: string,
+  assetId: string,
+  exec: SqlExecutor = db,
+): Promise<string> {
+  const r = (await exec.execute<{ delta: string }>(sql`
     select coalesce(sum(event.amount), 0)::text as delta
       from asset_events event
      where event.org_id = ${orgId} and event.asset_id = ${assetId}
@@ -546,55 +561,60 @@ export async function remeasureAsset(
   opts: { newCarryingValue: string; date: string; actorId: string | null },
 ): Promise<RemeasureResult> {
   const bookId = await primaryBookId(orgId);
-  const res = (await db.execute<{
-      asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string; salvage_value: string;
-      custom: Record<string, unknown> | null; department_id: string | null; project_id: string | null;
-      location_id: string | null; base_currency: string; accumulated_depreciation_account_id: string;
-      gain_loss_account_id: string | null; accumulated: string;
-    }>(sql`
-    select a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost, a.salvage_value, a.custom,
-           a.department_id, a.project_id, a.location_id, sub.base_currency,
-           c.accumulated_depreciation_account_id, c.gain_loss_account_id,
-           coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
-                       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
-                      where l.org_id = a.org_id and s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
-      from fixed_assets a
-      join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
-      join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
-     where a.org_id = ${orgId} and a.id = ${assetId}`));
-  const asset = res.rows[0];
-  if (!asset) throw new AssetLifecycleError("asset not found");
-  if (asset.status === "disposed" || asset.status === "written_off") {
-    throw new AssetLifecycleError(`asset ${asset.asset_number} is ${asset.status}`);
-  }
-  if (!asset.gain_loss_account_id) {
-    throw new AssetLifecycleError("configure a gain/loss (adjustment) account on the asset category first");
-  }
-  const custom = (asset.custom?.accounts ?? {}) as Record<string, string | undefined>;
-  // Fold prior remeasurement events into the carrying amount: they credit
-  // accumulated depreciation without schedule lines, so the schedule sum alone
-  // overstates NBV the moment an asset has been impaired.
-  const remeasureDelta = await netRemeasurementDelta(orgId, assetId);
-  const effectiveAccumulated = sub(asset.accumulated, remeasureDelta);
-  const { delta, lines } = computeRemeasurement({
-    cost: asset.acquisition_cost,
-    accumulated: effectiveAccumulated,
-    newCarryingValue: opts.newCarryingValue,
-    accumulatedDepreciationAccountId: custom.accumulated || asset.accumulated_depreciation_account_id,
-    adjustmentAccountId: custom.gainLoss || asset.gain_loss_account_id,
-  });
-  if (isZero(delta)) throw new AssetLifecycleError("new carrying value equals current net book value");
+  return db.transaction(async (tx) => {
+    // Lock before reading any carrying-value input. A concurrent
+    // remeasurement waits here, then its following SELECT sees the committed
+    // event and schedule state from the transaction ahead of it.
+    await lockAssetRow(tx, orgId, assetId);
 
-  // Framework gate: restoration of an impairment is prohibited under US GAAP
-  // and capped under IAS 36. The rule reads the org's configured framework.
-  const unreversedImpairment = cmp(remeasureDelta, "0") < 0 ? neg(remeasureDelta) : "0";
-  const framework = await orgReportingFramework(orgId);
-  const policy = remeasurementPolicy({ framework, delta, unreversedImpairment });
-  if (!policy.allowed) throw new AssetLifecycleError(policy.reason!);
+    const res = (await tx.execute<{
+        asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string; salvage_value: string;
+        custom: Record<string, unknown> | null; department_id: string | null; project_id: string | null;
+        location_id: string | null; base_currency: string; accumulated_depreciation_account_id: string;
+        gain_loss_account_id: string | null; accumulated: string;
+      }>(sql`
+      select a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost, a.salvage_value, a.custom,
+             a.department_id, a.project_id, a.location_id, sub.base_currency,
+             c.accumulated_depreciation_account_id, c.gain_loss_account_id,
+             coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
+                         join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
+                        where l.org_id = a.org_id and s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
+        from fixed_assets a
+        join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
+        join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
+       where a.org_id = ${orgId} and a.id = ${assetId}`));
+    const asset = res.rows[0];
+    if (!asset) throw new AssetLifecycleError("asset not found");
+    if (asset.status === "disposed" || asset.status === "written_off") {
+      throw new AssetLifecycleError(`asset ${asset.asset_number} is ${asset.status}`);
+    }
+    if (!asset.gain_loss_account_id) {
+      throw new AssetLifecycleError("configure a gain/loss (adjustment) account on the asset category first");
+    }
+    const custom = (asset.custom?.accounts ?? {}) as Record<string, string | undefined>;
+    // Fold prior remeasurement events into the carrying amount: they credit
+    // accumulated depreciation without schedule lines, so the schedule sum alone
+    // overstates NBV the moment an asset has been impaired.
+    const remeasureDelta = await netRemeasurementDelta(orgId, assetId, tx);
+    const effectiveAccumulated = sub(asset.accumulated, remeasureDelta);
+    const { delta, lines } = computeRemeasurement({
+      cost: asset.acquisition_cost,
+      accumulated: effectiveAccumulated,
+      newCarryingValue: opts.newCarryingValue,
+      accumulatedDepreciationAccountId: custom.accumulated || asset.accumulated_depreciation_account_id,
+      adjustmentAccountId: custom.gainLoss || asset.gain_loss_account_id,
+    });
+    if (isZero(delta)) throw new AssetLifecycleError("new carrying value equals current net book value");
 
-  const kind: "revalued" | "impaired" = cmp(delta, "0") < 0 ? "impaired" : "revalued";
+    // Framework gate: restoration of an impairment is prohibited under US GAAP
+    // and capped under IAS 36. The rule reads the org's configured framework.
+    const unreversedImpairment = cmp(remeasureDelta, "0") < 0 ? neg(remeasureDelta) : "0";
+    const framework = await orgReportingFramework(orgId);
+    const policy = remeasurementPolicy({ framework, delta, unreversedImpairment });
+    if (!policy.allowed) throw new AssetLifecycleError(policy.reason!);
 
-  const { entryId, rebuiltLines } = await db.transaction(async (tx) => {
+    const kind: "revalued" | "impaired" = cmp(delta, "0") < 0 ? "impaired" : "revalued";
+
     // An asset can be remeasured repeatedly; the entry number must be unique
     // per physical journal under journal_entries_org_number.
     const entryNumber = `${kind === "impaired" ? "IMPR" : "REVAL"}-${asset.asset_number}-${randomUUID().slice(0, 8)}`;
@@ -645,8 +665,6 @@ export async function remeasureAsset(
       await tx.execute(sql`update depreciation_schedule_lines set planned_amount = ${fromUnits(amt < 0n ? 0n : amt)}, updated_at = now(), updated_by = ${opts.actorId} where id = ${remaining.rows[i]!.id} and org_id = ${orgId}`);
       rebuilt++;
     }
-    return { entryId: eid, rebuiltLines: rebuilt };
+    return { assetId, entryId: eid, delta, kind, rebuiltLines: rebuilt };
   });
-
-  return { assetId, entryId, delta, kind, rebuiltLines };
 }
