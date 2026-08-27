@@ -2,8 +2,17 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { deriveEmailDeliveryKey, reconcileDeliveryAttempts } from "@openbooks/emails";
 import { businessToday } from "./business-date.ts";
 import { db } from "./db.ts";
+import {
+  appendEmailAttemptEvent,
+  claimEmailDeliveryLog,
+  confirmEmailSentGuarded,
+  markEmailFailed,
+  markEmailSent,
+  markEmailUncertain,
+} from "./email-config.ts";
 import {
   dispatchQueuedReportRuns,
   dispatchReportDeliveries,
@@ -298,6 +307,166 @@ test("exhausted report runs and deliveries are stamped terminal exactly once", {
     `)).rows[0]!;
     assert.deepEqual(afterRepeat.terminal_failed_at, stamped.terminal_failed_at);
     assert.equal(terminalEvents(repeat.lines).length, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("provider-accepted uncertain outcome blocks blind re-send and resists markEmailFailed overwrite", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const deliveryKey = deriveEmailDeliveryKey({
+      orgId: org.orgId,
+      scope: "retry-test-uncertain",
+      to: "retry@example.com",
+    });
+
+    // Claim the canonical row for attempt 1.
+    const canonical = await claimEmailDeliveryLog({
+      orgId: org.orgId,
+      deliveryKey,
+      jobId: "job-uncertain-1",
+      provider: "resend",
+      recipients: ["retry@example.com"],
+      subject: "Uncertain retry test",
+    });
+    assert.equal(canonical.attempts.length, 0);
+
+    // Simulate attempt 1: uncertain outcome (timeout after provider acceptance).
+    await appendEmailAttemptEvent(org.orgId, canonical.id, {
+      attempt: 1,
+      outcome: "uncertain",
+      detail: "Resend: request timed out before confirmation — acceptance state unresolved",
+    });
+    await markEmailUncertain(org.orgId, canonical.id, "Resend: request timed out");
+
+    // Verify the row is in uncertain status.
+    const afterUncertain = (await db.execute<{ status: string }>(sql`
+      select status from email_log where id = ${canonical.id}
+    `)).rows[0]!;
+    assert.equal(afterUncertain.status, "uncertain");
+
+    // Re-reclaim: the same delivery key must return the same canonical row.
+    const reclaimed = await claimEmailDeliveryLog({
+      orgId: org.orgId,
+      deliveryKey,
+      jobId: "job-uncertain-2",
+      provider: "resend",
+      recipients: ["retry@example.com"],
+      subject: "Uncertain retry test",
+    });
+    assert.equal(reclaimed.id, canonical.id);
+    assert.equal(reclaimed.status, "uncertain");
+    assert.equal(reclaimed.attempts.length, 1);
+    assert.equal(reclaimed.attempts[0]!.outcome, "uncertain");
+
+    // Reconciliation gate must suppress re-send — the earlier uncertain
+    // attempt means acceptance is unproven.
+    const decision = reconcileDeliveryAttempts(reclaimed.attempts);
+    assert.equal(decision.action, "suppress");
+    assert.ok(decision.reason.includes("attempt 1"));
+    assert.ok(decision.reason.includes("unresolved"));
+
+    // markEmailFailed must NOT overwrite the uncertain status — a retried
+    // attempt that fails has no authority to rewrite an uncertain outcome.
+    await markEmailFailed(org.orgId, canonical.id, "retry also failed");
+    const afterMarkFailed = (await db.execute<{ status: string }>(sql`
+      select status from email_log where id = ${canonical.id}
+    `)).rows[0]!;
+    assert.equal(afterMarkFailed.status, "uncertain",
+      "markEmailFailed must not overwrite an uncertain status");
+
+    // An operator can resolve the uncertainty by confirming acceptance.
+    const confirmed = await confirmEmailSentGuarded(org.orgId, canonical.id, "re_abc123");
+    assert.ok(confirmed);
+    const afterConfirm = (await db.execute<{ status: string; provider_message_id: string }>(sql`
+      select status, provider_message_id from email_log where id = ${canonical.id}
+    `)).rows[0]!;
+    assert.equal(afterConfirm.status, "sent");
+    assert.equal(afterConfirm.provider_message_id, "re_abc123");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("happy pre-accept retry succeeds after definite failure", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const deliveryKey = deriveEmailDeliveryKey({
+      orgId: org.orgId,
+      scope: "retry-test-preaccept",
+      to: "retry@example.com",
+    });
+
+    // Claim the canonical row for attempt 1.
+    const canonical = await claimEmailDeliveryLog({
+      orgId: org.orgId,
+      deliveryKey,
+      jobId: "job-preaccept-1",
+      provider: "resend",
+      recipients: ["retry@example.com"],
+      subject: "Pre-accept retry test",
+    });
+
+    // Attempt 1: definite failure (pre-accept — connection refused).
+    await appendEmailAttemptEvent(org.orgId, canonical.id, {
+      attempt: 1,
+      outcome: "notSent",
+      detail: "Resend: network request failed (ECONNREFUSED)",
+    });
+    await markEmailFailed(org.orgId, canonical.id, "connection refused");
+
+    // Verify the row is in failed status.
+    const afterFailed = (await db.execute<{ status: string }>(sql`
+      select status from email_log where id = ${canonical.id}
+    `)).rows[0]!;
+    assert.equal(afterFailed.status, "failed");
+
+    // Re-reclaim: same delivery key returns the same canonical row.
+    const reclaimed = await claimEmailDeliveryLog({
+      orgId: org.orgId,
+      deliveryKey,
+      jobId: "job-preaccept-2",
+      provider: "resend",
+      recipients: ["retry@example.com"],
+      subject: "Pre-accept retry test",
+    });
+    assert.equal(reclaimed.id, canonical.id);
+    assert.equal(reclaimed.attempts.length, 1);
+
+    // Reconciliation gate permits re-send — only definite failures, no uncertainty.
+    const decision = reconcileDeliveryAttempts(reclaimed.attempts);
+    assert.equal(decision.action, "send");
+
+    // Attempt 2: successful delivery.
+    await appendEmailAttemptEvent(org.orgId, canonical.id, {
+      attempt: 2,
+      outcome: "sent",
+      detail: "re_success_456",
+    });
+    await markEmailSent(org.orgId, canonical.id, "re_success_456");
+
+    // Verify the row is in sent status with the provider message id.
+    const afterSent = (await db.execute<{ status: string; provider_message_id: string }>(sql`
+      select status, provider_message_id from email_log where id = ${canonical.id}
+    `)).rows[0]!;
+    assert.equal(afterSent.status, "sent");
+    assert.equal(afterSent.provider_message_id, "re_success_456");
+
+    // A third attempt reconciles to complete without re-sending.
+    const thirdClaim = await claimEmailDeliveryLog({
+      orgId: org.orgId,
+      deliveryKey,
+      jobId: "job-preaccept-3",
+      provider: "resend",
+      recipients: ["retry@example.com"],
+      subject: "Pre-accept retry test",
+    });
+    const thirdDecision = reconcileDeliveryAttempts(thirdClaim.attempts);
+    assert.equal(thirdDecision.action, "complete");
+    if (thirdDecision.action === "complete") {
+      assert.equal(thirdDecision.providerMessageId, "re_success_456");
+    }
   } finally {
     await dropScratchOrg(org.orgId);
   }
