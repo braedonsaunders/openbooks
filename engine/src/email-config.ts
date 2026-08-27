@@ -8,13 +8,21 @@ import {
   type EmailTransport,
   type RawEmailConfig,
 } from "@openbooks/emails";
-import { db } from "./db.ts";
+import { db, withOrgTransaction } from "./db.ts";
 
 /**
  * Per-org email provider configuration lives in `orgs.settings.email` (jsonb),
  * with the single provider secret AES-sealed (never stored or returned in
  * plaintext). This module is the one place web (settings/test) and the worker
  * (delivery) read/write it, so both agree on shape + sealing.
+ *
+ * A save is a material delivery/security change, so every write carries its
+ * acting `EmailActor`, stamps the org's updated metadata, and commits redacted
+ * before/after evidence into audit_log in the SAME transaction — the evidence
+ * records that a credential was added/rotated/cleared without ever holding
+ * secret material. The read/merge/write runs under the org row lock with an
+ * optional expected-revision fence, so concurrent admin edits either merge
+ * over the committed result or are rejected — never silently overwritten.
  */
 
 /** Read the raw stored config for an org (secret still sealed), or null. */
@@ -25,15 +33,32 @@ export async function readOrgEmailConfig(orgId: string): Promise<RawEmailConfig 
   return r.rows[0]?.email ?? null;
 }
 
-/** What the settings UI may see — never the sealed secret, only whether one is set. */
-export type OrgEmailConfigView = Omit<RawEmailConfig, "keyCiphertext" | "keyNonce"> & {
+/** What the settings UI and audit evidence may see — never the sealed secret, only whether one is set. */
+export type RedactedEmailConfig = Omit<RawEmailConfig, "keyCiphertext" | "keyNonce"> & {
   hasSecret: boolean;
 };
 
-export async function readOrgEmailConfigView(orgId: string): Promise<OrgEmailConfigView> {
-  const raw = (await readOrgEmailConfig(orgId)) ?? {};
-  const { keyCiphertext, keyNonce, ...rest } = raw;
+/** Strip the sealed secret material, keeping only whether a credential exists. */
+export function redactEmailConfig(raw: RawEmailConfig | null | undefined): RedactedEmailConfig {
+  const { keyCiphertext, keyNonce, ...rest } = raw ?? {};
   return { ...rest, hasSecret: Boolean(keyCiphertext && keyNonce) };
+}
+
+/** What the settings UI may see, plus the exact org revision token for the CAS fence. */
+export type OrgEmailConfigView = RedactedEmailConfig & {
+  /** Exact persisted `orgs.updated_at` revision; echo it into expectedUpdatedAt to save safely. */
+  updatedAt: string | null;
+};
+
+export async function readOrgEmailConfigView(orgId: string): Promise<OrgEmailConfigView> {
+  const r = (await db.execute<{ email: RawEmailConfig | null; updatedAt: Date | null }>(sql`
+    select settings -> 'email' as email, updated_at as "updatedAt" from orgs where id = ${orgId}
+  `));
+  const row = r.rows[0];
+  return {
+    ...redactEmailConfig(row?.email),
+    updatedAt: row?.updatedAt ? new Date(row.updatedAt).toISOString() : null,
+  };
 }
 
 export type SaveOrgEmailInput = Omit<RawEmailConfig, "keyCiphertext" | "keyNonce"> & {
@@ -42,31 +67,145 @@ export type SaveOrgEmailInput = Omit<RawEmailConfig, "keyCiphertext" | "keyNonce
 };
 
 /**
+ * What happened to the sealed credential, derivable without touching secret
+ * material: a save that supplies a secret over one that existed rotated it,
+ * over none added it, and an explicit null cleared it.
+ */
+export type EmailSecretChange = "added" | "rotated" | "cleared" | "unchanged";
+
+export function emailSecretChange(
+  input: { secret?: string | null },
+  before: RedactedEmailConfig,
+  after: RedactedEmailConfig,
+): EmailSecretChange {
+  if (after.hasSecret && !before.hasSecret) return "added";
+  if (!after.hasSecret && before.hasSecret) return "cleared";
+  if (after.hasSecret && before.hasSecret && typeof input.secret === "string" && Boolean(input.secret.trim())) {
+    return "rotated";
+  }
+  return "unchanged";
+}
+
+/**
+ * Rejected because another actor saved since the caller read: the caller's
+ * expectedUpdatedAt no longer matches the persisted org revision. Nothing was
+ * written; reload the view and retry with the fresh revision.
+ */
+export class OrgEmailConfigConflictError extends Error {
+  readonly expectedUpdatedAt: string;
+  readonly persistedUpdatedAt: string;
+  constructor(expectedUpdatedAt: string, persistedUpdatedAt: string) {
+    super("email configuration changed after this edit started; reload the settings view and retry");
+    this.name = "OrgEmailConfigConflictError";
+    this.expectedUpdatedAt = expectedUpdatedAt;
+    this.persistedUpdatedAt = persistedUpdatedAt;
+  }
+}
+
+export type SaveOrgEmailOptions = {
+  /**
+   * Exact `updatedAt` revision token from the caller's preceding read. When
+   * provided, a persisted revision that differs rejects the save (409-shaped
+   * conflict, zero writes). Callers that skipped the read omit it and rely on
+   * the row-locked transaction alone.
+   */
+  expectedUpdatedAt?: string;
+  /** Free-text justification recorded with the audit evidence when supplied. */
+  reason?: string;
+};
+
+/**
  * Merge + persist an org's email config. A provided `secret` is sealed; a null
  * secret clears it; undefined keeps the stored one. Validates before saving so
  * a bad config fails loudly at the API boundary.
+ *
+ * Attribution is mandatory: `actor` names the authenticated user (or, for
+ * trusted automation, the system reason). The locked read/merge/write plus the
+ * org metadata stamp and the redacted audit_log evidence commit as one unit —
+ * a failure of any part rolls all of it back, so an unattributed or
+ * unauditable configuration change cannot persist.
  */
-export async function saveOrgEmailConfig(orgId: string, input: SaveOrgEmailInput): Promise<void> {
-  const existing = (await readOrgEmailConfig(orgId)) ?? {};
-  const { secret, ...fields } = input;
-
-  const next: RawEmailConfig = { ...existing, ...fields };
-  if (secret === null) {
-    delete next.keyCiphertext;
-    delete next.keyNonce;
-  } else if (typeof secret === "string" && secret.trim()) {
-    const sealed = sealSecret(secret.trim());
-    next.keyCiphertext = sealed.ciphertext;
-    next.keyNonce = sealed.nonce;
+export async function saveOrgEmailConfig(
+  orgId: string,
+  input: SaveOrgEmailInput,
+  actor: EmailActor,
+  options: SaveOrgEmailOptions = {},
+): Promise<OrgEmailConfigView> {
+  if (actor.kind === "user" && !actor.userId.trim()) {
+    throw new Error("email configuration writes require a non-empty acting user id");
   }
+  return withOrgTransaction(orgId, async () => {
+    // One locked read owns the whole read/merge/write: a concurrent save waits
+    // here and then merges over the committed result, or — when it read an
+    // earlier revision — is rejected by the fence below. The silent
+    // last-writer-wins overwrite of another admin's credential or settings is
+    // impossible in either path.
+    const locked = await db.execute<{ email: RawEmailConfig | null; updatedAt: Date | null }>(sql`
+      select settings -> 'email' as email, updated_at as "updatedAt"
+        from orgs where id = ${orgId} for update
+    `);
+    const current = locked.rows[0];
+    if (!current) throw new Error(`organization ${orgId} does not exist`);
+    const persistedRevision = current.updatedAt ? new Date(current.updatedAt).toISOString() : null;
+    if (
+      options.expectedUpdatedAt !== undefined &&
+      (persistedRevision === null ||
+        new Date(options.expectedUpdatedAt).getTime() !== new Date(persistedRevision).getTime())
+    ) {
+      throw new OrgEmailConfigConflictError(options.expectedUpdatedAt, persistedRevision ?? "");
+    }
 
-  validateStoredEmailConfig(next, { requireComplete: next.enabled === true });
+    const before = redactEmailConfig(current.email);
+    const existing = current.email ?? {};
+    const { secret, ...fields } = input;
 
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{email}', ${JSON.stringify(next)}::jsonb)
-     where id = ${orgId}
-  `);
+    const next: RawEmailConfig = { ...existing, ...fields };
+    if (secret === null) {
+      delete next.keyCiphertext;
+      delete next.keyNonce;
+    } else if (typeof secret === "string" && secret.trim()) {
+      const sealed = sealSecret(secret.trim());
+      next.keyCiphertext = sealed.ciphertext;
+      next.keyNonce = sealed.nonce;
+    }
+
+    validateStoredEmailConfig(next, { requireComplete: next.enabled === true });
+    const after = redactEmailConfig(next);
+
+    // A user actor stamps the org's canonical audit column; a system actor
+    // leaves updated_by null and carries its reason in the evidence envelope,
+    // so null never means "nobody recorded who changed this".
+    const updatedBy = actor.kind === "user" ? actor.userId : null;
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{email}', ${JSON.stringify(next)}::jsonb),
+             updated_at = now(),
+             updated_by = ${updatedBy}
+       where id = ${orgId}
+    `);
+
+    // Evidence is part of the same atomic unit: an audit failure rolls the
+    // configuration write back with it.
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({
+        area: "email",
+        actor: actor.kind === "user" ? { kind: "user", userId: actor.userId } : { kind: "system", reason: actor.reason },
+        ...(options.reason?.trim() ? { reason: options.reason.trim() } : {}),
+        secret: emailSecretChange(input, before, after),
+        before,
+        after,
+      })}::jsonb, ${updatedBy})
+    `);
+
+    const saved = await db.execute<{ updatedAt: Date | null }>(sql`
+      select updated_at as "updatedAt" from orgs where id = ${orgId}
+    `);
+    return {
+      ...after,
+      updatedAt: saved.rows[0]?.updatedAt ? new Date(saved.rows[0].updatedAt).toISOString() : null,
+    };
+  });
 }
 
 /** Resolve an org's sendable transport (secret unsealed), or null if unconfigured. */
