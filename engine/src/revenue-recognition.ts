@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "./db.ts";
+import { db, type SqlExecutor, withOrg } from "./db.ts";
 import { add, cmp, fromUnits, isZero, mul, mulPercent, neg, roundDiv, sum, toUnits } from "./money.ts";
 import {
   periodInterest,
@@ -593,16 +593,16 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
 // ---------------------------------------------------------------------------
 
 /** Primary accounting book id (schedules are book-aware). */
-async function primaryBookId(orgId: string): Promise<string> {
-  const res = (await db.execute<{ id: string }>(sql`
+async function primaryBookId(runner: SqlExecutor, orgId: string): Promise<string> {
+  const res = (await runner.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`));
   if (!res.rows[0]) throw new Error("no primary accounting book");
   return res.rows[0].id;
 }
 
 /** Resolve the (non-adjustment) accounting period covering a date, or null. */
-async function periodForDate(orgId: string, date: string): Promise<string | null> {
-  const res = (await db.execute<{ id: string }>(sql`
+async function periodForDate(runner: SqlExecutor, orgId: string, date: string): Promise<string | null> {
+  const res = (await runner.execute<{ id: string }>(sql`
     select id from accounting_periods
      where org_id = ${orgId} and is_adjustment = false
        and starts_on <= ${date} and ends_on >= ${date}
@@ -628,14 +628,15 @@ export interface BuildRecognitionResult {
  * `asOfDate` month (a percent change is a change in estimate — ASC 250 —
  * recognized in the current period, never restated to the contract start).
  */
-export async function buildRecognitionSchedule(
+async function buildRecognitionScheduleOn(
+  runner: SqlExecutor,
   obligationId: string,
   orgId: string,
   actorId: string | null,
-  forBookId?: string,
+  bookId: string,
   asOfDate?: string,
 ): Promise<BuildRecognitionResult> {
-  const oblRes = (await db.execute<{
+  const oblRes = (await runner.execute<{
       id: string;
       allocated_price: string;
       recognition_starts_on: string | null;
@@ -667,73 +668,111 @@ export async function buildRecognitionSchedule(
   const endOn = o.recognition_ends_on ?? (o.end_date_source === "contract" ? o.contract_ends : null);
   const isPercentComplete = o.method === "percent_complete";
 
-  const bookId = forBookId ?? (await primaryBookId(orgId));
-
-  return await db.transaction(async (tx) => {
-    const existing = (await tx.execute<{ id: string }>(sql`
-      select id from recognition_schedules
-       where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`));
-    let scheduleId: string;
-    if (existing.rows[0]) {
-      scheduleId = existing.rows[0].id;
-      await tx.execute(sql`
-        update recognition_schedules
-           set total_amount = ${o.allocated_price}, updated_at = now(), updated_by = ${actorId}
-         where id = ${scheduleId} and org_id = ${orgId}`);
+  const existing = (await runner.execute<{ id: string }>(sql`
+    select id from recognition_schedules
+     where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`));
+  let scheduleId: string;
+  if (existing.rows[0]) {
+    scheduleId = existing.rows[0].id;
+    await runner.execute(sql`
+      update recognition_schedules
+         set total_amount = ${o.allocated_price}, updated_at = now(), updated_by = ${actorId}
+       where id = ${scheduleId} and org_id = ${orgId}`);
     } else {
-      const ins = (await tx.execute<{ id: string }>(sql`
+      // Concurrent replays may race on the (obligation, book) identity; lose
+      // deterministically to the winner and adopt its row instead of failing.
+      const ins = (await runner.execute<{ id: string }>(sql`
         insert into recognition_schedules (org_id, obligation_id, book_id, total_amount, created_by, updated_by)
         values (${orgId}, ${obligationId}, ${bookId}, ${o.allocated_price}, ${actorId}, ${actorId})
+        on conflict do nothing
         returning id`));
-      scheduleId = ins.rows[0]!.id;
+      scheduleId =
+        ins.rows[0]?.id ??
+        (await runner.execute<{ id: string }>(sql`
+          select id from recognition_schedules
+           where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`)).rows[0]!.id;
     }
 
-    const posted = (await tx.execute<{ period_id: string; planned_amount: string; sequence: number }>(sql`
-      select period_id, planned_amount, sequence from recognition_schedule_lines
-       where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is not null`));
-    const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
-    const postedToDate = sum(posted.rows.map((r) => r.planned_amount));
-    const nextSequence = posted.rows.reduce((a, r) => Math.max(a, r.sequence + 1), 0);
+  const posted = (await runner.execute<{ period_id: string; planned_amount: string; sequence: number }>(sql`
+    select period_id, planned_amount, sequence from recognition_schedule_lines
+     where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is not null`));
+  const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
+  const postedToDate = sum(posted.rows.map((r) => r.planned_amount));
+  const nextSequence = posted.rows.reduce((a, r) => Math.max(a, r.sequence + 1), 0);
 
-    // Percent-complete: the catch-up delta lands in the as-of month (clamped to
-    // the term start), credited for everything this schedule already posted.
-    const plan = computeRecognitionSchedule({
-      total: o.allocated_price,
-      method: o.method,
-      startOn: isPercentComplete && asOfDate && asOfDate > startOn ? asOfDate : startOn,
-      endOn,
-      termPeriods: o.recognition_periods,
-      startOffsetDays: o.start_offset_days,
-      initialAmountPercent: o.initial_amount_percent,
-      periodOffset: o.period_offset,
-      percentComplete: o.percent_complete,
-      alreadyRecognized: isPercentComplete ? postedToDate : null,
-    });
-
-    await tx.execute(sql`
-      delete from recognition_schedule_lines where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is null`);
-
-    const skippedMonths: string[] = [];
-    let lineCount = 0;
-    for (const p of plan) {
-      const periodId = await periodForDate(orgId, p.periodMonth);
-      if (!periodId) {
-        skippedMonths.push(p.periodMonth);
-        continue;
-      }
-      // A period that already recognized is closed to re-planning — EXCEPT for
-      // percent_complete, where later catch-ups legitimately post additional
-      // lines into the current period (distinct sequence numbers).
-      if (!isPercentComplete && postedPeriods.has(periodId)) continue;
-      if (isPercentComplete && isZero(p.planned)) continue;
-      await tx.execute(sql`
-        insert into recognition_schedule_lines
-          (org_id, schedule_id, period_id, sequence, planned_amount, created_by, updated_by)
-        values (${orgId}, ${scheduleId}, ${periodId}, ${nextSequence + p.sequence}, ${p.planned}, ${actorId}, ${actorId})`);
-      lineCount++;
-    }
-    return { scheduleId, lineCount, skippedMonths };
+  // Percent-complete: the catch-up delta lands in the as-of month (clamped to
+  // the term start), credited for everything this schedule already posted.
+  const plan = computeRecognitionSchedule({
+    total: o.allocated_price,
+    method: o.method,
+    startOn: isPercentComplete && asOfDate && asOfDate > startOn ? asOfDate : startOn,
+    endOn,
+    termPeriods: o.recognition_periods,
+    startOffsetDays: o.start_offset_days,
+    initialAmountPercent: o.initial_amount_percent,
+    periodOffset: o.period_offset,
+    percentComplete: o.percent_complete,
+    alreadyRecognized: isPercentComplete ? postedToDate : null,
   });
+
+  await runner.execute(sql`
+    delete from recognition_schedule_lines where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is null`);
+
+  const skippedMonths: string[] = [];
+  let lineCount = 0;
+  for (const p of plan) {
+    const periodId = await periodForDate(runner, orgId, p.periodMonth);
+    if (!periodId) {
+      skippedMonths.push(p.periodMonth);
+      continue;
+    }
+    // A period that already recognized is closed to re-planning — EXCEPT for
+    // percent_complete, where later catch-ups legitimately post additional
+    // lines into the current period (distinct sequence numbers).
+    if (!isPercentComplete && postedPeriods.has(periodId)) continue;
+    if (isPercentComplete && isZero(p.planned)) continue;
+    await runner.execute(sql`
+      insert into recognition_schedule_lines
+        (org_id, schedule_id, period_id, sequence, planned_amount, created_by, updated_by)
+      values (${orgId}, ${scheduleId}, ${periodId}, ${nextSequence + p.sequence}, ${p.planned}, ${actorId}, ${actorId})`);
+    lineCount++;
+  }
+  return { scheduleId, lineCount, skippedMonths };
+}
+
+/**
+ * Build one obligation's recognition schedule on a book in its own transaction.
+ * Callers that must keep obligations and their schedules atomic (the invoice
+ * posting effect) use `buildRecognitionScheduleOn` on their transaction instead.
+ */
+export async function buildRecognitionSchedule(
+  obligationId: string,
+  orgId: string,
+  actorId: string | null,
+  forBookId?: string,
+  asOfDate?: string,
+): Promise<BuildRecognitionResult> {
+  const bookId = forBookId ?? (await primaryBookId(db, orgId));
+  return await db.transaction(async (tx) =>
+    buildRecognitionScheduleOn(tx, obligationId, orgId, actorId, bookId, asOfDate));
+}
+
+/** Build the recognition schedule on every GL-posting book (multi-book). */
+async function buildAllRecognitionSchedulesOn(
+  runner: SqlExecutor,
+  obligationId: string,
+  orgId: string,
+  actorId: string | null,
+  asOfDate?: string,
+): Promise<BuildRecognitionResult[]> {
+  const books = (await runner.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} and is_active and posts_gl
+     order by is_primary desc, code`));
+  const results: BuildRecognitionResult[] = [];
+  for (const b of books.rows) {
+    results.push(await buildRecognitionScheduleOn(runner, obligationId, orgId, actorId, b.id, asOfDate));
+  }
+  return results;
 }
 
 /** Build the recognition schedule on every GL-posting book (multi-book). */
@@ -743,12 +782,7 @@ export async function buildAllRecognitionSchedules(
   actorId: string | null,
   asOfDate?: string,
 ): Promise<BuildRecognitionResult[]> {
-  const books = (await db.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_active and posts_gl
-     order by is_primary desc, code`));
-  const results: BuildRecognitionResult[] = [];
-  for (const b of books.rows) results.push(await buildRecognitionSchedule(obligationId, orgId, actorId, b.id, asOfDate));
-  return results;
+  return buildAllRecognitionSchedulesOn(db, obligationId, orgId, actorId, asOfDate);
 }
 
 // ---------------------------------------------------------------------------
@@ -772,9 +806,13 @@ export function revenueObligationPostingEffectKey(documentLineId: string): strin
 /**
  * After a customer invoice posts, create one performance obligation per rev-rec
  * line (item carries a recognition rule), allocate the deferred transaction
- * price across them by relative SSP, and build the recognition schedules. Runs
- * inside the invoice post flow. Idempotent: lines that already have an
- * obligation are skipped, so re-posting/replay never duplicates.
+ * price across them by relative SSP, and build their recognition schedules on
+ * every GL-posting book. Runs inside the invoice post flow, and it is ATOMIC:
+ * each obligation commits together with its complete schedules, so a crash or
+ * a schedule-build failure can never leave committed money obligations with no
+ * recognition plan. Idempotent: lines that already have an obligation are
+ * never duplicated, and replay repairs obligations an earlier interrupted or
+ * legacy attempt left without full per-book coverage instead of skipping them.
  *
  * SSP source per line: item.standalone_selling_price → dated fair_value_prices
  * → the booked line amount. Deferred/recognized accounts resolve item → rule.
@@ -829,13 +867,13 @@ export async function createObligationsFromInvoice(
      order by dl.line_number`));
   if (lineRes.rows.length === 0) return { created: 0, contractId: null, obligationIds: [] };
 
-  // Skip lines that already produced an obligation (idempotent replay).
-  const existing = (await db.execute<{ document_line_id: string }>(sql`
-    select document_line_id from performance_obligations
+  // Lines that already produced an obligation (idempotent replay).
+  const existing = (await db.execute<{ id: string; document_line_id: string }>(sql`
+    select id, document_line_id from performance_obligations
      where org_id = ${orgId} and document_line_id = any(${`{${lineRes.rows.map((l) => l.line_id).join(",")}}`}::uuid[])`));
   const already = new Set(existing.rows.map((r) => r.document_line_id));
+  const existingObligationIds = existing.rows.map((r) => r.id);
   const lines = lineRes.rows.filter((l) => !already.has(l.line_id));
-  if (lines.length === 0) return { created: 0, contractId: null, obligationIds: [] };
 
   // Relative-SSP allocation over the bundle of new rev-rec lines. Lines flagged
   // 'exclude' from allocation keep their booked amount and don't dilute others.
@@ -851,59 +889,116 @@ export async function createObligationsFromInvoice(
 
   const obligationIds: string[] = [];
   const contractId = await db.transaction(async (tx) => {
-    // One contract per invoice. The unique storage key is the concurrency
-    // authority; contract_number remains business display data, not a mutex.
-    const contractKey = revenueContractPostingEffectKey(documentId);
-    const insertedContract = await tx.execute<{ id: string }>(sql`
-      insert into revenue_contracts
-        (org_id, customer_id, contract_number, idempotency_key, status, starts_on,
-         currency, total_transaction_price, created_by, updated_by)
-      values (${orgId}, ${doc.party_id}, ${doc.document_number}, ${contractKey}, 'active',
-              ${doc.document_date}, ${doc.currency}, ${bundleTotal}, ${actorId}, ${actorId})
-      on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
-      returning id
-    `);
-    const existingContract = insertedContract.rows[0]
-      ? null
-      : await tx.execute<{ id: string }>(sql`
-          select id from revenue_contracts
-           where org_id=${orgId} and idempotency_key=${contractKey}
-        `);
-    const cId = insertedContract.rows[0]?.id ?? existingContract?.rows[0]?.id;
-    if (!cId) throw new Error("revenue contract idempotency winner was not visible");
-
-    for (const l of lines) {
-      const startsOn = (l.line_custom?.recognitionStartsOn as string) ?? doc.document_date;
-      const endsOn = (l.line_custom?.recognitionEndsOn as string) ?? null;
-      const deferred = l.item_deferred ?? l.rule_deferred;
-      const recognized = l.rule_recognized ?? l.income_account_id;
-      const allocated = allocByLine.get(l.line_id) ?? l.amount;
-      const obligationKey = revenueObligationPostingEffectKey(l.line_id);
-      const fvFlag = rangePolicy === "warn"
-        ? fairValueRangeFlag(allocated, l.quantity, l.fair_value_low, l.fair_value_high)
-        : null;
-      const insObl = (await tx.execute<{ id: string }>(sql`
-        insert into performance_obligations
-          (org_id, contract_id, document_line_id, idempotency_key, item_id, description, recognition_rule_id,
-           booked_amount, standalone_selling_price, allocated_price,
-           fair_value_flag, fair_value_low, fair_value_high,
-           recognition_starts_on, recognition_ends_on,
-           deferred_account_id, recognized_account_id, status, created_by, updated_by)
-        values (${orgId}, ${cId}, ${l.line_id}, ${obligationKey}, ${l.item_id}, ${l.description ?? "Revenue"}, ${l.rule_id},
-                ${l.amount}, ${l.item_ssp ?? l.fair_value}, ${allocated},
-                ${fvFlag}, ${fvFlag ? l.fair_value_low : null}, ${fvFlag ? l.fair_value_high : null},
-                ${startsOn}, ${endsOn}, ${deferred}, ${recognized}, 'open', ${actorId}, ${actorId})
+    let cId: string | null = null;
+    if (lines.length > 0) {
+      // One contract per invoice. The unique storage key is the concurrency
+      // authority; contract_number remains business display data, not a mutex.
+      const contractKey = revenueContractPostingEffectKey(documentId);
+      const insertedContract = await tx.execute<{ id: string }>(sql`
+        insert into revenue_contracts
+          (org_id, customer_id, contract_number, idempotency_key, status, starts_on,
+           currency, total_transaction_price, created_by, updated_by)
+        values (${orgId}, ${doc.party_id}, ${doc.document_number}, ${contractKey}, 'active',
+                ${doc.document_date}, ${doc.currency}, ${bundleTotal}, ${actorId}, ${actorId})
         on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
-        returning id`));
-      if (insObl.rows[0]) obligationIds.push(insObl.rows[0].id);
+        returning id
+      `);
+      const existingContract = insertedContract.rows[0]
+        ? null
+        : await tx.execute<{ id: string }>(sql`
+            select id from revenue_contracts
+             where org_id=${orgId} and idempotency_key=${contractKey}
+          `);
+      cId = insertedContract.rows[0]?.id ?? existingContract?.rows[0]?.id ?? null;
+      if (!cId) throw new Error("revenue contract idempotency winner was not visible");
+
+      for (const l of lines) {
+        const startsOn = (l.line_custom?.recognitionStartsOn as string) ?? doc.document_date;
+        const endsOn = (l.line_custom?.recognitionEndsOn as string) ?? null;
+        const deferred = l.item_deferred ?? l.rule_deferred;
+        const recognized = l.rule_recognized ?? l.income_account_id;
+        const allocated = allocByLine.get(l.line_id) ?? l.amount;
+        const obligationKey = revenueObligationPostingEffectKey(l.line_id);
+        const fvFlag = rangePolicy === "warn"
+          ? fairValueRangeFlag(allocated, l.quantity, l.fair_value_low, l.fair_value_high)
+          : null;
+        const insObl = (await tx.execute<{ id: string }>(sql`
+          insert into performance_obligations
+            (org_id, contract_id, document_line_id, idempotency_key, item_id, description, recognition_rule_id,
+             booked_amount, standalone_selling_price, allocated_price,
+             fair_value_flag, fair_value_low, fair_value_high,
+             recognition_starts_on, recognition_ends_on,
+             deferred_account_id, recognized_account_id, status, created_by, updated_by)
+          values (${orgId}, ${cId}, ${l.line_id}, ${obligationKey}, ${l.item_id}, ${l.description ?? "Revenue"}, ${l.rule_id},
+                  ${l.amount}, ${l.item_ssp ?? l.fair_value}, ${allocated},
+                  ${fvFlag}, ${fvFlag ? l.fair_value_low : null}, ${fvFlag ? l.fair_value_high : null},
+                  ${startsOn}, ${endsOn}, ${deferred}, ${recognized}, 'open', ${actorId}, ${actorId})
+          on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
+          returning id`));
+        if (insObl.rows[0]) obligationIds.push(insObl.rows[0].id);
+      }
+
+      // The schedules commit WITH the obligations they plan: a crash or a
+      // schedule-build failure rolls the whole effect back, so committed money
+      // obligations can never be left without their recognition schedules.
+      for (const oid of obligationIds) {
+        await buildAllRecognitionSchedulesOn(tx, oid, orgId, actorId);
+      }
     }
+
     return cId;
   });
 
-  // Build schedules outside the insert txn (each opens its own).
-  for (const oid of obligationIds) await buildAllRecognitionSchedules(oid, orgId, actorId);
+  // Replay repair: an interrupted or legacy attempt may have committed
+  // obligations whose per-book coverage is incomplete. Rebuild on every active
+  // GL-posting book — the builder upserts each book's plan in place (posted
+  // history preserved, unposted lines replaced), so replay converges to exactly
+  // one complete schedule per obligation/book with no duplicate lines.
+  if (existingObligationIds.length > 0) {
+    await repairMissingRecognitionSchedules(db, documentId, orgId, actorId);
+  }
 
   return { created: obligationIds.length, contractId, obligationIds };
+}
+
+/**
+ * Find open or satisfied obligations of one invoice that lack a recognition
+ * schedule on at least one active GL-posting book and rebuild them. Satisfied
+ * obligations are deliberately included: an obligation can only flip to
+ * satisfied by scanning EXISTING schedule lines, so coverage it never received
+ * could not argue for its own completion — rebuilding restores what was lost.
+ * Cancelled obligations keep their cancelled lineage untouched. Returns the
+ * repaired ids.
+ */
+async function repairMissingRecognitionSchedules(
+  runner: SqlExecutor,
+  documentId: string,
+  orgId: string,
+  actorId: string | null,
+): Promise<string[]> {
+  const missing = (await runner.execute<{ id: string }>(sql`
+    select o.id
+      from performance_obligations o
+      join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
+     where o.org_id = ${orgId}
+       and dl.document_id = ${documentId}
+       and o.status <> 'cancelled'
+       and (
+         select count(*)::int from recognition_schedules s
+           join accounting_books b
+             on b.id = s.book_id and b.org_id = s.org_id and b.is_active and b.posts_gl
+          where s.obligation_id = o.id and s.org_id = o.org_id
+       ) < (
+         select count(*)::int from accounting_books b
+          where b.org_id = ${orgId} and b.is_active and b.posts_gl
+       )
+     order by o.created_at`));
+  const repaired: string[] = [];
+  for (const row of missing.rows) {
+    await buildAllRecognitionSchedulesOn(runner, row.id, orgId, actorId);
+    repaired.push(row.id);
+  }
+  return repaired;
 }
 
 // ---------------------------------------------------------------------------
