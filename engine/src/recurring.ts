@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
+import { allocateDocumentNumber } from "./document-numbering.ts";
 import { businessToday } from "./business-date.ts";
 import { now } from "./clock.ts";
 import { loadRequiredControlAccounts } from "./control-accounts.ts";
@@ -142,25 +143,8 @@ function addDays(isoDate: string, days: number): string {
   return toIso(base);
 }
 
-async function nextNumber(orgId: string, kind: string, subsidiaryId: string | null): Promise<string> {
-  const prefix = defaultPrefix(kind);
-  const configured = subsidiaryId
-    ? ((await db.execute(sql`
-        select 1 from number_sequences where org_id = ${orgId} and document_kind = ${kind}
-          and subsidiary_id = ${subsidiaryId} limit 1
-      `))).rows.length > 0
-    : false;
-  const seqSub = configured ? subsidiaryId : null;
-  const r = (await db.execute<{ prefix: string; next_number: number; padding: number }>(sql`
-    insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
-    values (${orgId}, ${kind}, ${seqSub}, ${prefix})
-    on conflict on constraint sequences_org_kind_sub
-    do update set next_number = number_sequences.next_number + 1
-    where number_sequences.org_id = ${orgId}
-    returning prefix, next_number, padding
-  `));
-  const s = r.rows[0]!;
-  return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
+async function nextNumber(orgId: string, kind: string): Promise<string> {
+  return allocateDocumentNumber(db, orgId, kind, defaultPrefix(kind));
 }
 
 function defaultPrefix(kind: string): string {
@@ -490,7 +474,7 @@ async function generateFromTemplate(
     tpl.document_date && tpl.due_date ? dayDiff(tpl.document_date, tpl.due_date) : null;
   const dueDate = termDays != null ? addDays(documentDate, termDays) : null;
 
-  const documentNumber = await nextNumber(orgId, tpl.kind, tpl.subsidiary_id ?? null);
+  const documentNumber = await nextNumber(orgId, tpl.kind);
   const provenance = {
     recurringScheduleId: context.scheduleId,
     recurringOccurrenceOn: context.occurrenceOn,

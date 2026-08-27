@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "./db.ts";
+import { allocateDocumentNumber } from "./document-numbering.ts";
 import {
   add,
   cmp,
@@ -604,8 +605,13 @@ export async function assertCostingPolicyChangeAllowed(
  * legal entity, so issues relieve layers exactly at standard after a
  * controlled switch to standard costing — or after revising the standard cost
  * of an item already costing standard (pass `memo` to label the revision) —
- * and each entity's GL keeps equalling its own layers. Returns one entry id
- * per revalued entity (null when nothing needed revaluing).
+ * and each entity's GL keeps equalling its own layers.
+ *
+ * Refuses when a nonzero variance would arise but no variance account is
+ * configured: routing the delta through the asset account itself would post a
+ * self-cancelling entry that leaves the GL unmoved while the layers moved —
+ * a permanent, silent subledger/GL divergence. Nothing is mutated on refusal.
+ * Returns one entry id per revalued entity (null when nothing needed revaluing).
  */
 export async function revalueOpenLayersToStandardCost(
   tx: Runner,
@@ -645,12 +651,23 @@ export async function revalueOpenLayersToStandardCost(
       layer.subsidiary_id,
       (deltasByOwner.get(layer.subsidiary_id) ?? 0n) + delta,
     );
+  }
+  const changed = [...deltasByOwner].filter(([, delta]) => delta !== 0n);
+  if (changed.length === 0) return null;
+  if (!p.varianceAccountId) {
+    // Refuse BEFORE touching a single layer: with nowhere to book the
+    // variance, the revaluation would post DR asset / CR asset on ONE account
+    // (balanced, effectless) while the layers moved — GL and subledger would
+    // diverge forever.
+    throw new InventoryError(
+      "revaluing open layers to standard cost requires a variance account to book the revaluation on — configure one for this item before switching it to (or revising) standard costing",
+    );
+  }
+  for (const layer of layers.rows) {
     await tx.execute(sql`
       update cost_layers set unit_cost = ${p.standardCost}, updated_at = now(), updated_by = ${actorId}
        where id = ${layer.id} and org_id = ${orgId}`);
   }
-  const changed = [...deltasByOwner].filter(([, delta]) => delta !== 0n);
-  if (changed.length === 0) return null;
 
   const date = await businessToday(orgId);
   const periodId = await periodForDate(orgId, date, tx);
@@ -672,7 +689,7 @@ export async function revalueOpenLayersToStandardCost(
       lines: [
         { accountId: p.assetAccountId, amount: fromUnits(deltaUnits), memo },
         {
-          accountId: p.varianceAccountId ?? p.assetAccountId,
+          accountId: p.varianceAccountId,
           amount: fromUnits(-deltaUnits),
           memo,
         },
@@ -1093,6 +1110,11 @@ export async function receiveInventory(
         "standard-cost receipts require a received-not-billed account to book purchase variance",
       );
     }
+    if (postJournal && !isZero(variance) && !profile.varianceAccountId) {
+      throw new InventoryError(
+        "this receipt carries a purchase price variance under standard costing but the item has no variance account — configure one; booking the variance on the asset account itself would post a self-cancelling entry and break GL = cost layers",
+      );
+    }
     if (!postJournal && !input.linkEntryId) {
       throw new InventoryError(
         "a non-posting receipt requires its source journal entry",
@@ -1181,8 +1203,7 @@ export async function receiveInventory(
           ...(!isZero(variance)
             ? [
                 {
-                  accountId:
-                    profile.varianceAccountId ?? profile.assetAccountId,
+                  accountId: profile.varianceAccountId!,
                   amount: variance,
                   ...dims,
                   memo: "PPV",
@@ -2850,8 +2871,13 @@ export async function buildAssembly(
     ];
     const buildVariance = add(consumedTotal, neg(fgValue));
     if (!isZero(buildVariance)) {
+      if (!assembly.varianceAccountId) {
+        throw new InventoryError(
+          "this assembly build carries a production variance under standard costing but the assembly has no variance account — configure one; booking the variance on the asset account itself would post a self-cancelling entry and break GL = cost layers",
+        );
+      }
       lines.push({
-        accountId: assembly.varianceAccountId ?? assembly.assetAccountId,
+        accountId: assembly.varianceAccountId,
         amount: buildVariance,
         memo: "Build variance",
       });
@@ -4452,25 +4478,9 @@ async function nextSequenceNumber(
   orgId: string,
   kind: string,
   prefix: string,
-  subsidiaryId: string | null,
   runner: Runner = db,
 ): Promise<string> {
-  const configured = subsidiaryId
-    ? (
-        (await runner.execute(sql`
-        select 1 from number_sequences where org_id = ${orgId} and document_kind = ${kind}
-          and subsidiary_id = ${subsidiaryId} limit 1`))
-      ).rows.length > 0
-    : false;
-  const seq = (await runner.execute<{ prefix: string; next_number: number; padding: number }>(sql`
-    insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
-    values (${orgId}, ${kind}, ${configured ? subsidiaryId : null}, ${prefix})
-    on conflict on constraint sequences_org_kind_sub
-    do update set next_number = number_sequences.next_number + 1
-    where number_sequences.org_id = ${orgId}
-    returning prefix, next_number, padding`));
-  const s = seq.rows[0]!;
-  return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
+  return allocateDocumentNumber(runner, orgId, kind, prefix);
 }
 
 export interface TransferOrderLineInput {
@@ -4521,7 +4531,6 @@ export async function createTransferOrder(
     orgId,
     "transfer_order",
     "TO-",
-    input.subsidiaryId,
   );
   return await db.transaction(async (tx) => {
     const order = (await tx.execute<{ id: string }>(sql`
@@ -4932,12 +4941,27 @@ export async function postLandedCostVoucher(
           : "apportionment failed",
       );
     }
+    // A standard-cost target books its share as a variance; with no variance
+    // account configured the share would land on the asset account itself,
+    // quietly absorbing freight into inventory and breaking GL = layers.
+    // Refuse before any layer, voucher, or journal mutation.
+    for (let i = 0; i < resolved.length; i++) {
+      const r = resolved[i]!;
+      if (
+        shares[i] !== 0n &&
+        r.profile.costingMethod === "standard" &&
+        !r.profile.varianceAccountId
+      ) {
+        throw new InventoryError(
+          `landed cost on standard-cost item ${r.target.itemId} requires a variance account to book the variance — configure one; booking it on the asset account itself would post a self-cancelling entry and break GL = cost layers`,
+        );
+      }
+    }
 
     const documentNumber = await nextSequenceNumber(
       orgId,
       "landed_cost_voucher",
       "LCV-",
-      input.subsidiaryId,
       tx,
     );
     const bookId = await primaryBookId(orgId, tx);
@@ -5037,7 +5061,7 @@ export async function postLandedCostVoucher(
       entryLines.push({
         accountId:
           r.profile.costingMethod === "standard"
-            ? r.profile.varianceAccountId ?? r.profile.assetAccountId
+            ? r.profile.varianceAccountId!
             : r.profile.assetAccountId,
         amount: shareAmount,
         memo: input.memo ?? `Landed cost ${documentNumber}`,

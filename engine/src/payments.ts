@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, orgContext, schema, withOrg, withOrgTransaction } from "./db.ts";
+import { allocateDocumentNumber } from "./document-numbering.ts";
 import { businessToday } from "./business-date.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRate, mulRatio, neg, normalizeDecimal, sum, toUnits } from "./money.ts";
@@ -101,24 +102,8 @@ function isPaymentKind(kind: string): kind is PaymentKind {
   return kind === "vendor_payment" || kind === "customer_payment";
 }
 
-export async function nextNumber(orgId: string, kind: string, prefix: string, subsidiaryId?: string | null): Promise<string> {
-  const configured = subsidiaryId
-    ? ((await db.execute(sql`
-        select 1 from number_sequences
-         where org_id = ${orgId} and document_kind = ${kind} and subsidiary_id = ${subsidiaryId}
-         limit 1`))).rows.length > 0
-    : false;
-  const sequenceSubsidiaryId = configured ? subsidiaryId : null;
-  const seq = (await db.execute<{ prefix: string; next_number: number; padding: number }>(sql`
-    insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
-    values (${orgId}, ${kind}, ${sequenceSubsidiaryId}, ${prefix})
-    on conflict on constraint sequences_org_kind_sub
-    do update set next_number = number_sequences.next_number + 1
-    where number_sequences.org_id = ${orgId}
-    returning prefix, next_number, padding
-  `));
-  const s = seq.rows[0]!;
-  return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
+export async function nextNumber(orgId: string, kind: string, prefix: string): Promise<string> {
+  return allocateDocumentNumber(db, orgId, kind, prefix);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +169,7 @@ export async function createPaymentDocument(opts: {
       (select id from subsidiaries where org_id = ${opts.orgId} and parent_id is null)
     ) as id`));
   const subsidiaryId = opts.subsidiaryId !== undefined ? opts.subsidiaryId : (sub.rows[0]?.id ?? null);
-  const documentNumber = await nextNumber(opts.orgId, opts.kind, NUMBER_PREFIX[opts.kind], subsidiaryId);
+  const documentNumber = await nextNumber(opts.orgId, opts.kind, NUMBER_PREFIX[opts.kind]);
   const fxRate = persistPaymentFxRate(opts.fxRate ?? "1");
   const [doc] = await db
     .insert(schema.documents)

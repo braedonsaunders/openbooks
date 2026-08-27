@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
+import { allocateDocumentNumber } from "./document-numbering.ts";
 import { inventoryFeatureEnabled } from "./inventory.ts";
 import { cmp, fromUnits, sum, toUnits } from "./money.ts";
 import {
@@ -484,25 +485,8 @@ export async function processCaptureItem(input: { orgId: string; captureItemId: 
   }
 }
 
-async function nextDocumentNumber(tx: SqlExecutor, orgId: string, kind: string, subsidiaryId: string | null): Promise<string> {
-  const prefix = kind === "vendor_credit" ? "VCRED-" : "BILL-";
-  const configured = subsidiaryId
-    ? ((await tx.execute(sql`
-        select 1 from number_sequences where org_id = ${orgId} and document_kind = ${kind}
-          and subsidiary_id = ${subsidiaryId} limit 1
-      `))).rows.length > 0
-    : false;
-  const sequenceSubsidiaryId = configured ? subsidiaryId : null;
-  const result = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
-    insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
-    values (${orgId}, ${kind}, ${sequenceSubsidiaryId}, ${prefix})
-    on conflict on constraint sequences_org_kind_sub
-    do update set next_number = number_sequences.next_number + 1
-    where number_sequences.org_id = ${orgId}
-    returning prefix, next_number, padding
-  `));
-  const row = result.rows[0]!;
-  return `${row.prefix}${String(row.next_number).padStart(row.padding, "0")}`;
+async function nextDocumentNumber(tx: SqlExecutor, orgId: string, kind: string): Promise<string> {
+  return allocateDocumentNumber(tx, orgId, kind, kind === "vendor_credit" ? "VCRED-" : "BILL-");
 }
 
 export class CaptureMaterializationError extends Error {
@@ -706,7 +690,7 @@ export async function materializeCapture(input: {
         }
       }
     }
-    const documentNumber = await nextDocumentNumber(tx, input.orgId, item.document_kind, subsidiaryId);
+    const documentNumber = await nextDocumentNumber(tx, input.orgId, item.document_kind);
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                              due_date, currency, status, reference_number, memo,

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { businessToday } from "./business-date.ts";
 import { db, type SqlExecutor } from "./db.ts";
+import { allocateDocumentNumber } from "./document-numbering.ts";
 import { add, cmp, mulPercent, neg, normalizeMoney, sum } from "./money.ts";
 
 export class SubcontractError extends Error {}
@@ -303,29 +304,8 @@ async function audit(
   `);
 }
 
-async function nextDocumentNumber(
-  tx: SqlExecutor,
-  orgId: string,
-  subsidiaryId: string | null,
-  prefix: string,
-): Promise<string> {
-  const configured = subsidiaryId
-    ? ((await tx.execute(sql`
-        select 1 from number_sequences where org_id = ${orgId} and document_kind = 'vendor_bill'
-          and subsidiary_id = ${subsidiaryId} limit 1
-      `))).rows.length > 0
-    : false;
-  const sequenceSubsidiary = configured ? subsidiaryId : null;
-  const result = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
-    insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
-    values (${orgId}, 'vendor_bill', ${sequenceSubsidiary}, ${prefix})
-    on conflict on constraint sequences_org_kind_sub
-    do update set next_number = number_sequences.next_number + 1
-    where number_sequences.org_id = ${orgId}
-    returning prefix, next_number, padding
-  `));
-  const row = result.rows[0]!;
-  return `${row.prefix}${String(row.next_number).padStart(row.padding, "0")}`;
+async function nextDocumentNumber(tx: SqlExecutor, orgId: string, prefix: string): Promise<string> {
+  return allocateDocumentNumber(tx, orgId, "vendor_bill", prefix);
 }
 
 export async function createSubcontract(input: {
@@ -800,7 +780,7 @@ export async function generateVendorPayApplicationBill(
        order by sov.sort_order
     `));
     if (detail.rows.some((row) => cmp(row.gross, "0") > 0 && !row.account_id)) throw new SubcontractError("Every billed SOV line requires an expense account");
-    const documentNumber = await nextDocumentNumber(tx, orgId, app.subsidiary_id ?? null, "BILL-");
+    const documentNumber = await nextDocumentNumber(tx, orgId, "BILL-");
     const document = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
         project_id, subsidiary_id, reference_number, memo, subtotal, tax_total, total, custom, created_by, updated_by)
@@ -866,7 +846,7 @@ export async function releaseVendorRetainage(input: {
     `));
     const available = add(balance.rows[0]?.held ?? "0", neg(balance.rows[0]?.released ?? "0"));
     if (cmp(amount, available) > 0) throw new SubcontractError("Release exceeds posted retainage currently held");
-    const documentNumber = await nextDocumentNumber(tx, input.orgId, row.subsidiary_id ?? null, "BILL-");
+    const documentNumber = await nextDocumentNumber(tx, input.orgId, "BILL-");
     const document = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
         project_id, subsidiary_id, memo, subtotal, tax_total, total, custom, created_by, updated_by)

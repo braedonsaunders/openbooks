@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
+import { allocateDocumentNumber } from '@openbooks/engine/src/document-numbering.ts'
 import { add, sum } from '@openbooks/engine/src/money.ts'
 import {
   computeLineTaxes,
@@ -150,26 +151,15 @@ export async function persistLineTaxComponents(
   }
 }
 
-export async function nextDocumentNumber(orgId: string, kind: string, prefix: string, subsidiaryId?: string | null) {
-  const requested = subsidiaryId ?? ((await db.execute(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null`))).rows[0]?.id ?? null
-  const configured = requested
-    ? ((await db.execute(sql`
-        select 1 from number_sequences
-         where org_id = ${orgId} and document_kind = ${kind} and subsidiary_id = ${requested}
-         limit 1`))).rows.length > 0
-    : false
-  const sequenceSubsidiaryId = configured ? requested : null
-  const seq = (await db.execute<{ prefix: string; next_number: number; padding: number }>(sql`
-    insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
-    values (${orgId}, ${kind}, ${sequenceSubsidiaryId}, ${prefix})
-    on conflict on constraint sequences_org_kind_sub
-    do update set next_number = number_sequences.next_number + 1
-    where number_sequences.org_id = ${orgId}
-    returning prefix, next_number, padding
-  `))
-  const s = seq.rows[0]!
-  return `${s.prefix}${String(s.next_number).padStart(s.padding, '0')}`
+/**
+ * The UI entry point for document numbering — a thin delegate to the ONE
+ * canonical allocator (engine/src/document-numbering.ts). `subsidiaryId` is
+ * accepted for call-site compatibility and deliberately ignored: document
+ * numbers are organization-wide identities, so subsidiary context never picks
+ * a sequence — every generator shares the single org-wide counter per kind.
+ */
+export async function nextDocumentNumber(orgId: string, kind: string, prefix: string, _subsidiaryId?: string | null) {
+  return allocateDocumentNumber(db, orgId, kind, prefix)
 }
 
 /** Full bill payload for the drawer: header + lines. */

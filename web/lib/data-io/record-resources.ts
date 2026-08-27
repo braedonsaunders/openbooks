@@ -3,10 +3,11 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { allocateDocumentNumber } from '@openbooks/engine/src/document-numbering.ts'
 import type { FieldType, FormField, FormSection } from '@openbooks/forms-core'
 import type { FieldValueMap } from '@openbooks/forms-core'
 import { loadRecordTypeByKey, buildSearchText } from '../records'
-import { lintRecordFields, stripUnknownData, validateRecordData, withComputedFormulas } from '../record-schema'
+import { lintRecordFields, recordNumberPrefix, stripUnknownData, validateRecordData, withComputedFormulas } from '../record-schema'
 import {
   exportCell,
   MAX_EXPORT_ROWS,
@@ -279,23 +280,12 @@ async function writeRecords(
   return outcome
 }
 
-/** Best-effort record number when the file omits one (bulk create). */
+/**
+ * Record number when the file omits one (bulk create) — delegated to the ONE
+ * canonical allocator (engine/src/document-numbering.ts), which seeds the
+ * org-wide `custrec:<typeKey>` sequence row on first use with the same
+ * `recordNumberPrefix` stem the UI draft route uses.
+ */
 async function allocateRecordNumber(orgId: string, typeKey: string): Promise<string> {
-  const kind = `custrec:${typeKey}`
-  const r = (await db.execute(sql`
-    update number_sequences set next_number = next_number + 1
-     where org_id = ${orgId} and document_kind = ${kind}
-    returning prefix, next_number - 1 as n, padding`)) as {
-    rows: { prefix: string | null; n: number; padding: number | null }[]
-  }
-  if (r.rows[0]) {
-    const { prefix, n, padding } = r.rows[0]
-    return `${prefix ?? ''}${String(n).padStart(padding ?? 0, '0')}`
-  }
-  // No sequence row yet — fall back to a timestamp-free counter based on count.
-  const c = (await db.execute(sql`
-    select count(*)::int as c from custom_records where org_id = ${orgId} and type_key = ${typeKey}`)) as {
-    rows: { c: number }[]
-  }
-  return `${typeKey.slice(0, 3).toUpperCase()}-${(c.rows[0]!.c ?? 0) + 1}`
+  return allocateDocumentNumber(db, orgId, `custrec:${typeKey}`, recordNumberPrefix(typeKey))
 }

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -160,6 +161,15 @@ export const accountingPeriods = pgTable(
  * Document numbering. Default mode allocates from a Postgres sequence
  * (fast, may gap on rollback); gapless mode locks the row and increments
  * (correct, serialized) for jurisdictions that require it.
+ *
+ * Document numbers are organization-wide identities — `documents` enforces
+ * UNIQUE (org_id, kind, document_number) with no subsidiary column — so
+ * numbering must guarantee organization-wide disjoint output: exactly ONE
+ * sequence per (org_id, document_kind), always the org-wide row. Per-subsidiary
+ * sequences would each hand out the same number, so storage refuses them
+ * (0032_document_number_sequence_globality). `allocatedThrough` records the
+ * highest number ever issued; a used counter cannot move backward or change
+ * its output format (storage trigger), while advancing forward stays legal.
  */
 export const numberSequences = pgTable(
   "number_sequences",
@@ -167,16 +177,21 @@ export const numberSequences = pgTable(
     id: id(),
     orgId: orgRef(),
     documentKind: text("document_kind").notNull(),
-    /** Per-subsidiary numbering when set; null = the org-wide sequence. */
+    /** Retired: always NULL — allocation is org-wide (see above). */
     subsidiaryId: uuid("subsidiary_id"),
     prefix: text("prefix").notNull().default(""),
     nextNumber: integer("next_number").notNull().default(1),
     padding: integer("padding").notNull().default(5),
     gapless: boolean("gapless").notNull().default(false),
+    /** Highest document number this sequence has issued (watermark trigger). */
+    allocatedThrough: integer("allocated_through").notNull().default(0),
     ...auditColumns,
   },
   (t) => [
-    unique("sequences_org_kind_sub").on(t.orgId, t.documentKind, t.subsidiaryId).nullsNotDistinct(),
+    unique("sequences_org_kind_sub").on(t.orgId, t.documentKind),
+    check("number_sequences_org_wide_sequence", sql`${t.subsidiaryId} is null`),
+    check("number_sequences_next_number_positive", sql`${t.nextNumber} >= 1`),
+    check("number_sequences_allocated_through_nonnegative", sql`${t.allocatedThrough} >= 0`),
   ],
 );
 

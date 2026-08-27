@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { db, schema, withOrgTransaction } from "./db.ts";
+import { allocateDocumentNumber } from "./document-numbering.ts";
 import { businessToday } from "./business-date.ts";
 import { abs, cmp, isZero, normalizeMoney, sum } from "./money.ts";
 import { loadRequiredControlAccounts } from "./control-accounts.ts";
@@ -165,16 +166,8 @@ async function insertScriptDraft(
   actorId: string | null,
 ): Promise<{ id: string; documentNumber: string }> {
   return db.transaction(async (tx) => {
-    // JE- sequence, same upsert the UI path uses (web/lib/bills.ts).
-    const seq = (await tx.execute(sql`
-      insert into number_sequences (org_id, document_kind, prefix)
-      values (${orgId}, 'journal', 'JE-')
-      on conflict on constraint sequences_org_kind_sub
-      do update set next_number = number_sequences.next_number + 1
-      where number_sequences.org_id = ${orgId}
-      returning prefix, next_number, padding`)) as any;
-    const s = seq.rows[0]!;
-    const documentNumber = `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
+    // JE- sequence via the ONE canonical allocator (engine/src/document-numbering.ts).
+    const documentNumber = await allocateDocumentNumber(tx, orgId, "journal", "JE-");
 
     const ins = (await tx.execute(sql`
       insert into documents (org_id, kind, document_number, subsidiary_id, document_date, currency,
