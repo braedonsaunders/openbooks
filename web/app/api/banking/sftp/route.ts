@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { encryptSecret, sftpServerAuditSnapshot, type SftpServerAuditRow } from '@openbooks/engine/src/sftp/manager.ts'
-import { appStorageKind, appBucket } from '@openbooks/engine/src/sftp/backend.ts'
+import { appStorageKind, appBucket, assertTenantRootPrefix } from '@openbooks/engine/src/sftp/backend.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { auditSetupChange } from '../../../../lib/setup/audit'
 
@@ -47,8 +47,25 @@ export async function POST(req: Request) {
   const base = slug(String(body.name).trim())
   const password = randomBytes(18).toString('base64url')
   // Storage is the app's own object store (or local) — never a per-tenant env/setting.
+  // The physical root is DERIVED from the tenant namespace (sftp/<orgId>/<server>),
+  // never a tenant-selected location: a requested prefix must stay under the
+  // org's namespace, and anything absolute, backslashed, percent-encoded or
+  // cross-tenant is refused (the engine's canonical validator fails closed).
   const backend = appStorageKind()
   const bucket = backend === 's3' ? appBucket() : null
+  const requestedPrefix = body.rootPrefix?.trim() || ''
+  if (requestedPrefix) {
+    // Refuse before any insert: a requested prefix is validated once, up front —
+    // it never passes through slash-stripping or other laundering.
+    try {
+      const canonical = assertTenantRootPrefix(requestedPrefix, user.orgId)
+      if (canonical.split('/').length < 3) {
+        return NextResponse.json({ error: `sftp root prefix must name a folder under sftp/${user.orgId}/` }, { status: 400 })
+      }
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 400 })
+    }
+  }
   const authorizedKeys = body.authorizedKeys?.trim() || null
   type Created = SftpServerAuditRow & { id: string }
   let created: Created | null = null
@@ -57,7 +74,9 @@ export async function POST(req: Request) {
   for (let attempt = 0; attempt < USERNAME_MINT_ATTEMPTS && !created; attempt++) {
     // A longer suffix after repeated losses keeps the mint converging.
     username = `${base}-${randomBytes(attempt < USERNAME_MINT_ATTEMPTS - 3 ? 3 : 8).toString('hex')}`
-    rootPrefix = (body.rootPrefix?.trim() || `sftp/${user.orgId}/${username}`).replace(/^\/+|\/+$/g, '')
+    rootPrefix = requestedPrefix
+      ? assertTenantRootPrefix(requestedPrefix, user.orgId)
+      : assertTenantRootPrefix(`sftp/${user.orgId}/${username}`, user.orgId)
     created = await db.transaction(async (tx) => {
       const row = (await tx.execute<Created>(sql`
         insert into sftp_servers (org_id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, created_by, updated_by)

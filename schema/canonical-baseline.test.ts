@@ -45,6 +45,8 @@ const schedulerOutboxTerminalAuditMigrationPath =
   "schema/migrations/generated/0026_scheduler_outbox_terminal_audit.sql";
 const sftpUsernameGlobalUniqueMigrationPath =
   "schema/migrations/generated/0029_sftp_username_global_unique.sql";
+const sftpRootPrefixTenantContainmentMigrationPath =
+  "schema/migrations/generated/0030_sftp_root_prefix_tenant_containment.sql";
 const apiKeyExplicitScopesMigrationPath =
   "schema/migrations/generated/0031_api_key_explicit_scopes.sql";
 const documentNumberSequenceGlobalityMigrationPath =
@@ -108,6 +110,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0024_tax_rate_effective_range_exclusion.sql",
     "0026_scheduler_outbox_terminal_audit.sql",
     "0029_sftp_username_global_unique.sql",
+    "0030_sftp_root_prefix_tenant_containment.sql",
     "0031_api_key_explicit_scopes.sql",
     "0032_document_number_sequence_globality.sql",
     "0033_reporting_framework_policy.sql",
@@ -1231,6 +1234,72 @@ test("bank-feed sync bookkeeping separates the attempt watermark from the succes
   // touch of last_sync_at (the success-only pull cursor sinceFor reads).
   assert.match(migration, /COMMENT ON COLUMN public\.bank_feed_connections\.last_attempt_at/);
   assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
+});
+
+test("sftp root prefixes are tenant-contained: quarantined, never rewritten, storage-enforced", () => {
+  const migration = readFileSync(sftpRootPrefixTenantContainmentMigrationPath, "utf8");
+  const schema = readFileSync("schema/src/banking.ts", "utf8");
+
+  // The conformance predicate is durable and inspectable: tenant namespace
+  // binding (sftp/<orgId>/) plus the escape-shape refusals, one definition for
+  // quarantine, verification and operator review.
+  assert.match(
+    migration,
+    /CREATE FUNCTION public\.sftp_root_prefix_tenant_conforms\(p_org_id uuid, p_root_prefix text\)\s+RETURNS boolean\s+LANGUAGE sql\s+IMMUTABLE/,
+  );
+  assert.match(migration, /\^sftp\/' \|\| p_org_id::text \|\| '\(\/\|\$\)'/);
+
+  // Evidence precedes enforcement: the quarantine (audit insert +
+  // deterministic deactivation) must run before the CHECK exists, or the
+  // guard's first UPDATE would trip over the legacy prefix it must preserve.
+  const firstEvidence = migration.search(/INSERT INTO public\.audit_log/);
+  const firstConstraint = migration.search(/ADD CONSTRAINT sftp_servers_root_prefix_safe/);
+  assert.ok(firstEvidence >= 0 && firstEvidence < firstConstraint, "quarantine must precede the constraint");
+
+  // The exact prior prefix is preserved verbatim as immutable evidence —
+  // before == after on the prefix, only is_active flips. No data is destroyed
+  // or rewritten: no prefix value is edited and nothing is deleted.
+  const quarantine = migration.match(/WITH quarantined AS MATERIALIZED \([\s\S]*?UPDATE public\.sftp_servers s[\s\S]*?AND s\.is_active;/)?.[0];
+  assert.ok(quarantine, "0030 must quarantine deterministically in one atomic unit");
+  assert.match(quarantine, /'root_prefix', q\.root_prefix/);
+  assert.match(quarantine, /'is_active', true/);
+  assert.match(quarantine, /'is_active', false/);
+  assert.match(quarantine, /SET is_active = false/);
+  assert.doesNotMatch(quarantine, /SET root_prefix/);
+  assert.doesNotMatch(migration, /^\s*DELETE\s+FROM\s/im);
+  assert.match(migration, /'migration:0030_sftp_root_prefix_tenant_containment'/);
+  assert.match(migration, /recreate the SFTP server with a root prefix under sftp\//);
+
+  // Storage enforcement mirrors schema/src/banking.ts: relative, traversal-
+  // proof prefixes only. NOT VALID, because quarantined rows keep their exact
+  // prior prefix — and any UPDATE re-validates, so a quarantined login cannot
+  // be reactivated without remediation.
+  const constraint = migration.match(/ALTER TABLE public\.sftp_servers[\s\S]*?NOT VALID;/)?.[0];
+  assert.ok(constraint, "0030 must install the storage guard");
+  assert.equal(
+    constraint,
+    `ALTER TABLE public.sftp_servers
+  ADD CONSTRAINT sftp_servers_root_prefix_safe
+  CHECK (
+    root_prefix ~ '^[^/%]+(/[^/%]+)*$'
+    AND root_prefix !~ '\\\\'
+    AND root_prefix !~ '(^|/)\\.\\.?(/|$)'
+  )
+  NOT VALID;`,
+  );
+  assert.match(migration, /COMMENT ON CONSTRAINT sftp_servers_root_prefix_safe/);
+  assert.match(
+    schema,
+    /check\(\s+"sftp_servers_root_prefix_safe",/,
+    "the storage guard must be mirrored in the drizzle schema",
+  );
+
+  // Fail closed: the migration ends by proving no ACTIVE login resolves
+  // outside its tenant namespace or carries an escape shape.
+  const verification = migration.match(/DO \$sftp_root_prefix_containment_verification\$[\s\S]*?\$sftp_root_prefix_containment_verification\$;/)?.[0];
+  assert.ok(verification, "0030 must verify the end state");
+  assert.match(verification, /NOT public\.sftp_root_prefix_tenant_conforms\(s\.org_id, s\.root_prefix\)/);
+  assert.match(verification, /RAISE EXCEPTION/);
 });
 
 test("recognition_events table stores milestone and usage recognition evidence", () => {

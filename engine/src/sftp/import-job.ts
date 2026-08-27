@@ -91,7 +91,7 @@ type ScheduleRow = {
 };
 
 async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
-  const backend = backendFor({ backend: s.backend, bucket: s.bucket, rootPrefix: s.root_prefix });
+  const backend = backendFor({ backend: s.backend, bucket: s.bucket, rootPrefix: s.root_prefix, orgId: s.org_id });
   // Engine-initiated write provenance: a schedule scan is performed by the
   // system itself — the bank machine file has no human importer and neither
   // the schedule's author nor any org-scoped id may stand in as one
@@ -185,8 +185,8 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
 
 /** Outbound: write a payment run's bank file into an SFTP server's outbound folder. */
 export async function deliverRunToSftp(runId: string, sftpServerId: string, orgId: string, userId: string, now: Date): Promise<{ filename: string; path: string }> {
-  const svr = (await db.execute<{ backend: string; bucket: string | null; root_prefix: string; payment_folder: string }>(sql`
-    select s.backend, s.bucket, s.root_prefix, coalesce(p.sftp_folder, 'outbound') as payment_folder
+  const svr = (await db.execute<{ org_id: string; backend: string; bucket: string | null; root_prefix: string; payment_folder: string }>(sql`
+    select s.org_id, s.backend, s.bucket, s.root_prefix, coalesce(p.sftp_folder, 'outbound') as payment_folder
       from payment_runs r join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
       join sftp_servers s on s.id = ${sftpServerId} and s.org_id = r.org_id and s.is_active
      where r.id = ${runId} and r.org_id = ${orgId}
@@ -198,7 +198,7 @@ export async function deliverRunToSftp(runId: string, sftpServerId: string, orgI
   if (!approval.rows[0] || !["approved", "delivered"].includes(approval.rows[0].status)) {
     throw new Error("the generated payment file requires approval before SFTP delivery");
   }
-  const backend = backendFor({ backend: svr.rows[0].backend, bucket: svr.rows[0].bucket, rootPrefix: svr.rows[0].root_prefix });
+  const backend = backendFor({ backend: svr.rows[0].backend, bucket: svr.rows[0].bucket, rootPrefix: svr.rows[0].root_prefix, orgId: svr.rows[0].org_id });
   const folder = svr.rows[0].payment_folder.replace(/^\/+|\/+$/g, "");
   if (!folder || folder.split("/").some((part) => part === ".." || part === ".")) throw new Error("payment profile SFTP folder is invalid");
   const path = `${folder}/${file.filename}`;

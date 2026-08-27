@@ -282,7 +282,15 @@ export const sftpServers = pgTable(
     authorizedKeys: text("authorized_keys"),
     backend: text("backend", { enum: ["s3", "local"] }).notNull().default("s3"),
     bucket: text("bucket"),
-    /** Root prefix inside the bucket (e.g. "sftp/rbc-inbound"). */
+    /**
+     * Tenant-scoped root inside the app's own storage — derived at creation as
+     * `sftp/<orgId>/<server>` and never a tenant-selected physical location.
+     * Storage refuses escape shapes (absolute, backslash, percent-encoding,
+     * dot/empty segments); the engine resolver additionally binds every root to
+     * the owning tenant and fails closed for direct/stale rows. Legacy rows
+     * outside their org namespace are quarantined (deactivated, with audit
+     * evidence) by migration 0030 until an operator recreates them.
+     */
     rootPrefix: text("root_prefix").notNull(),
     isActive: boolean("is_active").notNull().default(true),
     lastConnectedAt: timestamp("last_connected_at", { withTimezone: true }),
@@ -293,6 +301,14 @@ export const sftpServers = pgTable(
     // organization — the global unique index (0029) is what makes that
     // routing deterministic; per-org uniqueness is sftp_servers_org_username.
     uniqueIndex("sftp_servers_username_global").on(t.username),
+    // Escape-shape guard mirrored by migration 0030: a root prefix is a
+    // relative folder path — no backslashes, no percent-encoding, no dot or
+    // empty segments. Cross-tenant binding (sftp/<orgId>/) is enforced by the
+    // creation route and the engine resolver, which see the owning org.
+    check(
+      "sftp_servers_root_prefix_safe",
+      sql`${t.rootPrefix} ~ '^[^/%]+(/[^/%]+)*$' and ${t.rootPrefix} !~ '\\\\' and ${t.rootPrefix} !~ '(^|/)\\.\\.?(/|$)'`,
+    ),
   ],
 );
 
