@@ -30,11 +30,13 @@ import { executeFlowPlan } from "./execute.ts";
  */
 
 export interface RecordFlowsResult {
-  /** Enabled flows whose plan matched the event (one flow_runs row each). */
+  /** Enabled flows whose plan matched the event (one flow_runs row each; a
+   *  resumed dispatch that adopted an already-finished run reports that
+   *  run's existing verdict). */
   runs: Array<{
     runId: string;
     flowId: string;
-    status: "completed" | "waiting" | "failed";
+    status: "completed" | "waiting" | "failed" | "cancelled";
     gatesCreated: number;
   }>;
   gatesCreated: number;
@@ -48,6 +50,71 @@ export interface RecordFlowsResult {
 }
 
 const EMPTY_RESULT: RecordFlowsResult = Object.freeze({ runs: [], gatesCreated: 0, failed: false });
+
+type FlowRunStatus = (typeof schema.flowRuns.$inferSelect)["status"];
+
+/** The existing flow_runs row carrying `key`, for resumed-attempt adoption. */
+async function adoptableOccurrenceRun(
+  key: string,
+): Promise<{ id: string; status: FlowRunStatus } | undefined> {
+  const [row] = await db
+    .select({ id: schema.flowRuns.id, status: schema.flowRuns.status })
+    .from(schema.flowRuns)
+    .where(eq(schema.flowRuns.occurrenceKey, key));
+  return row;
+}
+
+/**
+ * Insert-or-adopt the flow_runs row for one occurrence-keyed dispatch.
+ * A first firing inserts; a resumed attempt adopts the SAME row so effect
+ * checkpoints and outbox keys converge on once. Adoption is status-aware:
+ * only a row still `running` (a crashed attempt) reopens and re-executes —
+ * a finished or gate-paused row is adopted in place (its `status` comes back
+ * as `adoptedStatus`) because the recomputed plan may carry fresh nodes the
+ * original run never checkpointed.
+ */
+async function startOrAdoptOccurrenceRun(
+  orgId: string,
+  occurrenceKey: string,
+  row: {
+    flowId: string;
+    subjectKind: string;
+    subjectId: string;
+    trigger: string;
+    context: Record<string, unknown>;
+    createdBy: string | null;
+  },
+): Promise<{ runId: string; adoptedStatus: Exclude<FlowRunStatus, "running"> | null }> {
+  let existing = await adoptableOccurrenceRun(occurrenceKey);
+  if (!existing) {
+    const [inserted] = await db
+      .insert(schema.flowRuns)
+      .values({ orgId, ...row, status: "running", occurrenceKey })
+      .onConflictDoNothing()
+      .returning({ id: schema.flowRuns.id });
+    if (inserted) return { runId: inserted.id, adoptedStatus: null };
+    // Lost the unique-index race to a concurrent attempt of the same
+    // dispatch: adopt its row.
+    existing = await adoptableOccurrenceRun(occurrenceKey);
+    if (!existing) throw new Error(`flow occurrence ${occurrenceKey} lost its adoption target run`);
+  }
+  // Resuming the crashed attempt's run: reopen it visibly while its
+  // remaining effects execute under the completed-checkpoint contract.
+  if (existing.status === "running") {
+    await db
+      .update(schema.flowRuns)
+      .set({ status: "running", error: null, finishedAt: null })
+      .where(and(eq(schema.flowRuns.id, existing.id), eq(schema.flowRuns.orgId, orgId)));
+    return { runId: existing.id, adoptedStatus: null };
+  }
+  // terminal occurrence rows adopt in place; only running rows reopen and re-execute.
+  // A finished (completed/failed/cancelled) or gate-paused run is immutable
+  // evidence: adopt it in place — the plan was recomputed from CURRENT
+  // subject state, so re-executing could append fresh effects the original
+  // run never fired, and a waiting replay would be restamped completed.
+  // Report the run's own verdict instead.
+  return { runId: existing.id, adoptedStatus: existing.status };
+}
 
 /** Parse a stored jsonb graph; null (with a log) when it fails validation. */
 export function parseFlowGraph(flowId: string, graph: unknown): AutomationGraph | null {
@@ -157,48 +224,22 @@ export async function runRecordFlows(
           ? `${event.occurrenceKey}:${flow.id}`
           : null;
       let runId: string;
+      // Non-null when the occurrence already owned a finished (or gate-paused)
+      // flow_runs row: the run is adopted AS-IS and the recomputed plan never
+      // executes against it.
+      let adoptedStatus: Exclude<FlowRunStatus, "running"> | null = null;
       if (occurrenceKey) {
-        const [existing] = await db
-          .select({ id: schema.flowRuns.id })
-          .from(schema.flowRuns)
-          .where(eq(schema.flowRuns.occurrenceKey, occurrenceKey));
-        if (existing) {
-          // Resuming the crashed attempt's run: reopen it visibly while its
-          // remaining effects execute under the completed-checkpoint contract.
-          await db
-            .update(schema.flowRuns)
-            .set({ status: "running", error: null, finishedAt: null })
-            .where(and(eq(schema.flowRuns.id, existing.id), eq(schema.flowRuns.orgId, ctx.orgId)));
-          runId = existing.id;
-        } else {
-          const [inserted] = await db
-            .insert(schema.flowRuns)
-            .values({
-              orgId: ctx.orgId,
-              flowId: flow.id,
-              subjectKind,
-              subjectId,
-              trigger: event.kind,
-              status: "running",
-              context: JSON.parse(JSON.stringify(subject.values)) as Record<string, unknown>,
-              createdBy: ctx.userId ?? null,
-              occurrenceKey,
-            })
-            .onConflictDoNothing()
-            .returning({ id: schema.flowRuns.id });
-          if (!inserted) {
-            // Lost the unique-index race to a concurrent attempt of the same
-            // dispatch: adopt its row.
-            const [adopted] = await db
-              .select({ id: schema.flowRuns.id })
-              .from(schema.flowRuns)
-              .where(eq(schema.flowRuns.occurrenceKey, occurrenceKey));
-            if (!adopted) throw new Error(`flow occurrence ${occurrenceKey} lost its adoption target run`);
-            runId = adopted.id;
-          } else {
-            runId = inserted.id;
-          }
-        }
+        const adoption = await startOrAdoptOccurrenceRun(ctx.orgId, occurrenceKey, {
+          flowId: flow.id,
+          subjectKind,
+          subjectId,
+          trigger: event.kind,
+          // jsonb snapshot: strip non-serializable values (Dates → ISO).
+          context: JSON.parse(JSON.stringify(subject.values)) as Record<string, unknown>,
+          createdBy: ctx.userId ?? null,
+        });
+        runId = adoption.runId;
+        adoptedStatus = adoption.adoptedStatus;
       } else {
         runId = (
           await db
@@ -218,39 +259,44 @@ export async function runRecordFlows(
         )[0]!.id;
       }
 
-      let status: "completed" | "waiting" | "failed";
+      let status: "completed" | "waiting" | "failed" | "cancelled";
       let gatesCreated = 0;
-      try {
-        const res = await executeFlowPlan(ctx, adapter, {
-          flow: { id: flow.id, name: flow.name, subjectKind: subjectKind, graph: flow.graph },
-          runId,
-          subjectId,
-          plan,
-          evalCtx,
-          submitterUserId: subject.submitterUserId,
-        });
-        gatesCreated = res.gatesCreated;
-        status = res.failed.length > 0 ? "failed" : res.gatesCreated > 0 ? "waiting" : "completed";
-        await db
-          .update(schema.flowRuns)
-          .set({
-            status,
-            error: res.failed.length > 0 ? res.failed.join("; ") : null,
-            finishedAt: status === "waiting" ? null : new Date(),
-          })
-          .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
-        if (res.failed.length > 0) {
-          console.error(`[flows] run ${runId} (flow "${flow.name}") failed:`, res.failed.join("; "));
+      if (adoptedStatus) {
+        // Adopted finished/paused run: report its verdict, execute nothing.
+        status = adoptedStatus;
+      } else {
+        try {
+          const res = await executeFlowPlan(ctx, adapter, {
+            flow: { id: flow.id, name: flow.name, subjectKind: subjectKind, graph: flow.graph },
+            runId,
+            subjectId,
+            plan,
+            evalCtx,
+            submitterUserId: subject.submitterUserId,
+          });
+          gatesCreated = res.gatesCreated;
+          status = res.failed.length > 0 ? "failed" : res.gatesCreated > 0 ? "waiting" : "completed";
+          await db
+            .update(schema.flowRuns)
+            .set({
+              status,
+              error: res.failed.length > 0 ? res.failed.join("; ") : null,
+              finishedAt: status === "waiting" ? null : new Date(),
+            })
+            .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
+          if (res.failed.length > 0) {
+            console.error(`[flows] run ${runId} (flow "${flow.name}") failed:`, res.failed.join("; "));
+          }
+        } catch (e) {
+          status = "failed";
+          const reason = e instanceof Error ? e.message : String(e);
+          console.error(`[flows] run ${runId} (flow "${flow.name}") crashed:`, e);
+          await db
+            .update(schema.flowRuns)
+            .set({ status: "failed", error: reason, finishedAt: new Date() })
+            .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)))
+            .catch(() => {});
         }
-      } catch (e) {
-        status = "failed";
-        const reason = e instanceof Error ? e.message : String(e);
-        console.error(`[flows] run ${runId} (flow "${flow.name}") crashed:`, e);
-        await db
-          .update(schema.flowRuns)
-          .set({ status: "failed", error: reason, finishedAt: new Date() })
-          .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)))
-          .catch(() => {});
       }
 
       result.runs.push({ runId, flowId: flow.id, status, gatesCreated });

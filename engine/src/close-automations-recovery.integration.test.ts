@@ -7,6 +7,7 @@ import { ensureCloseDefaults, runCloseAutomations } from "./close.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
+  seedDraftDocument,
   seedFlowActors,
   type FlowActors,
   type ScratchOrg,
@@ -421,5 +422,208 @@ test("a live lease held by another scheduler is respected, not stolen", { skip: 
     assert.equal(execution.attemptCount, 0);
     assert.equal(execution.leaseToken, token, "another worker's live claim was not touched");
     assert.equal((await notificationCounts(fixture.orgId)).size, 0);
+  });
+});
+
+/**
+ * A start_flow probe graph whose second branch only matches AFTER the first
+ * run's own set_field commits ("subject drift"): a memo-latch condition gates
+ * a second notify. Fire one plans act_latch → notify_first (memo is null);
+ * any re-planning after the latch commits plans notify_second — which has no
+ * effect checkpoint, so an improperly reopened run appends it fresh.
+ */
+function startFlowGraph(actors: FlowActors): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    nodes: [
+      {
+        id: "trigger",
+        position: { x: 0, y: 0 },
+        data: { kind: "trigger", trigger: { trigger: "manual", buttonId: "b1", label: "Run probe" } },
+      },
+      {
+        id: "cond_latch",
+        position: { x: 100, y: 0 },
+        data: { kind: "condition", rule: { op: "eq", field: "memo", value: "latched" } },
+      },
+      {
+        id: "act_latch",
+        position: { x: 200, y: 0 },
+        data: { kind: "action", action: { action: "set_field", field: "memo", value: { kind: "literal", value: "latched" } } },
+      },
+      {
+        id: "notify_first",
+        position: { x: 300, y: 0 },
+        data: {
+          kind: "action",
+          action: {
+            action: "notify",
+            to: [{ type: "user", userId: actors.approver1Id }],
+            title: "Recovery first pass",
+          },
+        },
+      },
+      {
+        id: "notify_second",
+        position: { x: 300, y: 100 },
+        data: {
+          kind: "action",
+          action: {
+            action: "notify",
+            to: [{ type: "user", userId: actors.approver2Id }],
+            title: "Recovery second pass",
+          },
+        },
+      },
+    ],
+    edges: [
+      { id: "e1", source: "trigger", target: "cond_latch" },
+      { id: "e2", source: "cond_latch", target: "act_latch", sourceHandle: "else" },
+      { id: "e3", source: "act_latch", target: "notify_first" },
+      { id: "e4", source: "cond_latch", target: "notify_second", sourceHandle: "then" },
+    ],
+  };
+}
+
+async function seedStartFlowRule(
+  orgId: string,
+  docId: string,
+): Promise<string> {
+  return seedRule({
+    orgId,
+    action: "start_flow",
+    config: { subjectKind: "vendor_bill", subjectId: docId, buttonId: "b1" },
+  });
+}
+
+async function seedFlowRow(orgId: string, actors: FlowActors): Promise<string> {
+  const flowId = randomUUID();
+  await db.execute(sql`
+    insert into flows (id, org_id, name, subject_kind, enabled, graph)
+    values (${flowId}, ${orgId}, 'Recovery probe flow', 'vendor_bill', true,
+            ${JSON.stringify(startFlowGraph(actors))}::jsonb)
+  `);
+  return flowId;
+}
+
+const flowNotifications = (orgId: string) =>
+  db.execute<{ title: string; n: number }>(sql`
+    select title, count(*)::int as n from notifications
+     where org_id = ${orgId} and kind = 'flow'
+     group by title
+  `);
+
+test("a resumed start_flow attempt adopts a completed flow run without reopening it or appending effects", { skip: !DB }, async () => {
+  await withProbe(async (fixture, actors, runId) => {
+    const docId = await seedDraftDocument(fixture.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    const flowId = await seedFlowRow(fixture.orgId, actors);
+    const ruleId = await seedStartFlowRule(fixture.orgId, docId);
+    const eventKey = `probe:${randomUUID()}`;
+    const executionId = await seedCrashedClaim({ orgId: fixture.orgId, ruleId, runId, eventKey });
+    const occurrenceKey = `${executionId}:${flowId}`;
+
+    // Durable state at the crash point: start_flow COMPLETED its flow run
+    // (notify_first fired, both effect checkpoints committed, the set_field
+    // latch drifted the subject) and only finishCloseExecution was lost.
+    const runRowId = (await db.execute<{ id: string }>(sql`
+      insert into flow_runs
+        (org_id, flow_id, subject_kind, subject_id, trigger, status, context,
+         occurrence_key, started_at, finished_at, created_by, updated_by)
+      values (${fixture.orgId}, ${flowId}, 'vendor_bill', ${docId}, 'manual', 'completed', '{}'::jsonb,
+              ${occurrenceKey}, now(), now(), null, null)
+      returning id
+    `)).rows[0]!.id;
+    await db.execute(sql`
+      insert into flow_run_effects (org_id, run_id, effect_key)
+      values (${fixture.orgId}, ${runRowId}, ${`${flowId}:action:act_latch`}),
+             (${fixture.orgId}, ${runRowId}, ${`${flowId}:action:notify_first`})
+    `);
+    await db.execute(sql`
+      update documents set memo = 'latched' where id = ${docId} and org_id = ${fixture.orgId}
+    `);
+    await db.execute(sql`
+      insert into notifications (org_id, user_id, kind, title, body)
+      values (${fixture.orgId}, ${actors.approver1Id}, 'flow', 'Recovery first pass', 'committed effect')
+    `);
+    const finishedBefore = (await db.execute<{ finished_at: string }>(sql`
+      select finished_at::text as finished_at from flow_runs where id = ${runRowId}
+    `)).rows[0]!.finished_at;
+
+    const result = await runCloseAutomations({
+      orgId: fixture.orgId,
+      runId,
+      trigger: "run_started",
+      eventKey,
+    });
+    assert.deepEqual(result, { completed: 1, failed: 0 });
+
+    // Terminal evidence is immutable: adopted in place — same verdict, same
+    // finished_at, and the drifted condition's fresh node never fires.
+    const [run] = (await db.execute<{ id: string; status: string; finished_at: string; error: string | null }>(sql`
+      select id, status, finished_at::text as finished_at, error from flow_runs where occurrence_key = ${occurrenceKey}
+    `)).rows;
+    assert.ok(run);
+    assert.equal(run.status, "completed");
+    assert.equal(run.error, null);
+    assert.equal(
+      run.finished_at,
+      finishedBefore,
+      "the resumed attempt must not rewrite the completed run's finished_at",
+    );
+    assert.deepEqual(
+      Object.fromEntries((await flowNotifications(fixture.orgId)).rows.map((r) => [r.title, r.n])),
+      { "Recovery first pass": 1 },
+      "the latched branch must not fire fresh under the adopted completed run",
+    );
+    assert.equal((await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from flow_run_effects where run_id = ${run.id}
+    `)).rows[0]!.n, 2);
+    assert.equal((await readExecution(executionId)).status, "completed");
+  });
+});
+
+test("a resumed start_flow attempt still finishes a crashed running flow run", { skip: !DB }, async () => {
+  await withProbe(async (fixture, actors, runId) => {
+    const docId = await seedDraftDocument(fixture.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    const flowId = await seedFlowRow(fixture.orgId, actors);
+    const ruleId = await seedStartFlowRule(fixture.orgId, docId);
+    const eventKey = `probe:${randomUUID()}`;
+    const executionId = await seedCrashedClaim({ orgId: fixture.orgId, ruleId, runId, eventKey });
+    const occurrenceKey = `${executionId}:${flowId}`;
+
+    // The crash left the run row RUNNING with no committed effects.
+    await db.execute(sql`
+      insert into flow_runs
+        (org_id, flow_id, subject_kind, subject_id, trigger, status, context,
+         occurrence_key, started_at, created_by, updated_by)
+      values (${fixture.orgId}, ${flowId}, 'vendor_bill', ${docId}, 'manual', 'running', '{}'::jsonb,
+              ${occurrenceKey}, now(), null, null)
+    `);
+
+    const result = await runCloseAutomations({
+      orgId: fixture.orgId,
+      runId,
+      trigger: "run_started",
+      eventKey,
+    });
+    assert.deepEqual(result, { completed: 1, failed: 0 });
+
+    // The resume contract is intact: the running run reopens, executes its
+    // remaining effects under the checkpoint contract, and completes once.
+    const [run] = (await db.execute<{ id: string; status: string; finished_at: Date | null; error: string | null }>(sql`
+      select id, status, finished_at, error from flow_runs where occurrence_key = ${occurrenceKey}
+    `)).rows;
+    assert.ok(run);
+    assert.equal(run.status, "completed");
+    assert.ok(run.finished_at);
+    assert.equal(run.error, null);
+    assert.deepEqual(
+      Object.fromEntries((await flowNotifications(fixture.orgId)).rows.map((r) => [r.title, r.n])),
+      { "Recovery first pass": 1 },
+    );
+    const memo = (await db.execute<{ memo: string | null }>(sql`
+      select memo from documents where id = ${docId} and org_id = ${fixture.orgId}
+    `)).rows[0]!.memo;
+    assert.equal(memo, "latched");
   });
 });
