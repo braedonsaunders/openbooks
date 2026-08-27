@@ -142,7 +142,8 @@ export async function createConformanceOrg(): Promise<ConformanceOrg> {
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
                                       is_adjustment, fiscal_calendar_id)
       values (${randomUUID()}, ${scratch.orgId}, 2026, ${month}, ${`2026-${mm}`}, ${startsOn}, ${endsOn},
-              false, ${fiscalCalendarId})`);
+              false, ${fiscalCalendarId})
+      on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing`);
   }
 
   // The foreign-currency cases need a second ISO currency on the registry.
