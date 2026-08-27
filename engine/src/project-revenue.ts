@@ -98,6 +98,9 @@ export async function syncProjectRevenueContracts(
   asOfDate: string,
   projectId?: string,
 ): Promise<ProjectRevenueSyncResult> {
+  if (!(await revenueRecognitionFeatureEnabled(db, orgId))) {
+    return { synced: [], problems: [] };
+  }
   return db.transaction(async (tx) =>
     syncProjectRevenueContractsInTransaction(tx, orgId, actorId, asOfDate, projectId),
   );
