@@ -374,7 +374,7 @@ test(
         // Force the audit insert to fail for THIS org's purge events. Utility
         // statements cannot take bind parameters, so the org scope is inlined
         // after asserting its shape.
-        assert.match(orgId, /^[0-9a-f][0-9a-f-]{34}$/);
+        assert.match(orgId, /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
         await db.execute(sql.raw(\`
           create function openbooks_test_block_purge_audit() returns trigger
           language plpgsql as $fn$ begin raise exception 'forced audit failure'; end $fn$
@@ -507,15 +507,23 @@ test(
       const org = await createScratchOrg();
       const orgId = org.orgId;
       try {
-        // A real POSTED document. documents_posted_period_required only
-        // demands non-null posting columns (no FKs back them), so
-        // representative uuids satisfy the check without a ledger fixture.
+        // A real POSTED document. Its posting period must belong to the
+        // scratch org now that document posting references are tenant-coherent.
         const documentId = randomUUID();
+        const postedEntryId = randomUUID();
+        await db.execute(sql\`
+          insert into journal_entries
+            (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+             period_id, memo, status, origin)
+          values (\${postedEntryId}, \${orgId}, \${org.bookId}, \${org.subsidiaryId},
+                  'RETAIN-ENTRY', current_date, \${org.periodId}, 'retention fixture',
+                  'draft', 'manual')
+        \`);
         await db.execute(sql\`
           insert into documents (id, org_id, kind, document_number, document_date,
                                  currency, status, posted_entry_id, posting_period_id)
           values (\${documentId}, \${orgId}, 'vendor_bill', 'RETAIN-1', current_date,
-                  'USD', 'posted', \${randomUUID()}, \${randomUUID()})
+                  'USD', 'posted', \${postedEntryId}, \${org.periodId})
         \`);
         const fileName = "posted-evidence.txt";
         const linkTarget = documentId;

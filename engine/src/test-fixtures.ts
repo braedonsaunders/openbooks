@@ -19,7 +19,6 @@ export interface ScratchOrg {
   orgId: string;
   subsidiaryId: string;
   periodId: string;
-  periodIds: string[];
   bookId: string;
   locationId: string;
   stockLocationId: string;
@@ -58,21 +57,13 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
                                   adjustment_period_enabled, is_default, is_active, config)
     values (${fiscalCalendarId}, ${orgId}, 'Default', 'monthly', 1, 1, 'UTC', false, true, true, '{}'::jsonb)`);
 
-  // 12 consecutive monthly periods spanning the default recognition rule term.
-  const periodIds: string[] = [];
-  for (let i = 0; i < 12; i++) {
-    const month = 7 + i;
-    const year = 2026 + Math.floor((month - 1) / 12);
-    const m = ((month - 1) % 12) + 1;
-    const start = `${year}-${String(m).padStart(2, "0")}-01`;
-    const endDays = new Date(Date.UTC(year, m, 0)).getUTCDate();
-    const end = `${year}-${String(m).padStart(2, "0")}-${String(endDays).padStart(2, "0")}`;
-    const pid = randomUUID();
-    periodIds.push(pid);
-    await db.execute(sql`
-      insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-      values (${pid}, ${orgId}, ${year}, ${m}, ${`${year}-${String(m).padStart(2, "0")}`}, ${start}, ${end}, false, ${fiscalCalendarId})`);
-  }
+  // Keep the fixture's accounting spine to one open period. Suites that need
+  // future or historical months seed those periods explicitly so their
+  // scenario-specific calendars cannot collide with shared fixture defaults.
+  const periodId = randomUUID();
+  await db.execute(sql`
+    insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+    values (${periodId}, ${orgId}, 2026, 7, '2026-07', '2026-07-01', '2026-07-31', false, ${fiscalCalendarId})`);
 
   const bookId = randomUUID();
   await db.execute(sql`
@@ -188,7 +179,7 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
     insert into parties (id, org_id, kind, display_name, is_active, custom)
     values (${vendorId}, ${orgId}, 'vendor', 'Acme Vendor', true, '{}'::jsonb)`);
 
-  return { orgId, subsidiaryId, periodId: periodIds[0]!, periodIds, bookId, locationId, stockLocationId, stockLocationId2, accounts, items, recognitionRuleId, customerId, vendorId, date };
+  return { orgId, subsidiaryId, periodId, bookId, locationId, stockLocationId, stockLocationId2, accounts, items, recognitionRuleId, customerId, vendorId, date };
 }
 
 export interface FlowActors {
