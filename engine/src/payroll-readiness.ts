@@ -18,6 +18,8 @@ import {
   payRunCalculationSourceChanges,
   payRunCalculationSourceDigest,
   payrollSettings,
+  payrollSubsidiaryScopeFilter,
+  type PayrollSubsidiaryScope,
 } from "./payroll-run.ts";
 import {
   jurisdictionKey,
@@ -112,15 +114,23 @@ type RunRow = {
   run_type: string;
   run_status: string;
   subsidiary_id: string | null;
+  document_subsidiary_id: string | null;
 };
 
-async function runContext(orgId: string, documentId: string): Promise<RunRow | null> {
+async function runContext(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<RunRow | null> {
   const runs = (await db.execute<RunRow>(sql`
     select r.pay_schedule_id, r.period_start::text as period_start, r.period_end::text as period_end,
-           r.pay_date::text as pay_date, r.tax_year, r.run_type, r.run_status, s.subsidiary_id
+           r.pay_date::text as pay_date, r.tax_year, r.run_type, r.run_status,
+           s.subsidiary_id, d.subsidiary_id as document_subsidiary_id
       from pay_runs r
       join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
   `));
   return runs.rows[0] ?? null;
 }
@@ -134,7 +144,12 @@ async function runContext(orgId: string, documentId: string): Promise<RunRow | n
  * (calculatePayRun applies both). Describing a different population from the
  * one that will be paid makes every per-employee count on this screen wrong.
  */
-async function scope(orgId: string, documentId: string, run: RunRow): Promise<ScopeRow[]> {
+async function scope(
+  orgId: string,
+  documentId: string,
+  run: RunRow,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<ScopeRow[]> {
   const rows = (await db.execute<ScopeRow>(sql`
     select p.id as employee_party_id, p.display_name as name, prof.pay_basis, prof.country,
            prof.province, prof.labour_jurisdiction,
@@ -175,6 +190,7 @@ async function scope(orgId: string, documentId: string, run: RunRow): Promise<Sc
        -- calculatePayRun's own two population predicates, verbatim.
        and (er.terminated_on is null or er.terminated_on >= ${run.period_start})
        and (${run.subsidiary_id}::uuid is null or p.subsidiary_id = ${run.subsidiary_id}::uuid)
+       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
        and not exists (
          select 1 from pay_run_adjustments a
           where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
@@ -195,7 +211,12 @@ async function scope(orgId: string, documentId: string, run: RunRow): Promise<Sc
 export async function installedPayrollCountries(
   orgId: string,
   payrollBlob: Record<string, unknown>,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<string[]> {
+  // Payroll pack markers are org-level configuration rooted at the active
+  // root entity. A restricted caller may not use this aggregate when that
+  // root is outside its explicit scope; an empty scope therefore denies it.
+  if (allowedSubsidiaryIds != null) await payrollSettings(orgId, allowedSubsidiaryIds);
   if (Array.isArray((payrollBlob as { countries?: unknown }).countries)) {
     return ((payrollBlob as { countries: unknown[] }).countries).map(String);
   }
@@ -239,7 +260,10 @@ export interface PayrollSetupState {
  * installedPayrollCountries, the pack vendor declarations) is the same one
  * the run pre-flight reads, so the two surfaces cannot disagree.
  */
-export async function payrollSetupState(orgId: string): Promise<PayrollSetupState> {
+export async function payrollSetupState(
+  orgId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<PayrollSetupState> {
   const setupHref = "/admin/setup/payroll";
   const checks: PayrollSetupCheck[] = [];
 
@@ -247,8 +271,8 @@ export async function payrollSetupState(orgId: string): Promise<PayrollSetupStat
     select settings->'payroll' as p from orgs where id = ${orgId}
   `));
   const blob = blobRes.rows[0]?.p ?? {};
-  const installed = await installedPayrollCountries(orgId, blob);
-  const settings = await payrollSettings(orgId);
+  const installed = await installedPayrollCountries(orgId, blob, allowedSubsidiaryIds);
+  const settings = await payrollSettings(orgId, allowedSubsidiaryIds);
 
   checks.push({
     severity: "blocker", code: "setup.pack",
@@ -334,7 +358,7 @@ export async function payrollSetupState(orgId: string): Promise<PayrollSetupStat
   // org's ACTIVE payroll population actually occupies, so an employer with no
   // Ontario payroll is never nagged about Ontario's health tax. Advisory for
   // the same reason as in the run pre-flight.
-  const population = await activePayrollPopulation(orgId);
+  const population = await activePayrollPopulation(orgId, allowedSubsidiaryIds);
   for (const country of installed) {
     const missing = await unconfiguredRatesForRun(
       orgId, country, await currentTaxYear(orgId, country), population,
@@ -374,7 +398,11 @@ export async function payrollSetupState(orgId: string): Promise<PayrollSetupStat
   };
 }
 
-export async function payRunReadiness(orgId: string, documentId: string): Promise<PayRunReadiness> {
+export async function payRunReadiness(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<PayRunReadiness> {
   const items: ReadinessItem[] = [];
   const flag = (
     severity: ReadinessSeverity,
@@ -395,94 +423,90 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
     included,
   });
 
-  const run = await runContext(orgId, documentId);
+  const run = await runContext(orgId, documentId, allowedSubsidiaryIds);
   if (!run) return tally(0);
-  const people = await scope(orgId, documentId, run);
+  const people = await scope(orgId, documentId, run, allowedSubsidiaryIds);
 
   // --- Org configuration: a commit cannot balance without these ------------
   const setupHref = "/admin/setup/payroll";
-  const settings = await payrollSettings(orgId);
-  if (!settings.wageExpenseAccountId) flag("blocker", "setup.wageExpense", [], { href: setupHref });
-  if (!settings.netPayAccountId) flag("blocker", "setup.netPay", [], { href: setupHref });
-  if (settings.wagesTo === "labor_clearing") {
-    const clearing = (await db.execute<{ id: string | null }>(sql`
-      select settings#>>'{laborCosting,clearingAccountId}' as id from orgs where id = ${orgId}
-    `));
-    if (!clearing.rows[0]?.id) flag("blocker", "setup.laborClearing", [], { href: setupHref });
-  }
+  let settings: Awaited<ReturnType<typeof payrollSettings>> | null = null;
+  let legacy: Record<string, unknown> = {};
+  let installed: string[] = [];
+  try {
+    settings = await payrollSettings(orgId, allowedSubsidiaryIds);
+    if (!settings.wageExpenseAccountId) flag("blocker", "setup.wageExpense", [], { href: setupHref });
+    if (!settings.netPayAccountId) flag("blocker", "setup.netPay", [], { href: setupHref });
+    if (settings.wagesTo === "labor_clearing") {
+      const clearing = (await db.execute<{ id: string | null }>(sql`
+        select settings#>>'{laborCosting,clearingAccountId}' as id from orgs where id = ${orgId}
+      `));
+      if (!clearing.rows[0]?.id) flag("blocker", "setup.laborClearing", [], { href: setupHref });
+    }
 
-  // Every statutory slot of every pack the run's people belong to must resolve
-  // to a liability account, or the commit has nowhere to credit withholdings.
-  const blob = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
-    select settings->'payroll' as p from orgs where id = ${orgId}
-  `));
-  const legacy = blob.rows[0]?.p ?? {};
-  const installed = await installedPayrollCountries(orgId, legacy);
-  const countriesInRun = new Set(people.map((p) => p.country));
-  for (const pack of await packSlotState(orgId, installed, legacy)) {
-    if (people.length > 0 && !countriesInRun.has(pack.country)) continue;
-    for (const slot of pack.slots) {
-      if (!slot.accountId) {
-        flag("blocker", "setup.slot", [], {
-          detail: `${pack.country} · ${slot.key}`,
-          href: `${setupHref}?tab=${pack.country.toLowerCase()}`,
-        });
+    // Every statutory slot of every pack the run's people belong to must resolve
+    // to a liability account, or the commit has nowhere to credit withholdings.
+    const blob = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
+      select settings->'payroll' as p from orgs where id = ${orgId}
+    `));
+    legacy = blob.rows[0]?.p ?? {};
+    installed = await installedPayrollCountries(orgId, legacy, allowedSubsidiaryIds);
+    const countriesInRun = new Set(people.map((p) => p.country));
+    for (const pack of await packSlotState(orgId, installed, legacy)) {
+      if (people.length > 0 && !countriesInRun.has(pack.country)) continue;
+      for (const slot of pack.slots) {
+        if (!slot.accountId) {
+          flag("blocker", "setup.slot", [], {
+            detail: `${pack.country} · ${slot.key}`,
+            href: `${setupHref}?tab=${pack.country.toLowerCase()}`,
+          });
+        }
       }
     }
-  }
 
-  // --- Statutory tables: is this year even loaded? -------------------------
-  // Every statutory engine refuses a pay date outside the years it has
-  // transcribed, which is right — and used to surface as an exception thrown
-  // from inside calculateStub, per employee, mid-payroll. The pack now DECLARES
-  // its editions, so the missing year is named here, before Calculate, as the
-  // blocker it is (engine/src/payroll/tax-years.ts).
-  //
-  // Asked per (country, region) pair actually being paid, because a region can
-  // publish its own tables and lag the country's: 2027 can be loaded federally
-  // for Canada and not loaded for Quebec.
-  const jurisdictionsInRun = new Map<string, { country: string; region: string | null }>();
-  for (const person of people) {
-    const key = `${person.country}:${person.province ?? ""}`;
-    if (!jurisdictionsInRun.has(key)) {
-      jurisdictionsInRun.set(key, { country: person.country, region: person.province ?? null });
+    // --- Statutory tables: is this year even loaded? -----------------------
+    const jurisdictionsInRun = new Map<string, { country: string; region: string | null }>();
+    for (const person of people) {
+      const key = `${person.country}:${person.province ?? ""}`;
+      if (!jurisdictionsInRun.has(key)) {
+        jurisdictionsInRun.set(key, { country: person.country, region: person.province ?? null });
+      }
     }
-  }
-  if (people.length === 0) {
-    for (const country of installed) {
-      jurisdictionsInRun.set(`${country}:`, { country, region: null });
+    if (people.length === 0) {
+      for (const country of installed) {
+        jurisdictionsInRun.set(`${country}:`, { country, region: null });
+      }
     }
-  }
-  const taxYearFailures = new Set<string>();
-  for (const { country, region } of jurisdictionsInRun.values()) {
-    const problem = payrollTaxYearProblem(country, run.tax_year, region);
-    if (!problem || taxYearFailures.has(problem.message)) continue;
-    taxYearFailures.add(problem.message);
-    flag(
-      "blocker", "statutory.taxYear",
-      people.filter((p) => p.country === country && (region === null || p.province === region)),
-      { detail: problem.message, href: `${setupHref}?tab=packs` },
-    );
-  }
-
-  // --- Statutory rates the employer has to supply --------------------------
-  // The pack declares which of its statutory rates cannot be published (an
-  // experience-rated SUI rate) or are published per region per year (the FUTA
-  // credit reduction, the provincial employer health levies), and at what scope
-  // each varies. Anything the run touches with nothing configured is reported
-  // here rather than accruing zero silently.
-  //
-  // ADVISORY, deliberately: an employer with no SUI registration in a state owes
-  // no SUI there, and refusing the whole payroll over a levy that may not apply
-  // would be wrong. What the operator is owed is the sentence, before payday.
-  for (const country of countriesInRun.size > 0 ? [...countriesInRun] : installed) {
-    for (const missing of await unconfiguredRatesForRun(orgId, country, run.tax_year, people)) {
+    const taxYearFailures = new Set<string>();
+    for (const { country, region } of jurisdictionsInRun.values()) {
+      const problem = payrollTaxYearProblem(country, run.tax_year, region);
+      if (!problem || taxYearFailures.has(problem.message)) continue;
+      taxYearFailures.add(problem.message);
       flag(
-        "warning", "statutory.rateUnconfigured",
-        people.filter((p) => missing.employees.some((e) => e.partyId === p.employee_party_id)),
-        { detail: missing.message, href: `${setupHref}?tab=rates` },
+        "blocker", "statutory.taxYear",
+        people.filter((p) => p.country === country && (region === null || p.province === region)),
+        { detail: problem.message, href: `${setupHref}?tab=packs` },
       );
     }
+
+    // --- Statutory rates the employer has to supply -------------------------
+    for (const country of countriesInRun.size > 0 ? [...countriesInRun] : installed) {
+      for (const missing of await unconfiguredRatesForRun(orgId, country, run.tax_year, people)) {
+        flag(
+          "warning", "statutory.rateUnconfigured",
+          people.filter((p) => missing.employees.some((e) => e.partyId === p.employee_party_id)),
+          { detail: missing.message, href: `${setupHref}?tab=rates` },
+        );
+      }
+    }
+  } catch (error) {
+    // A child-only caller may read its run and people while the org-level
+    // payroll configuration is rooted outside its scope. Omit those aggregate
+    // checks rather than leaking settings or refusing authorized run data.
+    if (
+      allowedSubsidiaryIds == null
+      || !(error instanceof PayrollError)
+      || error.message !== "payroll settings not found"
+    ) throw error;
   }
 
   // --- Period control: posting into a closed period fails at post ---------
@@ -637,13 +661,17 @@ const currentTaxYear = async (orgId: string, country: string): Promise<number> =
  * and the per-run readiness flags — none of which this query selects, so those
  * fields were `undefined` behind a type that promised otherwise.
  */
-async function activePayrollPopulation(orgId: string): Promise<RateScopeRow[]> {
+async function activePayrollPopulation(
+  orgId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<RateScopeRow[]> {
   const rows = (await db.execute<RateScopeRow>(sql`
     select p.id as employee_party_id, p.display_name as name, prof.country, prof.province,
            ${effectiveFilingAccountSql("prof")} as filing_account_id
-      from employee_payroll_profiles prof
+     from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
      where prof.org_id = ${orgId} and prof.is_active
+       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
   `));
   return rows.rows;
 }
@@ -657,8 +685,14 @@ export async function payrollStatutoryRateGaps(
   orgId: string,
   country: string,
   taxYear: number,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<UnconfiguredStatutoryRate[]> {
-  return unconfiguredRatesForRun(orgId, country, taxYear, await activePayrollPopulation(orgId));
+  return unconfiguredRatesForRun(
+    orgId,
+    country,
+    taxYear,
+    await activePayrollPopulation(orgId, allowedSubsidiaryIds),
+  );
 }
 
 /**
@@ -919,6 +953,7 @@ export async function payRunStaleness(
   orgId: string,
   documentId: string,
   executor: Pick<typeof db, "execute"> = db,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayRunStaleness> {
   const rows = (await executor.execute<{
       calculated_at: Date | string | null; never_calculated: boolean;
@@ -1043,7 +1078,9 @@ export async function payRunStaleness(
                    where os.org_id = r.org_id
                      and os.pay_run_document_id = other.document_id)) as ytd_changed
       from pay_runs r
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
   `));
   const row = rows.rows[0];
   // A missing run is not a fresh run. Fail closed and say why.
@@ -1064,7 +1101,9 @@ export async function payRunStaleness(
       || payRunCalculationSourceDigest(storedSource) !== row.calculation_source_digest) {
     selectionChanged = true;
   } else {
-    const currentSource = await payRunCalculationSource(orgId, documentId, executor);
+    const currentSource = await payRunCalculationSource(
+      orgId, documentId, executor, false, allowedSubsidiaryIds,
+    );
     if (!currentSource) {
       selectionChanged = true;
     } else if (payRunCalculationSourceDigest(currentSource) !== row.calculation_source_digest) {
@@ -1133,8 +1172,11 @@ export async function assertPayRunNotStale(
   orgId: string,
   documentId: string,
   executor: Pick<typeof db, "execute"> = db,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<void> {
-  const { stale, reasons, calculatedAt } = await payRunStaleness(orgId, documentId, executor);
+  const { stale, reasons, calculatedAt } = await payRunStaleness(
+    orgId, documentId, executor, allowedSubsidiaryIds,
+  );
   if (!stale || calculatedAt === null) return;
   throw new PayrollError(staleCalculationMessage(reasons));
 }
@@ -1183,16 +1225,24 @@ function businessDaysBetween(fromIso: string, toIso: string): number {
 }
 
 /** What this payday costs, and whether the chosen bank can carry it. */
-export async function payRunFunding(orgId: string, documentId: string): Promise<PayRunFunding> {
-  const run = await runContext(orgId, documentId);
+export async function payRunFunding(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<PayRunFunding> {
+  const run = await runContext(orgId, documentId, allowedSubsidiaryIds);
+  if (!run && allowedSubsidiaryIds != null) throw new PayrollError("pay run not found");
   const today = await businessToday(orgId);
   const payDate = run?.pay_date ?? today;
 
   const totals = (await db.execute<{ net: string; gross: string; employer: string }>(sql`
-    select coalesce(sum(net_pay), 0)::text as net,
-           coalesce(sum(gross), 0)::text as gross,
-           coalesce(sum(employer_cost), 0)::text as employer
-      from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}
+    select coalesce(sum(s.net_pay), 0)::text as net,
+           coalesce(sum(s.gross), 0)::text as gross,
+           coalesce(sum(s.employer_cost), 0)::text as employer
+      from pay_stubs s
+      join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+     where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
   `));
   const t = totals.rows[0] ?? { net: "0", gross: "0", employer: "0" };
   // Liabilities = what the run owes but does not pay today: employee
@@ -1202,8 +1252,17 @@ export async function payRunFunding(orgId: string, documentId: string): Promise<
   // Both rails are always reported, including at zero: the operator has to be
   // able to see that nobody is on cheques, not infer it from an absent row.
   const stubs = await stubPaymentMethods(orgId, documentId);
+  const visibleStubIds = (await db.execute<{ id: string }>(sql`
+    select s.id
+      from pay_stubs s
+      join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+     where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
+  `)).rows;
+  const visibleStubIdSet = new Set(visibleStubIds.map((row) => row.id));
+  const scopedStubs = stubs.filter((stub) => visibleStubIdSet.has(stub.stubId));
   const rails: FundingRail[] = PAYROLL_PAYMENT_METHODS.map((method) => {
-    const mine = stubs.filter((s) => s.method === method);
+    const mine = scopedStubs.filter((s) => s.method === method);
     return { method, netPay: sum(mine.map((s) => s.netPay)), employees: mine.length };
   });
 
@@ -1253,7 +1312,13 @@ export interface StubChange {
  * Payroll review is a diff exercise — reconstructing it by eye is exactly
  * where errors survive — so compare the component sets, not just net pay.
  */
-export async function payRunChanges(orgId: string, documentId: string): Promise<StubChange[]> {
+export async function payRunChanges(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<StubChange[]> {
+  const run = await runContext(orgId, documentId, allowedSubsidiaryIds);
+  if (!run && allowedSubsidiaryIds != null) throw new PayrollError("pay run not found");
   const rows = (await db.execute<{
       employee_party_id: string; name: string; gross: string; net_pay: string;
       prev_gross: string | null; prev_net: string | null; prev_pay_date: string | null;
@@ -1265,6 +1330,7 @@ export async function payRunChanges(orgId: string, documentId: string): Promise<
         from pay_stubs s
         join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
        where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
+         ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
     ),
     previous_stub as (
       select distinct on (s.employee_party_id)

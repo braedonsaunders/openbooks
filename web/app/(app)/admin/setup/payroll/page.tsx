@@ -3,7 +3,11 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { cn } from '@openbooks/ui'
 import { db } from '@openbooks/engine/src/db.ts'
-import { payrollSettings } from '@openbooks/engine/src/payroll-run.ts'
+import {
+  payrollSettings,
+  statutoryHolidayPayEnabled,
+  type PayrollSubsidiaryScope,
+} from '@openbooks/engine/src/payroll-run.ts'
 import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll-payment-method.ts'
 import { payrollSetupState } from '@openbooks/engine/src/payroll-readiness.ts'
 import { payrollBankProfiles } from '@openbooks/engine/src/payroll-bank-file.ts'
@@ -153,7 +157,7 @@ export default async function PayrollSetupPage({
     active: key === tab,
   }))
 
-  const launcher = await launcherData(orgId, canManageEntities)
+  const launcher = await launcherData(orgId, canManageEntities, authz.allowedSubsidiaryIds)
 
   return (
     <div className="space-y-5">
@@ -186,7 +190,7 @@ export default async function PayrollSetupPage({
       </nav>
       <ModuleHomeTabs tabs={subTabs} />
       {tab === 'packs' ? <PacksTab orgId={orgId} /> : null}
-      {tab === 'accounts' ? <AccountsTab orgId={orgId} /> : null}
+      {tab === 'accounts' ? <AccountsTab orgId={orgId} allowedSubsidiaryIds={authz.allowedSubsidiaryIds} /> : null}
       {tab === 'payday' ? <PaydayTab orgId={orgId} /> : null}
       {tab === 'rates' ? <StatutoryRatesSection /> : null}
       {isEntityTab(tab) ? (
@@ -213,7 +217,9 @@ export default async function PayrollSetupPage({
       {tab === 'holidays' ? (
         <>
           {/* The stat-pay election lives WITH the holiday elections it governs. */}
-          <StatHolidayPaySection statutoryHolidayPay={await statHolidayPayEnabled(orgId)} />
+          <StatHolidayPaySection
+            statutoryHolidayPay={await statutoryHolidayPayEnabled(orgId, undefined, authz.allowedSubsidiaryIds)}
+          />
           <SetupEntitySection
             entity={holidaysEntity()}
             orgId={orgId}
@@ -234,9 +240,13 @@ export default async function PayrollSetupPage({
 }
 
 /** Everything the "Set up payroll" wizard launcher needs, computed once. */
-async function launcherData(orgId: string, canManageEntities: boolean) {
+async function launcherData(
+  orgId: string,
+  canManageEntities: boolean,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+) {
   const [setup, bankProfiles, schedulesRes] = await Promise.all([
-    payrollSetupState(orgId),
+    payrollSetupState(orgId, allowedSubsidiaryIds),
     payrollBankProfiles(orgId),
     db.execute<{ id: string; name: string }>(sql`
       select id, name from pay_schedules
@@ -266,13 +276,6 @@ async function launcherData(orgId: string, canManageEntities: boolean) {
       id: p.id, name: p.name, format: p.format, configured: p.configured,
     })),
   }
-}
-
-async function statHolidayPayEnabled(orgId: string): Promise<boolean> {
-  const res = (await db.execute<{ v: string | null }>(sql`
-    select settings#>>'{payroll,statutoryHolidayPay}' as v from orgs where id = ${orgId}
-  `))
-  return res.rows[0]?.v === 'true'
 }
 
 async function PacksTab({ orgId }: { orgId: string }) {
@@ -309,9 +312,15 @@ async function PacksTab({ orgId }: { orgId: string }) {
   )
 }
 
-async function AccountsTab({ orgId }: { orgId: string }) {
+async function AccountsTab({
+  orgId,
+  allowedSubsidiaryIds,
+}: {
+  orgId: string
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope
+}) {
   const [settings, blobRes, accountsRes, vendorsRes] = (await Promise.all([
-    payrollSettings(orgId),
+    payrollSettings(orgId, allowedSubsidiaryIds),
     db.execute<{ p: Record<string, unknown> | null }>(sql`select settings->'payroll' as p from orgs where id = ${orgId}`),
     db.execute<{ id: string; number: string | null; name: string }>(sql`
       select id, number, name from accounts
@@ -320,7 +329,17 @@ async function AccountsTab({ orgId }: { orgId: string }) {
     db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name from parties p
        join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id and v.is_active
-       where p.org_id = ${orgId} and p.is_active order by p.display_name`),
+       where p.org_id = ${orgId} and p.is_active
+         and (${allowedSubsidiaryIds == null
+           ? sql`true`
+           : allowedSubsidiaryIds.size > 0
+             ? sql`coalesce(p.subsidiary_id, (select root.id from subsidiaries root
+                    where root.org_id = ${orgId} and root.parent_id is null and root.is_active
+                    order by root.created_at limit 1)) in (${sql.join(
+                      [...allowedSubsidiaryIds].map((id) => sql`${id}`), sql`, `,
+                    )})`
+             : sql`false`})
+       order by p.display_name`),
   ]))
   const blob = blobRes.rows[0]?.p ?? {}
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []

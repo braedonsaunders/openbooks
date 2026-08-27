@@ -5,7 +5,13 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { openingBalancesForYear } from "./payroll-opening-balances.ts";
-import { payrollSubsidiaryInScope } from "./payroll-run.ts";
+import {
+  payrollSettings,
+  seedPayrollComponents,
+  statutoryHolidayLinesForStub,
+  statutoryHolidayPayEnabled,
+  payrollSubsidiaryInScope,
+} from "./payroll-run.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -33,6 +39,8 @@ test("every shared payroll engine entry point carries the caller scope to its bo
     "payroll-opening-balances.ts",
     "payroll-parallel-run-store.ts",
     "payroll-retro-store.ts",
+    "payroll-payment.ts",
+    "payroll-readiness.ts",
     "payroll-run.ts",
   ];
   for (const file of files) {
@@ -97,6 +105,81 @@ test(
       assert.deepEqual(
         new Set(unrestricted.rows.map((row) => row.employeePartyId)),
         new Set([rootEmployeeId, childEmployeeId]),
+      );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "direct payroll settings, provisioning, and holiday callers fail closed by scope",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const employeeId = randomUUID();
+    try {
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom, subsidiary_id)
+        values (${employeeId}, ${org.orgId}, 'person', 'Scoped Worker', true, '{}'::jsonb,
+                ${org.subsidiaryId})`);
+
+      const unrestricted = await payrollSettings(org.orgId, null);
+      const restricted = await payrollSettings(org.orgId, new Set([org.subsidiaryId]));
+      assert.deepEqual(restricted, unrestricted);
+      await assert.rejects(
+        payrollSettings(org.orgId, new Set()),
+        /payroll settings not found/,
+      );
+      await assert.rejects(
+        payrollSettings(org.orgId, new Set([randomUUID()])),
+        /payroll settings not found/,
+      );
+
+      assert.equal(await statutoryHolidayPayEnabled(org.orgId, db, null), false);
+      assert.equal(
+        await statutoryHolidayPayEnabled(org.orgId, db, new Set([org.subsidiaryId])),
+        false,
+      );
+      await assert.rejects(
+        statutoryHolidayPayEnabled(org.orgId, db, new Set()),
+        /payroll settings not found/,
+      );
+
+      await seedPayrollComponents(org.orgId, actorId, "CA", new Set([org.subsidiaryId]));
+      const seeded = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from pay_components where org_id = ${org.orgId}
+      `)).rows[0]?.n ?? 0;
+      assert.ok(seeded > 0);
+      await assert.rejects(
+        seedPayrollComponents(org.orgId, actorId, "CA", new Set()),
+        /payroll settings not found/,
+      );
+      assert.equal(
+        (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from pay_components where org_id = ${org.orgId}
+        `)).rows[0]?.n,
+        seeded,
+      );
+
+      const need = (key: string) => ({ id: key === "stat_holiday" ? randomUUID() : randomUUID() });
+      await assert.rejects(
+        statutoryHolidayLinesForStub(db, {
+          orgId: org.orgId,
+          documentId: randomUUID(),
+          employeePartyId: employeeId,
+          employeeName: "Scoped Worker",
+          emp: { labour_jurisdiction: null },
+          country: "CA",
+          province: "ON",
+          periodStart: "2026-01-01",
+          periodEnd: "2026-01-02",
+          payRate: null,
+          need,
+          allowedSubsidiaryIds: new Set(),
+        }),
+        /employee not found/,
       );
     } finally {
       await dropScratchOrgReporting(org.orgId);

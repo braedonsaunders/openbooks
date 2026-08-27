@@ -2,7 +2,12 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { payrollSettings, seedPayrollComponents } from '@openbooks/engine/src/payroll-run.ts'
+import {
+  payrollSettings,
+  seedPayrollComponents,
+  statutoryHolidayPayEnabled,
+  type PayrollSubsidiaryScope,
+} from '@openbooks/engine/src/payroll-run.ts'
 import {
   declaredRemittanceVendorSettingsKeys,
   packSlotState, PAYROLL_COUNTRY_PACKS, PayrollPackError, setPackSlotAccount, uninstallPayrollPack,
@@ -73,7 +78,10 @@ async function writePayrollBlob(
     values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({ payroll: settings })}, ${actorId})`)
 }
 
-async function pickerOptions(orgId: string) {
+async function pickerOptions(
+  orgId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+) {
   const [accounts, vendors] = (await Promise.all([
     db.execute<{ id: string; number: string | null; name: string }>(sql`
       select id, number, name from accounts
@@ -82,7 +90,17 @@ async function pickerOptions(orgId: string) {
     db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name from parties p
        join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id and v.is_active
-       where p.org_id = ${orgId} and p.is_active order by p.display_name`),
+       where p.org_id = ${orgId} and p.is_active
+         and (${allowedSubsidiaryIds == null
+           ? sql`true`
+           : allowedSubsidiaryIds.size > 0
+             ? sql`coalesce(p.subsidiary_id, (select root.id from subsidiaries root
+                    where root.org_id = ${orgId} and root.parent_id is null and root.is_active
+                    order by root.created_at limit 1)) in (${sql.join(
+                      [...allowedSubsidiaryIds].map((id) => sql`${id}`), sql`, `,
+                    )})`
+             : sql`false`})
+       order by p.display_name`),
   ]))
   return {
     accounts: accounts.rows.map((a) => ({ id: a.id, label: a.number ? `${a.number} · ${a.name}` : a.name })),
@@ -96,9 +114,9 @@ export async function GET() {
   const scopeDenied = await guardRootSubsidiaryScope(gate)
   if (scopeDenied) return scopeDenied
   const [settings, blob, options] = await Promise.all([
-    payrollSettings(gate.user.orgId),
+    payrollSettings(gate.user.orgId, gate.allowedSubsidiaryIds),
     currentPayrollBlob(gate.user.orgId),
-    pickerOptions(gate.user.orgId),
+    pickerOptions(gate.user.orgId, gate.allowedSubsidiaryIds),
   ])
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
   const [packs, stubPassword, encryptionAvailable, setup] = await Promise.all([
@@ -107,12 +125,17 @@ export async function GET() {
     pdfEncryptionAvailable(),
     // The setup wizard's step state — the same org-level checks the pay-run
     // readiness pre-flight performs, so the two surfaces cannot disagree.
-    payrollSetupState(gate.user.orgId),
+    payrollSetupState(gate.user.orgId, gate.allowedSubsidiaryIds),
   ])
   const paymentMethods = await payrollPaymentMethodSettings(gate.user.orgId)
+  const statutoryHolidayPay = await statutoryHolidayPayEnabled(
+    gate.user.orgId,
+    undefined,
+    gate.allowedSubsidiaryIds,
+  )
   return NextResponse.json({
     settings, packs, stubPassword, encryptionAvailable, paymentMethods, setup,
-    statutoryHolidayPay: blob.statutoryHolidayPay === true,
+    statutoryHolidayPay,
     installable: installableCountries(),
     ...options,
   })
@@ -283,7 +306,9 @@ export async function POST(req: Request) {
     if (!installableCountries().includes(country)) {
       return NextResponse.json({ error: 'unknown country pack' }, { status: 422 })
     }
-    await seedPayrollComponents(gate.user.orgId, gate.user.id, country)
+    await seedPayrollComponents(
+      gate.user.orgId, gate.user.id, country, gate.allowedSubsidiaryIds,
+    )
     return NextResponse.json({ ok: true })
   }
   if (body.action === 'install-pack') {
@@ -293,7 +318,9 @@ export async function POST(req: Request) {
     }
     // A pack = its statutory component set (the engine wiring) plus the pack
     // marker the setup workspace and wizard read back.
-    await seedPayrollComponents(gate.user.orgId, gate.user.id, country)
+    await seedPayrollComponents(
+      gate.user.orgId, gate.user.id, country, gate.allowedSubsidiaryIds,
+    )
     const settings = await currentPayrollBlob(gate.user.orgId)
     const countries = Array.isArray(settings.countries) ? settings.countries.map(String) : []
     // A NEW payroll org (first pack, nothing decided yet) starts with
