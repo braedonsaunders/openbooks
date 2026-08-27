@@ -4,9 +4,9 @@ Each row is one requirement of a published accounting standard, encoded as an ex
 
 The wording of each requirement is our own restatement. Verify a row by reading the cited paragraph in an authoritative copy of the standard.
 
-**42 passing · 0 failing · 0 gaps · 0 not run**
+**40 passing · 0 failing · 0 gaps · 0 not run**
 
-Commit `3f430129f34da60a7fae6b421bd3684fdf18ac7d` · 2026-08-26T20:17:35.392Z
+Commit `f721d5c73a007eb5d73f03fde0512bac3122afcc` · 2026-08-26T19:53:21.160Z
 
 ## ASC 360
 
@@ -79,8 +79,6 @@ Commit `3f430129f34da60a7fae6b421bd3684fdf18ac7d` · 2026-08-26T20:17:35.392Z
 | **A foreign-currency loan is a monetary item and is retranslated at the closing rate**<br><sub>A foreign-currency borrowing carried as long-term debt — outside the bank/receivable/payable account types — is retranslated at the closing rate once the account is designated a monetary item, so debt-heavy balance sheets are not silently left at historical rates.</sub> | IAS 21.16<br>IAS 21.23(a) | PASS | Implemented |
 | **Retranslation restates the foreign balance and offsets the whole movement to profit or loss**<br><sub>Across several currencies and both directions of movement, each monetary balance is restated to foreign balance times closing rate and the net of every restatement lands in a single profit-or-loss account — the entry cannot leave a residual.</sub> | IAS 21.23(a)<br>IAS 21.28 | PASS | Implemented |
 | **An unchanged closing rate produces no entry**<br><sub>A period in which rates did not move generates no journal entry at all, so period-end processing cannot manufacture immaterial noise in the ledger or in the exchange gain and loss account.</sub> | IAS 21.28 | PASS | Implemented |
-| **A multi-line invoice translates balanced through a ten-decimal inverse rate**<br><sub>A multi-line sale invoiced in USD at the ten-decimal inverse of a stored CAD→USD pair — 1.4285714286, exactly the figure posting derives itself as (1 / 0.7)::numeric(19,10) when the exchange table holds only one direction — lands in CAD with every line translated independently and the entry balancing to exactly zero; per-line rounding never leaks a residual into any account, least of all a control account.</sub> | IAS 21.21 | PASS | Implemented |
-| **Output tax on a foreign-currency invoice equals the translated statutory amount exactly**<br><sub>On a taxed, multi-line USD invoice translated through a ten-decimal inverse rate, the tax control line carries exactly tax-total × spot rate — no translation residual is parked on a statutory return line where it would flow straight into a filed figure.</sub> | IAS 21.21 | PASS | Implemented |
 
 ## IFRS 16
 
