@@ -288,7 +288,12 @@ export const sftpServers = pgTable(
     lastConnectedAt: timestamp("last_connected_at", { withTimezone: true }),
     ...auditColumns,
   },
-  (t) => [index("sftp_servers_username").on(t.username)],
+  (t) => [
+    // The daemon routes a login to a tenant by username alone, across every
+    // organization — the global unique index (0029) is what makes that
+    // routing deterministic; per-org uniqueness is sftp_servers_org_username.
+    uniqueIndex("sftp_servers_username_global").on(t.username),
+  ],
 );
 
 /**

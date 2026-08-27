@@ -100,30 +100,39 @@ let handle: SftpServerHandle | null = null;
 let currentPort: number | null = null;
 
 /**
- * Start (or reconcile) the SFTP daemon from the DB config. Idempotent and safe
+ * Start (or reconcile) the SFTP server from the DB config. Idempotent and safe
  * to call after a settings change: it restarts only when enabled/port changed.
  * No env gate — a platform administrator explicitly enabling SFTP in the UI
  * is all it takes. Fresh installations stay closed by default.
+ *
+ * The config source is injectable for tests; production always reads the
+ * singleton DB row. Every failure propagates — a daemon that is configured
+ * enabled but is not listening must never be reported as running: the PATCH
+ * surface answers with a degraded response and process boot fails loudly
+ * rather than silently serving a login address nothing answers on.
+ *
+ * Cutover is bind-first: the replacement listener binds the new port BEFORE
+ * the old one closes, so a failed bind (conflicting port, bad config) leaves
+ * the previously working listener untouched instead of destroying it.
  */
-export async function ensureSftpServer(): Promise<void> {
-  let cfg: DaemonConfig;
-  try { cfg = await loadDaemonConfig(); } catch (e) {
-    console.error("[sftp] could not load daemon config:", (e as Error).message);
-    return;
-  }
+export async function ensureSftpServer(load: () => Promise<DaemonConfig> = loadDaemonConfig): Promise<void> {
+  const cfg = await load();
   if (!cfg.enabled) {
     await stopSftpServer();
     return;
   }
   if (handle && currentPort === cfg.port) return; // already running on the right port
-  await stopSftpServer();
-  try {
-    handle = await startSftpServer({ port: cfg.port, hostKey: cfg.hostKey, resolve: dbResolver });
-    currentPort = handle.port;
-    console.log(`[sftp] server listening on :${handle.port} (${hostKeyFingerprint(cfg.hostKey)})`);
-  } catch (e) {
-    console.error("[sftp] failed to start:", (e as Error).message);
-  }
+  const replacement = await startSftpServer({ port: cfg.port, hostKey: cfg.hostKey, resolve: dbResolver });
+  const previous = handle;
+  handle = replacement;
+  currentPort = replacement.port;
+  if (previous) await previous.close();
+  console.log(`[sftp] server listening on :${replacement.port} (${hostKeyFingerprint(cfg.hostKey)})`);
+}
+
+/** Whether a listener is currently bound, and on which port. */
+export function sftpListenerState(): { listening: boolean; port: number | null } {
+  return { listening: handle !== null, port: currentPort };
 }
 
 export function stopSftpServer(): Promise<void> {

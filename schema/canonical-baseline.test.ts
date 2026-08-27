@@ -42,6 +42,8 @@ const taxRateEffectiveRangeExclusionMigrationPath =
   "schema/migrations/generated/0024_tax_rate_effective_range_exclusion.sql";
 const schedulerOutboxTerminalAuditMigrationPath =
   "schema/migrations/generated/0026_scheduler_outbox_terminal_audit.sql";
+const sftpUsernameGlobalUniqueMigrationPath =
+  "schema/migrations/generated/0029_sftp_username_global_unique.sql";
 const accountPostingClassificationSerializationMigrationPath =
   "schema/migrations/generated/0046_account_posting_classification_serialization.sql";
 const subscriptionConfigurationInvariantsMigrationPath =
@@ -95,6 +97,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0023_payment_surcharge_rule_uniqueness.sql",
     "0024_tax_rate_effective_range_exclusion.sql",
     "0026_scheduler_outbox_terminal_audit.sql",
+    "0029_sftp_username_global_unique.sql",
     "0035_terminal_failure_surfacing.sql",
     "0036_bank_statement_source_idempotency.sql",
     "0038_ledger_tenant_coherent_foreign_keys.sql",
@@ -1131,4 +1134,35 @@ test("recognition_events table stores milestone and usage recognition evidence",
   assert.match(migration, /CREATE POLICY org_isolation ON public\.recognition_events/);
   // No data rewrite.
   assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
+});
+
+test("the SFTP login username is globally unique in storage, not by allocation luck", () => {
+  const migration = readFileSync(sftpUsernameGlobalUniqueMigrationPath, "utf8");
+  const schemaSource = readFileSync("schema/src/banking.ts", "utf8");
+
+  // Rollout fails closed on legacy collisions and never picks a winning
+  // duplicate: the daemon routes by username alone, so an arbitrary winner
+  // would hand one tenant's filesystem to another tenant's login.
+  assert.match(migration, /DO \$sftp_username_global_preflight\$/);
+  assert.match(migration, /legacy sftp_servers rows duplicate the global login name/);
+  assert.match(migration, /GROUP BY s\.username\s+HAVING count\(\*\) > 1/);
+  assert.match(migration, /never picks a winning duplicate/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
+
+  // Storage owns the invariant for every writer: the plain username lookup
+  // index is replaced by the global unique one (uniqueness is not scoped to
+  // is_active — a deactivated login keeps its name reserved).
+  assert.match(migration, /DROP INDEX IF EXISTS public\.sftp_servers_username;/);
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX IF NOT EXISTS sftp_servers_username_global\s+ON public\.sftp_servers USING btree \(username\);/,
+  );
+  assert.match(migration, /COMMENT ON INDEX public\.sftp_servers_username_global IS/);
+
+  // The drizzle mirror matches the published migration exactly.
+  assert.match(
+    schemaSource,
+    /uniqueIndex\("sftp_servers_username_global"\)\.on\(t\.username\)/,
+  );
+  assert.doesNotMatch(schemaSource, /index\("sftp_servers_username"\)/);
 });
