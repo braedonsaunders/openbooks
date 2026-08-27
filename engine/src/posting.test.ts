@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { sql } from "drizzle-orm";
+import { db } from "./db.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
 import {
   assertFinalKernelBalance,
   controlLineIsOpenItem,
+  glProjectionKey,
+  postDocument,
   PostingError,
   RULES,
   type PostingDocument,
@@ -10,6 +16,7 @@ import {
 } from "./posting.ts";
 
 const controlAccounts = new Set(["ar", "ap"]);
+const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("entity-bearing AR/AP journal lines participate in the subledger", () => {
   assert.equal(controlLineIsOpenItem("ar", "customer", controlAccounts), true);
@@ -461,4 +468,113 @@ test("transfer requires exactly two lines naming distinct accounts and a positiv
       ),
     /must be positive/,
   );
+});
+
+async function seedApprovedDocument(
+  org: ScratchOrg,
+  kind: "customer_invoice" | "vendor_bill",
+  documentNumber: string,
+  options: { amount?: string; currency?: string; fxRate?: string } = {},
+): Promise<string> {
+  const documentId = randomUUID();
+  const lineId = randomUUID();
+  const amount = options.amount ?? "80.0000";
+  const currency = options.currency ?? "CAD";
+  const fxRate = options.fxRate ?? "1";
+  const partyId = kind === "customer_invoice" ? org.customerId : org.vendorId;
+  const accountId = kind === "customer_invoice" ? org.accounts.revenue : org.accounts.cogs;
+  await db.execute(sql`
+    insert into documents
+      (id, org_id, kind, status, document_number, party_id, subsidiary_id,
+       document_date, posting_date, currency, fx_rate, subtotal, tax_total, total)
+    values (${documentId}, ${org.orgId}, ${kind}, 'draft', ${documentNumber},
+            ${partyId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+            ${currency}, ${fxRate}, ${amount}, '0', ${amount})`);
+  await db.execute(sql`
+    insert into document_lines
+      (id, org_id, document_id, line_number, account_id, amount,
+       tax_input_amount, tax_amount, quantity, unit_price)
+    values (${lineId}, ${org.orgId}, ${documentId}, 1, ${accountId}, ${amount},
+            ${amount}, '0', '1', ${amount})`);
+  await db.execute(sql`
+    update documents
+       set status = 'approved'
+     where id = ${documentId} and org_id = ${org.orgId}`);
+  return documentId;
+}
+
+test("GL projection keys treat line order as presentation-only", () => {
+  const lines = [
+    {
+      accountId: "ar",
+      amount: "100.0000",
+      subsidiaryId: "sub",
+      partyId: "customer",
+      currency: "CAD",
+      txnAmount: "100.0000",
+      fxRate: "1.0000000000",
+    },
+    {
+      accountId: "income",
+      amount: "-100.0000",
+      subsidiaryId: "sub",
+      currency: "CAD",
+      txnAmount: "-100.0000",
+      fxRate: "1.0000000000",
+    },
+  ];
+  assert.equal(
+    glProjectionKey(lines),
+    glProjectionKey([...lines].reverse()),
+    "reordering identical GL lines must not look like an accounting change",
+  );
+});
+
+test("numeric default FX header rates resolve a stored spot instead of a 1:1 peg", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`
+      insert into fx_rates (id, org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+      values (${randomUUID()}, ${org.orgId}, 'USD', 'CAD', ${org.date}, 'spot', '1.2500000000', 'posting-test')`);
+    const documentId = await seedApprovedDocument(org, "customer_invoice", "FX-SENTINEL-1", {
+      currency: "USD",
+      fxRate: "1.0000000000",
+    });
+    const entryId = await postDocument(documentId, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    }, { deferEffects: true, suppressAutomation: true });
+    const revenue = (await db.execute<{ amount: string; txn_amount: string; fx_rate: string }>(sql`
+      select amount::text, txn_amount::text, fx_rate::text
+        from journal_lines
+       where entry_id = ${entryId} and account_id = ${org.accounts.revenue}`)).rows[0]!;
+    assert.deepEqual(revenue, {
+      amount: "-100.0000",
+      txn_amount: "-80.0000",
+      fx_rate: "1.2500000000",
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("cross-document journal-number collisions identify the claimant document", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const deps = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
+  try {
+    const invoiceId = await seedApprovedDocument(org, "customer_invoice", "DUP-POSTING-1");
+    await postDocument(invoiceId, deps, { deferEffects: true, suppressAutomation: true });
+    const billId = await seedApprovedDocument(org, "vendor_bill", "DUP-POSTING-1");
+    await assert.rejects(
+      postDocument(billId, deps, { deferEffects: true, suppressAutomation: true }),
+      (error: unknown) =>
+        error instanceof Error &&
+        /journal entry number "DUP-POSTING-1" is already used by customer_invoice/.test(error.message) &&
+        !/already posted or voided/.test(error.message),
+    );
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from documents where id = ${billId} and org_id = ${org.orgId}`)).rows[0]?.status;
+    assert.equal(status, "approved");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
 });
