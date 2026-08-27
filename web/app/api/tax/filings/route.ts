@@ -33,7 +33,7 @@ export async function GET(req: Request) {
 
 /** Recompute server-side and freeze a versioned return snapshot in history. */
 export async function POST(req: Request) {
-  const gate = await guardPermission('reports.create')
+  const gate = await guardPermission('compliance.file')
   if (gate instanceof NextResponse) return gate
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
