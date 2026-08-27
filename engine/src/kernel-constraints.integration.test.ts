@@ -640,3 +640,57 @@ test("two organizations cannot hold the same global SFTP username", { skip: !DB 
     await dropScratchOrg(first.orgId);
   }
 });
+
+test("api key scope sets must be non-empty at the storage boundary", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = randomUUID();
+    // Users activate only once they hold a role (enforce_user_active_role_assignment).
+    const roleId = (await db.execute(sql`
+      insert into app_roles (org_id, key, name, is_built_in, permissions)
+      values (${org.orgId}, ${`key-owner-${userId.slice(0, 8)}`}, 'Key Owner', false, '[]'::jsonb)
+      returning id`)).rows[0]!.id as string;
+    await db.execute(sql`
+      insert into users (id, org_id, email, name, password_hash, is_active)
+      values (${userId}, ${org.orgId}, ${`key-owner-${userId.slice(0, 8)}@scratch.test`},
+              'Key Owner', 'x', false)`);
+    await db.execute(sql`
+      insert into role_assignments (org_id, user_id, role_id)
+      values (${org.orgId}, ${userId}, ${roleId})`);
+    await db.execute(sql`update users set is_active = true where id = ${userId}`);
+
+    // Non-empty control: an explicit scope set persists and narrows normally.
+    const keyId = randomUUID();
+    await db.execute(sql`
+      insert into api_keys (id, org_id, user_id, name, key_prefix, key_hash, key_preview,
+                            scopes, created_by, updated_by)
+      values (${keyId}, ${org.orgId}, ${userId}, 'control', 'ob_live_ctrl', ${'ctrl-' + keyId},
+              'abcd', '["gl.read"]'::jsonb, ${userId}, ${userId})`);
+
+    // Direct writes fail closed: neither minting into nor clearing down to an
+    // empty scope set survives storage (api_keys_scopes_non_empty) — an
+    // omitted selection can never become a credential here either.
+    await assert.rejects(
+      db.execute(sql`
+        insert into api_keys (id, org_id, user_id, name, key_prefix, key_hash, key_preview,
+                              scopes, created_by, updated_by)
+        values (${randomUUID()}, ${org.orgId}, ${userId}, 'empty-mint', 'ob_live_empty',
+                ${'empty-' + keyId}, 'wxyz', '[]'::jsonb, ${userId}, ${userId})`),
+      (error: unknown) => errorChainMatches(error, /api_keys_scopes_non_empty/),
+    );
+    await assert.rejects(
+      db.execute(sql`
+        update api_keys set scopes = '[]'::jsonb
+         where id = ${keyId} and org_id = ${org.orgId}`),
+      (error: unknown) => errorChainMatches(error, /api_keys_scopes_non_empty/),
+    );
+
+    const state = await db.execute<{ rows: number; min_scopes: number }>(sql`
+      select count(*)::int as rows, min(jsonb_array_length(scopes))::int as min_scopes
+        from api_keys
+       where org_id = ${org.orgId}`);
+    assert.deepEqual(state.rows[0], { rows: 1, min_scopes: 1 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

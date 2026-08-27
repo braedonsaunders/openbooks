@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -53,11 +55,15 @@ export const apiKeys = pgTable(
     /** Last 4 chars of the secret for the "…abcd" preview. */
     keyPreview: text("key_preview").notNull(),
     /**
-     * Scoped permission keys (a subset of the catalogue). Empty array =
-     * inherit the owner's full effective permission set (a "full-scope" key,
-     * closest to source platform's role-bound token).
+     * Explicit subset of the permission catalogue this key grants. A request
+     * is allowed only when BOTH the key's scopes AND the owner's effective
+     * permissions cover the required permission — the intersection means a
+     * key never grants more than its owner can do. Never empty: storage
+     * rejects empty scope sets (api_keys_scopes_non_empty, migration 0031)
+     * and legacy empty sets were frozen to the explicit catalogue snapshot —
+     * they do not dynamically inherit the owner or pick up new permissions.
      */
-    scopes: jsonb("scopes").$type<PermissionKey[]>().notNull().default([]),
+    scopes: jsonb("scopes").$type<PermissionKey[]>().notNull(),
     /**
      * Max requests per minute for this key (fixed-window). NULL = unlimited.
      * Defaults to 120; existing keys backfill to 120 via the 0049 migration.
@@ -78,6 +84,12 @@ export const apiKeys = pgTable(
     uniqueIndex("api_keys_hash").on(t.keyHash),
     index("api_keys_org").on(t.orgId),
     index("api_keys_org_user").on(t.orgId, t.userId),
+    // A scope set is a non-empty JSON array of explicit catalogue keys —
+    // empty sets are unrepresentable in storage (migration 0031).
+    check(
+      "api_keys_scopes_non_empty",
+      sql`jsonb_typeof(${t.scopes}) = 'array' AND jsonb_array_length(${t.scopes}) > 0`,
+    ),
   ],
 );
 

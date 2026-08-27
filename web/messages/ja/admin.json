@@ -491,7 +491,7 @@
       "owner": "所有者",
       "scopes": "スコープ",
       "scopesCount": "{count, plural, one {# 件の権限} other {# 件の権限}}",
-      "fullScope": "フルスコープ（所有者を継承）",
+      "fullScope": "明示的なスコープなし",
       "lastUsed": "最終使用",
       "status": "ステータス"
     },
@@ -519,9 +519,9 @@
       "createKey": "キーを作成",
       "saveChanges": "変更を保存",
       "scopesHeading": "権限スコープ",
-      "scopesHint": "このキーが付与する権限を選択します。空のままにすると、所有者のフル権限セットを継承します。キーは所有者が持つ権限を超えて付与することはありません。",
-      "fullScope": "フルスコープ（所有者の権限を継承）",
-      "scopesCount": "{count, plural, one {# 件の権限を選択中} other {# 件の権限を選択中}}"
+      "scopesHint": "このキーが付与する権限を選択します。少なくとも1つ選択する必要があります。キーが付与するのはここで選択した権限のみで、所有者の全権限が継承されることはありません。",
+      "scopesCount": "{count, plural, one {# 件の権限を選択中} other {# 件の権限を選択中}}",
+      "scopesRequired": "少なくとも1つの権限スコープを選択してください。"
     }
   },
   "settings": {

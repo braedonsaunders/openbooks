@@ -541,7 +541,7 @@
       "owner": "Owner",
       "scopes": "Scopes",
       "scopesCount": "{count, plural, one {# permission} other {# permissions}}",
-      "fullScope": "Full scope (inherits owner)",
+      "fullScope": "No explicit scopes",
       "lastUsed": "Last used",
       "status": "Status"
     },
@@ -569,9 +569,9 @@
       "createKey": "Create key",
       "saveChanges": "Save changes",
       "scopesHeading": "Permission scopes",
-      "scopesHint": "Select the permissions this key grants. Leave empty to inherit the owner's full permission set. A key never grants more than its owner has.",
-      "fullScope": "Full scope (inherits owner permissions)",
+      "scopesHint": "Select the permissions this key grants — at least one is required. A key grants only what is selected here, never the owner's full permission set.",
       "scopesCount": "{count, plural, one {# permission selected} other {# permissions selected}}",
+      "scopesRequired": "Select at least one permission scope.",
       "rateLimitLabel": "Requests per minute",
       "rateLimitPlaceholder": "Unlimited",
       "rateLimitHint": "Maximum requests this key may make each minute. Leave blank for no limit."
