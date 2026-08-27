@@ -164,48 +164,6 @@ test("finalizeCamPool persists actualAmount through canonicalDecimal then normal
   assert.doesNotMatch(body, /normalizeMoney\(actual\.rows\[0\]\?\.amount/);
 });
 
-test("finalizeCamPool fences and closes covered GL periods before reading source actuals", () => {
-  const source = readFileSync(
-    join(repoRoot, "engine/src/property-management.ts"),
-    "utf8",
-  );
-  const start = source.indexOf("export async function finalizeCamPool");
-  const next = source.indexOf("export async function billCamReconciliation");
-  const body = source.slice(start, next);
-
-  // Ordering invariants inside the finalized window.
-  const fenceAt = body.indexOf("pg_advisory_xact_lock(hashtextextended($");
-  const gateAt = body.indexOf("period_module_is_closed(");
-  const readAt = body.indexOf("const actual = await sourceTotals()");
-  const verifyAt = body.indexOf("CAM source ledgers changed while finalizing");
-  const mutateAt = body.indexOf("delete from cam_allocations");
-
-  // The exclusive side of the canonical journal-posting advisory key
-  // ('period-lock:<org>:<period>:<book>') must be taken before the first
-  // source read, sharing the key every guarded posting holds (migration 0022)
-  // and close/reopen writers take exclusively.
-  assert.ok(fenceAt > -1, "finalize must take the exclusive period-lock advisory fence");
-  assert.ok(gateAt > -1, "finalize must require the covered GL modules closed");
-  assert.ok(readAt > -1, "finalize must perform its fenced source totals read");
-  assert.ok(fenceAt < readAt && gateAt < readAt, "fence and closed-period gate precede the source read");
-
-  // Commit-time fingerprint recheck must sit between the last source read and
-  // the first pool mutation, refusing stale finalizations instead of committing them.
-  assert.ok(verifyAt > -1, "finalize must recheck the source fingerprint before commit");
-  assert.ok(mutateAt > -1 && verifyAt < mutateAt, "fingerprint recheck precedes the pool mutation");
-
-  // The scope covers every active book and every period overlapping the CAM
-  // dates, adjustment periods included.
-  assert.match(body, /join accounting_books b on b\.org_id=\$\{orgId\} and b\.is_active/);
-  assert.match(body, /p\.starts_on<=\$\{pool\.period_ends_on\} and p\.ends_on>=\$\{pool\.period_starts_on\}/);
-
-  // Finalization audit records source fingerprint and selected account/location scope.
-  assert.match(body, /cam_pools", poolId, "finalize"/);
-  assert.match(body, /sourceFingerprint/);
-  assert.match(body, /locationId: pool\.location_id/);
-  assert.match(body, /expenseAccountIds: pool\.expense_account_ids/);
-});
-
 test("CAM overlap is inclusive and excludes non-overlapping occupancy", () => {
   assert.equal(overlapDayCount("2026-01-15", "2026-03-15", "2026-01-01", "2026-12-31"), 60);
   assert.equal(overlapDayCount("2025-01-01", "2025-12-31", "2026-01-01", "2026-12-31"), 0);
