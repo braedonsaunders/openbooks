@@ -51,7 +51,7 @@ test(
         values (
           ${documentId}, ${org.orgId}, 'vendor_bill', 'SOURCE-CORR-1',
           ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-          'CAD', 1, 'approved', 125, 0, 125,
+          'CAD', 1, 'draft', 125, 0, 125,
           '{"sourceId":"transaction-1"}'::jsonb, ${actorId}, ${actorId}
         )
       `);
@@ -63,6 +63,10 @@ test(
           ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, 1, 125,
           125, 0, '{}'::jsonb, ${actorId}, ${actorId}
         )
+      `);
+      await db.execute(sql`
+        update documents set status = 'approved'
+         where id = ${documentId} and org_id = ${org.orgId}
       `);
       const originalEntryId = await postDocument(documentId, deps, {
         audit: { actorId, source: "test" },
@@ -349,7 +353,7 @@ test(
         values (
           ${documentId}, ${org.orgId}, 'vendor_bill', 'REPLAY-CLOSED-1',
           ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-          ${org.periodId}, 'CAD', 1, 'approved', 100, 0, 100,
+          ${org.periodId}, 'CAD', 1, 'draft', 100, 0, 100,
           '{"sourceId":"closed-period-transaction"}'::jsonb,
           ${actorId}, ${actorId}
         )
@@ -362,6 +366,10 @@ test(
           ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, 1, 100,
           100, 0, '{}'::jsonb, ${actorId}, ${actorId}
         )
+      `);
+      await db.execute(sql`
+        update documents set status = 'approved'
+         where id = ${documentId} and org_id = ${org.orgId}
       `);
       const originalEntryId = await postDocument(documentId, deps, {
         audit: { actorId, source: "test" },
@@ -538,7 +546,7 @@ test(
         values (
           ${ordinaryDocumentId}, ${org.orgId}, 'vendor_bill', 'ORDINARY-CLOSED-1',
           ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-          ${org.periodId}, 'CAD', 1, 'approved', 50, 0, 50, '{}'::jsonb,
+          ${org.periodId}, 'CAD', 1, 'draft', 50, 0, 50, '{}'::jsonb,
           ${actorId}, ${actorId}
         )
       `);
@@ -550,6 +558,10 @@ test(
           ${org.orgId}, ${ordinaryDocumentId}, 1, ${org.accounts.cogs}, 1, 50,
           50, 0, '{}'::jsonb, ${actorId}, ${actorId}
         )
+      `);
+      await db.execute(sql`
+        update documents set status = 'approved'
+         where id = ${ordinaryDocumentId} and org_id = ${org.orgId}
       `);
       await assert.rejects(
         postDocument(

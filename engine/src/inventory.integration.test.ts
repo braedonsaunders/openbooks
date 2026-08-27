@@ -16,6 +16,7 @@ import {
   ensureSerial,
   executeIdempotentInventoryAction,
   getOnHand,
+  InventoryError,
   InventoryIdempotencyConflictError,
   issueInventory,
   lockItemInventoryProfile,
@@ -93,7 +94,7 @@ async function draftApprovedInventoryBill(
        subtotal, tax_total, total, custom)
     values (${documentId}, ${org.orgId}, 'vendor_bill', 'BILL-RECEIPT-ATOMIC',
             ${org.vendorId}, null, ${org.date}, ${org.date}, 'CAD', 1,
-            'approved', ${total}, '0', ${total}, '{}'::jsonb)`);
+            'draft', ${total}, '0', ${total}, '{}'::jsonb)`);
   for (const [index, line] of lines.entries()) {
     await db.execute(sql`
       insert into document_lines
@@ -106,6 +107,12 @@ async function draftApprovedInventoryBill(
               ${line.stockLocationId === undefined ? org.stockLocationId : line.stockLocationId}, '{}'::jsonb,
               false)`);
   }
+  // Migration 0034 enforces that source lines are authored while their parent
+  // document is draft. Approve only after every line is present, matching the
+  // product lifecycle and keeping this helper valid on fresh release schemas.
+  await db.execute(sql`
+    update documents set status = 'approved'
+     where id = ${documentId} and org_id = ${org.orgId}`);
   return documentId;
 }
 
@@ -279,7 +286,7 @@ test("a vendor-bill inventory line without a resolvable stock location refuses p
     await assert.rejects(
       () => postDocument(billId, deps),
       (error: unknown) =>
-        error instanceof PostingError &&
+        error instanceof InventoryError &&
         /document line 1/.test(error.message) &&
         /requires a stock location/.test(error.message),
     );
@@ -297,9 +304,15 @@ test("a vendor-bill inventory line without a resolvable stock location refuses p
     // Resolving-location control: repairing the same line must post it as
     // inventory, not merely make the refusal disappear.
     await db.execute(sql`
+      update documents set status = 'draft'
+       where id = ${billId} and org_id = ${org.orgId}`);
+    await db.execute(sql`
       update document_lines
          set stock_location_id = ${org.stockLocationId}
        where org_id = ${org.orgId} and document_id = ${billId}`);
+    await db.execute(sql`
+      update documents set status = 'approved'
+       where id = ${billId} and org_id = ${org.orgId}`);
     assert.ok(await postDocument(billId, deps));
     assert.deepEqual(await billInventoryResidue(org.orgId, billId), {
       status: "posted",
