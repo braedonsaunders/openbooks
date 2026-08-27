@@ -117,7 +117,20 @@ export interface PayrollSettings {
   rqRemittancePartyId: string | null;
 }
 
-export async function payrollSettings(orgId: string): Promise<PayrollSettings> {
+export async function payrollSettings(
+  orgId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<PayrollSettings> {
+  if (allowedSubsidiaryIds != null) {
+    const root = (await db.execute<{ id: string }>(sql`
+      select id from subsidiaries
+       where org_id = ${orgId} and parent_id is null and is_active
+       order by created_at limit 1
+    `)).rows[0]?.id ?? null;
+    if (!payrollSubsidiaryInScope(allowedSubsidiaryIds, root)) {
+      throw new PayrollError("payroll settings not found");
+    }
+  }
   const r = (await db.execute<{ p: Record<string, unknown> | null; c: Record<string, unknown> | null }>(
     sql`select settings->'payroll' as p, settings->'controlAccounts' as c from orgs where id = ${orgId}`,
   ));
@@ -279,7 +292,18 @@ async function ensureComponents(
  */
 export async function seedPayrollComponents(
   orgId: string, actorId: string | null, country: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<void> {
+  if (allowedSubsidiaryIds != null) {
+    const root = (await db.execute<{ id: string }>(sql`
+      select id from subsidiaries
+       where org_id = ${orgId} and parent_id is null and is_active
+       order by created_at limit 1
+    `)).rows[0]?.id ?? null;
+    if (!payrollSubsidiaryInScope(allowedSubsidiaryIds, root)) {
+      throw new PayrollError("payroll settings not found");
+    }
+  }
   // A pack whose contributory-bases declaration is missing (authored through
   // a cast) must fail before its flags accumulate an unnamed base.
   assertContributoryBasesDeclared(country);
@@ -295,7 +319,18 @@ export async function seedPayrollComponents(
  */
 export async function ensureStatutoryHolidayComponents(
   executor: Pick<typeof db, "execute">, orgId: string, actorId: string | null,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<void> {
+  if (allowedSubsidiaryIds != null) {
+    const root = (await executor.execute<{ id: string }>(sql`
+      select id from subsidiaries
+       where org_id = ${orgId} and parent_id is null and is_active
+       order by created_at limit 1
+    `)).rows[0]?.id ?? null;
+    if (!payrollSubsidiaryInScope(allowedSubsidiaryIds, root)) {
+      throw new PayrollError("payroll settings not found");
+    }
+  }
   await ensureComponents(executor, orgId, actorId, STAT_HOLIDAY_COMPONENTS);
 }
 
@@ -309,8 +344,28 @@ export async function ensureStatutoryHolidayComponents(
  * only (web/app/api/payroll/settings/route.ts).
  */
 export async function statutoryHolidayPayEnabled(
-  orgId: string, executor: Pick<typeof db, "execute"> = db,
+  orgId: string,
+  executorOrScope: Pick<typeof db, "execute"> | PayrollSubsidiaryScope = db,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<boolean> {
+  const isExecutor = executorOrScope != null
+    && typeof executorOrScope === "object" && "execute" in executorOrScope;
+  const executor = isExecutor
+    ? executorOrScope as Pick<typeof db, "execute">
+    : db;
+  const scope = allowedSubsidiaryIds !== undefined
+    ? allowedSubsidiaryIds
+    : (isExecutor ? undefined : executorOrScope as PayrollSubsidiaryScope);
+  if (scope != null) {
+    const root = (await executor.execute<{ id: string }>(sql`
+      select id from subsidiaries
+       where org_id = ${orgId} and parent_id is null and is_active
+       order by created_at limit 1
+    `)).rows[0]?.id ?? null;
+    if (!payrollSubsidiaryInScope(scope, root)) {
+      throw new PayrollError("payroll settings not found");
+    }
+  }
   const r = (await executor.execute<{ enabled: string | null }>(sql`
     select settings#>>'{payroll,statutoryHolidayPay}' as enabled from orgs where id = ${orgId}
   `));
@@ -1628,8 +1683,14 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // Statutory holiday pay: read the gate once for the run, and provision the
     // STAT/STATPREM pair for orgs that predate them BEFORE the component map
     // is loaded — ctx.need is an assertion, never a discovery mechanism.
-    const statHolidayPay = await statutoryHolidayPayEnabled(orgId, tx);
-    if (statHolidayPay) await ensureStatutoryHolidayComponents(tx, orgId, actorId);
+    const statHolidayPay = await statutoryHolidayPayEnabled(
+      orgId, tx, input.allowedSubsidiaryIds,
+    );
+    if (statHolidayPay) {
+      await ensureStatutoryHolidayComponents(
+        tx, orgId, actorId, input.allowedSubsidiaryIds,
+      );
+    }
 
     // The pack's statutory components, ensured for a tenant provisioned before
     // the pack declared them — the same reason and the same idempotent path as
@@ -1957,12 +2018,24 @@ export async function statutoryHolidayLinesForStub(
     /** The resolved labor cost rate; a salaried rate is divided to hourly here. */
     payRate: { basis: "hour" | "year"; rate: string; annualHours: string } | null;
     need: (systemKey: string, kind: string) => Record<string, unknown>;
+    /** Caller role scope; null/undefined is unrestricted. */
+    allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   },
 ): Promise<StatutoryHolidayEarningLine[]> {
   const {
     orgId, documentId, employeePartyId, employeeName,
     emp, country, province, periodStart, periodEnd, payRate, need,
+    allowedSubsidiaryIds,
   } = args;
+  if (allowedSubsidiaryIds != null) {
+    const employee = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from parties
+       where org_id = ${orgId} and id = ${employeePartyId}
+    `)).rows[0];
+    if (!employee || !payrollSubsidiaryInScope(allowedSubsidiaryIds, employee.subsidiary_id)) {
+      throw new PayrollError("employee not found");
+    }
+  }
   // The employment attribute wins over the region derivation where the
   // profile carries one: an employer regulated by a different labour
   // jurisdiction than the one the employee works in has a different holiday
@@ -2385,11 +2458,13 @@ async function appendStatutoryHolidayEarningLines(
     oneOffRun: boolean;
     need: (systemKey: string, kind: string) => Record<string, unknown>;
     lines: Line[];
+    /** Caller role scope; null/undefined is unrestricted. */
+    allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   },
 ): Promise<void> {
   const {
     orgId, documentId, employeePartyId, emp, country, province, run, payRate,
-    statHolidayPay, oneOffRun, need, lines,
+    statHolidayPay, oneOffRun, need, lines, allowedSubsidiaryIds,
   } = args;
   if (!oneOffRun && statHolidayPay) {
     const holidayLines = await statutoryHolidayLinesForStub(tx, {
@@ -2404,6 +2479,7 @@ async function appendStatutoryHolidayEarningLines(
       periodEnd: run.period_end!,
       payRate,
       need,
+      allowedSubsidiaryIds,
     });
     for (const line of holidayLines) {
       lines.push({
@@ -3139,6 +3215,7 @@ async function calculateStub(
   await appendStatutoryHolidayEarningLines(tx, {
     orgId, documentId, employeePartyId, emp, country, province, run, payRate,
     statHolidayPay: ctx.statHolidayPay, oneOffRun, need: ctx.need, lines,
+    allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
   });
 
   await applyAssignedComponentLines(tx, {
@@ -3357,7 +3434,7 @@ async function payRunGlLegs(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<{ legs: PayRunGlLeg[]; debitTotal: string }> {
   {
-    const settings = await payrollSettings(orgId);
+    const settings = await payrollSettings(orgId, allowedSubsidiaryIds);
     const costing = await laborCostingSettings(orgId);
     const control = (await tx.execute<{ c: Record<string, string | null> | null; p: Record<string, unknown> | null }>(sql`
       select settings->'controlAccounts' as c, settings->'payroll' as p from orgs where id = ${orgId}
@@ -3531,7 +3608,7 @@ export async function commitPayRun(input: {
     // (same idiom as the approval gate just below).
     const { assertPayRunNotStale, staleCalculationMessage } =
       await import("./payroll-readiness.ts");
-    await assertPayRunNotStale(orgId, documentId, tx);
+    await assertPayRunNotStale(orgId, documentId, tx, input.allowedSubsidiaryIds);
     // Money must not move before the run is approved. Dynamic import keeps the
     // module cycle out of the engine's load order (same idiom as
     // flows/documents-adapter.ts → document-void.ts).
@@ -3625,7 +3702,7 @@ export async function commitPayRun(input: {
     // refused and recalculated instead of posting figures edited past. Only
     // writes committing after this statement stay outside it, exactly as the
     // time claim above leaves them unclaimed for the next calculation.
-    await assertPayRunNotStale(orgId, documentId, tx);
+    await assertPayRunNotStale(orgId, documentId, tx, input.allowedSubsidiaryIds);
     await tx.execute(sql`
       update pay_runs set run_status = 'committed', updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId}

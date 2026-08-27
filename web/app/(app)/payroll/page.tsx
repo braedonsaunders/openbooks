@@ -45,7 +45,7 @@ export default async function PayrollHomePage({
   const { money, moneyCompact } = await getMoneyFormatter()
   void (await searchParams)
 
-  const home = await payrollHome(orgId)
+  const home = await payrollHome(orgId, authz.allowedSubsidiaryIds)
   const tabs = await groupTabs('payroll', '/payroll', { orgId })
 
   const header = (

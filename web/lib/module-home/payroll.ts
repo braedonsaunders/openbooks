@@ -1,8 +1,14 @@
 import 'server-only'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
-import { nextPeriodAfter, payrollSettings } from '@openbooks/engine/src/payroll-run.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
+import {
+  nextPeriodAfter,
+  payrollSettings,
+  payrollSubsidiaryScopeFilter,
+  type PayrollSubsidiaryScope,
+} from '@openbooks/engine/src/payroll-run.ts'
 
 /**
  * Payroll module home — one light round trip for the /payroll landing cockpit:
@@ -85,7 +91,25 @@ export interface PayrollHome {
 
 const EXCEPTION_LIMIT = 6
 
-export async function payrollHome(orgId: string): Promise<PayrollHome> {
+function scheduleScopeFilter(
+  orgId: string,
+  allowedSubsidiaryIds: PayrollSubsidiaryScope,
+): SQL {
+  if (allowedSubsidiaryIds == null) return sql``
+  const ids = [...allowedSubsidiaryIds]
+  if (ids.length === 0) return sql` and false`
+  return sql` and coalesce(
+    s.subsidiary_id,
+    (select root.id from subsidiaries root
+      where root.org_id = ${orgId} and root.parent_id is null and root.is_active
+      order by root.created_at limit 1)
+  ) in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
+}
+
+export async function payrollHome(
+  orgId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<PayrollHome> {
   const today = await businessToday(orgId)
   const taxYear = Number(today.slice(0, 4))
 
@@ -100,16 +124,20 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
         from pay_schedules s
         left join lateral (
           select count(*) as n from employee_payroll_profiles pr
-           where pr.org_id = s.org_id and pr.pay_schedule_id = s.id and pr.is_active) pc on true
+           join parties p on p.id = pr.employee_party_id and p.org_id = pr.org_id
+           where pr.org_id = s.org_id and pr.pay_schedule_id = s.id and pr.is_active
+             ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}) pc on true
         left join lateral (
           select r.document_id, d.document_number, r.run_status, d.status as document_status,
                  r.period_start::text as period_start, r.period_end::text as period_end,
                  r.pay_date::text as pay_date, r.net_total, r.employee_count
-            from pay_runs r
+           from pay_runs r
             join documents d on d.id = r.document_id and d.org_id = r.org_id
            where r.org_id = s.org_id and r.pay_schedule_id = s.id
+             ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
            order by r.period_end desc limit 1) lr on true
        where s.org_id = ${orgId} and s.is_active
+         ${scheduleScopeFilter(orgId, allowedSubsidiaryIds)}
        order by s.is_default desc, s.name
     `),
     // Previous completed period — the latest committed (or posted) run.
@@ -119,17 +147,28 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
              r.pay_date::text as pay_date, r.net_total, r.employee_count
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
-        left join pay_schedules sc on sc.id = r.pay_schedule_id and sc.org_id = r.org_id
+       left join pay_schedules sc on sc.id = r.pay_schedule_id and sc.org_id = r.org_id
        where r.org_id = ${orgId} and r.run_status = 'committed'
+         ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        order by r.pay_date desc, r.period_end desc limit 1
     `),
     db.execute(sql`
       select
-        (select count(*) from employee_payroll_profiles where org_id = ${orgId} and is_active) as active_employees,
-        (select count(*) from pay_runs where org_id = ${orgId} and tax_year = ${taxYear} and run_status = 'committed') as runs_this_year,
+        (select count(*) from employee_payroll_profiles pr
+          join parties p on p.id = pr.employee_party_id and p.org_id = pr.org_id
+         where pr.org_id = ${orgId} and pr.is_active
+           ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}) as active_employees,
+        (select count(*) from pay_runs r
+          join documents d on d.id = r.document_id and d.org_id = r.org_id
+         where r.org_id = ${orgId} and r.tax_year = ${taxYear} and r.run_status = 'committed'
+           ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}) as runs_this_year,
         (select count(*) from pay_runs r join documents d on d.id = r.document_id and d.org_id = r.org_id
-          where r.org_id = ${orgId} and d.status = 'draft') as in_progress,
-        (select count(*) from pay_runs where org_id = ${orgId}) as total_runs
+          where r.org_id = ${orgId} and d.status = 'draft'
+            ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}) as in_progress,
+        (select count(*) from pay_runs r
+          join documents d on d.id = r.document_id and d.org_id = r.org_id
+         where r.org_id = ${orgId}
+           ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}) as total_runs
     `),
     // YTD = committed stubs for the current tax year (matches the engine's YTD basis).
     db.execute(sql`
@@ -138,7 +177,9 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
              coalesce(sum(st.employer_cost), 0) as employer_cost
         from pay_stubs st
         join pay_runs r on r.document_id = st.pay_run_document_id and r.org_id = st.org_id and r.run_status = 'committed'
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
        where st.org_id = ${orgId} and st.tax_year = ${taxYear}
+         ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
     `),
     // Active employees with no active payroll profile.
     db.execute(sql`
@@ -146,6 +187,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
         from parties p
         join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
        where p.org_id = ${orgId} and p.is_active
+         ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
          and not exists (
            select 1 from employee_payroll_profiles pr
             where pr.org_id = p.org_id and pr.employee_party_id = p.id and pr.is_active)
@@ -159,6 +201,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
         from employee_payroll_profiles pr
         join parties p on p.id = pr.employee_party_id and p.org_id = pr.org_id
        where pr.org_id = ${orgId} and pr.is_active
+         ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
          and not exists (
            select 1 from labor_cost_rates w
             where w.org_id = pr.org_id and w.employee_party_id = pr.employee_party_id
@@ -167,7 +210,14 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
        order by p.display_name
        limit ${EXCEPTION_LIMIT}
     `),
-    payrollSettings(orgId),
+    payrollSettings(orgId, allowedSubsidiaryIds).catch((error) => {
+      if (
+        allowedSubsidiaryIds != null
+        && error instanceof PayrollError
+        && error.message === 'payroll settings not found'
+      ) return null
+      throw error
+    }),
   ]))
 
   const schedules: PayrollScheduleCard[] = schedulesRes.rows.map((s: any) => {
@@ -255,6 +305,8 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
       missingWages: noWageRes.rows.map((r) => ({ id: String(r.id), name: String(r.name) })),
       missingWagesTotal: Number(noWageRes.rows[0]?.total ?? 0),
     },
-    missingSettings: REQUIRED_PAYROLL_SETTING_KEYS.filter((key) => !settings[key]),
+    missingSettings: settings
+      ? REQUIRED_PAYROLL_SETTING_KEYS.filter((key) => !settings[key])
+      : [],
   }
 }

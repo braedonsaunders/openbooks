@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, neg, sum } from "./money.ts";
-import { PayrollError, payrollSettings } from "./payroll-run.ts";
+import {
+  PayrollError,
+  payrollSettings,
+  payrollSubsidiaryOutsideScopeFilter,
+  payrollSubsidiaryScopeFilter,
+  type PayrollSubsidiaryScope,
+} from "./payroll-run.ts";
 
 /**
  * Pay-run payment: the GL settlement of net pay.
@@ -34,9 +40,11 @@ export async function recordPayRunPayment(input: {
   bankAccountId: string;
   /** Settlement date; defaults to the run's pay date. */
   paidOn?: string;
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<{ entryId: string; total: string; eft: string; cheque: string }> {
   const { orgId, actorId, documentId } = input;
-  const settings = await payrollSettings(orgId);
+  const settings = await payrollSettings(orgId, input.allowedSubsidiaryIds);
   const netPayable = settings.netPayAccountId;
   if (!netPayable) {
     throw new PayrollError("payroll setup incomplete: net pay payable account is not configured");
@@ -46,10 +54,11 @@ export async function recordPayRunPayment(input: {
     const runRows = (await tx.execute<Record<string, string | null>>(sql`
       select r.run_status, r.paid_at, r.pay_date, d.status as doc_status, d.posted_entry_id,
              d.document_number, d.subsidiary_id, d.currency, e.book_id
-        from pay_runs r
+       from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
         left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
+         ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
        for update of r
     `));
     const run = runRows.rows[0];
@@ -57,6 +66,28 @@ export async function recordPayRunPayment(input: {
     if (run.paid_at) throw new PayrollError("this pay run is already recorded as paid");
     if (run.doc_status !== "posted" || !run.posted_entry_id) {
       throw new PayrollError("post the pay run before recording its payment");
+    }
+
+    // A calculated run may predate the caller's restriction (or have been
+    // calculated by an unrestricted administrator). Never let a restricted
+    // caller settle only the visible part of a mixed-entity run: that would
+    // mutate an authorized run while leaving its hidden employee liabilities
+    // behind. Treat the whole run as opaque when any open net-pay item is out
+    // of scope, including an orphaned party row.
+    if (input.allowedSubsidiaryIds != null) {
+      const hidden = (await tx.execute<{ id: string }>(sql`
+        select jl.id
+          from journal_lines jl
+          left join parties p on p.id = jl.party_id and p.org_id = jl.org_id
+         where jl.org_id = ${orgId} and jl.entry_id = ${run.posted_entry_id}
+           and jl.account_id = ${netPayable} and jl.is_open_item and jl.party_id is not null
+           and jl.amount < 0
+           and (p.id is null or ${payrollSubsidiaryOutsideScopeFilter(
+             sql`p.subsidiary_id`, input.allowedSubsidiaryIds,
+           )})
+         limit 1
+      `));
+      if (hidden.rows[0]) throw new PayrollError("pay run not found");
     }
 
     const bank = (await tx.execute<{ id: string }>(sql`
@@ -69,9 +100,11 @@ export async function recordPayRunPayment(input: {
     const openItems = (await tx.execute<{ id: string; party_id: string; amount: string; subsidiary_id: string; currency: string }>(sql`
       select jl.id, jl.party_id, jl.amount, jl.subsidiary_id, jl.currency
         from journal_lines jl
+        join parties p on p.id = jl.party_id and p.org_id = jl.org_id
        where jl.org_id = ${orgId} and jl.entry_id = ${run.posted_entry_id}
          and jl.account_id = ${netPayable} and jl.is_open_item and jl.party_id is not null
          and jl.amount < 0
+         ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}
        order by jl.line_number
        for update
     `));
