@@ -75,6 +75,23 @@ async function scopedRetroEmployees(
   const deniedSchedule = guardSubsidiaryScope(gate, schedule?.subsidiaryId)
   if (deniedSchedule) return deniedSchedule
 
+  // The detector walks every committed source run for this schedule. Prove
+  // that population is inside scope before invoking it; otherwise a malformed
+  // run whose document was re-homed could leak its source period through a
+  // candidate even when the employee itself is visible.
+  const sourceRuns = await db.execute<{ subsidiaryId: string | null }>(sql`
+    select coalesce(d.subsidiary_id, ${root}) as "subsidiaryId"
+      from pay_runs r
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where r.org_id = ${gate.user.orgId}
+       and r.pay_schedule_id = ${payScheduleId}
+       and r.run_status = 'committed'
+       and r.run_type <> 'retro'`)
+  for (const sourceRun of sourceRuns.rows) {
+    const denied = guardSubsidiaryScope(gate, sourceRun.subsidiaryId)
+    if (denied) return denied
+  }
+
   if (requested) {
     const deniedEmployees = await guardPayrollEmployees(gate, requested)
     if (deniedEmployees) return deniedEmployees as NextResponse
