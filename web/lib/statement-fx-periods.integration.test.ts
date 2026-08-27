@@ -114,7 +114,7 @@ test(
         const period = { from: "2026-07-01", to: "2026-07-31" };
 
         await withOrgContext(org.orgId, async () => {
-          const view = await resolveSubsidiaryView(undefined, period.to);
+          const view = await resolveSubsidiaryView(org.subsidiaryId, period.to);
           assert.ok(view.consolidated && view.subsidiary?.rates?.length);
           // The context now carries one rate set PER PERIOD per foreign entity,
           // not a single set borrowed from the report's own period.
@@ -172,7 +172,7 @@ test(
           \`);
           const inFlightPnl = await profitAndLossView(period, "July 2026", pnlLabels, { ...opts, compare: "prior_period" });
           assert.deepEqual(findLine(inFlightPnl, "Net income").values.slice(0, 3).map(n), [140, 120, 20]);
-          const refreshedView = await resolveSubsidiaryView(undefined, period.to);
+          const refreshedView = await resolveSubsidiaryView(org.subsidiaryId, period.to);
           const refreshedOpts = { orgId: org.orgId, subsidiary: refreshedView.subsidiary };
           const refreshedPnl = await profitAndLossView(period, "July 2026", pnlLabels, { ...refreshedOpts, compare: "prior_period" });
           assert.deepEqual(findLine(refreshedPnl, "Net income").values.slice(0, 3).map(n), [150, 120, 30]);
@@ -191,7 +191,7 @@ test(
           await db.execute(sql\`
             delete from consolidated_fx_rates where org_id = \${org.orgId} and period_id = \${priorPeriodId}
           \`);
-          const gappedView = await resolveSubsidiaryView(undefined, period.to);
+          const gappedView = await resolveSubsidiaryView(org.subsidiaryId, period.to);
           const gappedOpts = { orgId: org.orgId, subsidiary: gappedView.subsidiary };
           await assert.rejects(
             profitAndLossView(period, "July 2026", pnlLabels, { ...gappedOpts, compare: "prior_period" }),
@@ -214,7 +214,7 @@ test(
             delete from consolidated_fx_rates where org_id = \${org.orgId} and period_id = \${org.periodId}
           \`);
           await assert.rejects(
-            resolveSubsidiaryView(undefined, period.to),
+            resolveSubsidiaryView(org.subsidiaryId, period.to),
             (error) =>
               error instanceof MissingRatesError &&
               /USD.*CAD.*period ending 2026-07-31/.test(error.message),
