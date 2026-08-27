@@ -55,10 +55,10 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
           (id, org_id, kind, status, document_number, subsidiary_id, party_id,
            document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
         values
-          (${invoiceAId}, ${org.orgId}, 'customer_invoice', 'approved', 'INV-DUPLICATE-A',
+          (${invoiceAId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-DUPLICATE-A',
            ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
            '75', '0', '75', ${actorId}),
-          (${invoiceBId}, ${org.orgId}, 'customer_invoice', 'approved', 'INV-DUPLICATE-B',
+          (${invoiceBId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-DUPLICATE-B',
            ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
            '125', '0', '125', ${actorId})`);
       await db.execute(sql`
@@ -70,6 +70,11 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
            '75', '0', '75'),
           (${org.orgId}, ${invoiceBId}, 1, ${org.accounts.revenue}, '1', '125',
            '125', '0', '125')`);
+      await db.execute(sql`
+        update documents
+           set status = 'approved', updated_at = now()
+         where org_id = ${org.orgId}
+           and id in (${invoiceAId}, ${invoiceBId})`);
       await postDocument(invoiceAId, {
         control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
       });

@@ -149,7 +149,7 @@ async function seedDunnableInvoice(
     insert into documents
       (id, org_id, kind, status, document_number, subsidiary_id, party_id,
        document_date, due_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-    values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'approved', ${opts.documentNumber},
+    values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', ${opts.documentNumber},
             ${org.subsidiaryId}, ${org.customerId}, ${org.date}, ${opts.dueDate ?? "2026-06-01"},
             'CAD', '1', '100', '0', '100', ${userId})
   `);
@@ -157,6 +157,11 @@ async function seedDunnableInvoice(
     insert into document_lines
       (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
     values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')
+  `);
+  await db.execute(sql`
+    update documents
+       set status = 'approved', updated_at = now()
+     where id = ${invoiceId} and org_id = ${org.orgId}
   `);
   await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
   return {

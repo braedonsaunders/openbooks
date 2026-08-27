@@ -69,10 +69,14 @@ test(
       const documentId = randomUUID();
       await db.execute(sql`
         insert into documents (id, org_id, kind, status, document_number, document_date, party_id, subsidiary_id, currency, subtotal, tax_total, total, custom)
-        values (${documentId}, ${org.orgId}, 'expense_report', 'approved', 'EXP-OPENITEM-1', ${org.date}, ${employeeId}, ${org.subsidiaryId}, 'CAD', '123.45', '0', '123.45', '{}'::jsonb)`);
+        values (${documentId}, ${org.orgId}, 'expense_report', 'draft', 'EXP-OPENITEM-1', ${org.date}, ${employeeId}, ${org.subsidiaryId}, 'CAD', '123.45', '0', '123.45', '{}'::jsonb)`);
       await db.execute(sql`
         insert into document_lines (id, org_id, document_id, line_number, account_id, description, quantity, unit_price, amount, tax_amount)
         values (${randomUUID()}, ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, 'Travel & per diem', '1', '123.45', '123.45', '0')`);
+      await db.execute(sql`
+        update documents
+           set status = 'approved', updated_at = now()
+         where id = ${documentId} and org_id = ${org.orgId}`);
 
       const entryId = await postDocument(documentId, deps);
 
