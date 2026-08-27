@@ -53,6 +53,21 @@ Three things are published here:
 Every run also uploads its full artifacts to the workflow run, including the
 conformance JSON and the harness checkpoint.
 
+### Campaign register evidence
+
+The remediation register's 2026-08-27 snapshot records **487 findings as fixed
+or resolved**. That aggregate is not fully verified assurance. After the 18
+historical `unreachable` closures were reconciled, **238** closures are
+demonstrably reachable because their closing commit is an ancestor of the
+integration `main` ref. **10** closing refs are unresolvable and **239** legacy
+rows are unattributed; those 249 rows remain assertion-only and **UNVERIFIED**.
+The 239 rows are pre-0.25.0 findings, recorded before commit attribution was
+available. They are not retroactively attributed and are not waived. The
+campaign checker is fail-closed and remains non-zero while any unsupported row
+exists, so “487 fixed” must not be read as a fully verified claim. See the
+[published reachability evidence](docs/trust/register-reachability-campaign.md)
+for the exact split and reconciliation record.
+
 ---
 
 ## The invariants
