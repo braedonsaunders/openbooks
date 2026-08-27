@@ -72,6 +72,7 @@ const mockSources = new Map<string, string>([
     `
       const harness = globalThis[Symbol.for('openbooks.pdf-send-attribution-test')]
       export const db = { execute: (query) => harness.execute(query) }
+      export async function withOrgTransaction(_orgId, work) { return work() }
     `,
   ],
   [
