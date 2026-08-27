@@ -85,6 +85,12 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
       toast.error(t('drawer.nameRequired'))
       return
     }
+    // Zero selection is a rejected request — a key must state the catalogue
+    // permissions it grants explicitly; there is no inherit-all default.
+    if (selected.size === 0) {
+      toast.error(t('drawer.scopesRequired'))
+      return
+    }
     setBusy(true)
     const res = await fetch('/api/admin/api-keys', {
       method: 'POST',
@@ -109,6 +115,14 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
 
   async function saveChanges() {
     if (!keyRow) return
+    if (!name.trim()) {
+      toast.error(t('drawer.nameRequired'))
+      return
+    }
+    if (selected.size === 0) {
+      toast.error(t('drawer.scopesRequired'))
+      return
+    }
     setBusy(true)
     const res = await fetch('/api/admin/api-keys', {
       method: 'PATCH',
@@ -271,9 +285,7 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
                 {t('drawer.scopesHeading')}
               </h3>
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {selected.size === 0
-                  ? t('drawer.fullScope')
-                  : t('drawer.scopesCount', { count: selectedCount })}
+                {t('drawer.scopesCount', { count: selectedCount })}
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
