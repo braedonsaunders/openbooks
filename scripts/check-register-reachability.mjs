@@ -84,11 +84,17 @@ const BASELINE_CLASSES = new Set(["unreachable", "unresolvable", "unattributed"]
  * Every finding recorded fixed or resolved in the goal register for this
  * repository: [finding id, closing ref]. The ref is the commit reported to
  * have closed the finding (full sha when it resolves, else the reported
- * token), or null when the register never recorded what closed it. Append
- * only: entries describe what was recorded, never what we wish was true —
- * the tree, not the report, decides reachability.
+ * token), or null when the register never recorded what closed it. Entries
+ * describe what was recorded, never what we wish was true — the tree, not the
+ * report, decides reachability. A documented reconciliation may replace an
+ * unreachable historical ref with the exact integration commit that ships
+ * the same fix; the campaign doc preserves both refs and the evidence.
  */
 const REGISTER_DATA = [
+  // Reachability reconciliation (2026-08-27): each of the 18 historical
+  // worker refs formerly recorded for this campaign is re-attributed below to
+  // the exact integration commit that ships its fix. The old refs, finding-
+  // by-finding dispositions, and evidence are recorded in the campaign doc.
   ["fnd_018b450d_de435b", null],
   ["fnd_040063a6_6655aa", null],
   ["fnd_04a10801_efb02d", "03f01f8b6204fbe771f5fcda884b681373a304fd"],
@@ -104,7 +110,7 @@ const REGISTER_DATA = [
   ["fnd_192456a6_f4f910", null],
   ["fnd_1c61887e_a94923", "26b69bc18730a6e06ac6b9125539190979279bc4"],
   ["fnd_1d1c9297_cfe976", null],
-  ["fnd_24dfd85d_ff16d2", "09e0e9944dd6bef1343038b86a18e31951f4e01d"],
+  ["fnd_24dfd85d_ff16d2", "e4ed339d4bedb6b74030ecf42c9707d47d5b3bdc"],
   ["fnd_255eda65_3437e2", "44e0cd08fec2c52974ee98be1b011fff9aa30e69"],
   ["fnd_26619e5e_9457b9", null],
   ["fnd_2872f07a_1f0993", null],
@@ -121,7 +127,7 @@ const REGISTER_DATA = [
   ["fnd_3c97b269_8b257e", null],
   ["fnd_3e38f9d1_e2ae4b", null],
   ["fnd_3f685d1f_907f76", "fa819c46d4c1e496079eeac7a9300c2feb1f08c9"],
-  ["fnd_421d5f16_2b6657", "44ecb4d818873f88ceb5606d43624f7c579a6151"],
+  ["fnd_421d5f16_2b6657", "8fbe02704b95be2c519e0811e3e13037d1a29700"],
   ["fnd_461bea26_8fd15a", null],
   ["fnd_4992e18b_9c685c", null],
   ["fnd_4afdaaca_5dfa95", null],
@@ -130,7 +136,7 @@ const REGISTER_DATA = [
   ["fnd_4f34882c_ff599b", "2fc361432ac2421e505b00bb662cd93264988329"],
   ["fnd_510b1782_bd65b3", null],
   ["fnd_5649f7e2_bab03f", "2fc361432ac2421e505b00bb662cd93264988329"],
-  ["fnd_56e2f1d3_73d494", "45c705a3e885e521dcd2f60465c597f89f032dd4"],
+  ["fnd_56e2f1d3_73d494", "7f177519148060ea2774cdbba9ade65db339e22a"],
   ["fnd_574198e6_08be98", null],
   ["fnd_5830a195_030c0e", "ff1f25b8afdf0f27871352c186eb3435f0ef4296"],
   ["fnd_597f7ddf_5adcb8", "2fc361432ac2421e505b00bb662cd93264988329"],
@@ -145,7 +151,7 @@ const REGISTER_DATA = [
   ["fnd_68f990dd_e5cb20", null],
   ["fnd_697c3d37_3a32b2", null],
   ["fnd_6a582972_18e497", "9faee2ebf0923185e7d5d3fbad3387f51faf6f05"],
-  ["fnd_6a5d52fa_a5a3a0", "45c705a3e885e521dcd2f60465c597f89f032dd4"],
+  ["fnd_6a5d52fa_a5a3a0", "7f177519148060ea2774cdbba9ade65db339e22a"],
   ["fnd_6a8c6921_9ffdd4", null],
   ["fnd_6acd3c58_1e7df0", null],
   ["fnd_6c8f6ce0_98a7a3", "8a002960303ea757f2bead4ca3096e027028679d"],
@@ -163,17 +169,17 @@ const REGISTER_DATA = [
   ["fnd_7f75a7e7_aed241", null],
   ["fnd_80b3dc55_db2f1f", null],
   ["fnd_80c456a3_09a85f", null],
-  ["fnd_815b6d7d_de3a32", "d54f7bea729de9e441276300d6b6b26a187bf7ac"],
+  ["fnd_815b6d7d_de3a32", "fe1e16ec95a0c859b13757d32774e28a1589e092"],
   ["fnd_821c5702_033b3a", "2fc361432ac2421e505b00bb662cd93264988329"],
-  ["fnd_82904c62_85f4ed", "44ecb4d818873f88ceb5606d43624f7c579a6151"],
+  ["fnd_82904c62_85f4ed", "8fbe02704b95be2c519e0811e3e13037d1a29700"],
   ["fnd_83a2c3ca_0482a7", "f7bcf43af19b19d3a7d367fe348f07c84d97e0e7"],
   ["fnd_84077a9c_bc371b", null],
   ["fnd_844e9c12_cc86f3", null],
-  ["fnd_84a1dbbb_832e7c", "c85153fd2db14796edf7264418f52ba937f21abf"],
+  ["fnd_84a1dbbb_832e7c", "aa516625af3c1873512c976a10c7af35ac323692"],
   ["fnd_85323ce2_4f0c4b", null],
-  ["fnd_8ae2ccb8_9a2063", "ca176905f51436f524415fb52a7d3e0c79eafebe"],
+  ["fnd_8ae2ccb8_9a2063", "6a6c1245fe343739fc1fdcc4285a30dc8cd9c4b3"],
   ["fnd_8af1095c_af50d5", null],
-  ["fnd_8af82a06_e94d88", "45c705a3e885e521dcd2f60465c597f89f032dd4"],
+  ["fnd_8af82a06_e94d88", "7f177519148060ea2774cdbba9ade65db339e22a"],
   ["fnd_8c12a82f_a05ead", "c0fca24448c291909b567edddc694a319e0f736c"],
   ["fnd_8ee4529a_4b560d", null],
   ["fnd_9251a1a4_f53bbb", null],
@@ -231,8 +237,8 @@ const REGISTER_DATA = [
   ["fnd_d0abb66d_11e96d", "fa819c46d4c1e496079eeac7a9300c2feb1f08c9"],
   ["fnd_d2321082_57cf9c", null],
   ["fnd_d278f487_2a57a4", "44e0cd08fec2c52974ee98be1b011fff9aa30e69"],
-  ["fnd_d3eb5d98_28c85a", "45c705a3e885e521dcd2f60465c597f89f032dd4"],
-  ["fnd_d46f1bdf_6db94a", "45c705a3e885e521dcd2f60465c597f89f032dd4"],
+  ["fnd_d3eb5d98_28c85a", "7f177519148060ea2774cdbba9ade65db339e22a"],
+  ["fnd_d46f1bdf_6db94a", "7f177519148060ea2774cdbba9ade65db339e22a"],
   ["fnd_d506f57f_c2509f", "5f72f9f8fc9de071be8bb0b1a7557393061ddd4c"],
   ["fnd_d903ce80_f886d7", null],
   ["fnd_da3b2b0e_ba22fe", null],
@@ -243,7 +249,7 @@ const REGISTER_DATA = [
   ["fnd_dc0ca0a5_885180", null],
   ["fnd_dcc4eaaa_8877de", "2fc361432ac2421e505b00bb662cd93264988329"],
   ["fnd_dcf29488_68f38a", "443303201c6ef7565cfb30561c8e36f7b7ec41a7"],
-  ["fnd_ddae2dd2_92aed7", "43ee270b456961a704bf7c6955383dd890a7d160"],
+  ["fnd_ddae2dd2_92aed7", "c0fca24448c291909b567edddc694a319e0f736c"],
   ["fnd_df8faf6c_3e052f", null],
   ["fnd_e84f6947_19ebeb", "4b6267ef7ad2dfed5075d1dcff1963ea56f914e8"],
   ["fnd_e9a0ec01_449310", "32d327e931b7affb2b3e458f827e89628c5683b8"],
@@ -252,9 +258,9 @@ const REGISTER_DATA = [
   ["fnd_eef2fe98_4a4c53", "948eda9c71a852d55f108975ce11e3b649acb2b3"],
   ["fnd_f1a324e5_c23f05", null],
   ["fnd_f1c01a19_80c40d", null],
-  ["fnd_f3336505_de4203", "09e0e9944dd6bef1343038b86a18e31951f4e01d"],
+  ["fnd_f3336505_de4203", "e4ed339d4bedb6b74030ecf42c9707d47d5b3bdc"],
   ["fnd_f3ac5f5e_b9ff77", "f7314bb8929f85264f1d2725d5468b782da2a7f4"],
-  ["fnd_f40ce24a_881fae", "255b7674d103b4c5490f032df199e2abb71f63e1"],
+  ["fnd_f40ce24a_881fae", "8fbe02704b95be2c519e0811e3e13037d1a29700"],
   ["fnd_f410d9a3_0b5665", "c70b8eb26ff6d57aa03b6e2a267711c63dd38df3"],
   ["fnd_f6d05c34_122968", null],
   ["fnd_f791d71e_479414", null],
@@ -301,10 +307,10 @@ const REGISTER_DATA = [
   ["fnd_mt7nxp48_3iyi13", null],
   ["fnd_mt7nyxa_dyn307", null],
   ["fnd_mt7nyxa_erp307", null],
-  ["fnd_mt7nyxa_ns307", "2645d3e50faf98e66d1575653ac5745a7764e041"],
+  ["fnd_mt7nyxa_ns307", "68a73600e7f7d521f0ff1ccd26ef61029ccfbd12"],
   ["fnd_mt7nyxa_odoo307", null],
   ["fnd_mt7nyxa_qbo307", null],
-  ["fnd_mt7nyxa_tax307", "2645d3e50faf98e66d1575653ac5745a7764e041"],
+  ["fnd_mt7nyxa_tax307", "1ab18121762c7e47700f4049399ad92e68a95565"],
   ["fnd_mt7nyxa_xero307", "9d99fac88f5952098af7897c048f4727c2f1974b"],
   ["fnd_mt7uqucr_7te09s", null],
   ["fnd_mt7wjef6_tlh4xk", null],
@@ -378,7 +384,7 @@ const REGISTER_DATA = [
   ["fnd_mt981v1v_zf5ryu", "69b67969d7817290b695d527708e363a1faf8ba7"],
   ["fnd_mt9826j4_enjdzq", null],
   ["fnd_mt9835mh_4xjl6x", null],
-  ["fnd_mt9844pt_0bwnsn", "0575704025ef5290927830c31db7ff5b771eb496"],
+  ["fnd_mt9844pt_0bwnsn", "e85307c7d07a570af8d5e03dda37773290355d38"],
   ["fnd_mt9844xu_b1ncd4", "a0801f0476f53b99bc8ea7a85ab29b875a99fdd2"],
   ["fnd_mt985mgz_xcpku4", "dd5cafde4f5e2fde0876a2d52100c1f97a3a57ac"],
   ["fnd_mt985mo0_m1238j", null],
@@ -505,7 +511,7 @@ const REGISTER_DATA = [
   ["fnd_mtah7rmu_bbciky", null],
   ["fnd_mtaimv2s_8iumm3", null],
   ["fnd_mtain7xv_n6lbj3", null],
-  ["fnd_mtbnparb_fnvdqh", "13760657c69081f142bfefa55d0f76599e93839e"],
+  ["fnd_mtbnparb_fnvdqh", "26606bdd729f22273207c1218e7ea4682121fafe"],
   ["fnd_mtbnpxsd_9e8npy", null],
   ["fnd_mtbnqgz1_n95clg", "29b3ae3d21809a6709cb3ff7a4433813e8a7d925"],
   ["fnd_mtbnqpsu_xt0hrx", null],
@@ -518,6 +524,12 @@ const REGISTER_DATA = [
  * integration ref on 2026-08-27. These entries remain useful for class-drift
  * diagnostics, but auditRegister treats them as violations; history gaps are
  * never silently waived by retaining a baseline row.
+ *
+ * The 18 rows that were initially classified unreachable were individually
+ * re-attributed in REGISTER_DATA to reachable integration commits and are
+ * intentionally absent here. The remaining baseline is the 10 unresolvable
+ * and 239 unattributed rows documented in docs/trust/register-reachability-
+ * campaign.md.
  */
 const BASELINE_DATA = [
   ["fnd_018b450d_de435b", "unattributed"],
@@ -759,24 +771,6 @@ const BASELINE_DATA = [
   ["fnd_mtbnpxsd_9e8npy", "unattributed"],
   ["fnd_mtbnqpsu_xt0hrx", "unattributed"],
   ["fnd_mt9hq5zf_n0e5c1", "unattributed"],
-  ["fnd_24dfd85d_ff16d2", "unreachable"],
-  ["fnd_421d5f16_2b6657", "unreachable"],
-  ["fnd_56e2f1d3_73d494", "unreachable"],
-  ["fnd_6a5d52fa_a5a3a0", "unreachable"],
-  ["fnd_815b6d7d_de3a32", "unreachable"],
-  ["fnd_82904c62_85f4ed", "unreachable"],
-  ["fnd_84a1dbbb_832e7c", "unreachable"],
-  ["fnd_8ae2ccb8_9a2063", "unreachable"],
-  ["fnd_8af82a06_e94d88", "unreachable"],
-  ["fnd_d3eb5d98_28c85a", "unreachable"],
-  ["fnd_d46f1bdf_6db94a", "unreachable"],
-  ["fnd_ddae2dd2_92aed7", "unreachable"],
-  ["fnd_f3336505_de4203", "unreachable"],
-  ["fnd_f40ce24a_881fae", "unreachable"],
-  ["fnd_mt7nyxa_ns307", "unreachable"],
-  ["fnd_mt7nyxa_tax307", "unreachable"],
-  ["fnd_mt9844pt_0bwnsn", "unreachable"],
-  ["fnd_mtbnparb_fnvdqh", "unreachable"],
   ["fnd_mt6g89ug_ggc4yz", "unresolvable"],
   ["fnd_mt6g8a0w_5o5636", "unresolvable"],
   ["fnd_mt6gfs13_ujfk0k", "unresolvable"],
