@@ -718,8 +718,9 @@ export async function buildRecognitionSchedule(
     for (const p of plan) {
       const periodId = await periodForDate(orgId, p.periodMonth);
       if (!periodId) {
-        skippedMonths.push(p.periodMonth);
-        continue;
+        throw new RevenueRecognitionError(
+          `no accounting period covers ${p.periodMonth} — provision all periods spanning the recognition term before building a schedule`,
+        );
       }
       // A period that already recognized is closed to re-planning — EXCEPT for
       // percent_complete, where later catch-ups legitimately post additional
