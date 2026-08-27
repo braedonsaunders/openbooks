@@ -63,7 +63,7 @@ test("payment-link API rejects a malformed bank reference before any link write"
         coalesce(settings->'features', '{}'::jsonb) || '{"onlinePayments":true}'::jsonb)
        where id = ${org.orgId}
     `);
-    const state = (globalThis as typeof globalThis & Record<symbol, any>)[routeState] as {
+    const state = (globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] as {
       authz: { user: { orgId: string; id: string } } | null;
     };
     state.authz = { user: { orgId: org.orgId, id: actorId } };
@@ -82,7 +82,7 @@ test("payment-link API rejects a malformed bank reference before any link write"
     `);
     assert.equal(after.rows[0]!.count, before.rows[0]!.count);
   } finally {
-    const state = (globalThis as typeof globalThis & Record<symbol, any>)[routeState] as {
+    const state = (globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] as {
       authz: { user: { orgId: string; id: string } } | null;
     };
     state.authz = null;
