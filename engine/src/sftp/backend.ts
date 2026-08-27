@@ -119,11 +119,20 @@ function client(): S3Client {
   return s3;
 }
 
-export function s3Backend(bucket: string, prefix: string): SftpBackend {
-  const root = prefix.replace(/^\/+|\/+$/g, "");
+export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBackend {
+  // Keep the exported constructor safe on its own as well as through
+  // backendFor: every S3 backend must be rooted in its owning tenant.
+  const root = assertTenantRootPrefix(prefix, orgId).replace(/^\/+|\/+$/g, "");
+  const tenantPrefix = sftpTenantPrefix(orgId);
   const key = (p: string) => {
     const rel = cleanPath(p).replace(/^\//, "");
-    return [root, rel].filter(Boolean).join("/");
+    const full = [root, rel].filter(Boolean).join("/");
+    // Defense in depth: every key this backend touches must stay inside the
+    // owning tenant's namespace, whatever the session asked for.
+    if (full !== tenantPrefix && !full.startsWith(tenantPrefix + "/")) {
+      throw new Error("sftp s3 key escapes the tenant prefix");
+    }
+    return full;
   };
   const dirKey = (p: string) => {
     const k = key(p);
@@ -199,11 +208,77 @@ export function appBucket(): string | null {
   return env.S3_BUCKET ?? null;
 }
 
-/** Pick a backend for a virtual server. 's3' when configured, else a local dir. */
-export function backendFor(server: { backend: string; bucket: string | null; rootPrefix: string }): SftpBackend {
+/**
+ * Physical storage config for one virtual SFTP server. `orgId` is REQUIRED:
+ * the physical root is always derived from (or validated against) the owning
+ * tenant's namespace — a stored prefix alone is never trusted, because a
+ * direct or stale row could otherwise point anywhere in the shared bucket or
+ * on disk.
+ */
+export interface SftpServerStorageConfig {
+  backend: string; // 's3' | 'local'
+  bucket: string | null;
+  rootPrefix: string;
+  orgId: string;
+}
+
+/** The tenant namespace every SFTP root must live under: `sftp/<orgId>`. */
+export function sftpTenantPrefix(orgId: string): string {
+  return `sftp/${orgId}`;
+}
+
+/**
+ * Fail-closed shape guard for a root prefix: a tenant may name folders, never
+ * physical locations. Rejects empty prefixes, absolute paths, backslashes,
+ * percent-encoding (a `%2e%2e` traversal must never reach the backend) and
+ * empty or dot segments. Returns the prefix unchanged — nothing is silently
+ * rewritten into validity.
+ */
+export function assertSafeRootPrefix(rootPrefix: string): string {
+  const raw = typeof rootPrefix === "string" ? rootPrefix : "";
+  if (raw === "") throw new Error("sftp root prefix must not be empty");
+  if (raw.includes("\\")) throw new Error("sftp root prefix must not contain backslashes");
+  if (raw.includes("%")) throw new Error("sftp root prefix must not contain percent-encoding");
+  if (raw.startsWith("/")) throw new Error("sftp root prefix must be a relative path");
+  if (raw.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+    throw new Error("sftp root prefix must not contain empty or dot segments");
+  }
+  return raw;
+}
+
+/**
+ * Tenant binding for a root prefix: it must stay inside the owning org's
+ * `sftp/<orgId>` namespace (exactly that root or deeper). A cross-tenant
+ * prefix is refused exactly like a traversal. Returns the validated prefix.
+ */
+export function assertTenantRootPrefix(rootPrefix: string, orgId: string): string {
+  if (!orgId) throw new Error("sftp root prefix requires the owning org id");
+  const safe = assertSafeRootPrefix(rootPrefix);
+  const tenantPrefix = sftpTenantPrefix(orgId);
+  if (safe !== tenantPrefix && !safe.startsWith(tenantPrefix + "/")) {
+    throw new Error(`sftp root prefix must stay under ${tenantPrefix}/`);
+  }
+  return safe;
+}
+
+/**
+ * Pick a backend for a virtual server. 's3' when configured, else a local dir.
+ * The resolver is authoritative for direct/stale rows: the prefix is validated
+ * against the owning tenant (S3 keys stay under `sftp/<orgId>`; the local root
+ * stays under the data root) and any violation fails closed before the first
+ * storage operation.
+ */
+export function backendFor(server: SftpServerStorageConfig): SftpBackend {
+  if (!server.orgId) throw new Error("sftp server config is missing its owning org id");
+  const rootPrefix = assertTenantRootPrefix(server.rootPrefix, server.orgId);
   if (server.backend === "s3") {
     if (!server.bucket) throw new Error("s3 sftp server missing bucket");
-    return s3Backend(server.bucket, server.rootPrefix);
+    return s3Backend(server.bucket, rootPrefix, server.orgId);
   }
-  return localBackend(path.join(localRoot(), server.rootPrefix));
+  const dataRoot = path.resolve(localRoot());
+  const resolved = path.resolve(dataRoot, rootPrefix);
+  if (resolved !== dataRoot && !resolved.startsWith(dataRoot + path.sep)) {
+    throw new Error("path escapes root");
+  }
+  return localBackend(resolved);
 }

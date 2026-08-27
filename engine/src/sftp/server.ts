@@ -20,6 +20,8 @@ const { STATUS_CODE, OPEN_MODE } = utils.sftp;
 
 export interface SftpServerConfig {
   id: string;
+  /** Owning tenant — the physical storage root is always validated against it. */
+  orgId: string;
   username: string;
   backend: string; // 's3' | 'local'
   bucket: string | null;
