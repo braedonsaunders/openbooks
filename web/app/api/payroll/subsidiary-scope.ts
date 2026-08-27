@@ -107,6 +107,11 @@ export async function guardPayrollFilingData(
   const accounts = parsed.flatMap((row) => row!.accounts)
   const employeeDenied = await guardPayrollEmployees(gate, employees)
   if (employeeDenied) return employeeDenied
+  // Employee-keyed filings (ROE/RL-1 and unassigned T4/W-2 rows) carry no
+  // account id; their party guard above is the complete scope decision. An
+  // aggregate account-only row (for example an unassigned Form 941) has no
+  // employee dimension and therefore follows the explicit root convention.
+  if (employees.length > 0 && accounts.length === 0) return null
   return guardPayrollFilingAccounts(gate, accounts)
 }
 
@@ -122,7 +127,10 @@ export async function guardPayrollFilingRowIds(
   if (parsed.some((row) => row === null)) return notFound()
   const employeeDenied = await guardPayrollEmployees(gate, parsed.flatMap((row) => row!.employees))
   if (employeeDenied) return employeeDenied
-  return guardPayrollFilingAccounts(gate, parsed.flatMap((row) => row!.accounts))
+  const employees = parsed.flatMap((row) => row!.employees)
+  const accounts = parsed.flatMap((row) => row!.accounts)
+  if (employees.length > 0 && accounts.length === 0) return null
+  return guardPayrollFilingAccounts(gate, accounts)
 }
 
 /** Parse the built-in filing row keys. Unknown pack row shapes fail closed. */
