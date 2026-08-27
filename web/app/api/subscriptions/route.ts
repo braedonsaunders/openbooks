@@ -279,7 +279,9 @@ export async function POST(req: Request) {
         const id = ((created)).id as string;
         let proration: unknown = null;
         if (prorateFirstPeriod) {
-          proration = await prorateFirstInvoice(id, firstBillOn);
+          // The authenticated caller authors the proration invoice — the
+          // subscription's own id is never an actor.
+          proration = await prorateFirstInvoice(id, firstBillOn, undefined, { actorId: userId });
         }
         return NextResponse.json({ id, proration }, { status: 201 });
       }
@@ -301,7 +303,7 @@ export async function POST(req: Request) {
         const result = await changeSubscription(body.id, {
           quantity,
           priceOverride,
-        });
+        }, undefined, { actorId: userId });
         return NextResponse.json(result);
       }
       case "updateSubscription": {
@@ -372,7 +374,9 @@ export async function POST(req: Request) {
       case "billNow": {
         const owned = (await db.execute(sql`select 1 from subscriptions where id = ${body.id} and org_id = ${orgId}`));
         if (!owned.rows.length) return NextResponse.json({ error: "not found" }, { status: 404 });
-        const gen = await billSubscriptionNow(body.id);
+        // The authenticated caller authors the bill-now invoice — the
+        // subscription's own id is never an actor.
+        const gen = await billSubscriptionNow(body.id, undefined, { actorId: userId });
         return NextResponse.json(gen);
       }
       default:

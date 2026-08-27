@@ -12,6 +12,7 @@ interface RouteState {
   transactionQueries: unknown[];
   normalizedMoney: string[];
   normalizedCadences: Array<{ interval: string; intervalCount: number }>;
+  engineCalls: Array<{ fn: string; args: unknown[] }>;
 }
 
 const stateKey = Symbol.for("openbooks.subscription-route-test");
@@ -24,6 +25,7 @@ const routeState: RouteState & {
   transactionQueries: [],
   normalizedMoney: [],
   normalizedCadences: [],
+  engineCalls: [],
   SubscriptionError,
   normalizeSubscriptionCadence: (interval, intervalCount) => {
     const cadence = normalizeSubscriptionCadence(interval, intervalCount);
@@ -64,6 +66,7 @@ const mockSources = new Map<string, string>([
         const text = sqlText(query)
         if (text.includes('insert into subscription_plans')) return { rows: [{ id: 'plan-1' }] }
         if (text.includes('insert into subscriptions')) return { rows: [{ id: 'subscription-1' }] }
+        if (text.includes('from subscriptions where id =')) return { rows: [{ owned: 1 }] }
         return { rows: [] }
       }
       export const db = {
@@ -87,10 +90,19 @@ const mockSources = new Map<string, string>([
       export const SubscriptionError = state.SubscriptionError
       export const normalizeSubscriptionCadence = (...args) => state.normalizeSubscriptionCadence(...args)
       export const normalizeSubscriptionMoney = (...args) => state.normalizeSubscriptionMoney(...args)
-      export async function billSubscriptionNow() { throw new Error('unexpected bill') }
-      export async function changeSubscription() { throw new Error('unexpected change') }
+      export async function billSubscriptionNow(...args) {
+        state.engineCalls.push({ fn: 'billSubscriptionNow', args })
+        return { invoiceId: 'invoice-1', documentNumber: 'INV-0001', posted: true }
+      }
+      export async function changeSubscription(...args) {
+        state.engineCalls.push({ fn: 'changeSubscription', args })
+        return { invoiceId: null, documentNumber: null, adjustment: '0.0000' }
+      }
       export function monthlyRecurringRevenue() { return '0.0000' }
-      export async function prorateFirstInvoice() { throw new Error('unexpected proration') }
+      export async function prorateFirstInvoice(...args) {
+        state.engineCalls.push({ fn: 'prorateFirstInvoice', args })
+        return { invoiceId: 'invoice-2', documentNumber: 'INV-0002', posted: false, amount: '42.0000' }
+      }
     `,
   ],
   [
@@ -145,6 +157,7 @@ function reset(): void {
   routeState.transactionQueries.length = 0;
   routeState.normalizedMoney.length = 0;
   routeState.normalizedCadences.length = 0;
+  routeState.engineCalls.length = 0;
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
@@ -239,4 +252,33 @@ test("subscription API preserves valid exact-decimal plan and subscription value
   });
   assert.equal(subscriptionResponse.status, 201);
   assert.deepEqual(routeState.normalizedMoney, ["1.2345", "0.0001"]);
+});
+
+test("bill-now, change, and first proration attribute the engine call to the authenticated user", async () => {
+  reset();
+  const billResponse = await post({ action: "billNow", id: "subscription-1" });
+  assert.equal(billResponse.status, 200);
+  const changeResponse = await post({ action: "changeSubscription", id: "subscription-1", quantity: "2" });
+  assert.equal(changeResponse.status, 200);
+  const prorateResponse = await post({
+    action: "addSubscription",
+    customerId: "customer-1",
+    planId: "plan-1",
+    startOn: "2026-08-26",
+    firstBillOn: "2026-09-26",
+    prorateFirstPeriod: true,
+  });
+  assert.equal(prorateResponse.status, 201);
+
+  // The defect: the route discarded gate.user.id on all three interactive
+  // paths, so the engine stamped the subscription's own UUID into user-actor
+  // columns. Every interactive engine call must carry the authenticated user.
+  assert.deepEqual(routeState.engineCalls, [
+    { fn: "billSubscriptionNow", args: ["subscription-1", undefined, { actorId: "user-1" }] },
+    {
+      fn: "changeSubscription",
+      args: ["subscription-1", { quantity: "2.0000", priceOverride: undefined }, undefined, { actorId: "user-1" }],
+    },
+    { fn: "prorateFirstInvoice", args: ["subscription-1", "2026-09-26", undefined, { actorId: "user-1" }] },
+  ]);
 });
