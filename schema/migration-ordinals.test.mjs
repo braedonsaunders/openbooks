@@ -136,13 +136,14 @@ test("bootstrap resolves renamed migrations to their published bodies and digest
     APPROVED_MIGRATION_FILENAME_TRANSITIONS: transitions,
     assertMigrationFilenameTransitionTargets,
   } = await bootstrapTransitionModule();
-  assert.equal(transitions.length, 3);
+  assert.equal(transitions.length, 4);
   assert.deepEqual(
     transitions.map((transition) => transition.to.filename),
     [
       "generated/0035_terminal_failure_surfacing.sql",
       "generated/0036_bank_statement_source_idempotency.sql",
       "generated/0052_durable_work_lease_fencing.sql",
+      "generated/0063_email_delivery_idempotency.sql",
     ],
   );
   assert.doesNotThrow(() =>
@@ -234,6 +235,7 @@ test("migration header comments name their own file", () => {
     ["0006_terminal_failure_surfacing", "0035_terminal_failure_surfacing.sql"],
     ["0010_bank_statement_source_idempotency", "0036_bank_statement_source_idempotency.sql"],
     ["0008_durable_work_lease_fencing", "0052_durable_work_lease_fencing.sql"],
+    ["0028_email_delivery_idempotency", "0063_email_delivery_idempotency.sql"],
   ]);
   const mismatches = [];
   for (const file of publishedMigrationFiles()) {

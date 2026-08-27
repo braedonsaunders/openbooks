@@ -83,6 +83,21 @@ export const APPROVED_MIGRATION_FILENAME_TRANSITIONS: ReadonlyArray<MigrationFil
         "fresh installs otherwise fail at 0008 because the approved 0006-to-0035 " +
         "canonicalization reordered the column DDL behind its backfill",
   },
+  {
+    from: {
+      filename: "generated/0028_email_delivery_idempotency.sql",
+      sha256: "ca93c827fa161d267f6b93717f4d0ef28f9d6c30511c52152618229e6f07e052",
+    },
+    to: {
+      filename: "generated/0063_email_delivery_idempotency.sql",
+      sha256: "ca93c827fa161d267f6b93717f4d0ef28f9d6c30511c52152618229e6f07e052",
+    },
+    reason:
+      "move the email delivery_key format CHECK + org-scoped index after " +
+        "0059_email_delivery_identity_reconciliation which creates the delivery_key " +
+        "column; fresh installs otherwise fail at 0028 with 'column delivery_key does " +
+        "not exist' because filename order runs 0028 before 0059",
+  },
 ];
 
 type RuntimeDatabaseConfig = {
