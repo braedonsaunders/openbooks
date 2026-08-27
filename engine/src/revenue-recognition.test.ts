@@ -11,6 +11,7 @@ import {
   computeRecognitionSchedule,
   estimateVariableConsideration,
   fairValueRangeFlag,
+  recordRecognitionEvent,
   RevenueRecognitionError,
   runRevenueRecognition,
   separateFinancingComponent,
@@ -472,6 +473,228 @@ test("buildRecognitionSchedule throws when a planned month has no accounting per
       select count(*)::text as line_count from recognition_schedule_lines
        where schedule_id in (select id from recognition_schedules where obligation_id = ${obligationId} and org_id = ${org.orgId})`));
     assert.equal(Number(schedule.rows[0]!.line_count), 0, "no schedule lines should be persisted for a failed build");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Milestone + usage event persistence — live PG proofs
+// ---------------------------------------------------------------------------
+
+test("milestone events produce a non-zero recognition schedule and post through runRevenueRecognition", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = randomUUID();
+  try {
+    // Create additional accounting periods for the event months.
+    const calId = (await db.execute<{ id: string }>(sql`
+      select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`)).rows[0]!.id;
+    for (const { year, num, name, start, end } of [
+      { year: 2026, num: 1, name: "2026-01", start: "2026-01-01", end: "2026-01-31" },
+      { year: 2026, num: 2, name: "2026-02", start: "2026-02-01", end: "2026-02-28" },
+    ]) {
+      await db.execute(sql`
+        insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values (${randomUUID()}, ${org.orgId}, ${year}, ${num}, ${name}, ${start}, ${end}, false, ${calId})`);
+    }
+
+    const ruleId = randomUUID();
+    await db.execute(sql`
+      insert into recognition_rules
+        (id, org_id, code, name, method, is_forecast, recognition_periods, start_date_source, end_date_source,
+         period_offset, start_offset_days, initial_amount_percent, deferred_account_id, recognized_account_id, is_active)
+      values (${ruleId}, ${org.orgId}, 'MILESTONE2', 'Milestone events', 'milestone', false, 1,
+              'obligation', 'term', 0, 0, '0', ${org.accounts.deferred}, ${org.accounts.recognized}, true)`);
+
+    const contractId = randomUUID();
+    await db.execute(sql`
+      insert into revenue_contracts
+        (id, org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
+      values (${contractId}, ${org.orgId}, ${org.customerId}, 'REV-MILESTONE-002', 'active', '2026-01-01',
+              'CAD', '5000', ${actorId}, ${actorId})`);
+
+    const obligationId = randomUUID();
+    await db.execute(sql`
+      insert into performance_obligations
+        (id, org_id, contract_id, description, recognition_rule_id,
+         booked_amount, allocated_price, recognition_starts_on, status, created_by, updated_by)
+      values (${obligationId}, ${org.orgId}, ${contractId}, 'Milestone deliverable', ${ruleId},
+              '5000', '5000', '2026-01-01', 'open', ${actorId}, ${actorId})`);
+
+    // Record two milestone events.
+    const evt1 = await recordRecognitionEvent({
+      obligationId, orgId: org.orgId, actorId, periodMonth: "2026-01-01", amount: "2000",
+      description: "Design complete",
+    });
+    const evt2 = await recordRecognitionEvent({
+      obligationId, orgId: org.orgId, actorId, periodMonth: "2026-02-01", amount: "3000",
+      description: "Build complete",
+    });
+    assert.ok(evt1.eventId);
+    assert.ok(evt2.eventId);
+
+    // Build the schedule — should now produce 2 lines, not zero.
+    const build = await buildRecognitionSchedule(obligationId, org.orgId, actorId);
+    assert.equal(build.lineCount, 2);
+
+    // Run recognition — both periods should post.
+    const run = await runRevenueRecognition(org.orgId, "2026-12-31", actorId);
+    assert.equal(run.posted, 2);
+    assert.equal(run.totalAmount, "5000.0000");
+    // Obligation should be satisfied.
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from performance_obligations where id = ${obligationId}`));
+    assert.equal(status.rows[0]!.status, "satisfied");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("usage events produce a non-zero recognition schedule with correct amounts", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = randomUUID();
+  try {
+    const calId = (await db.execute<{ id: string }>(sql`
+      select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`)).rows[0]!.id;
+    await db.execute(sql`
+      insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      values (${randomUUID()}, ${org.orgId}, 2026, 1, '2026-01', '2026-01-01', '2026-01-31', false, ${calId})`);
+
+    const ruleId = randomUUID();
+    await db.execute(sql`
+      insert into recognition_rules
+        (id, org_id, code, name, method, is_forecast, recognition_periods, start_date_source, end_date_source,
+         period_offset, start_offset_days, initial_amount_percent, deferred_account_id, recognized_account_id, is_active)
+      values (${ruleId}, ${org.orgId}, 'USAGE1', 'Usage metered', 'usage', false, 1,
+              'obligation', 'term', 0, 0, '0', ${org.accounts.deferred}, ${org.accounts.recognized}, true)`);
+
+    const contractId = randomUUID();
+    await db.execute(sql`
+      insert into revenue_contracts
+        (id, org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
+      values (${contractId}, ${org.orgId}, ${org.customerId}, 'REV-USAGE-001', 'active', '2026-01-01',
+              'CAD', '1200', ${actorId}, ${actorId})`);
+
+    const obligationId = randomUUID();
+    await db.execute(sql`
+      insert into performance_obligations
+        (id, org_id, contract_id, description, recognition_rule_id,
+         booked_amount, allocated_price, recognition_starts_on, status, created_by, updated_by)
+      values (${obligationId}, ${org.orgId}, ${contractId}, 'API usage', ${ruleId},
+              '1200', '1200', '2026-01-01', 'open', ${actorId}, ${actorId})`);
+
+    // Record a usage event: 10,000 calls at $0.12 each = $1,200.
+    await recordRecognitionEvent({
+      obligationId, orgId: org.orgId, actorId,
+      periodMonth: "2026-01-01", amount: "1200",
+      description: "January API calls", unitRate: "0.12", quantity: "10000",
+    });
+
+    const build = await buildRecognitionSchedule(obligationId, org.orgId, actorId);
+    assert.equal(build.lineCount, 1);
+
+    const plan = computeRecognitionSchedule({
+      total: "1200", method: "usage", startOn: "2026-01-01",
+      events: [{ periodMonth: "2026-01-01", amount: "1200" }],
+    });
+    assert.equal(plan.length, 1);
+    assert.equal(toUnits(plan[0]!.planned), toUnits("1200"));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("recordRecognitionEvent rejects a straight_line method obligation", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = randomUUID();
+  try {
+    const contractId = randomUUID();
+    await db.execute(sql`
+      insert into revenue_contracts
+        (id, org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
+      values (${contractId}, ${org.orgId}, ${org.customerId}, 'REV-SL-001', 'active', ${org.date},
+              'CAD', '1200', ${actorId}, ${actorId})`);
+
+    const obligationId = randomUUID();
+    await db.execute(sql`
+      insert into performance_obligations
+        (id, org_id, contract_id, description, recognition_rule_id,
+         booked_amount, allocated_price, recognition_starts_on, status, created_by, updated_by)
+      values (${obligationId}, ${org.orgId}, ${contractId}, 'Subscription', ${org.recognitionRuleId},
+              '1200', '1200', ${org.date}, 'open', ${actorId}, ${actorId})`);
+
+    await assert.rejects(
+      () => recordRecognitionEvent({
+        obligationId, orgId: org.orgId, actorId, periodMonth: "2026-07-01", amount: "100",
+      }),
+      /does not accept events/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("milestone schedule rebuilds on new event and preserves posted history", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = randomUUID();
+  try {
+    const calId = (await db.execute<{ id: string }>(sql`
+      select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`)).rows[0]!.id;
+    // Create periods for Jan and Feb 2026.
+    for (const { num, name, start, end } of [
+      { num: 1, name: "2026-01", start: "2026-01-01", end: "2026-01-31" },
+      { num: 2, name: "2026-02", start: "2026-02-01", end: "2026-02-28" },
+    ]) {
+      await db.execute(sql`
+        insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values (${randomUUID()}, ${org.orgId}, 2026, ${num}, ${name}, ${start}, ${end}, false, ${calId})`);
+    }
+
+    const ruleId = randomUUID();
+    await db.execute(sql`
+      insert into recognition_rules
+        (id, org_id, code, name, method, is_forecast, recognition_periods, start_date_source, end_date_source,
+         period_offset, start_offset_days, initial_amount_percent, deferred_account_id, recognized_account_id, is_active)
+      values (${ruleId}, ${org.orgId}, 'MILEST3', 'Milestone', 'milestone', false, 1,
+              'obligation', 'term', 0, 0, '0', ${org.accounts.deferred}, ${org.accounts.recognized}, true)`);
+
+    const contractId = randomUUID();
+    await db.execute(sql`
+      insert into revenue_contracts
+        (id, org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
+      values (${contractId}, ${org.orgId}, ${org.customerId}, 'REV-MILESTONE-003', 'active', '2026-01-01',
+              'CAD', '5000', ${actorId}, ${actorId})`);
+
+    const obligationId = randomUUID();
+    await db.execute(sql`
+      insert into performance_obligations
+        (id, org_id, contract_id, description, recognition_rule_id,
+         booked_amount, allocated_price, recognition_starts_on, status, created_by, updated_by)
+      values (${obligationId}, ${org.orgId}, ${contractId}, 'Milestone deliverable', ${ruleId},
+              '5000', '5000', '2026-01-01', 'open', ${actorId}, ${actorId})`);
+
+    // Record first milestone.
+    await recordRecognitionEvent({
+      obligationId, orgId: org.orgId, actorId, periodMonth: "2026-01-01", amount: "2000",
+    });
+
+    // Run recognition — Jan posts.
+    const run1 = await runRevenueRecognition(org.orgId, "2026-01-31", actorId);
+    assert.equal(run1.posted, 1);
+
+    // Add a second event for Feb.
+    await recordRecognitionEvent({
+      obligationId, orgId: org.orgId, actorId, periodMonth: "2026-02-01", amount: "3000",
+    });
+
+    // Build should now plan both periods, but the Jan line is already posted.
+    const build = await buildRecognitionSchedule(obligationId, org.orgId, actorId);
+    assert.equal(build.lineCount, 1); // only the new Feb line; Jan is posted
+
+    // Run recognition for Feb.
+    const run2 = await runRevenueRecognition(org.orgId, "2026-12-31", actorId);
+    assert.equal(run2.posted, 1);
+    assert.equal(run2.totalAmount, "3000.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }

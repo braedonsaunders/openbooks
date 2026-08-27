@@ -229,6 +229,39 @@ export const recognitionSchedules = pgTable(
   (t) => [uniqueIndex("rec_schedules_obligation_book").on(t.obligationId, t.bookId)],
 );
 
+/**
+ * Milestone / usage recognition events — explicit evidence of a recognized
+ * performance milestone or metered usage occurrence. Each event carries a
+ * period month, an amount, and an audit trail. The engine loads these when
+ * building a recognition schedule for a milestone/usage rule, producing one
+ * schedule line per event instead of a zero-line schedule.
+ */
+export const recognitionEvents = pgTable(
+  "recognition_events",
+  {
+    id: id(),
+    orgId: orgRef(),
+    obligationId: uuid("obligation_id").notNull(),
+    /** Accounting month the event belongs to (YYYY-MM-01). */
+    periodMonth: text("period_month").notNull(),
+    /** Amount to recognize in this period, decimal string. */
+    amount: money("amount").notNull(),
+    /** Human-readable description of the milestone or usage occurrence. */
+    description: text("description"),
+    /** Freeform source reference (e.g. invoice number, meter reading id). */
+    sourceReference: text("source_reference"),
+    /** Optional unit rate for usage-based events. */
+    unitRate: money("unit_rate"),
+    /** Optional quantity for usage-based events. */
+    quantity: money("quantity"),
+    ...auditColumns,
+  },
+  (t) => [
+    index("rec_events_obligation").on(t.obligationId),
+    index("rec_events_period").on(t.periodMonth),
+  ],
+);
+
 export const recognitionScheduleLines = pgTable(
   "recognition_schedule_lines",
   {

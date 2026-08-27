@@ -700,6 +700,19 @@ async function buildRecognitionScheduleOn(
   const postedToDate = sum(posted.rows.map((r) => r.planned_amount));
   const nextSequence = posted.rows.reduce((a, r) => Math.max(a, r.sequence + 1), 0);
 
+  // Milestone and usage methods recognize from recorded events rather than
+  // a term. Load the obligation's persisted events so computeRecognitionSchedule
+  // produces one line per event instead of a zero-line schedule.
+  const isMilestoneOrUsage = o.method === "milestone" || o.method === "usage";
+  let events: { periodMonth: string; amount: string }[] | undefined;
+  if (isMilestoneOrUsage) {
+    const eventRes = (await runner.execute<{ period_month: string; amount: string }>(sql`
+      select period_month, amount from recognition_events
+       where org_id = ${orgId} and obligation_id = ${obligationId}
+       order by period_month`));
+    events = eventRes.rows.map((e) => ({ periodMonth: e.period_month, amount: e.amount }));
+  }
+
   // Percent-complete: the catch-up delta lands in the as-of month (clamped to
   // the term start), credited for everything this schedule already posted.
   const plan = computeRecognitionSchedule({
@@ -713,6 +726,7 @@ async function buildRecognitionScheduleOn(
     periodOffset: o.period_offset,
     percentComplete: o.percent_complete,
     alreadyRecognized: isPercentComplete ? postedToDate : null,
+    events,
   });
 
   await runner.execute(sql`
@@ -784,6 +798,75 @@ export async function buildAllRecognitionSchedules(
   asOfDate?: string,
 ): Promise<BuildRecognitionResult[]> {
   return buildAllRecognitionSchedulesOn(db, obligationId, orgId, actorId, asOfDate);
+}
+
+// ---------------------------------------------------------------------------
+// recordRecognitionEvent — persist a milestone or usage event
+// ---------------------------------------------------------------------------
+
+export interface RecordRecognitionEventInput {
+  obligationId: string;
+  orgId: string;
+  actorId: string | null;
+  /** Accounting month the event belongs to (YYYY-MM-01). */
+  periodMonth: string;
+  /** Amount to recognize, decimal string. */
+  amount: string;
+  description?: string | null;
+  sourceReference?: string | null;
+  unitRate?: string | null;
+  quantity?: string | null;
+}
+
+export interface RecordRecognitionEventResult {
+  eventId: string;
+}
+
+/**
+ * Record a milestone achievement or metered-usage occurrence for a performance
+ * obligation. The event is persisted as subledger evidence and drives the next
+ * schedule rebuild: the next call to buildRecognitionSchedule on the obligation
+ * will load these events and produce one schedule line per event.
+ *
+ * Corrections and amendments are additive — posting history is never rewritten.
+ * A correction event with a negative amount reverses the prior recognition in
+ * the affected period through the normal schedule-rebuild / posting flow.
+ */
+export async function recordRecognitionEvent(
+  input: RecordRecognitionEventInput,
+): Promise<RecordRecognitionEventResult> {
+  await assertEnabled(db, input.orgId);
+  // Validate the obligation exists and uses a milestone or usage method.
+  const oblRes = (await db.execute<{ id: string; method: string }>(sql`
+    select o.id, r.method
+      from performance_obligations o
+      join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
+     where o.id = ${input.obligationId} and o.org_id = ${input.orgId}`));
+  if (!oblRes.rows[0]) {
+    throw new RevenueRecognitionError("obligation not found");
+  }
+  if (oblRes.rows[0].method !== "milestone" && oblRes.rows[0].method !== "usage") {
+    throw new RevenueRecognitionError(
+      `recognition method '${oblRes.rows[0].method}' does not accept events; only milestone and usage methods are supported`,
+    );
+  }
+
+  const res = (await db.execute<{ id: string }>(sql`
+    insert into recognition_events
+      (org_id, obligation_id, period_month, amount, description, source_reference,
+       unit_rate, quantity, created_by, updated_by)
+    values (${input.orgId}, ${input.obligationId}, ${input.periodMonth},
+            ${input.amount}, ${input.description ?? null}, ${input.sourceReference ?? null},
+            ${input.unitRate ?? null}, ${input.quantity ?? null},
+            ${input.actorId}, ${input.actorId})
+    returning id`));
+  const eventId = res.rows[0]!.id;
+
+  // Rebuild the obligation's schedule on every GL-posting book so the new
+  // event immediately appears as a planned recognition line.
+  await buildAllRecognitionSchedulesOn(db, input.obligationId, input.orgId, input.actorId);
+
+  return { eventId };
 }
 
 // ---------------------------------------------------------------------------
