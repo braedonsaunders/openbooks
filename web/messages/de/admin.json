@@ -559,7 +559,11 @@
       "taxFramework": "Ertragsteuer-Standard",
       "taxFrameworkHint": "Bestimmt die Begrifflichkeit der Steuerabgrenzung (Einstellungen → Geschäftsjahr).",
       "frameworkAsc740": "ASC 740 (US GAAP)",
-      "frameworkIas12": "IAS 12 (IFRS)"
+      "frameworkIas12": "IAS 12 (IFRS)",
+      "reportingFramework": "Finanzberichtsstandard",
+      "reportingFrameworkHint": "Steuert die Bilanzierung nach US-GAAP oder IFRS für Leasingverhältnisse, Vorrats-NRV und Wertminderungen. Unabhängig vom Ertragsteuer-Standard.",
+      "reportingFrameworkUsGaap": "US-GAAP",
+      "reportingFrameworkIfrs": "IFRS"
     },
     "months": {
       "january": "Januar",

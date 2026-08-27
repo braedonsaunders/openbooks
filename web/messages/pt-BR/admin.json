@@ -559,7 +559,11 @@
       "taxFramework": "Norma de imposto de renda",
       "taxFrameworkHint": "Define a terminologia da provisão (Configurações → exercício).",
       "frameworkAsc740": "ASC 740 (US GAAP)",
-      "frameworkIas12": "IAS 12 (IFRS)"
+      "frameworkIas12": "IAS 12 (IFRS)",
+      "reportingFramework": "Estrutura de relatórios financeiros",
+      "reportingFrameworkHint": "Controla o tratamento contábil US GAAP ou IFRS para arrendamentos, VNR do estoque e impairment. Independente da norma de imposto de renda.",
+      "reportingFrameworkUsGaap": "US GAAP",
+      "reportingFrameworkIfrs": "IFRS"
     },
     "months": {
       "january": "Janeiro",

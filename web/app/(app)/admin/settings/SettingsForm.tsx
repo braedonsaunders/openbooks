@@ -53,6 +53,7 @@ type Initial = {
   country: string
   baseCurrency: string
   fiscalYearStartMonth: number
+  reportingFramework: 'us_gaap' | 'ifrs'
   taxFramework?: 'asc740' | 'ias12'
   defaultLocale: Locale
   reportPdfStyle: 'formal' | 'modern'
@@ -300,6 +301,17 @@ export function SettingsForm({
               >
                 <option value="asc740">{t('fiscal.frameworkAsc740')}</option>
                 <option value="ias12">{t('fiscal.frameworkIas12')}</option>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <FieldLabel htmlFor="reportingFramework" help={t('fiscal.reportingFrameworkHint')}>{t('fiscal.reportingFramework')}</FieldLabel>
+              <Select
+                id="reportingFramework"
+                value={form.reportingFramework}
+                onChange={(e) => setForm((f) => ({ ...f, reportingFramework: e.target.value as 'us_gaap' | 'ifrs' }))}
+              >
+                <option value="us_gaap">{t('fiscal.reportingFrameworkUsGaap')}</option>
+                <option value="ifrs">{t('fiscal.reportingFrameworkIfrs')}</option>
               </Select>
             </div>
           </div>

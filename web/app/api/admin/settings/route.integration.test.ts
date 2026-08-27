@@ -117,6 +117,10 @@ async function seed(): Promise<Fixture> {
       insert into currencies (code, name, minor_units)
       values ('USD', 'US Dollar', 2), ('EUR', 'Euro', 2)
       on conflict (code) do nothing`);
+    await db.execute(sql`
+      update orgs
+         set settings = settings || '{"reportingFramework":"us_gaap"}'::jsonb
+       where id = ${org.orgId}`);
     return { ...org, actorId };
   });
 }
@@ -270,6 +274,8 @@ test(
           legalName: "",
           country: "CA",
           defaultLocale: "en",
+          reportingFramework: "us_gaap",
+          taxFramework: "asc740",
         },
       });
       assert.deepEqual(routeState.requestedPermissions, ["admin.users.manage"]);
@@ -294,6 +300,38 @@ test(
         (await settingsState(fixture.orgId)).settings.taxFramework,
         "ias12",
       );
+
+      const invalid = await put(fixture, { reportingFramework: "local_gaap" });
+      assert.equal(invalid.status, 400);
+      assert.deepEqual(await invalid.json(), {
+        error: "reportingFramework must be us_gaap or ifrs",
+      });
+
+      const explicit = await put(fixture, { reportingFramework: "ifrs" });
+      assert.equal(explicit.status, 200);
+      assert.equal(
+        (await settingsState(fixture.orgId)).settings.reportingFramework,
+        "ifrs",
+      );
+      const frameworkAudit = await withOrgContext(fixture.orgId, () =>
+        db.execute<{ change: [string, string] }>(sql`
+          select changes->'reportingFramework' as change
+            from audit_log
+           where org_id = ${fixture.orgId}
+             and table_name = 'orgs'
+             and changes ? 'reportingFramework'
+           order by created_at desc
+           limit 1`),
+      );
+      assert.deepEqual(frameworkAudit.rows[0]?.change, ["us_gaap", "ifrs"]);
+
+      // Tax presentation is an independent policy. Changing it back to ASC
+      // 740 must not move the authoritative financial-reporting framework.
+      const taxOnly = await put(fixture, { taxFramework: "asc740" });
+      assert.equal(taxOnly.status, 200);
+      const afterTaxEdit = await settingsState(fixture.orgId);
+      assert.equal(afterTaxEdit.settings.taxFramework, "asc740");
+      assert.equal(afterTaxEdit.settings.reportingFramework, "ifrs");
     } finally {
       routeState.authz = null;
       await dropScratchOrg(fixture.orgId);

@@ -559,7 +559,11 @@
       "taxFramework": "所得税の会計基準",
       "taxFrameworkHint": "税金計算の認識用語を決定します（会社設定 → 会計年度）。",
       "frameworkAsc740": "ASC 740（米国会計基準）",
-      "frameworkIas12": "IAS 12（IFRS）"
+      "frameworkIas12": "IAS 12（IFRS）",
+      "reportingFramework": "財務報告フレームワーク",
+      "reportingFrameworkHint": "リース、棚卸資産の正味実現可能価額、減損の会計処理をUS GAAPまたはIFRSから選択します。所得税の会計基準とは独立しています。",
+      "reportingFrameworkUsGaap": "US GAAP",
+      "reportingFrameworkIfrs": "IFRS"
     },
     "months": {
       "january": "1月",

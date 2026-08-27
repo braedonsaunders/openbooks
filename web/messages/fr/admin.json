@@ -582,7 +582,11 @@
       "taxFramework": "Référentiel d'impôt sur le résultat",
       "taxFrameworkHint": "Détermine le libellé de la provision d'impôt (Paramètres → exercice).",
       "frameworkAsc740": "ASC 740 (US GAAP)",
-      "frameworkIas12": "IAS 12 (IFRS)"
+      "frameworkIas12": "IAS 12 (IFRS)",
+      "reportingFramework": "Référentiel d'information financière",
+      "reportingFrameworkHint": "Détermine le traitement US GAAP ou IFRS des contrats de location, de la VNR des stocks et des dépréciations. Indépendant du référentiel d'impôt sur le résultat.",
+      "reportingFrameworkUsGaap": "US GAAP",
+      "reportingFrameworkIfrs": "IFRS"
     },
     "months": {
       "january": "Janvier",
