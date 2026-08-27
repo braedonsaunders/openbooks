@@ -280,13 +280,16 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'approved', 'INV-FX-1',
+      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-FX-1',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'EUR', '1.2',
               '100', '0', '100', ${userId})`);
     await db.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
       values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '100')`);
+    await db.execute(sql`
+      update documents set status = 'approved', updated_at = now()
+       where id = ${invoiceId} and org_id = ${org.orgId}`);
     const invoiceEntryId = await postDocument(invoiceId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
@@ -422,15 +425,18 @@ async function seedPaymentRunSelectionFixture(org: Awaited<ReturnType<typeof cre
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-      values (${billId}, ${org.orgId}, 'vendor_bill', 'approved', 'BILL-RESERVE-1',
+      values (${billId}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-RESERVE-1',
               ${org.subsidiaryId}, ${org.vendorId}, ${org.date}, 'CAD', '1',
               '125', '0', '125', ${actorId})`);
     await db.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price,
          amount, tax_amount)
-      values (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', '125',
+        values (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', '125',
               '125', '0')`);
+    await db.execute(sql`
+      update documents set status = 'approved', updated_at = now()
+       where id = ${billId} and org_id = ${org.orgId}`);
     await postDocument(billId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
@@ -1970,15 +1976,18 @@ test("draft payment saves are fenced by the exact document revision", { skip: !D
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-      values (${invoiceId}, ${org.orgId}, 'vendor_bill', 'approved', 'BILL-FENCE-1',
+      values (${invoiceId}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-FENCE-1',
               ${org.subsidiaryId}, ${org.vendorId}, ${org.date}, 'CAD', '1',
               '40', '0', '40', ${userId})`);
     await db.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price,
          amount, tax_amount)
-      values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.cogs}, '1', '40',
+        values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.cogs}, '1', '40',
               '40', '0')`);
+    await db.execute(sql`
+      update documents set status = 'approved', updated_at = now()
+       where id = ${invoiceId} and org_id = ${org.orgId}`);
     const invoiceEntryId = await postDocument(invoiceId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
