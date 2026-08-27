@@ -40,6 +40,8 @@ const paymentSurchargeRuleUniquenessMigrationPath =
   "schema/migrations/generated/0023_payment_surcharge_rule_uniqueness.sql";
 const taxRateEffectiveRangeExclusionMigrationPath =
   "schema/migrations/generated/0024_tax_rate_effective_range_exclusion.sql";
+const schedulerOutboxTerminalAuditMigrationPath =
+  "schema/migrations/generated/0026_scheduler_outbox_terminal_audit.sql";
 const accountPostingClassificationSerializationMigrationPath =
   "schema/migrations/generated/0046_account_posting_classification_serialization.sql";
 const subscriptionConfigurationInvariantsMigrationPath =
@@ -88,6 +90,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0022_close_posting_fence.sql",
     "0023_payment_surcharge_rule_uniqueness.sql",
     "0024_tax_rate_effective_range_exclusion.sql",
+    "0026_scheduler_outbox_terminal_audit.sql",
     "0035_terminal_failure_surfacing.sql",
     "0036_bank_statement_source_idempotency.sql",
     "0038_ledger_tenant_coherent_foreign_keys.sql",
@@ -258,6 +261,87 @@ test("base subscription configuration fails closed at the storage boundary", () 
   ]) {
     assert.match(migration, new RegExp(`VALIDATE CONSTRAINT ${constraint}`));
   }
+});
+
+test("scheduler outbox terminal failures carry immutable, exactly-once audit evidence", () => {
+  const migration = readFileSync(schedulerOutboxTerminalAuditMigrationPath, "utf8");
+
+  // The evidence channel is append-only at the storage boundary — no UPDATE
+  // and no DELETE can rewrite a transition that already happened, for tenant
+  // and org-less system scans alike. Only the scoped sandbox wipe helper may
+  // remove rows, mirroring every other append-only evidence table.
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.scheduler_outbox_terminal_audit/);
+  const guard = migration.match(
+    /CREATE OR REPLACE FUNCTION public\.scheduler_outbox_terminal_audit_append_only_guard\(\)\s+RETURNS trigger[\s\S]*?\$\$;/,
+  )?.[0];
+  assert.ok(guard, "0026 must install an append-only guard over the evidence table");
+  assert.match(guard, /openbooks_sandbox_wipe_allowed\(OLD\.org_id\)/);
+  assert.match(guard, /RAISE EXCEPTION 'scheduler_outbox_terminal_audit is append-only'/);
+  assert.match(
+    migration,
+    /CREATE TRIGGER scheduler_outbox_terminal_audit_append_only\s+BEFORE UPDATE OR DELETE ON public\.scheduler_outbox_terminal_audit/,
+  );
+  // Exactly-once: one terminal-failure record and one replay authorization per
+  // outbox occurrence, enforced by storage instead of worker discipline.
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX IF NOT EXISTS scheduler_outbox_terminal_audit_one_failure\s+ON public\.scheduler_outbox_terminal_audit USING btree \(outbox_row_id\)\s+WHERE event <> 'replay_authorized'/,
+  );
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX IF NOT EXISTS scheduler_outbox_terminal_audit_one_replay\s+ON public\.scheduler_outbox_terminal_audit USING btree \(outbox_row_id\)\s+WHERE event = 'replay_authorized'/,
+  );
+
+  // Replay authorization is transaction-scoped to exactly one organization.
+  assert.match(
+    migration,
+    /CREATE OR REPLACE FUNCTION public\.openbooks_scheduler_outbox_replay_allowed\(\s*p_org_id uuid\s*\)/,
+  );
+  assert.match(migration, /current_setting\('openbooks\.scheduler_outbox_replay_org', true\)\s*=\s*p_org_id::text/);
+
+  // A stamped row freezes its audit-bearing facts: any rewrite without the
+  // replay authorization raises, and clearing the stamps requires BOTH the
+  // prior replay evidence and the organization's transaction pin in the same
+  // transaction — an unevidenced reset rolls back with everything else.
+  const terminalGuard = migration.match(
+    /CREATE OR REPLACE FUNCTION public\.scheduler_outbox_terminal_guard\(\)\s+RETURNS trigger[\s\S]*?\$\$;/,
+  )?.[0];
+  assert.ok(terminalGuard, "0026 must freeze stamped scheduler_outbox rows");
+  assert.match(terminalGuard, /IF OLD\.terminal_failed_at IS NULL THEN/);
+  for (const frozenFact of [
+    "NEW\\.org_id IS DISTINCT FROM OLD\\.org_id",
+    "NEW\\.kind IS DISTINCT FROM OLD\\.kind",
+    "NEW\\.occurrence_key IS DISTINCT FROM OLD\\.occurrence_key",
+    "NEW\\.payload IS DISTINCT FROM OLD\\.payload",
+    "NEW\\.terminal_failed_at IS DISTINCT FROM OLD\\.terminal_failed_at",
+    "NEW\\.terminal_failed_by IS DISTINCT FROM OLD\\.terminal_failed_by",
+  ]) {
+    assert.match(terminalGuard, new RegExp(frozenFact), `guard must freeze ${frozenFact}`);
+  }
+  assert.match(
+    terminalGuard,
+    /RAISE EXCEPTION 'scheduler_outbox terminal-failure evidence is immutable; authorize a replay to reset it'/,
+  );
+  const stampClearAt = terminalGuard.indexOf("NEW.terminal_failed_at IS NOT DISTINCT FROM OLD.terminal_failed_at");
+  const evidenceReadAt = terminalGuard.indexOf("FROM public.scheduler_outbox_terminal_audit prior");
+  const pinReadAt = terminalGuard.indexOf("openbooks_scheduler_outbox_replay_allowed(OLD.org_id)");
+  assert.ok(stampClearAt >= 0 && evidenceReadAt > stampClearAt && pinReadAt > evidenceReadAt,
+    "stamp-clearing must be gated by prior evidence, then by the pin");
+  assert.match(terminalGuard, /prior\.event = 'replay_authorized'/);
+  assert.match(
+    terminalGuard,
+    /RAISE EXCEPTION 'a scheduler_outbox replay reset requires its replay_authorized audit evidence first'/,
+  );
+  assert.match(
+    migration,
+    /CREATE TRIGGER scheduler_outbox_terminal_guard_trigger\s+BEFORE UPDATE ON public\.scheduler_outbox/,
+  );
+
+  // Pre-existing poison arrives with its history intact: the backfill is
+  // additive, marks its provenance, and never duplicates on re-execution.
+  assert.match(migration, /INSERT INTO public\.scheduler_outbox_terminal_audit/);
+  assert.match(migration, /'pre_0026_backfill'/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
 });
 
 test("tax rates stay in the calculation engine's domain and setup codes stay unique per tenant", () => {
