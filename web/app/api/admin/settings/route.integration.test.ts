@@ -95,6 +95,12 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } =
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+/** Drizzle wraps driver errors, so PostgreSQL messages live on `cause`. */
+function postgresCauseMessage(error: unknown): string {
+  const cause = (error as { cause?: { message?: string } })?.cause;
+  return String(cause?.message ?? "");
+}
+
 interface Fixture {
   orgId: string;
   actorId: string;
@@ -320,7 +326,7 @@ test(
            where org_id = ${fixture.orgId}
              and table_name = 'orgs'
              and changes ? 'reportingFramework'
-           order by created_at desc
+           order by at desc
            limit 1`),
       );
       assert.deepEqual(frameworkAudit.rows[0]?.change, ["us_gaap", "ifrs"]);
@@ -352,7 +358,8 @@ test(
 
       await assert.rejects(
         () => put(fixture, { name: "Must Roll Back", fiscalYearStartMonth: 4 }),
-        /forced settings audit failure/,
+        (error: unknown) =>
+          postgresCauseMessage(error).includes("forced settings audit failure"),
       );
       assert.deepEqual(await settingsState(fixture.orgId), before);
     } finally {
@@ -537,6 +544,17 @@ test(
       assert.equal(after.calendarMonth, 4);
       assert.deepEqual(after.periods, [
         { fiscalYear: 2027, periodNumber: 4, name: "Jul 2026" },
+        { fiscalYear: 2027, periodNumber: 5, name: "Aug 2026" },
+        { fiscalYear: 2027, periodNumber: 6, name: "Sep 2026" },
+        { fiscalYear: 2027, periodNumber: 7, name: "Oct 2026" },
+        { fiscalYear: 2027, periodNumber: 8, name: "Nov 2026" },
+        { fiscalYear: 2027, periodNumber: 9, name: "Dec 2026" },
+        { fiscalYear: 2027, periodNumber: 10, name: "Jan 2027" },
+        { fiscalYear: 2027, periodNumber: 11, name: "Feb 2027" },
+        { fiscalYear: 2027, periodNumber: 12, name: "Mar 2027" },
+        { fiscalYear: 2028, periodNumber: 1, name: "Apr 2027" },
+        { fiscalYear: 2028, periodNumber: 2, name: "May 2027" },
+        { fiscalYear: 2028, periodNumber: 3, name: "Jun 2027" },
       ]);
       assert.equal(after.audits, 1);
     } finally {
