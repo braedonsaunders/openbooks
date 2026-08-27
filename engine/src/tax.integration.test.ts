@@ -385,36 +385,60 @@ test("approved sales and purchases use the configured provider atomically and re
       null,
     );
 
-    async function seedDocument(kind: "customer_invoice" | "vendor_bill", number: string): Promise<{ id: string; lineId: string }> {
+    async function seedDocument(
+      kind: "customer_invoice" | "vendor_bill",
+      number: string,
+      taxAmount = "13.0000",
+    ): Promise<{ id: string; lineId: string }> {
       const id = randomUUID();
       const lineId = randomUUID();
       const partyId = kind === "customer_invoice" ? org.customerId : org.vendorId;
       const accountId = kind === "customer_invoice" ? org.accounts.revenue : org.accounts.cogs;
+      const total = taxAmount === "9.5000" ? "109.5000" : "113.0000";
       await db.execute(sql`
         insert into documents
           (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date,
            currency, subtotal, tax_total, total)
         values (${id}, ${org.orgId}, ${kind}, 'draft', ${number}, ${partyId}, ${org.subsidiaryId}, ${org.date},
-                'CAD', '100', '13', '113')`);
+                'CAD', '100', ${taxAmount}, ${total})`);
       await db.execute(sql`
         insert into document_lines
           (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
            tax_amount, tax_code_id, quantity, unit_price)
-        values (${lineId}, ${org.orgId}, ${id}, 1, ${accountId}, '100', '100', '13', ${taxCodeId}, '1', '100')`);
+        values (${lineId}, ${org.orgId}, ${id}, 1, ${accountId}, '100', '100', ${taxAmount}, ${taxCodeId}, '1', '100')`);
       await db.execute(sql`
         insert into document_line_tax_components
           (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
            tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
            price_includes_tax, compound_on_previous, rounding_scale,
            collected_account_id, paid_account_id, overridden)
-        values (${org.orgId}, ${lineId}, ${taxCodeId}, 1, '13', '100', '13', '13', '0', 'standard',
+        values (${org.orgId}, ${lineId}, ${taxCodeId}, 1, '13', '100', ${taxAmount}, ${taxAmount}, '0', 'standard',
                 false, false, 2, ${org.accounts.taxOutput}, ${org.accounts.taxInput}, false)`);
       await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
       return { id, lineId };
     }
 
-    const sales = await seedDocument("customer_invoice", "EXT-SALE");
-    const purchase = await seedDocument("vendor_bill", "EXT-PURCHASE");
+    const sales = await seedDocument("customer_invoice", "EXT-SALE", "9.5000");
+    const purchase = await seedDocument("vendor_bill", "EXT-PURCHASE", "9.5000");
+    // Draft calculation is the only provider call and persists the immutable
+    // line quote before approval. Posting must only replay this evidence.
+    await quoteExternalTax(org.orgId, {
+      taxableAmount: "100.0000",
+      currency: "CAD",
+      shipFrom: {},
+      shipTo: {},
+      quotedOn: org.date,
+      documentLineId: sales.lineId,
+    });
+    await quoteExternalTax(org.orgId, {
+      taxableAmount: "100.0000",
+      currency: "CAD",
+      shipFrom: {},
+      shipTo: {},
+      quotedOn: org.date,
+      documentLineId: purchase.lineId,
+    });
+    assert.equal(calls, 2, "draft calculation invokes the configured provider for sales and purchases");
     const deps = { control: {
       ar: org.accounts.ar,
       ap: org.accounts.ap,
@@ -424,7 +448,7 @@ test("approved sales and purchases use the configured provider atomically and re
     } };
     await postDocument(sales.id, deps, { deferEffects: true, suppressAutomation: true });
     await postDocument(purchase.id, deps, { deferEffects: true, suppressAutomation: true });
-    assert.equal(calls, 2, "each taxable sales/purchase line invokes the configured provider");
+    assert.equal(calls, 2, "posting reuses the immutable draft quotes without provider calls");
 
     const evidence = (await db.execute<{ document_line_id: string; tax_amount: string; external_ref: string | null }>(sql`
       select document_line_id, tax_amount::text, external_ref
@@ -442,7 +466,7 @@ test("approved sales and purchases use the configured provider atomically and re
 
     // A persisted line quote is the replay authority. Once it exists, a retry
     // does not call a changed/outage endpoint and reuses the same provenance.
-    const replay = await seedDocument("customer_invoice", "EXT-REPLAY");
+    const replay = await seedDocument("customer_invoice", "EXT-REPLAY", "9.5000");
     await quoteExternalTax(org.orgId, {
       taxableAmount: "100.0000",
       currency: "CAD",
@@ -472,8 +496,8 @@ test("approved sales and purchases use the configured provider atomically and re
     assert.equal(calls, 3);
     assert.equal((await db.execute(sql`select count(*) from tax_rate_quotes where org_id = ${org.orgId} and document_line_id = ${local.lineId}`)).rows[0]?.count, "0");
 
-    // A provider outage fails before the posting transaction starts: the
-    // approved document, its local evidence, and journal stay untouched.
+    // An approved document without draft provider evidence fails closed before
+    // the posting transaction starts: no endpoint call or journal is emitted.
     await saveTaxRateProviderConfig(
       org.orgId,
       { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/outage` } },
@@ -482,8 +506,9 @@ test("approved sales and purchases use the configured provider atomically and re
     const failed = await seedDocument("vendor_bill", "EXT-OUTAGE");
     await assert.rejects(
       postDocument(failed.id, deps, { deferEffects: true, suppressAutomation: true }),
-      /configured tax provider custom_http failed/,
+      /no immutable tax-provider quote/,
     );
+    assert.equal(calls, 3);
     const failedState = (await db.execute<{ status: string; posted_entry_id: string | null }>(sql`
       select status, posted_entry_id from documents where id = ${failed.id}`)).rows[0]!;
     assert.deepEqual(failedState, { status: "approved", posted_entry_id: null });
