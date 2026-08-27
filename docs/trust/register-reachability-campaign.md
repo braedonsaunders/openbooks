@@ -2,8 +2,11 @@
 
 `check:register-reachability` is campaign tooling for auditing orchestration
 state. It answers whether findings recorded fixed or resolved have a closing
-commit that is reachable from the integration ref. It is intentionally not a
-permanent product-property gate and is not part of `npm test`; run it
+commit that is reachable from the local integration `main` ref. The checker
+never defaults to the potentially stale `origin/main` remote-tracking ref. For
+an explicit release candidate, set `OPENBOOKS_REGISTER_CHECK_REF` to a ref that
+resolves to a commit; a missing override fails closed. It is intentionally not
+a permanent product-property gate and is not part of `npm test`; run it
 deliberately when a campaign register needs to be checked:
 
 ```sh
@@ -11,6 +14,10 @@ OPENBOOKS_REGISTER_DB=/path/to/ultragoal/data.db \
 OPENBOOKS_REGISTER_THREAD_ID=thr_... \
 npm run check:register-reachability
 ```
+
+`OPENBOOKS_REGISTER_CHECK_REF` is optional. When omitted, the checker audits
+local `main`; when supplied, it must resolve to a commit in the checkout. There
+is no implicit fallback to `origin/main` or `HEAD`.
 
 `OPENBOOKS_REGISTER_JSON` can be used instead for an exported findings
 document. A SQLite probe selects fixed/resolved rows from one thread. For both
