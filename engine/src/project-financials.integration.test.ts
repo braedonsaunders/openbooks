@@ -80,7 +80,7 @@ async function stageUncommittedPosting(
     `insert into journal_lines
        (org_id, entry_id, line_number, account_id, subsidiary_id, project_id, amount, currency, txn_amount, fx_rate)
      values ($1,$2,1,$3,$4,$5,$6,'CAD',$6,'1'), ($1,$2,2,$7,$4,null,$8,'CAD',$8,'1')`,
-    [entryId, org.orgId, org.accounts.cogs, org.subsidiaryId, projectId, lineAmount, org.accounts.ap, `-${lineAmount}`],
+    [org.orgId, entryId, org.accounts.cogs, org.subsidiaryId, projectId, lineAmount, org.accounts.ap, `-${lineAmount}`],
   );
   await writer.query(`update journal_entries set status = 'posted', posted_at = now() where id = $1`, [entryId]);
 }
