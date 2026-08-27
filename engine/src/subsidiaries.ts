@@ -214,19 +214,33 @@ export interface IntercompanyLeg {
  * functional amounts that miss zero by a few ten-thousandths. Ordinary
  * single-entity documents get no intercompany legs to absorb that, and the
  * kernel requires exact balance — so each subsidiary's own rounding residual
- * is folded onto the final line of its group: the same convention the
- * intercompany balancer applies to its due-to/from legs.
+ * is folded onto ONE line of its group. The bucket is chosen by ROLE, never
+ * by position: a tax control leg (stamped with a tax code) must carry exactly
+ * its translated statutory charge — the statutory return sums these lines
+ * straight into filed figures — and an open-item control leg must equal the
+ * amount its subledger item settles at. Among the remaining lines the
+ * largest-magnitude one takes the residual, so the adjustment is a pure
+ * function of the ordered lines and regeneration reproduces it exactly.
  *
  * Only a group whose transaction amounts already sum to zero can be carrying
  * rounding; anything else is real economics left for the intercompany
  * balancer to pair (or the kernel to refuse). A transaction-balanced group
  * whose functional residual exceeds half a ledger unit per line cannot be
- * rounding and is refused loudly instead of flattened into the ledger. The
- * adjustment touches functional amounts only and is a pure function of the
- * ordered lines, so regeneration reproduces it exactly.
+ * rounding and is refused loudly instead of flattened into the ledger — and a
+ * group made up entirely of control legs has no lawful bucket and is refused
+ * the same way. The adjustment touches functional amounts only.
  */
 export function absorbFxRoundingResidual<
-  T extends { amount: string; subsidiaryId: string; txnAmount?: string | null },
+  T extends {
+    accountId: string;
+    amount: string;
+    subsidiaryId: string;
+    txnAmount?: string | null;
+    /** Present on tax control legs: the statutory charge is untouchable. */
+    taxCodeId?: string | null;
+    /** Present on AR/AP settlement legs: the open item settles at this amount. */
+    isOpenItem?: boolean;
+  },
 >(lines: T[]): void {
   const groups = new Map<string, T[]>();
   for (const line of lines) {
@@ -248,8 +262,23 @@ export function absorbFxRoundingResidual<
         `functional-currency residual ${fromUnits(total)} on subsidiary ${subId} exceeds per-line FX rounding and cannot be absorbed`,
       );
     }
-    const last = group[group.length - 1]!;
-    last.amount = fromUnits(toUnits(last.amount) - total);
+    let bucket: T | undefined;
+    let bucketMagnitude = 0n;
+    for (const line of group) {
+      if (line.taxCodeId || line.isOpenItem) continue;
+      const units = toUnits(line.amount);
+      const m = units < 0n ? -units : units;
+      if (!bucket || m > bucketMagnitude) {
+        bucket = line;
+        bucketMagnitude = m;
+      }
+    }
+    if (!bucket) {
+      throw new SubsidiaryError(
+        `functional-currency residual ${fromUnits(total)} on subsidiary ${subId} has no line that may absorb it — every line is a tax control or open-item leg`,
+      );
+    }
+    bucket.amount = fromUnits(toUnits(bucket.amount) - total);
   }
 }
 
