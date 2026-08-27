@@ -39,7 +39,7 @@ import {
   seedFlowActors,
   type ScratchOrg,
 } from "./test-fixtures.ts";
-import { postDocument, PostingError } from "./posting.ts";
+import { postDocument } from "./posting.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
