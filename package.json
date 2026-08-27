@@ -44,7 +44,7 @@
   },
   "scripts": {
     "worker": "tsx engine/src/worker/index.ts",
-    "lint": "node --import ./scripts/eslint-typescript-api.mjs ./node_modules/eslint/bin/eslint.js . --max-warnings=757",
+    "lint": "node --import ./scripts/eslint-typescript-api.mjs ./node_modules/eslint/bin/eslint.js . --max-warnings=756",
     "typecheck:e2e": "tsc --project e2e/tsconfig.json",
     "check:dependencies": "npm audit --omit=dev --audit-level=moderate",
     "check:history-hygiene": "node scripts/check-history-hygiene.mjs",
