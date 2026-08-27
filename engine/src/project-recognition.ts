@@ -49,8 +49,11 @@ async function recognitionAccountsFrom(
   };
 }
 
-export async function recognitionAccounts(orgId: string): Promise<RecognitionAccounts> {
-  return recognitionAccountsFrom(db, orgId);
+export async function recognitionAccounts(
+  orgId: string,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<RecognitionAccounts> {
+  return recognitionAccountsFrom(runner, orgId);
 }
 
 interface GlLine {

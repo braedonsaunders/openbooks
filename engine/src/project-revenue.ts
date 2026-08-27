@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { cmp, formatMoney, mulRatio, normalizeMoney, toUnits } from "./money.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
-import { buildAllRecognitionSchedules, revenueRecognitionFeatureEnabled } from "./revenue-recognition.ts";
+import { buildAllRecognitionSchedulesInTransaction, revenueRecognitionFeatureEnabled } from "./revenue-recognition.ts";
 import { recognitionAccounts } from "./project-recognition.ts";
 
 /**
@@ -71,11 +71,11 @@ export function costToCostPercent(budget: string, actual: string): string {
  * rule stays fully editable under Setup → Recognition Rules (accounts left to
  * the obligation, which carries the org control accounts).
  */
-async function ensureProjectPocRule(orgId: string, actorId: string | null): Promise<string> {
-  const existing = (await db.execute<{ id: string }>(sql`
+async function ensureProjectPocRule(orgId: string, actorId: string | null, runner: Pick<typeof db, "execute"> = db): Promise<string> {
+  const existing = (await runner.execute<{ id: string }>(sql`
     select id from recognition_rules where org_id = ${orgId} and code = ${PROJECT_POC_RULE_CODE} limit 1`));
   if (existing.rows[0]) return existing.rows[0].id;
-  const ins = (await db.execute<{ id: string }>(sql`
+  const ins = (await runner.execute<{ id: string }>(sql`
     insert into recognition_rules (org_id, code, name, method, is_active, created_by, updated_by)
     values (${orgId}, ${PROJECT_POC_RULE_CODE}, 'Project percent complete', 'percent_complete', true, ${actorId}, ${actorId})
     on conflict (org_id, code) do update set updated_at = now()
@@ -98,16 +98,36 @@ export async function syncProjectRevenueContracts(
   asOfDate: string,
   projectId?: string,
 ): Promise<ProjectRevenueSyncResult> {
-  const result: ProjectRevenueSyncResult = { synced: [], problems: [] };
-  if (!(await revenueRecognitionFeatureEnabled(db, orgId))) return result;
+  return db.transaction(async (tx) =>
+    syncProjectRevenueContractsInTransaction(tx, orgId, actorId, asOfDate, projectId),
+  );
+}
 
-  const accts = await recognitionAccounts(orgId);
+/**
+ * Transaction-bearing core of syncProjectRevenueContracts. The WHOLE sync for a
+ * project — the contract, its single obligation, and the multi-book schedule
+ * rebuild — runs inside one transaction (`tx`), so a percent-complete override
+ * cannot leave a mixed state (new displayed override/contract price with an old
+ * obligation or partial book schedules). Every book's schedule agrees on one
+ * source percent/contract value or the entire sync rolls back.
+ */
+export async function syncProjectRevenueContractsInTransaction(
+  tx: Pick<typeof db, "execute" | "transaction">,
+  orgId: string,
+  actorId: string | null,
+  asOfDate: string,
+  projectId?: string,
+): Promise<ProjectRevenueSyncResult> {
+  const result: ProjectRevenueSyncResult = { synced: [], problems: [] };
+  if (!(await revenueRecognitionFeatureEnabled(tx, orgId))) return result;
+
+  const accts = await recognitionAccounts(orgId, tx);
   if (!accts.unbilledReceivable || !accts.projectRevenue) {
     // Inert until mapped — same contract as the rest of project GL recognition.
     return result;
   }
 
-  const projects = (await db.execute<{
+  const projects = (await tx.execute<{
       id: string; code: string; name: string; customer_id: string | null; subsidiary_id: string | null;
       starts_on: string | null; contract_value: string; pct_override: string | null; functional_currency: string | null;
     }>(sql`
@@ -140,7 +160,7 @@ export async function syncProjectRevenueContracts(
       result.problems.push(`${p.code}: project has no authoritative functional currency`);
       continue;
     }
-    ruleId ??= await ensureProjectPocRule(orgId, actorId);
+    ruleId ??= await ensureProjectPocRule(orgId, actorId, tx);
 
     // -- percent complete: override (0..100) wins, else cost-to-cost ---------
     let percent: string;
@@ -161,33 +181,33 @@ export async function syncProjectRevenueContracts(
       percent = cmp(override, "0") < 0 ? "0.0000" : cmp(override, "100") > 0 ? "100.0000" : override;
       overridden = true;
     } else {
-      const cc = (await db.execute<{ budget: string; actual: string }>(sql`
+      const cc = (await tx.execute<{ budget: string; actual: string }>(sql`
         select
           coalesce((select sum(t.estimated_cost) from project_tasks t
                      where t.project_id = ${p.id} and t.org_id = ${orgId}), 0) as budget,
           coalesce((select sum(l.amount) from journal_lines l
-                     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-                     join accounts a on a.id = l.account_id and a.org_id = l.org_id
-                    where l.org_id = ${orgId} and l.project_id = ${p.id} and e.status in ('posted', 'reversed')
-                      and a.type in ('expense','cogs','expense_other','expense_deferred')), 0) as actual`));
+                    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+                    join accounts a on a.id = l.account_id and a.org_id = l.org_id
+                   where l.org_id = ${orgId} and l.project_id = ${p.id} and e.status in ('posted', 'reversed')
+                     and a.type in ('expense','cogs','expense_other','expense_deferred')), 0) as actual`));
       percent = costToCostPercent(cc.rows[0]?.budget ?? "0", cc.rows[0]?.actual ?? "0");
     }
 
     // -- ensure the contract --------------------------------------------------
     const startsOn = p.starts_on ?? asOfDate;
     let created = false;
-    const existing = (await db.execute<{ id: string }>(sql`
+    const existing = (await tx.execute<{ id: string }>(sql`
       select id from revenue_contracts where org_id = ${orgId} and project_id = ${p.id} limit 1`));
     let contractId: string;
     if (existing.rows[0]) {
       contractId = existing.rows[0].id;
-      await db.execute(sql`
+      await tx.execute(sql`
         update revenue_contracts
            set total_transaction_price = ${p.contract_value}, customer_id = ${p.customer_id},
                starts_on = coalesce(starts_on, ${startsOn}), updated_at = now(), updated_by = ${actorId}
          where id = ${contractId} and org_id = ${orgId}`);
     } else {
-      const ins = (await db.execute<{ id: string }>(sql`
+      const ins = (await tx.execute<{ id: string }>(sql`
         insert into revenue_contracts
           (org_id, customer_id, project_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
         values (${orgId}, ${p.customer_id}, ${p.id}, ${p.code}, 'active', ${startsOn}, ${p.functional_currency}, ${p.contract_value}, ${actorId}, ${actorId})
@@ -197,12 +217,12 @@ export async function syncProjectRevenueContracts(
     }
 
     // -- ensure the (single) obligation --------------------------------------
-    const existingObl = (await db.execute<{ id: string }>(sql`
+    const existingObl = (await tx.execute<{ id: string }>(sql`
       select id from performance_obligations where org_id = ${orgId} and contract_id = ${contractId} limit 1`));
     let obligationId: string;
     if (existingObl.rows[0]) {
       obligationId = existingObl.rows[0].id;
-      await db.execute(sql`
+      await tx.execute(sql`
         update performance_obligations
            set booked_amount = ${p.contract_value}, standalone_selling_price = ${p.contract_value},
                allocated_price = ${p.contract_value}, percent_complete = ${percent},
@@ -210,7 +230,7 @@ export async function syncProjectRevenueContracts(
                updated_at = now(), updated_by = ${actorId}
          where id = ${obligationId} and org_id = ${orgId}`);
     } else {
-      const ins = (await db.execute<{ id: string }>(sql`
+      const ins = (await tx.execute<{ id: string }>(sql`
         insert into performance_obligations
           (org_id, contract_id, item_id, description, recognition_rule_id,
            booked_amount, standalone_selling_price, allocated_price, percent_complete,
@@ -222,7 +242,7 @@ export async function syncProjectRevenueContracts(
       obligationId = ins.rows[0]!.id;
     }
 
-    await buildAllRecognitionSchedules(obligationId, orgId, actorId, asOfDate);
+    await buildAllRecognitionSchedulesInTransaction(tx, obligationId, orgId, actorId, asOfDate);
 
     result.synced.push({
       projectId: p.id,

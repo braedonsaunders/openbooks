@@ -800,6 +800,21 @@ export async function buildAllRecognitionSchedules(
   return buildAllRecognitionSchedulesOn(db, obligationId, orgId, actorId, asOfDate);
 }
 
+/**
+ * Build every active GL-posting book's schedule inside one caller-supplied
+ * transaction (`tx`). The multi-book percent-complete sync must be atomic:
+ * a failure after the first book leaves no book changed.
+ */
+export async function buildAllRecognitionSchedulesInTransaction(
+  tx: SqlExecutor,
+  obligationId: string,
+  orgId: string,
+  actorId: string | null,
+  asOfDate?: string,
+): Promise<BuildRecognitionResult[]> {
+  return buildAllRecognitionSchedulesOn(tx, obligationId, orgId, actorId, asOfDate);
+}
+
 // ---------------------------------------------------------------------------
 // recordRecognitionEvent — persist a milestone or usage event
 // ---------------------------------------------------------------------------
