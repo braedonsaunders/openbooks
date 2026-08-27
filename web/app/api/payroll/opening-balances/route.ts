@@ -1,5 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
@@ -13,6 +15,9 @@ import {
 } from '@openbooks/engine/src/payroll-opening-balances.ts'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { type Authz } from '../../../../lib/authz'
+import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
+import { guardPayrollEmployees } from '../subsidiary-scope'
 import { isUuid } from '../../../../lib/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -43,6 +48,15 @@ async function parseYear(orgId: string, raw: string | null): Promise<number> {
   return Number.isInteger(year) ? year : currentTaxYear(orgId)
 }
 
+async function visibleEmployeeIds(orgId: string, gate: Authz): Promise<Set<string> | null> {
+  if (gate.allowedSubsidiaryIds === null) return null
+  const rows = await db.execute<{ id: string }>(sql`
+    select id from parties p
+     where p.org_id = ${orgId}
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`)
+  return new Set(rows.rows.map((row) => row.id))
+}
+
 export async function GET(req: Request) {
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
   if (gate instanceof NextResponse) return gate
@@ -53,6 +67,26 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: message(error) }, { status: 422 })
   }
   const data = await openingBalancesForYear(gate.user.orgId, year)
+  const visible = await visibleEmployeeIds(gate.user.orgId, gate)
+  if (visible) {
+    const rows = data.rows.filter((row) => visible.has(row.employeePartyId))
+    const years = (await db.execute<{ taxYear: number }>(sql`
+      select distinct b.tax_year as "taxYear"
+        from payroll_opening_balances b
+        join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
+       where b.org_id = ${gate.user.orgId}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}
+       order by b.tax_year desc`)).rows.map((row) => Number(row.taxYear))
+    return NextResponse.json({
+      ...data,
+      rows,
+      entered: rows.filter((row) => row.amounts !== null).length,
+      years,
+      fields: OPENING_BALANCE_FIELDS.map((field) => ({
+        key: field.key, label: field.label, help: field.help, packs: field.packs,
+      })),
+    })
+  }
   return NextResponse.json({
     ...data,
     fields: OPENING_BALANCE_FIELDS.map((field) => ({
@@ -141,6 +175,12 @@ export async function POST(req: Request) {
       components,
     })
   }
+
+  const denied = await guardPayrollEmployees(
+    gate,
+    rows.map((row) => row.employeePartyId),
+  )
+  if (denied) return denied
 
   try {
     const result = await saveOpeningBalances({

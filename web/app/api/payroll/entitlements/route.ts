@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { entitlementBalances } from '@openbooks/engine/src/payroll-entitlements.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -27,14 +28,19 @@ export async function GET(req: Request) {
 
   // Money balances are denominated in the employee's legal entity's functional
   // currency (the same currency their wage and pay run carry).
-  const currencyRes = (await db.execute<{ currency: string | null }>(sql`
-    select coalesce(s.base_currency, o.base_currency) as currency
+  const currencyRes = (await db.execute<{ currency: string | null; subsidiaryId: string | null }>(sql`
+    select coalesce(s.base_currency, o.base_currency) as currency,
+           p.subsidiary_id as "subsidiaryId"
       from parties p
       join orgs o on o.id = p.org_id
       left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${employee}
   `))
-  const currency = currencyRes.rows[0]?.currency ?? 'CAD'
+  const employeeRow = currencyRes.rows[0]
+  if (!employeeRow) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, employeeRow.subsidiaryId)
+  if (denied) return denied
+  const currency = employeeRow.currency ?? 'CAD'
 
   const balances = await entitlementBalances(orgId, employee)
   // The movements behind those balances — the append-only evidence trail, most
