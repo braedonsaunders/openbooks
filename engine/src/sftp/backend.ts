@@ -120,7 +120,9 @@ function client(): S3Client {
 }
 
 export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBackend {
-  const root = prefix.replace(/^\/+|\/+$/g, "");
+  // Keep the exported constructor safe on its own as well as through
+  // backendFor: every S3 backend must be rooted in its owning tenant.
+  const root = assertTenantRootPrefix(prefix, orgId).replace(/^\/+|\/+$/g, "");
   const tenantPrefix = sftpTenantPrefix(orgId);
   const key = (p: string) => {
     const rel = cleanPath(p).replace(/^\//, "");
@@ -268,7 +270,7 @@ export function assertTenantRootPrefix(rootPrefix: string, orgId: string): strin
  */
 export function backendFor(server: SftpServerStorageConfig): SftpBackend {
   if (!server.orgId) throw new Error("sftp server config is missing its owning org id");
-  const rootPrefix = assertSafeRootPrefix(server.rootPrefix);
+  const rootPrefix = assertTenantRootPrefix(server.rootPrefix, server.orgId);
   if (server.backend === "s3") {
     if (!server.bucket) throw new Error("s3 sftp server missing bucket");
     return s3Backend(server.bucket, rootPrefix, server.orgId);

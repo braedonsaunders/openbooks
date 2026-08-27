@@ -45,6 +45,11 @@ test("a percent-encoded cross-tenant traversal prefix is refused by both physica
     () => assertTenantRootPrefix(`sftp/${VICTIM}/statements`, ORG),
     new RegExp(`must stay under sftp/${ORG}/`),
   );
+  assert.throws(
+    () => backendFor({ orgId: ORG, backend: "local", bucket: null, rootPrefix: `sftp/${VICTIM}/statements` }),
+    new RegExp(`must stay under sftp/${ORG}/`),
+    "the local physical resolver must enforce tenant binding, not only path shape",
+  );
 });
 
 test("a valid tenant-relative control resolves under the tenant namespace and the local data root", () => {
