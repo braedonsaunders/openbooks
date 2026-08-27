@@ -46,6 +46,8 @@ const sftpUsernameGlobalUniqueMigrationPath =
   "schema/migrations/generated/0029_sftp_username_global_unique.sql";
 const documentNumberSequenceGlobalityMigrationPath =
   "schema/migrations/generated/0032_document_number_sequence_globality.sql";
+const reportingFrameworkPolicyMigrationPath =
+  "schema/migrations/generated/0033_reporting_framework_policy.sql";
 const accountPostingClassificationSerializationMigrationPath =
   "schema/migrations/generated/0046_account_posting_classification_serialization.sql";
 const subscriptionConfigurationInvariantsMigrationPath =
@@ -101,6 +103,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0026_scheduler_outbox_terminal_audit.sql",
     "0029_sftp_username_global_unique.sql",
     "0032_document_number_sequence_globality.sql",
+    "0033_reporting_framework_policy.sql",
     "0035_terminal_failure_surfacing.sql",
     "0036_bank_statement_source_idempotency.sql",
     "0038_ledger_tenant_coherent_foreign_keys.sql",
@@ -137,6 +140,28 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
   assert.match(baseline, /CREATE FUNCTION public\.je_check_posted_balance/);
   assert.match(baseline, /CREATE POLICY org_isolation/);
   assert.match(baseline, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+});
+
+test("reporting framework policy is explicit and preserves the legacy effective value", () => {
+  const migration = readFileSync(reportingFrameworkPolicyMigrationPath, "utf8");
+
+  // The upgrade writes only the org settings document and is rerunnable.  Its
+  // CASE is the exact pre-0033 read rule: IAS 12 meant IFRS; everything else
+  // meant US GAAP.
+  assert.match(migration, /UPDATE public\.orgs[\s\S]*settings = jsonb_set/);
+  assert.match(
+    migration,
+    /CASE\s+WHEN settings->>'taxFramework'\s*=\s*'ias12'\s+THEN\s*'ifrs'\s+ELSE\s*'us_gaap'\s+END/,
+  );
+  assert.match(
+    migration,
+    /settings->>'reportingFramework' IS NULL\s+OR settings->>'reportingFramework' NOT IN \('us_gaap', 'ifrs'\)/,
+  );
+  const updateTargets = [
+    ...migration.matchAll(/^\s*UPDATE\s+(?:ONLY\s+)?(?:public\.)?([a-z_]+)/gm),
+  ].map((match) => match[1]);
+  assert.deepEqual(updateTargets, ["orgs"]);
+  assert.doesNotMatch(migration, /0001_baseline/);
 });
 
 test("document numbering allocates from one org-wide sequence with monotonic safety", () => {

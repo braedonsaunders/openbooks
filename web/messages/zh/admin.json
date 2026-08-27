@@ -559,7 +559,11 @@
       "taxFramework": "所得税准则",
       "taxFrameworkHint": "决定所得税计提的确认用语（公司设置 → 财年）。",
       "frameworkAsc740": "ASC 740（美国公认会计准则）",
-      "frameworkIas12": "IAS 12（国际财务报告准则）"
+      "frameworkIas12": "IAS 12（国际财务报告准则）",
+      "reportingFramework": "财务报告准则",
+      "reportingFrameworkHint": "控制租赁、存货可变现净值和减值的 US GAAP 或 IFRS 会计处理。独立于所得税准则。",
+      "reportingFrameworkUsGaap": "US GAAP（美国公认会计准则）",
+      "reportingFrameworkIfrs": "IFRS（国际财务报告准则）"
     },
     "months": {
       "january": "一月",

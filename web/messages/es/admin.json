@@ -538,7 +538,11 @@
       "taxFramework": "Marco de impuesto sobre beneficios",
       "taxFrameworkHint": "Determina la terminología de la provisión (Configuración → ejercicio).",
       "frameworkAsc740": "ASC 740 (US GAAP)",
-      "frameworkIas12": "IAS 12 (IFRS)"
+      "frameworkIas12": "IAS 12 (IFRS)",
+      "reportingFramework": "Marco de información financiera",
+      "reportingFrameworkHint": "Controla el tratamiento contable PCGA o NIIF para arrendamientos, VNR de inventario y deterioro. Es independiente del marco de impuesto sobre beneficios.",
+      "reportingFrameworkUsGaap": "PCGA de EE. UU.",
+      "reportingFrameworkIfrs": "NIIF (IFRS)"
     },
     "months": {
       "january": "Enero",

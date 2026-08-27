@@ -17,6 +17,12 @@ class WizardFeatureBlocked extends Error {
   }
 }
 
+class WizardReportingFrameworkBlocked extends Error {
+  constructor() {
+    super('reporting framework cannot change after accounting evidence exists')
+  }
+}
+
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +56,7 @@ export async function PUT(req: Request) {
     country: inputCountry,
     baseCurrency: inputCurrency,
     fiscalYearStartMonth: inputFiscalMonth,
+    reportingFramework: inputReportingFramework,
     industry: inputIndustry,
     features: inputFeatureOverrides,
     workspaceProfile: inputWorkspaceProfile,
@@ -59,6 +66,7 @@ export async function PUT(req: Request) {
     country?: string
     baseCurrency?: string
     fiscalYearStartMonth?: number
+    reportingFramework?: string
     industry?: string
     features?: Record<string, boolean>
     workspaceProfile?: { teamSize?: unknown; complexity?: unknown; bookStart?: unknown; taxPosition?: unknown; monthlyActivity?: unknown; closeCadence?: unknown }
@@ -95,6 +103,13 @@ export async function PUT(req: Request) {
     || inputFiscalMonth > 12
   ) {
     return NextResponse.json({ error: 'invalid-fiscal-year-start-month' }, { status: 422 })
+  }
+  if (
+    inputReportingFramework !== undefined
+    && inputReportingFramework !== 'us_gaap'
+    && inputReportingFramework !== 'ifrs'
+  ) {
+    return NextResponse.json({ error: 'invalid-reporting-framework' }, { status: 422 })
   }
   if (
     !inputWorkspaceProfile
@@ -189,6 +204,39 @@ export async function PUT(req: Request) {
     const settingsChanges: Record<string, unknown> = {}
     const currentIndustry = typeof nextSettings.industry === 'string' ? nextSettings.industry : null
     const industryChanged = Boolean(industry && industry.key !== currentIndustry)
+    const currentReportingFramework =
+      nextSettings.reportingFramework === 'ifrs' || nextSettings.reportingFramework === 'us_gaap'
+        ? nextSettings.reportingFramework
+        : null
+    // Existing organizations retain the pre-0033 effective value when first
+    // opened through setup (the migration normally makes this branch
+    // unnecessary). New organizations receive an explicit policy, independent
+    // from the income-tax framework seeded below.
+    const seededReportingFramework =
+      inputReportingFramework
+      ?? (nextSettings.taxFramework === 'ias12'
+        ? 'ifrs'
+        : nextSettings.taxFramework === 'asc740'
+          ? 'us_gaap'
+          : normalizeCountryCode(inputCountry) === 'US' ? 'us_gaap' : 'ifrs')
+    if (
+      currentReportingFramework !== null
+      && inputReportingFramework !== undefined
+      && inputReportingFramework !== currentReportingFramework
+    ) {
+      const evidence = await tx.execute<{ leaseEvidence: boolean; inventoryEvidence: boolean }>(sql`
+        select exists (select 1 from lease_agreements where org_id = ${orgId}) as "leaseEvidence",
+               exists (select 1 from inventory_writedowns where org_id = ${orgId}) as "inventoryEvidence"`)
+      if (evidence.rows[0]?.leaseEvidence || evidence.rows[0]?.inventoryEvidence) {
+        throw new WizardReportingFrameworkBlocked()
+      }
+    }
+    if (currentReportingFramework === null || inputReportingFramework !== undefined) {
+      if (currentReportingFramework !== seededReportingFramework) {
+        nextSettings.reportingFramework = seededReportingFramework
+        settingsChanges.reportingFramework = [currentReportingFramework, seededReportingFramework]
+      }
+    }
     let effectiveBaseCurrency = cur.base_currency
     let fiscalStartChanged = false
 
@@ -485,6 +533,15 @@ export async function PUT(req: Request) {
     // not a second, weaker door onto the same decision.
     if (error instanceof WizardFeatureBlocked) {
       return NextResponse.json({ error: 'feature-blocked', key: error.key }, { status: 409 })
+    }
+    if (error instanceof WizardReportingFrameworkBlocked) {
+      return NextResponse.json(
+        {
+          error: 'reporting-framework-locked',
+          message: 'Cannot change the reporting framework after lease or inventory NRV evidence exists.',
+        },
+        { status: 409 },
+      )
     }
     throw error
   }

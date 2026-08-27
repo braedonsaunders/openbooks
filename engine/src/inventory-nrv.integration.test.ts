@@ -11,6 +11,7 @@ import {
   revalueOpenLayersToStandardCost,
 } from "./inventory.ts";
 import { reverseInventoryWritedown, writeDownInventoryToNrv } from "./inventory-nrv.ts";
+import { orgReportingFramework } from "./reporting-framework.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -31,9 +32,16 @@ async function setFramework(orgId: string, framework: "us_gaap" | "ifrs"): Promi
      where id = ${orgId}`);
 }
 
+async function setTaxFramework(orgId: string, framework: "asc740" | "ias12"): Promise<void> {
+  await db.execute(sql`
+    update orgs set settings = settings || ${JSON.stringify({ taxFramework: framework })}::jsonb
+     where id = ${orgId}`);
+}
+
 test("NRV write-down remeasures value only, keeps subledger = GL, and new basis flows to COGS", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
+    await setFramework(org.orgId, "us_gaap");
     await receiveInventory(org.orgId, null, {
       itemId: org.items.fifo,
       stockLocationId: org.stockLocationId,
@@ -74,6 +82,53 @@ test("NRV write-down remeasures value only, keeps subledger = GL, and new basis 
     const after = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
     assert.equal(toUnits(after.quantity), toUnits("90"));
     assert.equal(toUnits(after.value), toUnits("180")); // 90 × 2.00
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("tax-framework edits do not reinterpret the reporting policy or prior NRV evidence", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await setFramework(org.orgId, "us_gaap");
+    await setTaxFramework(org.orgId, "asc740");
+    await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "10",
+      unitCost: "3",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.ap,
+      date: org.date,
+    });
+    const writedown = await writeDownInventoryToNrv(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      nrvPerUnit: "2",
+    });
+    assert.equal(writedown.framework, "us_gaap");
+
+    // Income-tax presentation can change independently. The authoritative
+    // reporting policy and the framework snapshot on committed evidence stay
+    // US GAAP, so a reversal remains prohibited after the tax edit.
+    await setTaxFramework(org.orgId, "ias12");
+    assert.equal(await orgReportingFramework(org.orgId), "us_gaap");
+    const evidence = await db.execute<{ framework: string }>(sql`
+      select framework from inventory_writedowns
+       where id = ${writedown.writedownId} and org_id = ${org.orgId}`);
+    assert.equal(evidence.rows[0]?.framework, "us_gaap");
+    await assert.rejects(
+      reverseInventoryWritedown(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "3",
+      }),
+      /prohibited under US GAAP/,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

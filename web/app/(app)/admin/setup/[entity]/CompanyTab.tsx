@@ -53,6 +53,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
           baseCurrency: (row?.base_currency as string) ?? '',
           fiscalYearStartMonth:
             typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
+          reportingFramework: settings.reportingFramework === 'ifrs' ? 'ifrs' : 'us_gaap',
           taxFramework: settings.taxFramework === 'ias12' ? 'ias12' : 'asc740',
           defaultLocale: isLocale(settings.defaultLocale) ? settings.defaultLocale : DEFAULT_LOCALE,
           reportPdfStyle: settings.reportPdfStyle === 'formal' ? 'formal' : 'modern',

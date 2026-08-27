@@ -23,13 +23,14 @@ export const runtime = "nodejs";
 
 /**
  * Company & Accounting settings. GET preserves the user-administration view of
- * non-financial organization identity/locale only. PUT persists the complete
- * setup policy: identity, base currency, fiscal calendar, tax/revenue policy,
- * and control accounts.
+ * organization identity, locale, and the two independent accounting policies.
+ * PUT persists the complete setup policy: identity, base currency, fiscal
+ * calendar, reporting/tax policy, and control accounts.
  *
  * Reads retain the existing user-administration gate because the response is
- * deliberately limited to identity/locale metadata. Every write is a setup
- * operation and is separately gated by admin.setup.manage: even an
+ * still the company-administration view rather than a posting endpoint.
+ * Every write is a setup operation and is separately gated by
+ * admin.setup.manage: even an
  * identity-only payload shares one authoritative settings mutation boundary
  * with ledger policy and must never inherit user-administration authority.
  *
@@ -74,6 +75,13 @@ export async function GET() {
       defaultLocale: isLocale(settings.defaultLocale)
         ? settings.defaultLocale
         : DEFAULT_LOCALE,
+      reportingFramework:
+        settings.reportingFramework === "ifrs" ||
+        settings.reportingFramework === "us_gaap"
+          ? settings.reportingFramework
+          : null,
+      taxFramework:
+        settings.taxFramework === "ias12" ? "ias12" : "asc740",
     },
   });
 }
@@ -92,6 +100,7 @@ export async function PUT(req: Request) {
     country?: unknown;
     baseCurrency?: unknown;
     fiscalYearStartMonth?: unknown;
+    reportingFramework?: unknown;
     taxFramework?: unknown;
     controlAccounts?: unknown;
     defaultLocale?: unknown;
@@ -331,6 +340,56 @@ export async function PUT(req: Request) {
       if (body.taxFramework !== curFramework) {
         nextSettings.taxFramework = body.taxFramework;
         changes.taxFramework = [curFramework, body.taxFramework];
+        settingsChanged = true;
+      }
+    }
+    if (body.reportingFramework !== undefined) {
+      if (
+        body.reportingFramework !== "us_gaap" &&
+        body.reportingFramework !== "ifrs"
+      ) {
+        return NextResponse.json(
+          { error: "reportingFramework must be us_gaap or ifrs" },
+          { status: 400 },
+        );
+      }
+      const curReportingFramework =
+        settings.reportingFramework === "ifrs" ||
+        settings.reportingFramework === "us_gaap"
+          ? settings.reportingFramework
+          : null;
+      if (body.reportingFramework !== curReportingFramework) {
+        // Lease classifications and NRV write-downs snapshot the policy that
+        // produced their accounting evidence. Once either evidence stream
+        // exists, changing the org policy without a prospective migration
+        // would make a later read appear to reinterpret committed history.
+        if (curReportingFramework !== null) {
+          const evidence = await tx.execute<{
+            leaseEvidence: boolean;
+            inventoryEvidence: boolean;
+          }>(sql`
+            select exists (
+                     select 1 from lease_agreements where org_id = ${orgId}
+                   ) as "leaseEvidence",
+                   exists (
+                     select 1 from inventory_writedowns where org_id = ${orgId}
+                   ) as "inventoryEvidence"`);
+          if (evidence.rows[0]?.leaseEvidence || evidence.rows[0]?.inventoryEvidence) {
+            return NextResponse.json(
+              {
+                error: "reporting-framework-locked",
+                message:
+                  "Cannot change the reporting framework after lease or inventory NRV evidence exists.",
+              },
+              { status: 409 },
+            );
+          }
+        }
+        nextSettings.reportingFramework = body.reportingFramework;
+        changes.reportingFramework = [
+          curReportingFramework,
+          body.reportingFramework,
+        ];
         settingsChanged = true;
       }
     }

@@ -614,7 +614,11 @@
       "taxFramework": "Income tax framework",
       "taxFrameworkHint": "Drives the income tax provision's recognition language (Company Settings → fiscal).",
       "frameworkAsc740": "ASC 740 (US GAAP)",
-      "frameworkIas12": "IAS 12 (IFRS)"
+      "frameworkIas12": "IAS 12 (IFRS)",
+      "reportingFramework": "Financial reporting framework",
+      "reportingFrameworkHint": "Controls GAAP versus IFRS accounting treatment for leases, inventory NRV and impairment. Independent from the income tax framework.",
+      "reportingFrameworkUsGaap": "US GAAP",
+      "reportingFrameworkIfrs": "IFRS"
     },
     "months": {
       "january": "January",
