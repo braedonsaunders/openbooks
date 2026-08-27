@@ -533,3 +533,40 @@ test("applications enforce independent base and transaction caps at deferred com
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("two organizations cannot hold the same global SFTP username", { skip: !DB }, async () => {
+  const first = await createScratchOrg();
+  const second = await createScratchOrg();
+  try {
+    const username = `global-unique-${randomUUID().slice(0, 8)}`;
+    await db.execute(sql`
+      insert into sftp_servers (org_id, name, username, root_prefix)
+      values (${first.orgId}, 'First Login', ${username}, 'sftp/first')`);
+
+    // The daemon routes a login by username alone, across every organization:
+    // a second tenant claiming the same global login name must fail closed in
+    // storage (sftp_servers_username_global), not merely be re-rolled by the
+    // creating route.
+    await assert.rejects(
+      db.execute(sql`
+        insert into sftp_servers (org_id, name, username, root_prefix)
+        values (${second.orgId}, 'Second Login', ${username}, 'sftp/second')`),
+      (error: unknown) => errorChainMatches(error, /sftp_servers_username_global/),
+    );
+
+    // Distinct-identity control: different usernames persist for both orgs.
+    const secondUsername = `distinct-${randomUUID().slice(0, 8)}`;
+    await db.execute(sql`
+      insert into sftp_servers (org_id, name, username, root_prefix)
+      values (${second.orgId}, 'Second Login', ${secondUsername}, 'sftp/second')`);
+    const state = await db.execute<{ usernames: string[] }>(sql`
+      select array_agg(username order by username) as usernames
+        from sftp_servers
+       where org_id = ${first.orgId} or org_id = ${second.orgId}
+    `);
+    assert.deepEqual(state.rows[0]?.usernames, [secondUsername, username].sort());
+  } finally {
+    await dropScratchOrg(second.orgId);
+    await dropScratchOrg(first.orgId);
+  }
+});

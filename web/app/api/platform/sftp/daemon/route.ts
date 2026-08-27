@@ -67,6 +67,22 @@ export async function PATCH(req: Request) {
     }, tx);
     return after;
   });
-  await ensureSftpServer();
+  try {
+    await ensureSftpServer();
+  } catch (e) {
+    // The configuration committed, but no listener could be brought up to
+    // serve it (bad/conflicting port, daemon startup failure). Never answer
+    // ok:true here: the operator gets a structured degraded response naming
+    // the failure and the exact configuration the database now holds.
+    return NextResponse.json(
+      {
+        ok: false,
+        degraded: true,
+        error: (e as Error).message,
+        config: { enabled: cfg.enabled, port: cfg.port, advertisedHost: cfg.advertisedHost },
+      },
+      { status: 502 },
+    );
+  }
   return NextResponse.json({ ok: true, enabled: cfg.enabled, port: cfg.port, advertisedHost: cfg.advertisedHost });
 }
