@@ -8,6 +8,12 @@ import {
   type ComputedTaxComponent,
   type TaxComponentConfig,
 } from '@openbooks/engine/src/tax.ts'
+import {
+  quoteExternalTax,
+  readTaxRateProviderConfig,
+  type TaxQuoteRequest,
+  type TaxQuoteResult,
+} from '@openbooks/engine/src/tax-rate-providers.ts'
 import { resolveOrgId } from './org-scope'
 import { requireEffectiveRateRow } from '@openbooks/engine/src/tax-persist.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
@@ -90,24 +96,36 @@ export interface BillLineInput {
   /** Manual tax override: when true, `taxAmount` is honored instead of computed. */
   taxOverridden?: boolean
   taxAmount?: string | null
+  custom?: Record<string, unknown>
+  /** Internal pre-persistence provider evidence; never accepted from API input. */
+  providerQuote?: {
+    providerConfigId: string
+    request: TaxQuoteRequest
+    result: TaxQuoteResult
+  }
 }
 
 /** Pre-tax lines → per-line tax + document totals. Honors manual overrides. */
 export function computeBillTotals(lines: BillLineInput[], profiles: TaxProfiles) {
   const computed = lines.map((l) => {
-    if (l.taxCodeId && l.taxGroupId) throw new Error('select either a tax code or a tax group, not both')
-    const config = l.taxGroupId
-      ? profiles.groups.get(l.taxGroupId)
-      : l.taxCodeId
-        ? profiles.codes.get(l.taxCodeId)
+    // Provider evidence is minted by this module, never accepted from an API
+    // caller. Strip the internal sidecar before carrying user line fields
+    // forward into the persisted document shape.
+    const line = { ...l }
+    delete line.providerQuote
+    if (line.taxCodeId && line.taxGroupId) throw new Error('select either a tax code or a tax group, not both')
+    const config = line.taxGroupId
+      ? profiles.groups.get(line.taxGroupId)
+      : line.taxCodeId
+        ? profiles.codes.get(line.taxCodeId)
         : []
-    if ((l.taxCodeId || l.taxGroupId) && !config) throw new Error('selected tax profile is inactive or has no effective rate')
-    const result = computeLineTaxes(l.amount, config ?? [], {
-      overridden: l.taxOverridden,
-      taxAmount: l.taxAmount,
+    if ((line.taxCodeId || line.taxGroupId) && !config) throw new Error('selected tax profile is inactive or has no effective rate')
+    const result = computeLineTaxes(line.amount, config ?? [], {
+      overridden: line.taxOverridden,
+      taxAmount: line.taxAmount,
     })
     return {
-      ...l,
+      ...line,
       amount: result.netAmount,
       taxInputAmount: result.inputAmount,
       taxAmount: result.taxTotal,
@@ -118,6 +136,96 @@ export function computeBillTotals(lines: BillLineInput[], profiles: TaxProfiles)
   const subtotal = sum(computed.map((l) => l.amount))
   const taxTotal = sum(computed.map((l) => l.taxAmount))
   return { lines: computed, subtotal, taxTotal, total: add(subtotal, taxTotal) }
+}
+
+export interface ProviderBillTotalsOptions {
+  orgId: string
+  kind: string
+  currency: string
+  documentDate: string
+  partyId?: string | null
+}
+
+const PROVIDER_DOCUMENT_KINDS = new Set([
+  'customer_invoice',
+  'customer_credit',
+  'vendor_bill',
+  'vendor_credit',
+])
+
+async function partyTaxAddress(orgId: string, partyId: string | null | undefined): Promise<Record<string, string | null>> {
+  if (!partyId) return {}
+  const result = await db.execute<Record<string, string | null>>(sql`
+    select line1, city, region, postal_code as "postalCode", country
+      from addresses
+     where org_id = ${orgId} and party_id = ${partyId}
+     order by is_default_shipping desc, is_default_billing desc, id asc
+     limit 1
+  `)
+  return result.rows[0] ?? {}
+}
+
+/**
+ * Compute document tax with the configured provider as the authoritative
+ * source. Resolution is read/HTTP-only; callers persist the returned quote in
+ * their own document transaction so an outage cannot leave partial writes.
+ */
+export async function computeBillTotalsWithProvider(
+  lines: BillLineInput[],
+  profiles: TaxProfiles,
+  options: ProviderBillTotalsOptions,
+) {
+  const local = computeBillTotals(lines, profiles)
+  if (!PROVIDER_DOCUMENT_KINDS.has(options.kind)) return local
+  const provider = await readTaxRateProviderConfig(options.orgId)
+  if (!provider?.isEnabled || !provider.preferProvider || provider.provider === 'manual') return local
+
+  const partyAddress = await partyTaxAddress(options.orgId, options.partyId)
+  const resolved = [] as typeof local.lines
+  for (const line of local.lines) {
+    if (!line.taxCodeId && !line.taxGroupId) {
+      resolved.push(line)
+      continue
+    }
+    const config = line.taxGroupId
+      ? profiles.groups.get(line.taxGroupId)
+      : line.taxCodeId
+        ? profiles.codes.get(line.taxCodeId)
+        : []
+    if (!config?.length) throw new Error('selected tax profile is inactive or has no effective rate')
+    const request: TaxQuoteRequest = {
+      taxableAmount: line.taxInputAmount,
+      currency: options.currency,
+      shipFrom: options.kind === 'vendor_bill' || options.kind === 'vendor_credit' ? partyAddress : {},
+      shipTo: options.kind === 'vendor_bill' || options.kind === 'vendor_credit' ? {} : partyAddress,
+      itemCode: line.custom?.taxItemCode == null ? null : String(line.custom.taxItemCode),
+      quotedOn: options.documentDate,
+    }
+    let quote: TaxQuoteResult & { quoteId: string | null }
+    try {
+      quote = await quoteExternalTax(options.orgId, request, null, { persist: false, config: provider })
+    } catch (error) {
+      throw new Error(
+        `configured tax provider ${provider.provider} failed for line: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+    const calculated = computeLineTaxes(request.taxableAmount, config, {
+      overridden: true,
+      taxAmount: quote.taxAmount,
+    })
+    resolved.push({
+      ...line,
+      amount: calculated.netAmount,
+      taxInputAmount: calculated.inputAmount,
+      taxAmount: calculated.taxTotal,
+      taxOverridden: true,
+      taxComponents: calculated.components,
+      providerQuote: { providerConfigId: provider.id, request, result: quote },
+    })
+  }
+  const subtotal = sum(resolved.map((line) => line.amount))
+  const taxTotal = sum(resolved.map((line) => line.taxAmount))
+  return { lines: resolved, subtotal, taxTotal, total: add(subtotal, taxTotal) }
 }
 
 type SqlRunner = SqlExecutor
