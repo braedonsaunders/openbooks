@@ -23,7 +23,7 @@ import {
   payRunBankFileEntitlement,
   releasePayRunBankFile,
 } from "./payroll-bank-file-artifact.ts";
-import { packStatutoryComponents } from "./payroll/packs.ts";
+import { packStatutoryComponents, setPackSlotAccount } from "./payroll/packs.ts";
 import {
   calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
 } from "./payroll-run.ts";
@@ -521,6 +521,7 @@ test("a sub-cent credit is refused rather than rounded into the file", () => {
 
 interface Fixture {
   orgId: string; subsidiaryId: string; actorId: string; scheduleId: string; profileId: string;
+  country: "CA" | "US"; currency: "CAD" | "USD"; region: string;
 }
 
 const account = async (orgId: string, number: string, name: string, type: string) => {
@@ -546,7 +547,9 @@ const account = async (orgId: string, number: string, name: string, type: string
  * a run; once the widened constraint lands, the catch never fires and the one
  * real seeder is the only path.
  */
-async function seedComponentsTolerantly(orgId: string, actorId: string): Promise<void> {
+async function seedComponentsTolerantly(
+  orgId: string, actorId: string, country: "CA" | "US",
+): Promise<void> {
   const causedBy = (error: unknown, pattern: RegExp): boolean => {
     let current: unknown = error;
     while (current) {
@@ -556,7 +559,7 @@ async function seedComponentsTolerantly(orgId: string, actorId: string): Promise
     return false;
   };
   try {
-    await seedPayrollComponents(orgId, actorId, "CA");
+    await seedPayrollComponents(orgId, actorId, country);
   } catch (error) {
     if (!causedBy(error, /pay_components_system_key/)) throw error;
     const rows = [
@@ -564,9 +567,9 @@ async function seedComponentsTolerantly(orgId: string, actorId: string): Promise
       { code: "OT", name: "Overtime", kind: "earning", systemKey: "overtime", basis: "per_hour", sequence: 20 },
       { code: "BONUS", name: "Bonus", kind: "earning", systemKey: "bonus", nonPeriodic: true, vacationable: false, sequence: 30 },
       { code: "VACPAY", name: "Vacation pay", kind: "earning", systemKey: "vacation_payout", vacationable: false, sequence: 40 },
-      ...packStatutoryComponents("CA").map((c) => ({
+      ...packStatutoryComponents(country).map((c) => ({
         code: c.code, name: c.name, kind: c.kind as string, systemKey: c.systemKey,
-        sequence: c.sequence, country: "CA",
+        sequence: c.sequence, country,
       })),
     ] as {
       code: string; name: string; kind: string; systemKey: string; sequence: number;
@@ -645,6 +648,24 @@ async function payrollOrg(
 ): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const spec = RAIL_FORMAT[rail];
+  const country = spec.country;
+  const currency = spec.currency;
+  const region = country === "US" ? "TX" : "ON";
+  // The bank rail and the payroll entity must describe the same jurisdiction.
+  // NACHA fixtures are US/USD; CPA-005 fixtures remain CA/CAD. Keeping that
+  // invariant before createPayRun means every commit consumes the calculation
+  // it was just given, rather than changing the run currency after Calculate.
+  if (rail === "nacha") {
+    await db.execute(sql`
+      insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2)
+      on conflict (code) do nothing`);
+    await db.execute(sql`
+      update orgs set base_currency = 'USD', country = 'US' where id = ${org.orgId}`);
+    await db.execute(sql`
+      update subsidiaries set base_currency = 'USD', country = 'US'
+       where org_id = ${org.orgId} and id = ${org.subsidiaryId}`);
+  }
   const accounts = {
     wageExpense: await account(org.orgId, "6000", "Wages expense", "expense"),
     burdenExpense: await account(org.orgId, "6010", "Payroll burden", "expense"),
@@ -666,7 +687,12 @@ async function payrollOrg(
         wagesTo: "expense",
       },
     })}::jsonb where id = ${org.orgId}`);
-  await seedComponentsTolerantly(org.orgId, actorId);
+  await seedComponentsTolerantly(org.orgId, actorId, country);
+  if (country === "US") {
+    for (const slot of ["fit", "fica", "futa", "suta", "state_income_tax", "local_income_tax"]) {
+      await setPackSlotAccount(org.orgId, actorId, country, slot, accounts.craPayable);
+    }
+  }
 
   const scheduleId = randomUUID();
   await db.execute(sql`
@@ -677,7 +703,6 @@ async function payrollOrg(
 
   // The tenant's originator configuration — the ONLY place institution-assigned
   // values come from. Anything absent is a named refusal, never a default.
-  const spec = RAIL_FORMAT[rail];
   const formatId = randomUUID();
   await db.execute(sql`
     insert into payment_formats (id, org_id, code, name, rail, direction, country, currency,
@@ -695,7 +720,10 @@ async function payrollOrg(
             ${sealJson({ ...ORIGINATOR_SECRETS[rail], ...overrides })},
             '{}'::jsonb, true, ${actorId}, ${actorId})`);
 
-  return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, profileId };
+  return {
+    orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, profileId,
+    country, currency, region,
+  };
 }
 
 async function employee(fx: Fixture, name: string, opts: {
@@ -715,15 +743,17 @@ async function employee(fx: Fixture, name: string, opts: {
   await db.execute(sql`
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                   effective_from, is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, 'CAD', '30', 'hour', '2080', '2026-01-01', true,
+    values (${fx.orgId}, ${id}, ${fx.currency}, '30', 'hour', '2080', '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
-                                           vacation_percent, vacation_method, payment_method,
+                                           vacation_percent, vacation_method, payment_method, filing_status,
                                            is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${fx.scheduleId}, 'ON', 'hourly', 1, 1, '4', 'accrue',
-            ${opts.profileMethod ?? null}, true, ${fx.actorId}, ${fx.actorId})`);
+    values (${fx.orgId}, ${id}, ${fx.scheduleId}, ${fx.country}, ${fx.region}, 'hourly', 1, 1,
+            ${fx.country === "US" ? null : "4"}, 'accrue',
+            ${opts.profileMethod ?? null}, ${fx.country === "US" ? "single" : null}, true,
+            ${fx.actorId}, ${fx.actorId})`);
   if (opts.bank) {
     const canadian = "institution" in opts.bank;
     await db.execute(sql`
@@ -772,12 +802,6 @@ async function mixedRun(fx: Fixture) {
     orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
   });
   assert.deepEqual(calc.errors, []);
-  // The NACHA rail settles in USD; the run must match or the amounts would be
-  // read as the wrong currency's cents.
-  await db.execute(sql`
-    insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2)
-    on conflict (code) do nothing`);
-  await db.execute(sql`update documents set currency = 'USD' where id = ${run.documentId}`);
   return { documentId: run.documentId, wired, paper, overridden };
 }
 
