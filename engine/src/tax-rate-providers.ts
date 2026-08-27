@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withOrgTransaction } from "./db.ts";
 import { add, fromUnits, mul, mulRatio, normalizeDecimal, normalizeMoney, toUnits } from "./money.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
@@ -74,12 +74,19 @@ export type TaxRateProviderConfigRow = {
   lastAttemptAt: Date | null;
   lastSuccessAt: Date | null;
   lastError: string | null;
+  /**
+   * Exact write revision — `updated_at` serialized with microsecond precision
+   * so a caller can pass it back as `expectedUpdatedAt` for optimistic
+   * concurrency without a float/truncation mismatch.
+   */
+  updatedAt: string | null;
 };
 
 const CONFIG_COLS = sql`
   id, org_id as "orgId", provider, display_name as "displayName", is_enabled as "isEnabled",
   settings, secrets, prefer_provider as "preferProvider",
-  last_attempt_at as "lastAttemptAt", last_success_at as "lastSuccessAt", last_error as "lastError"`;
+  last_attempt_at as "lastAttemptAt", last_success_at as "lastSuccessAt", last_error as "lastError",
+  to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"`;
 
 export async function readTaxRateProviderConfig(orgId: string): Promise<TaxRateProviderConfigRow | null> {
   const r = (await db.execute<TaxRateProviderConfigRow>(sql`
@@ -125,62 +132,162 @@ function persistableTaxProviderSettings(
   }
 }
 
+export interface SaveTaxRateProviderOptions {
+  /**
+   * Optimistic-concurrency token: the `updatedAt` revision the caller read
+   * before editing. If another administrator committed a write since then, the
+   * save is rejected instead of silently overwriting their change. `null`
+   * asserts the config does not exist yet. Omitted → transactional row
+   * serialization alone guards the write.
+   */
+  expectedUpdatedAt?: string | null;
+  /** Why the change was made, recorded verbatim in the audit evidence. */
+  reason?: string | null;
+}
+
+/** Non-secret audit shape: field values plus which credential KEYS changed — never their values. */
+interface TaxProviderConfigAuditState {
+  provider: TaxRateProviderKey;
+  displayName: string;
+  isEnabled: boolean;
+  preferProvider: boolean;
+  settings: Record<string, unknown>;
+  hasSecret: boolean;
+  revision: string | null;
+  secretKeys?: string[];
+  secretChange?: { added: string[]; removed: string[] };
+}
+
 export async function saveTaxRateProviderConfig(
   orgId: string,
   input: SaveTaxRateProviderInput,
   actorId: string | null,
-): Promise<void> {
-  const existing = await readTaxRateProviderConfig(orgId);
-  let secrets: string | null | undefined = undefined;
-  if (input.apiKey !== undefined || input.accountId !== undefined || input.licenseKey !== undefined) {
-    const prev = existing?.secrets ? ((await unsealJson(existing.secrets)) as Record<string, string>) : {};
-    const next: Record<string, string> = { ...prev };
-    if (input.apiKey === null) delete next.apiKey;
-    else if (typeof input.apiKey === "string" && input.apiKey) next.apiKey = input.apiKey;
-    if (input.accountId === null) delete next.accountId;
-    else if (typeof input.accountId === "string" && input.accountId) next.accountId = input.accountId;
-    if (input.licenseKey === null) delete next.licenseKey;
-    else if (typeof input.licenseKey === "string" && input.licenseKey) next.licenseKey = input.licenseKey;
-    secrets = Object.keys(next).length ? await sealJson(next) : null;
-  }
+  options: SaveTaxRateProviderOptions = {},
+): Promise<string> {
+  return withOrgTransaction(orgId, async () => {
+    // One locked, versioned unit: the row lock is held to commit, so a
+    // competing administrator save either merges against this write or waits
+    // for it — concurrent edits can never silently overwrite each other, and
+    // the config row, its sealed secret, and the audit evidence commit or roll
+    // back together.
+    const locked = (await db.execute<TaxRateProviderConfigRow>(sql`
+      select ${CONFIG_COLS} from tax_rate_provider_configs where org_id = ${orgId} for update
+    `));
+    const existing = locked.rows[0] ?? null;
 
-  const displayName =
-    input.displayName?.trim() ||
-    ({ avalara: "Avalara AvaTax", taxjar: "TaxJar", custom_http: "Custom tax HTTP", manual: "Manual rates" } as const)[
-      input.provider
-    ];
-  const settings = persistableTaxProviderSettings(input.settings ?? existing?.settings ?? {});
-
-  if (existing) {
-    await db.execute(sql`
-      update tax_rate_provider_configs set
-        provider = ${input.provider},
-        display_name = ${displayName},
-        is_enabled = ${input.isEnabled},
-        prefer_provider = ${input.preferProvider ?? true},
-        settings = ${JSON.stringify(settings)}::jsonb,
-        secrets = coalesce(${secrets === undefined ? null : secrets}, secrets),
-        updated_at = now(), updated_by = ${actorId}
-       where org_id = ${orgId}
-    `);
-    if (secrets === null) {
-      await db.execute(sql`update tax_rate_provider_configs set secrets = null where org_id = ${orgId}`);
-    } else if (typeof secrets === "string") {
-      await db.execute(sql`update tax_rate_provider_configs set secrets = ${secrets} where org_id = ${orgId}`);
+    if (options.expectedUpdatedAt !== undefined) {
+      const expected = options.expectedUpdatedAt ?? null;
+      const current = existing?.updatedAt ?? null;
+      if (current !== expected) {
+        throw new TaxRateProviderError(
+          existing
+            ? "tax provider config was modified concurrently — reload it and retry"
+            : "tax provider config does not exist at the expected revision — reload and retry",
+        );
+      }
     }
-  } else {
-    const sealed =
-      secrets === undefined
-        ? null
-        : secrets;
+
+    let previousSecretKeys: string[] | null = null;
+    let nextSecretKeys: string[] | null = null;
+    let secretChange: TaxProviderConfigAuditState["secretChange"];
+    let sealedSecrets: string | null = existing?.secrets ?? null;
+    if (input.apiKey !== undefined || input.accountId !== undefined || input.licenseKey !== undefined) {
+      const prev = existing?.secrets ? ((await unsealJson(existing.secrets)) as Record<string, string>) : {};
+      previousSecretKeys = Object.keys(prev).sort();
+      const next: Record<string, string> = { ...prev };
+      if (input.apiKey === null) delete next.apiKey;
+      else if (typeof input.apiKey === "string" && input.apiKey) next.apiKey = input.apiKey;
+      if (input.accountId === null) delete next.accountId;
+      else if (typeof input.accountId === "string" && input.accountId) next.accountId = input.accountId;
+      if (input.licenseKey === null) delete next.licenseKey;
+      else if (typeof input.licenseKey === "string" && input.licenseKey) next.licenseKey = input.licenseKey;
+      nextSecretKeys = Object.keys(next).sort();
+      secretChange = {
+        added: nextSecretKeys.filter((k) => !(k in prev)).sort(),
+        removed: previousSecretKeys.filter((k) => !(k in next)).sort(),
+      };
+      sealedSecrets = nextSecretKeys.length ? await sealJson(next) : null;
+    }
+
+    const displayName =
+      input.displayName?.trim() ||
+      ({ avalara: "Avalara AvaTax", taxjar: "TaxJar", custom_http: "Custom tax HTTP", manual: "Manual rates" } as const)[
+        input.provider
+      ];
+    const settings = persistableTaxProviderSettings(input.settings ?? existing?.settings ?? {});
+
+    const before: TaxProviderConfigAuditState | null = existing
+      ? {
+          provider: existing.provider,
+          displayName: existing.displayName,
+          isEnabled: existing.isEnabled,
+          preferProvider: existing.preferProvider,
+          settings: existing.settings,
+          hasSecret: Boolean(existing.secrets),
+          revision: existing.updatedAt,
+          ...(previousSecretKeys ? { secretKeys: previousSecretKeys } : {}),
+        }
+      : null;
+
+    let configId: string;
+    let afterRevision: string;
+    if (existing) {
+      // Single statement: general config and the sealed secret move together,
+      // so a clear can never be half-applied by a failure between two writes.
+      const updated = (await db.execute<{ updatedAt: string }>(sql`
+        update tax_rate_provider_configs set
+          provider = ${input.provider},
+          display_name = ${displayName},
+          is_enabled = ${input.isEnabled},
+          prefer_provider = ${input.preferProvider ?? true},
+          settings = ${JSON.stringify(settings)}::jsonb,
+          secrets = ${sealedSecrets},
+          updated_at = now(), updated_by = ${actorId}
+         where org_id = ${orgId}
+        returning id,
+                  to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
+      `));
+      if (!updated.rows[0]) throw new TaxRateProviderError("tax provider config row vanished while saving");
+      configId = existing.id;
+      afterRevision = updated.rows[0].updatedAt;
+    } else {
+      const inserted = (await db.execute<{ id: string; updatedAt: string }>(sql`
+        insert into tax_rate_provider_configs
+          (org_id, provider, display_name, is_enabled, settings, secrets, prefer_provider, created_by, updated_by)
+        values (${orgId}, ${input.provider}, ${displayName}, ${input.isEnabled},
+                ${JSON.stringify(settings)}::jsonb, ${sealedSecrets}, ${input.preferProvider ?? true},
+                ${actorId}, ${actorId})
+        returning id, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
+      `));
+      configId = inserted.rows[0]!.id;
+      afterRevision = inserted.rows[0]!.updatedAt;
+    }
+
+    const after: TaxProviderConfigAuditState = {
+      provider: input.provider,
+      displayName,
+      isEnabled: input.isEnabled,
+      preferProvider: input.preferProvider ?? true,
+      settings,
+      hasSecret: Boolean(sealedSecrets),
+      revision: afterRevision,
+      ...(secretChange ? { secretKeys: nextSecretKeys ?? [], secretChange } : {}),
+    };
+
+    // Attributable, redacted evidence in the SAME transaction as the write: a
+    // forced audit failure rolls the configuration change back with it.
     await db.execute(sql`
-      insert into tax_rate_provider_configs
-        (org_id, provider, display_name, is_enabled, settings, secrets, prefer_provider, created_by, updated_by)
-      values (${orgId}, ${input.provider}, ${displayName}, ${input.isEnabled},
-              ${JSON.stringify(settings)}::jsonb, ${sealed}, ${input.preferProvider ?? true},
-              ${actorId}, ${actorId})
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'tax_rate_provider_configs', ${configId}, ${existing ? "update" : "insert"},
+              ${JSON.stringify({
+                reason: options.reason ?? null,
+                before,
+                after,
+              })}::jsonb,
+              ${actorId})
     `);
-  }
+    return afterRevision;
+  });
 }
 
 /** Pure: aggregate component taxes with ledger scale. */

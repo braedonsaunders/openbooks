@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import test from "node:test";
+import pg from "pg";
+import { sql } from "drizzle-orm";
+import { db, withBypass, withOrgContext } from "./db.ts";
+import { sealJson, unsealJson } from "./secrets.ts";
 import {
+  readTaxRateProviderConfigView,
   quoteViaAvalara,
   quoteViaCustomHttp,
   quoteViaTaxJar,
+  saveTaxRateProviderConfig,
   TaxRateProviderError,
   type TaxQuoteRequest,
 } from "./tax-rate-providers.ts";
@@ -324,3 +331,423 @@ test("provider error statuses surface as TaxRateProviderError without leaking cr
     await close(errors);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Provider configuration persistence (live PostgreSQL): attributable
+// before/after audit evidence, optimistic concurrency over concurrent admin
+// edits, atomic sealed-secret updates, and rollback safety.
+// ---------------------------------------------------------------------------
+
+const DB = !!process.env.OPENBOOKS_DB_URL;
+
+const REVISION_COL = sql`to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+
+type CommittedConfig = {
+  provider: string;
+  displayName: string;
+  isEnabled: boolean;
+  preferProvider: boolean;
+  settings: Record<string, unknown>;
+  secrets: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+interface ConfigAuditState {
+  provider?: string;
+  displayName?: string;
+  isEnabled?: boolean;
+  preferProvider?: boolean;
+  settings?: Record<string, unknown>;
+  hasSecret?: boolean;
+  revision?: string | null;
+  secretKeys?: string[];
+  secretChange?: { added: string[]; removed: string[] };
+}
+
+type ConfigAuditRow = {
+  action: string;
+  actor_id: string | null;
+  changes: { reason: string | null; before: ConfigAuditState | null; after: ConfigAuditState };
+};
+
+async function seedTaxConfigOrg(): Promise<string> {
+  const orgId = randomUUID();
+  await withBypass(async () => {
+    await db.execute(sql`
+      insert into orgs (id, name, base_currency, country, settings, env_kind)
+      values (${orgId}, ${"Scratch " + orgId.slice(0, 8)}, 'CAD', 'CA', '{}'::jsonb, 'production')`);
+  });
+  return orgId;
+}
+
+async function dropTaxConfigOrg(orgId: string): Promise<void> {
+  await withBypass(async () => {
+    // audit_log is append-only by design and the seeded segment spine makes the
+    // org row itself non-trivially removable — both outlive the test inertly,
+    // and every assertion scopes itself to this run's unique org id.
+    await db.execute(sql`delete from tax_rate_provider_configs where org_id = ${orgId}`);
+  });
+}
+
+/** Read the COMMITTED row through its own trusted boundary, bypassing the product. */
+async function committedConfig(orgId: string): Promise<CommittedConfig | null> {
+  return (
+    (await withBypass(() =>
+      db.execute<CommittedConfig>(sql`
+        select provider, display_name as "displayName", is_enabled as "isEnabled",
+               prefer_provider as "preferProvider", settings, secrets,
+               ${REVISION_COL} as "updatedAt", updated_by as "updatedBy"
+          from tax_rate_provider_configs where org_id = ${orgId}
+      `),
+    )).rows[0] ?? null
+  );
+}
+
+async function configAuditRows(orgId: string): Promise<ConfigAuditRow[]> {
+  return (
+    (await withBypass(() =>
+      db.execute<ConfigAuditRow>(sql`
+        select action, actor_id, changes
+          from audit_log
+         where org_id = ${orgId} and table_name = 'tax_rate_provider_configs'
+         order by at, id
+      `),
+    )).rows
+  );
+}
+
+test(
+  "provider config saves record attributable before/after audit evidence without disclosing secrets",
+  { skip: !DB },
+  async () => {
+    const orgId = await seedTaxConfigOrg();
+    try {
+      const admin1 = randomUUID();
+      // `expectedUpdatedAt: null` asserts "no row yet" on first creation.
+      const revision1 = await saveTaxRateProviderConfig(
+        orgId,
+        { provider: "manual", isEnabled: true, settings: { defaultRatePercent: "5" } },
+        admin1,
+        { expectedUpdatedAt: null, reason: "initial setup" },
+      );
+      assert.ok(revision1);
+
+      const admin2 = randomUUID();
+      const licenseKey = "AVALARA-LICENSE-SECRET-9f3b";
+      const apiKey = "TAXJAR-KEY-SECRET-2c7d";
+      await saveTaxRateProviderConfig(
+        orgId,
+        {
+          provider: "avalara",
+          displayName: "Avalara production",
+          isEnabled: false,
+          settings: { defaultRatePercent: "7.25", companyCode: "MAIN" },
+          apiKey,
+          accountId: "ACCT-99",
+          licenseKey,
+        },
+        admin2,
+        { reason: "wire avalara provider" },
+      );
+      const row2 = (await committedConfig(orgId))!;
+
+      const audits = await configAuditRows(orgId);
+      assert.equal(audits.length, 2);
+
+      const insertAudit = audits[0]!;
+      assert.equal(insertAudit.action, "insert");
+      assert.equal(insertAudit.actor_id, admin1);
+      assert.equal(insertAudit.changes.reason, "initial setup");
+      assert.equal(insertAudit.changes.before, null);
+      assert.equal(insertAudit.changes.after.isEnabled, true);
+      assert.deepEqual(insertAudit.changes.after.settings, { defaultRatePercent: "5.0000" });
+      assert.equal(insertAudit.changes.after.hasSecret, false);
+      assert.equal(insertAudit.changes.after.revision, revision1);
+
+      const updateAudit = audits[1]!;
+      assert.equal(updateAudit.action, "update");
+      assert.equal(updateAudit.actor_id, admin2);
+      assert.equal(updateAudit.changes.reason, "wire avalara provider");
+      const before = updateAudit.changes.before!;
+      const after = updateAudit.changes.after;
+      // Authoritative before/after for every material field.
+      assert.equal(before.provider, "manual");
+      assert.equal(after.provider, "avalara");
+      assert.equal(before.displayName, "Manual rates");
+      assert.equal(after.displayName, "Avalara production");
+      assert.equal(before.isEnabled, true);
+      assert.equal(after.isEnabled, false);
+      assert.deepEqual(before.settings, { defaultRatePercent: "5.0000" });
+      assert.deepEqual(after.settings, { defaultRatePercent: "7.2500", companyCode: "MAIN" });
+      // The audit chains revisions: before.token is the caller's read, after.token the committed row.
+      assert.equal(before.revision, revision1);
+      assert.equal(after.revision, row2.updatedAt);
+      // Credential evidence records WHICH KEYS changed — never their values.
+      assert.equal(before.hasSecret, false);
+      assert.deepEqual(before.secretKeys, []);
+      assert.equal(after.hasSecret, true);
+      assert.deepEqual(after.secretKeys, ["accountId", "apiKey", "licenseKey"]);
+      assert.deepEqual(after.secretChange!.added, ["accountId", "apiKey", "licenseKey"]);
+      assert.deepEqual(after.secretChange!.removed, []);
+
+      // The serialized evidence must carry no secret material at all — the
+      // plaintexts above exist only inside the sealed blob on the row.
+      const evidenceText = JSON.stringify(audits);
+      for (const secretValue of [licenseKey, apiKey, "ACCT-99"]) {
+        assert.ok(!evidenceText.includes(secretValue), "audit evidence must never contain a secret value");
+      }
+
+      // The read view exposes the revision token and the secret's existence — never the secret.
+      const view = await withOrgContext(orgId, () => readTaxRateProviderConfigView(orgId));
+      assert.equal(view!.hasSecret, true);
+      assert.equal("secrets" in view!, false);
+      assert.equal(view!.updatedAt, row2.updatedAt);
+      const sealed = unsealJson<Record<string, string>>(row2.secrets);
+      assert.deepEqual(Object.keys(sealed!).sort(), ["accountId", "apiKey", "licenseKey"]);
+
+      // Clearing one credential is atomic: the rest survive in the same commit,
+      // with removed-key evidence attributable to the actor.
+      await saveTaxRateProviderConfig(
+        orgId,
+        { provider: "avalara", isEnabled: false, apiKey: null },
+        admin2,
+        { expectedUpdatedAt: row2.updatedAt, reason: "drop stray key" },
+      );
+      const cleared = (await committedConfig(orgId))!;
+      assert.deepEqual(Object.keys(unsealJson<Record<string, string>>(cleared.secrets)!).sort(), [
+        "accountId",
+        "licenseKey",
+      ]);
+      assert.notEqual(cleared.updatedAt, row2.updatedAt);
+      const clearAudit = (await configAuditRows(orgId)).at(-1)!;
+      assert.equal(clearAudit.actor_id, admin2);
+      assert.equal(clearAudit.changes.reason, "drop stray key");
+      assert.deepEqual(clearAudit.changes.before!.secretKeys, ["accountId", "apiKey", "licenseKey"]);
+      assert.equal(clearAudit.changes.before!.hasSecret, true);
+      assert.deepEqual(clearAudit.changes.after.secretChange!.removed, ["apiKey"]);
+      assert.deepEqual(clearAudit.changes.after.secretKeys, ["accountId", "licenseKey"]);
+      assert.equal(clearAudit.changes.after.hasSecret, true);
+    } finally {
+      await dropTaxConfigOrg(orgId);
+    }
+  },
+);
+
+test(
+  "a stale expectedUpdatedAt revision is rejected with zero partial write",
+  { skip: !DB },
+  async () => {
+    const orgId = await seedTaxConfigOrg();
+    try {
+      const admin1 = randomUUID();
+      await saveTaxRateProviderConfig(
+        orgId,
+        { provider: "manual", isEnabled: true, settings: { defaultRatePercent: "5" } },
+        admin1,
+      );
+      const staleToken = (await committedConfig(orgId))!.updatedAt;
+
+      // A committed concurrent write advances the revision under the other save.
+      const admin2 = randomUUID();
+      await saveTaxRateProviderConfig(
+        orgId,
+        { provider: "manual", isEnabled: true, settings: { defaultRatePercent: "6" }, accountId: "ACCT-CONCURRENT" },
+        admin2,
+        { reason: "concurrent edit" },
+      );
+      const current = (await committedConfig(orgId))!;
+      assert.notEqual(current.updatedAt, staleToken);
+
+      const admin3 = randomUUID();
+      await assert.rejects(
+        saveTaxRateProviderConfig(
+          orgId,
+          { provider: "taxjar", isEnabled: false, settings: { defaultRatePercent: "9" }, apiKey: "ROGUE-KEY" },
+          admin3,
+          { expectedUpdatedAt: staleToken },
+        ),
+        (e: unknown) => e instanceof TaxRateProviderError && /concurrent/.test(e.message),
+      );
+      // A stale "config does not exist yet" expectation is refused the same way.
+      await assert.rejects(
+        saveTaxRateProviderConfig(orgId, { provider: "manual", isEnabled: true }, admin3, { expectedUpdatedAt: null }),
+        TaxRateProviderError,
+      );
+
+      // Zero partial write: the row is exactly what the concurrent save committed.
+      const after = (await committedConfig(orgId))!;
+      assert.deepEqual(after.settings, current.settings);
+      assert.deepEqual(Object.keys(unsealJson<Record<string, string>>(after.secrets)!), ["accountId"]);
+      assert.equal(after.isEnabled, true);
+      assert.equal(after.provider, "manual");
+      assert.equal(after.updatedAt, current.updatedAt);
+      assert.equal(after.updatedBy, admin2);
+      // The rejected save leaked no audit rows either.
+      assert.equal((await configAuditRows(orgId)).length, 2);
+    } finally {
+      await dropTaxConfigOrg(orgId);
+    }
+  },
+);
+
+test(
+  "concurrent disjoint secret edits serialize on the row lock and lose neither",
+  { skip: !DB },
+  async () => {
+    const orgId = await seedTaxConfigOrg();
+    let editor: pg.Client | null = null;
+    try {
+      const admin1 = randomUUID();
+      await saveTaxRateProviderConfig(
+        orgId,
+        { provider: "custom_http", isEnabled: true, settings: { quoteUrl: "https://tax.example.internal/quote" } },
+        admin1,
+      );
+      assert.equal((await committedConfig(orgId))!.secrets, null);
+
+      // A second session holds the config row's lock while the product save is
+      // already in flight — exactly the interleaving that used to lose one
+      // side's credential: the save must merge on the lock, not on a stale read.
+      editor = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+      await editor.connect();
+      await editor.query("begin");
+      await editor.query("select set_config('app.bypass_rls', 'on', true)");
+      await editor.query("select id from tax_rate_provider_configs where org_id = $1 for update", [orgId]);
+
+      const admin2 = randomUUID();
+      const racingSave = saveTaxRateProviderConfig(
+        orgId,
+        { provider: "custom_http", isEnabled: true, apiKey: "RACING-KEY-VALUE" },
+        admin2,
+        { reason: "rotate api key" },
+      );
+
+      // Deterministic barrier: the save must be parked on the editor's lock
+      // before the competing edit commits (ungranted transactionid waiter).
+      let parked = false;
+      for (let waited = 0; waited < 10_000 && !parked; waited += 25) {
+        const waiting = (
+          await withBypass(() =>
+            db.execute<{ n: number }>(sql`
+              select count(*)::int as n from pg_locks where locktype = 'transactionid' and not granted
+            `),
+          )
+        ).rows[0]!.n;
+        parked = waiting > 0;
+        if (!parked) await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      assert.ok(parked, "the save must block on the concurrent editor's row lock");
+
+      // The competing administrator commits a disjoint credential while the
+      // save sits parked on the lock.
+      const admin3 = randomUUID();
+      await editor.query(
+        "update tax_rate_provider_configs set secrets = $2, updated_at = now(), updated_by = $3 where org_id = $1",
+        [orgId, sealJson({ accountId: "EDITOR-ACCT" }), admin3],
+      );
+      await editor.query("commit");
+
+      // The save must succeed and merge against the editor's committed secret.
+      await racingSave;
+
+      const final = (await committedConfig(orgId))!;
+      const secrets = unsealJson<Record<string, string>>(final.secrets);
+      assert.ok(secrets);
+      // NEITHER side's credential was lost to the other.
+      assert.deepEqual(Object.keys(secrets).sort(), ["accountId", "apiKey"]);
+      assert.equal(secrets.apiKey, "RACING-KEY-VALUE");
+      assert.equal(secrets.accountId, "EDITOR-ACCT");
+      assert.equal(final.updatedBy, admin2);
+
+      // The save's audit evidence shows it merged on top of the editor's write.
+      const audits = await configAuditRows(orgId);
+      const saveAudit = audits.at(-1)!;
+      assert.equal(saveAudit.actor_id, admin2);
+      assert.equal(saveAudit.changes.reason, "rotate api key");
+      assert.deepEqual(saveAudit.changes.before!.secretKeys, ["accountId"]);
+      assert.equal(saveAudit.changes.before!.hasSecret, true);
+      assert.deepEqual(saveAudit.changes.after.secretChange!.added, ["apiKey"]);
+      assert.deepEqual(saveAudit.changes.after.secretChange!.removed, []);
+    } finally {
+      if (editor) await editor.end().catch(() => {});
+      await dropTaxConfigOrg(orgId);
+    }
+  },
+);
+
+test(
+  "a forced audit failure rolls the configuration write back atomically",
+  { skip: !DB },
+  async () => {
+    const orgId = await seedTaxConfigOrg();
+    const guardHex = orgId.replace(/-/g, "");
+    const fnName = `block_tax_provider_audit_${guardHex}`;
+    const triggerName = `tr_block_tax_provider_audit_${guardHex}`;
+    try {
+      const admin1 = randomUUID();
+      await saveTaxRateProviderConfig(
+        orgId,
+        { provider: "manual", isEnabled: true, settings: { defaultRatePercent: "5" }, apiKey: "KEEP-KEY-VALUE" },
+        admin1,
+        { reason: "seed" },
+      );
+      const prior = (await committedConfig(orgId))!;
+      assert.equal((await configAuditRows(orgId)).length, 1);
+
+      // Force every provider-config audit insert to fail inside the transaction.
+      await withBypass(async () => {
+        await db.execute(sql`
+          create function ${sql.identifier(fnName)}() returns trigger language plpgsql as $$
+          begin
+            raise exception 'forced audit failure';
+          end $$`);
+        await db.execute(sql`
+          create trigger ${sql.identifier(triggerName)}
+            after insert on audit_log for each row
+            when (new.table_name = 'tax_rate_provider_configs')
+            execute function ${sql.identifier(fnName)}()`);
+      });
+
+      const admin2 = randomUUID();
+      try {
+        // Drizzle wraps driver errors, so the assertion must unwrap the cause.
+        const messageOf = (e: unknown): string => {
+          const cause = e instanceof Error && e.cause instanceof Error ? ` ${e.cause.message}` : "";
+          return e instanceof Error ? `${e.message}${cause}` : String(e);
+        };
+        await assert.rejects(
+          saveTaxRateProviderConfig(
+            orgId,
+            {
+              provider: "taxjar",
+              isEnabled: false,
+              settings: { defaultRatePercent: "9" },
+              apiKey: "ROTATED-KEY-VALUE",
+              accountId: "NEW-ACCT",
+            },
+            admin2,
+            { reason: "credential rotation" },
+          ),
+          (e: unknown) => /forced audit failure/.test(messageOf(e)),
+        );
+      } finally {
+        await withBypass(async () => {
+          await db.execute(sql`drop trigger if exists ${sql.identifier(triggerName)} on audit_log`);
+          await db.execute(sql`drop function if exists ${sql.identifier(fnName)}()`);
+        });
+      }
+
+      // The prior row survives byte-for-byte: settings, sealed secret and
+      // revision are exactly what the last committed save left behind.
+      const after = (await committedConfig(orgId))!;
+      assert.deepEqual(after, prior);
+      assert.equal(unsealJson<Record<string, string>>(after.secrets)!.apiKey, "KEEP-KEY-VALUE");
+      assert.equal(after.updatedBy, admin1);
+      // No audit row leaked from the rolled-back attempt either.
+      assert.equal((await configAuditRows(orgId)).length, 1);
+    } finally {
+      await dropTaxConfigOrg(orgId);
+    }
+  },
+);
