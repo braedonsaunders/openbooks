@@ -455,7 +455,8 @@ test("standard-cost revaluation posts one balanced entry per owning legal entity
              to_char(current_date, 'YYYY-MM'),
              date_trunc('month', current_date)::date,
              (date_trunc('month', current_date) + interval '1 month - 1 day')::date,
-             false, ${calendar.rows[0]!.id}`);
+             false, ${calendar.rows[0]!.id}
+      on conflict do nothing`);
 
     // Standard cost 3.00: A revalues +8.00 (4 units), B +10.00 (10 units).
     const entryIds = await db.transaction((tx) =>
