@@ -636,14 +636,17 @@ function addressFromRow(row: Record<string, unknown> | undefined): Address {
 async function defaultPartyAddress(
   orgId: string,
   partyId: string | null,
-  _shipping: boolean,
+  shipping: boolean,
 ): Promise<Address> {
   if (!partyId) return {};
   const result = await db.execute<Record<string, unknown>>(sql`
     select line1, city, region, postal_code as "postalCode", country
       from addresses
      where org_id = ${orgId} and party_id = ${partyId}
-     order by is_default_shipping desc, is_default_billing desc, id asc
+     order by
+       case when ${shipping} then is_default_shipping else is_default_billing end desc,
+       case when ${shipping} then is_default_billing else is_default_shipping end desc,
+       id asc
      limit 1
   `);
   return addressFromRow(result.rows[0]);
@@ -1414,8 +1417,16 @@ async function applySubsidiaries(
       if (doc.currency === targetCurrency) return "1";
       // Honour a user-supplied header rate. The schema default is '1', which
       // on a foreign-currency document is "unset", not a 1:1 peg — look the
-      // spot up so dunning, payment runs and the stamp are not all 1.
-      if (targetCurrency === origin.baseCurrency && doc.fxRate && doc.fxRate !== "1") {
+      // spot up so dunning, payment runs and the stamp are not all 1. The
+      // column is numeric(19,10), so the default readback is the string
+      // "1.0000000000": compare at the column's own ten-decimal scale,
+      // rather than by string inequality, so every default-rate document
+      // resolves its spot rate.
+      if (
+        targetCurrency === origin.baseCurrency &&
+        doc.fxRate &&
+        normalizeDecimal(doc.fxRate, 10) !== "1.0000000000"
+      ) {
         return doc.fxRate;
       }
       const cached = rateCache.get(targetCurrency);
@@ -1942,6 +1953,30 @@ export async function postDocument(
       const code = (error as { code?: string }).code ??
         (error as { cause?: { code?: string } }).cause?.code;
       if (code === "23505") {
+        // The (org, entry_number) index spans every document kind, so the
+        // collision is either this document's own earlier posting or a
+        // DIFFERENT document that already claimed the number. Diagnose which,
+        // because "already posted" is false for a valid approved document
+        // that has no journal yet. The violated index aborted this
+        // transaction, so the read runs on the pool against the committed
+        // claimant row before this unit rolls back.
+        const claimant = await db.execute<{
+          kind: string;
+          document_number: string;
+          source_document_id: string | null;
+        }>(sql`
+          select d.kind, d.document_number, e.source_document_id
+            from journal_entries e
+            left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+           where e.org_id = ${doc.orgId}
+             and e.entry_number = ${effectiveDoc.documentNumber}
+           limit 1`);
+        const other = claimant.rows[0];
+        if (other && other.source_document_id !== doc.id) {
+          throw new PostingError(
+            `journal entry number "${effectiveDoc.documentNumber}" is already used by ${other.kind ?? "another document"} ${other.document_number ?? ""} — entry numbers are unique across document kinds; give this ${doc.kind} a different document number`,
+          );
+        }
         throw new PostingError(
           `document ${doc.documentNumber} was already posted or voided`,
         );
@@ -2310,54 +2345,64 @@ function buildProjection(
   return kl;
 }
 
-/** Stable comparison key for a set of GL lines (order-sensitive, amount-normalized). */
-function glKey(
-  lines: {
-    accountId: string;
-    amount: string;
-    subsidiaryId?: string | null;
-    partyId?: string | null;
-    departmentId?: string | null;
-    projectId?: string | null;
-    locationId?: string | null;
-    classId?: string | null;
-    equipmentUnitId?: string | null;
-    extraDims?: Record<string, string> | null;
-    taxCodeId?: string | null;
-    paymentCardId?: string | null;
-    dueDate?: string | null;
-    isOpenItem?: boolean | null;
-    currency?: string | null;
-    txnAmount?: string | null;
-    fxRate?: string | null;
-  }[],
-): string {
-  return JSON.stringify(
-    lines.map((l) => [
-      l.accountId,
-      toUnits(l.amount).toString(),
-      l.subsidiaryId ?? null,
-      l.partyId ?? null,
-      l.departmentId ?? null,
-      l.projectId ?? null,
-      l.locationId ?? null,
-      l.classId ?? null,
-      l.equipmentUnitId ?? null,
-      JSON.stringify(
-        Object.fromEntries(
-          Object.entries(l.extraDims ?? {}).sort(([a], [b]) =>
-            a.localeCompare(b),
-          ),
+/** Stable comparison key for ONE GL line (amount-normalized). */
+function glLineKey(line: {
+  accountId: string;
+  amount: string;
+  subsidiaryId?: string | null;
+  partyId?: string | null;
+  departmentId?: string | null;
+  projectId?: string | null;
+  locationId?: string | null;
+  classId?: string | null;
+  equipmentUnitId?: string | null;
+  extraDims?: Record<string, string> | null;
+  taxCodeId?: string | null;
+  paymentCardId?: string | null;
+  dueDate?: string | null;
+  isOpenItem?: boolean | null;
+  currency?: string | null;
+  txnAmount?: string | null;
+  fxRate?: string | null;
+}): string {
+  return JSON.stringify([
+    line.accountId,
+    toUnits(line.amount).toString(),
+    line.subsidiaryId ?? null,
+    line.partyId ?? null,
+    line.departmentId ?? null,
+    line.projectId ?? null,
+    line.locationId ?? null,
+    line.classId ?? null,
+    line.equipmentUnitId ?? null,
+    JSON.stringify(
+      Object.fromEntries(
+        Object.entries(line.extraDims ?? {}).sort(([a], [b]) =>
+          a.localeCompare(b),
         ),
       ),
-      l.taxCodeId ?? null,
-      l.paymentCardId ?? null,
-      l.dueDate ?? null,
-      !!l.isOpenItem,
-      l.currency ?? null,
-      l.txnAmount == null ? null : toUnits(l.txnAmount).toString(),
-      l.fxRate == null ? null : normalizeDecimal(l.fxRate, 10),
-    ]),
+    ),
+    line.taxCodeId ?? null,
+    line.paymentCardId ?? null,
+    line.dueDate ?? null,
+    !!line.isOpenItem,
+    line.currency ?? null,
+    line.txnAmount == null ? null : toUnits(line.txnAmount).toString(),
+    line.fxRate == null ? null : normalizeDecimal(line.fxRate, 10),
+  ]);
+}
+
+/**
+ * Stable comparison key for a set of GL lines. Line ORDER inside an entry is
+ * presentation, not accounting impact — the same multiset of lines posts
+ * the same ledger regardless of sequence — so the key sorts per-line keys,
+ * making projection equality line-order-insensitive.
+ */
+export function glProjectionKey(
+  lines: Parameters<typeof glLineKey>[0][],
+): string {
+  return JSON.stringify(
+    lines.map((line) => glLineKey(line)).sort(),
   );
 }
 
@@ -2508,8 +2553,8 @@ export async function regenerateGlImpactTx(
       { periodId: entry.periodId, postingDate: entry.postingDate },
       { periodId: period.id, postingDate },
     ) &&
-    glKey(kernelLines) ===
-      glKey(existing as unknown as Parameters<typeof glKey>[0]);
+    glProjectionKey(kernelLines) ===
+      glProjectionKey(existing as unknown as Parameters<typeof glLineKey>[0][]);
   if (unchanged) return { entryId: entry.id, changed: false };
 
   if (!correction) {
