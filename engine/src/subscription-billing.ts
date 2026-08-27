@@ -214,7 +214,6 @@ type SubRow = {
   baseCurrency: string;
   nextBillOn: string;
   currentPeriodStart: string | null;
-  createdBy: string | null;
 };
 
 /** Whole-day count b − a (both ISO). */
@@ -298,6 +297,56 @@ export interface InvoiceSpec {
   postingAuditSource?: string;
   /** Property CAM true-ups may issue a native customer credit. */
   documentKind?: "customer_invoice" | "customer_credit";
+}
+
+/**
+ * Who a subscription billing write is attributed to. A subscription is never
+ * an actor: interactive paths pass the authenticated caller's user id, and
+ * engine-initiated runs pass explicit null — the repository-wide system
+ * identity (null actor columns mean system) — while `source` records, durably
+ * on the invoice header and in the posting audit, which path cut the invoice.
+ */
+export interface SubscriptionBillingActor {
+  actorId: string | null;
+  source: "scheduler" | "bill_now" | "change_proration" | "first_proration";
+}
+
+/** Actor options for the public entry points; omitted actor means system. */
+export interface SubscriptionBillingActorOptions {
+  actorId?: string | null;
+}
+
+/** Transaction-audit source (audit_log.changes.source / request_id) per path. */
+const POSTING_AUDIT_SOURCES: Record<SubscriptionBillingActor["source"], string> = {
+  scheduler: "subscription_billing_schedule",
+  bill_now: "subscription_bill_now",
+  change_proration: "subscription_change_proration",
+  first_proration: "subscription_first_proration",
+};
+
+/** Why the engine itself acted, recorded next to the explicit system marker. */
+const SYSTEM_ACTOR_REASONS: Record<SubscriptionBillingActor["source"], string> = {
+  scheduler: "subscription billing schedule",
+  bill_now: "subscription bill-now billing",
+  change_proration: "subscription change proration",
+  first_proration: "subscription first-period proration",
+};
+
+/** Durable invoice-header provenance: the path, the subscription, and — for an
+ *  engine-initiated write — the explicit system-actor markers. */
+function subscriptionBillingProvenance(
+  subscriptionId: string,
+  actor: SubscriptionBillingActor,
+  occurrenceOn?: string,
+): Record<string, unknown> {
+  return {
+    subscriptionBillingRunSource: actor.source,
+    subscriptionId,
+    ...(occurrenceOn === undefined ? {} : { occurrenceOn }),
+    ...(actor.actorId === null
+      ? { actorKind: "system", actorReason: SYSTEM_ACTOR_REASONS[actor.source] }
+      : {}),
+  };
 }
 
 /**
@@ -430,6 +479,7 @@ async function billOne(
   invoiceDate: string,
   billingDate = invoiceDate,
   periodStartOverride?: string | null,
+  actor: SubscriptionBillingActor = { actorId: null, source: "scheduler" },
 ): Promise<{ invoiceId: string; documentNumber: string; posted: boolean }> {
   // Serialize every invoice attempt for one subscription. This makes the
   // period/revision lookup + document creation + guard insert one atomic claim;
@@ -465,7 +515,7 @@ async function billOne(
   if (prior.rows[0]) return { invoiceId: prior.rows[0].invoiceId, documentNumber: prior.rows[0].documentNumber, posted: prior.rows[0].status === "posted" };
   const generated = await createSubscriptionInvoice({
     orgId: sub.orgId,
-    actorId: sub.id,
+    actorId: actor.actorId,
     customerId: sub.customerId,
     subsidiaryId: sub.subsidiaryId,
     currency: sub.planCurrency ?? sub.baseCurrency,
@@ -479,12 +529,14 @@ async function billOne(
     invoiceDate,
     autoPost: sub.autoPost,
     lines: advanced?.lines,
+    custom: subscriptionBillingProvenance(sub.id, actor, billingDate),
+    postingAuditSource: POSTING_AUDIT_SOURCES[actor.source],
   });
   await db.execute(sql`
     insert into subscription_period_invoices
       (org_id, subscription_id, period_starts_on, period_ends_on, contract_revision, invoice_id, created_by, updated_by)
     values (${sub.orgId}, ${sub.id}, ${guard.startsOn}, ${guard.endsOn},
-            ${guard.revision}, ${generated.invoiceId}, ${sub.createdBy}, ${sub.createdBy})
+            ${guard.revision}, ${generated.invoiceId}, ${actor.actorId}, ${actor.actorId})
   `);
   return generated;
 }
@@ -496,8 +548,7 @@ const SUB_SELECT = sql`
          p.income_account_id as "incomeAccountId", p.item_id as "itemId", p.tax_code_id as "taxCodeId",
          coalesce(v.interval, p.interval) as interval, coalesce(v.interval_count, p.interval_count) as "intervalCount",
          (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "subsidiaryId",
-         o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn", s.current_period_start as "currentPeriodStart",
-         s.created_by as "createdBy"
+         o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn", s.current_period_start as "currentPeriodStart"
     from subscriptions s
     join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
     left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
@@ -599,7 +650,10 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
         const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${row.id} and s.org_id = ${row.orgId} limit 1`));
         const s = r.rows[0];
         if (!s) throw new SubscriptionError("subscription vanished");
-        return billOne(s, row.nextBillOn, row.nextBillOn, row.currentPeriodStart);
+        // Engine-initiated: explicit null (the repository system identity)
+        // plus the scheduler source marker — never a row id, never a historic
+        // creator.
+        return billOne(s, row.nextBillOn, row.nextBillOn, row.currentPeriodStart, { actorId: null, source: "scheduler" });
       });
     } catch (e) {
       // Billing threw — withOrg already rolled the whole unit back, claim
@@ -648,8 +702,18 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
   return result;
 }
 
-/** Bill one subscription immediately (the "bill now" button), no date advance. */
-export async function billSubscriptionNow(subscriptionId: string, asOf?: string): Promise<{ invoiceId: string; documentNumber: string; posted: boolean }> {
+/**
+ * Bill one subscription immediately (the "bill now" button), no date advance.
+ * `actor.actorId` is the authenticated caller threading their identity through
+ * every audit surface the invoice leaves; omitted means engine-initiated
+ * (system provenance) — a subscription id is never accepted as an actor.
+ */
+export async function billSubscriptionNow(
+  subscriptionId: string,
+  asOf?: string,
+  actor?: SubscriptionBillingActorOptions,
+): Promise<{ invoiceId: string; documentNumber: string; posted: boolean }> {
+  const actorId = actor?.actorId ?? null;
   const meta = await withBypass(async () =>
     (await db.execute<{ orgId: string; advancedLifecycle: boolean; advancedEnabled: boolean }>(sql`
       select s.org_id as "orgId", l.id is not null as "advancedLifecycle",
@@ -667,7 +731,7 @@ export async function billSubscriptionNow(subscriptionId: string, asOf?: string)
     const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`));
     const s = r.rows[0];
     if (!s) throw new SubscriptionError("subscription not found");
-    return billOne(s, today, s.nextBillOn, s.currentPeriodStart);
+    return billOne(s, today, s.nextBillOn, s.currentPeriodStart, { actorId, source: "bill_now" });
   });
   await withBypass(async () => {
     await db.execute(sql`
@@ -712,7 +776,7 @@ async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDet
            p.interval, p.interval_count as "intervalCount",
            (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "subsidiaryId",
            o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn",
-           s.current_period_start as "currentPeriodStart", s.start_on as "startOn", s.status, s.created_by as "createdBy",
+           s.current_period_start as "currentPeriodStart", s.start_on as "startOn", s.status,
            s.last_invoice_id as "lastInvoiceId", s.run_count as "runCount",
            exists(select 1 from subscription_lifecycles l where l.subscription_id = s.id and l.org_id = s.org_id) as "advancedLifecycle"
       from subscriptions s
@@ -729,13 +793,17 @@ async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDet
  * Change a subscription's quantity and/or price mid-period and bill (or credit)
  * the prorated difference for the remaining days of the current period. The
  * proration line is a pre-tax net adjustment left as a draft for review; the
- * next full invoice uses the new quantity/price.
+ * next full invoice uses the new quantity/price. The proration invoice is
+ * attributed to `actor.actorId` (the authenticated caller; omitted means
+ * engine-initiated system provenance) — never to the subscription itself.
  */
 export async function changeSubscription(
   subscriptionId: string,
   changes: { quantity?: string; priceOverride?: string | null },
   asOf?: string,
+  actor?: SubscriptionBillingActorOptions,
 ): Promise<{ invoiceId: string | null; documentNumber: string | null; adjustment: string }> {
+  const actorId = actor?.actorId ?? null;
   const orgId = await loadSubOrgId(subscriptionId);
   const today = asOf ?? (await businessToday(orgId));
   // Serialize the whole change (read → proration → invoice → subscription
@@ -778,7 +846,7 @@ export async function changeSubscription(
       const doc = prorationDocument(adjustment);
       const gen = await createSubscriptionInvoice({
         orgId,
-        actorId: subscriptionId,
+        actorId,
         customerId: row.customerId,
         subsidiaryId: row.subsidiaryId,
         currency: row.planCurrency ?? row.baseCurrency,
@@ -793,6 +861,8 @@ export async function changeSubscription(
         autoPost: false,
         applyTax: false,
         documentKind: doc.kind,
+        custom: subscriptionBillingProvenance(subscriptionId, { actorId, source: "change_proration" }),
+        postingAuditSource: POSTING_AUDIT_SOURCES.change_proration,
       });
       invoiceId = gen.invoiceId;
       documentNumber = gen.documentNumber;
@@ -812,13 +882,17 @@ export async function changeSubscription(
  * Bill a prorated first invoice for the partial period [startOn, firstBillOn]
  * and set the subscription's period tracking. Used when a subscription starts
  * mid-period and the customer should pay only for the days used before the first
- * full cycle. Positive charge → taxed like a normal invoice.
+ * full cycle. Positive charge → taxed like a normal invoice. The invoice is
+ * attributed to `actor.actorId` (the authenticated caller; omitted means
+ * engine-initiated system provenance) — never to the subscription itself.
  */
 export async function prorateFirstInvoice(
   subscriptionId: string,
   firstBillOn: string,
   asOf?: string,
+  actor?: SubscriptionBillingActorOptions,
 ): Promise<{ invoiceId: string; documentNumber: string; posted: boolean; amount: string }> {
+  const actorId = actor?.actorId ?? null;
   const orgId = await loadSubOrgId(subscriptionId);
   const today = asOf ?? (await businessToday(orgId));
   // Same single-transaction row lock as changeSubscription: a double-click
@@ -842,7 +916,7 @@ export async function prorateFirstInvoice(
 
     const gen = await createSubscriptionInvoice({
       orgId,
-      actorId: subscriptionId,
+      actorId,
       customerId: row.customerId,
       subsidiaryId: row.subsidiaryId,
       currency: row.planCurrency ?? row.baseCurrency,
@@ -855,6 +929,8 @@ export async function prorateFirstInvoice(
       memo: row.planName,
       invoiceDate: today,
       autoPost: row.autoPost,
+      custom: subscriptionBillingProvenance(subscriptionId, { actorId, source: "first_proration" }),
+      postingAuditSource: POSTING_AUDIT_SOURCES.first_proration,
     });
     await db.execute(sql`
       update subscriptions set next_bill_on = ${firstBillOn}, current_period_start = ${row.startOn},
