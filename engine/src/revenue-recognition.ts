@@ -746,10 +746,16 @@ async function buildRecognitionScheduleOn(
     // lines into the current period (distinct sequence numbers).
     if (!isPercentComplete && postedPeriods.has(periodId)) continue;
     if (isPercentComplete && isZero(p.planned)) continue;
+    // Keep the rule's sequence for term/event schedules.  Their unposted
+    // lines represent fixed periods in the plan, so offsetting them by the
+    // count of posted lines would shift every line after the first posted
+    // period on a replay.  Percent-complete is different: each rebuild is a
+    // new catch-up entry, so it deliberately appends after posted sequences.
+    const sequence = isPercentComplete ? nextSequence + p.sequence : p.sequence;
     await runner.execute(sql`
       insert into recognition_schedule_lines
         (org_id, schedule_id, period_id, sequence, planned_amount, created_by, updated_by)
-      values (${orgId}, ${scheduleId}, ${periodId}, ${nextSequence + p.sequence}, ${p.planned}, ${actorId}, ${actorId})`);
+      values (${orgId}, ${scheduleId}, ${periodId}, ${sequence}, ${p.planned}, ${actorId}, ${actorId})`);
     lineCount++;
   }
   return { scheduleId, lineCount, skippedMonths };
