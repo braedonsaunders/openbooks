@@ -85,6 +85,7 @@ const {
   ensureFiling,
   finalizeFiling,
   markFilingFiled,
+  recomputeFiling,
 } = await import("@openbooks/engine/src/information-returns.ts");
 const { createScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 
@@ -92,37 +93,109 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /** Seed a `computed` 1099-NEC filing with two included recipients (TINs on file). */
 async function seedComputedFiling(
-  orgId: string,
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
   actorId: string,
   taxYear: number,
 ): Promise<{ filingId: string; recipientIds: string[] }> {
   await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb),
       '{features,subcontractorCompliance}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-  const filing = await ensureFiling({ orgId, taxYear, formType: "1099-NEC", currency: "USD", actorId });
-  const recipientIds: string[] = [];
+     where id = ${org.orgId}`);
+  const filing = await ensureFiling({ orgId: org.orgId, taxYear, formType: "1099-NEC", currency: "USD", actorId });
   for (let i = 0; i < 2; i++) {
     const partyId = randomUUID();
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${partyId}, ${orgId}, 'vendor', ${`Recipient ${taxYear}-${i}`},
+      values (${partyId}, ${org.orgId}, 'vendor', ${`Recipient ${taxYear}-${i}`},
               null, true, '{}'::jsonb)`);
-    const recipientId = randomUUID();
-    await db.execute(sql`
-      insert into information_return_recipients
-        (id, org_id, filing_id, party_id, computed_amounts, status, tin_last4, tin_type,
-         created_by, updated_by)
-      values (${recipientId}, ${orgId}, ${filing.id}, ${partyId},
-              ${JSON.stringify({ nec1: `${1000 + i}.0000` })}::jsonb,
-              'included', ${i === 0 ? "1234" : "5678"}, 'ein', ${actorId}, ${actorId})`);
-    recipientIds.push(recipientId);
+    await seedInformationReturnPayment(
+      org,
+      actorId,
+      `${1000 + i}`,
+      `ROUTE-FIXTURE-${taxYear}-${i}`,
+      partyId,
+      taxYear,
+      i === 0 ? "1234" : "5678",
+    );
   }
+  await recomputeFiling({ orgId: org.orgId, filingId: filing.id, actorId });
+  const recipients = await db.execute<{ id: string }>(sql`
+    select id from information_return_recipients
+     where org_id = ${org.orgId} and filing_id = ${filing.id}
+     order by party_id`);
+  return { filingId: filing.id, recipientIds: recipients.rows.map((row) => row.id) };
+}
+
+/** Seed one posted vendor payment so the fixture's compute evidence is current. */
+async function seedInformationReturnPayment(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+  actorId: string,
+  amount: string,
+  suffix: string,
+  partyId: string,
+  taxYear: number,
+  tinLast4: string,
+): Promise<void> {
+  const sourceDate = `${taxYear}-07-15`;
   await db.execute(sql`
-    update information_return_filings
-       set status = 'computed', computed_at = now(), computed_by = ${actorId}
-     where id = ${filing.id}`);
-  return { filingId: filing.id, recipientIds };
+    insert into vendor_roles
+      (org_id, party_id, is_t4a, information_return_form, tin_last4, tin_type,
+       created_by, updated_by)
+    values (${org.orgId}, ${partyId}, true, '1099-NEC', ${tinLast4}, 'ein',
+            ${actorId}, ${actorId})
+    on conflict (party_id) do update set
+      is_t4a = true, information_return_form = '1099-NEC',
+      tin_last4 = excluded.tin_last4, tin_type = 'ein', updated_by = ${actorId}
+    where vendor_roles.org_id = ${org.orgId}
+  `);
+  const paymentId = randomUUID();
+  const journalEntryId = randomUUID();
+  const journalLineIds = [randomUUID(), randomUUID()];
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, posting_date, currency, subtotal, tax_total, total,
+         custom, created_by, updated_by)
+      values (${paymentId}, ${org.orgId}, 'vendor_payment', 'approved',
+              ${`IR-SOURCE-${suffix}`}, ${org.subsidiaryId}, ${partyId},
+              ${sourceDate}, ${sourceDate}, 'CAD', ${amount}, '0', ${amount},
+              ${JSON.stringify({ bankAccountId: org.accounts.bank, allocations: [] })}::jsonb,
+              ${actorId}, ${actorId})
+    `);
+    await tx.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+         period_id, memo, status, source_document_id, origin, created_by, updated_by)
+      values (${journalEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+              ${`IR-SOURCE-${suffix}`}, ${sourceDate}, ${org.periodId},
+              'Information-return route fixture', 'draft', ${paymentId}, 'document',
+              ${actorId}, ${actorId})
+    `);
+    await tx.execute(sql`
+      insert into journal_lines
+        (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount,
+         currency, txn_amount, fx_rate, party_id, is_open_item, memo)
+      values
+        (${journalLineIds[0]!}, ${org.orgId}, ${journalEntryId}, 1,
+         ${org.accounts.ap}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, 1,
+         ${partyId}, true, 'Information-return route control'),
+        (${journalLineIds[1]!}, ${org.orgId}, ${journalEntryId}, 2,
+         ${org.accounts.bank}, ${org.subsidiaryId}, ${`-${amount}`}, 'CAD',
+         ${`-${amount}`}, 1, null, false, 'Information-return route cash source')
+    `);
+    await tx.execute(sql`
+      update journal_entries
+         set status = 'posted', posted_at = now(), posted_by = ${actorId}
+       where org_id = ${org.orgId} and id = ${journalEntryId}
+    `);
+    await tx.execute(sql`
+      update documents
+         set status = 'posted', posted_entry_id = ${journalEntryId},
+             posting_period_id = ${org.periodId}
+       where org_id = ${org.orgId} and id = ${paymentId}
+    `);
+  });
 }
 
 type RecipientRow = {
@@ -235,7 +308,7 @@ test("PATCH through the real route persists signed deltas and audits them once",
   try {
     const actorId = randomUUID();
     routeState.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(), allowedSubsidiaryIds: null };
-    const { filingId, recipientIds } = await seedComputedFiling(org.orgId, actorId, 2061);
+    const { filingId, recipientIds } = await seedComputedFiling(org, actorId, 2061);
     const target = recipientIds[0]!;
 
     const res = await PATCH(patchRequest({ adjustments: { nec1: "-250.5" }, adjustmentReason: "duplicate cheque recovered" }), {
@@ -275,7 +348,7 @@ test("the finalize-versus-PATCH race cannot mutate frozen evidence through the r
   try {
     const actorId = randomUUID();
     routeState.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(), allowedSubsidiaryIds: null };
-    const { filingId, recipientIds } = await seedComputedFiling(org.orgId, actorId, 2062);
+    const { filingId, recipientIds } = await seedComputedFiling(org, actorId, 2062);
     const target = recipientIds[0]!;
     const before = await recipientRow(org.orgId, target);
 
@@ -320,7 +393,7 @@ test("the finalize-versus-PATCH race cannot mutate frozen evidence through the r
     assert.equal(await recipientAuditCount(org.orgId, target), 0);
     // The simulated freeze bypassed the service on purpose; the assertion that
     // matters is that the refused edit added nothing to the audit trail.
-    assert.deepEqual(await filingAudits(org.orgId, filingId), []);
+    assert.deepEqual(await filingAudits(org.orgId, filingId), ["compute"]);
   } finally {
     routeState.authz = null;
     if (holder) {
@@ -336,7 +409,7 @@ test("when the edit wins the race its delta is part of the frozen evidence", { s
   try {
     const actorId = randomUUID();
     routeState.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(), allowedSubsidiaryIds: null };
-    const { filingId, recipientIds } = await seedComputedFiling(org.orgId, actorId, 2063);
+    const { filingId, recipientIds } = await seedComputedFiling(org, actorId, 2063);
     const target = recipientIds[0]!;
 
     const [edit, freeze] = await Promise.allSettled([
@@ -374,7 +447,7 @@ test("the action route refuses to void a FILED return and writes exactly one voi
 
     // A filed return is permanent evidence: the action route used to void it
     // with a bare UPDATE; through the service it is refused.
-    const filed = await seedComputedFiling(org.orgId, actorId, 2064);
+    const filed = await seedComputedFiling(org, actorId, 2064);
     await finalizeFiling({ orgId: org.orgId, filingId: filed.filingId, actorId });
     await markFilingFiled({ orgId: org.orgId, filingId: filed.filingId, channel: "paper", actorId });
     const refused = await POST(postRequest({ action: "void", reason: "superseded" }), {
@@ -386,13 +459,13 @@ test("the action route refuses to void a FILED return and writes exactly one voi
 
     // Voiding before transmission works, through the service, with exactly one
     // atomic audit row.
-    const unfrozen = await seedComputedFiling(org.orgId, actorId, 2065);
+    const unfrozen = await seedComputedFiling(org, actorId, 2065);
     const ok = await POST(postRequest({ action: "void", reason: "superseded by corrected return" }), {
       params: Promise.resolve({ id: unfrozen.filingId }),
     });
     assert.equal(ok.status, 200);
     assert.equal(await filingStatus(org.orgId, unfrozen.filingId), "void");
-    assert.deepEqual(await filingAudits(org.orgId, unfrozen.filingId), ["void"]);
+    assert.deepEqual(await filingAudits(org.orgId, unfrozen.filingId), ["compute", "void"]);
 
     // Unknown filing ids fail closed as 404.
     const missing = await POST(postRequest({ action: "void", reason: "x" }), {

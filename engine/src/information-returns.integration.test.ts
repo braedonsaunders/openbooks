@@ -26,43 +26,47 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 // storage, and each lifecycle write commits or rolls back together with its
 // audit evidence.
 
-/** Seed a `computed` 1099-NEC filing with two included recipients. */
+/**
+ * Seed a `computed` 1099-NEC filing with two included recipients.
+ *
+ * The finalization boundary re-derives the authoritative cash generation and
+ * compares it with the stored compute evidence.  Keep this fixture on that
+ * production path: each recipient gets a real posted cash source and the
+ * filing is computed through `recomputeFiling`, rather than hand-writing rows
+ * that can never pass the stale-evidence check.
+ */
 async function seedComputedFiling(
-  orgId: string,
+  org: SourceFixtureOrg,
   actorId: string,
   taxYear: number,
   opts: { tinLast4?: (string | null)[] } = {},
 ): Promise<{ filingId: string; recipientIds: string[] }> {
   const tins = opts.tinLast4 ?? ["1234", "5678"];
   const filing = await ensureFiling({
-    orgId,
+    orgId: org.orgId,
     taxYear,
     formType: "1099-NEC",
     currency: "USD",
     actorId,
   });
-  const recipientIds: string[] = [];
   for (let i = 0; i < tins.length; i++) {
     const partyId = randomUUID();
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${partyId}, ${orgId}, 'vendor', ${`Recipient ${taxYear}-${i}`},
+      values (${partyId}, ${org.orgId}, 'vendor', ${`Recipient ${taxYear}-${i}`},
               null, true, '{}'::jsonb)`);
-    const recipientId = randomUUID();
-    await db.execute(sql`
-      insert into information_return_recipients
-        (id, org_id, filing_id, party_id, computed_amounts, status, tin_last4, tin_type,
-         created_by, updated_by)
-      values (${recipientId}, ${orgId}, ${filing.id}, ${partyId},
-              ${JSON.stringify({ nec1: `${1000 + i}.0000` })}::jsonb,
-              'included', ${tins[i]}, 'ein', ${actorId}, ${actorId})`);
-    recipientIds.push(recipientId);
+    await seedInformationReturnPayment(org, actorId, `${1000 + i}`, `FIXTURE-${taxYear}-${i}`, {
+      partyId,
+      taxYear,
+      tinLast4: tins[i],
+    });
   }
-  await db.execute(sql`
-    update information_return_filings
-       set status = 'computed', computed_at = now(), computed_by = ${actorId}
-     where id = ${filing.id}`);
-  return { filingId: filing.id, recipientIds };
+  await recomputeFiling({ orgId: org.orgId, filingId: filing.id, actorId });
+  const recipients = await db.execute<{ id: string }>(sql`
+    select id from information_return_recipients
+     where org_id = ${org.orgId} and filing_id = ${filing.id}
+     order by party_id`);
+  return { filingId: filing.id, recipientIds: recipients.rows.map((row) => row.id) };
 }
 
 async function filingRow(
@@ -116,17 +120,20 @@ async function seedInformationReturnPayment(
   actorId: string,
   amount: string,
   suffix: string,
+  opts: { partyId?: string; taxYear?: number; tinLast4?: string | null } = {},
 ): Promise<{ paymentId: string; journalEntryId: string; journalLineIds: string[] }> {
+  const partyId = opts.partyId ?? org.vendorId;
+  const sourceDate = opts.taxYear === undefined ? org.date : `${opts.taxYear}-07-15`;
   await db.execute(sql`
     insert into vendor_roles
       (org_id, party_id, is_t4a, information_return_form, tin_last4, tin_type,
        created_by, updated_by)
     values
-      (${org.orgId}, ${org.vendorId}, true, '1099-NEC', '1234', 'ein',
+      (${org.orgId}, ${partyId}, true, '1099-NEC', ${opts.tinLast4 === undefined ? "1234" : opts.tinLast4}, 'ein',
        ${actorId}, ${actorId})
     on conflict (party_id) do update set
       is_t4a = true, information_return_form = '1099-NEC',
-      tin_last4 = '1234', tin_type = 'ein', updated_by = ${actorId}
+      tin_last4 = excluded.tin_last4, tin_type = 'ein', updated_by = ${actorId}
     where vendor_roles.org_id = ${org.orgId}
   `);
   const paymentId = randomUUID();
@@ -140,8 +147,8 @@ async function seedInformationReturnPayment(
          custom, created_by, updated_by)
       values
         (${paymentId}, ${org.orgId}, 'vendor_payment', 'approved',
-         ${`IR-SOURCE-${suffix}`}, ${org.subsidiaryId}, ${org.vendorId},
-         ${org.date}, ${org.date}, 'CAD', ${amount}, '0', ${amount},
+         ${`IR-SOURCE-${suffix}`}, ${org.subsidiaryId}, ${partyId},
+         ${sourceDate}, ${sourceDate}, 'CAD', ${amount}, '0', ${amount},
          ${JSON.stringify({ bankAccountId: org.accounts.bank, allocations: [] })}::jsonb,
          ${actorId}, ${actorId})
     `);
@@ -151,7 +158,7 @@ async function seedInformationReturnPayment(
          period_id, memo, status, source_document_id, origin, created_by, updated_by)
       values
         (${journalEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-         ${`IR-SOURCE-${suffix}`}, ${org.date}, ${org.periodId},
+         ${`IR-SOURCE-${suffix}`}, ${sourceDate}, ${org.periodId},
          'Information-return source fixture', 'draft', ${paymentId}, 'document',
          ${actorId}, ${actorId})
     `);
@@ -281,7 +288,7 @@ test("the filing lifecycle refuses to cross finalize/file and leaves frozen stor
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const { filingId, recipientIds } = await seedComputedFiling(org.orgId, actorId, 2026);
+    const { filingId, recipientIds } = await seedComputedFiling(org, actorId, 2026);
     const before = await recipientRows(org.orgId, filingId);
     assert.equal(before.size, 2);
 
@@ -334,7 +341,7 @@ test("the filing lifecycle refuses to cross finalize/file and leaves frozen stor
         }));
     assert.deepEqual(snapshot(after), snapshot(before));
     // And none of the refusals fabricated audit evidence.
-    assert.deepEqual(await auditActions(org.orgId, filingId), ["finalize"]);
+    assert.deepEqual(await auditActions(org.orgId, filingId), ["compute", "finalize"]);
 
     // Filed is terminal for edits and recompute too.
     await markFilingFiled({ orgId: org.orgId, filingId, channel: "paper", reference: "IRIS-1", actorId });
@@ -371,16 +378,16 @@ test("finalize gates refuse without writing anything — no freeze, no audit tra
     const actorId = (await seedFlowActors(org.orgId)).adminId;
 
     // A missing TIN blocks the freeze entirely.
-    const missingTin = await seedComputedFiling(org.orgId, actorId, 2027, { tinLast4: ["1234", null] });
+    const missingTin = await seedComputedFiling(org, actorId, 2027, { tinLast4: ["1234", null] });
     await rejectsInfo(
       () => finalizeFiling({ orgId: org.orgId, filingId: missingTin.filingId, actorId }),
       /no taxpayer identification number/,
     );
     assert.equal((await filingRow(org.orgId, missingTin.filingId)).status, "computed");
-    assert.deepEqual(await auditActions(org.orgId, missingTin.filingId), []);
+    assert.deepEqual(await auditActions(org.orgId, missingTin.filingId), ["compute"]);
 
     // No included recipients: nothing to transmit.
-    const empty = await seedComputedFiling(org.orgId, actorId, 2028);
+    const empty = await seedComputedFiling(org, actorId, 2028);
     await db.execute(sql`
       update information_return_recipients set status = 'excluded', exclusion_reason = 'below threshold'
        where org_id = ${org.orgId} and filing_id = ${empty.filingId}`);
@@ -388,7 +395,7 @@ test("finalize gates refuse without writing anything — no freeze, no audit tra
       () => finalizeFiling({ orgId: org.orgId, filingId: empty.filingId, actorId }),
       /the filing has no recipients to file/,
     );
-    assert.deepEqual(await auditActions(org.orgId, empty.filingId), []);
+    assert.deepEqual(await auditActions(org.orgId, empty.filingId), ["compute"]);
 
     // A draft filing must be computed first.
     const draft = await ensureFiling({ orgId: org.orgId, taxYear: 2029, formType: "1099-NEC", currency: "USD", actorId });
@@ -408,7 +415,7 @@ for (let round = 0; round < 10; round++) {
     try {
       const actorId = (await seedFlowActors(org.orgId)).adminId;
       const taxYear = 2030 + round;
-      const { filingId, recipientIds } = await seedComputedFiling(org.orgId, actorId, taxYear);
+      const { filingId, recipientIds } = await seedComputedFiling(org, actorId, taxYear);
 
       const [recompute, freeze] = await Promise.allSettled([
         recomputeFiling({ orgId: org.orgId, filingId, actorId }),
@@ -433,18 +440,19 @@ for (let round = 0; round < 10; round++) {
             ["included", {}],
           ],
         );
-        assert.deepEqual(await auditActions(org.orgId, filingId), ["finalize"]);
+        assert.deepEqual(await auditActions(org.orgId, filingId), ["compute", "finalize"]);
       } else {
-        // The recomputation won the lock: it legitimately reverted nothing —
-        // it ran while the filing was still computed and its ledger has no
-        // cash, so both seeded recipients are visibly voided and the finalize
-        // gate then refuses an empty filing.
+        // The recomputation won the lock.  Under SERIALIZABLE isolation the
+        // finalize snapshot is aborted after waiting on that write, so the
+        // caller gets a deterministic retry error and the filing remains
+        // computed with its freshly reviewed source evidence.
         assert.equal(freeze.reason instanceof InformationReturnError, true, String(freeze.reason));
-        assert.match((freeze.reason as InformationReturnError).message, /no recipients to file/);
+        assert.match((freeze.reason as InformationReturnError).message, /changed concurrently/);
+        assert.equal(recompute.status, "fulfilled");
         assert.equal(state.status, "computed");
         const rows = await recipientRows(org.orgId, filingId);
-        assert.deepEqual([...rows.values()].map((r) => r.status), ["void", "void"]);
-        assert.deepEqual(await auditActions(org.orgId, filingId), ["compute"]);
+        assert.deepEqual([...rows.values()].map((r) => r.status), ["included", "included"]);
+        assert.deepEqual(await auditActions(org.orgId, filingId), ["compute", "compute"]);
       }
       void recipientIds;
     } finally {
@@ -457,7 +465,7 @@ for (let round = 0; round < 10; round++) {
     try {
       const actorId = (await seedFlowActors(org.orgId)).adminId;
       const taxYear = 2040 + round;
-      const { filingId, recipientIds } = await seedComputedFiling(org.orgId, actorId, taxYear);
+      const { filingId, recipientIds } = await seedComputedFiling(org, actorId, taxYear);
 
       const [edit, freeze] = await Promise.allSettled([
         updateFilingRecipient({
@@ -503,7 +511,7 @@ test("every successful transition writes exactly one audit row, in one unit with
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const { filingId } = await seedComputedFiling(org.orgId, actorId, 2050);
+    const { filingId } = await seedComputedFiling(org, actorId, 2050);
 
     await finalizeFiling({ orgId: org.orgId, filingId, actorId });
     await markFilingFiled({ orgId: org.orgId, filingId, channel: "iris", reference: "REF-9", actorId });
@@ -519,7 +527,7 @@ test("every successful transition writes exactly one audit row, in one unit with
     );
 
     // Voiding applies up to (but never after) the transmission.
-    const unfrozen = await seedComputedFiling(org.orgId, actorId, 2053);
+    const unfrozen = await seedComputedFiling(org, actorId, 2053);
     await finalizeFiling({ orgId: org.orgId, filingId: unfrozen.filingId, actorId });
     await voidFiling({
       orgId: org.orgId,
@@ -539,8 +547,8 @@ test("every successful transition writes exactly one audit row, in one unit with
     assert.equal(voided.void_reason, "superseded by corrected return");
     // One row per successful transition per filing, in order — refusals above
     // added nothing.
-    assert.deepEqual(await auditActions(org.orgId, filingId), ["finalize", "file"]);
-    assert.deepEqual(await auditActions(org.orgId, unfrozen.filingId), ["finalize", "void"]);
+    assert.deepEqual(await auditActions(org.orgId, filingId), ["compute", "finalize", "file"]);
+    assert.deepEqual(await auditActions(org.orgId, unfrozen.filingId), ["compute", "finalize", "void"]);
     const actors = await db.execute<{ action: string; actor_id: string }>(sql`
       select action, actor_id from audit_log
        where org_id = ${org.orgId} and table_name = 'information_return_filings' and row_id = ${filingId}
@@ -568,7 +576,7 @@ test("recipient edits keep the API contract: signed deltas over computed figures
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const { filingId, recipientIds } = await seedComputedFiling(org.orgId, actorId, 2052);
+    const { filingId, recipientIds } = await seedComputedFiling(org, actorId, 2052);
     const target = recipientIds[0]!;
     const call = (over: Partial<Parameters<typeof updateFilingRecipient>[0]> = {}) =>
       updateFilingRecipient({ orgId: org.orgId, filingId, recipientId: target, actorId, ...over });
