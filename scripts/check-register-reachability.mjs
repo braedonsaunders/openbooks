@@ -183,8 +183,12 @@ const REGISTER_DATA = [
   ["fnd_9843aa70_2baa0d", "459b3ae35533c4683708c1135b6be3a2a1ec4ca1"],
   ["fnd_99db4bea_12141a", null],
   ["fnd_9bad2b47_ba541e", "1ca023d4b11a22ae542797e4f60e57414b9ae7db"],
-  ["fnd_a02c07d5_82fd6e", "44ecb4d818873f88ceb5606d43624f7c579a6151"],
-  ["fnd_a08f4ac8_089cca", "d0c34c1f6c37c095b9be6f7f0ae28611e3c105d5"],
+  // These two worker fixes were coalesced into one integration commit. Keep
+  // the snapshot attributed to the commit that actually ships both patches;
+  // retaining either pre-coalescence SHA makes a reachable fix look like new
+  // drift even though its product and regression-test blobs are present.
+  ["fnd_a02c07d5_82fd6e", "8fbe02704b95be2c519e0811e3e13037d1a29700"],
+  ["fnd_a08f4ac8_089cca", "8fbe02704b95be2c519e0811e3e13037d1a29700"],
   ["fnd_a11ac2c2_e6ce78", null],
   ["fnd_a21eac3e_210929", null],
   ["fnd_a2d284ac_e1911e", "c0fca24448c291909b567edddc694a319e0f736c"],

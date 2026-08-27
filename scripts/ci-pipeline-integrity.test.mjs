@@ -315,6 +315,34 @@ test('register reachability fails new drift, publishes baselined gaps, and rejec
   )
 })
 
+test('coalesced integration attribution is reachable while unsupported rows still fail closed', () => {
+  const coalescedIntegration = '8fbe02704b95be2c519e0811e3e13037d1a29700'
+  const coalescedFindings = ['fnd_a02c07d5_82fd6e', 'fnd_a08f4ac8_089cca']
+  for (const id of coalescedFindings) {
+    assert.equal(REGISTER.get(id), coalescedIntegration, `${id} must name the coalesced integration commit`)
+    assert.equal(BASELINE.has(id), false, `${id} must not be waived through the historical baseline`)
+  }
+
+  const register = new Map([
+    ...coalescedFindings.map((id) => [id, REGISTER.get(id)]),
+    ['fnd_unsupported_probe', '1111111111111111111111111111111111111111'],
+  ])
+  const result = auditRegister({
+    register,
+    baseline: new Map(),
+    resolveRef: (ref) => ref,
+    isAncestor: (sha) => sha === coalescedIntegration,
+    checkRef: coalescedIntegration,
+  })
+
+  assert.equal(result.counts.reachable, coalescedFindings.length)
+  assert.deepEqual(
+    result.newDrift.map((entry) => entry.id),
+    ['fnd_unsupported_probe'],
+    'a genuinely unsupported row remains a fail-closed new drift violation',
+  )
+})
+
 /**
  * The golden-harness gate.
  *
