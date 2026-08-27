@@ -15,10 +15,11 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../db.ts";
+import { fromUnits, toUnits } from "../../money.ts";
 import { computeRevaluation, runRevaluation } from "../../fx-revaluation.ts";
 import { postDocument } from "../../posting.ts";
-import { capture, deps, periodFor, postNewDocument, setSpotRate } from "../ledger-helpers.ts";
-import type { ConformanceCase } from "../types.ts";
+import { capture, deps, periodFor, setSpotRate, type DraftDocumentInput } from "../ledger-helpers.ts";
+import type { CaseContext, ConformanceCase } from "../types.ts";
 
 /**
  * journal_lines stamps fx_rate as numeric(19,10), whose text keeps all ten
@@ -29,6 +30,42 @@ import type { ConformanceCase } from "../types.ts";
 function rateScaledBy1e10(rate: string): string {
   const [whole = "", fraction = ""] = rate.trim().split(".");
   return BigInt(`${whole}${fraction.padEnd(10, "0")}`).toString();
+}
+
+/**
+ * Build a source document while its lines are still mutable, then approve and
+ * post it through the production kernel. The immutability guard is part of the
+ * accounting data-integrity boundary exercised by these cases.
+ */
+async function postConformanceDocument(ctx: CaseContext, input: DraftDocumentInput): Promise<string> {
+  const ledger = ctx.ledger!;
+  const documentId = randomUUID();
+  const date = input.date ?? ledger.date;
+  const currency = input.currency ?? "CAD";
+  const fxRate = input.fxRate ?? "1";
+  const subtotal = fromUnits(input.lines.reduce((sum, line) => sum + toUnits(line.amount), 0n));
+
+  await db.execute(sql`
+    insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
+                           currency, fx_rate, status, subtotal, tax_total, total, is_final_invoice, custom, extra_dims)
+    values (${documentId}, ${ledger.orgId}, ${input.kind}, ${input.number}, ${input.partyId ?? null},
+            ${ledger.subsidiaryId}, ${date}, ${date}, ${currency}, ${fxRate}, 'draft',
+            ${subtotal}, '0', ${subtotal}, false, '{}'::jsonb, '{}'::jsonb)`);
+
+  for (const [index, line] of input.lines.entries()) {
+    await db.execute(sql`
+      insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price,
+                                  amount, tax_amount, is_billable, quantity_fulfilled, quantity_billed,
+                                  stock_location_id, custom, tax_overridden, extra_dims)
+      values (${randomUUID()}, ${ledger.orgId}, ${documentId}, ${index + 1}, ${line.itemId ?? null},
+              ${line.accountId ?? null}, ${line.quantity}, ${line.unitPrice}, ${line.amount}, '0',
+              false, '0', '0', ${line.stockLocationId ?? null}, '{}'::jsonb, false, '{}'::jsonb)`);
+  }
+
+  await db.execute(sql`
+    update documents set status = 'approved'
+     where id = ${documentId} and org_id = ${ledger.orgId} and status = 'draft'`);
+  return await postDocument(documentId, deps(ctx));
 }
 
 export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
@@ -69,7 +106,7 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
       const ledger = ctx.ledger!;
       await setSpotRate(ledger, "USD", "CAD", "2026-07-15", "1.35");
       const sale = await capture(ctx, "foreign-currency sale", async () => {
-        await postNewDocument(ctx, {
+        await postConformanceDocument(ctx, {
           kind: "customer_invoice",
           number: "CONF-FX-1",
           partyId: ledger.customerId,
@@ -136,7 +173,7 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
     run: async (ctx) => {
       const ledger = ctx.ledger!;
       await setSpotRate(ledger, "USD", "CAD", "2026-07-15", "1.35");
-      await postNewDocument(ctx, {
+      await postConformanceDocument(ctx, {
         kind: "customer_invoice",
         number: "CONF-FX-2",
         partyId: ledger.customerId,
@@ -216,7 +253,7 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
          where id = ${ctx.roles.loanPayable} and org_id = ${ledger.orgId}`);
 
       await setSpotRate(ledger, "USD", "CAD", "2026-07-15", "1.35");
-      await postNewDocument(ctx, {
+      await postConformanceDocument(ctx, {
         kind: "journal",
         number: "CONF-FX-3",
         currency: "USD",
@@ -393,7 +430,7 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
       await setSpotRate(ledger, "CAD", "USD", "2026-07-22", "0.70");
       let entryId = "";
       const invoice = await capture(ctx, "multi-line USD invoice at ten-decimal inverse rate", async () => {
-        entryId = await postNewDocument(ctx, {
+        entryId = await postConformanceDocument(ctx, {
           kind: "customer_invoice",
           number: "CONF-FX-6",
           partyId: ledger.customerId,
