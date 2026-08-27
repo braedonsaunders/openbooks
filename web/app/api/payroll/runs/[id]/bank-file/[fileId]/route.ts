@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { releasePayRunBankFile } from '@openbooks/engine/src/payroll-bank-file-artifact.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
 import { guardFeaturePermission } from '../../../../../../../lib/feature-gates'
+import { guardSubsidiaryScope } from '../../../../../../../lib/authz'
 import { isUuid } from '../../../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -41,11 +42,16 @@ export async function POST(
 
   // The artifact must belong to the run in the URL: an id alone must not be a
   // capability to read any org's payroll file through any run's path.
-  const owned = (await db.execute(sql`
-    select 1 from pay_run_bank_files
-     where org_id = ${gate.user.orgId} and id = ${fileId} and pay_run_document_id = ${id}
+  const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select d.subsidiary_id as "subsidiaryId"
+      from pay_run_bank_files f
+      join pay_runs r on r.document_id = f.pay_run_document_id and r.org_id = f.org_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where f.org_id = ${gate.user.orgId} and f.id = ${fileId} and f.pay_run_document_id = ${id}
   `))
   if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+  if (denied) return denied
 
   try {
     const released = await releasePayRunBankFile(gate.user.orgId, fileId, gate.user.id)

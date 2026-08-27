@@ -8,6 +8,7 @@ import { pdfResponse, safeName } from '../../../../../../lib/export'
 import { payrollSlipFacsimile } from '../../../../../../lib/payroll-slip-facsimile'
 import { renderTaxFormFacsimilePdf } from '../../../../../../lib/tax-form-facsimile'
 import { orgBranding } from '../../../../../../lib/report-pdf'
+import { guardPayrollFilingRowIds } from '../../../subsidiary-scope'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -38,11 +39,15 @@ export async function GET(req: Request) {
       { status: 422 },
     )
   }
+  const country = url.searchParams.get('country') ?? ''
+  const filing = url.searchParams.get('filing') ?? ''
+  const denied = await guardPayrollFilingRowIds(gate, country, filing, [row])
+  if (denied) return denied
   try {
     const slip = await filingCorrectionSlip(
       gate.user.orgId,
-      url.searchParams.get('country') ?? '',
-      url.searchParams.get('filing') ?? '',
+      country,
+      filing,
       year,
       row,
       revision,

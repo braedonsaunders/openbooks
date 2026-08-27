@@ -11,6 +11,9 @@ import {
   payrollPack,
 } from '@openbooks/engine/src/payroll/packs.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { guardSubsidiaryScope } from '../../../../lib/authz'
+import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
+import { guardPayrollFilingAccounts, payrollVisibleScheduleFilter } from '../subsidiary-scope'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
@@ -77,6 +80,16 @@ function claimCode(value: unknown): number | null | 'invalid' {
   return n
 }
 
+async function visibleFilingAccounts(gate: Parameters<typeof guardPayrollFilingAccounts>[0]) {
+  const accounts = await listFilingAccounts(gate.user.orgId)
+  if (gate.allowedSubsidiaryIds === null) return accounts
+  const visible = await Promise.all(accounts.map(async (account) => ({
+    account,
+    denied: await guardPayrollFilingAccounts(gate, [account.id]),
+  })))
+  return visible.filter(({ denied }) => !denied).map(({ account }) => account)
+}
+
 export async function GET(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
@@ -84,6 +97,13 @@ export async function GET(req: Request) {
   if (employee) {
     // Drawer-tab variant: one employee's profile (or null) + the schedules.
     if (!isUuid(employee)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
+    const employeeScope = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId"
+        from parties
+       where org_id = ${gate.user.orgId} and id = ${employee}`)).rows[0]
+    if (!employeeScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const denied = guardSubsidiaryScope(gate, employeeScope.subsidiaryId)
+    if (denied) return denied
     // The default country for a NEW profile: the employee's own legal entity,
     // falling back to the root subsidiary, falling back to the org's sole
     // installed pack. Never a literal — the employer of record decides which
@@ -131,12 +151,19 @@ export async function GET(req: Request) {
          where prof.org_id = ${gate.user.orgId} and prof.employee_party_id = ${employee}`),
       db.execute(sql`
         select id, name, frequency from pay_schedules
-         where org_id = ${gate.user.orgId} and is_active order by name`),
+         where org_id = ${gate.user.orgId} and is_active
+           ${payrollVisibleScheduleFilter(gate)}
+         order by name`),
     ]))
+    const profileAccountDenied = await guardPayrollFilingAccounts(
+      gate,
+      [((profileRes.rows[0] as { filing_account_id?: string | null } | undefined)?.filing_account_id) ?? null],
+    )
+    if (profileAccountDenied) return profileAccountDenied
     return NextResponse.json({
       profile: profileRes.rows[0] ?? null,
       schedules: schedulesRes.rows,
-      filingAccounts: await listFilingAccounts(gate.user.orgId),
+      filingAccounts: await visibleFilingAccounts(gate),
       labourJurisdictions: labourJurisdictionOptions(),
       defaultCountry,
     })
@@ -159,10 +186,22 @@ export async function GET(req: Request) {
       left join pay_schedules s on s.id = prof.pay_schedule_id and s.org_id = prof.org_id
       left join payroll_filing_accounts fa on fa.id = prof.filing_account_id and fa.org_id = prof.org_id
      where prof.org_id = ${gate.user.orgId}
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}
      order by p.display_name`))
+  // A profile can name a filing account attached to another legal entity even
+  // when its employee is visible. Refuse the aggregate rather than returning
+  // account metadata that the caller cannot otherwise inspect.
+  for (const profile of profiles.rows) {
+    const denied = await guardPayrollFilingAccounts(
+      gate,
+      [typeof profile.filing_account_id === 'string' ? profile.filing_account_id : null],
+    )
+    if (denied) return denied
+  }
+  const filingAccounts = await visibleFilingAccounts(gate)
   return NextResponse.json({
     profiles: profiles.rows,
-    filingAccounts: await listFilingAccounts(gate.user.orgId),
+    filingAccounts,
     labourJurisdictions: labourJurisdictionOptions(),
   })
 }
@@ -289,15 +328,25 @@ export async function POST(req: Request) {
 
   const refs = (await Promise.all([
     db.execute(sql`
-      select 1 from parties p
+      select p.subsidiary_id as "subsidiaryId" from parties p
        join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
        where p.org_id = ${orgId} and p.id = ${body.employeePartyId} and p.is_active`),
     db.execute(sql`
-      select 1 from pay_schedules where org_id = ${orgId} and id = ${body.payScheduleId} and is_active`),
+      select subsidiary_id as "subsidiaryId"
+        from pay_schedules where org_id = ${orgId} and id = ${body.payScheduleId} and is_active`),
   ]))
   if (refs.some((result) => result.rows.length !== 1)) {
     return NextResponse.json({ error: 'employee or pay schedule is not available' }, { status: 422 })
   }
+  // The employee and schedule are both payroll records. Resolve their legal
+  // entities before the upsert so a restricted operator cannot re-home a
+  // profile or edit another subsidiary by guessing an employee id.
+  const employeeDenied = guardSubsidiaryScope(gate, (refs[0].rows[0] as { subsidiaryId: string | null }).subsidiaryId)
+  if (employeeDenied) return employeeDenied
+  const scheduleDenied = guardSubsidiaryScope(gate, (refs[1].rows[0] as { subsidiaryId: string | null }).subsidiaryId)
+  if (scheduleDenied) return scheduleDenied
+  const filingDenied = await guardPayrollFilingAccounts(gate, [filingAccountId])
+  if (filingDenied) return filingDenied
   if (filingAccountId !== null) {
     // The account must exist, be active, and file under the same country pack
     // as the employee — a CA employee can never be filed on a US EIN.

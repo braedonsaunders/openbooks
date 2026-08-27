@@ -14,6 +14,7 @@ import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
 import { mutatePayRunAdjustment } from '@openbooks/engine/src/payroll-run-adjustments.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 
@@ -39,6 +40,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const runs = (await db.execute<Record<string, unknown>>(sql`
     select r.document_id, d.document_number, d.status as document_status, d.currency,
+           d.subsidiary_id as "subsidiaryId",
            r.pay_schedule_id, s.name as schedule_name,
            r.period_start::text as period_start, r.period_end::text as period_end,
            r.pay_date::text as pay_date, r.tax_year, r.run_status,
@@ -49,6 +51,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
      where r.org_id = ${orgId} and r.document_id = ${id}`))
   const run = runs.rows[0]
   if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, run.subsidiaryId as string | null | undefined)
+  if (denied) return denied
 
   const [stubs, lines] = (await Promise.all([
     db.execute<Record<string, unknown>>(sql`
@@ -108,6 +112,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Resolve and gate the owning document before parsing or dispatching any
+  // action. Every mutation below eventually reaches a shared engine service;
+  // keeping this check ahead of that dispatch prevents an out-of-scope run
+  // from being calculated, edited, approved, committed, or paid by id.
+  const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select d.subsidiary_id as "subsidiaryId"
+      from pay_runs r
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
+  if (!owned) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
+  if (denied) return denied
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
