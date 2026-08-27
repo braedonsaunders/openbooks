@@ -379,3 +379,100 @@ test('contact hits use the party lists\u2019 own org-wide predicate', () => {
   assert.match(src, /if \(ids\.length === 0\) return sql`and false`/,
     'an empty scope fails closed before the party query runs')
 })
+
+// ---------------------------------------------------------------------------
+// Payroll: every route is a subsidiary boundary, including artifact and
+// year-end output surfaces. The route-specific tests above pin the detailed
+// query ordering; this inventory prevents a newly added payroll endpoint from
+// silently becoming an org-only escape hatch.
+// ---------------------------------------------------------------------------
+
+const PAYROLL_ROUTE_FILES = [
+  'app/api/payroll/entitlements/route.ts',
+  'app/api/payroll/opening-balances/entitlements/route.ts',
+  'app/api/payroll/opening-balances/route.ts',
+  'app/api/payroll/parallel-run/comparisons/[id]/route.ts',
+  'app/api/payroll/parallel-run/registers/[id]/route.ts',
+  'app/api/payroll/parallel-run/route.ts',
+  'app/api/payroll/parallel-run/tolerances/route.ts',
+  'app/api/payroll/profiles/route.ts',
+  'app/api/payroll/remittances/route.ts',
+  'app/api/payroll/retro/route.ts',
+  'app/api/payroll/runs/[id]/bank-file/[fileId]/route.ts',
+  'app/api/payroll/runs/[id]/bank-file/route.ts',
+  'app/api/payroll/runs/[id]/cheques-pdf/route.ts',
+  'app/api/payroll/runs/[id]/route.ts',
+  'app/api/payroll/runs/[id]/stubs-pdf/route.ts',
+  'app/api/payroll/runs/route.ts',
+  'app/api/payroll/settings/rates/route.ts',
+  'app/api/payroll/settings/route.ts',
+  'app/api/payroll/year-end/amendments/artifact/route.ts',
+  'app/api/payroll/year-end/amendments/route.ts',
+  'app/api/payroll/year-end/amendments/slip/route.ts',
+  'app/api/payroll/year-end/file/route.ts',
+  'app/api/payroll/year-end/route.ts',
+  'app/api/payroll/year-end/slip/route.ts',
+] as const
+
+test('every payroll API route carries a subsidiary scope boundary', () => {
+  assert.equal(PAYROLL_ROUTE_FILES.length, 24)
+  for (const file of PAYROLL_ROUTE_FILES) {
+    const src = source(file)
+    assert.match(src, /guardFeaturePermission\(/, `${file} must retain the payroll permission gate`)
+    assert.match(
+      src,
+      /guardSubsidiaryScope\(|guardRootSubsidiaryScope\(|guardPayroll[A-Za-z]+\(|subsidiaryVisibleFilter\(|subsidiaryScopeAllows\(|subsidiariesInScope\(/,
+      `${file} must enforce subsidiary visibility before its payroll service call`,
+    )
+  }
+})
+
+test('payroll read, write, artifact, and year-end paths pass scope before service work', () => {
+  const representative = [
+    ['app/api/payroll/runs/[id]/route.ts', 'guardSubsidiaryScope'],
+    ['app/api/payroll/profiles/route.ts', 'guardSubsidiaryScope'],
+    ['app/api/payroll/runs/[id]/bank-file/route.ts', 'guardSubsidiaryScope'],
+    ['app/api/payroll/year-end/slip/route.ts', 'guardPayrollFilingRowIds'],
+  ] as const
+  for (const [file, primitive] of representative) {
+    const src = source(file)
+    assert.ok(src.includes(primitive), `${file} must call ${primitive}`)
+  }
+})
+
+test('payroll scope decisions precede representative service and artifact calls', () => {
+  const run = source('app/api/payroll/runs/[id]/route.ts')
+  assert.ok(
+    run.indexOf('guardSubsidiaryScope(gate, owned.subsidiaryId)')
+      < run.indexOf('calculatePayRun('),
+    'run mutation scope must settle before calculation',
+  )
+
+  const profile = source('app/api/payroll/profiles/route.ts')
+  assert.ok(
+    profile.indexOf('guardSubsidiaryScope(gate, (refs[0].rows[0]')
+      < profile.indexOf('insert into employee_payroll_profiles'),
+    'profile write scope must settle before the upsert',
+  )
+
+  const bank = source('app/api/payroll/runs/[id]/bank-file/route.ts')
+  assert.ok(
+    bank.indexOf('guardSubsidiaryScope(gate, owned.subsidiaryId)')
+      < bank.indexOf('generatePayRunBankFile('),
+    'bank-file generation must settle scope before producing an artifact',
+  )
+
+  const yearEnd = source('app/api/payroll/year-end/slip/route.ts')
+  assert.ok(
+    yearEnd.indexOf('guardPayrollFilingRowIds(')
+      < yearEnd.indexOf('filing.slip.build('),
+    'year-end slip scope must settle before rendering payroll output',
+  )
+
+  const remittance = source('app/api/payroll/remittances/route.ts')
+  assert.ok(
+    remittance.indexOf('guardRemittancePeriod(')
+      < remittance.indexOf('payrollRemittanceSummary('),
+    'remittance aggregate scope must settle before summary generation',
+  )
+})

@@ -155,6 +155,11 @@ export async function GET(req: Request) {
            ${payrollVisibleScheduleFilter(gate)}
          order by name`),
     ]))
+    const profileAccountDenied = await guardPayrollFilingAccounts(
+      gate,
+      [((profileRes.rows[0] as { filing_account_id?: string | null } | undefined)?.filing_account_id) ?? null],
+    )
+    if (profileAccountDenied) return profileAccountDenied
     return NextResponse.json({
       profile: profileRes.rows[0] ?? null,
       schedules: schedulesRes.rows,
@@ -183,9 +188,20 @@ export async function GET(req: Request) {
      where prof.org_id = ${gate.user.orgId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}
      order by p.display_name`))
+  // A profile can name a filing account attached to another legal entity even
+  // when its employee is visible. Refuse the aggregate rather than returning
+  // account metadata that the caller cannot otherwise inspect.
+  for (const profile of profiles.rows) {
+    const denied = await guardPayrollFilingAccounts(
+      gate,
+      [typeof profile.filing_account_id === 'string' ? profile.filing_account_id : null],
+    )
+    if (denied) return denied
+  }
+  const filingAccounts = await visibleFilingAccounts(gate)
   return NextResponse.json({
     profiles: profiles.rows,
-    filingAccounts: await visibleFilingAccounts(gate),
+    filingAccounts,
     labourJurisdictions: labourJurisdictionOptions(),
   })
 }
