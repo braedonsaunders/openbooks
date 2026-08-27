@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { canonicalJson } from "./canonical-json.ts";
 import { db, withOrg } from "./db.ts";
 import { computeTaxReturn, TaxReturnError, type TaxReturnResult } from "./tax-return.ts";
 
@@ -79,7 +80,10 @@ export function buildTaxFilingSnapshot(
     })),
     adjustments,
   };
-  const snapshotHash = createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+  // JSONB does not preserve object insertion order. Canonicalize before
+  // hashing so prepare and mark-filed derive the same fingerprint after the
+  // adjustments object makes a database round trip.
+  const snapshotHash = createHash("sha256").update(canonicalJson(snapshot)).digest("hex");
   return { snapshot, snapshotHash };
 }
 
