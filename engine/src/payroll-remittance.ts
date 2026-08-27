@@ -15,6 +15,11 @@ import {
   resolveObservedHolidays,
 } from "./payroll-holidays.ts";
 import { PayrollError } from "./payroll-error.ts";
+import {
+  payrollSubsidiaryInScope,
+  payrollSubsidiaryScopeFilter,
+  type PayrollSubsidiaryScope,
+} from "./payroll-run.ts";
 import { legacyStatutoryLiabilityAccount, statutoryRemittanceDeclaration } from "./payroll/packs.ts";
 
 /**
@@ -86,6 +91,7 @@ async function rawPayrollSettings(orgId: string): Promise<Record<string, unknown
 export async function payrollRemittanceSummary(
   orgId: string,
   range: { from: string; to: string },
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<RemittanceGroup[]> {
   const declaration = statutoryRemittanceDeclaration();
   const rawSettings = await rawPayrollSettings(orgId);
@@ -111,11 +117,13 @@ export async function payrollRemittanceSummary(
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+      left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
       left join employee_payroll_profiles prof
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where l.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        and l.kind in ('deduction', 'employer_contribution')
        and coalesce(c.system_key, '') <> all(${internalAccruals}::text[])
+       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      group by c.id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
               c.liability_account_id, ${filingAccount}, s.province
      order by c.sequence, c.code
@@ -128,9 +136,11 @@ export async function payrollRemittanceSummary(
            count(distinct s.employee_party_id)::int as employees
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
       left join employee_payroll_profiles prof
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
+       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      group by ${filingAccount}
   `));
   const contextByAccount = new Map(
@@ -512,10 +522,20 @@ export function pickRemittanceSequence(
 export async function createRemittanceBill(
   orgId: string,
   actorId: string,
-  input: { partyId: string; from: string; to: string; filingAccountId?: string | null },
+  input: {
+    partyId: string;
+    from: string;
+    to: string;
+    filingAccountId?: string | null;
+    allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+  },
 ): Promise<{ documentId: string; documentNumber: string }> {
   const filingAccountId = input.filingAccountId ?? null;
-  const groups = await payrollRemittanceSummary(orgId, { from: input.from, to: input.to });
+  const groups = await payrollRemittanceSummary(
+    orgId,
+    { from: input.from, to: input.to },
+    input.allowedSubsidiaryIds,
+  );
   const group = groups.find(
     (g) => g.partyId === input.partyId && g.filingAccount.id === filingAccountId,
   );
@@ -537,17 +557,47 @@ export async function createRemittanceBill(
       })}, 0))
     `);
 
-    const vendor = (await tx.execute(sql`
-      select 1 from vendor_roles where org_id = ${orgId} and party_id = ${input.partyId} and is_active
+    const vendor = (await tx.execute<{ party_id: string | null; subsidiary_id: string | null }>(sql`
+      select p.id as party_id, p.subsidiary_id
+        from vendor_roles v
+        left join parties p on p.id = v.party_id and p.org_id = v.org_id
+       where v.org_id = ${orgId} and v.party_id = ${input.partyId} and v.is_active
     `));
     if (!vendor.rows.length) throw new PayrollError("the remittance destination must be an active vendor");
-
     const sub = (await tx.execute<{ id: string; base_currency: string | null }>(sql`
       select s.id, s.base_currency from subsidiaries s
        where s.org_id = ${orgId} and s.parent_id is null and s.is_active
        order by s.created_at limit 1
     `));
     if (!sub.rows[0]) throw new PayrollError("no active root subsidiary");
+    if (
+      input.allowedSubsidiaryIds != null
+      && (!(vendor.rows[0]!.party_id)
+        || !payrollSubsidiaryInScope(
+          input.allowedSubsidiaryIds,
+          vendor.rows[0]!.subsidiary_id ?? sub.rows[0].id,
+        ))
+    ) {
+      throw new PayrollError("nothing to remit to this vendor for the period");
+    }
+    if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, sub.rows[0].id)) {
+      throw new PayrollError("nothing to remit to this vendor for the period");
+    }
+
+    if (filingAccountId) {
+      const account = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+        select subsidiary_id from payroll_filing_accounts
+         where org_id = ${orgId} and id = ${filingAccountId} and is_active
+      `));
+      const accountSub = account.rows[0]?.subsidiary_id ?? null;
+      if (!account.rows[0]) throw new PayrollError("nothing to remit to this vendor for the period");
+      if (
+        input.allowedSubsidiaryIds != null
+        && !payrollSubsidiaryInScope(input.allowedSubsidiaryIds, accountSub ?? sub.rows[0].id)
+      ) {
+        throw new PayrollError("nothing to remit to this vendor for the period");
+      }
+    }
 
     // The structured marker written below is the bill's identity — search it
     // back and refuse the second bill inside the lock, naming the one found.

@@ -3,7 +3,11 @@ import { db } from "./db.ts";
 import { add, cmp, sum } from "./money.ts";
 import { payrollTaxYear } from "./payroll/packs.ts";
 import {
-  calculatePayRun, createPayRun, type CapturedStub,
+  calculatePayRun,
+  createPayRun,
+  payrollSubsidiaryScopeFilter,
+  type CapturedStub,
+  type PayrollSubsidiaryScope,
 } from "./payroll-run.ts";
 import {
   differenceRetroEarnings,
@@ -84,6 +88,8 @@ export interface DetectRetroInput {
   payScheduleId?: string;
   employeePartyIds?: readonly string[];
   executor?: Pick<typeof db, "execute">;
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }
 
 /**
@@ -160,6 +166,7 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
        and r.tax_year = ${input.taxYear}
        ${scheduleFilter}
        ${employeeFilter}
+       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}
      order by p.display_name, r.period_end
   `));
 
@@ -243,6 +250,7 @@ export async function quantifyRetroCandidates(input: {
   orgId: string;
   actorId: string;
   candidates: readonly RetroCandidate[];
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<RetroQuantifiedPeriod[]> {
   const { orgId, actorId } = input;
   const bySourceRun = new Map<string, RetroCandidate[]>();
@@ -261,7 +269,11 @@ export async function quantifyRetroCandidates(input: {
       // The seam. `simulate` implies a rolled-back dry run inside
       // calculatePayRun itself, so nothing this touches survives the call.
       const result = await calculatePayRun({
-        orgId, documentId: sourceDocumentId, actorId, simulate: true,
+        orgId,
+        documentId: sourceDocumentId,
+        actorId,
+        simulate: true,
+        allowedSubsidiaryIds: input.allowedSubsidiaryIds,
       });
       stubs = result.stubs ?? [];
       errors = result.errors;
@@ -409,9 +421,11 @@ async function previouslySettledBuckets(
 async function scheduleTaxYear(
   orgId: string, payScheduleId: string, payDate: string,
   executor: Pick<typeof db, "execute"> = db,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<number> {
-  const rows = (await executor.execute<{ country: string | null }>(sql`
-    select coalesce(sub.country, root.country) as country
+  const rows = (await executor.execute<{ country: string | null; subsidiary_id: string | null }>(sql`
+    select coalesce(sub.country, root.country) as country,
+           coalesce(sub.id, root.id) as subsidiary_id
       from pay_schedules sch
       left join subsidiaries sub on sub.id = sch.subsidiary_id and sub.org_id = sch.org_id
       left join lateral (
@@ -420,12 +434,19 @@ async function scheduleTaxYear(
          order by s.created_at limit 1) root on true
      where sch.org_id = ${orgId} and sch.id = ${payScheduleId}
   `));
-  const country = rows.rows[0]?.country;
+  if (!rows.rows[0]) throw new RetroPayError("pay schedule not found");
+  const country = rows.rows[0].country;
   if (!country) {
     throw new RetroPayError(
       "the pay schedule's legal entity has no country, so no statutory year can be resolved "
       + "for it — set the subsidiary's country before running retroactive pay",
     );
+  }
+  if (
+    !rows.rows[0].subsidiary_id
+    || (allowedSubsidiaryIds != null && !allowedSubsidiaryIds.has(rows.rows[0].subsidiary_id))
+  ) {
+    throw new RetroPayError("pay schedule not found");
   }
   // The PACK's year definition, never `payDate.slice(0, 4)`.
   return payrollTaxYear(country, payDate);
@@ -443,16 +464,27 @@ export async function proposeRetroPay(input: {
   /** The date the retro run will pay on; decides the statutory year in scope. */
   payDate: string;
   employeePartyIds?: readonly string[];
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<RetroProposal> {
-  const taxYear = await scheduleTaxYear(input.orgId, input.payScheduleId, input.payDate);
+  const taxYear = await scheduleTaxYear(
+    input.orgId,
+    input.payScheduleId,
+    input.payDate,
+    db,
+    input.allowedSubsidiaryIds,
+  );
   const candidates = await detectRetroCandidates({
     orgId: input.orgId,
     taxYear,
     payScheduleId: input.payScheduleId,
     employeePartyIds: input.employeePartyIds,
+    allowedSubsidiaryIds: input.allowedSubsidiaryIds,
   });
   const periods = await quantifyRetroCandidates({
-    orgId: input.orgId, actorId: input.actorId, candidates,
+    orgId: input.orgId,
+    actorId: input.actorId,
+    candidates,
+    allowedSubsidiaryIds: input.allowedSubsidiaryIds,
   });
   const withDifference = periods.filter((period) => period.difference !== null);
   return {
@@ -491,6 +523,8 @@ export interface CreateRetroPayRunInput {
    * silently paid, and one they exclude here stays owed and is found again.
    */
   excludeSourcePayRunDocumentIds?: readonly string[];
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }
 
 export interface CreateRetroPayRunResult {
@@ -524,6 +558,7 @@ export async function createRetroPayRun(
     payScheduleId: input.payScheduleId,
     payDate: input.payDate,
     employeePartyIds: input.employeePartyIds,
+    allowedSubsidiaryIds: input.allowedSubsidiaryIds,
   });
   const excluded = new Set(input.excludeSourcePayRunDocumentIds ?? []);
   const paying = proposal.periods.filter((period) =>
@@ -561,6 +596,7 @@ export async function createRetroPayRun(
     payDate: input.payDate,
     runType: "retro",
     employeePartyIds,
+    allowedSubsidiaryIds: input.allowedSubsidiaryIds,
   });
 
   await db.transaction(async (tx) => {
@@ -652,6 +688,7 @@ export async function retroEarningLinesForStub(
     employeePartyId: string;
     employeeName: string;
     nonPeriodic: boolean;
+    allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   },
 ): Promise<RetroStubEarningLine[]> {
   const rows = (await tx.execute<{
@@ -669,10 +706,12 @@ export async function retroEarningLinesForStub(
            st.delta
       from payroll_retro_settlements st
       join payroll_retro_allocations a on a.settlement_id = st.id and a.org_id = st.org_id
+      left join parties ep on ep.id = st.employee_party_id and ep.org_id = st.org_id
       left join pay_components c on c.id = a.component_id and c.org_id = st.org_id
      where st.org_id = ${input.orgId}
        and st.retro_pay_run_document_id = ${input.payRunDocumentId}
        and st.employee_party_id = ${input.employeePartyId}
+       ${payrollSubsidiaryScopeFilter(sql`ep.subsidiary_id`, input.allowedSubsidiaryIds)}
      order by st.source_period_start, a.description
   `));
   if (rows.rows.length === 0) return [];
@@ -766,6 +805,7 @@ export interface RetroRunReview {
 export async function retroRunReview(
   orgId: string, documentId: string,
   executor: Pick<typeof db, "execute"> = db,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<RetroRunReview> {
   const settlements = (await executor.execute<{
       id: string; employee_party_id: string; employee_name: string;
@@ -784,7 +824,10 @@ export async function retroRunReview(
       from payroll_retro_settlements st
       join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
       join documents d on d.id = st.source_pay_run_document_id and d.org_id = st.org_id
+      join documents retro_doc on retro_doc.id = st.retro_pay_run_document_id and retro_doc.org_id = st.org_id
      where st.org_id = ${orgId} and st.retro_pay_run_document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`retro_doc.subsidiary_id`, allowedSubsidiaryIds)}
+       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.display_name, st.source_period_start
   `));
   if (settlements.rows.length === 0) {
@@ -877,6 +920,7 @@ export interface RetroReadinessFinding {
 export async function retroRunFindings(
   orgId: string, documentId: string,
   executor: Pick<typeof db, "execute"> = db,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<RetroReadinessFinding[]> {
   const findings: RetroReadinessFinding[] = [];
   const runRows = (await executor.execute<{ run_type: string; tax_year: number }>(sql`
@@ -940,7 +984,10 @@ export async function retroRunFindings(
       join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
       join pay_runs src on src.document_id = st.source_pay_run_document_id and src.org_id = st.org_id
       join documents d on d.id = st.source_pay_run_document_id and d.org_id = st.org_id
+      join documents retro_doc on retro_doc.id = st.retro_pay_run_document_id and retro_doc.org_id = st.org_id
      where st.org_id = ${orgId} and st.retro_pay_run_document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`retro_doc.subsidiary_id`, allowedSubsidiaryIds)}
+       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
   `));
 
   if (rows.rows.length === 0) {
@@ -994,10 +1041,15 @@ export async function retroRunFindings(
 export async function retroRunTotal(
   orgId: string, documentId: string,
   executor: Pick<typeof db, "execute"> = db,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<string> {
   const rows = (await executor.execute<{ total: string }>(sql`
-    select coalesce(sum(delta), 0)::text as total from payroll_retro_settlements
-     where org_id = ${orgId} and retro_pay_run_document_id = ${documentId}
+    select coalesce(sum(st.delta), 0)::text as total from payroll_retro_settlements st
+      join documents d on d.id = st.retro_pay_run_document_id and d.org_id = st.org_id
+      join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
+     where st.org_id = ${orgId} and st.retro_pay_run_document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
   `));
   return rows.rows[0]?.total ?? "0";
 }

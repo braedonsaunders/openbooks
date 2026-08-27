@@ -4,6 +4,11 @@ import { db, inDbTransaction } from "./db.ts";
 import { cmp, isZero, normalizeMoney } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";
 import {
+  payrollSubsidiaryOutsideScopeFilter,
+  payrollSubsidiaryScopeFilter,
+  type PayrollSubsidiaryScope,
+} from "./payroll-run.ts";
+import {
   auditComparison,
   comparePriorPayrollPeriod,
   componentSlot,
@@ -210,6 +215,8 @@ export interface PriorRegisterUpsert {
   payDate: string;
   currencyCode?: string | null;
   sourceFileName?: string | null;
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -285,9 +292,11 @@ export async function recordUnmappedColumns(
   orgId: string,
   registerId: string,
   columns: readonly UnmappedSourceColumn[],
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<void> {
   await inDbTransaction(async (tx) => {
     await lockParallelRunInputs(tx, orgId);
+    await assertPriorRegisterInScope(tx, orgId, registerId, allowedSubsidiaryIds);
     await tx.execute(sql`
       select id from payroll_prior_registers
        where org_id = ${orgId} and id = ${registerId}
@@ -367,7 +376,13 @@ export interface PriorStubWrite {
  * whose rewrite nobody can audit.
  */
 export async function savePriorStub(
-  input: { orgId: string; actorId: string; registerId: string; row: PriorStubWrite },
+  input: {
+    orgId: string;
+    actorId: string;
+    registerId: string;
+    row: PriorStubWrite;
+    allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+  },
   slots: readonly ComparableSlot[],
 ): Promise<{ created: boolean }> {
   const bySlotField = new Map(slots.map((slot) => [slot.fieldKey, slot]));
@@ -407,6 +422,23 @@ export async function savePriorStub(
 
   return inDbTransaction(async (tx) => {
     await lockParallelRunInputs(tx, input.orgId);
+    await assertPriorRegisterInScope(
+      tx,
+      input.orgId,
+      input.registerId,
+      input.allowedSubsidiaryIds,
+    );
+    const employee = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from parties
+       where org_id = ${input.orgId} and id = ${input.row.employeePartyId}
+    `));
+    if (
+      !employee.rows[0]
+      || (input.allowedSubsidiaryIds != null
+        && !input.allowedSubsidiaryIds.has(employee.rows[0].subsidiary_id ?? ""))
+    ) {
+      throw new ParallelRunStoreError("employee is outside the caller's subsidiary scope");
+    }
     const existing = (await tx.execute<{ id: string }>(sql`
       select id from payroll_prior_stubs
        where org_id = ${input.orgId} and register_id = ${input.registerId}
@@ -474,7 +506,14 @@ export async function savePriorStub(
 }
 
 /** Every imported register, newest period first, with what it actually holds. */
-export async function priorRegisters(orgId: string): Promise<PriorRegisterHeader[]> {
+export async function priorRegisters(
+  orgId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<PriorRegisterHeader[]> {
+  const hiddenPriorStubFilter = allowedSubsidiaryIds == null
+    ? sql`false`
+    : sql`hidden_party.id is null
+        or ${payrollSubsidiaryOutsideScopeFilter(sql`hidden_party.subsidiary_id`, allowedSubsidiaryIds)}`;
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select r.id, r.name, r.provider_name, r.period_start::text as period_start,
            r.period_end::text as period_end, r.pay_date::text as pay_date,
@@ -489,8 +528,16 @@ export async function priorRegisters(orgId: string): Promise<PriorRegisterHeader
              where s.register_id = r.id and s.org_id = r.org_id) as stated_gross,
            (select coalesce(sum(s.net_pay), 0) from payroll_prior_stubs s
              where s.register_id = r.id and s.org_id = r.org_id) as stated_net
-      from payroll_prior_registers r
+     from payroll_prior_registers r
      where r.org_id = ${orgId}
+       and not exists (
+         select 1
+           from payroll_prior_stubs hidden
+           left join parties hidden_party
+            on hidden_party.id = hidden.employee_party_id and hidden_party.org_id = hidden.org_id
+          where hidden.org_id = r.org_id and hidden.register_id = r.id
+            and (${hiddenPriorStubFilter})
+       )
      order by r.pay_date desc, r.name
      limit 500`));
 
@@ -526,9 +573,11 @@ export async function deletePriorRegister(
   orgId: string,
   registerId: string,
   actorId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<void> {
   await inDbTransaction(async (tx) => {
     await lockParallelRunInputs(tx, orgId);
+    await assertPriorRegisterInScope(tx, orgId, registerId, allowedSubsidiaryIds);
     await tx.execute(sql`
       delete from payroll_parallel_findings
        where org_id = ${orgId} and comparison_id in (
@@ -557,17 +606,65 @@ export async function deletePriorRegister(
 /* Loading the two sides                                               */
 /* ------------------------------------------------------------------ */
 
+async function assertPriorRegisterInScope(
+  runner: ParallelRunExecutor,
+  orgId: string,
+  registerId: string,
+  allowedSubsidiaryIds: PayrollSubsidiaryScope,
+): Promise<void> {
+  if (allowedSubsidiaryIds == null) return;
+  const row = (await runner.execute<{ id: string }>(sql`
+    select r.id
+      from payroll_prior_registers r
+     where r.org_id = ${orgId} and r.id = ${registerId}
+       and not exists (
+         select 1
+           from payroll_prior_stubs s
+           left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+          where s.org_id = r.org_id and s.register_id = r.id
+            and (p.id is null or ${payrollSubsidiaryOutsideScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)})
+       )
+  `));
+  if (!row.rows[0]) throw new ParallelRunStoreError("that prior register does not exist");
+}
+
+async function assertPayRunInScope(
+  runner: ParallelRunExecutor,
+  orgId: string,
+  payRunDocumentId: string,
+  allowedSubsidiaryIds: PayrollSubsidiaryScope,
+): Promise<void> {
+  if (allowedSubsidiaryIds == null) return;
+  const row = (await runner.execute<{ document_id: string }>(sql`
+    select r.document_id
+      from pay_runs r
+     join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where r.org_id = ${orgId} and r.document_id = ${payRunDocumentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+       and not exists (
+         select 1
+           from pay_stubs s
+           left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+          where s.org_id = r.org_id and s.pay_run_document_id = r.document_id
+            and (p.id is null or ${payrollSubsidiaryOutsideScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)})
+       )
+  `));
+  if (!row.rows[0]) throw new ParallelRunStoreError("that pay run does not exist");
+}
+
 /** The prior register as one side of a comparison. */
 export async function loadPriorSide(
   orgId: string,
   registerId: string,
   runner: ParallelRunExecutor = db,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<ParallelSide & { unmappedColumns: UnmappedSourceColumn[] }> {
   const header = (await runner.execute<{ name: string; unmapped_columns: unknown }>(sql`
     select name, unmapped_columns from payroll_prior_registers
      where org_id = ${orgId} and id = ${registerId}`));
   const register = header.rows[0];
   if (!register) throw new ParallelRunStoreError("that prior register does not exist");
+  await assertPriorRegisterInScope(runner, orgId, registerId, allowedSubsidiaryIds);
 
   const stubs = (await runner.execute<Record<string, unknown>>(sql`
     select s.id, s.employee_party_id, s.employee_label, s.gross, s.net_pay, s.employer_cost,
@@ -625,6 +722,7 @@ export async function loadOurSide(
   orgId: string,
   payRunDocumentId: string,
   runner: ParallelRunExecutor = db,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<ParallelSide> {
   const header = (await runner.execute<{ label: string; run_status: string }>(sql`
     select coalesce(d.document_number, r.document_id::text) as label,
@@ -635,6 +733,7 @@ export async function loadOurSide(
      where r.org_id = ${orgId} and r.document_id = ${payRunDocumentId}`));
   const run = header.rows[0];
   if (!run) throw new ParallelRunStoreError("that pay run does not exist");
+  await assertPayRunInScope(runner, orgId, payRunDocumentId, allowedSubsidiaryIds);
   if (run.run_status === "draft") {
     // A draft run has no stubs at all, so comparing against it would produce a
     // population mismatch dressed up as a reconciliation. Refuse plainly.
@@ -818,6 +917,8 @@ export interface RunParallelComparisonInput {
   actorId: string;
   registerId: string;
   payRunDocumentId: string;
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }
 
 export interface FiledComparison {
@@ -849,6 +950,8 @@ export async function runParallelComparison(
     // evidence insert, so a writer either commits before every source read or
     // waits until after this comparison has been filed — never between them.
     await lockParallelRunInputs(tx, input.orgId);
+    await assertPriorRegisterInScope(tx, input.orgId, input.registerId, input.allowedSubsidiaryIds);
+    await assertPayRunInScope(tx, input.orgId, input.payRunDocumentId, input.allowedSubsidiaryIds);
     await tx.execute(sql`
       select id from payroll_prior_registers
        where org_id = ${input.orgId} and id = ${input.registerId}
@@ -860,8 +963,8 @@ export async function runParallelComparison(
 
     const slots = await comparableSlots(input.orgId, tx);
     const [prior, ours, tolerances] = await Promise.all([
-      loadPriorSide(input.orgId, input.registerId, tx),
-      loadOurSide(input.orgId, input.payRunDocumentId, tx),
+      loadPriorSide(input.orgId, input.registerId, tx, input.allowedSubsidiaryIds),
+      loadOurSide(input.orgId, input.payRunDocumentId, tx, input.allowedSubsidiaryIds),
       parallelTolerances(input.orgId, tx),
     ]);
 
@@ -979,12 +1082,21 @@ export interface ComparisonSummary {
 /** Filed comparisons, newest first. */
 export async function parallelComparisons(
   orgId: string,
-  opts: { registerId?: string; payRunDocumentId?: string; limit?: number } = {},
+  opts: {
+    registerId?: string;
+    payRunDocumentId?: string;
+    limit?: number;
+    allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+  } = {},
 ): Promise<ComparisonSummary[]> {
   const filters = [sql`c.org_id = ${orgId}`];
   if (opts.registerId) filters.push(sql`c.register_id = ${opts.registerId}`);
   if (opts.payRunDocumentId) filters.push(sql`c.pay_run_document_id = ${opts.payRunDocumentId}`);
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500);
+  const hiddenFindingFilter = opts.allowedSubsidiaryIds == null
+    ? sql`false`
+    : sql`hidden_party.id is null
+        or ${payrollSubsidiaryOutsideScopeFilter(sql`hidden_party.subsidiary_id`, opts.allowedSubsidiaryIds)}`;
 
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select c.*, r.name as register_name,
@@ -992,8 +1104,19 @@ export async function parallelComparisons(
            c.compared_at::text as compared_at_text
       from payroll_parallel_comparisons c
       join payroll_prior_registers r on r.id = c.register_id and r.org_id = c.org_id
-      left join documents d on d.id = c.pay_run_document_id and d.org_id = c.org_id
+     left join documents d on d.id = c.pay_run_document_id and d.org_id = c.org_id
      where ${sql.join(filters, sql` and `)}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, opts.allowedSubsidiaryIds)}
+       and not exists (
+         select 1
+           from payroll_parallel_findings hidden_finding
+           left join parties hidden_party
+             on hidden_party.id = hidden_finding.employee_party_id
+            and hidden_party.org_id = hidden_finding.org_id
+          where hidden_finding.org_id = c.org_id
+            and hidden_finding.comparison_id = c.id
+            and (${hiddenFindingFilter})
+       )
      order by c.compared_at desc
      limit ${limit}`));
 
@@ -1061,7 +1184,11 @@ export interface StoredFinding {
 export async function comparisonFindings(
   orgId: string,
   comparisonId: string,
-  opts: { employeePartyId?: string; classifications?: string[] } = {},
+  opts: {
+    employeePartyId?: string;
+    classifications?: string[];
+    allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+  } = {},
 ): Promise<StoredFinding[]> {
   const filters = [sql`f.org_id = ${orgId}`, sql`f.comparison_id = ${comparisonId}`];
   if (opts.employeePartyId) filters.push(sql`f.employee_party_id = ${opts.employeePartyId}`);
@@ -1073,12 +1200,17 @@ export async function comparisonFindings(
       )})`,
     );
   }
+  const findingScopeFilter = opts.allowedSubsidiaryIds == null
+    ? sql`true`
+    : sql`p.id is not null ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, opts.allowedSubsidiaryIds)}`;
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select f.id, f.employee_party_id, f.employee_name, f.kind, f.slot, f.slot_label,
            f.classification, f.prior_amount, f.our_amount, f.difference,
            f.tolerance_applied, f.source_column
       from payroll_parallel_findings f
+      left join parties p on p.id = f.employee_party_id and p.org_id = f.org_id
      where ${sql.join(filters, sql` and `)}
+       and (${findingScopeFilter})
      order by f.employee_name, f.sequence, f.slot
      limit ${MAX_REGISTER_ROWS}`));
 
@@ -1101,14 +1233,16 @@ export async function comparisonFindings(
 /** Calculated or committed runs a register could be compared against. */
 export async function comparablePayRuns(
   orgId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<{ documentId: string; label: string; periodStart: string; periodEnd: string; payDate: string; runStatus: string; employeeCount: number }[]> {
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select r.document_id, coalesce(d.document_number, r.document_id::text) as label,
            r.period_start::text as period_start, r.period_end::text as period_end,
            r.pay_date::text as pay_date, r.run_status, r.employee_count
-      from pay_runs r
+     from pay_runs r
       left join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.run_status in ('calculated', 'committed')
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
      order by r.pay_date desc
      limit 200`));
   return rows.rows.map((row) => ({
@@ -1132,6 +1266,7 @@ export async function comparablePayRuns(
 export async function suggestedPayRunForRegister(
   orgId: string,
   registerId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<string | null> {
   const rows = (await db.execute<{ document_id: string }>(sql`
     select r.document_id
@@ -1139,7 +1274,9 @@ export async function suggestedPayRunForRegister(
       join pay_runs r on r.org_id = g.org_id
        and r.pay_date = g.pay_date
        and r.run_status in ('calculated', 'committed')
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
      where g.org_id = ${orgId} and g.id = ${registerId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
      limit 2`));
   return rows.rows.length === 1 ? rows.rows[0]!.document_id : null;
 }
