@@ -17,8 +17,8 @@
  *
  *   reachable      closing commit is an ancestor of main — verified shipped;
  *   unreachable    closing commit resolves but is not an ancestor of main —
- *                  new drift fails immediately; known drift is published in
- *                  BASELINE below, never silent;
+ *                  fails closed; BASELINE below records historical drift for
+ *                  diagnostics, never as an exemption;
  *   unresolvable   the reported closing commit is not a commit object in
  *                  this repository (the branch it lived on was never fetched
  *                  anywhere and its objects are gone);
@@ -29,18 +29,18 @@
  *                  commits; reported loudly as PARTIAL PASS, never counted
  *                  as either verified or a violation.
  *
- * The ratchet cuts both ways, like every baseline gate in scripts/: an
- * unreachable entry NOT in BASELINE fails (new drift cannot slip in); a
- * BASELINE entry that has become reachable fails ("reachable now — remove
- * from baseline", so the backlog cannot rot into permanent amnesty); and a
- * BASELINE entry whose class changed fails (the tree or the register moved
+ * Every gap fails closed, while the ratchet still cuts both ways: a gap NOT in
+ * BASELINE is new drift; a BASELINE entry that has become reachable fails
+ * ("reachable now — remove from baseline", so stale metadata is visible); and
+ * a BASELINE entry whose class changed fails (the tree or the register moved
  * underneath it — reconcile before trusting either).
  *
- * Ref choice: the register's contract is the integration branch main — the
- * ref the orchestrator pushes to origin as the goal's final act. Gating on
- * origin/main directly would fail every fix merged since the last push;
- * gating on main fails exactly what will not ship. Override with
- * OPENBOOKS_REGISTER_REF for ad-hoc probes.
+ * Ref choice: the register's contract is the active integration branch — the
+ * ref the orchestrator will push to origin as the goal's final act. In a BB
+ * worktree the local `main` ref can intentionally lag that integration tip,
+ * so the default is `origin/main`; a complete clone that has no remote-tracking
+ * ref falls back to local `main`. Override with OPENBOOKS_REGISTER_REF for
+ * ad-hoc probes.
  *
  * BASELINE provenance: published 2026-08-27 from the goal register
  * (statuses fixed/resolved) at remediation start, from a complete
@@ -48,7 +48,7 @@
  * report, else a hex token in the report that resolves to a commit object,
  * else the newest commit whose subject names the finding id, else no
  * attribution. At baseline 341 of 417 entries could not be verified as
- * shipped from main — that number is the honest size of the problem,
+ * shipped from the integration ref — that number is the honest size of the problem,
  * printed on every pass rather than amnestied. New findings recorded fixed
  * append to REGISTER with a closing commit; a finding whose fix reaches
  * main has its baseline entry removed in the same change.
@@ -57,7 +57,8 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-const CHECK_REF = process.env.OPENBOOKS_REGISTER_REF || "main";
+const REQUESTED_REF = process.env.OPENBOOKS_REGISTER_REF || null;
+const CHECK_REF = REQUESTED_REF || "origin/main";
 const BASELINE_DATE = "2026-08-27";
 
 const BASELINE_CLASSES = new Set(["unreachable", "unresolvable", "unattributed"]);
@@ -491,10 +492,11 @@ const REGISTER_DATA = [
 ];
 
 /**
- * Published backlog at baseline: [finding id, class]. Each entry names a
- * finding recorded fixed whose fix was NOT verifiably reachable from main
- * on 2026-08-27 — visible here on every pass, owned by the register
- * backlog, removable only when its fix actually reaches main.
+ * Historical baseline metadata: [finding id, class]. Each entry names a
+ * finding recorded fixed whose fix was NOT verifiably reachable from the
+ * integration ref on 2026-08-27. These entries remain useful for class-drift
+ * diagnostics, but auditRegister treats them as violations; history gaps are
+ * never silently waived by retaining a baseline row.
  */
 const BASELINE_DATA = [
   ["fnd_018b450d_de435b", "unattributed"],
@@ -848,11 +850,12 @@ export { CHECK_REF, BASELINE_DATE };
  * Classify every register entry against the tree. resolveRef maps a
  * reported ref to its commit sha (null when the object is absent from this
  * clone); isAncestor reports whether a resolved sha is an ancestor of the
- * check ref; partial marks a checkout that cannot resolve historical
- * objects (shallow CI) — unverifiable entries there are reported, never
- * silently trusted or failed.
+ * check ref; isEquivalent reports truthy for a squash-equivalent patch (or
+ * null when no equivalent patch exists); partial marks a checkout
+ * that cannot resolve historical objects (shallow CI) — unverifiable entries
+ * there are reported, never silently trusted or failed.
  */
-export function auditRegister({ register, baseline, resolveRef, isAncestor, partial = false }) {
+export function auditRegister({ register, baseline, resolveRef, isAncestor, isEquivalent = () => null, checkRef = CHECK_REF, partial = false }) {
   const integrity = [];
   const seen = new Set();
   for (const [id] of register) {
@@ -905,16 +908,28 @@ export function auditRegister({ register, baseline, resolveRef, isAncestor, part
       }
       continue;
     }
-    if (isAncestor(sha)) {
+    const ancestor = isAncestor(sha);
+    // A shallow clone cannot prove that a non-ancestor is absent from the
+    // full history. Do not let a truncated rev-list turn a valid historical
+    // fix into a false unreachable violation.
+    if (partial && !ancestor) {
+      counts.unverifiable += 1;
+      continue;
+    }
+    const equivalentSha = ancestor ? null : isEquivalent(sha);
+    if (ancestor || equivalentSha) {
       counts.reachable += 1;
       if (baseline.has(id)) {
-        staleBaseline.push({ id, ref: sha.slice(0, 8), was: baseline.get(id), detail: `closing commit ${sha.slice(0, 8)} is now reachable from ${CHECK_REF} — remove from baseline` });
+        const detail = equivalentSha
+          ? `closing commit ${sha.slice(0, 8)} has a squash-equivalent patch on ${checkRef} — remove from baseline`
+          : `closing commit ${sha.slice(0, 8)} is now reachable from ${checkRef} — remove from baseline`;
+        staleBaseline.push({ id, ref: sha.slice(0, 8), was: baseline.get(id), detail });
       }
       continue;
     }
     counts.unreachable += 1;
     const baselinedAs = baseline.get(id);
-    const detail = `closing commit ${sha.slice(0, 8)} is not an ancestor of ${CHECK_REF}`;
+    const detail = `closing commit ${sha.slice(0, 8)} is not an ancestor or squash-equivalent of ${checkRef}`;
     if (baselinedAs === "unreachable") {
       knownGaps.push({ id, entryClass: "unreachable", detail });
     } else if (baselinedAs) {
@@ -943,44 +958,80 @@ function resolveCommit(ref) {
   }
 }
 
+/**
+ * Ask git's deterministic patch-id comparison whether a reported commit was
+ * replayed on ref (normally by a squash merge). `git cherry` compares patches,
+ * not metadata, and its `-` marker means the commit's patch already exists on
+ * the upstream ref. Exact ancestry is checked separately and always wins.
+ */
+function isPatchEquivalent(ref, upstreamRef) {
+  try {
+    const lines = git("cherry", "-v", upstreamRef, ref).trim().split("\n");
+    return lines.some((line) => line.startsWith("- ") && line.split(/\s+/, 3)[1] === ref);
+  } catch {
+    return false;
+  }
+}
+
+function selectCheckRef() {
+  if (REQUESTED_REF) return REQUESTED_REF;
+  // BB worktrees can carry a stale local main while the active integration tip
+  // is the remote-tracking ref. Prefer that tip, but keep complete local clones
+  // without remotes usable.
+  return resolveCommit("origin/main") ? "origin/main" : "main";
+}
+
 function main() {
+  const checkRef = selectCheckRef();
   let shallow = false;
   try {
     shallow = git("rev-parse", "--is-shallow-repository").trim() === "true";
   } catch {
-    console.error(`FAIL: git is unavailable, so the register cannot be checked against ${CHECK_REF}.`);
+    console.error(`FAIL: git is unavailable, so the register cannot be checked against ${checkRef}.`);
     process.exitCode = 1;
     return;
   }
 
-  const mainSha = resolveCommit(CHECK_REF);
+  const mainSha = resolveCommit(checkRef);
   if (!mainSha) {
     if (shallow) {
       console.log(
-        `PARTIAL PASS: this shallow checkout has no ${CHECK_REF} ref, so 0/${REGISTER.size} register entries ` +
+        `PARTIAL PASS: this shallow checkout has no ${checkRef} ref, so 0/${REGISTER.size} register entries ` +
           `could be verified against the tree. Re-run with complete history for the real gate.`,
       );
       return;
     }
-    console.error(`FAIL: cannot resolve ${CHECK_REF} in a complete checkout — the register's contract ref is missing.`);
+    console.error(`FAIL: cannot resolve ${checkRef} in a complete checkout — the register's contract ref is missing.`);
     process.exitCode = 1;
     return;
   }
 
   // Ancestors of the check ref, computed once: rev-list is the exact
   // ancestry relation, and one pass beats one merge-base walk per entry.
-  const ancestors = new Set(git("rev-list", CHECK_REF).split("\n").filter(Boolean));
+  const ancestors = new Set(git("rev-list", checkRef).split("\n").filter(Boolean));
+  const equivalentCommits = new Set();
+  if (!shallow) {
+    for (const [, ref] of REGISTER) {
+      if (!ref) continue;
+      const sha = resolveCommit(ref);
+      if (!sha || ancestors.has(sha)) continue;
+      if (isPatchEquivalent(sha, checkRef)) equivalentCommits.add(sha);
+    }
+  }
   const result = auditRegister({
     register: REGISTER,
     baseline: BASELINE,
     resolveRef: resolveCommit,
     isAncestor: (sha) => ancestors.has(sha),
+    isEquivalent: (sha) => (equivalentCommits.has(sha) ? true : null),
+    checkRef,
     partial: shallow,
   });
 
   const { counts } = result;
   const violations =
     result.newDrift.length +
+    result.knownGaps.length +
     result.staleBaseline.length +
     result.classDrift.length +
     result.integrity.length +
@@ -996,8 +1047,21 @@ function main() {
       for (const line of result.bogusBaseline) console.error(`  ${line}`);
     }
     if (result.newDrift.length > 0) {
-      console.error(`FAIL: ${result.newDrift.length} finding(s) recorded fixed whose fix is not reachable from ${CHECK_REF} and not baselined:`);
+      console.error(`FAIL: ${result.newDrift.length} finding(s) recorded fixed whose fix is not reachable from ${checkRef} and not baselined:`);
       for (const entry of result.newDrift) console.error(`  ${entry.id} [${entry.entryClass}] ${entry.detail}`);
+    }
+    if (result.knownGaps.length > 0) {
+      console.error(
+        `FAIL: ${result.knownGaps.length} baselined register gap(s) remain; ` +
+          "the baseline records history, it does not waive reachability:",
+      );
+      for (const entryClass of ["unreachable", "unresolvable", "unattributed"]) {
+        const group = result.knownGaps.filter((gap) => gap.entryClass === entryClass);
+        if (group.length === 0) continue;
+        console.error(`  ${entryClass} (${group.length}):`);
+        for (const gap of group.slice(0, 5)) console.error(`    ${gap.id} — ${gap.detail}`);
+        if (group.length > 5) console.error(`    … ${group.length - 5} more`);
+      }
     }
     if (result.staleBaseline.length > 0) {
       console.error("FAIL: baseline entries now reachable:");
@@ -1014,7 +1078,7 @@ function main() {
   if (counts.unverifiable > 0) {
     console.log(
       `PARTIAL PASS: shallow checkout verified ${counts.reachable}/${REGISTER.size} register entries against ` +
-        `${CHECK_REF}; ${counts.unverifiable} could not be resolved without full history. ` +
+        `${checkRef}; ${counts.unverifiable} could not be resolved without full history. ` +
         `Re-run with complete history for the real gate.`,
     );
     return;
@@ -1024,7 +1088,7 @@ function main() {
     `${BASELINE.size} published gaps (baseline ${BASELINE_DATE}: ` +
     `${counts.unreachable} unreachable, ${counts.unresolvable} unresolvable, ${counts.unattributed} unattributed)`;
   console.log(
-    `PASS: ${counts.reachable}/${REGISTER.size} register entries verified reachable from ${CHECK_REF}; ` +
+    `PASS: ${counts.reachable}/${REGISTER.size} register entries verified reachable from ${checkRef}; ` +
       `${gaps}; 0 new drift.`,
   );
   console.log(`published gaps — baselined, owned by the register backlog (${BASELINE.size}):`);
