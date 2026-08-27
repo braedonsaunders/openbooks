@@ -6,7 +6,7 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 
 **42 passing · 0 failing · 0 gaps · 0 not run**
 
-Commit `56ebb532b3221ab8c28d247d96562355ddc4b120` · 2026-08-27T14:13:10.674Z
+Commit `5fb2683b5e864ee77815fefdf6eb880173ce35eb` · 2026-08-27T14:25:15.612Z
 
 ## ASC 360
 
