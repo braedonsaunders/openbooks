@@ -64,7 +64,7 @@ test(
           insert into documents
             (id, org_id, kind, status, document_number, subsidiary_id, party_id,
              document_date, currency, subtotal, tax_total, total, created_by)
-          values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'approved',
+          values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft',
                   ${`INV-RETURN-${invoiceId}`}, ${org.subsidiaryId}, ${org.customerId},
                   ${org.date}, 'CAD', '100', '0', '100', ${actorId})
         `);
@@ -74,6 +74,11 @@ test(
              amount, tax_amount, tax_input_amount)
           values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1',
                   '100', '100', '0', '100')
+        `);
+        await db.execute(sql`
+          update documents
+             set status = 'approved', submitted_by = ${actorId}, submitted_at = now()
+           where id = ${invoiceId} and org_id = ${org.orgId}
         `);
         const invoiceEntryId = await postDocument(invoiceId, {
           control: {

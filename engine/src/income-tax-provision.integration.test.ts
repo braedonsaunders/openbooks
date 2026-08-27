@@ -83,13 +83,17 @@ test(
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'approved', 'INV-TAX-1',
+      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-TAX-1',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
               '1000000', '0', '1000000', ${userId})`);
       await db.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
       values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '1000000', '1000000', '0', '0')`);
+      await db.execute(sql`
+      update documents
+         set status = 'approved', submitted_by = ${userId}, submitted_at = now()
+       where id = ${invoiceId} and org_id = ${org.orgId}`);
       await postDocument(invoiceId, {
         control: {
           ar: org.accounts.ar,
@@ -310,13 +314,17 @@ async function postInvoice(
     insert into documents
       (id, org_id, kind, status, document_number, subsidiary_id, party_id,
        document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-    values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'approved', ${opts.number},
+    values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', ${opts.number},
             ${opts.subsidiaryId}, ${org.customerId}, ${org.date}, ${currency}, '1',
             ${opts.amount}, '0', ${opts.amount}, ${opts.userId})`);
   await db.execute(sql`
     insert into document_lines
       (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
     values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', ${opts.amount}, ${opts.amount}, '0', '0')`);
+  await db.execute(sql`
+    update documents
+       set status = 'approved', submitted_by = ${opts.userId}, submitted_at = now()
+     where id = ${invoiceId} and org_id = ${org.orgId}`);
   await postDocument(invoiceId, {
     control: {
       ar: org.accounts.ar,

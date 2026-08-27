@@ -275,7 +275,7 @@ test(
              document_date, posting_date, currency, fx_rate, subtotal,
              tax_total, total, created_by)
           values (
-            ${documentId}, ${org.orgId}, 'journal', 'approved', 'JE-FX-RESIDUAL',
+            ${documentId}, ${org.orgId}, 'journal', 'draft', 'JE-FX-RESIDUAL',
             ${org.subsidiaryId}, ${org.date}, ${org.date}, 'EUR',
             '0.3333333333', '200', '0', '200', ${actorId}
           )
@@ -291,6 +291,11 @@ test(
              'EUR debit two', '100', '1', '100', '0'),
             (${org.orgId}, ${documentId}, 3, ${org.accounts.revenue},
              'EUR credit', '-200', '1', '-200', '0')
+        `);
+        await db.execute(sql`
+          update documents
+             set status = 'approved', submitted_by = ${actorId}, submitted_at = now()
+           where id = ${documentId} and org_id = ${org.orgId}
         `);
       });
 
@@ -367,7 +372,7 @@ test(
              document_date, posting_date, currency, fx_rate, subtotal,
              tax_total, total, created_by)
           values (
-            ${documentId}, ${org.orgId}, 'journal', 'approved', 'JE-FX-EXACT',
+            ${documentId}, ${org.orgId}, 'journal', 'draft', 'JE-FX-EXACT',
             ${org.subsidiaryId}, ${org.date}, ${org.date}, 'EUR',
             '1.2500000000', '150', '0', '150', ${actorId}
           )
@@ -383,6 +388,11 @@ test(
              'EUR debit two', '50', '1', '50', '0'),
             (${org.orgId}, ${documentId}, 3, ${org.accounts.revenue},
              'EUR credit', '-150', '1', '-150', '0')
+        `);
+        await db.execute(sql`
+          update documents
+             set status = 'approved', submitted_by = ${actorId}, submitted_at = now()
+           where id = ${documentId} and org_id = ${org.orgId}
         `);
       });
 
