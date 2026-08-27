@@ -103,6 +103,76 @@ test(
   },
 );
 
+test(
+  "approved document lines reject direct mutation while draft edits remain writable",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const documentId = randomUUID();
+      const lineId = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, document_date, currency, status)
+        values
+          (${documentId}, ${org.orgId}, 'vendor_bill', ${`IMMUTABLE-${documentId}`},
+           ${org.date}, 'CAD', 'draft')
+      `);
+      await db.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, account_id, amount, description)
+        values
+          (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, '42', 'original')
+      `);
+
+      // Draft control: the same direct line edit is accepted before approval.
+      await db.execute(sql`
+        update document_lines
+           set description = 'draft edit'
+         where id = ${lineId} and org_id = ${org.orgId}
+      `);
+      const draftControl = await db.execute<{ description: string | null }>(sql`
+        select description
+          from document_lines
+         where id = ${lineId} and org_id = ${org.orgId}
+      `);
+      assert.equal(draftControl.rows[0]?.description, "draft edit");
+      await db.execute(sql`
+        update documents
+           set status = 'approved'
+         where id = ${documentId} and org_id = ${org.orgId}
+      `);
+      const before = await db.execute<{ document: unknown; line: unknown }>(sql`
+        select to_jsonb(d) as document, to_jsonb(l) as line
+          from documents d
+          join document_lines l on l.document_id = d.id and l.org_id = d.org_id
+         where d.id = ${documentId} and d.org_id = ${org.orgId} and l.id = ${lineId}
+      `);
+
+      // RED before migration 0034: this direct write committed against an
+      // approved parent. GREEN after 0034: the storage guard rejects it.
+      await assert.rejects(
+        db.execute(sql`
+          update document_lines
+             set description = 'tampered'
+           where id = ${lineId} and org_id = ${org.orgId}
+        `),
+        (error: unknown) => errorChainMatches(error, /lines are immutable/),
+      );
+
+      const after = await db.execute<{ document: unknown; line: unknown }>(sql`
+        select to_jsonb(d) as document, to_jsonb(l) as line
+          from documents d
+          join document_lines l on l.document_id = d.id and l.org_id = d.org_id
+         where d.id = ${documentId} and d.org_id = ${org.orgId} and l.id = ${lineId}
+      `);
+      assert.deepEqual(after.rows, before.rows, "approved document and line remain byte-for-byte unchanged");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
 test("moving a line cannot strand its old entry unbalanced and then post it", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
