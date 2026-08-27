@@ -44,14 +44,10 @@ import {
 import { assertBillPostingAllowed, ComplianceError } from "./compliance.ts";
 import { reversalJournalLines } from "./reversal-journal-lines.ts";
 import {
-  persistTaxQuote,
-  quoteExternalTax,
   readTaxRateProviderConfig,
   readTaxQuoteForDocumentLine,
+  sumComponentTax,
   type Address,
-  type PersistedTaxQuote,
-  type TaxQuoteResult,
-  type TaxRateProviderConfigRow,
 } from "./tax-rate-providers.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "./tax.ts";
 import {
@@ -619,12 +615,7 @@ function validateTaxControlAccounts(
 
 type ProviderTaxPlan = {
   line: DocLine;
-  nextLine: DocLine;
   components: TaxPostingComponent[];
-  request: import("./tax-rate-providers.ts").TaxQuoteRequest;
-  quote: TaxQuoteResult | PersistedTaxQuote;
-  providerConfig: TaxRateProviderConfigRow;
-  persistedQuoteId: string | null;
 };
 
 function providerTaxDocumentKind(kind: string): boolean {
@@ -645,15 +636,14 @@ function addressFromRow(row: Record<string, unknown> | undefined): Address {
 async function defaultPartyAddress(
   orgId: string,
   partyId: string | null,
-  shipping: boolean,
+  _shipping: boolean,
 ): Promise<Address> {
   if (!partyId) return {};
-  const flag = shipping ? sql`is_default_shipping` : sql`is_default_billing`;
   const result = await db.execute<Record<string, unknown>>(sql`
     select line1, city, region, postal_code as "postalCode", country
       from addresses
      where org_id = ${orgId} and party_id = ${partyId}
-     order by ${flag} desc, id asc
+     order by is_default_shipping desc, is_default_billing desc, id asc
      limit 1
   `);
   return addressFromRow(result.rows[0]);
@@ -704,32 +694,16 @@ function taxConfigsFromEvidence(
   }));
 }
 
-function postingComponentsFromComputed(
-  components: Awaited<ReturnType<typeof computeLineTaxes>>["components"],
-): TaxPostingComponent[] {
-  return components.map((component) => ({
-    taxCodeId: component.taxCodeId,
-    sequence: component.sequence,
-    taxAmount: component.taxAmount,
-    recoverableAmount: component.recoverableAmount,
-    nonrecoverableAmount: component.nonrecoverableAmount,
-    calculationType: component.calculationType,
-    collectedAccountId: component.collectedAccountId,
-    paidAccountId: component.paidAccountId,
-    withholdingAccountId: component.withholdingAccountId,
-    ratePercent: component.ratePercent,
-    taxableAmount: component.taxableAmount,
-    priceIncludesTax: component.priceIncludesTax,
-    compoundOnPrevious: component.compoundOnPrevious,
-    roundingScale: component.roundingScale,
-    recoverablePercent: component.recoverablePercent,
-  }));
+function sameProviderAddress(a: Address, b: Address): boolean {
+  const keys: (keyof Address)[] = ["line1", "city", "region", "postalCode", "country"];
+  return keys.every((key) => (a[key] ?? null) === (b[key] ?? null));
 }
 
 /**
- * Resolve provider tax before posting. This is deliberately read/HTTP-only:
- * callers persist the plan in the posting transaction, so an outage, invalid
- * response, or later posting guard leaves zero document/journal/quote writes.
+ * Resolve provider tax before posting by replaying the immutable quote and
+ * calculation snapshot minted by the draft writer. Posting never performs
+ * provider I/O or persists tax evidence: an absent, stale, or mismatched
+ * snapshot fails closed before scripts, journals, or post-commit effects.
  */
 async function resolveProviderTaxPlans(
   doc: Doc,
@@ -761,117 +735,64 @@ async function resolveProviderTaxPlans(
       doc.kind === "vendor_bill" || doc.kind === "vendor_credit" ? {} : partyAddress,
     );
     const persisted = await readTaxQuoteForDocumentLine(doc.orgId, line.id);
-    let quote: TaxQuoteResult | PersistedTaxQuote;
-    let persistedQuoteId: string | null = null;
-    if (persisted) {
-      if (persisted.providerConfigId !== config.id || persisted.provider !== config.provider) {
-        throw new PostingError(`line ${line.lineNumber} has ambiguous tax-provider provenance; refusing to post`);
+    if (!persisted) {
+      throw new PostingError(
+        `line ${line.lineNumber} has no immutable tax-provider quote; recalculate the draft before approval`,
+      );
+    }
+    if (persisted.providerConfigId !== config.id || persisted.provider !== config.provider) {
+      throw new PostingError(`line ${line.lineNumber} has ambiguous tax-provider provenance; refusing to post`);
+    }
+    if (
+      persisted.quotedOn !== doc.documentDate ||
+      persisted.currency !== (doc.currency ?? null) ||
+      toUnits(persisted.taxableAmount) !== toUnits(request.taxableAmount) ||
+      !sameProviderAddress(persisted.shipFrom, request.shipFrom) ||
+      !sameProviderAddress(persisted.shipTo, request.shipTo)
+    ) {
+      throw new PostingError(`line ${line.lineNumber} persisted tax quote does not match the document; refusing to post`);
+    }
+    try {
+      if (toUnits(persisted.taxAmount) !== toUnits(sumComponentTax(persisted.components))) {
+        throw new Error("quote component total does not match headline tax");
       }
-      if (persisted.currency !== (doc.currency ?? null) || toUnits(persisted.taxableAmount) !== toUnits(request.taxableAmount)) {
-        throw new PostingError(`line ${line.lineNumber} persisted tax quote does not match the document; refusing to post`);
+      if (persisted.provider !== config.provider || !Array.isArray(persisted.components)) {
+        throw new Error("quote provider or components are invalid");
       }
-      quote = persisted;
-      persistedQuoteId = persisted.id;
-    } else {
-      try {
-        quote = await quoteExternalTax(doc.orgId, request, null, { persist: false, config });
-      } catch (error) {
-        throw new PostingError(
-          `configured tax provider ${config.provider} failed for line ${line.lineNumber}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+    } catch (error) {
+      throw new PostingError(
+        `line ${line.lineNumber} has invalid immutable tax-provider evidence: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
     const configs = taxConfigsFromEvidence(existingComponents);
     let calculated;
     try {
       calculated = computeLineTaxes(request.taxableAmount, configs, {
         overridden: true,
-        taxAmount: quote.taxAmount,
+        taxAmount: persisted.taxAmount,
       });
     } catch (error) {
       throw new PostingError(
         `configured tax provider returned an invalid result for line ${line.lineNumber}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+    // Approved lines are immutable at the storage boundary. A document must
+    // have been recalculated through the provider before approval; posting
+    // revalidates the authoritative result instead of amending source facts.
+    if (
+      toUnits(calculated.netAmount) !== toUnits(line.amount) ||
+      toUnits(calculated.taxTotal) !== toUnits(line.taxAmount ?? "0")
+    ) {
+      throw new PostingError(
+        `configured tax provider changed the tax for line ${line.lineNumber}; recalculate the draft before approval`,
+      );
+    }
     plans.push({
       line,
-      nextLine: {
-        ...line,
-        amount: calculated.netAmount,
-        taxInputAmount: calculated.inputAmount,
-        taxAmount: calculated.taxTotal,
-        taxOverridden: true,
-      },
-      components: postingComponentsFromComputed(calculated.components),
-      request,
-      quote,
-      providerConfig: config,
-      persistedQuoteId,
+      components: existingComponents,
     });
   }
   return plans;
-}
-
-async function persistProviderTaxPlans(
-  tx: Tx,
-  orgId: string,
-  plans: ProviderTaxPlan[],
-  actorId: string | null,
-): Promise<void> {
-  if (plans.length > 0) {
-    // Approved documents have not yet entered immutable history, but their
-    // original local evidence is protected by the same trigger used for posted
-    // rows. This engine-only transaction flag permits the authoritative
-    // pre-post replacement while keeping the scope local to this transaction.
-    await tx.execute(sql`set local openbooks.amend = on`);
-  }
-  for (const plan of plans) {
-    if (!plan.persistedQuoteId) {
-      await persistTaxQuote(
-        orgId,
-        plan.providerConfig.id,
-        plan.request,
-        plan.quote,
-        actorId,
-        tx,
-      );
-    }
-    await tx.execute(sql`
-      delete from document_line_tax_components
-       where org_id = ${orgId} and document_line_id = ${plan.line.id}
-    `);
-    for (const component of plan.components) {
-      await tx.execute(sql`
-        insert into document_line_tax_components
-          (org_id, document_line_id, tax_code_id, sequence, rate_percent,
-           taxable_amount, tax_amount, recoverable_amount, nonrecoverable_amount,
-           calculation_type, price_includes_tax, compound_on_previous, rounding_scale,
-           collected_account_id, paid_account_id, withholding_account_id, overridden,
-           created_by, updated_by)
-        values (${orgId}, ${plan.line.id}, ${component.taxCodeId}, ${component.sequence},
-                ${component.ratePercent ?? "0"}, ${component.taxableAmount ?? plan.request.taxableAmount},
-                ${component.taxAmount}, ${component.recoverableAmount}, ${component.nonrecoverableAmount},
-                ${component.calculationType}, ${component.priceIncludesTax ?? false},
-                ${component.compoundOnPrevious ?? false}, ${component.roundingScale ?? 2},
-                ${component.collectedAccountId}, ${component.paidAccountId},
-                ${component.withholdingAccountId}, true, ${actorId}, ${actorId})
-      `);
-    }
-    await tx.execute(sql`
-      update document_lines
-         set amount = ${plan.nextLine.amount},
-             tax_input_amount = ${plan.nextLine.taxInputAmount},
-             tax_amount = ${plan.nextLine.taxAmount},
-             tax_overridden = true,
-             updated_by = ${actorId}
-       where id = ${plan.line.id} and org_id = ${orgId}
-    `);
-    await tx.execute(sql`
-      update tax_rate_provider_configs
-         set last_attempt_at = now(), last_success_at = now(), last_error = null
-       where id = ${plan.providerConfig.id} and org_id = ${orgId}
-    `);
-  }
 }
 
 function signed(amount: string, direction: 1 | -1): string {
@@ -1794,8 +1715,7 @@ export async function postDocument(
   // fails closed with no document/journal effects. Existing line-linked quotes
   // are replayed byte-for-byte, so a retry never depends on a changed endpoint.
   const providerPlans = await resolveProviderTaxPlans(doc, lines, deps);
-  const providerByLine = new Map(providerPlans.map((plan) => [plan.line.id, plan]));
-  const postingLines = lines.map((line) => providerByLine.get(line.id)?.nextLine ?? line);
+  const postingLines = lines;
   if (providerPlans.length > 0) {
     const providerComponents = new Map(deps.taxComponentsByLine ?? []);
     for (const plan of providerPlans) providerComponents.set(plan.line.id, plan.components);
@@ -1987,7 +1907,6 @@ export async function postDocument(
   const entryId = await inDbTransaction(async (tx) => {
     if (deps.migration)
       await tx.execute(sql`set local openbooks.migration = on`);
-    await persistProviderTaxPlans(tx, doc.orgId, providerPlans, options.audit?.actorId ?? null);
     const auditBefore = options.audit
       ? await captureTransactionAuditSnapshot(tx, documentId, doc.orgId)
       : null;
