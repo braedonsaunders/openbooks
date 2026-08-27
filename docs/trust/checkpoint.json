@@ -1,19 +1,19 @@
 {
-  "orgId": "c033286a-0855-48c4-9558-e09fd99c5554",
+  "orgId": "17d05960-11a8-4e68-a16a-09e1e6f5e688",
   "orgName": "SIM · Summit Ridge Construction",
-  "at": "2026-08-26T19:54:04.599Z",
-  "gitSha": "f721d5c",
+  "at": "2026-08-27T13:37:30.433Z",
+  "gitSha": "ce718c1",
   "cutoff": "2026-02-28",
   "cutoffSource": "last-closed-gl-period",
   "counts": {
-    "documents": 900,
-    "postedDocuments": 423,
-    "postedEntries": 426,
-    "postedLines": 1342
+    "documents": 929,
+    "postedDocuments": 444,
+    "postedEntries": 447,
+    "postedLines": 1369
   },
   "trialBalance": {
-    "debits": "8447424.7428",
-    "credits": "8447424.7428",
+    "debits": "8494916.5376",
+    "credits": "8494916.5376",
     "accounts": 41
   },
   "controlTieOut": [
@@ -21,8 +21,8 @@
       "account": "Contracts Receivable",
       "number": "1200",
       "kind": "asset_receivable",
-      "gl": "1106910.6728",
-      "subledger": "459410.6728",
+      "gl": "1133724.7976",
+      "subledger": "486224.7976",
       "direct": "647500.0000",
       "diff": "0.0000"
     },
@@ -30,21 +30,22 @@
       "account": "Retainage Receivable",
       "number": "1210",
       "kind": "asset_receivable",
-      "gl": "20780.0000",
+      "gl": "21373.0000",
       "subledger": "0",
-      "direct": "20780.0000",
+      "direct": "21373.0000",
       "diff": "0.0000"
     },
     {
       "account": "Accounts Payable — Trade",
       "number": "2010",
       "kind": "liability_payable",
-      "gl": "-465555.6200",
-      "subledger": "-122555.6200",
+      "gl": "-466868.1200",
+      "subledger": "-123868.1200",
       "direct": "-343000.0000",
       "diff": "0.0000"
     }
   ],
+  "inventoryTieOut": [],
   "checks": [
     {
       "name": "global-balance",
@@ -80,12 +81,17 @@
       "name": "subledger-gl-tieout",
       "ok": true,
       "detail": "3 control accounts; worst |GL − subledger − directJE| = 0.0000"
+    },
+    {
+      "name": "inventory-subledger-gl-tieout",
+      "ok": true,
+      "detail": "0 control-account/entity ties across 0 method sets; worst |GL − Σ open layers| = 0.0000"
     }
   ],
   "timings": [
     {
       "report": "trial_balance",
-      "ms": 3,
+      "ms": 2,
       "rows": 39
     },
     {
