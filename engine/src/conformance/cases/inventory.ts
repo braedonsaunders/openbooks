@@ -6,15 +6,17 @@
  * general ledger is read back. Nothing is stubbed.
  */
 
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../db.ts";
+import { fromUnits, toUnits } from "../../money.ts";
 import {
   applyInventoryIssuesForInvoice,
   applyInventoryReceiptsForBill,
   getOnHand,
 } from "../../inventory.ts";
 import { reverseInventoryWritedown, writeDownInventoryToNrv } from "../../inventory-nrv.ts";
-import { capture, draftDocument, deps, postNewDocument } from "../ledger-helpers.ts";
+import { capture, deps, type DraftDocumentInput } from "../ledger-helpers.ts";
 import { postDocument } from "../../posting.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 
@@ -25,7 +27,7 @@ async function receiveViaBill(
   args: { number: string; itemId: string; quantity: string; unitCost: string; amount: string },
 ): Promise<void> {
   const ledger = ctx.ledger!;
-  const documentId = await draftDocument(ledger, {
+  const documentId = await draftConformanceDocument(ledger, {
     kind: "vendor_bill",
     number: args.number,
     partyId: ledger.vendorId,
@@ -56,7 +58,7 @@ async function sellViaInvoice(
   args: { number: string; itemId: string; quantity: string; unitPrice: string; amount: string },
 ): Promise<void> {
   const ledger = ctx.ledger!;
-  const documentId = await draftDocument(ledger, {
+  const documentId = await draftConformanceDocument(ledger, {
     kind: "customer_invoice",
     number: args.number,
     partyId: ledger.customerId,
@@ -79,6 +81,43 @@ async function sellViaInvoice(
     ledger.date,
     ledger.subsidiaryId,
   );
+}
+
+/**
+ * Insert document lines while the source header is draft, then approve it for
+ * the posting kernel. This preserves the document-line immutability boundary.
+ */
+async function draftConformanceDocument(
+  ledger: NonNullable<CaseContext["ledger"]>,
+  input: DraftDocumentInput,
+): Promise<string> {
+  const documentId = randomUUID();
+  const date = input.date ?? ledger.date;
+  const currency = input.currency ?? "CAD";
+  const fxRate = input.fxRate ?? "1";
+  const subtotal = fromUnits(input.lines.reduce((sum, line) => sum + toUnits(line.amount), 0n));
+
+  await db.execute(sql`
+    insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
+                           currency, fx_rate, status, subtotal, tax_total, total, is_final_invoice, custom, extra_dims)
+    values (${documentId}, ${ledger.orgId}, ${input.kind}, ${input.number}, ${input.partyId ?? null},
+            ${ledger.subsidiaryId}, ${date}, ${date}, ${currency}, ${fxRate}, 'draft',
+            ${subtotal}, '0', ${subtotal}, false, '{}'::jsonb, '{}'::jsonb)`);
+
+  for (const [index, line] of input.lines.entries()) {
+    await db.execute(sql`
+      insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price,
+                                  amount, tax_amount, is_billable, quantity_fulfilled, quantity_billed,
+                                  stock_location_id, custom, tax_overridden, extra_dims)
+      values (${randomUUID()}, ${ledger.orgId}, ${documentId}, ${index + 1}, ${line.itemId ?? null},
+              ${line.accountId ?? null}, ${line.quantity}, ${line.unitPrice}, ${line.amount}, '0',
+              false, '0', '0', ${line.stockLocationId ?? null}, '{}'::jsonb, false, '{}'::jsonb)`);
+  }
+
+  await db.execute(sql`
+    update documents set status = 'approved'
+     where id = ${documentId} and org_id = ${ledger.orgId} and status = 'draft'`);
+  return documentId;
 }
 
 export const INVENTORY_CASES: readonly ConformanceCase[] = [

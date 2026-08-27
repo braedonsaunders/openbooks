@@ -6,9 +6,11 @@
  * `requirement` line is our own restatement of the cited paragraph.
  */
 
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../db.ts";
 import { add, fromUnits, toUnits } from "../../money.ts";
+import { postDocument } from "../../posting.ts";
 import {
   allocateByRelativeSSP,
   computeRecognitionSchedule,
@@ -16,8 +18,63 @@ import {
   runRevenueRecognition,
   separateFinancingComponent,
 } from "../../revenue-recognition.ts";
-import { capture, postNewDocument } from "../ledger-helpers.ts";
-import type { ConformanceCase } from "../types.ts";
+import { capture, deps, type DraftDocumentInput } from "../ledger-helpers.ts";
+import type { CaseContext, ConformanceCase } from "../types.ts";
+
+/**
+ * Build a source document through its real draft lifecycle. The document-line
+ * immutability guard permits ordinary line writes only while the header is
+ * draft, so the fixture stages lines before approving and posting.
+ */
+async function postConformanceDocument(ctx: CaseContext, input: DraftDocumentInput): Promise<string> {
+  const ledger = ctx.ledger!;
+  await ensureRecognitionPeriods(ledger.orgId);
+  const documentId = randomUUID();
+  const date = input.date ?? ledger.date;
+  const currency = input.currency ?? "CAD";
+  const fxRate = input.fxRate ?? "1";
+  const subtotal = fromUnits(input.lines.reduce((sum, line) => sum + toUnits(line.amount), 0n));
+
+  await db.execute(sql`
+    insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
+                           currency, fx_rate, status, subtotal, tax_total, total, is_final_invoice, custom, extra_dims)
+    values (${documentId}, ${ledger.orgId}, ${input.kind}, ${input.number}, ${input.partyId ?? null},
+            ${ledger.subsidiaryId}, ${date}, ${date}, ${currency}, ${fxRate}, 'draft',
+            ${subtotal}, '0', ${subtotal}, false, '{}'::jsonb, '{}'::jsonb)`);
+
+  for (const [index, line] of input.lines.entries()) {
+    await db.execute(sql`
+      insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price,
+                                  amount, tax_amount, is_billable, quantity_fulfilled, quantity_billed,
+                                  stock_location_id, custom, tax_overridden, extra_dims)
+      values (${randomUUID()}, ${ledger.orgId}, ${documentId}, ${index + 1}, ${line.itemId ?? null},
+              ${line.accountId ?? null}, ${line.quantity}, ${line.unitPrice}, ${line.amount}, '0',
+              false, '0', '0', ${line.stockLocationId ?? null}, '{}'::jsonb, false, '{}'::jsonb)`);
+  }
+
+  await db.execute(sql`
+    update documents set status = 'approved'
+     where id = ${documentId} and org_id = ${ledger.orgId} and status = 'draft'`);
+  return await postDocument(documentId, deps(ctx));
+}
+
+/** Provision periods spanning the twelve-month service fixtures. */
+async function ensureRecognitionPeriods(orgId: string): Promise<void> {
+  const calendar = (await db.execute<{ id: string }>(sql`
+    select id from fiscal_calendars where org_id = ${orgId} limit 1`)).rows[0];
+  if (!calendar) throw new Error("conformance tenant has no fiscal calendar");
+  for (let month = 1; month <= 12; month++) {
+    const mm = String(month).padStart(2, "0");
+    const startsOn = `2027-${mm}-01`;
+    const endsOn = new Date(Date.UTC(2027, month, 0)).toISOString().slice(0, 10);
+    await db.execute(sql`
+      insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
+                                      is_adjustment, fiscal_calendar_id)
+      values (${randomUUID()}, ${orgId}, 2027, ${month}, ${`2027-${mm}`}, ${startsOn}, ${endsOn},
+              false, ${calendar.id})
+      on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing`);
+  }
+}
 
 export const REVENUE_CASES: readonly ConformanceCase[] = [
   // -------------------------------------------------------------------------
@@ -293,7 +350,7 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
     run: async (ctx) => {
       const ledger = ctx.ledger!;
       const invoice = await capture(ctx, "invoice", async () => {
-        await postNewDocument(ctx, {
+        await postConformanceDocument(ctx, {
           kind: "customer_invoice",
           number: "CONF-REV-1",
           partyId: ledger.customerId,
@@ -351,7 +408,7 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
     },
     run: async (ctx) => {
       const ledger = ctx.ledger!;
-      await postNewDocument(ctx, {
+      await postConformanceDocument(ctx, {
         kind: "customer_invoice",
         number: "CONF-REV-2",
         partyId: ledger.customerId,
@@ -403,7 +460,7 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
     expected: { values: { obligations: "1" } },
     run: async (ctx) => {
       const ledger = ctx.ledger!;
-      const documentId = await postNewDocument(ctx, {
+      const documentId = await postConformanceDocument(ctx, {
         kind: "customer_invoice",
         number: "CONF-REV-3",
         partyId: ledger.customerId,
