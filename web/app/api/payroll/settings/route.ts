@@ -12,6 +12,7 @@ import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll-paym
 import { payrollSetupState } from '@openbooks/engine/src/payroll-readiness.ts'
 import { STUB_PASSWORD_TOKENS, stubPasswordPolicy } from '../../../../lib/payroll-outputs'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { guardRootSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -92,6 +93,8 @@ async function pickerOptions(orgId: string) {
 export async function GET() {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = await guardRootSubsidiaryScope(gate)
+  if (scopeDenied) return scopeDenied
   const [settings, blob, options] = await Promise.all([
     payrollSettings(gate.user.orgId),
     currentPayrollBlob(gate.user.orgId),
@@ -118,6 +121,8 @@ export async function GET() {
 export async function PUT(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = await guardRootSubsidiaryScope(gate)
+  if (scopeDenied) return scopeDenied
   const orgId = gate.user.orgId
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -264,6 +269,8 @@ export async function PUT(req: Request) {
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = await guardRootSubsidiaryScope(gate)
+  if (scopeDenied) return scopeDenied
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = parsedBody2.data

@@ -20,6 +20,7 @@ import {
 } from '@openbooks/engine/src/payroll/tax-years.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { guardRootSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 
@@ -139,6 +140,8 @@ function persistStatutoryRateValues(
 export async function GET(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = await guardRootSubsidiaryScope(gate)
+  if (scopeDenied) return scopeDenied
   const orgId = gate.user.orgId
   const url = new URL(req.url)
 
@@ -212,6 +215,8 @@ export async function GET(req: Request) {
 export async function PUT(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = await guardRootSubsidiaryScope(gate)
+  if (scopeDenied) return scopeDenied
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const parsed = parseBody(parsedBody.data)
@@ -263,6 +268,8 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = await guardRootSubsidiaryScope(gate)
+  if (scopeDenied) return scopeDenied
   const id = new URL(req.url).searchParams.get('id') ?? ''
   if (!isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
   const removed = await deleteStatutoryRate(gate.user.orgId, gate.user.id, id)
