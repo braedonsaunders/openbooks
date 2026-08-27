@@ -492,6 +492,48 @@ export async function loadDocumentEditCurrent(
   return result.rows[0] ?? null
 }
 
+export type PreparedDocumentTotals = Awaited<ReturnType<typeof computeBillTotalsWithProvider>>
+
+/**
+ * Resolve provider tax before a create writer mints its draft row. The result
+ * is an internal hand-off to applyDocumentEdit; callers must never accept it
+ * from an HTTP payload. Provider failures become request-state errors while no
+ * document or dependent rows exist yet.
+ */
+export async function precomputeDocumentTotalsForCreate(
+  orgId: string,
+  kind: string,
+  body: Pick<DocumentEditInput, 'lines' | 'currency' | 'documentDate' | 'partyId'>,
+): Promise<PreparedDocumentTotals | null> {
+  if (!body.lines) return null
+  let currency = body.currency
+  if (currency !== undefined) {
+    currency = String(currency).trim().toUpperCase()
+    if (!/^[A-Z]{3}$/.test(currency)) throw new DocumentEditError(422, 'invalid currency')
+    const found = await db.execute(sql`select 1 from currencies where code = ${currency}`)
+    if (!found.rows[0]) throw new DocumentEditError(422, 'invalid currency')
+  } else {
+    currency = await orgBaseCurrency(orgId)
+  }
+  const documentDate = body.documentDate ?? await businessToday(orgId)
+  try {
+    return await computeBillTotalsWithProvider(
+      validateEditableDocumentLines(body.lines),
+      await taxProfileMap(orgId, documentDate),
+      {
+        orgId,
+        kind,
+        currency,
+        documentDate,
+        partyId: body.partyId,
+      },
+    )
+  } catch (error) {
+    if (error instanceof DocumentEditError) throw error
+    throw new DocumentEditError(422, error instanceof Error ? error.message : String(error))
+  }
+}
+
 export interface DocumentEditContext {
   orgId: string
   userId: string
@@ -499,6 +541,8 @@ export interface DocumentEditContext {
   source: 'ui' | 'api' | 'mcp' | 'assistant' | 'posted_correction'
   /** Fire on_update record flows after the edit commits (default true). */
   runFlows?: boolean
+  /** Internal create-path provider preflight; never supplied by API callers. */
+  precomputedTotals?: PreparedDocumentTotals | null
 }
 
 /** Exact numeric(19,4) money string, or null when the value is not canonical. */
@@ -746,18 +790,27 @@ export async function applyDocumentEdit(
     // the caller sent now either reaches computeBillTotals exactly as
     // submitted (the tax engine handles signed bases) or fails closed with a
     // 422 naming the offending line.
-    const computed = await computeBillTotalsWithProvider(
-      validateEditableDocumentLines(body.lines),
-      await taxProfileMap(orgId, body.documentDate ?? current.documentDate),
-      {
-        orgId,
-        kind: current.kind,
-        currency: currency ?? (await db.execute<{ currency: string }>(sql`
-          select currency from documents where id = ${id} and org_id = ${orgId}`)).rows[0]?.currency ?? await orgBaseCurrency(orgId),
-        documentDate: body.documentDate ?? current.documentDate,
-        partyId: body.partyId !== undefined ? body.partyId : current.partyId,
-      },
-    )
+    let computed: Awaited<ReturnType<typeof computeBillTotalsWithProvider>>
+    if (ctx.precomputedTotals) {
+      computed = ctx.precomputedTotals
+    } else {
+      try {
+        computed = await computeBillTotalsWithProvider(
+          validateEditableDocumentLines(body.lines),
+          await taxProfileMap(orgId, body.documentDate ?? current.documentDate),
+          {
+            orgId,
+            kind: current.kind,
+            currency: currency ?? (await db.execute<{ currency: string }>(sql`
+              select currency from documents where id = ${id} and org_id = ${orgId}`)).rows[0]?.currency ?? await orgBaseCurrency(orgId),
+            documentDate: body.documentDate ?? current.documentDate,
+            partyId: body.partyId !== undefined ? body.partyId : current.partyId,
+          },
+        )
+      } catch (error) {
+        throw new DocumentEditError(422, error instanceof Error ? error.message : String(error))
+      }
+    }
     totals = {
       subtotal: normalizeMoney(computed.subtotal),
       taxTotal: normalizeMoney(computed.taxTotal),

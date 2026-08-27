@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
+import { createServer, type IncomingMessage, type Server } from 'node:http'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
@@ -32,6 +33,8 @@ const {
   validateEditableDocumentLines,
 } = await import('./documents.ts')
 const { computeBillTotals } = await import('./bills.ts')
+const { createRecord } = await import('./api/writers.ts')
+const { saveTaxRateProviderConfig } = await import('@openbooks/engine/src/tax-rate-providers.ts')
 const { withSimClock } = await import('@openbooks/engine/src/clock.ts')
 const {
   DocumentVoidError,
@@ -49,6 +52,29 @@ const { correctPostedDocument } = await import('./application/documents.ts')
 
 const NO_PROFILES = { codes: new Map(), groups: new Map() }
 const DOCUMENTS_SOURCE = readFileSync(new URL('./documents.ts', import.meta.url), 'utf8')
+
+async function listenProvider(server: Server): Promise<string> {
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => resolve())
+  })
+  const address = server.address()
+  if (!address || typeof address === 'string') throw new Error('provider test server did not bind')
+  return `http://127.0.0.1:${address.port}`
+}
+
+function consumeRequest(req: IncomingMessage): Promise<void> {
+  return new Promise((resolve, reject) => {
+    req.on('data', () => undefined)
+    req.on('end', resolve)
+    req.on('error', reject)
+  })
+}
+
+async function closeProvider(server: Server): Promise<void> {
+  if (!server.listening) return
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+}
 
 type StoredDocument = {
   kind: string
@@ -277,7 +303,7 @@ test(
         values
           (${applicationCorrectionSourceId}, ${org.orgId}, 'vendor_bill',
            'OCC-APPLICATION-CORRECTION', ${org.vendorId}, ${org.subsidiaryId},
-           ${org.date}, ${org.date}, 'CAD', '1', 'approved', '125', '0', '125',
+           ${org.date}, ${org.date}, 'CAD', '1', 'draft', '125', '0', '125',
            'application correction source', '{}'::jsonb, '{}'::jsonb,
            ${actorId}, ${actorId})
       `)
@@ -291,6 +317,10 @@ test(
            '{}'::jsonb, ${actorId}, ${actorId})
       `)
       await db.execute(sql`
+        update documents set status = 'approved'
+         where id = ${applicationCorrectionSourceId} and org_id = ${org.orgId}
+      `)
+      await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, subsidiary_id,
            document_date, posting_date, currency, fx_rate, status, subtotal,
@@ -298,7 +328,7 @@ test(
         values
           (${voidRollbackSourceId}, ${org.orgId}, 'vendor_bill',
            'OCC-VOID-ROLLBACK', ${org.vendorId}, ${org.subsidiaryId},
-           ${org.date}, ${org.date}, 'CAD', '1', 'approved', '125', '0', '125',
+           ${org.date}, ${org.date}, 'CAD', '1', 'draft', '125', '0', '125',
            'void rollback source', '{}'::jsonb, '{}'::jsonb,
            ${actorId}, ${actorId})
       `)
@@ -310,6 +340,10 @@ test(
           (${org.orgId}, ${voidRollbackSourceId}, 1,
            ${org.accounts.cogs}, '1', '125', '125', '0', '{}'::jsonb,
            '{}'::jsonb, ${actorId}, ${actorId})
+      `)
+      await db.execute(sql`
+        update documents set status = 'approved'
+         where id = ${voidRollbackSourceId} and org_id = ${org.orgId}
       `)
       await db.execute(sql`
         insert into flows
@@ -1207,4 +1241,81 @@ test('the UI correction route commits the replacement and its void as one atomic
   // The swallowed compensating delete must stay dead.
   assert.doesNotMatch(handler, /deleteDocument/)
   assert.doesNotMatch(handler, /\.catch\(\(\) => \{\}\)/)
+})
+
+test('provider failure during API document create leaves no document or dependent rows', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId
+  const provider = createServer(async (req, res) => {
+    await consumeRequest(req)
+    res.writeHead(502, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ error: 'provider offline' }))
+  })
+  try {
+    const taxCodeId = randomUUID()
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into tax_codes
+          (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
+        values (${taxCodeId}, ${org.orgId}, 'CREATE-EXT', 'Create external tax', '100',
+                ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`)
+      await db.execute(sql`
+        insert into tax_rates (id, org_id, tax_code_id, rate_percent, effective_from)
+        values (${randomUUID()}, ${org.orgId}, ${taxCodeId}, '13', ${org.date})`)
+    })
+    const origin = await listenProvider(provider)
+    await withBypass(() => saveTaxRateProviderConfig(
+      org.orgId,
+      { provider: 'custom_http', isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/quote` } },
+      actorId,
+    ))
+
+    const result = await createRecord(
+      { id: actorId, orgId: org.orgId, roles: [] } as never,
+      {
+        key: 'bills',
+        table: 'documents',
+        searchColumn: 'document_number',
+        readPermission: 'ap.read',
+        writePermission: 'ap.create',
+        operations: ['list', 'get', 'create', 'update', 'delete'],
+        writer: { kind: 'document', docKind: 'vendor_bill' },
+        dynamic: false,
+        documentKinds: ['vendor_bill'],
+      } as never,
+      [],
+      {
+        partyId: org.vendorId,
+        lines: [{ accountId: org.accounts.cogs, amount: '100.0000', taxCodeId }],
+      },
+      { source: 'api' },
+    )
+    assert.equal(result.status, 422)
+    const counts = await withBypass(() => db.execute<{
+      documents: string
+      lines: string
+      quotes: string
+      journals: string
+      effects: string
+      audits: string
+    }>(sql`
+      select
+        (select count(*) from documents where org_id = ${org.orgId} and document_number like 'BILL-%')::text as documents,
+        (select count(*) from document_lines where org_id = ${org.orgId})::text as lines,
+        (select count(*) from tax_rate_quotes where org_id = ${org.orgId})::text as quotes,
+        (select count(*) from journal_entries where org_id = ${org.orgId})::text as journals,
+        (select count(*) from posting_effects where org_id = ${org.orgId})::text as effects,
+        (select count(*) from audit_log where org_id = ${org.orgId} and table_name = 'documents')::text as audits`))
+    assert.deepEqual(counts.rows[0], {
+      documents: '0',
+      lines: '0',
+      quotes: '0',
+      journals: '0',
+      effects: '0',
+      audits: '0',
+    })
+  } finally {
+    await closeProvider(provider)
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
 })
