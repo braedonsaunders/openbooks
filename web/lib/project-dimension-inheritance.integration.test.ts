@@ -54,7 +54,7 @@ test(
           values (
             \${chargeId}, \${org.orgId}, 'project_charge', 'CHARGE-MIXED',
             \${org.customerId}, \${org.subsidiaryId}, \${projectA},
-            \${org.date}, \${org.date}, 'CAD', 1, 'approved',
+            \${org.date}, \${org.date}, 'CAD', 1, 'draft',
             '880', '0', '880', false, '{}'::jsonb, '{}'::jsonb
           )
         \`);
@@ -73,6 +73,11 @@ test(
              \${org.accounts.cogs}, 'Explicit line override', '1', '800',
              '800', '800', '900', '0', true, '0', '0', '{}'::jsonb, false,
              '{}'::jsonb)
+        \`);
+        await db.execute(sql\`
+          update documents
+             set status = 'approved'
+           where id = \${chargeId} and org_id = \${org.orgId}
         \`);
 
         await withOrg(org.orgId, async () => {

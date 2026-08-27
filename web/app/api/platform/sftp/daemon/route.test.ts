@@ -136,6 +136,9 @@ const mockSources = new Map<string, string>([
       export function appBucket() {
         return null
       }
+      export function assertTenantRootPrefix(rootPrefix, _orgId) {
+        return rootPrefix
+      }
     `,
   ],
   [

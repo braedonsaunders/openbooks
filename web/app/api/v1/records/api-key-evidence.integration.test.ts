@@ -117,7 +117,8 @@ async function seedEvidenceOrg(): Promise<EvidenceOrg> {
     let adminKey = "";
     let adminKeyId = "";
     let guestKey = "";
-    // Both keys inherit their owner's effective scope ('[]' == owner's full set).
+    // Keys must carry explicit catalogue scopes; the owner's effective
+    // permissions still intersect these grants during authentication.
     for (const userId of [adminUserId, guestUserId]) {
       const generated = generateApiKey();
       const [row] = (await db.execute<{ id: string }>(sql`
@@ -125,7 +126,7 @@ async function seedEvidenceOrg(): Promise<EvidenceOrg> {
         values (${orgId}, ${userId},
                 ${userId === adminUserId ? "evidence admin key" : "roleless guest key"},
                 ${generated.keyPrefix}, ${generated.keyHash}, ${generated.keyPreview},
-                '[]'::jsonb, true)
+                '["parties.read", "parties.manage"]'::jsonb, true)
         returning id`)).rows;
       if (userId === adminUserId) {
         adminKey = generated.plaintext;
