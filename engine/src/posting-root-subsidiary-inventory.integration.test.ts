@@ -295,12 +295,19 @@ test("replay of a root-subsidiary bill runs its inventory effect exactly once", 
     });
     const lineId = await firstLineId(billId);
 
-    // Post WITHOUT draining: the outbox row is the crash-durable retry.
+    // Post WITHOUT draining. The receipt commits atomically inside the bill's
+    // posting transaction (bill GL + inventory are one accounting unit); the
+    // durable outbox row is the exactly-once replay gate, not the applier.
     await postDocument(billId, deps(org), { deferEffects: true });
     assert.equal(await effectsStatus(billId), "pending");
-    assert.equal((await movementFacts(org.orgId, lineId, "receipt")).count, 0);
+    assert.equal(
+      (await movementFacts(org.orgId, lineId, "receipt")).count,
+      1,
+      "the receipt must commit atomically with the bill's posting transaction",
+    );
 
-    // First drain performs the effect.
+    // First drain re-runs the per-line-idempotent effect and marks the
+    // durable row succeeded without duplicating the receipt.
     await runPostDocumentEffects(billId);
     assert.equal(await effectsStatus(billId), "succeeded");
     const afterFirst = await movementFacts(org.orgId, lineId, "receipt");
@@ -441,6 +448,10 @@ test("a purchase order converted into a vendor bill receives its inventory at th
     } from "./engine/src/test-fixtures.ts";
     import { postDocument } from "./engine/src/posting.ts";
     import { toUnits } from "./engine/src/money.ts";
+    import {
+      inventoryPostingEffectKey,
+      receiveInventory,
+    } from "./engine/src/inventory.ts";
     import { convertOrder, createOrderDraft } from "./web/lib/order-cycle.ts";
 
     // Web modules install the normal request resolver during evaluation.
@@ -457,12 +468,13 @@ test("a purchase order converted into a vendor bill receives its inventory at th
       const po = await withOrg(org.orgId, () =>
         createOrderDraft(org.orgId, userId, "purchase_order"),
       );
+      const poLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines
           (id, org_id, document_id, line_number, item_id, quantity, unit,
            unit_price, amount, tax_amount, is_billable, quantity_fulfilled,
            quantity_billed, stock_location_id, custom)
-        values (\${randomUUID()}, \${org.orgId}, \${po.id}, 1, \${org.items.fifo},
+        values (\${poLineId}, \${org.orgId}, \${po.id}, 1, \${org.items.fifo},
                 '50', 'ea', '2', '100', '0', false, '0', '0',
                 \${org.stockLocationId}, '{}'::jsonb)\`);
       // Issue the order (draft orders are not convertible) and name the
@@ -475,6 +487,34 @@ test("a purchase order converted into a vendor bill receives its inventory at th
            set status='approved', subtotal='100', total='100',
                party_id = \${org.vendorId}, document_date = \${org.date}
          where id = \${po.id} and org_id = \${org.orgId}\`);
+
+      // The shared three-way PO match refuses to bill stock that has not been
+      // received, so record the receipt BEFORE converting: the real production
+      // receipt kernel posts the physical receipt against the purchase-order
+      // line (DR inventory / CR received-not-billed), and the line's received
+      // quantity advances under the same guarded ceiling every fulfillment
+      // writer uses. Conversion still reads this receipt evidence through the
+      // matcher — an unreceived line bills nothing.
+      const receipt = await receiveInventory(org.orgId, userId, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "50",
+        unitCost: "2",
+        subsidiaryId: root,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+        documentLineId: poLineId,
+        idempotencyKey: inventoryPostingEffectKey(poLineId, "receipt"),
+        memo: "Purchase order receipt",
+      });
+      assert.ok(receipt.movementId);
+      const received = (await db.execute(sql\`
+        update document_lines
+           set quantity_fulfilled = quantity_fulfilled + '50'
+         where id = \${poLineId} and org_id = \${org.orgId}
+           and quantity_fulfilled + '50' <= quantity
+        returning id\`)).rows[0];
+      assert.ok(received, "the receipt must fit inside the ordered quantity");
 
       const bill = await withOrg(org.orgId, () =>
         convertOrder(org.orgId, userId, po.id, "vendor_bill"),
@@ -531,6 +571,10 @@ test("a purchase order converted into a vendor bill receives its inventory at th
             where org_id = \${org.orgId} and source_movement_id in (select id from moves)) as layers,
           (select coalesce(sum(round(original_quantity * unit_cost, 4)), 0)::text from cost_layers
             where org_id = \${org.orgId} and source_movement_id in (select id from moves)) as layer_value,
+          (select coalesce(sum(round(original_quantity * unit_cost, 4)), 0)::text from cost_layers
+            where org_id = \${org.orgId} and item_id = \${org.items.fifo}
+              and stock_location_id = \${org.stockLocationId}
+              and subsidiary_id = \${root}) as total_layer_value,
           (select coalesce(sum(l.amount), 0)::text from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
            where l.org_id = \${org.orgId} and e.subsidiary_id = \${root}
@@ -544,13 +588,24 @@ test("a purchase order converted into a vendor bill receives its inventory at th
            where l.org_id = \${org.orgId} and e.subsidiary_id = \${root}
              and l.account_id = \${org.accounts.clearing}) as clearing_gl\`)).rows[0];
 
+      // The converted bill's own receipt: exactly ONE receipt movement on its
+      // line, owned by the ROOT entity, and exactly one cost layer born from
+      // it at the bill's unit cost.
       assert.equal(facts.receipts, 1);
       assert.equal(facts.receipt_sub, root);
       assert.equal(facts.layers, 1);
       assert.equal(toUnits(facts.layer_value), toUnits("100"));
-      assert.equal(toUnits(facts.inv_gl), toUnits("100"));
+
+      // Root-entity GL. The seeded purchase-order receipt contributed DR
+      // inventory 100 / CR received-not-billed 100; the bill's own receipt
+      // adds its 100 of inventory, the bill debits received-not-billed 100,
+      // and its receipt credit leaves the accrual at −100 while AP carries
+      // the debt. The inventory asset corroborates the entity's total layer
+      // value exactly.
+      assert.equal(toUnits(facts.inv_gl), toUnits("200"));
+      assert.equal(toUnits(facts.inv_gl), toUnits(facts.total_layer_value));
       assert.equal(toUnits(facts.ap_gl), toUnits("-100"));
-      assert.equal(toUnits(facts.clearing_gl), 0n);
+      assert.equal(toUnits(facts.clearing_gl), toUnits("-100"));
 
       const effects = (await db.execute(sql\`
         select status from posting_effects where document_id = \${bill.id}\`)).rows[0];
