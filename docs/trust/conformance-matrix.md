@@ -6,7 +6,7 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 
 **42 passing · 0 failing · 0 gaps · 0 not run**
 
-Commit `5a23b129b218d54f5da06f5ee6fdef0244bb8995` · 2026-08-27T17:49:14.360Z
+Commit `b688d2f74856d9952a31ebf6b6b17102cdcbe057` · 2026-08-27T23:44:01.446Z
 
 ## ASC 360
 
@@ -80,7 +80,7 @@ Commit `5a23b129b218d54f5da06f5ee6fdef0244bb8995` · 2026-08-27T17:49:14.360Z
 | **Retranslation restates the foreign balance and offsets the whole movement to profit or loss**<br><sub>Across several currencies and both directions of movement, each monetary balance is restated to foreign balance times closing rate and the net of every restatement lands in a single profit-or-loss account — the entry cannot leave a residual.</sub> | IAS 21.23(a)<br>IAS 21.28 | PASS | Implemented |
 | **An unchanged closing rate produces no entry**<br><sub>A period in which rates did not move generates no journal entry at all, so period-end processing cannot manufacture immaterial noise in the ledger or in the exchange gain and loss account.</sub> | IAS 21.28 | PASS | Implemented |
 | **A multi-line invoice translates balanced through a ten-decimal inverse rate**<br><sub>A multi-line sale invoiced in USD at the ten-decimal inverse of a stored CAD→USD pair — 1.4285714286, exactly the figure posting derives itself as (1 / 0.7)::numeric(19,10) when the exchange table holds only one direction — lands in CAD with every line translated independently and the entry balancing to exactly zero; per-line rounding never leaks a residual into any account, least of all a control account.</sub> | IAS 21.21 | PASS | Implemented |
-| **Output tax on a foreign-currency invoice equals the translated statutory amount exactly**<br><sub>On a taxed, multi-line USD invoice translated through a ten-decimal inverse rate, the tax control line carries exactly tax-total × spot rate — no translation residual is parked on a statutory return line where it would flow straight into a filed figure.</sub> | IAS 21.21 | PASS | Implemented |
+| **Output tax on a foreign-currency invoice equals the translated statutory amount exactly, and the translation residual lands on a trading line**<br><sub>On a taxed, multi-line USD invoice translated through a ten-decimal rate whose per-line roundings do NOT reconcile, the tax control lines carry exactly tax-total × spot rate and the one-unit translation residual is absorbed by a revenue line — no translation residual is parked on a statutory return line where it would flow straight into a filed figure.</sub> | IAS 21.21 | PASS | Implemented |
 
 ## IFRS 16
 
