@@ -64,6 +64,7 @@ async function seedAcceptance(org: Awaited<ReturnType<typeof createScratchOrg>>,
              ${startsOn}, ${endsOn}, false
         from accounting_periods
        where id = ${org.periodId}
+      on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing
     `);
   }
   const invoiceId = randomUUID();
@@ -399,6 +400,7 @@ test("payment link settles a signed webhook into an applied receipt with a surch
                ${startsOn}, ${endsOn}, false
           from accounting_periods
          where id = ${org.periodId}
+        on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing
       `);
     }
 
@@ -1167,6 +1169,73 @@ test("surcharge resolution honors the payment method across card and bank-debit 
       select surcharge_amount from payment_links where id = ${stripeLink.id}
     `)).rows[0]!;
     assert.equal(frozenLink.surcharge_amount, "3.0000", "the link keeps the fee quoted at creation");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("invalid acceptance references fail before checkout and at storage", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const fx = await seedAcceptance(org, "INV-PAY-REFS");
+
+    // PostgreSQL is the final authority for direct writers: neither a bank
+    // reference to an income account nor a surcharge target to an expense
+    // account can be stored, even when the caller bypasses the service.
+    await assert.rejects(
+      db.execute(sql`
+        insert into psp_provider_configs
+          (org_id, provider, display_name, is_enabled, acceptance_enabled,
+           default_bank_account_id, created_by, updated_by)
+        values (${org.orgId}, 'adyen', 'Bad bank', true, true,
+                ${org.accounts.revenue}, ${fx.userId}, ${fx.userId})
+      `),
+    );
+    await assert.rejects(
+      db.execute(sql`
+        insert into payment_surcharge_rules
+          (org_id, name, calculation, percent, fee_income_account_id,
+           provider, payment_method, effective_from, created_by, updated_by)
+        values (${org.orgId}, 'Bad fee', 'percent', '3', ${org.accounts.cogs},
+                'stripe', 'card', '2020-01-01', ${fx.userId}, ${fx.userId})
+      `),
+    );
+
+    // Account state can change after a link is issued. Checkout revalidates
+    // the stored link before the irreversible provider call and therefore
+    // leaves every payment-side table untouched when its receipt bank is no
+    // longer postable.
+    const before = await db.execute<{ attempts: number; payments: number; journals: number; audits: number }>(sql`
+      select
+        (select count(*)::int from payment_attempts where org_id = ${org.orgId}) as attempts,
+        (select count(*)::int from documents where org_id = ${org.orgId} and kind = 'customer_payment') as payments,
+        (select count(*)::int from journal_entries where org_id = ${org.orgId} and source_document_id is not null) as journals,
+        (select count(*)::int from audit_log where org_id = ${org.orgId}) as audits
+    `);
+    await db.execute(sql`
+      update accounts set is_active = false
+       where id = ${org.accounts.bank} and org_id = ${org.orgId}
+    `);
+    let providerCalls = 0;
+    await assert.rejects(
+      createCheckoutSession(fx.link.token, `https://app.test/pay/${fx.link.token}`, async () => {
+        providerCalls += 1;
+        return {
+          status: 200,
+          json: async () => ({ id: "cs_should_not_be_called", url: "https://checkout.test/no" }),
+        };
+      }),
+      (error: unknown) => error instanceof PaymentAcceptanceError,
+    );
+    const after = await db.execute<{ attempts: number; payments: number; journals: number; audits: number }>(sql`
+      select
+        (select count(*)::int from payment_attempts where org_id = ${org.orgId}) as attempts,
+        (select count(*)::int from documents where org_id = ${org.orgId} and kind = 'customer_payment') as payments,
+        (select count(*)::int from journal_entries where org_id = ${org.orgId} and source_document_id is not null) as journals,
+        (select count(*)::int from audit_log where org_id = ${org.orgId}) as audits
+    `);
+    assert.equal(providerCalls, 0);
+    assert.deepEqual(after.rows[0], before.rows[0]);
   } finally {
     await dropScratchOrg(org.orgId);
   }

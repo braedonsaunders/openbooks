@@ -2047,3 +2047,38 @@ test("draft payment saves are fenced by the exact document revision", { skip: !D
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
+
+test("customer-payment surcharge posting rejects a non-income fee account", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Fee account guard", "admin");
+    const payment = await createPaymentDocument({
+      orgId: org.orgId,
+      kind: "customer_payment",
+      createdBy: userId,
+      partyId: org.customerId,
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      documentDate: org.date,
+      currency: "CAD",
+    });
+    await assert.rejects(
+      updateDraftPayment(
+        payment.id,
+        { feeAmount: "1", feeIncomeAccountId: org.accounts.cogs },
+        userId,
+        org.orgId,
+      ),
+      (error: unknown) => error instanceof PaymentError && /fee income account/.test(error.message),
+    );
+    const unchanged = await db.execute<{ status: string; total: string; lines: number }>(sql`
+      select d.status, d.total,
+             (select count(*)::int from document_lines l where l.org_id = d.org_id and l.document_id = d.id) as lines
+        from documents d
+       where d.org_id = ${org.orgId} and d.id = ${payment.id}
+    `);
+    assert.deepEqual(unchanged.rows[0], { status: "draft", total: "0.0000", lines: 0 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

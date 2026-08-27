@@ -10,7 +10,7 @@ import {
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
-import { parseJsonBody, uuidId } from "../../../../lib/api/json";
+import { nullableUuidId, parseJsonBody, uuidId } from "../../../../lib/api/json";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ const createLinkBody = z.object({
   documentId: z
     .string({ error: "documentId is required" })
     .refine((v) => uuidId.safeParse(v).success, "documentId is required"),
-  bankAccountId: z.string().nullable().optional(),
+  bankAccountId: nullableUuidId.optional(),
   expiresOn: z.string().nullable().optional(),
   memo: z.string().nullable().optional(),
 });
