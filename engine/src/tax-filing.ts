@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "./db.ts";
-import { periodLockBlocksPosting } from "./close.ts";
 import { computeTaxReturn, TaxReturnError, type TaxReturnResult } from "./tax-return.ts";
 
 /**
@@ -96,11 +95,11 @@ type FilingRow = {
 
 /**
  * Every accounting period the filing window touches, closed for gl AND tax on
- * the primary book. Closure is evaluated with the same governing-lock order
- * the posting guard uses: a subsidiary-scoped row shadows the org-wide row,
- * so a reopened entity keeps the period open no matter what the tenant-wide
- * row says. No period rows, no primary book, or any scope not closed fails
- * closed.
+ * the primary book. The certification is statutory and tenant-wide, so only
+ * the org-wide lock row (subsidiary_id IS NULL) evidences closure: a
+ * subsidiary-scoped row never governs this fence, and an open row on a lapsed
+ * reopen window is not a closed lock. No period rows, no primary book, or any
+ * covered period without an org-wide closed row fails closed.
  */
 async function assertCoveredPeriodsClosed(
   orgId: string,
@@ -126,33 +125,16 @@ async function assertCoveredPeriodsClosed(
 
   for (const module of ["gl", "tax"] as const) {
     for (const period of periods.rows) {
-      const locks = (await db.execute<{
-        subsidiary_id: string | null;
-        state: string;
-        reopen_expires_at: Date | string | null;
-        reason: string | null;
-      }>(sql`
-        select subsidiary_id, state, reopen_expires_at, reason
-          from period_locks
+      const closed = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from period_locks
          where org_id = ${orgId} and period_id = ${period.id}
-           and book_id = ${bookId} and module = ${module}`));
-      const orgWide = locks.rows.find((row) => row.subsidiary_id === null) ?? null;
-      const scopes: (string | null)[] = [null, ...locks.rows.map((r) => r.subsidiary_id).filter((s): s is string => s !== null)];
-      for (const scope of scopes) {
-        const governing =
-          scope === null
-            ? orgWide
-            : (locks.rows.find((row) => row.subsidiary_id === scope) ?? orgWide);
-        if (!governing || !periodLockBlocksPosting({
-          state: governing.state,
-          reopenExpiresAt: governing.reopen_expires_at,
-          reason: governing.reason,
-        }, false)) {
-          throw new TaxFilingError(
-            "period-not-closed",
-            `period ${period.name} must be closed for ${module} before the filing can be marked filed`,
-          );
-        }
+           and book_id = ${bookId} and module = ${module}
+           and subsidiary_id is null and state = 'closed'`));
+      if ((closed.rows[0]?.n ?? 0) === 0) {
+        throw new TaxFilingError(
+          "period-not-closed",
+          `period ${period.name} must be closed for ${module} before the filing can be marked filed`,
+        );
       }
     }
   }
