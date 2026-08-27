@@ -22,6 +22,13 @@ import type {
 } from "./income-tax-provision.ts";
 import { postDocument } from "./posting.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
+import {
+  TaxFilingError,
+  buildTaxFilingSnapshot,
+  markTaxFilingFiled,
+} from "./tax-filing.ts";
+import { computeTaxReturn } from "./tax-return.ts";
+import { BUILT_IN_ROLES, PERMISSION_CATALOGUE, permissionSetCovers } from "./permissions.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -764,6 +771,252 @@ test("third same-year repost writes a third distinct reversal without number col
        where org_id = ${org.orgId} and fiscal_year = 2026 and status = 'posted'`)).rows[0]!;
     const retry = await postProvisionRun(org.orgId, liveRun.id, userId);
     assert.equal(retry.entryId, liveRun.journal_entry_id);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Tax filing segregation of duties (fnd_mt9844pt_0bwnsn)
+// ---------------------------------------------------------------------------
+
+const holds = (role: string, perm: string) =>
+  permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+
+test("tax filing prepare and mark-filed require compliance.file, not reports.create", () => {
+  assert.ok(
+    (PERMISSION_CATALOGUE as readonly string[]).includes("compliance.file"),
+    "compliance.file must be seeded so a principal can hold it",
+  );
+  assert.ok(
+    (PERMISSION_CATALOGUE as readonly string[]).includes("reports.create"),
+    "reports.create must be seeded for report authorship",
+  );
+
+  // The two authorities are disjoint: report authorship must not grant filing.
+  assert.equal(
+    permissionSetCovers(new Set(["reports.create"]), "compliance.file"),
+    false,
+    "reports.create must not cover compliance.file — filing is a separate duty",
+  );
+  assert.equal(
+    permissionSetCovers(new Set(["compliance.file"]), "reports.create"),
+    false,
+    "compliance.file must not cover reports.create — the split is one-way",
+  );
+
+  // The accountant designs/runs reports but cannot prepare or file a return.
+  assert.equal(holds("accountant", "reports.create"), true);
+  assert.equal(holds("accountant", "compliance.file"), false);
+
+  // The controller holds both duties (senior enough for either).
+  assert.equal(holds("controller", "compliance.file"), true);
+  assert.equal(holds("controller", "reports.create"), true);
+
+  // Viewer, approver, and sales roles hold neither authority.
+  for (const role of ["approver", "viewer", "sales_manager", "sales_rep"]) {
+    assert.equal(holds(role, "reports.create"), false, `${role} must not create reports`);
+    assert.equal(holds(role, "compliance.file"), false, `${role} must not file returns`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Tax filing mark-filed fences (fnd_mt9844xu_b1ncd4): a prepared filing may
+// only be certified as filed while its fingerprint still reproduces from the
+// live source ledger and its covered periods are closed.
+// ---------------------------------------------------------------------------
+
+/** One tax code (collected account = the fixture's tax payable) and a two-box
+ *  return: GL-mapped line 101, computed line 102 = "101". */
+async function seedFilingFingerprintFixture(org: ScratchOrg): Promise<string> {
+  const taxCodeId = randomUUID();
+  await db.execute(sql`
+    insert into tax_codes (id, org_id, code, name, country, applies_to, collected_account_id, is_active)
+    values (${taxCodeId}, ${org.orgId}, 'GST-FP', 'Fingerprint Test GST', 'CA', 'sales',
+            ${org.accounts.taxOutput}, true)`);
+  await db.execute(sql`
+    insert into tax_return_forms (id, org_id, code, name, country, submission_channel, is_active)
+    values (${randomUUID()}, ${org.orgId}, 'FP_GST', 'Fingerprint Test Return', 'CA', 'portal_manual', true)`);
+  await db.execute(sql`
+    insert into tax_report_lines (id, org_id, report_code, line_code, label, sign, sequence, tax_code_id, basis, formula, pdf_field)
+    values
+      (${randomUUID()}, ${org.orgId}, 'FP_GST', '101', 'GST collected', 1, 1, ${taxCodeId}, 'tax_collected', null, null),
+      (${randomUUID()}, ${org.orgId}, 'FP_GST', '102', 'Net tax payable', 1, 2, null, null, '101', null)`);
+  return taxCodeId;
+}
+
+/** A posted, balanced two-line journal carrying tax activity in the period. */
+async function postTaxJournal(
+  org: ScratchOrg,
+  userId: string,
+  taxCodeId: string,
+  opts: { number: string; taxAmount: string; date?: string },
+): Promise<void> {
+  const entryId = randomUUID();
+  const date = opts.date ?? org.date;
+  await db.execute(sql`
+    insert into journal_entries
+      (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
+    values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${opts.number}, ${date},
+            ${org.periodId}, 'test tax activity', 'draft', 'manual', ${userId}, ${userId})`);
+  await db.execute(sql`
+    insert into journal_lines
+      (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo, tax_code_id)
+    values
+      (${org.orgId}, ${entryId}, 1, ${org.accounts.taxOutput}, ${org.subsidiaryId}, ${opts.taxAmount},
+       'CAD', ${opts.taxAmount}, 1, 'gst collected', ${taxCodeId}),
+      (${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${`-${opts.taxAmount}`},
+       'CAD', ${`-${opts.taxAmount}`}, 1, 'gst collected offset', null)`);
+  await db.execute(sql`
+    update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId}
+     where id = ${entryId} and org_id = ${org.orgId}`);
+}
+
+/** The prepare path: compute live, freeze the snapshot + fingerprint (route
+ *  web/app/api/tax/filings/route.ts POST, through the shared engine builder). */
+async function prepareFiling(org: ScratchOrg, userId: string): Promise<{ id: string; snapshotHash: string }> {
+  const result = await computeTaxReturn(org.orgId, 'FP_GST', '2026-07-01', '2026-07-31', {});
+  const { snapshot, snapshotHash } = buildTaxFilingSnapshot(result, {});
+  const filingId = randomUUID();
+  const versions = (await db.execute<{ version: number }>(sql`
+    select coalesce(max(version), 0)::int + 1 as version from tax_filings
+     where org_id = ${org.orgId} and form_code = ${result.formCode}
+       and period_from = ${result.from} and period_to = ${result.to}`)).rows[0]!;
+  await db.execute(sql`
+    insert into tax_filings
+      (id, org_id, form_code, form_name, country, period_from, period_to, version, status,
+       submission_channel, boxes, adjustments, snapshot_hash, created_by, updated_by)
+    values (${filingId}, ${org.orgId}, ${result.formCode}, ${result.formName}, 'CA',
+            ${result.from}, ${result.to}, ${versions.version}, 'prepared', ${result.submissionChannel},
+            ${JSON.stringify(snapshot.boxes)}::jsonb, '{}'::jsonb, ${snapshotHash}, ${userId}, ${userId})`);
+  return { id: filingId, snapshotHash };
+}
+
+async function filingState(orgId: string, filingId: string) {
+  return (await db.execute<{
+    status: string;
+    filed_at: Date | null;
+    filing_reference: string | null;
+    snapshot_hash: string;
+  }>(sql`
+    select status, filed_at, filing_reference, snapshot_hash
+      from tax_filings where org_id = ${orgId} and id = ${filingId}`)).rows[0]!;
+}
+
+function filingAudits(orgId: string, filingId: string) {
+  return db.execute<{ n: number }>(sql`
+    select count(*)::int as n from audit_log
+     where org_id = ${orgId} and table_name = 'tax_filings' and row_id = ${filingId} and action = 'update'`);
+}
+
+function closeCoveredPeriod(org: ScratchOrg): Promise<void> {
+  return db.transaction(async (tx) => {
+    for (const module of ["gl", "tax"] as const) {
+      await tx.execute(sql`
+        insert into period_locks (id, org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
+        values (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, null, ${module},
+                'closed', now(), 'test: governed close')`);
+    }
+  });
+}
+
+test("mark-filed rejects a filing whose source ledger moved after preparation", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const taxCodeId = await seedFilingFingerprintFixture(org);
+    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-1", taxAmount: "13.00" });
+    const prepared = await prepareFiling(org, userId);
+
+    // The covered period moves AFTER the snapshot was frozen, and the period
+    // is then closed — a closed period alone must not certify stale numbers.
+    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-2", taxAmount: "7.00", date: "2026-07-20" });
+    await closeCoveredPeriod(org);
+
+    await assert.rejects(
+      () => markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-001"),
+      (error: unknown) => error instanceof TaxFilingError && error.code === "stale",
+    );
+    // Zero writes on rejection: still prepared, nothing filed, no audit trail.
+    const row = await filingState(org.orgId, prepared.id);
+    assert.equal(row.status, "prepared");
+    assert.equal(row.filed_at, null);
+    assert.equal(row.filing_reference, null);
+    assert.equal((await filingAudits(org.orgId, prepared.id)).rows[0]!.n, 0);
+
+    // The fence forces re-preparation, not lockout: a new version prepared
+    // against the moved ledger carries a different fingerprint.
+    const fresh = await prepareFiling(org, userId);
+    assert.notEqual(fresh.id, prepared.id);
+    assert.notEqual(fresh.snapshotHash, prepared.snapshotHash);
+    assert.equal((await filingState(org.orgId, fresh.id)).status, "prepared");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("mark-filed refuses a filing while its covered period is not closed", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const taxCodeId = await seedFilingFingerprintFixture(org);
+    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-3", taxAmount: "5.00" });
+    const prepared = await prepareFiling(org, userId);
+
+    await assert.rejects(
+      () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
+      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+    );
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+
+    // Partial closure is not closure: gl closed, tax still open.
+    await db.execute(sql`
+      insert into period_locks (id, org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
+      values (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl',
+              'closed', now(), 'test: gl only')`);
+    await assert.rejects(
+      () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
+      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+    );
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+    assert.equal((await filingAudits(org.orgId, prepared.id)).rows[0]!.n, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a fingerprint-matching filing marks filed once its covered period is closed", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const taxCodeId = await seedFilingFingerprintFixture(org);
+    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-4", taxAmount: "13.00" });
+    const prepared = await prepareFiling(org, userId);
+    await closeCoveredPeriod(org);
+
+    const updated = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-REF-1");
+    assert.ok(updated.filedAt, "filed_at stamped");
+    const row = await filingState(org.orgId, prepared.id);
+    assert.equal(row.status, "filed");
+    assert.equal(row.filing_reference, "GOV-REF-1");
+    assert.ok(row.filed_at);
+
+    // The certification is auditable: the audit row names the verified
+    // fingerprint, so the filed lineage survives later re-preparation.
+    const audits = (await db.execute<{ changes: Record<string, unknown> }>(sql`
+      select changes from audit_log
+       where org_id = ${org.orgId} and table_name = 'tax_filings' and row_id = ${prepared.id}
+         and action = 'update'`)).rows[0]!;
+    const after = audits.changes as { after: { status: string; snapshotHash: string; sourceVerified: boolean } };
+    assert.equal(after.after.status, "filed");
+    assert.equal(after.after.snapshotHash, prepared.snapshotHash);
+    assert.equal(after.after.sourceVerified, true);
+
+    // The transition stays one-way.
+    await assert.rejects(
+      () => markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-REF-2"),
+      (error: unknown) => error instanceof TaxFilingError && error.code === "already-filed",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

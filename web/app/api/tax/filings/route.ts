@@ -1,9 +1,9 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
-import { createHash } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-return.ts'
+import { buildTaxFilingSnapshot } from '@openbooks/engine/src/tax-filing.ts'
 import { loadOrgFilingCalendar } from '@openbooks/engine/src/tax-nexus-ledger.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
@@ -63,16 +63,7 @@ export async function POST(req: Request) {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([key, value]) => [key, value.trim()]),
     )
-    const snapshot = {
-      formCode: result.formCode,
-      formName: result.formName,
-      from: result.from,
-      to: result.to,
-      submissionChannel: result.submissionChannel,
-      boxes: result.boxes.map(({ pdfField: _pdfField, ...box }) => box),
-      adjustments: normalizedAdjustments,
-    }
-    const snapshotHash = createHash('sha256').update(JSON.stringify(snapshot)).digest('hex')
+    const { snapshot, snapshotHash } = buildTaxFilingSnapshot(result, normalizedAdjustments)
 
     const filing = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`tax-filing:${gate.user.orgId}:${body.code}:${body.from}:${body.to}`}))`)
