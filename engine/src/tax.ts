@@ -32,6 +32,8 @@ export interface ComputedTaxComponent {
   code?: string;
   sequence: number;
   ratePercent: string;
+  /** Configured recovery ratio retained even when the rounded tax is zero. */
+  recoverablePercent?: string;
   taxableAmount: string;
   taxAmount: string;
   recoverableAmount: string;
@@ -158,6 +160,7 @@ function calculateFromNet(
       code: config.code,
       sequence: config.sequence,
       ratePercent: normalizeMoney(config.ratePercent),
+      recoverablePercent: normalizeMoney(config.recoverablePercent ?? "100"),
       taxableAmount,
       taxAmount,
       recoverableAmount,
@@ -256,18 +259,15 @@ function applyAggregateOverride(
       throw new TaxCalculationError(
         "manual tax override cannot make a component negative",
       );
-    const recoverableAmount = mulPercent(
-      taxAmount,
-      component.recoverableAmount === component.taxAmount ? "100" : "0",
-      4,
-    );
     // Preserve the configured recovery ratio exactly by deriving it from the
-    // original component when possible; zero-tax components are all recoverable
-    // only when their original split says so.
+    // original component when possible. The explicit ratio survives the
+    // zero-tax case, where the old equality heuristic guessed 100% recovery.
     const originalTax = toUnits(component.taxAmount);
+    const configuredRecovery = component.recoverablePercent ??
+      (component.recoverableAmount === component.taxAmount ? "100" : "0");
     const recovered =
       originalTax === 0n
-        ? recoverableAmount
+        ? mulPercent(taxAmount, configuredRecovery, 4)
         : fromUnits(
             (toUnits(taxAmount) * toUnits(component.recoverableAmount) +
               originalTax / 2n) /
@@ -276,6 +276,7 @@ function applyAggregateOverride(
     return {
       ...component,
       taxAmount,
+      recoverablePercent: configuredRecovery,
       recoverableAmount: recovered,
       nonrecoverableAmount: fromUnits(toUnits(taxAmount) - toUnits(recovered)),
       overridden: true,
