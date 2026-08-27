@@ -34,6 +34,7 @@ import {
   isDocKindEnabled,
   loadDocument,
   loadDocumentEditCurrent,
+  precomputeDocumentTotalsForCreate,
   type DocumentEditCurrent,
   type DocumentEditInput,
 } from "../documents";
@@ -503,6 +504,14 @@ async function createDocument(
   if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, "multiCurrency"))) {
     return err(404, "not found");
   }
+  let precomputedTotals;
+  try {
+    precomputedTotals = await precomputeDocumentTotalsForCreate(user.orgId, docKind, body);
+  } catch (e) {
+    const mapped = docEditError(e);
+    if (mapped) return mapped;
+    throw e;
+  }
   const draft = await createDocumentDraft(user.orgId, user.id, docKind, { source });
   const draftId = draft!.id;
   // on_create flows run before createDocumentDraft returns and may mutate the
@@ -515,7 +524,7 @@ async function createDocument(
       draftId,
       current,
       { ...body, expectedUpdatedAt: current.updatedAt },
-      { orgId: user.orgId, userId: user.id, source },
+      { orgId: user.orgId, userId: user.id, source, precomputedTotals },
     );
   } catch (e) {
     const mapped = docEditError(e);
