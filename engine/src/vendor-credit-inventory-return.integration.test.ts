@@ -74,7 +74,7 @@ async function createApprovedVendorReturn(
     values
       (${documentId}, ${org.orgId}, 'vendor_credit',
        ${`VC-RETURN-${documentId.slice(0, 8)}`}, ${org.vendorId}, null,
-       ${org.date}, ${org.date}, 'CAD', 1, 'approved', ${input.amount}, '0',
+       ${org.date}, ${org.date}, 'CAD', 1, 'draft', ${input.amount}, '0',
        ${input.amount}, '{}'::jsonb)
   `);
   await db.execute(sql`
@@ -95,6 +95,12 @@ async function createApprovedVendorReturn(
          },
        })}::jsonb,
        false)
+  `);
+  // Lines are source facts and may only be inserted while their document is
+  // draft. Promote the fully seeded fixture afterward for posting coverage.
+  await db.execute(sql`
+    update documents set status = 'approved'
+     where id = ${documentId} and org_id = ${org.orgId}
   `);
   return { documentId, lineId };
 }
@@ -185,8 +191,9 @@ test(
       });
 
       // Invalid receipt evidence must leave no half-posted AP, stock, entry,
-      // or effect, and the same approved credit can then be repaired/retried.
-      const credit = await createApprovedVendorReturn(org, {
+      // or effect. Approved source lines are immutable, so repair is modeled
+      // by a replacement credit carrying the corrected receipt evidence.
+      const invalidCredit = await createApprovedVendorReturn(org, {
         itemId: org.items.fifo,
         quantity: "4",
         unitPrice: "2.5",
@@ -195,26 +202,24 @@ test(
         lotId,
       });
       await assert.rejects(
-        () => postDocument(credit.documentId, depsFor(org)),
+        () => postDocument(invalidCredit.documentId, depsFor(org)),
         (error: unknown) =>
           error instanceof PostingError && /posted receipt movement/.test(error.message),
       );
-      assert.deepEqual(await creditResidue(org.orgId, credit.documentId), {
+      assert.deepEqual(await creditResidue(org.orgId, invalidCredit.documentId), {
         status: "approved",
         sourceEntries: 0,
         returns: 0,
         effects: 0,
       });
-      await db.execute(sql`
-        update document_lines
-           set custom = ${JSON.stringify({
-             inventoryReturn: {
-               sourceReceiptMovementId: receipt.movementId,
-               lotId,
-             },
-           })}::jsonb
-         where org_id = ${org.orgId} and id = ${credit.lineId}
-      `);
+      const credit = await createApprovedVendorReturn(org, {
+        itemId: org.items.fifo,
+        quantity: "4",
+        unitPrice: "2.5",
+        amount: "10",
+        sourceReceiptMovementId: receipt.movementId,
+        lotId,
+      });
       await postDocument(credit.documentId, depsFor(org));
 
       const onHand = await getOnHand(
