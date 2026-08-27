@@ -575,6 +575,24 @@ export async function convertOrder(
     `)).rows as unknown as [any]
     const newId = created.id
 
+    // Migration 0034 makes approved document lines immutable. Advancing
+    // quantity_billed is operational reconciliation state, rather than an
+    // edit to the approved commercial source. The source header is already
+    // locked for this transaction, so briefly reopen it while the conversion
+    // advances its covered lines, then restore the approved status before the
+    // transaction can become visible to another caller. Any failure rolls the
+    // entire conversion (including this temporary status window) back.
+    const reopenSourceForLineAdvances = doc.status === 'approved'
+    if (reopenSourceForLineAdvances) {
+      const reopened = (await tx.execute<{ id: string }>(sql`
+        update documents
+           set status = 'draft', updated_by = ${userId}
+         where id = ${sourceId} and org_id = ${orgId} and status = 'approved'
+        returning id
+      `)).rows[0]
+      if (!reopened) throw new ConversionError('Order changed while it was being converted', 409)
+    }
+
     let lineNo = 1
     for (const r of covered) {
       const l = r.line
@@ -670,6 +688,16 @@ export async function convertOrder(
       `)).rows[0]
       if (!advanced) throw new ConversionError(`Line ${l.line_number} changed while it was being converted`, 409)
       lineNo++
+    }
+
+    if (reopenSourceForLineAdvances) {
+      const restored = (await tx.execute<{ id: string }>(sql`
+        update documents
+           set status = 'approved', updated_by = ${userId}
+         where id = ${sourceId} and org_id = ${orgId} and status = 'draft'
+        returning id
+      `)).rows[0]
+      if (!restored) throw new ConversionError('Order changed while it was being converted', 409)
     }
 
     await tx.execute(sql`
