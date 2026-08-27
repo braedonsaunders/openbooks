@@ -418,7 +418,8 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
 
   {
     id: "fx-inverse-rate-statutory-tax-exact",
-    title: "Output tax on a foreign-currency invoice equals the translated statutory amount exactly",
+    title:
+      "Output tax on a foreign-currency invoice equals the translated statutory amount exactly, and the translation residual lands on a trading line",
     citations: [
       {
         standard: "IAS 21",
@@ -431,33 +432,34 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
     support: "supported",
     tier: "ledger",
     assertion:
-      "On a taxed, multi-line USD invoice translated through a ten-decimal inverse rate, the tax control line carries exactly tax-total × spot rate — no translation residual is parked on a statutory return line where it would flow straight into a filed figure.",
+      "On a taxed, multi-line USD invoice translated through a ten-decimal rate whose per-line roundings do NOT reconcile, the tax control lines carry exactly tax-total × spot rate and the one-unit translation residual is absorbed by a revenue line — no translation residual is parked on a statutory return line where it would flow straight into a filed figure.",
     facts: [
-      "The reporting currency is CAD; CAD→USD 0.7000 is the stored direction, and the invoice posts at its ten-decimal inverse 1.4285714286.",
-      "Revenue lines of USD 700.00 and USD 350.00 carry statutory output tax at 5%: USD 35.00 and USD 17.50 (tax total USD 52.50).",
-      "Every element translates to an exact four-decimal CAD figure: revenue 1,000.0000 and 500.0000, tax 75.0000 total, receivable 1,575.0000.",
-      "Tax payable therefore shows exactly CAD 75.0000 — the translated statutory charge — proving translation residuals cannot land on a tax control line when the transaction amounts themselves reconcile.",
+      "The reporting currency is CAD; CAD→USD 0.8100 is the stored direction, and the invoice posts at its ten-decimal inverse 1.2345679012 (what (1/0.81)::numeric(19,10) truncates to) — no tidy two-decimal approximation that would make rounding impossible.",
+      "Revenue lines of USD 33.33, 33.33 and 33.34 (total USD 100.00) carry statutory output tax at 5%: USD 1.6665, 1.6665 and 1.6670 (tax total USD 5.0000).",
+      "The per-line translations genuinely miss zero: revenue 41.1481, 41.1481, 41.1605; tax 2.0574, 2.0574, 2.0580; receivable 129.6296 — the roundings leave a one-ledger-unit residual, so the absorption rule actually executes.",
+      "The residual is absorbed by the largest revenue line (41.1605 → 41.1606); every tax control line keeps its exact statutory translation, so tax payable shows exactly CAD 6.1728.",
     ],
     expected: {
       entries: [
         {
           step: "taxed multi-line USD invoice at ten-decimal inverse rate",
           lines: [
-            { role: "ar", amount: "1575.0000" },
-            { role: "revenue", amount: "-1500.0000" },
-            { role: "taxPayable", amount: "-75.0000" },
+            { role: "ar", amount: "129.6296" },
+            { role: "revenue", amount: "-123.4568" },
+            { role: "taxPayable", amount: "-6.1728" },
           ],
         },
       ],
-      values: { fxRateAppliedE10: "14285714286" },
+      values: { fxRateAppliedE10: "12345679012" },
     },
     run: async (ctx) => {
       const ledger = ctx.ledger!;
-      await setSpotRate(ledger, "CAD", "USD", "2026-07-23", "0.70");
+      // One direction only on the registry: the inverse of this row is where
+      // ten-decimal rates come from.
+      await setSpotRate(ledger, "CAD", "USD", "2026-07-23", "0.81");
       const taxCodeId = randomUUID();
       const documentId = randomUUID();
-      const taxableLineId = randomUUID();
-      const untaxedLineId = randomUUID();
+      const lineIds = [randomUUID(), randomUUID(), randomUUID()];
       await db.execute(sql`
         insert into tax_codes (id, org_id, code, name, collected_account_id)
         values (${taxCodeId}, ${ledger.orgId}, 'CONF-FX-VAT', 'Statutory Output Tax', ${ctx.roles.taxPayable})`);
@@ -466,35 +468,41 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
       const invoice = await capture(ctx, "taxed multi-line USD invoice at ten-decimal inverse rate", async () => {
         // Tax calculation evidence is immutably bound while the document is
         // still a draft (kernel guard), so this fixture builds its own draft —
-        // lines, evidence, and approval lifecycle included.
+        // lines, evidence, and approval lifecycle included. The amounts are
+        // chosen so the per-line translations MISS zero by one ledger unit:
+        // the absorption rule must run, and must run onto a revenue line.
         await db.execute(sql`
           insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id,
                                  document_date, posting_date, currency, fx_rate, status,
                                  subtotal, tax_total, total, is_final_invoice, custom, extra_dims)
           values (${documentId}, ${ledger.orgId}, 'customer_invoice', 'CONF-FX-7', ${ledger.customerId},
-                  ${ledger.subsidiaryId}, '2026-07-23', '2026-07-23', 'USD', '1.4285714286', 'draft',
-                  '1050.00', '0', '1050.00', false, '{}'::jsonb, '{}'::jsonb)`);
-        await db.execute(sql`
-          insert into document_lines (id, org_id, document_id, line_number, item_id, account_id,
-                                      quantity, unit_price, amount, tax_amount, is_billable,
-                                      quantity_fulfilled, quantity_billed, stock_location_id,
-                                      custom, tax_overridden, extra_dims)
-          values (${taxableLineId}, ${ledger.orgId}, ${documentId}, 1, null, ${ctx.roles.revenue},
-                  '1', '700.00', '700.00', '35.00', false, '0', '0', null, '{}'::jsonb, false, '{}'::jsonb),
-                 (${untaxedLineId}, ${ledger.orgId}, ${documentId}, 2, null, ${ctx.roles.revenue},
-                  '1', '350.00', '350.00', '17.50', false, '0', '0', null, '{}'::jsonb, false, '{}'::jsonb)`);
-        await db.execute(sql`
-          insert into document_line_tax_components
-            (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
-             tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
-             collected_account_id)
-          values (${ledger.orgId}, ${taxableLineId}, ${taxCodeId}, 1, '5', '700.00',
-                  '35.00', '35.00', '0', 'standard', ${ctx.roles.taxPayable}),
-                 (${ledger.orgId}, ${untaxedLineId}, ${taxCodeId}, 1, '5', '350.00',
-                  '17.50', '17.50', '0', 'standard', ${ctx.roles.taxPayable})`);
+                  ${ledger.subsidiaryId}, '2026-07-23', '2026-07-23', 'USD', '1.2345679012', 'draft',
+                  '100.00', '0', '100.00', false, '{}'::jsonb, '{}'::jsonb)`);
+        const taxableLines = [
+          { id: lineIds[0]!, amount: "33.33", tax: "1.6665" },
+          { id: lineIds[1]!, amount: "33.33", tax: "1.6665" },
+          { id: lineIds[2]!, amount: "33.34", tax: "1.6670" },
+        ];
+        for (const [index, line] of taxableLines.entries()) {
+          await db.execute(sql`
+            insert into document_lines (id, org_id, document_id, line_number, item_id, account_id,
+                                        quantity, unit_price, amount, tax_amount, is_billable,
+                                        quantity_fulfilled, quantity_billed, stock_location_id,
+                                        custom, tax_overridden, extra_dims)
+            values (${line.id}, ${ledger.orgId}, ${documentId}, ${index + 1}, null, ${ctx.roles.revenue},
+                    '1', ${line.amount}, ${line.amount}, ${line.tax}, false, '0', '0', null,
+                    '{}'::jsonb, false, '{}'::jsonb)`);
+          await db.execute(sql`
+            insert into document_line_tax_components
+              (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
+               tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
+               collected_account_id)
+            values (${ledger.orgId}, ${line.id}, ${taxCodeId}, 1, '5', ${line.amount},
+                    ${line.tax}, ${line.tax}, '0', 'standard', ${ctx.roles.taxPayable})`);
+        }
         await db.execute(sql`
           update documents
-             set status = 'approved', tax_total = '52.50', total = subtotal + '52.50'
+             set status = 'approved', tax_total = '5.00', total = subtotal + '5.00'
            where org_id = ${ledger.orgId} and id = ${documentId}`);
         entryId = await postDocument(documentId, deps(ctx));
       });
