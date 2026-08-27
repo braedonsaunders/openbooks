@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server'
 import { yearEndFiling } from '@openbooks/engine/src/payroll-filing-registry.ts'
 import { PayrollPackError } from '@openbooks/engine/src/payroll/packs.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
+import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { guardPayrollEmployees, guardPayrollFilingData } from '../../subsidiary-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,10 +28,27 @@ export async function GET(req: Request) {
   if (!Number.isInteger(year) || year < 2020 || year > 2100) {
     return NextResponse.json({ error: 'invalid year' }, { status: 422 })
   }
+  const country = url.searchParams.get('country') ?? ''
+  const filingKey = url.searchParams.get('filing') ?? ''
+  const section = (await orgYearEndFilings(gate.user.orgId, year))
+    .find((candidate) => candidate.country === country && candidate.key === filingKey)
+  const selected = url.searchParams.get('employees')
+  if (section && !(selected && country === 'CA' && filingKey === 'roe')) {
+    const denied = await guardPayrollFilingData(gate, country, filingKey, section.data)
+    if (denied) return denied
+  }
+  // ROE's pack-owned employee selection is an additional direct boundary. It
+  // can name a subset (or a row absent from the current population), so guard
+  // the submitted identities before the pack builds any bytes.
+  if (selected && country === 'CA' && filingKey === 'roe') {
+    const ids = selected.split(',').filter(Boolean).map((entry) => entry.split(':', 1)[0]!)
+    const denied = await guardPayrollEmployees(gate, ids)
+    if (denied) return denied
+  }
   try {
     const filing = yearEndFiling(
-      url.searchParams.get('country') ?? '',
-      url.searchParams.get('filing') ?? '',
+      country,
+      filingKey,
     )
     if (!filing.download) {
       return NextResponse.json(

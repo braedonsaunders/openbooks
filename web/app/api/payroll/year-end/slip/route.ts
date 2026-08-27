@@ -8,6 +8,7 @@ import { pdfResponse, safeName } from '../../../../../lib/export'
 import { payrollSlipFacsimile } from '../../../../../lib/payroll-slip-facsimile'
 import { renderTaxFormFacsimilePdf } from '../../../../../lib/tax-form-facsimile'
 import { orgBranding } from '../../../../../lib/report-pdf'
+import { guardPayrollFilingRowIds } from '../../subsidiary-scope'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -34,10 +35,14 @@ export async function GET(req: Request) {
   }
   const row = url.searchParams.get('row') ?? ''
   if (!row) return NextResponse.json({ error: 'row is required' }, { status: 422 })
+  const country = url.searchParams.get('country') ?? ''
+  const filingKey = url.searchParams.get('filing') ?? ''
+  const denied = await guardPayrollFilingRowIds(gate, country, filingKey, [row])
+  if (denied) return denied
   try {
     const filing = yearEndFiling(
-      url.searchParams.get('country') ?? '',
-      url.searchParams.get('filing') ?? '',
+      country,
+      filingKey,
     )
     if (!filing.slip) {
       return NextResponse.json(
