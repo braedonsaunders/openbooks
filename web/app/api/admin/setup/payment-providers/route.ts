@@ -374,6 +374,14 @@ export async function POST(req: Request) {
   if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
     return NextResponse.json({ error: "provider must be stripe, adyen or gocardless" }, { status: 400 });
   }
+  for (const [field, value] of [
+    ["defaultBankAccountId", body.defaultBankAccountId],
+    ["surchargeRuleId", body.surchargeRuleId],
+  ] as const) {
+    if (value !== undefined && value !== null && (typeof value !== "string" || !isUuid(value))) {
+      return NextResponse.json({ error: `${field} must be a valid UUID` }, { status: 400 });
+    }
+  }
   try {
     if (body.settings != null && (typeof body.settings !== "object" || Array.isArray(body.settings))) {
       throw new PaymentAcceptanceError("provider settings must be an object");

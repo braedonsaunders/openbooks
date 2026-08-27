@@ -653,6 +653,88 @@ export interface SurchargeResolution {
   feeIncomeAccountId: string | null;
 }
 
+const ACCEPTANCE_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assertAcceptanceUuid(value: string, label: string): void {
+  if (typeof value !== "string" || !ACCEPTANCE_UUID_RE.test(value)) {
+    throw new PaymentAcceptanceError(`${label} must be a valid UUID`);
+  }
+}
+
+/** Validate a receipt bank reference at the service boundary. The migration
+ *  also enforces this invariant for direct SQL writers; keeping the check here
+ *  makes stale/deactivated accounts fail before any payment-side effect. */
+async function validateAcceptanceBankAccount(orgId: string, accountId: string): Promise<void> {
+  assertAcceptanceUuid(accountId, "bank account");
+  const row = await db.execute<{ id: string }>(sql`
+    select id
+      from accounts
+     where org_id = ${orgId} and id = ${accountId}
+       and type = 'asset_bank' and is_active and not is_summary
+     limit 1
+  `);
+  if (!row.rows[0]) {
+    throw new PaymentAcceptanceError("bank account must be an active bank-type account");
+  }
+}
+
+/** Surcharge income is deliberately narrower than a generic posting account. */
+async function validateSurchargeIncomeAccount(orgId: string, accountId: string): Promise<void> {
+  assertAcceptanceUuid(accountId, "surcharge income account");
+  const row = await db.execute<{ id: string }>(sql`
+    select id
+      from accounts
+     where org_id = ${orgId} and id = ${accountId}
+       and type in ('income', 'income_other') and is_active and not is_summary
+     limit 1
+  `);
+  if (!row.rows[0]) {
+    throw new PaymentAcceptanceError("surcharge income account must be an active income account");
+  }
+}
+
+/** A configured rule is an explicit reference, not merely a preference. An
+ *  inactive, foreign, or provider-incompatible rule must never be silently
+ *  replaced by a fallback rule during link creation or checkout. */
+async function validateConfiguredSurchargeRule(
+  orgId: string,
+  provider: AcceptanceProvider,
+  ruleId: string | null,
+): Promise<void> {
+  if (ruleId === null) return;
+  assertAcceptanceUuid(ruleId, "surcharge rule");
+  const row = await db.execute<{
+    id: string;
+    is_active: boolean;
+    provider: AcceptanceProvider | null;
+    fee_income_account_id: string;
+  }>(sql`
+    select id, is_active, provider, fee_income_account_id
+      from payment_surcharge_rules
+     where org_id = ${orgId} and id = ${ruleId}
+     limit 1
+  `);
+  const rule = row.rows[0];
+  if (!rule || !rule.is_active) {
+    throw new PaymentAcceptanceError("surcharge rule is not active for this organization");
+  }
+  if (rule.provider !== null && rule.provider !== provider) {
+    throw new PaymentAcceptanceError("surcharge rule is not configured for this provider");
+  }
+  await validateSurchargeIncomeAccount(orgId, rule.fee_income_account_id);
+}
+
+async function validateProviderConfigReferences(
+  orgId: string,
+  config: ProviderConfigRow,
+): Promise<void> {
+  if (config.default_bank_account_id !== null) {
+    await validateAcceptanceBankAccount(orgId, config.default_bank_account_id);
+  }
+  await validateConfiguredSurchargeRule(orgId, config.provider, config.surcharge_rule_id);
+}
+
 /** Pure surcharge math: percent / fixed / percent+fixed, optional cap. */
 export function computeSurcharge(
   baseAmount: string,
@@ -688,6 +770,10 @@ export async function resolveSurcharge(
   orgId: string,
   opts: { provider: AcceptanceProvider; amount: string; onDate: string; configuredRuleId?: string | null },
 ): Promise<SurchargeResolution> {
+  if (opts.configuredRuleId !== undefined && opts.configuredRuleId !== null) {
+    assertAcceptanceUuid(opts.configuredRuleId, "surcharge rule");
+    await validateConfiguredSurchargeRule(orgId, opts.provider, opts.configuredRuleId);
+  }
   const r = (await db.execute<{ id: string; calculation: string; percent: string | null; fixed_amount: string | null; cap_amount: string | null; fee_income_account_id: string }>(sql`
     select id, calculation, percent, fixed_amount, cap_amount, fee_income_account_id
       from payment_surcharge_rules
@@ -704,6 +790,7 @@ export async function resolveSurcharge(
   `));
   const rule = r.rows[0];
   if (!rule) return { amount: "0", ruleId: null, feeIncomeAccountId: null };
+  await validateSurchargeIncomeAccount(orgId, rule.fee_income_account_id);
   return { amount: computeSurcharge(opts.amount, rule), ruleId: rule.id, feeIncomeAccountId: rule.fee_income_account_id };
 }
 
@@ -743,6 +830,13 @@ export async function createPaymentLink(
   actorId: string,
   input: { documentId: string; provider: AcceptanceProvider; bankAccountId?: string | null; expiresOn?: string | null; memo?: string | null },
 ): Promise<PaymentLinkView> {
+  assertAcceptanceUuid(input.documentId, "document");
+  if (input.provider !== "stripe" && input.provider !== "adyen" && input.provider !== "gocardless") {
+    throw new PaymentAcceptanceError("unknown payment provider");
+  }
+  if (input.bankAccountId !== undefined && input.bankAccountId !== null) {
+    assertAcceptanceUuid(input.bankAccountId, "bank account");
+  }
   return await withOrg(orgId, async () => {
     const docs = (await db.execute<{ id: string; kind: string; status: string; party_id: string | null; subsidiary_id: string; currency: string; document_number: string; open_balance: string }>(sql`
       select id, kind, status, party_id, subsidiary_id, currency, document_number, open_balance
@@ -759,8 +853,10 @@ export async function createPaymentLink(
     if (!config?.is_enabled || !config.acceptance_enabled) {
       throw new PaymentAcceptanceError(`${input.provider} payment acceptance is not configured`);
     }
+    await validateProviderConfigReferences(orgId, config);
     const bankAccountId = input.bankAccountId ?? config.default_bank_account_id;
     if (!bankAccountId) throw new PaymentAcceptanceError("no receipt bank account configured for this provider");
+    await validateAcceptanceBankAccount(orgId, bankAccountId);
 
     const surcharge = await resolveSurcharge(orgId, {
       provider: input.provider,
@@ -964,6 +1060,8 @@ export async function createCheckoutSession(
 
     const config = await loadProviderConfig(link.orgId, link.provider);
     if (!config?.is_enabled || !config.acceptance_enabled) throw new PaymentAcceptanceError("provider is not configured");
+    await validateProviderConfigReferences(link.orgId, config);
+    await validateAcceptanceBankAccount(link.orgId, link.bankAccountId);
     const surcharge = await resolveSurcharge(link.orgId, {
       provider: link.provider,
       amount: openBalance,
@@ -1472,6 +1570,14 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
   `));
   const a = rows.rows[0];
   if (!a) throw new PaymentAcceptanceError("attempt not found");
+  // Validate every accounting reference before reserving a receipt document.
+  // A provider webhook can arrive after an administrator deactivates an
+  // account; that must retry without leaving a draft, journal, or audit trail.
+  await validateAcceptanceBankAccount(orgId, a.bank_account_id);
+  const configuredFeeAccountId = a.event_payload?.feeIncomeAccountId ?? null;
+  if (configuredFeeAccountId !== null) {
+    await validateSurchargeIncomeAccount(orgId, configuredFeeAccountId);
+  }
 
   const doc = (await db.execute<{ id: string; document_number: string; open_balance: string }>(sql`
     select id, document_number, open_balance from documents where id = ${a.document_id} and org_id = ${orgId}
@@ -1723,6 +1829,10 @@ export async function saveAcceptanceConfig(
     webhookSecret?: string | null;
   },
 ): Promise<void> {
+  if (input.defaultBankAccountId !== undefined && input.defaultBankAccountId !== null) {
+    await validateAcceptanceBankAccount(orgId, input.defaultBankAccountId);
+  }
+  await validateConfiguredSurchargeRule(orgId, input.provider, input.surchargeRuleId ?? null);
   const settings = normalizeAcceptanceProviderSettings(input.provider, input.settings);
   await db.transaction(async (tx) => {
     type ConfigRow = NonNullable<Awaited<ReturnType<typeof loadProviderConfig>>>;

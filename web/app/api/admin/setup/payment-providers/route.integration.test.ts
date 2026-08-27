@@ -43,6 +43,14 @@ const hooks = registerHooks({
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
+    // The shared dependency tree links @openbooks/engine to another checkout;
+    // route tests must execute this worktree's service boundary.
+    if (specifier.startsWith("@openbooks/engine/") && context.parentURL?.includes("setup/payment-providers")) {
+      return nextResolve(
+        new URL(`../../../../../../engine/${specifier.slice("@openbooks/engine/".length)}`, context.parentURL).href,
+        context,
+      );
+    }
     if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/payment-providers")) {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -70,6 +78,8 @@ interface Fixture {
   actorId: string;
   /** active non-summary income account usable as the fee target */
   revenueAccount: string;
+  /** active non-summary bank account usable as the receipt target */
+  bankAccount: string;
 }
 
 async function seed(): Promise<Fixture> {
@@ -80,7 +90,7 @@ async function seed(): Promise<Fixture> {
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
       coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ onlinePayments: true })}::jsonb)
      where id = ${org.orgId}`);
-  return { orgId: org.orgId, actorId, revenueAccount: org.accounts.revenue };
+  return { orgId: org.orgId, actorId, revenueAccount: org.accounts.revenue, bankAccount: org.accounts.bank };
 }
 
 function postRequest(body: unknown): Request {
@@ -152,6 +162,41 @@ function withoutId(row: Record<string, unknown>): Record<string, unknown> {
   void id;
   return rest;
 }
+
+test("provider acceptance configuration rejects invalid references before persistence", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    authorize(f);
+    const malformed = await POST(postRequest({
+      provider: "stripe",
+      acceptanceEnabled: true,
+      defaultBankAccountId: "not-a-uuid",
+    }));
+    assert.equal(malformed.status, 400);
+
+    const wrongClass = await POST(postRequest({
+      provider: "stripe",
+      acceptanceEnabled: true,
+      defaultBankAccountId: f.revenueAccount,
+    }));
+    assert.equal(wrongClass.status, 422);
+
+    const valid = await POST(postRequest({
+      provider: "stripe",
+      acceptanceEnabled: true,
+      defaultBankAccountId: f.bankAccount,
+    }));
+    assert.equal(valid.status, 200);
+    const stored = await db.execute<{ bank_account_id: string; acceptance_enabled: boolean }>(sql`
+      select default_bank_account_id as bank_account_id, acceptance_enabled
+        from psp_provider_configs where org_id = ${f.orgId} and provider = 'stripe'
+    `);
+    assert.deepEqual(stored.rows[0], { bank_account_id: f.bankAccount, acceptance_enabled: true });
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
 
 test("a valid surcharge rule persists with actual stored-row insert evidence", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const f = await seed();
@@ -306,7 +351,7 @@ test("same-start same-scope saves conflict; distinct scopes coexist deterministi
   try {
     authorize(f);
     const first = await POST(postRequest(baseRule({
-      name: "Stripe card", provider: "stripe", effectiveFrom: "2026-01-01", feeIncomeAccountId: f.revenueAccount,
+      name: "Stripe card", provider: "stripe", effectiveFrom: "2026-01-01", effectiveTo: "2026-01-31", feeIncomeAccountId: f.revenueAccount,
     })));
     assert.equal(first.status, 200);
 
