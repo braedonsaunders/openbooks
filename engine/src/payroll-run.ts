@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "./db.ts";
 import { PayrollError } from "./payroll-error.ts";
 import {
@@ -629,6 +629,47 @@ export function nextPeriodAfter(
  */
 export type PayRunType = "regular" | "bonus" | "termination" | "retro";
 
+/** The role-derived subsidiary visibility a payroll engine caller carries. */
+export type PayrollSubsidiaryScope = ReadonlySet<string> | null | undefined;
+
+/**
+ * Shared fail-closed SQL predicate for payroll engine reads. A null/undefined
+ * scope is unrestricted; a present empty set matches nothing. Payroll records
+ * are legal-entity-owned, so a null subsidiary never belongs to a restricted
+ * caller (the same rule as the document API gate).
+ */
+export function payrollSubsidiaryScopeFilter(
+  column: SQL,
+  allowedSubsidiaryIds: PayrollSubsidiaryScope,
+): SQL {
+  if (allowedSubsidiaryIds == null) return sql``;
+  const ids = [...allowedSubsidiaryIds];
+  return ids.length > 0
+    ? sql` and ${column} in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
+    : sql` and false`;
+}
+
+/** Predicate matching rows a restricted caller must not be allowed to read. */
+export function payrollSubsidiaryOutsideScopeFilter(
+  column: SQL,
+  allowedSubsidiaryIds: PayrollSubsidiaryScope,
+): SQL {
+  if (allowedSubsidiaryIds == null) return sql`false`;
+  const ids = [...allowedSubsidiaryIds];
+  return ids.length > 0
+    ? sql`${column} is null or ${column} not in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
+    : sql`true`;
+}
+
+/** In-memory twin for direct service guards and tests. */
+export function payrollSubsidiaryInScope(
+  allowedSubsidiaryIds: PayrollSubsidiaryScope,
+  subsidiaryId: string | null | undefined,
+): boolean {
+  if (allowedSubsidiaryIds == null) return true;
+  return subsidiaryId != null && subsidiaryId !== "" && allowedSubsidiaryIds.has(subsidiaryId);
+}
+
 const RUN_TYPE_MEMO: Record<PayRunType, string> = {
   regular: "Pay run",
   bonus: "Off-cycle bonus run",
@@ -660,6 +701,8 @@ export async function createPayRun(input: {
   runType?: PayRunType;
   /** Employees this run pays; required for `termination`, ignored otherwise. */
   employeePartyIds?: readonly string[];
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<{ documentId: string; documentNumber: string }> {
   const { orgId, actorId } = input;
   return await db.transaction(async (tx) => {
@@ -712,6 +755,11 @@ export async function createPayRun(input: {
       throw new PayrollError(schedule.subsidiary_id
         ? "the pay schedule's subsidiary is missing or inactive"
         : "no active root subsidiary");
+    }
+    if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, subsidiary.id)) {
+      // Match the schedule lookup's not-found response and leave the
+      // transaction untouched: an out-of-scope schedule must be opaque.
+      throw new PayrollError("pay schedule not found");
     }
     const runContext = resolvePayrollRunContext({
       payDate,
@@ -1159,24 +1207,29 @@ export async function payRunCalculationSource(
   documentId: string,
   executor: Pick<typeof db, "execute"> = db,
   lockSources = false,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayRunCalculationSourceSnapshot | null> {
   const rowLock = lockSources ? sql`for update` : sql``;
   const entryRowLock = lockSources ? sql`for update of te` : sql``;
   const result = (await executor.execute<CalculationSourceRow>(sql`
     with run_scope as materialized (
       select r.org_id, r.document_id, r.period_start, r.period_end, r.run_type,
-             d.currency as run_currency
+             d.currency as run_currency, d.subsidiary_id
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
+         ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
     ),
     stub_employees as materialized (
       select s.employee_party_id, prof.pay_basis, r.period_end, r.run_currency
         from run_scope r
         join pay_stubs s
           on s.org_id = r.org_id and s.pay_run_document_id = r.document_id
+        left join parties p
+          on p.id = s.employee_party_id and p.org_id = s.org_id
         join employee_payroll_profiles prof
           on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
+       where true ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
     ),
     locked_entries as materialized (
       select te.id, te.employee_party_id, te.worked_on, te.hours, te.time_type_id,
@@ -1405,7 +1458,10 @@ export interface PayRunCalculation {
  * period actually paid (engine/src/payroll-retro.ts).
  */
 export async function captureCalculatedStubs(
-  tx: Pick<typeof db, "execute">, orgId: string, documentId: string,
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<CapturedStub[]> {
   const rows = (await tx.execute<Record<string, string | number | null>>(sql`
     select s.employee_party_id, s.province, s.gross, s.net_pay, s.employer_cost,
@@ -1414,7 +1470,9 @@ export async function captureCalculatedStubs(
       from pay_stubs s
       left join pay_stub_lines l on l.stub_id = s.id and l.org_id = s.org_id
       left join pay_components c on c.id = l.component_id and c.org_id = s.org_id
+      left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by s.employee_party_id, l.sequence, l.description
   `));
   const byEmployee = new Map<string, CapturedStub>();
@@ -1492,6 +1550,8 @@ export interface CalculatePayRunInput {
    * fresh under the pack's declared retroactive treatment.
    */
   simulate?: boolean;
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }
 
 export async function calculatePayRun(input: CalculatePayRunInput): Promise<PayRunCalculation> {
@@ -1520,6 +1580,9 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     `));
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
+    if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.doc_subsidiary_id)) {
+      throw new PayrollError("pay run not found");
+    }
     // A simulation is a rolled-back re-derivation of a run that has already
     // been paid, so these two guards are exactly what it is asking to pass;
     // everything it writes is discarded by the DryRunRollback below.
@@ -1638,6 +1701,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
            and prof.is_active
            and (er.terminated_on is null or er.terminated_on >= ${run.period_start})
            and (${scopedSubsidiaryId}::uuid is null or p.subsidiary_id = ${scopedSubsidiaryId}::uuid)
+           ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}
          order by p.id, er.terminated_on nulls last
       ) roster
       order by roster.display_name
@@ -1736,7 +1800,10 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         const result = await calculateStub(tx, {
           orgId, actorId, documentId, run, emp, runContext, jurisdiction,
           periodsPerYear: P, need, components: components.rows,
-          eftFallbackToCheque, statHolidayPay, simulate: input.simulate === true,
+          eftFallbackToCheque,
+          statHolidayPay,
+          simulate: input.simulate === true,
+          allowedSubsidiaryIds: input.allowedSubsidiaryIds,
         });
         grossTotal = add(grossTotal, result.gross);
         netTotal = add(netTotal, result.net);
@@ -1767,7 +1834,12 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // a dry run whose OUTPUT is the point, so the stubs are read back first —
     // inside this transaction, immediately before it is thrown away.
     if (input.simulate) {
-      result.stubs = await captureCalculatedStubs(tx, orgId, documentId);
+      result.stubs = await captureCalculatedStubs(
+        tx,
+        orgId,
+        documentId,
+        input.allowedSubsidiaryIds,
+      );
       throw new DryRunRollback(result);
     }
     if (input.dryRun) throw new DryRunRollback(result);
@@ -1777,6 +1849,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       documentId,
       tx,
       true,
+      input.allowedSubsidiaryIds,
     );
     if (!calculationSource) throw new PayrollError("pay run not found");
     const calculationSourceDigest = payRunCalculationSourceDigest(calculationSource);
@@ -2181,16 +2254,21 @@ async function appendRetroSettlementLines(
     emp: Record<string, string | null>;
     country: string;
     retroRun: boolean;
+    allowedSubsidiaryIds?: PayrollSubsidiaryScope;
     lines: Line[];
   },
 ): Promise<void> {
-  const { orgId, documentId, employeePartyId, emp, country, retroRun, lines } = args;
+  const {
+    orgId, documentId, employeePartyId, emp, country, retroRun, lines,
+    allowedSubsidiaryIds,
+  } = args;
   if (retroRun) {
     const { retroEarningLinesForStub } = await import("./payroll-retro-store.ts");
     const retroLines = await retroEarningLinesForStub(tx, {
       orgId, payRunDocumentId: documentId, employeePartyId,
       employeeName: emp.display_name ?? employeePartyId,
       nonPeriodic: payrollPack(country).retroactivePayTreatment === "non_periodic",
+      allowedSubsidiaryIds,
     });
     for (const line of retroLines) {
       lines.push({
@@ -2907,6 +2985,7 @@ async function calculateStub(
     statHolidayPay: boolean;
     /** Rolled-back re-derivation of a COMMITTED run; writes no ledger rows. */
     simulate: boolean;
+    allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   },
 ): Promise<StubComputation> {
   const { orgId, actorId, documentId, run, emp, jurisdiction } = ctx;
@@ -3006,7 +3085,14 @@ async function calculateStub(
   // The pack decides the tax treatment. Dynamic import, like the union fringe
   // phase above, so the retro module can depend on this one.
   await appendRetroSettlementLines(tx, {
-    orgId, documentId, employeePartyId, emp, country, retroRun, lines,
+    orgId,
+    documentId,
+    employeePartyId,
+    emp,
+    country,
+    retroRun,
+    lines,
+    allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
   });
 
   // Recurring assigned components (allowances, RRSP match, dues, garnishees…).
@@ -3265,7 +3351,10 @@ export interface PayRunGlLeg {
  * preview surfaces setup problems before anything is written.
  */
 async function payRunGlLegs(
-  tx: Pick<typeof db, "execute">, orgId: string, documentId: string,
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<{ legs: PayRunGlLeg[]; debitTotal: string }> {
   {
     const settings = await payrollSettings(orgId);
@@ -3304,7 +3393,9 @@ async function payRunGlLegs(
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
         left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+        left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
        where l.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
+         ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
        order by s.employee_party_id, l.sequence
     `));
     if (stubLines.rows.length === 0) throw new PayrollError("pay run has no calculated stubs");
@@ -3388,17 +3479,24 @@ async function payRunGlLegs(
  * priced it.
  */
 export async function commitPayRun(input: {
-  orgId: string; documentId: string; actorId: string;
+  orgId: string;
+  documentId: string;
+  actorId: string;
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<{ lines: number }> {
   const { orgId, documentId, actorId } = input;
   return await db.transaction(async (tx) => {
     const runRows = (await tx.execute<Record<string, string>>(sql`
-      select r.*, d.status as doc_status from pay_runs r
+      select r.*, d.status as doc_status, d.subsidiary_id as subsidiary_id from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
       where r.org_id = ${orgId} and r.document_id = ${documentId} for update
     `));
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
+    if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.subsidiary_id)) {
+      throw new PayrollError("pay run not found");
+    }
     if (run.run_status !== "calculated") throw new PayrollError("calculate the pay run before committing");
     // Approval moves the document from draft to approved, so both are
     // committable; anything else (posted, voided) is not.
@@ -3450,7 +3548,13 @@ export async function commitPayRun(input: {
         || payRunCalculationSourceDigest(storedSource) !== storedDigest) {
       throw new PayrollError(staleCalculationMessage(["selection"]));
     }
-    const currentSource = await payRunCalculationSource(orgId, documentId, tx, true);
+    const currentSource = await payRunCalculationSource(
+      orgId,
+      documentId,
+      tx,
+      true,
+      input.allowedSubsidiaryIds,
+    );
     if (!currentSource) throw new PayrollError("pay run not found");
     const changes = payRunCalculationSourceChanges(storedSource, currentSource);
     const sourceReasons = [
@@ -3464,7 +3568,12 @@ export async function commitPayRun(input: {
       ));
     }
 
-    const { legs, debitTotal } = await payRunGlLegs(tx, orgId, documentId);
+    const { legs, debitTotal } = await payRunGlLegs(
+      tx,
+      orgId,
+      documentId,
+      input.allowedSubsidiaryIds,
+    );
 
     await tx.execute(sql`delete from document_lines where org_id = ${orgId} and document_id = ${documentId}`);
     let lineNumber = 1;
@@ -3537,19 +3646,29 @@ export async function commitPayRun(input: {
  * before anything is written.
  */
 export async function previewPayRunGl(
-  orgId: string, documentId: string,
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<{ legs: (PayRunGlLeg & {
   accountLabel: string; partyName: string | null; projectName: string | null;
 })[]; debitTotal: string }> {
-  const runRows = (await db.execute<{ run_status: string }>(sql`
-    select r.run_status from pay_runs r
+  const runRows = (await db.execute<{ run_status: string; subsidiary_id: string | null }>(sql`
+    select r.run_status, d.subsidiary_id
+      from pay_runs r
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
   `));
   if (!runRows.rows[0]) throw new PayrollError("pay run not found");
   if (runRows.rows[0].run_status === "draft") {
     throw new PayrollError("calculate the pay run to preview its GL impact");
   }
-  const { legs, debitTotal } = await payRunGlLegs(db, orgId, documentId);
+  const { legs, debitTotal } = await payRunGlLegs(
+    db,
+    orgId,
+    documentId,
+    allowedSubsidiaryIds,
+  );
   const accountIds = [...new Set(legs.map((l) => l.accountId))];
   const partyIds = [...new Set(legs.map((l) => l.partyId).filter(Boolean))] as string[];
   const projectIds = [...new Set(legs.map((l) => l.projectId).filter(Boolean))] as string[];

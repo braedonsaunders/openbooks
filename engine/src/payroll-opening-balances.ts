@@ -1,8 +1,20 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { db } from "./db.ts";
 import { add, cmp, normalizeMoney } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";
+import type { PayrollSubsidiaryScope } from "./payroll-run.ts";
+
+function openingSubsidiaryScopeFilter(
+  column: SQL,
+  allowedSubsidiaryIds: PayrollSubsidiaryScope,
+): SQL {
+  if (allowedSubsidiaryIds == null) return sql``;
+  const ids = [...allowedSubsidiaryIds];
+  return ids.length > 0
+    ? sql` and ${column} in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
+    : sql` and false`;
+}
 
 /**
  * Mid-year adoption: the statutory year-to-date an employer accumulated on a
@@ -394,6 +406,7 @@ export async function openingBalanceLocks(
   orgId: string,
   taxYear: number,
   runner: Pick<typeof db, "execute"> = db,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<Map<string, { documentNumber: string | null; payDate: string }>> {
   const rows = (await runner.execute<LockRow>(sql`
     select distinct on (s.employee_party_id)
@@ -401,7 +414,9 @@ export async function openingBalanceLocks(
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
       left join documents d on d.id = r.document_id and d.org_id = r.org_id
+      left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and r.run_status = 'committed'
+       ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by s.employee_party_id, s.pay_date
   `));
   return new Map(
@@ -415,7 +430,11 @@ export async function openingBalanceLocks(
  * WITHOUT a row are returned too — an empty grid that has to be discovered
  * employee by employee is how people get missed.
  */
-export async function openingBalancesForYear(orgId: string, taxYear: number): Promise<OpeningBalanceYear> {
+export async function openingBalancesForYear(
+  orgId: string,
+  taxYear: number,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<OpeningBalanceYear> {
   const year = assertTaxYear(taxYear);
   const amountCols = OPENING_BALANCE_FIELDS.map((f) => sql.raw(`b.${f.column}`));
 
@@ -432,6 +451,7 @@ export async function openingBalancesForYear(orgId: string, taxYear: number): Pr
         on b.org_id = prof.org_id and b.employee_party_id = prof.employee_party_id
        and b.tax_year = ${year}
      where prof.org_id = ${orgId} and prof.is_active and p.is_active
+       ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.display_name
   `));
 
@@ -443,18 +463,24 @@ export async function openingBalancesForYear(orgId: string, taxYear: number): Pr
            b.updated_at::text as updated_at,
            ${sql.join(amountCols, sql`, `)}
       from payroll_opening_balances b
-      join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
+      left join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
       left join employee_roles er on er.party_id = p.id and er.org_id = b.org_id
       left join employee_payroll_profiles prof
         on prof.org_id = b.org_id and prof.employee_party_id = b.employee_party_id
      where b.org_id = ${orgId} and b.tax_year = ${year}
        and (prof.id is null or not prof.is_active or not p.is_active)
+       ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.display_name
   `));
 
   const years = (await db.execute<{ tax_year: number }>(sql`
     select distinct tax_year from payroll_opening_balances
-     where org_id = ${orgId} order by tax_year desc
+     where org_id = ${orgId}
+       and employee_party_id in (
+         select p.id from parties p
+          where p.org_id = ${orgId}
+            ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)})
+     order by tax_year desc
   `));
 
   const components = await openingComponentFields(orgId, year);
@@ -464,7 +490,9 @@ export async function openingBalancesForYear(orgId: string, taxYear: number): Pr
     select oc.opening_balance_id, oc.component_id, oc.ytd_amount
       from payroll_opening_balance_components oc
       join payroll_opening_balances b on b.id = oc.opening_balance_id and b.org_id = oc.org_id
+      left join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
      where oc.org_id = ${orgId} and b.tax_year = ${year}
+       ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
   `));
   const componentsByRow = new Map<string, OpeningComponentAmounts>();
   for (const row of componentRows.rows) {
@@ -473,7 +501,7 @@ export async function openingBalancesForYear(orgId: string, taxYear: number): Pr
     componentsByRow.set(row.opening_balance_id, amounts);
   }
 
-  const locks = await openingBalanceLocks(orgId, year);
+  const locks = await openingBalanceLocks(orgId, year, db, allowedSubsidiaryIds);
   const toRow = (raw: Record<string, unknown>): OpeningBalanceRow => {
     const employeePartyId = String(raw.employee_party_id);
     const lock = locks.get(employeePartyId) ?? null;
@@ -555,24 +583,27 @@ export async function saveOpeningBalances(input: {
   rows: OpeningBalanceWrite[];
   /** Reject (rather than skip) rows locked by a committed run. Default true. */
   strictLocks?: boolean;
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<OpeningBalanceSaveResult> {
   const year = assertTaxYear(input.taxYear);
   const result: OpeningBalanceSaveResult = { created: 0, updated: 0, deleted: 0, errors: [] };
   if (input.rows.length === 0) return result;
 
   return db.transaction(async (tx) => {
-    const locks = await openingBalanceLocks(input.orgId, year, tx);
+    const locks = await openingBalanceLocks(input.orgId, year, tx, input.allowedSubsidiaryIds);
 
     // Employees must belong to this org. Resolving names in one pass also
     // gives every error message something a human can act on.
-    const names = (await tx.execute<{ id: string; display_name: string }>(sql`
-      select p.id, p.display_name from parties p
+    const names = (await tx.execute<{ id: string; display_name: string; subsidiary_id: string | null }>(sql`
+      select p.id, p.display_name, p.subsidiary_id from parties p
        where p.org_id = ${input.orgId} and p.id in (
          select (value->>'id')::uuid from jsonb_array_elements(${JSON.stringify(
            input.rows.map((r) => ({ id: r.employeePartyId })),
          )}::jsonb) as value)
     `));
     const nameById = new Map(names.rows.map((r) => [r.id, r.display_name]));
+    const subsidiaryById = new Map(names.rows.map((r) => [r.id, r.subsidiary_id]));
 
     const existing = (await tx.execute<{ employee_party_id: string }>(sql`
       select employee_party_id from payroll_opening_balances
@@ -608,6 +639,13 @@ export async function saveOpeningBalances(input: {
         result.errors.push({ employeePartyId: row.employeePartyId, employeeName, message });
       if (!employeeName) {
         fail("employee not found in this organization");
+        continue;
+      }
+      if (
+        input.allowedSubsidiaryIds != null
+        && !input.allowedSubsidiaryIds.has(subsidiaryById.get(row.employeePartyId) ?? "")
+      ) {
+        fail("employee is outside the caller's subsidiary scope");
         continue;
       }
       if (seen.has(row.employeePartyId)) {

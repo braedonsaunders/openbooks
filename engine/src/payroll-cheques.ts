@@ -2,6 +2,10 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { sum } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";
+import {
+  payrollSubsidiaryScopeFilter,
+  type PayrollSubsidiaryScope,
+} from "./payroll-run.ts";
 
 /**
  * Printed pay cheques.
@@ -50,14 +54,17 @@ export async function issuePayRunCheques(input: {
   orgId: string;
   documentId: string;
   actorId: string;
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<PayRunChequeBatch> {
-  const { orgId, documentId, actorId } = input;
+  const { orgId, documentId, actorId, allowedSubsidiaryIds } = input;
   return await db.transaction(async (tx) => {
     const runRows = (await tx.execute<{ run_status: string; subsidiary_id: string | null }>(sql`
       select r.run_status, d.subsidiary_id
-        from pay_runs r
-        join documents d on d.id = r.document_id and d.org_id = r.org_id
+       from pay_runs r
+       join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        for update of r
     `));
     const run = runRows.rows[0];
@@ -126,17 +133,23 @@ export async function issuePayRunCheques(input: {
 }
 
 /** The batch as it stands, without allocating anything (list/preview). */
-export async function payRunCheques(orgId: string, documentId: string): Promise<PayRunChequeBatch> {
+export async function payRunCheques(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<PayRunChequeBatch> {
   const rows = (await db.execute<{
       id: string; employee_party_id: string; name: string; net_pay: string;
       cheque_number: string | null;
     }>(sql`
     select s.id, s.employee_party_id, p.display_name as name, s.net_pay::text as net_pay,
            s.cheque_number
-      from pay_stubs s
-      join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+     from pay_stubs s
+       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+       join documents d on d.id = s.pay_run_document_id and d.org_id = s.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
        and s.payment_method = 'cheque'
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.display_name, s.id
   `));
   const cheques = rows.rows.map((row) => ({

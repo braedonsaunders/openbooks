@@ -14,6 +14,10 @@ import {
   type PayrollOriginatorConfig,
 } from "./payroll-bank-file.ts";
 import { PayrollError } from "./payroll-error.ts";
+import {
+  payrollSubsidiaryScopeFilter,
+  type PayrollSubsidiaryScope,
+} from "./payroll-run.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 
 /**
@@ -152,14 +156,19 @@ type RunRow = {
   subsidiary_id: string | null;
 };
 
-async function loadRun(orgId: string, documentId: string): Promise<RunRow | null> {
+async function loadRun(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<RunRow | null> {
   const rows = (await db.execute<RunRow>(sql`
     select r.run_status, r.pay_date::text as pay_date, r.paid_at::text as paid_at,
            r.net_total::text as net_total, d.status as doc_status,
            d.document_number, d.currency, d.subsidiary_id
       from pay_runs r
-      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
   `));
   return rows.rows[0] ?? null;
 }
@@ -177,8 +186,9 @@ async function loadRun(orgId: string, documentId: string): Promise<RunRow | null
 export async function payRunBankFileEntitlement(
   orgId: string,
   documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayRunBankFileEntitlement> {
-  const run = await loadRun(orgId, documentId);
+  const run = await loadRun(orgId, documentId, allowedSubsidiaryIds);
   if (!run) {
     return {
       entitled: false,
@@ -244,10 +254,11 @@ export async function payRunBankFileEntitlement(
 export async function assertPayRunBankFileEntitled(
   orgId: string,
   documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayRunBankFileEntitlement> {
   // A cloned environment must never originate a real payment instruction.
   await assertNotSandbox(orgId, "generate a payroll bank file");
-  const entitlement = await payRunBankFileEntitlement(orgId, documentId);
+  const entitlement = await payRunBankFileEntitlement(orgId, documentId, allowedSubsidiaryIds);
   if (!entitlement.entitled) throw new PayrollError(entitlement.refusal!.reason);
   // Belt and braces: the approval module owns the wording of its own refusals,
   // and this is the call the original control asked every caller to make.
@@ -286,10 +297,14 @@ const artifactColumns = (prefix = "") => {
 export async function listPayRunBankFiles(
   orgId: string,
   documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayRunBankFileArtifact[]> {
   const rows = (await db.execute<PayRunBankFileArtifact>(sql`
-    select ${artifactColumns()} from pay_run_bank_files
-     where org_id = ${orgId} and pay_run_document_id = ${documentId}
+    select ${artifactColumns("f")} from pay_run_bank_files f
+      join pay_runs r on r.document_id = f.pay_run_document_id and r.org_id = f.org_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where f.org_id = ${orgId} and f.pay_run_document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
      order by sequence_number desc
   `));
   return rows.rows;
@@ -299,8 +314,9 @@ export async function listPayRunBankFiles(
 export async function activePayRunBankFiles(
   orgId: string,
   documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayRunBankFileArtifact[]> {
-  return (await listPayRunBankFiles(orgId, documentId)).filter(
+  return (await listPayRunBankFiles(orgId, documentId, allowedSubsidiaryIds)).filter(
     (artifact) => artifact.status !== "superseded",
   );
 }
@@ -448,6 +464,7 @@ export async function payRunBankFileAudit(
   orgId: string,
   documentId: string,
   limit = 100,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayRunBankFileAuditEntry[]> {
   const rows = (await db.execute<PayRunBankFileAuditEntry>(sql`
     select a.id, coalesce(a.changes->>'event', a.action) as event,
@@ -455,9 +472,12 @@ export async function payRunBankFileAudit(
            coalesce(u.name, u.email) as "actorName", a.at, a.changes
       from audit_log a
       join pay_run_bank_files f on f.id = a.row_id and f.org_id = a.org_id
+      join pay_runs r on r.document_id = f.pay_run_document_id and r.org_id = f.org_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
       left join users u on u.id = a.actor_id and u.org_id = a.org_id
      where a.org_id = ${orgId} and a.table_name = 'pay_run_bank_files'
        and f.pay_run_document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
      order by a.at desc
      limit ${limit}
   `));
@@ -482,6 +502,8 @@ export interface GeneratePayRunBankFileInput {
   supersedeReason?: string | null;
   /** Injectable for reproducible tests. */
   now?: Date;
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }
 
 /**
@@ -499,7 +521,11 @@ export async function generatePayRunBankFile(
   const { orgId, documentId, actorId } = input;
   const now = input.now ?? new Date();
 
-  const entitlement = await assertPayRunBankFileEntitled(orgId, documentId);
+  const entitlement = await assertPayRunBankFileEntitled(
+    orgId,
+    documentId,
+    input.allowedSubsidiaryIds,
+  );
 
   const originator = await payrollOriginatorConfig(orgId, input.paymentBankProfileId);
   if (!originator.ok) {
@@ -521,7 +547,7 @@ export async function generatePayRunBankFile(
     );
   }
 
-  const existing = await activePayRunBankFiles(orgId, documentId);
+  const existing = await activePayRunBankFiles(orgId, documentId, input.allowedSubsidiaryIds);
   const supersedeReason = input.supersedeReason?.trim() ?? "";
   if (existing.length > 0 && supersedeReason.length < 5) {
     throw new PayrollError(
@@ -755,6 +781,7 @@ export async function releasePayRunBankFile(
   orgId: string,
   artifactId: string,
   actorId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<ReleasedPayRunBankFile> {
   const rows = (await db.execute<(PayRunBankFileArtifact & {
       storageKind: string;
@@ -764,10 +791,13 @@ export async function releasePayRunBankFile(
     select ${artifactColumns("f")}, fv.storage_kind as "storageKind",
            fb.bytes as "dbBytes", f.file_version_id as "versionId"
       from pay_run_bank_files f
+      join pay_runs r on r.document_id = f.pay_run_document_id and r.org_id = f.org_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
       join files fi on fi.id = f.file_id and fi.org_id = ${orgId}
       join file_versions fv on fv.id = f.file_version_id and fv.file_id = fi.id
       left join file_blobs fb on fb.version_id = fv.id
      where f.org_id = ${orgId} and f.id = ${artifactId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
   `));
   const row = rows.rows[0];
   if (!row) throw new PayrollError("payroll bank file not found");
@@ -814,7 +844,12 @@ export async function releasePayRunBankFile(
   });
 
   const refreshed = (await db.execute<PayRunBankFileArtifact>(sql`
-    select ${artifactColumns()} from pay_run_bank_files where org_id = ${orgId} and id = ${artifactId}
+    select ${artifactColumns("f")}
+      from pay_run_bank_files f
+      join pay_runs r on r.document_id = f.pay_run_document_id and r.org_id = f.org_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where f.org_id = ${orgId} and f.id = ${artifactId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
   `));
 
   return {
