@@ -9,6 +9,7 @@ import {
   cancelCamPool,
   createCamPool,
   finalizeCamPool,
+  reopenFinalizedCamPool,
   updateCamPool,
 } from "./property-management.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
@@ -26,6 +27,32 @@ function expectConflict(error: unknown): boolean {
     cursor = (cursor as { cause?: unknown }).cause;
   }
   return false;
+}
+
+const FORCED_AUDIT_FAILURE = /forced CAM audit failure/u;
+
+function expectForcedAuditFailure(error: unknown): boolean {
+  let cursor: unknown = error;
+  for (let depth = 0; cursor instanceof Error && depth < 5; depth += 1) {
+    if (FORCED_AUDIT_FAILURE.test(cursor.message)) return true;
+    cursor = (cursor as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+type CamAuditChanges = Record<string, unknown>;
+
+interface CamAuditRow {
+  changes: CamAuditChanges;
+  actorId: string | null;
+}
+
+async function camAudits(orgId: string, table: string, rowId: string, action: string): Promise<CamAuditRow[]> {
+  const result = (await db.execute<{ changes: CamAuditChanges; actorId: string | null }>(sql`
+    select changes, actor_id as "actorId" from audit_log
+     where org_id=${orgId} and table_name=${table} and row_id=${rowId} and action=${action}
+     order by at asc, id asc`));
+  return result.rows;
 }
 
 interface CamFixture {
@@ -237,6 +264,180 @@ test("cancelling a pool releases its shared sources for reuse", { skip: !DB }, a
       () => createCamPool({ ...poolInputs, name: "FY26 CHALLENGER" }),
       (error: unknown) => error instanceof PropertyManagementError && CONFLICT_MESSAGE.test(error.message),
     );
+  } finally {
+    await dropScratchOrg(fixture.org.orgId);
+  }
+});
+
+test("the CAM lifecycle commits before/after audit evidence with every transition", { skip: !DB }, async () => {
+  const fixture = await seedCamProperty();
+  try {
+    const actor = await createScratchUser(fixture.org.orgId, "CAM auditor", "admin");
+    await postLedgerExpense(fixture, "1000");
+    const createInputs = {
+      orgId: fixture.org.orgId,
+      actorId: actor,
+      propertyId: fixture.propertyId,
+      name: "FY26 AUDIT",
+      fiscalYear: 2026,
+      periodStartsOn: "2026-07-01",
+      periodEndsOn: "2026-07-31",
+      allocationBasis: "equal" as const,
+      budgetAmount: "500",
+      expenseAccountIds: [fixture.ledgerAccount],
+    };
+    const created = await createCamPool(createInputs);
+
+    // Create: null before → full source scope after, tied to a re-derivable fingerprint.
+    const [insertAudit] = await camAudits(fixture.org.orgId, "cam_pools", created.id, "insert");
+    assert.ok(insertAudit);
+    assert.equal(insertAudit.actorId, actor);
+    assert.deepEqual(insertAudit.changes.before ?? null, null);
+    assert.deepEqual(insertAudit.changes.after, {
+      status: "open",
+      name: "FY26 AUDIT",
+      fiscalYear: 2026,
+      periodStartsOn: "2026-07-01",
+      periodEndsOn: "2026-07-31",
+      allocationBasis: "equal",
+      budgetAmount: "500.0000",
+      expenseAccountIds: [fixture.ledgerAccount],
+    });
+    const insertFingerprint = String(insertAudit.changes.sourceFingerprint);
+    assert.match(insertFingerprint, /^[a-f0-9]{64}$/);
+
+    // Update: the audit carries the true prior state next to the new one.
+    const updated = await updateCamPool({ ...createInputs, poolId: created.id, name: "FY26 AUDIT REV", budgetAmount: "750" });
+    assert.equal(updated.id, created.id);
+    const [updateAudit] = await camAudits(fixture.org.orgId, "cam_pools", created.id, "update");
+    assert.ok(updateAudit);
+    assert.equal(updateAudit.actorId, actor);
+    assert.deepEqual(updateAudit.changes.before, {
+      status: "open",
+      name: "FY26 AUDIT",
+      fiscalYear: 2026,
+      periodStartsOn: "2026-07-01",
+      periodEndsOn: "2026-07-31",
+      allocationBasis: "equal",
+      budgetAmount: "500.0000",
+      expenseAccountIds: [fixture.ledgerAccount],
+    });
+    assert.deepEqual((updateAudit.changes.after as Record<string, unknown>).name, "FY26 AUDIT REV");
+    assert.equal((updateAudit.changes.after as Record<string, unknown>).budgetAmount, "750.0000");
+
+    // Finalize: before/after statuses plus allocation totals that tie out to the pool.
+    await closeGlModule(fixture, actor);
+    const finalized = await finalizeCamPool(fixture.org.orgId, actor, created.id);
+    assert.equal(finalized.actualAmount, "1000.0000");
+    assert.equal(finalized.allocations, 1);
+    const [finalizeAudit] = await camAudits(fixture.org.orgId, "cam_pools", created.id, "finalize");
+    assert.ok(finalizeAudit);
+    assert.equal(finalizeAudit.actorId, actor);
+    assert.deepEqual(finalizeAudit.changes.before, { status: "open" });
+    assert.deepEqual(finalizeAudit.changes.after, {
+      status: "finalized",
+      actualAmount: "1000.0000",
+      allocationCount: 1,
+      budgetAllocationTotal: "750.0000",
+      actualAllocationTotal: "1000.0000",
+    });
+    const finalizeFingerprint = String(finalizeAudit.changes.sourceFingerprint);
+    assert.match(finalizeFingerprint, /^[a-f0-9]{64}$/);
+
+    // The fingerprint is source-derived: reopening and refinalizing unchanged
+    // sources reproduces it exactly.
+    await reopenFinalizedCamPool(fixture.org.orgId, actor, created.id, "audit determinism check");
+    const refinalized = await finalizeCamPool(fixture.org.orgId, actor, created.id);
+    assert.equal(refinalized.actualAmount, finalized.actualAmount);
+    const [refinalizeAudit] = await camAudits(fixture.org.orgId, "cam_pools", created.id, "finalize").then((rows) => rows.slice(-1));
+    assert.equal(String(refinalizeAudit?.changes.sourceFingerprint), finalizeFingerprint);
+
+    // Invoice: both the per-allocation document link and the pool stamp are audited.
+    const billed = await billCamReconciliation(fixture.org.orgId, actor, created.id, "2026-07-15");
+    assert.equal(billed.documents.length, 1);
+    const invoiceAudits = await camAudits(fixture.org.orgId, "cam_pools", created.id, "invoice");
+    assert.equal(invoiceAudits.length, 1);
+    assert.equal(invoiceAudits[0]!.actorId, actor);
+    assert.deepEqual(invoiceAudits[0]!.changes, {
+      before: { status: "finalized" },
+      after: { status: "invoiced" },
+      documents: billed.documents,
+    });
+    const allocationId = (await db.execute<{ id: string }>(sql`
+      select id from cam_allocations where org_id=${fixture.org.orgId} and pool_id=${created.id}`)).rows[0]!.id;
+    const linkAudits = await camAudits(fixture.org.orgId, "cam_allocations", allocationId, "invoice");
+    assert.equal(linkAudits.length, 1);
+    assert.equal(linkAudits[0]!.changes.after && (linkAudits[0]!.changes.after as Record<string, unknown>).invoiceDocumentId, billed.documents[0]);
+    // Same audit row would have failed the transition had it not committed —
+    // forced failure at finalize is proven by the dedicated crash test below;
+    // these assertions prove every stage wrote its evidence.
+    const pools = (await db.execute<{ status: string; actualAmount: string }>(sql`
+      select status, actual_amount::text as "actualAmount" from cam_pools
+       where org_id=${fixture.org.orgId} and id=${created.id}`)).rows[0]!;
+    assert.equal(pools.status, "invoiced");
+    assert.equal(pools.actualAmount, "1000.0000");
+  } finally {
+    await dropScratchOrg(fixture.org.orgId);
+  }
+});
+
+test("forcing the CAM audit write to fail leaves no partial allocation or status change", { skip: !DB }, async () => {
+  const fixture = await seedCamProperty();
+  try {
+    const actor = await createScratchUser(fixture.org.orgId, "CAM auditor", "admin");
+    await postLedgerExpense(fixture, "400");
+    const pool = await createCamPool({
+      orgId: fixture.org.orgId,
+      actorId: actor,
+      propertyId: fixture.propertyId,
+      name: "FY26 CRASH",
+      fiscalYear: 2026,
+      periodStartsOn: "2026-07-01",
+      periodEndsOn: "2026-07-31",
+      allocationBasis: "equal" as const,
+      budgetAmount: "250",
+      expenseAccountIds: [fixture.ledgerAccount],
+    });
+    await closeGlModule(fixture, actor);
+
+    await db.execute(sql`
+      create or replace function openbooks_forced_cam_audit_failure() returns trigger language plpgsql as $$
+      begin raise exception 'forced CAM audit failure'; end $$`);
+    let triggerInstalled = false;
+    try {
+      await db.execute(sql`
+        create trigger forced_cam_audit_failure before insert on audit_log
+          for each row when (new.table_name='cam_pools' and new.action='finalize')
+          execute function openbooks_forced_cam_audit_failure()`);
+      triggerInstalled = true;
+
+      await assert.rejects(
+        () => finalizeCamPool(fixture.org.orgId, actor, pool.id),
+        expectForcedAuditFailure,
+      );
+
+      // The whole stage rolled back: no rebuilt allocations, no stamped actuals,
+      // no moved status — nothing happened without its audit row.
+      const survivor = (await db.execute<{
+        status: string; allocations: number; actualAmount: string | null;
+      }>(sql`
+        select cp.status,(select count(*)::int from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id) as allocations,
+               cp.actual_amount::text as "actualAmount"
+        from cam_pools cp where cp.org_id=${fixture.org.orgId} and cp.id=${pool.id}`)).rows[0]!;
+      assert.equal(survivor.status, "open");
+      assert.equal(survivor.allocations, 0);
+      assert.equal(survivor.actualAmount, null);
+    } finally {
+      if (triggerInstalled) await db.execute(sql`drop trigger forced_cam_audit_failure on audit_log`);
+      await db.execute(sql`drop function if exists openbooks_forced_cam_audit_failure()`);
+    }
+
+    // With the saboteur gone, the same call commits the change together with its audit.
+    const finalized = await finalizeCamPool(fixture.org.orgId, actor, pool.id);
+    assert.equal(finalized.actualAmount, "400.0000");
+    const audits = await camAudits(fixture.org.orgId, "cam_pools", pool.id, "finalize");
+    assert.equal(audits.length, 1);
+    assert.match(String(audits[0]!.changes.sourceFingerprint), /^[a-f0-9]{64}$/);
   } finally {
     await dropScratchOrg(fixture.org.orgId);
   }

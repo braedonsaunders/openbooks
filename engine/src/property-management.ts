@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg, withOrgTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
+import { canonicalJson } from "./canonical-json.ts";
 import { add, cmp, fromUnits, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { apportion } from "./revenue-recognition.ts";
@@ -1396,11 +1398,26 @@ async function assertNoSharedSourceOverlap(
   }
 }
 
+/** Stable identity of a pool's source scope: the inputs any later reviewer can
+ * re-derive from the period/location/account data to prove the audit evidence
+ * still describes the source it was computed from. */
+function camPoolSourceFingerprint(definition: {
+  propertyId: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string;
+  allocationBasis: string; budgetAmount: string; expenseAccountIds: string[];
+}): string {
+  return createHash("sha256").update(canonicalJson({
+    kind: "cam_pool.v1",
+    ...definition,
+    expenseAccountIds: [...definition.expenseAccountIds].sort(),
+  })).digest("hex");
+}
+
 export async function createCamPool(input: { orgId: string; actorId: string; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[] }): Promise<{ id: string }> {
   const name = input.name.trim();
   const startsOn = validDate(input.periodStartsOn, "CAM period start")!;
   const endsOn = validDate(input.periodEndsOn, "CAM period end")!;
   const expenseAccountIds = [...new Set(input.expenseAccountIds)];
+  const budgetAmount = exactMoney(input.budgetAmount, "CAM budget");
   if (!name || !Number.isInteger(input.fiscalYear) || endsOn < startsOn) throw new PropertyManagementError("CAM name, fiscal year, and a valid period are required");
   if (!expenseAccountIds.length) throw new PropertyManagementError("Select at least one CAM expense account");
   return db.transaction(async (tx) => {
@@ -1410,10 +1427,17 @@ export async function createCamPool(input: { orgId: string; actorId: string; pro
     if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
     await assertNoSharedSourceOverlap(tx, input.orgId, input.propertyId, startsOn, endsOn, expenseAccountIds);
     const result = (await tx.execute<{ id: string }>(sql`insert into cam_pools(org_id,property_id,name,fiscal_year,period_starts_on,period_ends_on,allocation_basis,budget_amount,expense_account_ids,status,created_by,updated_by)
-      select ${input.orgId},id,${name},${input.fiscalYear},${startsOn},${endsOn},${input.allocationBasis},${exactMoney(input.budgetAmount, "CAM budget")},${JSON.stringify(expenseAccountIds)}::jsonb,'open',${input.actorId},${input.actorId}
+      select ${input.orgId},id,${name},${input.fiscalYear},${startsOn},${endsOn},${input.allocationBasis},${budgetAmount},${JSON.stringify(expenseAccountIds)}::jsonb,'open',${input.actorId},${input.actorId}
         from managed_properties where org_id=${input.orgId} and id=${input.propertyId} and status='active' returning id`));
     if (!result.rows[0]) throw new PropertyManagementError("Active property not found");
-    return { id: result.rows[0].id };
+    const id = result.rows[0].id;
+    await audit(tx, input.orgId, "cam_pools", id, "insert", input.actorId, {
+      propertyId: input.propertyId,
+      before: null,
+      after: { status: "open", name, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, budgetAmount, expenseAccountIds },
+      sourceFingerprint: camPoolSourceFingerprint({ propertyId: input.propertyId, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, budgetAmount, expenseAccountIds }),
+    });
+    return { id };
   });
 }
 
@@ -1430,19 +1454,31 @@ export async function updateCamPool(input: { orgId: string; actorId: string; poo
     const accounts = (await tx.execute<{ n: number }>(sql`select count(*)::int as n from accounts where org_id=${input.orgId} and id::text in
       (select jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb)) and type in ('expense','expense_other') and is_active and not is_summary`));
     if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
-    const editable = (await tx.execute<{ propertyId: string }>(sql`select property_id as "propertyId" from cam_pools where org_id=${input.orgId} and id=${input.poolId} and status in ('draft','open') for update`));
-    if (!editable.rows[0]) throw new PropertyManagementError("Editable CAM pool not found");
-    await assertNoSharedSourceOverlap(tx, input.orgId, editable.rows[0].propertyId, startsOn, endsOn, expenseAccountIds, input.poolId);
-    const result = (await tx.execute<{ id: string; propertyId: string }>(sql`
+    const editable = (await tx.execute<{
+      propertyId: string; status: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string;
+      allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[];
+    }>(sql`select property_id as "propertyId",status,name,fiscal_year as "fiscalYear",period_starts_on::text as "periodStartsOn",
+      period_ends_on::text as "periodEndsOn",allocation_basis as "allocationBasis",budget_amount::text as "budgetAmount",
+      expense_account_ids as "expenseAccountIds"
+      from cam_pools where org_id=${input.orgId} and id=${input.poolId} and status in ('draft','open') for update`));
+    const before = editable.rows[0];
+    if (!before) throw new PropertyManagementError("Editable CAM pool not found");
+    const { propertyId: poolPropertyId, ...beforeSnapshot } = before;
+    await assertNoSharedSourceOverlap(tx, input.orgId, poolPropertyId, startsOn, endsOn, expenseAccountIds, input.poolId);
+    await tx.execute(sql`
       update cam_pools set name=${name},fiscal_year=${input.fiscalYear},period_starts_on=${startsOn},period_ends_on=${endsOn},
         allocation_basis=${input.allocationBasis},budget_amount=${budgetAmount},expense_account_ids=${JSON.stringify(expenseAccountIds)}::jsonb,
         updated_at=now(),updated_by=${input.actorId}
-      where org_id=${input.orgId} and id=${input.poolId} and status in ('draft','open') returning id,property_id as "propertyId"
-    `));
-    const row = result.rows[0];
-    if (!row) throw new PropertyManagementError("Editable CAM pool not found");
-    await audit(tx, input.orgId, "cam_pools", input.poolId, "update", input.actorId, { name, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, budgetAmount, expenseAccountIds });
-    return { id: row.id };
+      where org_id=${input.orgId} and id=${input.poolId} and status in ('draft','open')
+    `);
+    const snapshot = { status: beforeSnapshot.status, name, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, budgetAmount, expenseAccountIds };
+    await audit(tx, input.orgId, "cam_pools", input.poolId, "update", input.actorId, {
+      propertyId: poolPropertyId,
+      before: beforeSnapshot,
+      after: snapshot,
+      sourceFingerprint: camPoolSourceFingerprint({ ...snapshot, propertyId: poolPropertyId }),
+    });
+    return { id: input.poolId };
   });
 }
 
@@ -1529,6 +1565,22 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
       budgetAllocations.push(forceResidual ? add(pool.budget_amount, neg(sum(budgetAllocations))) : mulPercent(pool.budget_amount, share));
       actualAllocations.push(forceResidual ? add(actualAmount, neg(sum(actualAllocations))) : mulPercent(actualAmount, share));
     }
+    const finalizeSourceFingerprint = createHash("sha256").update(canonicalJson({
+      kind: "cam_finalize.v1",
+      poolId,
+      propertyId: pool.property_id,
+      periodStartsOn: pool.period_starts_on,
+      periodEndsOn: pool.period_ends_on,
+      locationId: pool.location_id,
+      allocationBasis: pool.allocation_basis,
+      expenseAccountIds: [...pool.expense_account_ids].sort(),
+      budgetAmount: pool.budget_amount,
+      actualAmount,
+      sources: weighted
+        .map((lease) => ({ leaseId: lease.id, days: lease.days, weight: lease.weight.toString(), billed: lease.billed }))
+        .sort((left, right) => left.leaseId.localeCompare(right.leaseId)),
+      shares,
+    })).digest("hex");
     await tx.execute(sql`delete from cam_allocations where org_id=${orgId} and pool_id=${poolId}`);
     for (const [index, lease] of weighted.entries()) {
       const share = shares[index]!;
@@ -1537,6 +1589,12 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
         values(${orgId},${poolId},${lease.id},${share},${budgetAllocation},${actualAllocation},${lease.billed},${add(actualAllocation,neg(lease.billed))},${actorId},${actorId})`);
     }
     await tx.execute(sql`update cam_pools set actual_amount=${actualAmount},status='finalized',finalized_at=now(),finalized_by=${actorId},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${poolId}`);
+    await audit(tx, orgId, "cam_pools", poolId, "finalize", actorId, {
+      locationId: pool.location_id,
+      before: { status: pool.status },
+      after: { status: "finalized", actualAmount, allocationCount: weighted.length, budgetAllocationTotal: sum(budgetAllocations), actualAllocationTotal: sum(actualAllocations) },
+      sourceFingerprint: finalizeSourceFingerprint,
+    });
     return { actualAmount, allocations: weighted.length };
   });
 }
@@ -1566,12 +1624,27 @@ export async function billCamReconciliation(orgId: string, actorId: string, pool
         documentId = generated.invoiceId;
       }
       await db.execute(sql`update cam_allocations set invoice_document_id=${documentId},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${row.id} and invoice_document_id is null`);
+      await audit(db, orgId, "cam_allocations", row.id, "invoice", actorId, {
+        before: { invoiceDocumentId: null },
+        after: { invoiceDocumentId: documentId },
+        billingKey: key,
+      });
       documents.push(documentId);
     });
   }
-  await db.execute(sql`update cam_pools cp set status='invoiced',updated_at=now(),updated_by=${actorId}
-    where cp.org_id=${orgId} and cp.id=${poolId} and cp.status='finalized'
-      and not exists(select 1 from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id and a.reconciliation_amount<>0 and a.invoice_document_id is null)`);
+  await db.transaction(async (tx) => {
+    const stamped = (await tx.execute<{ id: string }>(sql`
+      update cam_pools cp set status='invoiced',updated_at=now(),updated_by=${actorId}
+      where cp.org_id=${orgId} and cp.id=${poolId} and cp.status='finalized'
+        and not exists(select 1 from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id and a.reconciliation_amount<>0 and a.invoice_document_id is null)
+      returning id`));
+    if (!stamped.rows[0]) return;
+    await audit(tx, orgId, "cam_pools", poolId, "invoice", actorId, {
+      before: { status: "finalized" },
+      after: { status: "invoiced" },
+      documents,
+    });
+  });
   return { documents };
 }
 
