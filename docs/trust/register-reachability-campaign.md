@@ -31,6 +31,12 @@ a live gap. Malformed or empty input also fails closed. Failed audits emit
 sources attempted, so campaign automation can consume the result without
 scraping prose.
 
+When multiple worker fixes are coalesced into one integration commit, the
+checked-in snapshot records that reachable integration SHA for each affected
+finding. This keeps attribution aligned with the tree that ships; it is not a
+baseline waiver. Any other unsupported row remains a new drift violation until
+its own closing commit is recorded and reachable.
+
 The permanent shipping checks remain in the canonical suite: credential-fetch
 redirects, explicit-`any`, product neutrality, container security, CI
 integrity, and the conformance corpus. Those checks assert properties of the
