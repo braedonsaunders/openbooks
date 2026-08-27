@@ -6,21 +6,7 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 
 **42 passing · 0 failing · 0 gaps · 0 not run**
 
-Commit `c0d0fae1e7022849c1881528c65bf4ae20f35e95` · 2026-08-27T23:55:42.619Z
-
-### Campaign register evidence (2026-08-27 snapshot)
-
-The remediation register records **487 findings as fixed or resolved**. This is
-an aggregate status count, not fully verified assurance. Once the 18 historical
-`unreachable` closures were reconciled, **238** have a closing commit that is
-an ancestor of integration `main` and are demonstrably reachable. The remaining
-**249** are assertion-only: **10 unresolvable** closing refs and **239 legacy
-unattributed** rows. The 239 rows are pre-0.25.0 findings from before the
-register recorded commit attribution; they are **UNVERIFIED**, are not
-retroactively attributed, and are not waived. The campaign checker remains
-fail-closed and exits non-zero while any unsupported row remains. See the
-[reachability campaign record](register-reachability-campaign.md) for the
-reconciliation evidence and exact checker behavior.
+Commit `a70eef2c9271e223c4fd185338a56eb0916af872` · 2026-08-27T23:57:48.754Z
 
 ## ASC 360
 
