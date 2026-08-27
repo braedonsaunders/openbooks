@@ -23,10 +23,12 @@ import { auditColumns, id, orgRef } from "./helpers";
 export const EMAIL_LOG_STATUSES = ["queued", "sent", "failed", "suppressed", "uncertain"] as const;
 
 /**
- * Who caused a message to be sent. A user actor is written to the canonical
- * created_by audit column; a system actor leaves created_by null and carries
- * its reason in meta.actorReason — identity state is never invented for a
- * non-human sender.
+ * Who caused a message to be sent — and, by the same convention, who changed
+ * material email provider configuration (engine saveOrgEmailConfig): a user
+ * actor is written to the canonical created_by / updated_by / audit_log
+ * actor_id column; a system actor leaves those columns null and carries its
+ * reason in the recorded evidence — identity state is never invented for a
+ * non-human actor.
  */
 export type EmailActor =
   | { readonly kind: "user"; readonly userId: string }
