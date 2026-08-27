@@ -65,7 +65,7 @@ async function loadServer(username: string): Promise<ServerRow | null> {
 async function touch(row: ServerRow) {
   await db.execute(sql`update sftp_servers set last_connected_at = now() where id = ${row.id} and org_id = ${row.orgId}`);
 }
-const asConfig = (row: ServerRow) => ({ id: row.id, username: row.username, backend: row.backend, bucket: row.bucket, rootPrefix: row.root_prefix });
+const asConfig = (row: ServerRow) => ({ id: row.id, orgId: row.orgId, username: row.username, backend: row.backend, bucket: row.bucket, rootPrefix: row.root_prefix });
 
 export const dbResolver: SftpResolver = {
   async password(username, password) {
