@@ -70,7 +70,7 @@ async function seedSalesOrder(
     values (
       ${id}, ${org.orgId}, 'sales_order', ${input.number}, ${org.customerId},
       ${org.subsidiaryId}, ${org.date}, ${input.currency ?? "CAD"},
-      ${input.status ?? "draft"}, ${input.total}, '0', ${input.total},
+      'draft', ${input.total}, '0', ${input.total},
       ${actorId}, ${actorId}
     )
   `);
@@ -86,12 +86,19 @@ async function seedSalesOrder(
       ${input.total}, ${input.total}, '0', ${actorId}, ${actorId}
     )
   `);
-  const updated = (await db.execute<{ updated_at: Date }>(sql`
+  if (input.status && input.status !== "draft") {
+    await db.execute(sql`
+      update documents
+         set status = ${input.status}, updated_at = now(), updated_by = ${actorId}
+       where id = ${id} and org_id = ${org.orgId}
+    `);
+  }
+  const updated = (await db.execute<{ updated_at: Date | string }>(sql`
     select updated_at
       from documents
      where id = ${id} and org_id = ${org.orgId}
   `)).rows[0]!;
-  return { id, updatedAt: updated.updated_at.toISOString() };
+  return { id, updatedAt: new Date(updated.updated_at).toISOString() };
 }
 
 async function seedPostedInvoice(
@@ -109,7 +116,7 @@ async function seedPostedInvoice(
        created_by, updated_by)
     values (
       ${id}, ${org.orgId}, 'customer_invoice', ${number}, ${org.customerId},
-      ${org.subsidiaryId}, ${org.date}, ${currency}, 'approved', ${amount},
+      ${org.subsidiaryId}, ${org.date}, ${currency}, 'draft', ${amount},
       '0', ${amount}, ${actorId}, ${actorId}
     )
   `);
@@ -121,6 +128,11 @@ async function seedPostedInvoice(
       ${org.orgId}, ${id}, 1, ${org.accounts.revenue}, '1', ${amount},
       ${amount}, ${amount}, '0', ${actorId}, ${actorId}
     )
+  `);
+  await db.execute(sql`
+    update documents
+       set status = 'approved', updated_at = now(), updated_by = ${actorId}
+     where id = ${id} and org_id = ${org.orgId}
   `);
   await postDocument(id, {
     control: {
@@ -145,6 +157,37 @@ async function expectIssueError(
   });
   return captured!;
 }
+
+test(
+  "sales-order revision fence rejects malformed tokens as a domain error",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Malformed revision issuer", "malformed_revision_issuer");
+      const order = await seedSalesOrder(org, actorId, {
+        number: "SO-REVISION-MALFORMED-1",
+        total: "10",
+      });
+
+      // The raw SQL timestamp used by issueSalesOrder may be a driver string;
+      // malformed caller input must still fail through the typed stale-revision
+      // error instead of leaking a timestamp method TypeError.
+      await expectIssueError(
+        issueSalesOrder({
+          orgId: org.orgId,
+          salesOrderId: order.id,
+          actorId,
+          expectedUpdatedAt: "not-a-timestamp",
+        }),
+        "SALES_ORDER_STALE_REVISION",
+        409,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test(
   "credit exposure combines issued-order commitments and unpaid invoices at below/at/over boundaries",
