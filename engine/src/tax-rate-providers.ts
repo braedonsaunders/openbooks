@@ -52,6 +52,8 @@ export interface TaxQuoteRequest {
   /** Optional line item code for reduced/zero bands. */
   itemCode?: string | null;
   quotedOn?: string;
+  /** Optional immutable document-line provenance for persisted quotes. */
+  documentLineId?: string | null;
 }
 
 export interface TaxQuoteResult {
@@ -88,8 +90,11 @@ const CONFIG_COLS = sql`
   last_attempt_at as "lastAttemptAt", last_success_at as "lastSuccessAt", last_error as "lastError",
   to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"`;
 
-export async function readTaxRateProviderConfig(orgId: string): Promise<TaxRateProviderConfigRow | null> {
-  const r = (await db.execute<TaxRateProviderConfigRow>(sql`
+export async function readTaxRateProviderConfig(
+  orgId: string,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<TaxRateProviderConfigRow | null> {
+  const r = (await runner.execute<TaxRateProviderConfigRow>(sql`
     select ${CONFIG_COLS} from tax_rate_provider_configs where org_id = ${orgId} limit 1
   `));
   return r.rows[0] ?? null;
@@ -564,20 +569,29 @@ export async function quoteViaCustomHttp(
   req: TaxQuoteRequest,
   config: { url: string; apiKey?: string },
 ): Promise<TaxQuoteResult> {
+  const wireRequest = { ...req };
+  delete wireRequest.documentLineId;
   const res = await taxProviderFetch(config.url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
     },
-    body: JSON.stringify(req),
+    body: JSON.stringify(wireRequest),
   });
   const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) throw new TaxRateProviderError(`custom tax hook ${res.status}`);
-  const taxAmount = fromUnits(toUnits(String(raw.taxAmount ?? "0")));
   const components = (Array.isArray(raw.components) ? raw.components : []) as TaxComponentQuote[];
+  const hasHeadline = raw.taxAmount !== undefined && raw.taxAmount !== null && raw.taxAmount !== "";
+  if (!hasHeadline && components.length === 0) {
+    throw new TaxRateProviderError("custom tax hook response must include taxAmount or components");
+  }
+  const taxAmount = hasHeadline ? fromUnits(toUnits(String(raw.taxAmount))) : sumComponentTax(components);
+  if (components.length > 0 && toUnits(taxAmount) !== toUnits(sumComponentTax(components))) {
+    throw new TaxRateProviderError("custom tax hook taxAmount does not match its components");
+  }
   return {
-    taxAmount: components.length ? sumComponentTax(components) : taxAmount,
+    taxAmount,
     components,
     externalRef: raw.externalRef ? String(raw.externalRef) : null,
     raw,
@@ -593,6 +607,139 @@ async function quoteCustomHttp(row: TaxRateProviderConfigRow, req: TaxQuoteReque
   return quoteViaCustomHttp(req, { url, apiKey: secrets.apiKey || undefined });
 }
 
+/** Resolve the configured provider without mutating provider or quote rows. */
+async function resolveConfiguredTax(
+  _orgId: string,
+  req: TaxQuoteRequest,
+  cfg: TaxRateProviderConfigRow,
+): Promise<TaxQuoteResult> {
+  let result: TaxQuoteResult;
+  if (cfg.provider === "avalara") result = await quoteAvalara(cfg, req);
+  else if (cfg.provider === "taxjar") result = await quoteTaxJar(cfg, req);
+  else if (cfg.provider === "custom_http") result = await quoteCustomHttp(cfg, req);
+  else {
+    // A missing default is NOT zero-rated: quoting would post statutory-looking
+    // evidence at 0%. Only a profile that explicitly declares 0 stays legal.
+    const configured = cfg.settings.defaultRatePercent;
+    if (typeof configured !== "number" && typeof configured !== "string") {
+      throw new TaxRateProviderError(
+        "manual provider requires settings.defaultRatePercent; refusing to quote at an implied 0%",
+      );
+    }
+    result = quoteFromRate(req.taxableAmount, configured, req.shipTo.region ?? req.shipTo.country ?? "LOCAL");
+  }
+  validateTaxQuoteResult(result, cfg.provider);
+  return result;
+}
+
+function validateTaxQuoteResult(result: TaxQuoteResult, expectedProvider: TaxRateProviderKey): void {
+  if (result.provider !== expectedProvider || !Array.isArray(result.components)) {
+    throw new TaxRateProviderError("provider returned an ambiguous tax quote");
+  }
+  try {
+    toUnits(result.taxAmount);
+    for (const component of result.components) {
+      if (!component || typeof component.jurisdiction !== "string" || component.jurisdiction.trim() === "") {
+        throw new Error("component jurisdiction is missing");
+      }
+      if (toUnits(component.ratePercent) < 0n) throw new Error("component rate cannot be negative");
+      toUnits(component.taxAmount);
+    }
+  } catch (error) {
+    throw new TaxRateProviderError(
+      `provider returned an invalid tax quote: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export interface PersistedTaxQuote {
+  id: string;
+  providerConfigId: string;
+  provider: TaxRateProviderKey;
+  quotedOn: string;
+  currency: string | null;
+  shipFrom: Address;
+  shipTo: Address;
+  taxableAmount: string;
+  taxAmount: string;
+  components: TaxComponentQuote[];
+  externalRef: string | null;
+  raw: Record<string, unknown> | null;
+}
+
+/** Read immutable provider evidence linked to a document line for retry/replay. */
+export async function readTaxQuoteForDocumentLine(
+  orgId: string,
+  documentLineId: string,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<PersistedTaxQuote | null> {
+  const result = await runner.execute<{
+    id: string;
+    provider_config_id: string;
+    provider: TaxRateProviderKey;
+    quoted_on: string;
+    currency: string | null;
+    ship_from: Address;
+    ship_to: Address;
+    taxable_amount: string;
+    tax_amount: string;
+    components: TaxComponentQuote[];
+    external_ref: string | null;
+    raw_payload: Record<string, unknown> | null;
+  }>(sql`
+    select id, provider_config_id, provider, quoted_on::text, currency,
+           ship_from, ship_to, taxable_amount::text, tax_amount::text,
+           components, external_ref, raw_payload
+      from tax_rate_quotes
+     where org_id = ${orgId} and document_line_id = ${documentLineId}
+     order by created_at desc, id desc
+     limit 1
+  `);
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    providerConfigId: row.provider_config_id,
+    provider: row.provider,
+    quotedOn: row.quoted_on,
+    currency: row.currency,
+    shipFrom: row.ship_from,
+    shipTo: row.ship_to,
+    taxableAmount: String(row.taxable_amount),
+    taxAmount: String(row.tax_amount),
+    components: row.components,
+    externalRef: row.external_ref,
+    raw: row.raw_payload,
+  };
+}
+
+/** Persist one provider result as immutable line-linked evidence. */
+export async function persistTaxQuote(
+  orgId: string,
+  providerConfigId: string,
+  req: TaxQuoteRequest,
+  result: TaxQuoteResult,
+  actorId: string | null,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<string> {
+  const quotedOn = req.quotedOn ?? await businessToday(orgId);
+  const inserted = await runner.execute<{ id: string }>(sql`
+    insert into tax_rate_quotes
+      (org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,
+       taxable_amount, tax_amount, components, external_ref, raw_payload, document_line_id,
+       created_by, updated_by)
+    values (${orgId}, ${providerConfigId}, ${result.provider}, ${quotedOn}, ${req.currency ?? null},
+            ${JSON.stringify(req.shipFrom)}::jsonb, ${JSON.stringify(req.shipTo)}::jsonb,
+            ${req.taxableAmount}, ${result.taxAmount}, ${JSON.stringify(result.components)}::jsonb,
+            ${result.externalRef}, ${result.raw ? JSON.stringify(result.raw) : null}::jsonb,
+            ${req.documentLineId ?? null}, ${actorId}, ${actorId})
+    returning id
+  `);
+  const id = inserted.rows[0]?.id;
+  if (!id) throw new TaxRateProviderError("provider tax evidence insert returned no id");
+  return id;
+}
+
 /**
  * Resolve a tax quote for the org's configured provider. Manual provider uses
  * settings.defaultRatePercent or a matching tax_code headline rate.
@@ -601,51 +748,42 @@ export async function quoteExternalTax(
   orgId: string,
   req: TaxQuoteRequest,
   actorId: string | null = null,
+  options: {
+    /** Existing transaction, so quote/config evidence commits atomically with the document. */
+    runner?: Pick<typeof db, "execute">;
+    /** Resolve and validate the provider without writing quote/config evidence. */
+    persist?: boolean;
+    /** Provider row selected by the caller; avoids a config-change race between planning and quoting. */
+    config?: TaxRateProviderConfigRow;
+  } = {},
 ): Promise<TaxQuoteResult & { quoteId: string | null }> {
-  const cfg = await readTaxRateProviderConfig(orgId);
+  const runner = options.runner ?? db;
+  const cfg = options.config ?? await readTaxRateProviderConfig(orgId, runner);
   if (!cfg || !cfg.isEnabled) {
     throw new TaxRateProviderError("no enabled tax rate provider");
   }
-  await db.execute(sql`
+  const persist = options.persist ?? true;
+  if (!persist) {
+    return {
+      ...(await resolveConfiguredTax(orgId, req, cfg)),
+      quoteId: null,
+    };
+  }
+  await runner.execute(sql`
     update tax_rate_provider_configs set last_attempt_at = now(), last_error = null where id = ${cfg.id} and org_id = ${orgId}
   `);
   try {
-    let result: TaxQuoteResult;
-    if (cfg.provider === "avalara") result = await quoteAvalara(cfg, req);
-    else if (cfg.provider === "taxjar") result = await quoteTaxJar(cfg, req);
-    else if (cfg.provider === "custom_http") result = await quoteCustomHttp(cfg, req);
-    else {
-      // A missing default is NOT zero-rated: quoting would post statutory-looking
-      // evidence at 0%. Only a profile that explicitly declares 0 stays legal.
-      const configured = cfg.settings.defaultRatePercent;
-      if (typeof configured !== "number" && typeof configured !== "string") {
-        throw new TaxRateProviderError(
-          "manual provider requires settings.defaultRatePercent; refusing to quote at an implied 0%",
-        );
-      }
-      result = quoteFromRate(req.taxableAmount, configured, req.shipTo.region ?? req.shipTo.country ?? "LOCAL");
-    }
+    const result = await resolveConfiguredTax(orgId, req, cfg);
 
-    const quotedOn = req.quotedOn ?? await businessToday(orgId);
-    const inserted = (await db.execute<{ id: string }>(sql`
-      insert into tax_rate_quotes
-        (org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,
-         taxable_amount, tax_amount, components, external_ref, raw_payload, created_by, updated_by)
-      values (${orgId}, ${cfg.id}, ${result.provider}, ${quotedOn}, ${req.currency ?? null},
-              ${JSON.stringify(req.shipFrom)}::jsonb, ${JSON.stringify(req.shipTo)}::jsonb,
-              ${req.taxableAmount}, ${result.taxAmount}, ${JSON.stringify(result.components)}::jsonb,
-              ${result.externalRef}, ${result.raw ? JSON.stringify(result.raw) : null}::jsonb,
-              ${actorId}, ${actorId})
-      returning id
-    `));
+    const quoteId = await persistTaxQuote(orgId, cfg.id, req, result, actorId, runner);
 
-    await db.execute(sql`
+    await runner.execute(sql`
       update tax_rate_provider_configs set last_success_at = now(), last_error = null where id = ${cfg.id} and org_id = ${orgId}
     `);
-    return { ...result, quoteId: inserted.rows[0]?.id ?? null };
+    return { ...result, quoteId };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    await db.execute(sql`
+    await runner.execute(sql`
       update tax_rate_provider_configs set last_error = ${message} where id = ${cfg.id} and org_id = ${orgId}
     `);
     throw e;
