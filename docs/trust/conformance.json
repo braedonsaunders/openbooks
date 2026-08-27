@@ -1,8 +1,8 @@
 {
-  "at": "2026-08-26T20:17:35.392Z",
-  "gitSha": "3f430129f34da60a7fae6b421bd3684fdf18ac7d",
+  "at": "2026-08-26T19:53:21.160Z",
+  "gitSha": "f721d5c73a007eb5d73f03fde0512bac3122afcc",
   "totals": {
-    "pass": 42,
+    "pass": 40,
     "fail": 0,
     "gap": 0,
     "skipped": 0
@@ -40,7 +40,7 @@
         "Standalone selling prices 50.00, 25.00 and 75.00 (total 150.00).",
         "Proportions are 1/3, 1/6 and 1/2 of the transaction price."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "rev-allocate-no-lost-cent",
@@ -173,7 +173,7 @@
         "The item carries a straight-line twelve-period recognition rule.",
         "Recognition is run as at 2026-07-31, the end of the first service month."
       ],
-      "ms": 186
+      "ms": 175
     },
     {
       "id": "rev-recognition-is-idempotent",
@@ -197,7 +197,7 @@
         "A twelve-month service obligation of 1,200.00 invoiced on 2026-07-15.",
         "Recognition is run for 2026-07-31, then run again for the same date."
       ],
-      "ms": 132
+      "ms": 137
     },
     {
       "id": "rev-obligation-created-per-line",
@@ -227,7 +227,7 @@
       "facts": [
         "One invoice with a single distinct twelve-month service promise."
       ],
-      "ms": 61
+      "ms": 84
     },
     {
       "id": "rev-variable-consideration-constraint",
@@ -266,7 +266,7 @@
         "Management concludes only 12,000.00 of the bonus meets the constraint.",
         "The transaction price is therefore 112,000.00, with 8,000.00 constrained out until the uncertainty resolves."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "rev-significant-financing-component",
@@ -338,7 +338,7 @@
         "The incremental borrowing rate is 5%.",
         "The present value of the payments is 86,589.5334."
       ],
-      "ms": 20
+      "ms": 19
     },
     {
       "id": "lease-finance-interest-and-amortization",
@@ -535,7 +535,7 @@
         "The spot rate on 2026-07-15 is 1.3500 CAD per USD.",
         "The translated amount is CAD 1,350.00."
       ],
-      "ms": 45
+      "ms": 43
     },
     {
       "id": "fx-monetary-item-retranslated-at-closing-rate",
@@ -607,7 +607,7 @@
         "The closing rate on 2026-07-31 is 1.4000.",
         "Both the USD cash (a default monetary item) and the USD loan restate by CAD 500.00 in opposite directions; the exchange loss on the loan offsets the gain on the cash."
       ],
-      "ms": 51
+      "ms": 52
     },
     {
       "id": "fx-retranslation-arithmetic",
@@ -665,59 +665,6 @@
       "ms": 0
     },
     {
-      "id": "fx-inverse-rate-multiline-balance",
-      "title": "A multi-line invoice translates balanced through a ten-decimal inverse rate",
-      "standards": [
-        "IAS 21"
-      ],
-      "citations": [
-        {
-          "standard": "IAS 21",
-          "reference": "IAS 21.21",
-          "kind": "requirement",
-          "requirement": "A foreign currency transaction is recorded on initial recognition by applying the spot exchange rate at the date of the transaction to the foreign currency amount."
-        }
-      ],
-      "support": "supported",
-      "tier": "ledger",
-      "status": "pass",
-      "assertion": "A multi-line sale invoiced in USD at the ten-decimal inverse of a stored CAD→USD pair — 1.4285714286, exactly the figure posting derives itself as (1 / 0.7)::numeric(19,10) when the exchange table holds only one direction — lands in CAD with every line translated independently and the entry balancing to exactly zero; per-line rounding never leaks a residual into any account, least of all a control account.",
-      "facts": [
-        "The reporting currency is CAD; the FX registry stores the pair only one way, CAD→USD 0.7000 on 2026-07-22.",
-        "The invoice carries the inverse spot figure 1.4285714286 (numeric(19,10), what (1/0.7) truncates to) as its transaction rate — no tidy two-decimal approximation that would make rounding impossible.",
-        "Two revenue lines of USD 1,234.56 and USD 765.44 (total USD 2,000.00) plus the receivable leg make THREE legs, so per-line half-up rounding can no longer cancel by sign symmetry.",
-        "Translations round independently: revenue 1,763.6571 and 1,093.4857 against a receivable of 2,857.1429 — the individual roundings miss zero by one ledger unit.",
-        "That rounding residual is absorbed within the same entry, leaving AR at CAD 2,857.1429 against revenue at CAD −2,857.1429, and every journal line stamped with the ten-decimal rate actually applied."
-      ],
-      "ms": 44
-    },
-    {
-      "id": "fx-inverse-rate-statutory-tax-exact",
-      "title": "Output tax on a foreign-currency invoice equals the translated statutory amount exactly",
-      "standards": [
-        "IAS 21"
-      ],
-      "citations": [
-        {
-          "standard": "IAS 21",
-          "reference": "IAS 21.21",
-          "kind": "requirement",
-          "requirement": "A foreign currency transaction is recorded on initial recognition by applying the spot exchange rate at the date of the transaction to the foreign currency amount."
-        }
-      ],
-      "support": "supported",
-      "tier": "ledger",
-      "status": "pass",
-      "assertion": "On a taxed, multi-line USD invoice translated through a ten-decimal inverse rate, the tax control line carries exactly tax-total × spot rate — no translation residual is parked on a statutory return line where it would flow straight into a filed figure.",
-      "facts": [
-        "The reporting currency is CAD; CAD→USD 0.7000 is the stored direction, and the invoice posts at its ten-decimal inverse 1.4285714286.",
-        "Revenue lines of USD 700.00 and USD 350.00 carry statutory output tax at 5%: USD 35.00 and USD 17.50 (tax total USD 52.50).",
-        "Every element translates to an exact four-decimal CAD figure: revenue 1,000.0000 and 500.0000, tax 75.0000 total, receivable 1,575.0000.",
-        "Tax payable therefore shows exactly CAD 75.0000 — the translated statutory charge — proving translation residuals cannot land on a tax control line when the transaction amounts themselves reconcile."
-      ],
-      "ms": 49
-    },
-    {
       "id": "inv-fifo-cost-formula",
       "title": "First-in, first-out assigns the earliest costs to the earliest sales",
       "standards": [
@@ -755,7 +702,7 @@
         "Under FIFO the sale consumes 100 units at 2.00 and 50 units at 3.00, so cost of sales is 350.00.",
         "Fifty units remain, all from the second purchase, carried at 150.00."
       ],
-      "ms": 195
+      "ms": 189
     },
     {
       "id": "inv-weighted-average-cost-formula",
@@ -788,7 +735,7 @@
         "Sale: 150 units at 10.00 each, so cost of sales is 150 at 2.50 = 375.00.",
         "Fifty units remain at 2.50, carried at 125.00."
       ],
-      "ms": 177
+      "ms": 182
     },
     {
       "id": "inv-cost-expensed-against-revenue",
@@ -819,7 +766,7 @@
         "100 units purchased at 2.00 (200.00), then 40 units sold at 9.00 (360.00).",
         "Cost of sales is 40 at 2.00 = 80.00, recognised with the sale."
       ],
-      "ms": 122
+      "ms": 116
     },
     {
       "id": "inv-purchase-does-not-touch-profit",
@@ -842,7 +789,7 @@
       "facts": [
         "A vendor bill for 250 units at 4.00 each (1,000.00)."
       ],
-      "ms": 61
+      "ms": 64
     },
     {
       "id": "inv-lower-of-cost-and-nrv",
@@ -880,7 +827,7 @@
         "Net realisable value falls to 2.00 per unit, or 200.00 in total.",
         "A write-down of 100.00 is recognised as an expense; 100 units remain on hand at a carrying amount of 200.00."
       ],
-      "ms": 69
+      "ms": 75
     },
     {
       "id": "inv-writedown-reversal-policy-divergence",
@@ -913,7 +860,7 @@
         "Under IFRS the carrying amount returns to 280.00, reversing 80.00 of the write-down.",
         "Under US GAAP the reversal is refused and the carrying amount stays at 200.00."
       ],
-      "ms": 91
+      "ms": 89
     },
     {
       "id": "ppe-impairment-to-fair-value",
@@ -1126,7 +1073,7 @@
         "The deferred tax liability of 200,000 at 25% is 50,000.00, all of it arising this year.",
         "Total tax expense is 262,500.00 — the timing difference shifts tax between current and deferred without changing the total."
       ],
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "tax-deferred-measured-at-enacted-rate",
