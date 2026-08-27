@@ -573,15 +573,18 @@ async function applyRowLevelSecurity(): Promise<void> {
   );
 }
 
-async function ensureRuntimeDatabaseRole(
+// Create the runtime database role (and reassert its safe posture) if it does
+// not yet exist. This must run BEFORE migrations are applied: forward
+// migrations may reference the runtime role directly (e.g. an RLS policy
+// targeted `TO <runtime role>`), and PostgreSQL requires the role to exist at
+// DDL time. Mirrors the openbooks_read pre-creation below migrate because
+// migrations also grant privileges to those roles. Idempotent — safe to call
+// again after migrate to grant access to newly created relations.
+async function ensureRuntimeRoleExists(
   config: RuntimeDatabaseConfig,
 ): Promise<void> {
   const role = await quoted(config.roleName, "identifier");
   const password = await quoted(config.password, "literal");
-  const databaseResult = await pool.query<{ database_name: string }>(
-    "select current_database() as database_name",
-  );
-  const database = await quoted(databaseResult.rows[0]!.database_name, "identifier");
   const existing = await pool.query<{ exists: boolean }>(
     "select exists(select 1 from pg_roles where rolname = $1)",
     [config.roleName],
@@ -594,6 +597,17 @@ async function ensureRuntimeDatabaseRole(
   await pool.query(
     `alter role ${role} login inherit nosuperuser nobypassrls nocreatedb nocreaterole noreplication password ${password}`,
   );
+}
+
+async function ensureRuntimeDatabaseRole(
+  config: RuntimeDatabaseConfig,
+): Promise<void> {
+  const role = await quoted(config.roleName, "identifier");
+  const databaseResult = await pool.query<{ database_name: string }>(
+    "select current_database() as database_name",
+  );
+  const database = await quoted(databaseResult.rows[0]!.database_name, "identifier");
+  await ensureRuntimeRoleExists(config);
   await pool.query(`grant connect, temporary on database ${database} to ${role}`);
   await pool.query(`grant usage on schema public to ${role}`);
   await pool.query(
@@ -964,6 +978,11 @@ async function main(): Promise<void> {
       // must establish the role before applying them. Run the same idempotent
       // routine again afterward to grant access to the newly created tables.
       await ensureReadRole();
+      // Runtime roles the migrations may reference (e.g. RLS policies targeted
+      // `TO openbooks_app`) must also exist before the migration chain runs;
+      // the post-migrate ensureRuntimeDatabaseRole still grants the now-created
+      // relations their privileges.
+      if (runtimeConfig) await ensureRuntimeRoleExists(runtimeConfig);
       await migrate();
       if (runtimeConfig) await ensureRuntimeDatabaseRole(runtimeConfig);
       await ensureReadRole(runtimeConfig?.roleName);
