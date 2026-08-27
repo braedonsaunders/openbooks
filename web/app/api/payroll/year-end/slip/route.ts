@@ -3,12 +3,13 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { yearEndFiling } from '@openbooks/engine/src/payroll-filing-registry.ts'
 import { PayrollPackError } from '@openbooks/engine/src/payroll/packs.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
+import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { pdfResponse, safeName } from '../../../../../lib/export'
 import { payrollSlipFacsimile } from '../../../../../lib/payroll-slip-facsimile'
 import { renderTaxFormFacsimilePdf } from '../../../../../lib/tax-form-facsimile'
 import { orgBranding } from '../../../../../lib/report-pdf'
-import { guardPayrollFilingRowIds } from '../../subsidiary-scope'
+import { guardPayrollFilingData, guardPayrollFilingRowIds } from '../../subsidiary-scope'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -37,6 +38,12 @@ export async function GET(req: Request) {
   if (!row) return NextResponse.json({ error: 'row is required' }, { status: 422 })
   const country = url.searchParams.get('country') ?? ''
   const filingKey = url.searchParams.get('filing') ?? ''
+  const section = (await orgYearEndFilings(gate.user.orgId, year))
+    .find((candidate) => candidate.country === country && candidate.key === filingKey)
+  if (section) {
+    const populationDenied = await guardPayrollFilingData(gate, country, filingKey, section.data)
+    if (populationDenied) return populationDenied
+  }
   const denied = await guardPayrollFilingRowIds(gate, country, filingKey, [row])
   if (denied) return denied
   try {
