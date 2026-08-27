@@ -55,7 +55,7 @@ interface SalesOrderRow extends Record<string, unknown> {
   party_id: string | null;
   currency: string;
   total: string;
-  updated_at: Date;
+  updated_at: Date | string;
 }
 
 interface CustomerRoleRow extends Record<string, unknown> {
@@ -68,9 +68,11 @@ interface CustomerRoleRow extends Record<string, unknown> {
 
 /** Effective permission check for engine-side authority gates: engine/src/actor-permissions.ts. */
 
-function sameRevision(expected: string, actual: Date): boolean {
+/** Raw SQL timestamps may be returned as Date objects or driver strings. */
+function sameRevision(expected: string, actual: Date | string): boolean {
   const expectedTime = new Date(expected).getTime();
-  return !Number.isNaN(expectedTime) && expectedTime === actual.getTime();
+  const actualTime = actual instanceof Date ? actual.getTime() : new Date(actual).getTime();
+  return Number.isFinite(expectedTime) && Number.isFinite(actualTime) && expectedTime === actualTime;
 }
 
 /**
