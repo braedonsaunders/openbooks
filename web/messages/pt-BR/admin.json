@@ -491,7 +491,7 @@
       "owner": "Proprietário",
       "scopes": "Escopos",
       "scopesCount": "{count, plural, one {# permissão} other {# permissões}}",
-      "fullScope": "Escopo total (herda do proprietário)",
+      "fullScope": "Sem escopos explícitos",
       "lastUsed": "Último uso",
       "status": "Status"
     },
@@ -519,9 +519,9 @@
       "createKey": "Criar chave",
       "saveChanges": "Salvar alterações",
       "scopesHeading": "Escopos de permissão",
-      "scopesHint": "Selecione as permissões que esta chave concede. Deixe vazio para herdar o conjunto completo de permissões do proprietário. Uma chave nunca concede mais do que seu proprietário possui.",
-      "fullScope": "Escopo total (herda as permissões do proprietário)",
-      "scopesCount": "{count, plural, one {# permissão selecionada} other {# permissões selecionadas}}"
+      "scopesHint": "Selecione as permissões que esta chave concede — pelo menos uma é obrigatória. Uma chave concede apenas o que está selecionado aqui, nunca o conjunto completo de permissões do proprietário.",
+      "scopesCount": "{count, plural, one {# permissão selecionada} other {# permissões selecionadas}}",
+      "scopesRequired": "Selecione pelo menos um escopo de permissão."
     }
   },
   "settings": {

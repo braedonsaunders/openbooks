@@ -491,7 +491,7 @@
       "owner": "所有者",
       "scopes": "作用域",
       "scopesCount": "{count, plural, one {# 项权限} other {# 项权限}}",
-      "fullScope": "完整作用域（继承所有者）",
+      "fullScope": "无显式作用域",
       "lastUsed": "上次使用",
       "status": "状态"
     },
@@ -519,9 +519,9 @@
       "createKey": "创建密钥",
       "saveChanges": "保存更改",
       "scopesHeading": "权限作用域",
-      "scopesHint": "选择此密钥授予的权限。留空则继承所有者的完整权限集。密钥授予的权限绝不会超过其所有者所拥有的。",
-      "fullScope": "完整作用域（继承所有者权限）",
-      "scopesCount": "{count, plural, one {已选 # 项权限} other {已选 # 项权限}}"
+      "scopesHint": "选择此密钥授予的权限——至少需要选择一项。密钥仅授予此处所选的权限，绝不会继承所有者的完整权限集。",
+      "scopesCount": "{count, plural, one {已选 # 项权限} other {已选 # 项权限}}",
+      "scopesRequired": "请至少选择一个权限作用域。"
     }
   },
   "settings": {

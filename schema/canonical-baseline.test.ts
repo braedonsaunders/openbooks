@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
+import { PERMISSION_CATALOGUE } from "@openbooks/engine/src/permissions.ts";
 
 const baselinePath = "schema/migrations/generated/0001_baseline.sql";
 const baseline = readFileSync(baselinePath, "utf8");
@@ -44,6 +45,8 @@ const schedulerOutboxTerminalAuditMigrationPath =
   "schema/migrations/generated/0026_scheduler_outbox_terminal_audit.sql";
 const sftpUsernameGlobalUniqueMigrationPath =
   "schema/migrations/generated/0029_sftp_username_global_unique.sql";
+const apiKeyExplicitScopesMigrationPath =
+  "schema/migrations/generated/0031_api_key_explicit_scopes.sql";
 const documentNumberSequenceGlobalityMigrationPath =
   "schema/migrations/generated/0032_document_number_sequence_globality.sql";
 const reportingFrameworkPolicyMigrationPath =
@@ -105,6 +108,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0024_tax_rate_effective_range_exclusion.sql",
     "0026_scheduler_outbox_terminal_audit.sql",
     "0029_sftp_username_global_unique.sql",
+    "0031_api_key_explicit_scopes.sql",
     "0032_document_number_sequence_globality.sql",
     "0033_reporting_framework_policy.sql",
     "0034_document_line_immutability.sql",
@@ -1278,4 +1282,41 @@ test("the SFTP login username is globally unique in storage, not by allocation l
     /uniqueIndex\("sftp_servers_username_global"\)\.on\(t\.username\)/,
   );
   assert.doesNotMatch(schemaSource, /index\("sftp_servers_username"\)/);
+});
+
+test("API keys state their scopes explicitly: legacy empty sets freeze to the catalogue snapshot", () => {
+  const migration = readFileSync(apiKeyExplicitScopesMigrationPath, "utf8");
+  const schemaSource = readFileSync("schema/src/api.ts", "utf8");
+
+  // Legacy '[]' rows meant "the owner's whole effective set", so the backfill
+  // targets exactly those rows and stamps the explicit permission catalogue
+  // snapshot — never a sentinel, wildcard, or inherit marker.
+  assert.match(migration, /UPDATE public\.api_keys/);
+  assert.match(migration, /WHERE scopes = '\[\]'::jsonb/);
+  assert.match(migration, /DO \$api_key_explicit_scopes_backfill\$/);
+  assert.doesNotMatch(migration, /'inherit_all'|'full_scope'|'\*'/);
+  const snapshot = JSON.parse(
+    migration.match(/SET scopes = '(\[[\s\S]*?\])'::jsonb/)?.[1] ?? "null",
+  ) as string[];
+  assert.deepEqual(snapshot, [...PERMISSION_CATALOGUE]);
+
+  // Storage owns the invariant for every writer afterwards: the empty shape
+  // is unrepresentable (non-empty JSON array CHECK, validated) and the '[]'
+  // default is gone, so omitting scopes fails at write time.
+  assert.match(migration, /ALTER COLUMN scopes DROP DEFAULT/);
+  assert.match(
+    migration,
+    /ADD CONSTRAINT api_keys_scopes_non_empty\s+CHECK \(jsonb_typeof\(scopes\) = 'array' AND jsonb_array_length\(scopes\) > 0\)\s+NOT VALID/,
+  );
+  assert.match(migration, /VALIDATE CONSTRAINT api_keys_scopes_non_empty/);
+  assert.match(migration, /COMMENT ON CONSTRAINT api_keys_scopes_non_empty ON public\.api_keys IS/);
+  assert.match(migration, /COMMENT ON COLUMN public\.api_keys\.scopes IS/);
+
+  // The drizzle mirror matches the published migration: no '[]' default and
+  // the same non-empty CHECK.
+  assert.doesNotMatch(schemaSource, /scopes:[^\n]*\.default\(\[\]\)/);
+  assert.match(
+    schemaSource,
+    /check\(\s*"api_keys_scopes_non_empty",\s*sql`jsonb_typeof\(\$\{t\.scopes\}\) = 'array' AND jsonb_array_length\(\$\{t\.scopes\}\) > 0`,?\s*\)/,
+  );
 });

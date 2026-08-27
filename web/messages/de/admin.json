@@ -491,7 +491,7 @@
       "owner": "Eigentümer",
       "scopes": "Bereiche",
       "scopesCount": "{count, plural, one {# Berechtigung} other {# Berechtigungen}}",
-      "fullScope": "Voller Bereich (erbt vom Eigentümer)",
+      "fullScope": "Keine expliziten Bereiche",
       "lastUsed": "Zuletzt verwendet",
       "status": "Status"
     },
@@ -519,9 +519,9 @@
       "createKey": "Schlüssel erstellen",
       "saveChanges": "Änderungen speichern",
       "scopesHeading": "Berechtigungsbereiche",
-      "scopesHint": "Wählen Sie die Berechtigungen aus, die dieser Schlüssel gewährt. Leer lassen, um den vollständigen Berechtigungssatz des Eigentümers zu erben. Ein Schlüssel gewährt nie mehr, als sein Eigentümer hat.",
-      "fullScope": "Voller Bereich (erbt Eigentümerberechtigungen)",
-      "scopesCount": "{count, plural, one {# Berechtigung ausgewählt} other {# Berechtigungen ausgewählt}}"
+      "scopesHint": "Wählen Sie die Berechtigungen aus, die dieser Schlüssel gewährt — mindestens eine ist erforderlich. Ein Schlüssel gewährt nur, was hier ausgewählt ist, niemals den vollständigen Berechtigungssatz des Eigentümers.",
+      "scopesCount": "{count, plural, one {# Berechtigung ausgewählt} other {# Berechtigungen ausgewählt}}",
+      "scopesRequired": "Wählen Sie mindestens einen Berechtigungsbereich aus."
     }
   },
   "settings": {
