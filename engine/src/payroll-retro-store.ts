@@ -429,7 +429,7 @@ async function scheduleTaxYear(
       from pay_schedules sch
       left join subsidiaries sub on sub.id = sch.subsidiary_id and sub.org_id = sch.org_id
       left join lateral (
-        select s.country from subsidiaries s
+        select s.id, s.country from subsidiaries s
          where s.org_id = sch.org_id and s.parent_id is null and s.is_active
          order by s.created_at limit 1) root on true
      where sch.org_id = ${orgId} and sch.id = ${payScheduleId}
