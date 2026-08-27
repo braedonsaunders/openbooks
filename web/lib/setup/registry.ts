@@ -1197,9 +1197,9 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     hasActive: false,
     columns: [
       { key: 'documentKind', kind: 'ref', ref: 'number-sequence-kinds' },
-      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'prefix', kind: 'code' },
       { key: 'nextNumber', kind: 'number' },
+      { key: 'allocatedThrough', kind: 'number' },
       { key: 'padding', kind: 'number' },
       { key: 'gapless', kind: 'boolean' },
     ],

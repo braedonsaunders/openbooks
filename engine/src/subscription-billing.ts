@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { db, withBypass, withOrg } from "./db.ts";
+import { allocateDocumentNumber } from "./document-numbering.ts";
 import { addCalendarDays, businessToday } from "./business-date.ts";
 import { now } from "./clock.ts";
 import { loadRequiredControlAccounts } from "./control-accounts.ts";
@@ -181,23 +182,8 @@ export function monthlyRecurringRevenue(
   return mulRatio(perPeriod, 1n, months * count);
 }
 
-async function nextNumber(orgId: string, kind: string, subsidiaryId: string | null, prefix: string): Promise<string> {
-  const configured = subsidiaryId
-    ? ((await db.execute(sql`
-        select 1 from number_sequences where org_id = ${orgId} and document_kind = ${kind}
-          and subsidiary_id = ${subsidiaryId} limit 1`))).rows.length > 0
-    : false;
-  const seqSub = configured ? subsidiaryId : null;
-  const r = (await db.execute<{ prefix: string; next_number: number; padding: number }>(sql`
-    insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
-    values (${orgId}, ${kind}, ${seqSub}, ${prefix})
-    on conflict on constraint sequences_org_kind_sub
-    do update set next_number = number_sequences.next_number + 1
-    where number_sequences.org_id = ${orgId}
-    returning prefix, next_number, padding
-  `));
-  const s = r.rows[0]!;
-  return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
+async function nextNumber(orgId: string, kind: string, prefix: string): Promise<string> {
+  return allocateDocumentNumber(db, orgId, kind, prefix);
 }
 
 /**
@@ -394,7 +380,7 @@ export async function createSubscriptionInvoice(
   const total = add(netAmount, taxTotal);
 
   const kind = spec.documentKind ?? "customer_invoice";
-  const documentNumber = await nextNumber(spec.orgId, kind, spec.subsidiaryId, kind === "customer_credit" ? "CM-" : "INV-");
+  const documentNumber = await nextNumber(spec.orgId, kind, kind === "customer_credit" ? "CM-" : "INV-");
   const created = (await db.execute<{ id: string }>(sql`
     insert into documents (org_id, kind, document_number, party_id, document_date, due_date, currency, status,
                            subsidiary_id, location_id, memo, subtotal, tax_total, total, custom, created_by)

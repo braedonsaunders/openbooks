@@ -44,6 +44,8 @@ const schedulerOutboxTerminalAuditMigrationPath =
   "schema/migrations/generated/0026_scheduler_outbox_terminal_audit.sql";
 const sftpUsernameGlobalUniqueMigrationPath =
   "schema/migrations/generated/0029_sftp_username_global_unique.sql";
+const documentNumberSequenceGlobalityMigrationPath =
+  "schema/migrations/generated/0032_document_number_sequence_globality.sql";
 const accountPostingClassificationSerializationMigrationPath =
   "schema/migrations/generated/0046_account_posting_classification_serialization.sql";
 const subscriptionConfigurationInvariantsMigrationPath =
@@ -98,6 +100,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0024_tax_rate_effective_range_exclusion.sql",
     "0026_scheduler_outbox_terminal_audit.sql",
     "0029_sftp_username_global_unique.sql",
+    "0032_document_number_sequence_globality.sql",
     "0035_terminal_failure_surfacing.sql",
     "0036_bank_statement_source_idempotency.sql",
     "0038_ledger_tenant_coherent_foreign_keys.sql",
@@ -134,6 +137,62 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
   assert.match(baseline, /CREATE FUNCTION public\.je_check_posted_balance/);
   assert.match(baseline, /CREATE POLICY org_isolation/);
   assert.match(baseline, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+});
+
+test("document numbering allocates from one org-wide sequence with monotonic safety", () => {
+  const migration = readFileSync(documentNumberSequenceGlobalityMigrationPath, "utf8");
+
+  // Document numbers are org-wide identities (documents UNIQUE org/kind/number
+  // has no subsidiary column), so storage must force exactly ONE sequence row
+  // per (organization, kind): the old per-subsidiary unique constraint is
+  // replaced and per-subsidiary rows are refused outright.
+  assert.match(
+    migration,
+    /ADD CONSTRAINT sequences_org_kind_sub UNIQUE \(org_id, document_kind\)/,
+  );
+  assert.match(
+    migration,
+    /ADD CONSTRAINT number_sequences_org_wide_sequence CHECK \(subsidiary_id IS NULL\)/,
+  );
+  assert.match(
+    migration,
+    /ADD CONSTRAINT number_sequences_next_number_positive CHECK \(next_number >= 1\)/,
+  );
+
+  // Monotonic safety: every issued counter value raises the watermark, and a
+  // used sequence can neither decrease into an occupied output range nor
+  // change the output format it already issued.
+  const watermark = migration.match(
+    /CREATE OR REPLACE FUNCTION public\.number_sequences_allocation_watermark\(\) RETURNS trigger[\s\S]*?^\$\$;/m,
+  )?.[0];
+  assert.ok(watermark, "0032 must install the allocation watermark");
+  assert.match(watermark, /GREATEST\(NEW\.allocated_through, NEW\.next_number\)/);
+  const guard = migration.match(
+    /CREATE OR REPLACE FUNCTION public\.number_sequences_monotonic_guard\(\) RETURNS trigger[\s\S]*?^\$\$;/m,
+  )?.[0];
+  assert.ok(guard, "0032 must install the monotonic guard");
+  assert.match(guard, /NEW\.next_number < OLD\.allocated_through/);
+  assert.match(guard, /NEW\.prefix IS DISTINCT FROM OLD\.prefix/);
+  assert.match(guard, /NEW\.padding IS DISTINCT FROM OLD\.padding/);
+  assert.match(
+    migration,
+    /CREATE TRIGGER number_sequences_monotonic_guard\s+BEFORE UPDATE\s+ON public\.number_sequences/i,
+  );
+
+  // The deterministic legacy repair runs BEFORE enforcement lands, and the
+  // only rows it deletes are per-subsidiary sequence configuration — never
+  // documents or any financial history.
+  const firstRepair = migration.search(/CREATE OR REPLACE FUNCTION public\.openbooks_repair_document_sequences/);
+  const firstEnforcement = migration.search(
+    /ADD CONSTRAINT sequences_org_kind_sub UNIQUE/,
+  );
+  assert.ok(firstRepair >= 0 && firstEnforcement > firstRepair, "repair must precede enforcement");
+  const updateTargets = [...migration.matchAll(/^\s*(?:UPDATE|DELETE FROM)\s+(?:ONLY\s+)?(?:public\.)?([a-z_]+)/gm)].map(
+    (m) => m[1],
+  );
+  assert.notEqual(updateTargets.length, 0);
+  assert.deepEqual(updateTargets.filter((target) => target !== "number_sequences"), []);
+  assert.match(migration, /DELETE FROM public\.number_sequences WHERE subsidiary_id IS NOT NULL/);
 });
 
 test("CAM pools cannot bill one GL expense twice through shared sources", () => {

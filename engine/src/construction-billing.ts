@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { db, type SqlExecutor } from "./db.ts";
+import { allocateDocumentNumber } from "./document-numbering.ts";
 import { add, cmp, formatMoney, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
 
 /**
@@ -229,29 +230,8 @@ export function computeApplication(lines: AppLineInput[]): ComputedApplication {
   };
 }
 
-async function nextNumber(
-  tx: SqlExecutor,
-  orgId: string,
-  kind: string,
-  subsidiaryId: string | null,
-  prefix: string,
-): Promise<string> {
-  const configured = subsidiaryId
-    ? ((await tx.execute(sql`
-        select 1 from number_sequences where org_id = ${orgId} and document_kind = ${kind}
-          and subsidiary_id = ${subsidiaryId} limit 1`))).rows.length > 0
-    : false;
-  const seqSub = configured ? subsidiaryId : null;
-  const r = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
-    insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
-    values (${orgId}, ${kind}, ${seqSub}, ${prefix})
-    on conflict on constraint sequences_org_kind_sub
-    do update set next_number = number_sequences.next_number + 1
-    where number_sequences.org_id = ${orgId}
-    returning prefix, next_number, padding
-  `));
-  const s = r.rows[0]!;
-  return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
+async function nextNumber(tx: SqlExecutor, orgId: string, kind: string, prefix: string): Promise<string> {
+  return allocateDocumentNumber(tx, orgId, kind, prefix);
 }
 
 async function retainageReceivableAccount(tx: SqlExecutor, orgId: string): Promise<string | null> {
@@ -559,7 +539,7 @@ export async function generatePayApplicationInvoice(
       );
     }
 
-    const documentNumber = await nextNumber(tx, orgId, "customer_invoice", project.subsidiary_id ?? null, "INV-");
+    const documentNumber = await nextNumber(tx, orgId, "customer_invoice", "INV-");
     const invoice = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
                              project_id, subsidiary_id, memo, subtotal, tax_total, total, created_by)
@@ -680,7 +660,7 @@ export async function releaseRetainage(
     const available = add(String(balance.rows[0]?.held ?? "0"), neg(String(balance.rows[0]?.reserved ?? "0")));
     if (cmp(exactAmount, available) > 0) throw new ConstructionBillingError("Release amount exceeds available retained funds");
 
-    const documentNumber = await nextNumber(tx, orgId, "customer_invoice", project.subsidiary_id ?? null, "INV-");
+    const documentNumber = await nextNumber(tx, orgId, "customer_invoice", "INV-");
     const invoice = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
                              project_id, subsidiary_id, memo, subtotal, tax_total, total, created_by)
