@@ -157,6 +157,24 @@ export function guardSubsidiaryScope(
 }
 
 /**
+ * Gate an org-wide payroll configuration surface through the org's root
+ * subsidiary. Payroll settings and statutory-rate configuration have no row
+ * subsidiary of their own, but their effects are rooted at the legal entity
+ * represented by the org root. Restricted callers may use those surfaces only
+ * when the root is inside their allowed set; an unresolved root fails closed.
+ */
+export async function guardRootSubsidiaryScope(authz: Authz): Promise<NextResponse | null> {
+  if (authz.allowedSubsidiaryIds === null) return null;
+  const root = (await db.execute<{ id: string }>(sql`
+    select id
+      from subsidiaries
+     where org_id = ${authz.user.orgId} and parent_id is null and is_active
+     order by created_at
+     limit 1`)).rows[0]?.id ?? null;
+  return guardSubsidiaryScope(authz, root);
+}
+
+/**
  * Write-body counterpart: true when EVERY explicitly requested subsidiary id
  * is inside the caller's scope. Undefined/null entries mean "leave as-is /
  * resolve at posting" and are checked by the caller's record-level gate, not
