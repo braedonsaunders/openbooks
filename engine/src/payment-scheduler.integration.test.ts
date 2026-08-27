@@ -69,7 +69,7 @@ async function seedScheduleFixture(
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-      values (${billId}, ${org.orgId}, 'vendor_bill', 'approved', ${`BILL-SCHED-${billId.slice(0, 8)}`},
+      values (${billId}, ${org.orgId}, 'vendor_bill', 'draft', ${`BILL-SCHED-${billId.slice(0, 8)}`},
               ${org.subsidiaryId}, ${org.vendorId}, ${org.date}, 'CAD', '1',
               '125', '0', '125', ${operatorId})`);
     await db.execute(sql`
@@ -78,6 +78,11 @@ async function seedScheduleFixture(
          amount, tax_amount)
       values (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', '125',
               '125', '0')`);
+    // Source lines must be authored while their parent document is draft;
+    // approve only after the complete fixture is present.
+    await db.execute(sql`
+      update documents set status = 'approved'
+       where id = ${billId} and org_id = ${org.orgId}`);
     await postDocument(billId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });

@@ -63,6 +63,38 @@ async function seedRevRecInvoice(
   return { documentId, lineId };
 }
 
+/**
+ * Recognition fixtures span the twelve months beginning in the scratch org's
+ * July 2026 open period. Keep those additional periods local to this suite so
+ * the general scratch fixture can remain intentionally minimal.
+ */
+async function ensureRecognitionPeriods(orgId: string): Promise<void> {
+  const calendar = await db.execute<{ id: string }>(sql`
+    select id from fiscal_calendars
+     where org_id = ${orgId} and is_default = true
+     limit 1`);
+  const calendarId = calendar.rows[0]?.id;
+  assert.ok(calendarId, "scratch org has a default fiscal calendar");
+
+  for (let offset = 1; offset < 12; offset += 1) {
+    const month = 6 + offset;
+    const year = 2026 + Math.floor(month / 12);
+    const monthNumber = (month % 12) + 1;
+    const start = `${year}-${String(monthNumber).padStart(2, "0")}-01`;
+    const endDate = new Date(Date.UTC(year, monthNumber, 0));
+    const end = `${year}-${String(monthNumber).padStart(2, "0")}-${String(endDate.getUTCDate()).padStart(2, "0")}`;
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
+         is_adjustment, fiscal_calendar_id)
+      select ${randomUUID()}, ${orgId}, ${year}, ${monthNumber}, ${start.slice(0, 7)},
+             ${start}, ${end}, false, ${calendarId}
+       where not exists (
+         select 1 from accounting_periods
+          where org_id = ${orgId} and starts_on = ${start})`);
+  }
+}
+
 interface ScheduleStateRow {
   [key: string]: unknown;
   book_code: string;
@@ -144,6 +176,7 @@ test("concurrent invoice obligation creation converges on one contract and one o
   const documentId = randomUUID();
   const lineId = randomUUID();
   try {
+    await ensureRecognitionPeriods(org.orgId);
     await db.execute(sql`
       insert into documents
         (id, org_id, kind, document_number, party_id, subsidiary_id,
@@ -194,13 +227,14 @@ test("concurrent invoice obligation creation converges on one contract and one o
 test("replay after a crash between obligation commit and schedule build converges to one complete plan per book", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
+    await ensureRecognitionPeriods(org.orgId);
     const { documentId } = await seedRevRecInvoice(org);
     assert.equal((await createObligationsFromInvoice(documentId, org.orgId, null)).created, 1);
     const baseline = await scheduleState(org.orgId);
     const glBooks = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from accounting_books
        where org_id = ${org.orgId} and is_active and posts_gl`);
-    assert.equal(baseline.length, 1);
+    assert.equal(baseline.length, 12, "one twelve-month plan for the primary book");
     assert.equal(glBooks.rows[0]!.n, 1);
 
     // Crash aftermath: the obligations committed, the schedule writes did not.
@@ -240,6 +274,7 @@ test("replay after a crash between obligation commit and schedule build converge
 test("replay repairs the failed book of a multi-book build and preserves posted history without duplicate lines", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
+    await ensureRecognitionPeriods(org.orgId);
     await db.execute(sql`
       insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
       values (${randomUUID()}, ${org.orgId}, 'SEC', 'Secondary', false, true, true)`);
@@ -247,7 +282,7 @@ test("replay repairs the failed book of a multi-book build and preserves posted 
     const { documentId } = await seedRevRecInvoice(org);
     assert.equal((await createObligationsFromInvoice(documentId, org.orgId, null)).created, 1);
     const baseline = await scheduleState(org.orgId);
-    assert.equal(baseline.length, 2);
+    assert.equal(baseline.length, 24, "one twelve-month plan for each GL book");
 
     // Midway through a multi-book build failure aftermath: only the primary
     // book's plan survived; the secondary never got a schedule.
@@ -267,7 +302,9 @@ test("replay repairs the failed book of a multi-book build and preserves posted 
     const actor = await createScratchUser(org.orgId, "Admin", "admin");
     const run = await runRevenueRecognition(org.orgId, "2026-07-31", actor);
     assert.equal(run.posted, 1);
-    const postedPrimary = (await scheduleState(org.orgId)).find((r) => r.book_code === "PRI");
+    const postedPrimary = (await scheduleState(org.orgId)).find(
+      (r) => r.book_code === "PRI" && r.sequence === 0,
+    );
     assert.ok(postedPrimary?.journal_entry_id);
 
     const replay = await createObligationsFromInvoice(documentId, org.orgId, null);
@@ -276,13 +313,11 @@ test("replay repairs the failed book of a multi-book build and preserves posted 
     const repaired = await scheduleState(org.orgId);
     assert.equal(repaired.length, baseline.length);
     assert.equal(new Set(repaired.map((r) => r.schedule_id)).size, 2);
-    for (const row of repaired) {
-      const original = baseline.find((r) => r.book_code === row.book_code);
-      assert.ok(original, `no baseline counterpart for ${row.book_code}`);
-      assert.equal(row.period_id, original.period_id);
-      assert.equal(row.sequence, original.sequence);
-      assert.equal(row.planned, original.planned);
-    }
+    const planShape = (rows: ScheduleStateRow[]) => rows
+      .map(({ book_code, period_id, planned }) => ({ book_code, period_id, planned }))
+      .sort((a, b) => `${a.book_code}:${a.period_id}`.localeCompare(`${b.book_code}:${b.period_id}`));
+    assert.deepEqual(planShape(repaired), planShape(baseline),
+      "replay preserves every book's period amounts without duplicate lines");
     const priAfter = repaired.find((r) => r.book_code === "PRI");
     const secAfter = repaired.find((r) => r.book_code === "SEC");
     assert.equal(
