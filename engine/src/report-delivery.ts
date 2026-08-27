@@ -312,10 +312,14 @@ export async function markReportDeliverySent(orgId: string, deliveryId: string, 
   `);
 }
 
+// Only a delivery that has not recorded a send may become 'suppressed'; a
+// stale retry/racing callback must not rewrite an already-sent row into a
+// suppression, erasing the evidence that the report email was delivered.
 export async function markReportDeliverySuppressed(orgId: string, deliveryId: string, emailLogId: string, reason: string): Promise<void> {
   await db.execute(sql`
     update report_delivery_outbox set status='suppressed', email_log_id=${emailLogId}, error=${reason.slice(0, 1000)},
            updated_at=now() where id=${deliveryId} and org_id=${orgId}
+             and status = any(array['pending','enqueued','sending','failed'])
   `);
 }
 

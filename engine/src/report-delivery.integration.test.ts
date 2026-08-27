@@ -19,6 +19,7 @@ import {
   markReportDeliveryFailed,
   markReportDeliverySent,
   markReportDeliveryStarted,
+  markReportDeliverySuppressed,
   materializeDueReportRuns,
   MAX_DELIVERY_ATTEMPTS,
   MAX_RUN_ATTEMPTS,
@@ -307,6 +308,67 @@ test("exhausted report runs and deliveries are stamped terminal exactly once", {
     `)).rows[0]!;
     assert.deepEqual(afterRepeat.terminal_failed_at, stamped.terminal_failed_at);
     assert.equal(terminalEvents(repeat.lines).length, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("stale suppression cannot rewrite a sent report delivery; a live suppression still lands", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const definitionId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions
+        (id, org_id, kind, report_type, slug, name, query, created_by, updated_by)
+      values (${definitionId}, ${org.orgId}, 'custom', 'query', 'suppress-guard',
+              'Suppress guard', '{}'::jsonb, null, null)
+    `);
+    const runId = randomUUID();
+    await db.execute(sql`
+      insert into report_runs
+        (id, org_id, schedule_id, definition_id, trigger, status, scheduled_for,
+         recipient_emails, next_attempt_at)
+      values (${runId}, ${org.orgId}, null, ${definitionId}, 'scheduled', 'queued',
+              ${new Date(Date.now() - 60_000)}, '[]'::jsonb, now())
+    `);
+    const log = (await db.execute<{ id: string }>(sql`
+      insert into email_log (org_id, recipients, recipient_primary, subject, status, category_key)
+      values (${org.orgId}, '["audit@example.com"]'::jsonb, 'audit@example.com', 'Suppress guard', 'sent', 'report')
+      returning id
+    `)).rows[0]!.id;
+
+    // An already-sent row carries delivered evidence; a stale retry's
+    // provider-suppress callback must be a no-op against it.
+    const sentDeliveryId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, email_log_id, sent_at, attempt_count, next_attempt_at)
+      values (${sentDeliveryId}, ${org.orgId}, ${runId}, 'audit@example.com', 'sent', ${log}, now(), 1, now())
+    `);
+    await markReportDeliverySuppressed(org.orgId, sentDeliveryId, log, "stale retry suppression");
+    const afterStale = (await db.execute<{ status: string; email_log_id: string; sent_at: Date | null; error: string | null }>(sql`
+      select status, email_log_id, sent_at, error from report_delivery_outbox where id=${sentDeliveryId}
+    `)).rows[0]!;
+    assert.deepEqual(
+      { status: afterStale.status, log: afterStale.email_log_id, sent: afterStale.sent_at !== null, error: afterStale.error },
+      { status: "sent", log, sent: true, error: null },
+    );
+
+    // A not-yet-sent row still takes the suppression (the live callback path).
+    const enqueuedDeliveryId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, attempt_count, next_attempt_at)
+      values (${enqueuedDeliveryId}, ${org.orgId}, ${runId}, 'sandbox@example.com', 'enqueued', 1, now())
+    `);
+    await markReportDeliverySuppressed(org.orgId, enqueuedDeliveryId, log, "sandbox environment — email egress blocked");
+    const afterLive = (await db.execute<{ status: string; email_log_id: string; error: string | null }>(sql`
+      select status, email_log_id, error from report_delivery_outbox where id=${enqueuedDeliveryId}
+    `)).rows[0]!;
+    assert.deepEqual(
+      { status: afterLive.status, log: afterLive.email_log_id, error: afterLive.error },
+      { status: "suppressed", log, error: "sandbox environment — email egress blocked" },
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
