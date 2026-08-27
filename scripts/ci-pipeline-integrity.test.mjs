@@ -463,6 +463,58 @@ test('a live campaign invocation remains strict and emits machine-readable irred
   )
 })
 
+test('the campaign checker audits local main and accepts closingCommit attribution', () => {
+  const env = {
+    ...process.env,
+    OPENBOOKS_REGISTER_JSON: JSON.stringify({
+      findings: [{ id: 'fnd_probe', status: 'fixed', closingCommit: 'aefa541a' }],
+    }),
+  }
+  delete env.OPENBOOKS_REGISTER_DB
+  delete env.OPENBOOKS_REGISTER_THREAD_ID
+  delete env.OPENBOOKS_REGISTER_CHECK_REF
+
+  const output = execFileSync('npm', ['run', 'check:register-reachability', '--silent'], {
+    encoding: 'utf8',
+    env,
+  })
+  assert.match(output, /PASS: 1\/1 register entries verified reachable from main;/)
+  assert.doesNotMatch(output, /origin\/main/)
+})
+
+test('the campaign checker honors an explicit commit ref and rejects a missing override', () => {
+  const baseEnv = {
+    ...process.env,
+    OPENBOOKS_REGISTER_JSON: JSON.stringify({
+      findings: [{ id: 'fnd_probe', status: 'fixed', closingCommit: 'aefa541a' }],
+    }),
+  }
+  delete baseEnv.OPENBOOKS_REGISTER_DB
+  delete baseEnv.OPENBOOKS_REGISTER_THREAD_ID
+
+  const explicit = execFileSync('npm', ['run', 'check:register-reachability', '--silent'], {
+    encoding: 'utf8',
+    env: { ...baseEnv, OPENBOOKS_REGISTER_CHECK_REF: 'aefa541a' },
+  })
+  assert.match(explicit, /PASS: 1\/1 register entries verified reachable from aefa541a;/)
+
+  assert.throws(
+    () =>
+      execFileSync('npm', ['run', 'check:register-reachability', '--silent'], {
+        encoding: 'utf8',
+        env: { ...baseEnv, OPENBOOKS_REGISTER_CHECK_REF: 'missing-register-check-ref' },
+      }),
+    (error) => {
+      assert.equal(error.status, 1)
+      assert.match(
+        String(error.stdout ?? '') + String(error.stderr ?? ''),
+        /FAIL: OPENBOOKS_REGISTER_CHECK_REF=missing-register-check-ref does not resolve to a commit/,
+      )
+      return true
+    },
+  )
+})
+
 test('malformed or empty live campaign input fails closed before any tree check', () => {
   for (const value of ['not-json', JSON.stringify({ findings: [] })]) {
     const env = { ...process.env, OPENBOOKS_REGISTER_JSON: value }

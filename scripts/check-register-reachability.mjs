@@ -37,12 +37,12 @@
  * IRREDUCIBLE_REGISTER_ROWS_JSON record lists every unsupported row and the
  * concrete evidence sources attempted for it.
  *
- * Ref choice: the register's contract is the active integration branch — the
- * ref the orchestrator will push to origin as the goal's final act. In a BB
- * worktree the local `main` ref can intentionally lag that integration tip,
- * so the default is `origin/main`; a complete clone that has no remote-tracking
- * ref falls back to local `main`. Override with OPENBOOKS_REGISTER_REF for
- * ad-hoc probes.
+ * Ref choice: the register's contract is the local integration branch `main` —
+ * the ref the orchestrator will push to origin as the goal's final act. The
+ * remote-tracking `origin/main` may be stale while integration work is in
+ * progress, so it is never selected implicitly. An explicit
+ * OPENBOOKS_REGISTER_CHECK_REF override is resolved as a commit and fails
+ * closed when missing.
  *
  * BASELINE provenance: published 2026-08-27 from the goal register
  * (statuses fixed/resolved) at remediation start, from a complete
@@ -71,8 +71,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-const REQUESTED_REF = process.env.OPENBOOKS_REGISTER_REF || null;
-const CHECK_REF = REQUESTED_REF || "origin/main";
+const REQUESTED_REF = process.env.OPENBOOKS_REGISTER_CHECK_REF || null;
+const CHECK_REF = REQUESTED_REF || "main";
 const BASELINE_DATE = "2026-08-27";
 const LIVE_REGISTER_JSON = process.env.OPENBOOKS_REGISTER_JSON || null;
 const LIVE_REGISTER_DB = process.env.OPENBOOKS_REGISTER_DB || null;
@@ -817,7 +817,13 @@ function parseLiveRegister(value, source) {
 
     const ref = Array.isArray(row)
       ? row[1] ?? null
-      : row?.closingRef ?? row?.closing_ref ?? row?.commitSha ?? row?.commit_sha ?? row?.ref ?? null;
+      : row?.closingCommit ??
+        row?.closingRef ??
+        row?.closing_ref ??
+        row?.commitSha ??
+        row?.commit_sha ??
+        row?.ref ??
+        null;
     if (ref !== null && (typeof ref !== "string" || !/^[0-9a-f]{7,40}$/.test(ref))) {
       throw new Error(`${source} has an invalid closing ref for ${id}`);
     }
@@ -1108,11 +1114,7 @@ function irreducibleRows(result, evidenceById, checkRef) {
 }
 
 function selectCheckRef() {
-  if (REQUESTED_REF) return REQUESTED_REF;
-  // BB worktrees can carry a stale local main while the active integration tip
-  // is the remote-tracking ref. Prefer that tip, but keep complete local clones
-  // without remotes usable.
-  return resolveCommit("origin/main") ? "origin/main" : "main";
+  return CHECK_REF;
 }
 
 function main() {
@@ -1137,6 +1139,13 @@ function main() {
 
   const mainSha = resolveCommit(checkRef);
   if (!mainSha) {
+    if (REQUESTED_REF) {
+      console.error(
+        `FAIL: OPENBOOKS_REGISTER_CHECK_REF=${checkRef} does not resolve to a commit in this repository.`,
+      );
+      process.exitCode = 1;
+      return;
+    }
     if (shallow) {
       console.log(
         `PARTIAL PASS: this shallow checkout has no ${checkRef} ref, so 0/${register.size} register entries ` +
