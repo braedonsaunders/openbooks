@@ -262,11 +262,21 @@ export async function persistLineTaxComponents(
 /**
  * The UI entry point for document numbering — a thin delegate to the ONE
  * canonical allocator (engine/src/document-numbering.ts). `subsidiaryId` is
- * accepted for call-site compatibility and deliberately ignored: document
- * numbers are organization-wide identities, so subsidiary context never picks
- * a sequence — every generator shares the single org-wide counter per kind.
+ * accepted for call-site compatibility. When supplied, its ownership is
+ * checked against the organization before allocation; it never picks a
+ * sequence because document numbers are organization-wide identities — every
+ * generator shares the single org-wide counter per kind.
  */
-export async function nextDocumentNumber(orgId: string, kind: string, prefix: string, _subsidiaryId?: string | null) {
+export async function nextDocumentNumber(orgId: string, kind: string, prefix: string, subsidiaryId?: string | null) {
+  if (subsidiaryId != null) {
+    const subsidiary = await db.execute<{ id: string }>(sql`
+      select id
+        from subsidiaries
+       where id = ${subsidiaryId} and org_id = ${orgId}
+       limit 1
+    `)
+    if (!subsidiary.rows[0]) throw new Error('subsidiary does not belong to organization')
+  }
   return allocateDocumentNumber(db, orgId, kind, prefix)
 }
 
