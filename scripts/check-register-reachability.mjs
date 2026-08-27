@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Register honesty gate: a finding recorded fixed must have its fix in the
- * history main will ship.
+ * Campaign register reachability checker: a finding recorded fixed must have
+ * its fix in the history main will ship.
  *
  * The defect this gate closes: work committed on a worker branch that was
  * never merged is invisible to main while its finding is closed by the
@@ -49,17 +49,22 @@
  * (non-shallow) checkout. Attribution order: a commit named in the closing
  * report, else a hex token in the report that resolves to a commit object,
  * else the newest commit whose subject names the finding id, else no
- * attribution. At baseline 341 of 417 entries could not be verified as
- * shipped from the integration ref — that number is the honest size of the problem,
+ * attribution. Baseline rows are the honest size of the historical problem,
  * printed on every pass rather than amnestied. New findings recorded fixed
  * append to REGISTER with a closing commit; a finding whose fix reaches
  * main has its baseline entry removed in the same change.
  *
- * Live-register probes: set OPENBOOKS_REGISTER_JSON to an exported findings
+ * Campaign probes: set OPENBOOKS_REGISTER_JSON to an exported findings
  * document or OPENBOOKS_REGISTER_DB to the ultragoal SQLite store. The latter
- * reads goal_findings (fixed/resolved rows) and joins the latest integration
- * commit before falling back to the verification note. A live source replaces
- * the snapshot for that run; malformed or empty sources fail closed.
+ * reads fixed/resolved goal_findings for one thread (the explicit
+ * OPENBOOKS_REGISTER_THREAD_ID, or the latest goal when omitted) and joins the
+ * latest integration commit before falling back to the verification note. A
+ * live source replaces the snapshot for that run. Its finding IDs are the one
+ * authoritative cohort: historical baseline metadata is projected onto those
+ * IDs before auditing, so a baseline row from another campaign can never be
+ * reported as a live register violation. Projection does not waive a live
+ * unreachable, unresolvable, or unattributed row; every such row still fails.
+ * Malformed or empty sources fail closed.
  */
 
 import { execFileSync } from "node:child_process";
@@ -873,9 +878,35 @@ function liveRegisterFromDatabase() {
 }
 
 function loadRegister() {
+  if (LIVE_REGISTER_JSON && LIVE_REGISTER_DB) {
+    throw new Error("set only one of OPENBOOKS_REGISTER_JSON or OPENBOOKS_REGISTER_DB for a campaign audit");
+  }
   if (LIVE_REGISTER_JSON) return liveRegisterFromJson();
   if (LIVE_REGISTER_DB) return liveRegisterFromDatabase();
   return REGISTER;
+}
+
+/**
+ * Scope historical metadata to the exact register cohort being audited.
+ *
+ * The checked-in baseline is a campaign snapshot, while live JSON/SQLite
+ * probes can contain a newer or narrower goal register. The loaded register
+ * is authoritative for that run; baseline rows outside its ID set are stale
+ * metadata from another cohort and must not become bogus "no register entry"
+ * violations. Rows in the cohort remain strict: auditRegister still treats
+ * known gaps as failures and emits them in IRREDUCIBLE_REGISTER_ROWS_JSON.
+ */
+export function scopeBaselineToRegister(register, baseline = BASELINE) {
+  const cohort = new Set(register.keys());
+  return new Map([...baseline].filter(([id]) => cohort.has(id)));
+}
+
+function loadCampaign() {
+  const register = loadRegister();
+  return {
+    register,
+    baseline: scopeBaselineToRegister(register),
+  };
 }
 
 /**
@@ -1085,14 +1116,15 @@ function selectCheckRef() {
 }
 
 function main() {
-  let register;
+  let campaign;
   try {
-    register = loadRegister();
+    campaign = loadCampaign();
   } catch (error) {
     console.error(`FAIL: ${error.message}`);
     process.exitCode = 1;
     return;
   }
+  const { register, baseline } = campaign;
   const checkRef = selectCheckRef();
   let shallow = false;
   try {
@@ -1138,7 +1170,7 @@ function main() {
   });
   const result = auditRegister({
     register,
-    baseline: BASELINE,
+    baseline,
     resolveRef: resolveCommit,
     isAncestor: (sha) => ancestors.has(sha),
     isEquivalent: (sha) => (equivalentCommits.has(sha) ? true : null),
@@ -1217,13 +1249,13 @@ function main() {
   }
 
   const gaps =
-    `${BASELINE.size} published gaps (baseline ${BASELINE_DATE}: ` +
+    `${baseline.size} published gaps (baseline ${BASELINE_DATE}: ` +
     `${counts.unreachable} unreachable, ${counts.unresolvable} unresolvable, ${counts.unattributed} unattributed)`;
   console.log(
     `PASS: ${counts.reachable}/${register.size} register entries verified reachable from ${checkRef}; ` +
       `${gaps}; 0 new drift.`,
   );
-  console.log(`published gaps — baselined, owned by the register backlog (${BASELINE.size}):`);
+  console.log(`published gaps — baselined, owned by the register backlog (${baseline.size}):`);
   for (const entryClass of ["unreachable", "unresolvable", "unattributed"]) {
     const group = result.knownGaps.filter((gap) => gap.entryClass === entryClass);
     if (group.length === 0) continue;

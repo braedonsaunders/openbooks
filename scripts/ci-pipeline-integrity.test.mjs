@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { MAX_EXPLICIT_ANY, measuredExplicitAnys } from './check-explicit-any.mjs'
-import { auditRegister, BASELINE, REGISTER } from './check-register-reachability.mjs'
+import { auditRegister, BASELINE, REGISTER, scopeBaselineToRegister } from './check-register-reachability.mjs'
 
 /**
  * CI can only gate what it can fail on.
@@ -229,21 +229,22 @@ test('the lint warning ceiling is not above the warnings eslint actually emits',
  * recorded fixed from a worker branch that was never merged overstated what
  * had actually shipped — a launch decision from the register alone would have
  * shipped a recorded-as-fixed segregation-of-duties bypass believing it was
- * closed. check-register-reachability.mjs is the tree-side half: every
- * recorded-fixed finding must have its closing commit in main's history.
+ * closed. check-register-reachability.mjs is the tree-side half, but it audits
+ * campaign orchestration state and therefore stays a deliberate standalone
+ * command rather than a permanent product gate.
  */
 
-test('the register-reachability gate is wired into the canonical npm test script', () => {
+test('the campaign checker stays standalone and is excluded from canonical npm test', () => {
   const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
   assert.match(
     scripts['check:register-reachability'] ?? '',
     /check-register-reachability\.mjs$/,
-    'the gate script must be registered before the test suite can rely on it',
+    'the campaign checker must remain available for deliberate live-register audits',
   )
-  assert.match(
+  assert.doesNotMatch(
     scripts.test,
     /check:register-reachability/,
-    'a gate that npm test does not run fails nothing; wire it beside the other check:* gates',
+    'campaign orchestration state must not be a permanent product shipping gate',
   )
 })
 
@@ -259,6 +260,18 @@ test('the embedded register names every closing ref as a commit token or nothing
     assert.ok(knownClasses.has(baselineClass), `${id}: unknown baseline class ${baselineClass}`)
     assert.ok(REGISTER.has(id), `${id}: baseline entry names no register entry`)
   }
+})
+
+test('a live campaign cohort scopes historical baseline rows to its own findings', () => {
+  const liveRegister = new Map([
+    ['fnd_mt6g89d5_7irug4', null],
+    ['fnd_live_only', null],
+  ])
+  const scoped = scopeBaselineToRegister(liveRegister, new Map([
+    ['fnd_mt6g89d5_7irug4', 'unattributed'],
+    ['fnd_other_campaign', 'unreachable'],
+  ]))
+  assert.deepEqual([...scoped], [['fnd_mt6g89d5_7irug4', 'unattributed']])
 })
 
 test('register reachability fails new drift, publishes baselined gaps, and rejects a stale baseline', () => {
@@ -428,30 +441,40 @@ test('the trust workflow keeps running the golden harness on pull requests too',
   assert.ok(provision.line < harness[0].line, 'the harness must run after the simulation, not before it')
 })
 
-test('this tree passes the live register-reachability gate', () => {
-  // Runs the exact command the npm test script runs, like the lint-ceiling
-  // test above — re-deriving the git plumbing here would drift the same way.
-  let output = ''
-  try {
-    output = execFileSync('node', ['scripts/check-register-reachability.mjs'], { encoding: 'utf8' })
-  } catch (error) {
-    output = String(error.stdout ?? '') + String(error.stderr ?? '')
-    assert.fail(`the register-reachability gate failed on this tree (status ${error.status}):\n${output}`)
-  }
-  if (/PARTIAL PASS/.test(output)) {
-    // CI checks out a shallow clone: ancestry cannot be verified there, and
-    // the gate must say exactly that instead of reporting health it never
-    // measured. Full verification happens wherever history is complete.
-    assert.match(output, /shallow checkout/)
-    return
-  }
-  const summary = /^PASS: (\d+)\/(\d+) register entries verified/.exec(output)
-  assert.ok(summary, `expected a full PASS summary line:\n${output}`)
-  assert.equal(Number(summary[2]), REGISTER.size, 'the gate must classify every register entry')
-  assert.equal(
-    Number(summary[1]),
-    REGISTER.size - BASELINE.size,
-    'every non-baselined register entry must verify reachable from main',
+test('a live campaign invocation remains strict and emits machine-readable irreducible rows', () => {
+  const env = { ...process.env, OPENBOOKS_REGISTER_JSON: JSON.stringify({ findings: [{ id: 'fnd_live_gap', status: 'fixed' }] }) }
+  delete env.OPENBOOKS_REGISTER_DB
+  delete env.OPENBOOKS_REGISTER_THREAD_ID
+
+  assert.throws(
+    () => execFileSync('npm', ['run', 'check:register-reachability', '--silent'], { encoding: 'utf8', env }),
+    (error) => {
+      const output = String(error.stdout ?? '') + String(error.stderr ?? '')
+      assert.equal(error.status, 1, 'an unattributed live row must fail the standalone campaign command')
+      const marker = 'IRREDUCIBLE_REGISTER_ROWS_JSON='
+      const json = output.slice(output.indexOf(marker) + marker.length).trim()
+      const report = JSON.parse(json)
+      assert.deepEqual(report.categoryCounts, { unattributed: 1 })
+      assert.deepEqual(report.rows.map((row) => ({ id: row.id, category: row.category })), [
+        { id: 'fnd_live_gap', category: 'unattributed' },
+      ])
+      return true
+    },
   )
-  assert.match(output, /0 new drift/)
+})
+
+test('malformed or empty live campaign input fails closed before any tree check', () => {
+  for (const value of ['not-json', JSON.stringify({ findings: [] })]) {
+    const env = { ...process.env, OPENBOOKS_REGISTER_JSON: value }
+    delete env.OPENBOOKS_REGISTER_DB
+    delete env.OPENBOOKS_REGISTER_THREAD_ID
+    assert.throws(
+      () => execFileSync('node', ['scripts/check-register-reachability.mjs'], { encoding: 'utf8', env }),
+      (error) => {
+        assert.equal(error.status, 1)
+        assert.match(String(error.stdout ?? '') + String(error.stderr ?? ''), /FAIL: cannot load OPENBOOKS_REGISTER_JSON/)
+        return true
+      },
+    )
+  }
 })
