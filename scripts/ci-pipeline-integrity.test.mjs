@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { MAX_EXPLICIT_ANY, measuredExplicitAnys } from './check-explicit-any.mjs'
+import { auditRegister, BASELINE, REGISTER } from './check-register-reachability.mjs'
 
 /**
  * CI can only gate what it can fail on.
@@ -221,4 +222,110 @@ test('the lint warning ceiling is not above the warnings eslint actually emits',
     `--max-warnings=${limitMatch[1]} exceeds the ${measured} warnings eslint actually emits. ` +
       'A ceiling above the real count gates nothing; set it back to the measured total.',
   )
+})
+
+/**
+ * The register trusts the closing report; nothing checked the tree. A finding
+ * recorded fixed from a worker branch that was never merged overstated what
+ * had actually shipped — a launch decision from the register alone would have
+ * shipped a recorded-as-fixed segregation-of-duties bypass believing it was
+ * closed. check-register-reachability.mjs is the tree-side half: every
+ * recorded-fixed finding must have its closing commit in main's history.
+ */
+
+test('the register-reachability gate is wired into the canonical npm test script', () => {
+  const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
+  assert.match(
+    scripts['check:register-reachability'] ?? '',
+    /check-register-reachability\.mjs$/,
+    'the gate script must be registered before the test suite can rely on it',
+  )
+  assert.match(
+    scripts.test,
+    /check:register-reachability/,
+    'a gate that npm test does not run fails nothing; wire it beside the other check:* gates',
+  )
+})
+
+test('the embedded register names every closing ref as a commit token or nothing', () => {
+  for (const [id, ref] of REGISTER) {
+    assert.ok(
+      ref === null || /^[0-9a-f]{7,40}$/.test(ref),
+      `${id}: closing ref must be a commit token or null, got ${JSON.stringify(ref)}`,
+    )
+  }
+  const knownClasses = new Set(['unreachable', 'unresolvable', 'unattributed'])
+  for (const [id, baselineClass] of BASELINE) {
+    assert.ok(knownClasses.has(baselineClass), `${id}: unknown baseline class ${baselineClass}`)
+    assert.ok(REGISTER.has(id), `${id}: baseline entry names no register entry`)
+  }
+})
+
+test('register reachability fails new drift, publishes baselined gaps, and rejects a stale baseline', () => {
+  const ancestor = '3333333333333333333333333333333333333333'
+  const register = new Map([
+    ['fnd_new_drift', '1111111111111111111111111111111111111111'],
+    ['fnd_published_gap', '2222222222222222222222222222222222222222'],
+    ['fnd_now_reachable', ancestor],
+    ['fnd_never_attributed', null],
+    ['fnd_object_gone', '4444444444444444444444444444444444444444'],
+  ])
+  const baseline = new Map([
+    ['fnd_published_gap', 'unreachable'],
+    ['fnd_now_reachable', 'unreachable'],
+  ])
+  const result = auditRegister({
+    register,
+    baseline,
+    resolveRef: (ref) => (ref === '4444444444444444444444444444444444444444' ? null : ref),
+    isAncestor: (sha) => sha === ancestor,
+  })
+  assert.deepEqual(
+    result.newDrift.map((entry) => entry.id).sort(),
+    ['fnd_never_attributed', 'fnd_new_drift', 'fnd_object_gone'],
+    'new drift (unmerged fix, missing attribution, vanished commit) must fail the gate',
+  )
+  assert.deepEqual(
+    result.knownGaps.map((entry) => entry.id),
+    ['fnd_published_gap'],
+    'a baselined gap is reported as published backlog, not a violation',
+  )
+  assert.deepEqual(
+    result.staleBaseline.map((entry) => entry.id),
+    ['fnd_now_reachable'],
+    'a baseline entry whose fix reached main must be removed, or the backlog rots into amnesty',
+  )
+  assert.deepEqual(
+    result.classDrift.map((entry) => entry.id),
+    [],
+    'no class drift in this fixture',
+  )
+})
+
+test('this tree passes the live register-reachability gate', () => {
+  // Runs the exact command the npm test script runs, like the lint-ceiling
+  // test above — re-deriving the git plumbing here would drift the same way.
+  let output = ''
+  try {
+    output = execFileSync('node', ['scripts/check-register-reachability.mjs'], { encoding: 'utf8' })
+  } catch (error) {
+    output = String(error.stdout ?? '') + String(error.stderr ?? '')
+    assert.fail(`the register-reachability gate failed on this tree (status ${error.status}):\n${output}`)
+  }
+  if (/PARTIAL PASS/.test(output)) {
+    // CI checks out a shallow clone: ancestry cannot be verified there, and
+    // the gate must say exactly that instead of reporting health it never
+    // measured. Full verification happens wherever history is complete.
+    assert.match(output, /shallow checkout/)
+    return
+  }
+  const summary = /^PASS: (\d+)\/(\d+) register entries verified/.exec(output)
+  assert.ok(summary, `expected a full PASS summary line:\n${output}`)
+  assert.equal(Number(summary[2]), REGISTER.size, 'the gate must classify every register entry')
+  assert.equal(
+    Number(summary[1]),
+    REGISTER.size - BASELINE.size,
+    'every non-baselined register entry must verify reachable from main',
+  )
+  assert.match(output, /0 new drift/)
 })
