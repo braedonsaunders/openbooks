@@ -52,6 +52,8 @@ const effectiveDateOverlapExclusionMigrationPath =
   "schema/migrations/generated/0051_effective_date_overlap_exclusion_constraints.sql";
 const emailDeliveryIdentityReconciliationMigrationPath =
   "schema/migrations/generated/0059_email_delivery_identity_reconciliation.sql";
+const emailDeliveryIdempotencyMigrationPath =
+  "schema/migrations/generated/0028_email_delivery_idempotency.sql";
 const bankFeedAttemptWatermarkMigrationPath =
   "schema/migrations/generated/0054_bank_feed_attempt_watermark.sql";
 const scriptRunActorMigrationPath =
@@ -91,6 +93,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0023_payment_surcharge_rule_uniqueness.sql",
     "0024_tax_rate_effective_range_exclusion.sql",
     "0026_scheduler_outbox_terminal_audit.sql",
+    "0028_email_delivery_idempotency.sql",
     "0035_terminal_failure_surfacing.sql",
     "0036_bank_statement_source_idempotency.sql",
     "0038_ledger_tenant_coherent_foreign_keys.sql",
@@ -748,6 +751,32 @@ test("email delivery attempts share one canonical identity and uncertain outcome
   assert.match(migration, /COMMENT ON COLUMN public\.email_log\.delivery_key IS/);
   // Historical rows are never assigned a guessed identity.
   assert.doesNotMatch(migration, /^\s*UPDATE\s/im);
+});
+
+test("email delivery idempotency enforces delivery key format at the storage boundary", () => {
+  const migration = readFileSync(emailDeliveryIdempotencyMigrationPath, "utf8");
+
+  // The CHECK constraint validates the obem_ prefix + 40 hex chars format
+  // derived by packages/emails/outcome.ts. NULL passes (historical rows).
+  assert.match(
+    migration,
+    /CHECK \(delivery_key IS NULL OR delivery_key ~ '\^obem_\[0-9a-f\]\{40\}\$'\)/,
+  );
+  assert.match(migration, /NOT VALID/);
+  assert.match(migration, /VALIDATE CONSTRAINT email_log_delivery_key_format/);
+  assert.match(
+    migration,
+    /COMMENT ON CONSTRAINT email_log_delivery_key_format ON public\.email_log IS/,
+  );
+
+  // Composite index for tenant-scoped claim lookups.
+  assert.match(
+    migration,
+    /CREATE INDEX IF NOT EXISTS email_log_org_delivery\s+ON public\.email_log USING btree \(org_id, delivery_key\)\s+WHERE delivery_key IS NOT NULL/,
+  );
+  assert.match(migration, /COMMENT ON INDEX public\.email_log_org_delivery IS/);
+  // No data manipulation — only additive DDL.
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
 });
 
 test("document header totals are enforced against the document's own lines", () => {

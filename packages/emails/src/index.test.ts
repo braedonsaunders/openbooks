@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
-import { deriveEmailDeliveryKey, EMAIL_DELIVERY_ID_HEADER } from "./outcome";
+import { buildSmtpIdentity, deriveEmailDeliveryKey, EMAIL_DELIVERY_ID_HEADER } from "./outcome";
 import { documentEmail, sendVia, type EmailTransport } from "./index";
 
 const TEST_ORG = "018f6b2a-7c1d-7d3e-9f4a-2b8c4d5e6f70";
@@ -325,4 +325,38 @@ test("resend confirmation lost mid-body after acceptance resolves uncertain", as
     globalThis.fetch = originalFetch;
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+});
+
+// --- SMTP deterministic identity (audit finding #52) -------------------------
+//
+// SMTP has no native idempotency key header like Resend's Idempotency-Key.
+// Instead we derive a deterministic Message-ID from the delivery key so the
+// same logical delivery always arrives with the same Message-ID, letting
+// conforming MTAs/MUAs deduplicate retries. The audit header
+// X-Openbooks-Delivery-Id is also present for traceability.
+
+test("SMTP identity is deterministic and carries the delivery key in Message-ID and audit header", () => {
+  const key = testKey("smtp-identity");
+  const from = "Ops <ops@example.com>";
+  const id1 = buildSmtpIdentity(key, from);
+  const id2 = buildSmtpIdentity(key, from);
+
+  // Deterministic: same inputs produce byte-identical output.
+  assert.equal(id1.messageId, id2.messageId);
+  assert.deepEqual(id1.headers, id2.headers);
+
+  // Message-ID embeds the delivery key and the sender domain.
+  assert.match(id1.messageId, new RegExp(`^<${key}@example\\.com>$`));
+
+  // Audit header carries the delivery key for operator traceability.
+  assert.equal(id1.headers[EMAIL_DELIVERY_ID_HEADER], key);
+
+  // A different delivery key yields a different Message-ID.
+  const other = buildSmtpIdentity(testKey("smtp-other"), from);
+  assert.notEqual(other.messageId, id1.messageId);
+
+  // A different sender domain yields a different Message-ID domain part.
+  const altFrom = "Alerts <alerts@otherdomain.org>";
+  const altDomain = buildSmtpIdentity(key, altFrom);
+  assert.match(altDomain.messageId, /@otherdomain\.org>$/);
 });
