@@ -313,25 +313,34 @@ test("concurrent reciprocal reparents commit at most one edge and refuse the cyc
     const b = await seedSummaryAccount(org.orgId, "9102");
 
     holder = await holdAccountsShareLock(org.orgId);
-    const results = await Promise.all([
-      PATCH(patchRequest({ parentId: b }), { params: Promise.resolve({ id: a }) }).then(async (res) => ({
+    // Start both requests without awaiting them: neither can finish while the
+    // SHARE lock pins the table, so awaiting them before releasing the holder
+    // would deadlock the harness against its own commit below.
+    const firstPending = PATCH(patchRequest({ parentId: b }), { params: Promise.resolve({ id: a }) }).then(
+      async (res) => ({
         status: res.status,
         body: (await res.json()) as { error?: string; field?: string },
-      })),
-      PATCH(patchRequest({ parentId: a }), { params: Promise.resolve({ id: b }) }).then(async (res) => ({
+      }),
+    );
+    const secondPending = PATCH(patchRequest({ parentId: a }), { params: Promise.resolve({ id: b }) }).then(
+      async (res) => ({
         status: res.status,
         body: (await res.json()) as { error?: string; field?: string },
-      })),
-      // Park both requests mid-flight: each has passed its reads while the
-      // table is frozen against writes, and the loser is queued behind the
-      // winner's transaction-scoped hierarchy lock.
-      waitForAdvisoryParking(),
-    ]);
-    const [first, second] = results;
+      }),
+    );
+    // Park both requests mid-flight: each has passed its reads while the
+    // table is frozen against writes, and the loser is queued behind the
+    // winner's transaction-scoped hierarchy lock.
+    await waitForAdvisoryParking();
 
+    // Only now release the table: the parked proof means the winner holds the
+    // advisory lock pre-commit and the loser has finished every pre-transaction
+    // read, so the winner's edge lands first and the loser must refuse it.
     await holder.query("commit");
     await holder.end();
     holder = null;
+
+    const [first, second] = await Promise.all([firstPending, secondPending]);
 
     const statuses = [first.status, second.status].sort((x, y) => x - y);
     assert.deepEqual(statuses, [200, 422], "at most one cross-reparent may commit");
