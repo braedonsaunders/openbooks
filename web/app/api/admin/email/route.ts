@@ -52,7 +52,7 @@ export async function PUT(req: Request) {
       smtpUsername: str(body.smtpUsername),
       // secret: string ⇒ seal; null ⇒ clear; undefined ⇒ keep existing.
       secret: body.secret === null ? null : str(body.secret),
-    })
+    }, { kind: "user", userId: gate.user.id })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'save failed' }, { status: 422 })
   }
