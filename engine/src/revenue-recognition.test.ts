@@ -11,6 +11,7 @@ import {
   computeRecognitionSchedule,
   estimateVariableConsideration,
   fairValueRangeFlag,
+  RevenueRecognitionError,
   runRevenueRecognition,
   separateFinancingComponent,
   type RecognitionInput,
@@ -422,6 +423,55 @@ test("an empty milestone schedule reports a problem and never satisfies the obli
     const status = (await db.execute<{ status: string }>(sql`
       select status from performance_obligations where id = ${obligationId}`));
     assert.equal(status.rows[0]!.status, "open");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// buildRecognitionSchedule — fail-closed on absent accounting periods
+// ---------------------------------------------------------------------------
+
+test("buildRecognitionSchedule throws when a planned month has no accounting period", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = randomUUID();
+  try {
+    // Remove future periods so the 12-month rule spans absent months.
+    await db.execute(sql`
+      delete from accounting_periods where org_id = ${org.orgId} and starts_on >= '2026-08-01'`);
+
+    const contractId = randomUUID();
+    await db.execute(sql`
+      insert into revenue_contracts
+        (id, org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
+      values (${contractId}, ${org.orgId}, ${org.customerId}, 'REV-MISSING-PERIOD-001', 'active', ${org.date},
+              'CAD', '1200', ${actorId}, ${actorId})`);
+
+    const obligationId = randomUUID();
+    await db.execute(sql`
+      insert into performance_obligations
+        (id, org_id, contract_id, description, recognition_rule_id,
+         booked_amount, allocated_price, recognition_starts_on, status, created_by, updated_by)
+      values (${obligationId}, ${org.orgId}, ${contractId}, '12-month subscription', ${org.recognitionRuleId},
+              '1200', '1200', ${org.date}, 'open', ${actorId}, ${actorId})`);
+
+    let caught: unknown;
+    try {
+      await buildRecognitionSchedule(obligationId, org.orgId, actorId);
+      assert.fail("expected RevenueRecognitionError for missing period");
+    } catch (e: unknown) {
+      caught = e;
+    }
+    assert.ok(caught instanceof RevenueRecognitionError, `expected RevenueRecognitionError, got ${String(caught)}`);
+    assert.ok(
+      (caught as RevenueRecognitionError).message.includes("no accounting period covers"),
+      `expected missing-period message, got: ${(caught as RevenueRecognitionError).message}`,
+    );
+
+    const schedule = (await db.execute<{ line_count: string }>(sql`
+      select count(*)::text as line_count from recognition_schedule_lines
+       where schedule_id in (select id from recognition_schedules where obligation_id = ${obligationId} and org_id = ${org.orgId})`));
+    assert.equal(Number(schedule.rows[0]!.line_count), 0, "no schedule lines should be persisted for a failed build");
   } finally {
     await dropScratchOrg(org.orgId);
   }
