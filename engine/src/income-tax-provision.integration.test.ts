@@ -985,6 +985,81 @@ test("mark-filed refuses a filing while its covered period is not closed", { ski
   }
 });
 
+test("mark-filed refuses a filing whose covered period is closed only at subsidiary scope", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const taxCodeId = await seedFilingFingerprintFixture(org);
+    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-3b", taxAmount: "5.00" });
+    const prepared = await prepareFiling(org, userId);
+
+    // Entity-scope closure only: gl and tax locked for one subsidiary, no
+    // tenant-wide row. A filing certifies the whole organization, so an
+    // entity's closed lock must never stand in for the org-wide close.
+    await db.execute(sql`
+      insert into period_locks (id, org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
+      values (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl',
+              'closed', now(), 'test: subsidiary-scope close only'),
+             (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'tax',
+              'closed', now(), 'test: subsidiary-scope close only')`);
+
+    await assert.rejects(
+      () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
+      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+    );
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+    assert.equal((await filingAudits(org.orgId, prepared.id)).rows[0]!.n, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("mark-filed requires an org-wide closed lock, not a subsidiary-scoped or lapsed-reopen stand-in", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const taxCodeId = await seedFilingFingerprintFixture(org);
+    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-5", taxAmount: "11.00" });
+    const prepared = await prepareFiling(org, userId);
+
+    // No org-wide closed lock exists: the tenant-wide rows sit OPEN on lapsed
+    // reopen windows and the only closed rows are subsidiary-scoped — exactly
+    // the configuration the posting guard's shadowing order would read as
+    // closed. The statutory fence must rest on the tenant-wide closed lock
+    // itself, so this must refuse to file.
+    await db.execute(sql`
+      insert into period_locks (id, org_id, period_id, book_id, subsidiary_id, module, state, reopen_expires_at, locked_at, reason)
+      values
+        (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl',
+         'open', now() - interval '1 hour', now(), 'test: lapsed reopen'),
+        (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'tax',
+         'open', now() - interval '1 hour', now(), 'test: lapsed reopen'),
+        (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl',
+         'closed', null, now(), 'test: entity-scoped close'),
+        (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'tax',
+         'closed', null, now(), 'test: entity-scoped close')`);
+
+    await assert.rejects(
+      () => markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-002"),
+      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+    );
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+    assert.equal((await filingAudits(org.orgId, prepared.id)).rows[0]!.n, 0);
+
+    // Closing the tenant-wide rows themselves is what unlocks the filing —
+    // the scoped rows and the reopen history were never the evidence.
+    await db.execute(sql`
+      update period_locks set state = 'closed', reopen_expires_at = null
+       where org_id = ${org.orgId} and period_id = ${org.periodId} and book_id = ${org.bookId}
+         and subsidiary_id is null`);
+    const updated = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-002");
+    assert.ok(updated.filedAt);
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a fingerprint-matching filing marks filed once its covered period is closed", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
