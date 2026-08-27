@@ -7,6 +7,7 @@ import { toUnits } from "./money.ts";
 import {
   allocateByRelativeSSP,
   apportion,
+  buildAllRecognitionSchedules,
   buildAllRecognitionSchedulesInTransaction,
   buildRecognitionSchedule,
   computeRecognitionSchedule,
@@ -698,8 +699,6 @@ test("milestone schedule rebuilds on new event and preserves posted history", { 
     assert.equal(run2.totalAmount, "3000.0000");
   } finally {
     await dropScratchOrg(org.orgId);
-  }
-});
   }
 });
 
