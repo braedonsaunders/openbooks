@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server'
 
 // Route boundary suite for the tax filing surface (no test file existed for
 // this module). Regression for fnd_mtbnow2k_d89o5i: the Prepare (POST) and
-// Mark Filed (PATCH) routes regressed to guardPermission('reports.create'),
+// Mark Filed (PATCH) routes regressed to the report-creation permission,
 // so any report creator could certify a statutory return as filed. The
 // certification authority is compliance.file; these tests pin the exact
 // permission string both entry points demand and prove a reports.create
