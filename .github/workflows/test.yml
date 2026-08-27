@@ -74,7 +74,7 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
@@ -131,6 +131,51 @@ jobs:
 
       - name: Full test suite (with database)
         run: npm test
+
+      - name: Drive a seeded company through real activity
+        # The golden harness below is only meaningful over a ledger that real
+        # activity has stressed. The simulation provisions a deterministic,
+        # sim-tagged company and runs it through three months of transactions;
+        # without this, every harness tie-out would pass vacuously on the
+        # pristine bootstrap tenant and the gate would assert nothing. The sim
+        # refuses to run without OPENBOOKS_SIM=1 — that interlock is the point.
+        env:
+          OPENBOOKS_SIM: "1"
+        shell: bash
+        run: |
+          # The pipe reports the LAST command's status; without pipefail a
+          # failed provision that still printed JSON would read as success.
+          set -o pipefail
+          RUN=$(npm --prefix engine run --silent sim -- provision \
+            --profile general-contractor --seed 1 --start 2026-01-01 --end 2026-03-31 \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).runDir))')
+          npm --prefix engine run --silent sim -- run "$RUN"
+          echo "SIM_RUN=$RUN" >> "$GITHUB_ENV"
+
+      - name: Golden harness asserts the ledger invariants
+        # The harness exits non-zero when any hard check fails (trial balance,
+        # subledger↔GL and inventory tie-outs), so a fix that breaks a ledger
+        # invariant fails HERE, before merge — not at the next audit. Same
+        # contract trust.yml's invariants job enforces; this copy is what the
+        # pull request actually waits for. Pinned by
+        # scripts/ci-pipeline-integrity.test.mjs so it cannot be dropped.
+        run: |
+          ORG_ID=$(node -e '
+            const { readFileSync } = require("node:fs");
+            const { join } = require("node:path");
+            const manifest = JSON.parse(readFileSync(join(process.env.SIM_RUN, "manifest.json"), "utf8"));
+            if (!manifest.orgId) throw new Error("simulation manifest is missing orgId");
+            process.stdout.write(manifest.orgId);
+          ')
+          npm --prefix engine run --silent harness -- "$ORG_ID"
+
+      - name: Upload defect bundles (if the oracle halted)
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sim-defects-integration
+          path: engine/sim-runs/**/defects/**
+          if-no-files-found: ignore
 
   restore-drill:
     runs-on: ubuntu-latest
