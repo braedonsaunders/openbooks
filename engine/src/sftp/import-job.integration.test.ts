@@ -84,7 +84,9 @@ async function seedSftpFixture(): Promise<SftpFixture> {
      where id = ${org.orgId}
   `);
   const serverId = randomUUID();
-  const rootPrefix = `sftp-it-${randomUUID()}`;
+  // Local and object storage roots are tenant-bound at the backend boundary;
+  // keep the fixture inside this org's namespace while retaining a unique lane.
+  const rootPrefix = `sftp/${org.orgId}/sftp-it-${randomUUID()}`;
   // The server row itself names a real creator — attribution metadata that
   // must never leak onto the statements its schedules pull.
   await db.execute(sql`

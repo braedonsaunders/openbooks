@@ -39,13 +39,17 @@ test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
       insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
                              currency, fx_rate, status, subtotal, tax_total, total, is_final_invoice, custom, extra_dims)
       values (${billId}, ${org.orgId}, 'vendor_bill', 'BILL-TEARDOWN', ${org.vendorId}, ${org.subsidiaryId},
-              ${org.date}, ${org.date}, 'CAD', 1, 'approved', '100', '0', '100', false, '{}'::jsonb, '{}'::jsonb)`);
+              ${org.date}, ${org.date}, 'CAD', 1, 'draft', '100', '0', '100', false, '{}'::jsonb, '{}'::jsonb)`);
     await db.execute(sql`
       insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount,
                                   tax_amount, is_billable, quantity_fulfilled, quantity_billed, stock_location_id, custom,
                                   tax_overridden, extra_dims)
       values (${randomUUID()}, ${org.orgId}, ${billId}, 1, null, ${org.accounts.cogs}, '1', '100', '100', '0',
               false, '0', '0', null, '{}'::jsonb, false, '{}'::jsonb)`);
+    await db.execute(sql`
+      update documents set status = 'approved'
+       where id = ${billId} and org_id = ${org.orgId}
+    `);
     await postDocument(billId, deps);
 
     // Inventory: receipts + an issue → posted inventory_movements, cost
