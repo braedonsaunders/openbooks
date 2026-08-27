@@ -238,6 +238,13 @@ test(
       ],
       { cwd: process.cwd(), env: process.env, encoding: "utf8" },
     );
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(
+      result.status,
+      0,
+      result.stderr ||
+        result.stdout ||
+        result.error?.message ||
+        `statement FX integration subprocess failed with status ${String(result.status)}`,
+    );
   },
 );
