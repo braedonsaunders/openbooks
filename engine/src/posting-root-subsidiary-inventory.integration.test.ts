@@ -78,7 +78,7 @@ async function layerValueBySubsidiary(
   return toUnits(r.rows[0]!.v);
 }
 
-/** Approved document whose header carries the defect's exact shape:
+/** Document whose header carries the defect's exact shape:
  *  subsidiary_id NULL — the encoding of "the org's root subsidiary". */
 async function draftRootDocument(
   org: ScratchOrg,
@@ -101,7 +101,7 @@ async function draftRootDocument(
        document_date, posting_date, currency, fx_rate, status,
        subtotal, tax_total, total, custom)
     values (${docId}, ${org.orgId}, ${kind}, ${number}, ${line.partyId ?? null},
-            null, ${org.date}, ${org.date}, 'CAD', 1, 'approved',
+            null, ${org.date}, ${org.date}, 'CAD', 1, 'draft',
             ${line.amount}, '0', ${line.amount}, '{}'::jsonb)`);
   await db.execute(sql`
     insert into document_lines
@@ -112,6 +112,11 @@ async function draftRootDocument(
             ${line.accountId ?? null}, ${line.quantity}, ${line.unitPrice},
             ${line.amount}, '0', false, '0', '0',
             ${line.stockLocationId ?? null}, '{}'::jsonb, false)`);
+  // Source lines must be authored while their parent document is draft;
+  // approve only after the complete fixture is present.
+  await db.execute(sql`
+    update documents set status = 'approved'
+     where id = ${docId} and org_id = ${org.orgId}`);
   // Guard the premise: the fixture really produced a null-subsidiary header.
   const [row] = (
     await db.execute<{ subsidiary_id: string | null }>(sql`
@@ -477,14 +482,14 @@ test("a purchase order converted into a vendor bill receives its inventory at th
         values (\${poLineId}, \${org.orgId}, \${po.id}, 1, \${org.items.fifo},
                 '50', 'ea', '2', '100', '0', false, '0', '0',
                 \${org.stockLocationId}, '{}'::jsonb)\`);
-      // Issue the order (draft orders are not convertible) and name the
-      // vendor the way every real purchase order does — convertOrder copies
-      // the party onto the bill and the AP line must carry it. Keep the
+      // Name the vendor the way every real purchase order does — convertOrder
+      // copies the party onto the bill and the AP line must carry it. Keep the
       // commercial date inside the fixture's open accounting period;
-      // conversion preserves the source date by contract.
+      // conversion preserves the source date by contract. Approval waits
+      // until after the receipt evidence updates quantity_fulfilled below.
       await db.execute(sql\`
         update documents
-           set status='approved', subtotal='100', total='100',
+           set subtotal='100', total='100',
                party_id = \${org.vendorId}, document_date = \${org.date}
          where id = \${po.id} and org_id = \${org.orgId}\`);
 
@@ -515,6 +520,10 @@ test("a purchase order converted into a vendor bill receives its inventory at th
            and quantity_fulfilled + '50' <= quantity
         returning id\`)).rows[0];
       assert.ok(received, "the receipt must fit inside the ordered quantity");
+
+      await db.execute(sql\`
+        update documents set status='approved'
+         where id = \${po.id} and org_id = \${org.orgId}\`);
 
       const bill = await withOrg(org.orgId, () =>
         convertOrder(org.orgId, userId, po.id, "vendor_bill"),
