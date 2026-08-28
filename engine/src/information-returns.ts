@@ -540,18 +540,24 @@ export async function loadPaymentTraces(args: {
     select d.id, d.document_number, d.party_id, d.document_date,
            je.id as journal_entry_id,
            array_agg(jl.id order by jl.line_number, jl.id)::text[] as journal_line_ids,
-           -- Cash out is the credit to the funding account; sum the negative,
-           -- non-open-item legs so cheques, EFT and card runs all measure alike.
-           coalesce(-sum(jl.amount) filter (where jl.amount < 0 and not jl.is_open_item), 0) as cash
+           -- Cash out is the credit to the funding account. Vendor-payment
+           -- discounts are a second negative, non-open-item leg, but they do
+           -- not leave the bank and must never inflate reportable cash.
+           coalesce(-sum(jl.amount) filter (
+             where jl.amount < 0 and not jl.is_open_item and funding.type = 'asset_bank'
+           ), 0) as cash
       from documents d
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
+      join accounts funding on funding.id = jl.account_id and funding.org_id = jl.org_id
      where d.org_id = ${args.orgId} and d.kind = 'vendor_payment' and d.status = 'posted'
        and d.document_date between ${from} and ${to}
        and d.party_id is not null
        and (${args.subsidiaryId ?? null}::uuid is null or d.subsidiary_id = ${args.subsidiaryId ?? null}::uuid)
      group by d.id, d.document_number, d.party_id, d.document_date, je.id
-     having coalesce(-sum(jl.amount) filter (where jl.amount < 0 and not jl.is_open_item), 0) > 0
+     having coalesce(-sum(jl.amount) filter (
+       where jl.amount < 0 and not jl.is_open_item and funding.type = 'asset_bank'
+     ), 0) > 0
      order by d.document_date, d.document_number
   `));
   if (payments.rows.length === 0) return new Map();
@@ -931,6 +937,14 @@ export type FilingRow = {
   threshold: string;
   currency: string;
 };
+
+/** Furnishing is evidence of a transmitted form, so it is only valid once the
+ * filing is frozen. Draft and computed rows can still be recomputed or edited;
+ * stamping either would create an audit-like claim for a form that may change.
+ */
+export function canFurnishRecipientCopies(status: string): status is "finalized" | "filed" {
+  return status === "finalized" || status === "filed";
+}
 
 type FilingRunner = Pick<typeof db, "execute">;
 
@@ -1551,10 +1565,27 @@ export async function stampRecipientCopiesPrinted(args: {
   recipientId?: string | null;
   actorId: string;
 }): Promise<void> {
-  await db.execute(sql`
-    update information_return_recipients
-       set printed_at = now(), updated_at = now(), updated_by = ${args.actorId}
-     where org_id = ${args.orgId} and filing_id = ${args.filingId} and status = 'included'
-       and (${args.recipientId ?? null}::uuid is null or id = ${args.recipientId ?? null}::uuid)
-  `);
+  await withOrg(args.orgId, async () => {
+    // Lock the parent before the child update. This closes the race where a
+    // mutable filing is finalized (or a finalized filing is voided) between a
+    // route preflight and the stamp itself.
+    const filing = await lockFilingRow(args.orgId, args.filingId);
+    if (!canFurnishRecipientCopies(filing.status)) {
+      throw new InformationReturnError(
+        `a ${filing.status} filing is not frozen — finalize it before furnishing recipient copies`,
+      );
+    }
+    await db.execute(sql`
+      update information_return_recipients
+         set printed_at = now(), updated_at = now(), updated_by = ${args.actorId}
+       where org_id = ${args.orgId} and filing_id = ${args.filingId} and status = 'included'
+         and (${args.recipientId ?? null}::uuid is null or id = ${args.recipientId ?? null}::uuid)
+         and exists (
+           select 1 from information_return_filings f
+            where f.org_id = information_return_recipients.org_id
+              and f.id = information_return_recipients.filing_id
+              and f.status in ('finalized', 'filed')
+         )
+    `);
+  });
 }

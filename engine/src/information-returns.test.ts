@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { sum } from "./money.ts";
 import {
   allocatePaymentToBoxes,
   allocateProportionally,
+  canFurnishRecipientCopies,
   filedBoxAmounts,
   filedTotal,
   formDefinition,
@@ -452,6 +454,37 @@ test("adjustments are added to the computed figure, never replacing it", () => {
 
 test("the filed total excludes withholding and indicator boxes", () => {
   assert.equal(filedTotal(NEC, { nec1: "5000.0000", nec2: "1.0000", nec4: "600.0000" }), "5000.0000");
+});
+
+test("recipient copies can only be furnished from a frozen filing", () => {
+  assert.equal(canFurnishRecipientCopies("draft"), false);
+  assert.equal(canFurnishRecipientCopies("computed"), false);
+  assert.equal(canFurnishRecipientCopies("finalized"), true);
+  assert.equal(canFurnishRecipientCopies("filed"), true);
+  assert.equal(canFurnishRecipientCopies("void"), false);
+
+  const route = readFileSync(
+    new URL("../../web/app/api/compliance/information-returns/[id]/copies/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.ok(
+    route.indexOf("if (!canFurnishRecipientCopies(filing.status))") < route.indexOf("const recipients"),
+    "the copies route must refuse mutable filings before reading or rendering recipients",
+  );
+});
+
+test("payment-trace cash is restricted to the funding bank leg", () => {
+  // The loader's SQL owns the cash-source boundary. Keep this representative
+  // contract test in the unit suite because the integration fixture would
+  // require a database; a discount leg must not be eligible for this sum.
+  const source = readFileSync(new URL("./information-returns.ts", import.meta.url), "utf8");
+  const loader = source.slice(
+    source.indexOf("export async function loadPaymentTraces"),
+    source.indexOf("export async function loadRecipientProfiles"),
+  );
+  assert.match(loader, /join accounts funding on funding\.id = jl\.account_id/);
+  assert.match(loader, /jl\.amount < 0 and not jl\.is_open_item and funding\.type = 'asset_bank'/);
+  assert.equal(loader.match(/funding\.type = 'asset_bank'/g)?.length, 2);
 });
 
 // --- catalogue integrity -------------------------------------------------
