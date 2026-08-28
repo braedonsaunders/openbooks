@@ -15,7 +15,7 @@ import {
   type PspProvider,
 } from "@openbooks/engine/src/psp-settlement.ts";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
-import { can, getAuthz } from "../../../../lib/authz";
+import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isFeatureEnabled } from "../../../../lib/features";
 
@@ -25,6 +25,11 @@ export async function GET() {
   const gate = await guardFeaturePermission("banking.read", "banking");
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
+  const subsidiaryFilter = gate.allowedSubsidiaryIds
+    ? gate.allowedSubsidiaryIds.size > 0
+      ? sql` and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
+      : sql` and false`
+    : sql``;
   const [batches, configs] = await Promise.all([
     db.execute(sql`
       select id, provider, external_ref as "externalRef", status, currency, net_amount as "netAmount",
@@ -32,10 +37,15 @@ export async function GET() {
              reversal_entry_id as "reversalEntryId", reversal_reason as "reversalReason",
              reversed_at as "reversedAt", reversed_by as "reversedBy",
              memo, line_count as "lineCount"
-        from psp_settlement_batches where org_id = ${orgId}
+        from psp_settlement_batches where org_id = ${orgId}${subsidiaryFilter}
        order by settlement_date desc, created_at desc limit 50
     `),
-    db.execute(sql`
+    // Provider configuration is organization-wide and has no subsidiary_id.
+    // Do not expose it to a restricted caller when its account defaults may
+    // span entities; setup administrators can use the dedicated setup route.
+    gate.allowedSubsidiaryIds
+      ? Promise.resolve({ rows: [] })
+      : db.execute(sql`
       select id, provider, display_name as "displayName", is_enabled as "isEnabled",
              default_bank_account_id as "defaultBankAccountId",
              default_fee_account_id as "defaultFeeAccountId",
@@ -90,6 +100,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
       case "import": {
+        const denied = guardSubsidiaryScope(authz, body.subsidiaryId ?? null);
+        if (denied) return denied;
         const provider = body.provider as PspProvider;
         const fallbackDate = String(body.settlementDate ?? (await businessToday(orgId)));
         let parsed;
@@ -133,6 +145,15 @@ export async function POST(req: Request) {
             { error: "batchId required" },
             { status: 422 },
           );
+        if (authz.allowedSubsidiaryIds) {
+          const batch = (await db.execute<{ subsidiaryId: string | null }>(sql`
+            select subsidiary_id as "subsidiaryId"
+              from psp_settlement_batches
+             where id = ${body.batchId} and org_id = ${orgId}
+          `)).rows[0];
+          const denied = guardSubsidiaryScope(authz, batch?.subsidiaryId ?? null);
+          if (denied) return denied;
+        }
         const posted = await postSettlementBatch(orgId, body.batchId, userId);
         return NextResponse.json(posted);
       }
@@ -152,6 +173,15 @@ export async function POST(req: Request) {
             { error: "reason required" },
             { status: 422 },
           );
+        if (authz.allowedSubsidiaryIds) {
+          const batch = (await db.execute<{ subsidiaryId: string | null }>(sql`
+            select subsidiary_id as "subsidiaryId"
+              from psp_settlement_batches
+             where id = ${body.batchId} and org_id = ${orgId}
+          `)).rows[0];
+          const denied = guardSubsidiaryScope(authz, batch?.subsidiaryId ?? null);
+          if (denied) return denied;
+        }
         const reversed = await reverseSettlementBatch(
           orgId,
           body.batchId,
