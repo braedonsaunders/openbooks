@@ -1400,6 +1400,19 @@ test('the surfaces this test was written for are covered', () => {
     /export async function applyAmendment[\s\S]{0,200}await assertEnabled\(orgId\)/,
     'amendments and scheduled auto-renew must refuse when Advanced subscriptions is off — existing terms stay',
   )
+  const advancedSubscriptions = read('../engine/src/advanced-subscriptions.ts')
+  for (const mutation of ['createPlanVersion', 'publishPlanVersion', 'activateLifecycle']) {
+    assert.match(
+      advancedSubscriptions,
+      new RegExp(`export async function ${mutation}[\\s\\S]{0,220}await assertEnabled\\(orgId\\)`),
+      `${mutation} must refuse when Advanced subscriptions is off — catalog and lifecycle writes stay unchanged`,
+    )
+  }
+  assert.match(
+    advancedSubscriptions,
+    /select id, subscription_id as "subscriptionId", request from subscription_amendments[\s\S]{0,300}assertIdempotentReplay\(replay\.rows\[0\]\.subscriptionId, request\.subscriptionId, replay\.rows\[0\]\.request, requestSnapshot\)/,
+    'amendment idempotency retries must compare the immutable request snapshot, not only subscription id',
+  )
   assert.match(
     read('../engine/src/advanced-subscriptions.ts'),
     /if \(!row\?\.billingTiming\) return true;\s*await assertEnabled\(orgId\)/,
