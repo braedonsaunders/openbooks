@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { db, orgContext, pool } from "./db.ts";
 import { PayrollError } from "./payroll-error.ts";
 import {
   yearEndFiling,
@@ -563,11 +564,55 @@ export async function recordFilingIssue(
 ): Promise<RecordFilingIssueResult> {
   const { orgId, actorId, country, filingKey, taxYear, revision } = input;
   const filing = yearEndFiling(country, filingKey);
-  const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
 
   if (revision === "original") {
-    return await issueOriginal(input, filing, submissions);
+    // An original artifact and its per-slip evidence must observe one
+    // database snapshot. Pack builders use the shared `db` handle, which
+    // participates in this transaction through the org context; repeatable
+    // read prevents a committed payroll/profile edit between those builders'
+    // awaits from mixing state A's bytes with state B's snapshots.
+    const active = orgContext.getStore();
+    if (active?.txDb && !active.bypass) {
+      if (orgId !== active.orgId) {
+        throw new Error("cannot change organization inside an active tenant transaction");
+      }
+      // Reuse the caller's pinned transaction; its isolation level governs
+      // this issuing operation and its uncommitted writes remain visible.
+      const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
+      return await issueOriginal(input, filing, submissions);
+    }
+
+    // Do not use the ambient db proxy for the outer transaction: a caller may
+    // have an unrelated bypass context, and a request transaction may already
+    // have chosen READ COMMITTED. Pin a dedicated tenant-scoped connection at
+    // REPEATABLE READ, then publish it through orgContext so every pack
+    // builder and persist() call uses the same connection.
+    const client = await pool.connect();
+    try {
+      await client.query("begin isolation level repeatable read");
+      await client.query(
+        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+        [orgId],
+      );
+      const txDb = drizzle({ client });
+      const result = await orgContext.run({ orgId, bypass: false, txDb }, async () => {
+        const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
+        return await issueOriginal(input, filing, submissions);
+      });
+      await client.query("commit");
+      return result;
+    } catch (error) {
+      try {
+        await client.query("rollback");
+      } catch {
+        // A broken connection is discarded when released.
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
   }
+  const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
   return await issueCorrection(input, filing, submissions, revision);
 }
 
