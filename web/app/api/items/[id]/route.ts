@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
@@ -65,6 +65,8 @@ interface PatchBody {
   createPlansOn?: string
   revenueAllocation?: string
   standaloneSellingPrice?: string | null
+  reason?: string | null
+  changeReason?: string | null
 }
 
 const CREATE_PLANS_ON = ['billing', 'fulfillment', 'arrangement'] as const
@@ -80,6 +82,49 @@ const REVENUE_RECOGNITION_BODY_KEYS = [
 function bodyTouchesRevenueRecognition(body: PatchBody): boolean {
   return REVENUE_RECOGNITION_BODY_KEYS.some((key) => body[key] !== undefined)
 }
+
+/**
+ * The fields whose values determine how an item is posted, priced, taxed, or
+ * recognized. Keep this list explicit: an audit row must be sufficient to
+ * reconstruct the accounting configuration without consulting the mutable
+ * item row later.
+ */
+const ITEM_ACCOUNTING_CONFIGURATION_FIELDS = [
+  'kind',
+  'code',
+  'name',
+  'description',
+  'category',
+  'unit',
+  'default_rate',
+  'default_cost',
+  'income_account_id',
+  'expense_account_id',
+  'cost_recovery_account_id',
+  'tax_code_id',
+  'show_on_timesheet',
+  'recognition_rule_id',
+  'deferred_account_id',
+  'create_plans_on',
+  'revenue_allocation',
+  'standalone_selling_price',
+  'is_active',
+  'custom',
+  'updated_at',
+  'updated_by',
+] as const
+
+function accountingConfiguration(row: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    ITEM_ACCOUNTING_CONFIGURATION_FIELDS.map((field) => [field, row[field] ?? null]),
+  )
+}
+
+/** A validation failure discovered after the item row is locked. */
+class PatchInvalid extends Error {}
+
+/** The item disappeared or a feature gate closed before the locked read. */
+class PatchNotFound extends Error {}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('items.read')
@@ -103,38 +148,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const existing = (await db.execute<{ name: string; is_active: boolean; kind: string }>(sql`
-    select name, is_active, kind from items where id = ${id} and org_id = ${user.orgId}
-  `))
-  if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as PatchBody
-  if (bodyTouchesRevenueRecognition(body) && !(await isFeatureEnabled(user.orgId, 'revenueRecognition'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
-  }
-  if (body.showOnTimesheet !== undefined && !(await isFeatureEnabled(user.orgId, 'timeTracking'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
-  }
-  // Inventory kinds (inventory / assembly / kit) are Inventory configuration.
-  // Turning that switch off must refuse a new write; the stored kind stays.
-  if (body.kind !== undefined && !(await isFeatureEnabled(user.orgId, 'inventory'))) {
-    const nextKind = String(body.kind)
-    const storedKind = existing.rows[0].kind
-    if (INVENTORY_ITEM_KINDS.has(nextKind) || (INVENTORY_ITEM_KINDS.has(storedKind) && nextKind !== storedKind)) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
-    }
-  }
-  // Equipment-charge kind is Equipment configuration.
-  // Turning that switch off must refuse a new write; the stored kind stays.
-  if (body.kind !== undefined && !(await isFeatureEnabled(user.orgId, 'equipment'))) {
-    const nextKind = String(body.kind)
-    const storedKind = existing.rows[0].kind
-    if (nextKind === 'equipment_charge' && nextKind !== storedKind) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
-    }
-  }
 
   // -- kind ----------------------------------------------------------------
   if (body.kind !== undefined && !ITEM_KINDS.includes(body.kind as (typeof ITEM_KINDS)[number])) {
@@ -143,13 +159,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   // -- name / activation ---------------------------------------------------
   const name = body.name !== undefined ? body.name.trim() : undefined
-  const willBeActive = body.isActive ?? existing.rows[0].is_active
-  const effectiveName = name ?? existing.rows[0].name.trim()
-  if (willBeActive && (!effectiveName || effectiveName === 'New item')) {
-    return bad(
-      body.isActive === true ? 'Give the item a real name before activating it' : 'An active item needs a name',
-    )
-  }
 
   // -- default rate --------------------------------------------------------
   let defaultRate: string | null | undefined
@@ -175,16 +184,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   // -- account / tax references (must exist & belong to org) ---------------
+  // IDs are normalized before the transaction; authoritative existence checks
+  // happen below after the item row is locked, so a concurrent account change
+  // cannot make the audit's before-image disagree with the committed write.
   let incomeAccountId: string | null | undefined
   if (body.incomeAccountId !== undefined) {
     const v = uuidOrNull(body.incomeAccountId)
     if (v === 'invalid') return bad('Invalid income account')
-    if (v !== null) {
-      const r = (await db.execute(
-        sql`select 1 from accounts where id = ${v} and org_id = ${user.orgId}`,
-      ))
-      if (!r.rows[0]) return bad('Income account not found')
-    }
     incomeAccountId = v
   }
 
@@ -192,12 +198,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.expenseAccountId !== undefined) {
     const v = uuidOrNull(body.expenseAccountId)
     if (v === 'invalid') return bad('Invalid expense account')
-    if (v !== null) {
-      const r = (await db.execute(
-        sql`select 1 from accounts where id = ${v} and org_id = ${user.orgId}`,
-      ))
-      if (!r.rows[0]) return bad('Expense account not found')
-    }
     expenseAccountId = v
   }
 
@@ -205,10 +205,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.costRecoveryAccountId !== undefined) {
     const v = uuidOrNull(body.costRecoveryAccountId)
     if (v === 'invalid') return bad('Invalid recovery account')
-    if (v !== null) {
-      const r = (await db.execute(sql`select 1 from accounts where id = ${v} and org_id = ${user.orgId}`))
-      if (!r.rows[0]) return bad('Recovery account not found')
-    }
     costRecoveryAccountId = v
   }
 
@@ -216,12 +212,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.taxCodeId !== undefined) {
     const v = uuidOrNull(body.taxCodeId)
     if (v === 'invalid') return bad('Invalid tax code')
-    if (v !== null) {
-      const r = (await db.execute(
-        sql`select 1 from tax_codes where id = ${v} and org_id = ${user.orgId}`,
-      ))
-      if (!r.rows[0]) return bad('Tax code not found')
-    }
     taxCodeId = v
   }
 
@@ -230,12 +220,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.recognitionRuleId !== undefined) {
     const v = uuidOrNull(body.recognitionRuleId)
     if (v === 'invalid') return bad('Invalid recognition rule')
-    if (v !== null) {
-      const r = (await db.execute(
-        sql`select 1 from recognition_rules where id = ${v} and org_id = ${user.orgId}`,
-      ))
-      if (!r.rows[0]) return bad('Recognition rule not found')
-    }
     recognitionRuleId = v
   }
 
@@ -243,12 +227,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.deferredAccountId !== undefined) {
     const v = uuidOrNull(body.deferredAccountId)
     if (v === 'invalid') return bad('Invalid deferred revenue account')
-    if (v !== null) {
-      const r = (await db.execute(
-        sql`select 1 from accounts where id = ${v} and org_id = ${user.orgId}`,
-      ))
-      if (!r.rows[0]) return bad('Deferred revenue account not found')
-    }
     deferredAccountId = v
   }
 
@@ -282,37 +260,119 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     cleanedCustom = v.cleaned
   }
 
+  const reason = strOrNull(body.reason ?? body.changeReason)
+
   try {
+    const updated = await withOrgTransaction(user.orgId, async () => {
+      // This is the authoritative before-image. The tenant-pinned transaction
+      // and row lock serialize every item configuration edit, including the
+      // audit insert below, so concurrent writers cannot falsify evidence.
+      const locked = await db.execute<Record<string, unknown>>(sql`
+        select * from items where id = ${id} and org_id = ${user.orgId} for update
+      `)
+      const before = locked.rows[0]
+      if (!before) throw new PatchNotFound()
+
+      if (bodyTouchesRevenueRecognition(body) && !(await isFeatureEnabled(user.orgId, 'revenueRecognition'))) {
+        throw new PatchNotFound()
+      }
+      if (body.showOnTimesheet !== undefined && !(await isFeatureEnabled(user.orgId, 'timeTracking'))) {
+        throw new PatchNotFound()
+      }
+      // Inventory kinds (inventory / assembly / kit) are Inventory configuration.
+      // Turning that switch off must refuse a new write; the stored kind stays.
+      if (body.kind !== undefined && !(await isFeatureEnabled(user.orgId, 'inventory'))) {
+        const nextKind = String(body.kind)
+        const storedKind = String(before.kind ?? '')
+        if (INVENTORY_ITEM_KINDS.has(nextKind) || (INVENTORY_ITEM_KINDS.has(storedKind) && nextKind !== storedKind)) {
+          throw new PatchNotFound()
+        }
+      }
+      // Equipment-charge kind is Equipment configuration.
+      // Turning that switch off must refuse a new write; the stored kind stays.
+      if (body.kind !== undefined && !(await isFeatureEnabled(user.orgId, 'equipment'))) {
+        const nextKind = String(body.kind)
+        const storedKind = String(before.kind ?? '')
+        if (nextKind === 'equipment_charge' && nextKind !== storedKind) {
+          throw new PatchNotFound()
+        }
+      }
+
+      const willBeActive = body.isActive ?? Boolean(before.is_active)
+      const effectiveName = name ?? String(before.name ?? '').trim()
+      if (willBeActive && (!effectiveName || effectiveName === 'New item')) {
+        throw new PatchInvalid(
+          body.isActive === true ? 'Give the item a real name before activating it' : 'An active item needs a name',
+        )
+      }
+
+      const assertReference = async (
+        table: 'accounts' | 'tax_codes' | 'recognition_rules',
+        value: string | null | undefined,
+        error: string,
+      ): Promise<void> => {
+        if (value === undefined || value === null) return
+        const found = await db.execute(sql`
+          select 1 from ${sql.raw(table)} where id = ${value} and org_id = ${user.orgId}
+        `)
+        if (!found.rows[0]) throw new PatchInvalid(error)
+      }
+      await assertReference('accounts', incomeAccountId, 'Income account not found')
+      await assertReference('accounts', expenseAccountId, 'Expense account not found')
+      await assertReference('accounts', costRecoveryAccountId, 'Recovery account not found')
+      await assertReference('tax_codes', taxCodeId, 'Tax code not found')
+      await assertReference('recognition_rules', recognitionRuleId, 'Recognition rule not found')
+      await assertReference('accounts', deferredAccountId, 'Deferred revenue account not found')
+
+      const written = await db.execute<Record<string, unknown>>(sql`
+        update items set
+          kind = coalesce(${body.kind ?? null}, kind),
+          name = ${name !== undefined ? name : sql`name`},
+          description = ${body.description !== undefined ? strOrNull(body.description) : sql`description`},
+          code = ${body.code !== undefined ? strOrNull(body.code) : sql`code`},
+          category = ${body.category !== undefined ? strOrNull(body.category) : sql`category`},
+          unit = ${body.unit !== undefined ? strOrNull(body.unit) : sql`unit`},
+          default_rate = ${defaultRate !== undefined ? defaultRate : sql`default_rate`},
+          default_cost = ${defaultCost !== undefined ? defaultCost : sql`default_cost`},
+          income_account_id = ${incomeAccountId !== undefined ? incomeAccountId : sql`income_account_id`},
+          expense_account_id = ${expenseAccountId !== undefined ? expenseAccountId : sql`expense_account_id`},
+          cost_recovery_account_id = ${costRecoveryAccountId !== undefined ? costRecoveryAccountId : sql`cost_recovery_account_id`},
+          tax_code_id = ${taxCodeId !== undefined ? taxCodeId : sql`tax_code_id`},
+          show_on_timesheet = ${body.showOnTimesheet !== undefined ? body.showOnTimesheet : sql`show_on_timesheet`},
+          recognition_rule_id = ${recognitionRuleId !== undefined ? recognitionRuleId : sql`recognition_rule_id`},
+          deferred_account_id = ${deferredAccountId !== undefined ? deferredAccountId : sql`deferred_account_id`},
+          create_plans_on = ${body.createPlansOn !== undefined ? body.createPlansOn : sql`create_plans_on`},
+          revenue_allocation = ${body.revenueAllocation !== undefined ? body.revenueAllocation : sql`revenue_allocation`},
+          standalone_selling_price = ${standaloneSellingPrice !== undefined ? standaloneSellingPrice : sql`standalone_selling_price`},
+          is_active = ${body.isActive !== undefined ? body.isActive : sql`is_active`},
+          custom = coalesce(${cleanedCustom ? JSON.stringify(cleanedCustom) : null}::jsonb, custom),
+          updated_at = now(), updated_by = ${user.id}
+        where id = ${id} and org_id = ${user.orgId}
+        returning *
+      `)
+      const after = written.rows[0]
+      if (!after) throw new Error('item_changed')
+
+      const changes: Record<string, unknown> = {
+        before: accountingConfiguration(before),
+        after: accountingConfiguration(after),
+      }
+      if (reason !== null) changes.reason = reason
       await db.execute(sql`
-      update items set
-        kind = coalesce(${body.kind ?? null}, kind),
-        name = ${name !== undefined ? name : sql`name`},
-        description = ${body.description !== undefined ? strOrNull(body.description) : sql`description`},
-        code = ${body.code !== undefined ? strOrNull(body.code) : sql`code`},
-        category = ${body.category !== undefined ? strOrNull(body.category) : sql`category`},
-        unit = ${body.unit !== undefined ? strOrNull(body.unit) : sql`unit`},
-        default_rate = ${defaultRate !== undefined ? defaultRate : sql`default_rate`},
-        default_cost = ${defaultCost !== undefined ? defaultCost : sql`default_cost`},
-        income_account_id = ${incomeAccountId !== undefined ? incomeAccountId : sql`income_account_id`},
-        expense_account_id = ${expenseAccountId !== undefined ? expenseAccountId : sql`expense_account_id`},
-        cost_recovery_account_id = ${costRecoveryAccountId !== undefined ? costRecoveryAccountId : sql`cost_recovery_account_id`},
-        tax_code_id = ${taxCodeId !== undefined ? taxCodeId : sql`tax_code_id`},
-        show_on_timesheet = ${body.showOnTimesheet !== undefined ? body.showOnTimesheet : sql`show_on_timesheet`},
-        recognition_rule_id = ${recognitionRuleId !== undefined ? recognitionRuleId : sql`recognition_rule_id`},
-        deferred_account_id = ${deferredAccountId !== undefined ? deferredAccountId : sql`deferred_account_id`},
-        create_plans_on = ${body.createPlansOn !== undefined ? body.createPlansOn : sql`create_plans_on`},
-        revenue_allocation = ${body.revenueAllocation !== undefined ? body.revenueAllocation : sql`revenue_allocation`},
-        standalone_selling_price = ${standaloneSellingPrice !== undefined ? standaloneSellingPrice : sql`standalone_selling_price`},
-        is_active = ${body.isActive !== undefined ? body.isActive : sql`is_active`},
-        custom = coalesce(${cleanedCustom ? JSON.stringify(cleanedCustom) : null}::jsonb, custom),
-        updated_at = now(), updated_by = ${user.id}
-      where id = ${id} and org_id = ${user.orgId}
-    `)
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id, at)
+        values
+          (${user.orgId}, 'items', ${id}, 'update', ${JSON.stringify(changes)}::jsonb,
+           ${user.id}, ${req.headers.get('X-Request-Id')}, now())
+      `)
+      return after
+    })
+    if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
   } catch (e: unknown) {
+    if (e instanceof PatchNotFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof PatchInvalid) return bad(e.message)
     const msg = e instanceof Error ? `${e.message} ${String((e as { cause?: unknown }).cause ?? '')}` : String(e)
-    if (msg.includes('items_org_code')) {
-      return bad('Code already in use')
-    }
+    if (msg.includes('items_org_code')) return bad('Code already in use')
     throw e
   }
 
