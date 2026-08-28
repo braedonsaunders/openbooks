@@ -110,13 +110,20 @@ export async function POST(req: Request) {
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     name?: string;
-    description?: string;
+    description?: string | null;
     scopes?: unknown;
     expiresAt?: string | null;
     rateLimitPerMin?: number | null;
   };
-  const name = body.name?.trim();
+  const name = typeof body.name === "string" ? body.name.trim() : "";
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+  if (
+    body.description !== undefined &&
+    body.description !== null &&
+    typeof body.description !== "string"
+  ) {
+    return NextResponse.json({ error: "description must be a string" }, { status: 400 });
+  }
 
   // An omitted or empty scope set is a rejected request, never a
   // full-permission credential.
@@ -145,7 +152,7 @@ export async function POST(req: Request) {
   }
 
   const gen = generateApiKey();
-  const description = body.description?.trim() || null;
+  const description = typeof body.description === "string" ? body.description.trim() || null : null;
   const insertedId = await withOrgTransaction(actor.orgId, async () => {
     const inserted = (await db.execute(sql`
       insert into api_keys (org_id, user_id, name, description, key_prefix, key_hash,
@@ -191,7 +198,7 @@ export async function PATCH(req: Request) {
   const body = (parsedBody2.data) as {
     id?: string;
     name?: string;
-    description?: string;
+    description?: string | null;
     scopes?: unknown;
     isActive?: boolean;
     rateLimitPerMin?: number | null;
@@ -209,12 +216,15 @@ export async function PATCH(req: Request) {
     rateLimitPerMin: undefined as number | null | undefined,
   };
   if (body.name !== undefined) {
-    const name = body.name.trim();
+    const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name) return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
     fields.name = name;
   }
   if (body.description !== undefined) {
-    fields.description = body.description.trim() || null;
+    if (body.description !== null && typeof body.description !== "string") {
+      return NextResponse.json({ error: "description must be a string" }, { status: 400 });
+    }
+    fields.description = body.description === null ? null : body.description.trim() || null;
   }
   if (body.scopes !== undefined) {
     // Clearing scopes to [] would mint a key whose grant contract is empty;
