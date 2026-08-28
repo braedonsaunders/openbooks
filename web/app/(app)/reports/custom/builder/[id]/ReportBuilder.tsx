@@ -63,6 +63,33 @@ export function ReportBuilder({
   const [deleting, setDeleting] = useState(false)
   const [tab, setTab] = useState<Tab>('data')
 
+  // PATCH requests can outlive the debounce timer that created them. Keep an
+  // exact server revision and serialize saves so a late response can never
+  // overwrite a newer definition (or report stale work as saved).
+  const revisionRef = useRef<string | null>(null)
+  const revisionRequestRef = useRef<Promise<string | null> | null>(null)
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const saveGenerationRef = useRef(0)
+
+  const ensureRevision = useCallback(async (): Promise<string | null> => {
+    if (revisionRef.current) return revisionRef.current
+    if (!revisionRequestRef.current) {
+      const request = fetch(`/api/reports/definitions/${definition.id}`)
+        .then(async (res) => {
+          if (!res.ok) return null
+          const data = (await res.json()) as { definition?: { updated_at?: unknown } }
+          const revision = data.definition?.updated_at
+          return typeof revision === 'string' ? revision : null
+        })
+        .catch(() => null)
+      revisionRequestRef.current = request
+    }
+    const revision = await revisionRequestRef.current
+    if (!revision) revisionRequestRef.current = null
+    revisionRef.current = revision
+    return revision
+  }, [definition.id])
+
   const entity = REPORT_ENTITY_MAP[query.entity] ?? REPORT_ENTITY_MAP.ledger_lines!
   const mode = query.mode ?? 'rows'
 
@@ -125,25 +152,57 @@ export function ReportBuilder({
       firstSave.current = false
       return
     }
+    const generation = ++saveGenerationRef.current
     setSaveState('dirty')
     const timer = setTimeout(async () => {
-      setSaveState('saving')
-      const res = await fetch(`/api/reports/definitions/${definition.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, query, layout }),
-      })
-      if (res.ok) {
-        setSaveState('saved')
-        router.refresh()
-      } else {
-        setSaveState('error')
-        toast.error((await res.json()).error ?? tc('feedback.saveFailed'))
-      }
+      const payload = { name, description, query, layout }
+      saveQueueRef.current = saveQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          // A newer debounce superseded this payload before the queue reached
+          // it. Skip the stale write entirely and let the latest generation
+          // carry the current state to the server.
+          if (generation !== saveGenerationRef.current) return
+          const expectedUpdatedAt = await ensureRevision()
+          // Editing while the revision GET was in flight supersedes this save.
+          if (generation !== saveGenerationRef.current) return
+          if (!expectedUpdatedAt) {
+            setSaveState('error')
+            toast.error(tc('feedback.saveFailed'))
+            return
+          }
+          setSaveState('saving')
+          try {
+            const res = await fetch(`/api/reports/definitions/${definition.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...payload, expectedUpdatedAt }),
+            })
+            const data = (await res.json().catch(() => ({}))) as {
+              error?: string
+              definition?: { updated_at?: unknown }
+            }
+            if (res.ok) {
+              const savedRevision = data.definition?.updated_at
+              if (typeof savedRevision === 'string') revisionRef.current = savedRevision
+              if (generation === saveGenerationRef.current) {
+                setSaveState('saved')
+                router.refresh()
+              }
+            } else if (generation === saveGenerationRef.current) {
+              setSaveState('error')
+              toast.error(data.error ?? tc('feedback.saveFailed'))
+            }
+          } catch {
+            if (generation !== saveGenerationRef.current) return
+            setSaveState('error')
+            toast.error(tc('feedback.saveFailed'))
+          }
+        })
     }, 700)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, query, layout])
+  }, [name, description, query, layout, ensureRevision])
 
   const selectableColumns = useMemo(() => entity.columns.filter(isOperationalColumn), [entity])
 
