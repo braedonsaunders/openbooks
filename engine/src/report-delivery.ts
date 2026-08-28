@@ -330,6 +330,9 @@ export async function markReportDeliveryFailed(
   error: string,
   finalQueueAttempt: boolean,
 ): Promise<void> {
+  // Only the sending attempt that owns this callback may record a failure.
+  // A delayed callback must not rewrite a row already completed as sent (or
+  // otherwise moved on by a newer lifecycle transition).
   // A queue giveup only strands the row forever once attempt_count has also
   // reached the delivery ceiling — until then the scanner re-enqueues failed
   // rows. That conjunction is the one and only terminal transition, so stamp
@@ -349,7 +352,7 @@ export async function markReportDeliveryFailed(
                                      then ${EMAIL_DELIVERY_WORKER_IDENTITY}
                                      else terminal_failed_by end,
            updated_at=${failedAt}
-     where id=${deliveryId} and org_id=${orgId}
+     where id=${deliveryId} and org_id=${orgId} and status='sending'
      returning attempt_count as "attempts",
                (attempt_count >= ${MAX_DELIVERY_ATTEMPTS}
                 and terminal_failed_by = ${EMAIL_DELIVERY_WORKER_IDENTITY}
