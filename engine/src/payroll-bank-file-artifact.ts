@@ -814,7 +814,7 @@ export async function releasePayRunBankFile(
   await db.transaction(async (tx) => {
     // The audit record and the release counters move together: an artifact
     // can never show a release the log does not explain, or vice versa.
-    await tx.execute(sql`
+    const updated = await tx.execute<{ releaseCount: number }>(sql`
       update pay_run_bank_files
          set status = case when status = 'superseded' then status else 'released' end,
              release_count = release_count + 1,
@@ -822,7 +822,12 @@ export async function releasePayRunBankFile(
              last_released_at = now(),
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${artifactId}
+       returning release_count as "releaseCount"
     `);
+    const releaseNumber = updated.rows[0]?.releaseCount;
+    if (releaseNumber === undefined) {
+      throw new PayrollError("payroll bank file not found");
+    }
     await recordBankFileEvent(tx, {
       orgId,
       actorId,
@@ -838,7 +843,7 @@ export async function releasePayRunBankFile(
         // A superseded file leaving the building is the dangerous release, so
         // it is called out in the evidence rather than inferred later.
         supersededAtRelease: row.status === "superseded",
-        releaseNumber: row.releaseCount + 1,
+        releaseNumber,
       },
     });
   });
