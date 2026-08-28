@@ -31,11 +31,23 @@ export async function loadFieldTicketDrawerData({
 
   let ticket: TicketPayload
   try {
-    ticket = (await loadFieldTicket(orgId, ticketId)) as unknown as TicketPayload
+    ticket = (await loadFieldTicket(orgId, ticketId, {
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    })) as unknown as TicketPayload
   } catch (error) {
     if (error instanceof FieldTicketError) return null
     throw error
   }
+
+  const ticketSubsidiaryId = (ticket as TicketPayload & {
+    fieldTicket: { subsidiaryId?: string | null }
+  }).fieldTicket.subsidiaryId ?? null
+  // A non-null ticket subsidiary is authoritative for every legal-entity
+  // aware picker. Unrestricted users retain the org-wide picker on an empty
+  // draft (whose subsidiary is still null).
+  const legalEntityFilter = (column: string) => ticketSubsidiaryId
+    ? sql` and ${sql.raw(column)} = ${ticketSubsidiaryId}`
+    : sql``
 
   const [equipmentEnabled, inventoryEnabled, today] = await Promise.all([
     isFeatureEnabled(orgId, 'equipment'),
@@ -61,6 +73,7 @@ export async function loadFieldTicketDrawerData({
              select 1 from employee_roles r
               where r.party_id = p.id and r.org_id = p.org_id and r.is_active
            )
+           ${legalEntityFilter('p.subsidiary_id')}
          order by p.display_name`),
       db.execute<(FieldTicketDrawerProps['laborItems'])[number]>(sql`
         select id, name from items
@@ -117,7 +130,9 @@ export async function loadFieldTicketDrawerData({
                ), 'weekly') as period
           from projects p
           left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
+            ${legalEntityFilter('cust.subsidiary_id')}
          where p.org_id = ${orgId} and p.is_active
+           ${legalEntityFilter('p.subsidiary_id')}
          order by p.name
          limit 2000`),
       ticket.projectId
@@ -125,13 +140,19 @@ export async function loadFieldTicketDrawerData({
             select id, code, name, status, estimated_hours as "estimatedHours"
               from project_tasks
              where org_id = ${orgId} and project_id = ${ticket.projectId}
+               ${ticketSubsidiaryId ? sql`and exists (
+                 select 1 from projects p
+                  where p.id = project_tasks.project_id and p.org_id = project_tasks.org_id
+                    and p.subsidiary_id = ${ticketSubsidiaryId}
+               )` : sql``}
              order by code nulls last, name`)
         : Promise.resolve({ rows: [] }),
       equipmentEnabled
         ? db.execute<(FieldTicketDrawerProps['equipmentUnits'])[number]>(sql`
             select id, name, unit_number as "unitNumber", charge_item_id as "chargeItemId"
-              from equipment_units
+             from equipment_units
              where org_id = ${orgId} and status = 'active' and charge_item_id is not null
+               ${legalEntityFilter('subsidiary_id')}
              order by unit_number, name`)
         : Promise.resolve({ rows: [] }),
       resolveFormLayout({
