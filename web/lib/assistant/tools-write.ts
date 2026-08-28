@@ -93,7 +93,10 @@ const draftJournalEntry: AssistantToolDef = {
         accountId: acct.id,
         accountLabel: `${acct.number ?? ""} · ${acct.name}`.replace(/^ · /, ""),
         description: l.description?.trim() || null,
-        amount: formatMoney(exactAmounts[index]!, 2),
+        // exactAmounts is already canonical numeric(19,4) money. Keep the
+        // signed proposal value intact so confirmation reviews and commits do
+        // not silently round valid four-decimal input to cents.
+        amount: exactAmounts[index]!,
       });
     }
 
