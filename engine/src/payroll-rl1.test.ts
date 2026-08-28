@@ -6,6 +6,7 @@
  * ED-430-V (each cited in the modules under test).
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { assembleRl1Slip, rl1YearCaps, RL1_UNSUPPORTED_BOXES, type Rl1SlipAggregates } from "./payroll-rl1.ts";
 import {
@@ -87,6 +88,22 @@ test("box I caps at the QPIP maximum insurable earnings (RL-1.G s. 5.11)", () =>
 
 test("the boxes the data cannot populate are published, not implied", () => {
   assert.match(RL1_UNSUPPORTED_BOXES, /box(es)? D/i);
+});
+
+test("RL-1 artifacts pin slips and totals to one repeatable-read snapshot", () => {
+  const source = readFileSync(new URL("./payroll-rl1.ts", import.meta.url), "utf8");
+  const returnStart = source.indexOf("export async function rl1Return");
+  const populationStart = source.indexOf("export async function rl1Population");
+  assert.ok(returnStart >= 0 && populationStart > returnStart);
+  const returnBody = source.slice(returnStart, populationStart);
+  assert.match(returnBody, /rl1Db\.transaction[\s\S]*isolationLevel: "repeatable read"/);
+  assert.doesNotMatch(returnBody, /await rl1Slips\(/);
+  assert.doesNotMatch(returnBody, /await rl1Summary\(/);
+
+  const populationBody = source.slice(populationStart);
+  assert.match(populationBody, /rl1Db\.transaction[\s\S]*isolationLevel: "repeatable read"/);
+  assert.doesNotMatch(populationBody, /await rl1Slips\(/);
+  assert.doesNotMatch(populationBody, /await rl1Summary\(/);
 });
 
 test("transmitter validation: a complete configuration passes", () => {
