@@ -79,6 +79,8 @@ const recognitionEventsMigrationPath =
   "schema/migrations/generated/0062_recognition_events.sql";
 const sandboxWipeGuardAuthorizationMigrationPath =
   "schema/migrations/generated/0078_sandbox_wipe_guard_authorization.sql";
+const payDerivedRulesEffectiveVersioningMigrationPath =
+  "schema/migrations/generated/0083_pay_derived_rules_effective_versioning.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -165,6 +167,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0080_payment_instruction_claim_fence_bundle_guard.sql",
     "0081_account_group_member_dimension_uniqueness.sql",
     "0082_asset_draft_number_uniqueness.sql",
+    "0083_pay_derived_rules_effective_versioning.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -684,6 +687,27 @@ test("one effective tax-rate window per tax code is enforced by storage, not by 
   );
   // The baseline keeps its published trigger untouched.
   assert.match(baseline, /CREATE FUNCTION public\.tax_rates_no_overlap_guard/);
+});
+
+test("derived-pay rule versioning is replay-safe and preserves storage invariants", () => {
+  const migration = readFileSync(payDerivedRulesEffectiveVersioningMigrationPath, "utf8");
+
+  // PostgreSQL has no ADD CONSTRAINT IF NOT EXISTS. The catalog guard keeps a
+  // second application a no-op while retaining the exact tenant/code window
+  // exclusion predicate on the first application.
+  assert.match(migration, /DO \$pay_derived_rules_no_active_overlap\$/);
+  assert.match(migration, /pg_catalog\.pg_constraint/);
+  assert.match(migration, /ADD CONSTRAINT pay_derived_rules_no_active_overlap\s+EXCLUDE USING gist/);
+  assert.match(migration, /org_id WITH =/);
+  assert.match(migration, /code WITH =/);
+  assert.match(migration, /\(daterange\(effective_from, COALESCE\(effective_to, 'infinity'::date\), '\[\]'\)\) WITH &&/);
+  assert.match(migration, /WHERE \(is_active\)/);
+
+  // Replay replaces the trigger/function definitions but never rewrites or
+  // deletes existing pay-rule rows.
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.pay_derived_rules_immutable_guard/);
+  assert.match(migration, /DROP TRIGGER IF EXISTS pay_derived_rules_immutable/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s+public\.pay_derived_rules/im);
 });
 test("payroll commit has durable exact-source selection evidence", () => {
   const migration = readFileSync(payrollCommitSelectionFenceMigrationPath, "utf8");
