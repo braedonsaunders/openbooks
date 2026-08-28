@@ -3,6 +3,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { ListViewConfig } from '@openbooks/customization'
 import { AP_KINDS, AR_KINDS } from '../document-kinds'
+import { subsidiaryVisibleFilter } from '../subsidiaries'
 import {
   DOCUMENT_BUILT_IN_EXPR,
   DOCUMENT_SORTS,
@@ -67,7 +68,10 @@ export interface DocListSource {
 export interface DocQuickFilter {
   paramKey: string
   filterKey: string
-  loadOptions?: (orgId: string) => Promise<{ value: string; label: string; count?: number }[]>
+  loadOptions?: (
+    orgId: string,
+    allowedSubsidiaryIds?: Set<string> | null,
+  ) => Promise<{ value: string; label: string; count?: number }[]>
   searchSelect?: boolean
 }
 
@@ -164,11 +168,11 @@ const SOURCES: Record<string, DocListSource> = {
     quickFilters: [{
       paramKey: 'employee',
       filterKey: 'party_id',
-      loadOptions: async (orgId) => {
+      loadOptions: async (orgId, allowedSubsidiaryIds) => {
         const result = await db.execute<{ value: string; label: string; count?: number } & Record<string, unknown>>(sql`
           select p.id::text as value, p.display_name as label, count(*)::int as count
             from documents d join parties p on p.id = d.party_id and p.org_id = d.org_id
-           where d.org_id = ${orgId} and d.kind = 'expense_report'
+           where d.org_id = ${orgId} and d.kind = 'expense_report'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
            group by p.id, p.display_name
            order by p.display_name`)
         return result.rows
@@ -283,11 +287,16 @@ const SOURCES: Record<string, DocListSource> = {
       paramKey: 'account',
       filterKey: 'bank_account_id',
       searchSelect: true,
-      loadOptions: async (orgId) => {
+      loadOptions: async (orgId, allowedSubsidiaryIds) => {
         const result = await db.execute<{ value: string; label: string; count?: number } & Record<string, unknown>>(sql`
           select id::text as value, trim(coalesce(number || ' ', '') || name) as label
             from accounts
            where org_id=${orgId} and is_active and not is_summary and reconcilable
+             ${allowedSubsidiaryIds == null
+               ? sql``
+               : allowedSubsidiaryIds.size
+                 ? sql`and (subsidiary_id is null or subsidiary_id = any(${`{${[...allowedSubsidiaryIds].join(',')}}`}::uuid[]))`
+                 : sql`and false`}
            order by number nulls last, name`)
         return result.rows
       },
