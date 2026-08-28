@@ -239,9 +239,6 @@ export async function correctPostedDocument(
   }
   assertApplicationPermission(context, createPermission(header.kind));
   assertApplicationPermission(context, postPermission(header.kind));
-  if (header.status !== "posted") {
-    throw invalidInput("only a posted transaction can be corrected");
-  }
   const outcome = await executeIdempotent({
     context,
     operation: "documents.correct",
@@ -249,6 +246,12 @@ export async function correctPostedDocument(
     request: { documentId: input.documentId, correction: input.correction },
     execute: async () => {
       try {
+        // A completed idempotency key must replay even after the first attempt
+        // voided the source. Fresh executions still enforce the posted guard;
+        // executeIdempotent never invokes this callback for a replay.
+        if (header.status !== "posted") {
+          throw invalidInput("only a posted transaction can be corrected");
+        }
         const replacement = await createPostedCorrectionDraft(
           input.documentId,
           input.correction,
