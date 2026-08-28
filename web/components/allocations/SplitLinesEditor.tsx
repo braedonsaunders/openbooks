@@ -31,7 +31,10 @@ export interface CodingConfig {
 
 export interface AllocationLine {
   accountId: string
-  portion: { kind: 'remainder' } | { kind: 'percent'; value: number } | { kind: 'fixed'; value: number }
+  // Fixed amounts stay as their exact decimal text while they are being
+  // edited. Converting every keystroke through Number loses precision before
+  // the server-side money validator can canonicalize the value.
+  portion: { kind: 'remainder' } | { kind: 'percent'; value: number } | { kind: 'fixed'; value: string }
   departmentId?: string | null
   projectId?: string | null
   locationId?: string | null
@@ -71,6 +74,16 @@ export function newAllocationLine(accountId = ''): AllocationLine {
   return { accountId, portion: { kind: 'remainder' } }
 }
 
+/** Convert an amount input without coercing fixed money through IEEE-754. */
+export function allocationPortionFromInput(
+  portion: AllocationLine['portion'],
+  rawValue: string,
+): AllocationLine['portion'] {
+  if (portion.kind === 'fixed') return { kind: 'fixed', value: rawValue }
+  if (portion.kind === 'percent') return { kind: 'percent', value: Number(rawValue) || 0 }
+  return portion
+}
+
 export function SplitLinesEditor({
   lines,
   onChange,
@@ -97,7 +110,11 @@ export function SplitLinesEditor({
 
   const setPortionKind = (i: number, kind: AllocationLine['portion']['kind']) => {
     const portion: AllocationLine['portion'] =
-      kind === 'remainder' ? { kind: 'remainder' } : { kind, value: kind === 'percent' ? 100 : 0 }
+      kind === 'remainder'
+        ? { kind: 'remainder' }
+        : kind === 'percent'
+          ? { kind: 'percent', value: 100 }
+          : { kind: 'fixed', value: '0' }
     setLine(i, { portion })
   }
 
@@ -129,11 +146,9 @@ export function SplitLinesEditor({
                   className={cn('h-8 w-24 text-right tabular-nums', line.portion.kind === 'percent' ? 'pr-6' : 'pr-2')}
                   inputMode="decimal"
                   value={String(line.portion.value ?? '')}
-                  onChange={(e) =>
-                    setLine(i, {
-                      portion: { kind: line.portion.kind as 'percent' | 'fixed', value: Number(e.target.value) || 0 },
-                    })
-                  }
+                  onChange={(e) => {
+                    setLine(i, { portion: allocationPortionFromInput(line.portion, e.target.value) })
+                  }}
                 />
                 {line.portion.kind === 'percent' ? (
                   <span className="pointer-events-none absolute top-1.5 right-2 text-xs text-slate-400">%</span>
