@@ -12,6 +12,7 @@ import {
   parseBankOfCanadaJson,
   parseEcbCsv,
   ratioRate,
+  runDueFxProviders,
   runFxProvider,
   saveFxProviderConfig,
 } from "./fx-providers.ts";
@@ -143,6 +144,67 @@ test("weekday schedules skip weekends and weekly schedules remain seven days apa
     "2026-07-23T22:00:00.000Z",
   );
 });
+
+// The scheduler cursor and its durable run claim must commit as one unit. If
+// run-row creation loses a storage race, the occurrence stays due so a later
+// tick can retry it; the old cursor-first ordering silently skipped it.
+test(
+  "a scheduler occurrence stays due when durable run creation fails",
+  { skip: !DB },
+  async () => {
+    const org = await setupManualFxScratchOrg();
+    const originalFetch = globalThis.fetch;
+    const now = new Date();
+    const dueAt = new Date(now.getTime() - 60_000);
+    try {
+      const actorId = await withBypass(async () => createScratchUser(org.orgId, "FX scheduler", "admin"));
+      await saveFxProviderConfig(org.orgId, actorId, {
+        provider: "bank_of_canada",
+        baseCurrency: "CAD",
+        currencies: ["USD", "EUR"],
+        schedule: "daily",
+        syncHourUtc: 0,
+        lookbackDays: 7,
+        isEnabled: true,
+        apiKey: null,
+      });
+      await db.execute(sql`
+        update fx_provider_configs set next_sync_at = ${dueAt}
+         where id = ${org.configId}`);
+      // A live run makes the durable insert fail. The occurrence claim must
+      // roll back with it instead of leaving the cursor advanced and unbacked.
+      await db.execute(sql`
+        insert into fx_provider_runs
+          (org_id, provider_config_id, trigger, requested_from, requested_to, started_at, lease_token)
+        values (${org.orgId}, ${org.configId}, 'scheduler', current_date - 7, current_date, now(), gen_random_uuid())
+      `);
+      const failedTick = await runDueFxProviders(now);
+      assert.equal(failedTick, 0, "a failed durable claim is not counted as dispatched");
+      const afterFailedClaim = await db.execute<{ next_sync_at: string }>(sql`
+        select next_sync_at::text from fx_provider_configs where id = ${org.configId}`);
+      assert.equal(new Date(afterFailedClaim.rows[0]!.next_sync_at).getTime(), dueAt.getTime(),
+        "the due cursor must remain unchanged when run creation rolls back");
+
+      await db.execute(sql`delete from fx_provider_runs where org_id = ${org.orgId}`);
+      globalThis.fetch = (async () => new Response(JSON.stringify({
+        observations: [{ d: "2026-07-15", FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
+      }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
+      const successfulTick = await runDueFxProviders(now);
+      assert.equal(successfulTick, 1, "the still-due occurrence dispatches on the next tick");
+      const settled = await db.execute<{ status: string; next_sync_at: string }>(sql`
+        select r.status, c.next_sync_at::text
+          from fx_provider_runs r
+          join fx_provider_configs c on c.id = r.provider_config_id
+         where r.org_id = ${org.orgId}`);
+      assert.deepEqual(settled.rows.map((row) => row.status), ["ok"]);
+      assert.ok(new Date(settled.rows[0]!.next_sync_at).getTime() > dueAt.getTime(),
+        "a successful dispatch advances the cursor after durable run creation");
+    } finally {
+      globalThis.fetch = originalFetch;
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("every outbound FX fetch is forced through the no-redirect guard", () => {
   assert.match(source, /function fxFetch\(/);
@@ -686,4 +748,3 @@ test(
     }
   },
 );
-
