@@ -250,6 +250,15 @@ print_env() {
   echo "export ORG_CURRENCY='${ORG_CURRENCY:-USD}'"
 }
 
+worktree_identity() {
+  # Hash the canonical checkout path so separate worktrees still get separate
+  # databases without exposing local filesystem paths in PostgreSQL names.
+  local repo_root=${1:-}
+  [ -n "$repo_root" ] || repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)
+  repo_root=$(cd "$repo_root" && pwd -P)
+  printf '%s' "$repo_root" | shasum -a 256 | cut -c1-16
+}
+
 cmd=${1:-help}
 case "$cmd" in
   up)
@@ -267,9 +276,12 @@ case "$cmd" in
     acquire_lock
     template_ready || build_template
     check_template_freshness
-    # Default to the worktree's own name so two agents never collide and a
-    # human can tell whose database is whose.
-    raw=${2:-$(basename "$(git rev-parse --show-toplevel)")_$(git rev-parse --short HEAD 2>/dev/null || echo local)}
+    # Include the worktree identity: BB worktrees all use the basename
+    # "openbooks", so basename plus commit alone collides across agents.
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)
+    repo_name=$(basename "$repo_root")
+    head=$(git rev-parse --short HEAD 2>/dev/null || echo local)
+    raw=${2:-${repo_name}_${head}_$(worktree_identity "$repo_root")}
     # printf, not echo: `tr -c` would turn echo's trailing newline into an
     # underscore and silently create a database nobody asked for.
     db=$(printf '%s' "ob_$raw" | tr -c 'a-zA-Z0-9_' '_' | cut -c1-60 | tr 'A-Z' 'a-z')
