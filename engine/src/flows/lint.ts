@@ -6,6 +6,10 @@ import {
   type FlowSubjectProfile,
 } from "@openbooks/forms-core";
 import { getFlowAdapter } from "./registry.ts";
+import {
+  BANK_ACCOUNT_ENGINE_MANAGED_RELEASE_STATUSES,
+  BANK_ACCOUNT_SUBJECT_KIND,
+} from "./bank-accounts-adapter.ts";
 import { DOCUMENT_FLOW_KINDS } from "./subject-profiles.ts";
 
 // Document approval release (pending_approval → approved | draft) is owned by
@@ -40,7 +44,13 @@ export function lintFlowGraphForSubject(
   const profile = profileOverride ?? adapter.profile;
   const errors = lintAutomationGraph(parsed.data, profileFieldIds(profile), profile);
 
-  if (DOCUMENT_FLOW_KINDS.includes(subjectKind)) {
+  const engineManagedReleaseStatuses = DOCUMENT_FLOW_KINDS.includes(subjectKind)
+    ? ENGINE_MANAGED_RELEASE_STATUSES
+    : subjectKind === BANK_ACCOUNT_SUBJECT_KIND
+      ? BANK_ACCOUNT_ENGINE_MANAGED_RELEASE_STATUSES
+      : null;
+
+  if (engineManagedReleaseStatuses) {
     const outgoing = new Map<string, string[]>();
     for (const edge of parsed.data.edges) {
       const targets = outgoing.get(edge.source) ?? [];
@@ -51,11 +61,13 @@ export function lintFlowGraphForSubject(
       if (
         node.data.kind === "action" &&
         node.data.action.action === "change_status" &&
-        ENGINE_MANAGED_RELEASE_STATUSES.has(node.data.action.to)
+        engineManagedReleaseStatuses.has(node.data.action.to)
       ) {
+        const subjectLabel =
+          subjectKind === BANK_ACCOUNT_SUBJECT_KIND ? "bank-detail" : "document";
         errors.push(
           `node "${node.id}": change_status to "${node.data.action.to}" is not allowed — ` +
-            `document approval release is engine-enforced; remove this node`,
+            `${subjectLabel} approval release is engine-enforced; remove this node`,
         );
       }
       if (
