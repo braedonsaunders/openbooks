@@ -124,6 +124,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   await db.transaction(async (tx) => {
     const before = ((await tx.execute(sql`
       select * from fair_value_prices where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
+      for update
     `)))
     if (!before.rows[0]) {
       notFound = true
@@ -162,6 +163,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   await db.transaction(async (tx) => {
     const existing = ((await tx.execute(sql`
       select * from fair_value_prices where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
+      for update
     `)))
     if (!existing.rows[0]) {
       notFound = true
