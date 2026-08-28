@@ -35,8 +35,8 @@ export async function runInsightQuery(
   labels?: InsightLabelResolver,
   asOf?: string,
 ): Promise<QueryResult> {
-  validateInsightQuery(query)
-  const compiled = compileInsightQuery(query, orgId, labels, asOf)
+  const validatedQuery = validateInsightQuery(query)
+  const compiled = compileInsightQuery(validatedQuery, orgId, labels, asOf)
   // Fetch one extra row to detect truncation at the cap.
   const capped = Math.min(compiled.limit, INSIGHT_MAX_ROWS)
   const wrapped = `select * from (${compiled.sql}) __insight limit ${capped + 1}`
