@@ -1,6 +1,6 @@
 {
-  "at": "2026-08-28T00:08:51.266Z",
-  "gitSha": "1a6c6f78e2e96a313e46a88e5bf5709112825ef0",
+  "at": "2026-08-28T00:38:54.993Z",
+  "gitSha": "7545525c08e5483df18cd3111302b40b205b6d98",
   "totals": {
     "pass": 42,
     "fail": 0,
@@ -173,7 +173,7 @@
         "The item carries a straight-line twelve-period recognition rule.",
         "Recognition is run as at 2026-07-31, the end of the first service month."
       ],
-      "ms": 172
+      "ms": 166
     },
     {
       "id": "rev-recognition-is-idempotent",
@@ -197,7 +197,7 @@
         "A twelve-month service obligation of 1,200.00 invoiced on 2026-07-15.",
         "Recognition is run for 2026-07-31, then run again for the same date."
       ],
-      "ms": 158
+      "ms": 285
     },
     {
       "id": "rev-obligation-created-per-line",
@@ -227,7 +227,7 @@
       "facts": [
         "One invoice with a single distinct twelve-month service promise."
       ],
-      "ms": 75
+      "ms": 72
     },
     {
       "id": "rev-variable-consideration-constraint",
@@ -338,7 +338,7 @@
         "The incremental borrowing rate is 5%.",
         "The present value of the payments is 86,589.5334."
       ],
-      "ms": 30
+      "ms": 27
     },
     {
       "id": "lease-finance-interest-and-amortization",
@@ -535,7 +535,7 @@
         "The spot rate on 2026-07-15 is 1.3500 CAD per USD.",
         "The translated amount is CAD 1,350.00."
       ],
-      "ms": 47
+      "ms": 56
     },
     {
       "id": "fx-monetary-item-retranslated-at-closing-rate",
@@ -689,7 +689,7 @@
         "Translations round independently: revenue 1,763.6571 and 1,093.4857 against a receivable of 2,857.1429 — the individual roundings miss zero by one ledger unit.",
         "That rounding residual is absorbed within the same entry, leaving AR at CAD 2,857.1429 against revenue at CAD −2,857.1429, and every journal line stamped with the ten-decimal rate actually applied."
       ],
-      "ms": 50
+      "ms": 51
     },
     {
       "id": "fx-inverse-rate-statutory-tax-exact",
@@ -715,7 +715,7 @@
         "The per-line translations genuinely miss zero: revenue 41.1481, 41.1481, 41.1605; tax 2.0574, 2.0574, 2.0580; receivable 129.6296 — the roundings leave a one-ledger-unit residual, so the absorption rule actually executes.",
         "The residual is absorbed by the largest revenue line (41.1605 → 41.1606); every tax control line keeps its exact statutory translation, so tax payable shows exactly CAD 6.1728."
       ],
-      "ms": 60
+      "ms": 56
     },
     {
       "id": "inv-fifo-cost-formula",
@@ -755,7 +755,7 @@
         "Under FIFO the sale consumes 100 units at 2.00 and 50 units at 3.00, so cost of sales is 350.00.",
         "Fifty units remain, all from the second purchase, carried at 150.00."
       ],
-      "ms": 204
+      "ms": 213
     },
     {
       "id": "inv-weighted-average-cost-formula",
@@ -788,7 +788,7 @@
         "Sale: 150 units at 10.00 each, so cost of sales is 150 at 2.50 = 375.00.",
         "Fifty units remain at 2.50, carried at 125.00."
       ],
-      "ms": 210
+      "ms": 191
     },
     {
       "id": "inv-cost-expensed-against-revenue",
@@ -819,7 +819,7 @@
         "100 units purchased at 2.00 (200.00), then 40 units sold at 9.00 (360.00).",
         "Cost of sales is 40 at 2.00 = 80.00, recognised with the sale."
       ],
-      "ms": 125
+      "ms": 146
     },
     {
       "id": "inv-purchase-does-not-touch-profit",
@@ -842,7 +842,7 @@
       "facts": [
         "A vendor bill for 250 units at 4.00 each (1,000.00)."
       ],
-      "ms": 66
+      "ms": 87
     },
     {
       "id": "inv-lower-of-cost-and-nrv",
@@ -913,7 +913,7 @@
         "Under IFRS the carrying amount returns to 280.00, reversing 80.00 of the write-down.",
         "Under US GAAP the reversal is refused and the carrying amount stays at 200.00."
       ],
-      "ms": 86
+      "ms": 88
     },
     {
       "id": "ppe-impairment-to-fair-value",
