@@ -7,6 +7,7 @@ import { COUNTRY_CODES } from '../countries'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity, type SetupField } from '../setup/registry'
 import { buildRow, idColumn } from '../setup/coerce'
+import { auditSetupChange as audit } from '../setup/audit'
 import {
   exportCell,
   MAX_EXPORT_ROWS,
@@ -125,7 +126,10 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
  * Bulk insert/upsert into a Setup-registry table. Mirrors the interactive
  * route (api/admin/setup/[entity]): coerce via the shared registry validator,
  * resolve reference columns from natural keys, match update-vs-insert by the
- * entity's natural key, stamp org/actor columns, and audit every write.
+ * entity's natural key, stamp org/actor columns, and audit every write. Each
+ * mutation and its actual stored-row snapshot are committed together; the
+ * row savepoint keeps one failed audit from leaking a configuration change or
+ * aborting the import's outer transaction.
  */
 async function writeSetup(
   entity: SetupEntity,
@@ -195,18 +199,54 @@ async function writeSetup(
           continue
         }
         if (!ctx.dryRun) {
-          const setParts = built.cols.map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
-          if (entity.actorCols) {
-            setParts.push(sql`updated_by = ${ctx.actorId}`)
-            setParts.push(sql`updated_at = now()`)
-          }
-          if (setParts.length > 0) {
-            const orgFilter = entity.orgScoped ? sql` and org_id = ${ctx.orgId}` : sql``
-            await db.execute(sql`
-              update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
-               where ${sql.raw(idColumn(entity))} = ${existingId}${orgFilter}`)
-            await audit(entity, existingId, 'update', ctx)
-          }
+          await db.transaction(async (tx) => {
+            // The import route owns an outer org transaction. A nested
+            // db.transaction participates in that unit, so this savepoint is
+            // what lets one failed row roll back without stranding later rows
+            // in an aborted transaction.
+            await tx.execute(sql`savepoint setup_import_row`)
+            try {
+              const orgFilter = entity.orgScoped ? sql` and org_id = ${ctx.orgId}` : sql``
+              const before = (await tx.execute(sql`
+                select * from ${sql.raw(entity.table)}
+                 where ${sql.raw(idColumn(entity))} = ${existingId}${orgFilter}
+                 for update`)) as { rows: Record<string, unknown>[] }
+              if (!before.rows[0]) throw new Error('row no longer exists')
+
+              const setParts = built.cols.map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
+              if (entity.actorCols) {
+                setParts.push(sql`updated_by = ${ctx.actorId}`)
+                setParts.push(sql`updated_at = now()`)
+              }
+              if (setParts.length > 0) {
+                const updated = (await tx.execute(sql`
+                  update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
+                   where ${sql.raw(idColumn(entity))} = ${existingId}${orgFilter}
+                  returning *`)) as { rows: Record<string, unknown>[] }
+                if (!updated.rows[0]) throw new Error('row no longer exists')
+                await audit(
+                  {
+                    orgId: entity.orgScoped ? ctx.orgId : null,
+                    table: entity.table,
+                    rowId: existingId,
+                    action: 'update',
+                    changes: {
+                      source: 'import',
+                      before: before.rows[0],
+                      after: updated.rows[0],
+                    },
+                    actorId: ctx.actorId,
+                  },
+                  tx,
+                )
+              }
+              await tx.execute(sql`release savepoint setup_import_row`)
+            } catch (error) {
+              await tx.execute(sql`rollback to savepoint setup_import_row`)
+              await tx.execute(sql`release savepoint setup_import_row`)
+              throw error
+            }
+          })
         }
         outcome.updated++
       } else {
@@ -217,18 +257,46 @@ async function writeSetup(
           continue
         }
         if (!ctx.dryRun) {
-          const cols = [...built.cols]
-          if (entity.orgScoped) cols.push({ column: 'org_id', value: ctx.orgId })
-          if (entity.actorCols) {
-            cols.push({ column: 'created_by', value: ctx.actorId })
-            cols.push({ column: 'updated_by', value: ctx.actorId })
-          }
-          const colSql = sql.raw(cols.map((c) => c.column).join(', '))
-          const valSql = sql.join(cols.map((c) => sql`${c.value}`), sql`, `)
-          const ins = (await db.execute(sql`
-            insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
-            returning ${sql.raw(idColumn(entity))} as id`)) as { rows: { id: string }[] }
-          await audit(entity, String(ins.rows[0]?.id ?? ''), 'insert', ctx)
+          await db.transaction(async (tx) => {
+            // See the update branch: this savepoint is required when the
+            // caller already owns the import's outer transaction.
+            await tx.execute(sql`savepoint setup_import_row`)
+            try {
+              const cols = [...built.cols]
+              if (entity.orgScoped) cols.push({ column: 'org_id', value: ctx.orgId })
+              if (entity.actorCols) {
+                cols.push({ column: 'created_by', value: ctx.actorId })
+                cols.push({ column: 'updated_by', value: ctx.actorId })
+              }
+              const colSql = sql.raw(cols.map((c) => c.column).join(', '))
+              const valSql = sql.join(
+                cols.map((c) => sql`${c.value}`),
+                sql`, `,
+              )
+              const ins = (await tx.execute(sql`
+                insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
+                returning *`)) as { rows: Record<string, unknown>[] }
+              const inserted = ins.rows[0]
+              const rowId = String(inserted?.[idColumn(entity)] ?? '')
+              if (!inserted || !rowId) throw new Error('insert did not return a row')
+              await audit(
+                {
+                  orgId: entity.orgScoped ? ctx.orgId : null,
+                  table: entity.table,
+                  rowId,
+                  action: 'insert',
+                  changes: { source: 'import', before: null, after: inserted },
+                  actorId: ctx.actorId,
+                },
+                tx,
+              )
+              await tx.execute(sql`release savepoint setup_import_row`)
+            } catch (error) {
+              await tx.execute(sql`rollback to savepoint setup_import_row`)
+              await tx.execute(sql`release savepoint setup_import_row`)
+              throw error
+            }
+          })
         }
         outcome.created++
       }
@@ -241,11 +309,4 @@ async function writeSetup(
     }
   }
   return outcome
-}
-
-async function audit(entity: SetupEntity, rowId: string, action: 'insert' | 'update', ctx: WriteCtx) {
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${entity.orgScoped ? ctx.orgId : null}, ${entity.table}, ${rowId}, ${action},
-            ${JSON.stringify({ source: 'import' })}, ${ctx.actorId})`)
 }
