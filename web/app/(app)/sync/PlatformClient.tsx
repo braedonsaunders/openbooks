@@ -535,12 +535,16 @@ export function PlatformClient() {
   async function toggleMirror(conn: Connection) {
     setBusy(`${conn.id}:mirror`);
     try {
-      await fetch(`/api/platform/connections/${conn.id}`, {
+      const res = await fetch(`/api/platform/connections/${conn.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mirrorEnabled: !conn.mirrorEnabled }),
       });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       await load();
+    } catch (error) {
+      toast.error((error as Error).message);
     } finally {
       setBusy(null);
     }
@@ -603,9 +607,15 @@ export function PlatformClient() {
     if (!confirm(t("confirmDelete", { name: conn.displayName }))) return;
     setBusy(`${conn.id}:del`);
     try {
-      await fetch(`/api/platform/connections/${conn.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/platform/connections/${conn.id}`, {
+        method: "DELETE",
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       await load();
       toast.success(t("toast.removed"));
+    } catch (error) {
+      toast.error((error as Error).message);
     } finally {
       setBusy(null);
     }
