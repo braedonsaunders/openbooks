@@ -101,7 +101,7 @@ BEGIN
            AND s.period_starts_on >= v_conflict.newer_from
         RETURNING s.id
       )
-      SELECT count(*) INTO v_lines_cancelled FROM cancelled;
+      SELECT v_lines_cancelled + count(*) INTO v_lines_cancelled FROM cancelled;
 
       UPDATE public.lease_schedule_lines s
          SET period_ends_on = v_conflict.newer_from - 1,
