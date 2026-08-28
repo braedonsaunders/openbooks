@@ -141,8 +141,9 @@ const hooks = registerHooks({
   },
 });
 
+const routeUrl = new URL("./route.ts?report-definition-occ-test", import.meta.url).href;
 const { GET, PATCH } =
-  (await import("./route.ts?report-definition-occ-test")) as typeof import("./route.ts");
+  (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const DEFINITION_ID = "definition-1";

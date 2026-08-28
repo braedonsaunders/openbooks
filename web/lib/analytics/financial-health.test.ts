@@ -99,8 +99,13 @@ const hooks = registerHooks({
   },
 });
 
-const { financialHealth } =
-  await import("./financial-health.ts?non-operating-income-regression");
+const financialHealthUrl = new URL(
+  "./financial-health.ts?non-operating-income-regression",
+  import.meta.url,
+).href;
+const { financialHealth } = (await import(financialHealthUrl)) as typeof import(
+  "./financial-health.ts"
+);
 hooks.deregister();
 
 const row = (type: string, balance: number) => ({
