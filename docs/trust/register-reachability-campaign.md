@@ -61,7 +61,7 @@ correction.
 | `fnd_ddae2dd2_92aed7` | `43ee270b456961a704bf7c6955383dd890a7d160` | `c0fca24448c291909b567edddc694a319e0f736c` | `fix: enforce nested private-folder access boundaries` |
 | `fnd_f3336505_de4203` | `09e0e9944dd6bef1343038b86a18e31951f4e01d` | `e4ed339d4bedb6b74030ecf42c9707d47d5b3bdc` | `fix: persist order drafts before requesting approval` |
 | `fnd_f40ce24a_881fae` | `255b7674d103b4c5490f032df199e2abb71f63e1` | `8fbe02704b95be2c519e0811e3e13037d1a29700` | `fix: make document void requests atomic and concurrency-safe` |
-| `fnd_mt7nyxa_ns307` | `2645d3e50faf98e66d1575653ac5745a7764e041` | `68a73600e7f7d521f0ff1ccd26ef61029ccfbd12` | `fix(engine): refuse redirects on NetSuite SuiteQL, RESTlet, and SuiteTalk calls` |
+| `fnd_mt7nyxa_ns307` | `2645d3e50faf98e66d1575653ac5745a7764e041` | `68a73600e7f7d521f0ff1ccd26ef61029ccfbd12` | `fix(engine): refuse redirects on external query, REST, and SOAP calls` |
 | `fnd_mt7nyxa_tax307` | `2645d3e50faf98e66d1575653ac5745a7764e041` | `1ab18121762c7e47700f4049399ad92e68a95565` | `fix: prevent tax provider credential leaks across redirects` |
 | `fnd_mt9844pt_0bwnsn` | `0575704025ef5290927830c31db7ff5b771eb496` | `e85307c7d07a570af8d5e03dda37773290355d38` | `fix(tax): gate filing prepare/mark-filed behind compliance.file` |
 | `fnd_mtbnparb_fnvdqh` | `13760657c69081f142bfefa55d0f76599e93839e` | `26606bdd729f22273207c1218e7ea4682121fafe` | `fix(tax): require an org-wide closed lock for the mark-filed period fence` |
