@@ -84,13 +84,20 @@ export async function resolveAccountGroups(dimension: string, orgId?: string): P
       from account_group_members m
       join account_groups g on g.id = m.group_id
       where g.dimension = ${dimension} and g.is_active = true${orgFilter}
+      order by m.account_id, g.id
     `),
     db.execute(sql`select id, number, name, type from accounts where is_summary = false${acctOrgFilter}`),
   ]);
 
   const pins = new Map<string, GroupRef>();
   for (const p of pinRows.rows as any[]) {
-    pins.set(p.account_id, { groupId: p.group_id, key: p.key, name: p.name, color: p.color });
+    // Migration 0081 makes duplicate account/dimension pins impossible. Keep
+    // a deterministic tie-break for legacy rows that predate that constraint
+    // so historical reports never depend on the database's physical order.
+    const existing = pins.get(p.account_id);
+    if (!existing || String(p.group_id) < existing.groupId) {
+      pins.set(p.account_id, { groupId: p.group_id, key: p.key, name: p.name, color: p.color });
+    }
   }
   const catchAll = groups.find((g) => g.isCatchAll) ?? null;
 
