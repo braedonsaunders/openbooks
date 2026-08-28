@@ -76,14 +76,117 @@ function pipesOutput(code) {
 }
 
 /**
+ * Split a run block into shell commands, joining backslash-continued lines.
+ *
+ * A fallback only excuses the pipeline in its own command. Keeping command
+ * boundaries here prevents a summary command such as `... || echo ...` from
+ * excusing an unrelated pipeline later in the same YAML block.
+ */
+function shellCommands(code) {
+  const commands = []
+  let continued = ''
+
+  for (const line of code.split('\n')) {
+    const text = line.trim()
+    if (!text) continue
+
+    const continues = /\\\s*$/.test(text)
+    const part = text.replace(/\\\s*$/, '')
+    continued = continued ? `${continued} ${part}` : part
+    if (continues) continue
+
+    commands.push(...splitShellCommands(continued))
+    continued = ''
+  }
+
+  if (continued) commands.push(...splitShellCommands(continued))
+  return commands
+}
+
+/** Split at command separators without treating quoted shell snippets as code. */
+function splitShellCommands(code) {
+  const commands = []
+  let command = ''
+  let quote = null
+  let escaped = false
+
+  for (let i = 0; i < code.length; i += 1) {
+    const char = code[i]
+    if (escaped) {
+      command += char
+      escaped = false
+      continue
+    }
+    if (char === '\\' && quote !== "'") {
+      command += char
+      escaped = true
+      continue
+    }
+    if (quote) {
+      command += char
+      if (char === quote) quote = null
+      continue
+    }
+    if (char === "'" || char === '"') {
+      command += char
+      quote = char
+      continue
+    }
+    if (char === ';' || (char === '&' && code[i + 1] === '&')) {
+      if (command.trim()) commands.push(command.trim())
+      command = ''
+      if (char === '&') i += 1
+      continue
+    }
+    command += char
+  }
+
+  if (command.trim()) commands.push(command.trim())
+  return commands
+}
+
+/** Whether this one shell command deliberately handles its pipeline failure. */
+function commandToleratesFailure(code) {
+  let quote = null
+  let escaped = false
+  for (let i = 0; i < code.length - 1; i += 1) {
+    const char = code[i]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (char === '\\' && quote !== "'") {
+      escaped = true
+      continue
+    }
+    if (quote) {
+      if (char === quote) quote = null
+      continue
+    }
+    if (char === "'" || char === '"') {
+      quote = char
+      continue
+    }
+    if (char === '|' && code[i + 1] === '|') return true
+  }
+  return false
+}
+
+/**
  * A pipeline followed by `|| fallback` is a deliberate statement that failure is
  * acceptable here, so pipefail is not required — and would be wrong. The
  * coverage summary truncates its own input with `head`, which SIGPIPEs the
  * upstream `sed`; arming pipefail there would fail a step whose only job is to
- * pretty-print a report that has already been recorded.
+ * pretty-print a report that has already been recorded. A block only tolerates
+ * failure when every pipeline in it makes that statement.
  */
 function toleratesFailure(code) {
-  return /\|\|/.test(code)
+  const pipelines = shellCommands(code).filter((command) => pipesOutput(command))
+  return pipelines.length > 0 && pipelines.every((command) => commandToleratesFailure(command))
+}
+
+function unprotectedPipelines(code) {
+  return shellCommands(code).filter((command) => pipesOutput(command) && !commandToleratesFailure(command))
 }
 
 test('every piping workflow step arms pipefail, so a failing command cannot be masked', () => {
@@ -92,8 +195,7 @@ test('every piping workflow step arms pipefail, so a failing command cannot be m
     const source = readFileSync(file, 'utf8')
     for (const block of runBlocks(source)) {
       const code = withoutComments(block.body)
-      if (!pipesOutput(code)) continue
-      if (toleratesFailure(code)) continue
+      if (unprotectedPipelines(code).length === 0) continue
       if (/set\s+-o\s+pipefail|set\s+-[a-z]*e[a-z]*o\s+pipefail|PIPESTATUS/.test(code)) continue
       offenders.push(`${file}:${block.line}`)
     }
@@ -102,6 +204,20 @@ test('every piping workflow step arms pipefail, so a failing command cannot be m
     offenders,
     [],
     `these steps pipe their output without pipefail, so the pipeline reports the LAST command's exit code and a failing build goes green:\n${offenders.join('\n')}`,
+  )
+})
+
+test('an allowed fallback does not excuse an unrelated failing pipeline in the same run block', () => {
+  const code = withoutComments(`
+    test -f report.txt || echo "no report produced"
+    false | tee test-output.log
+  `)
+
+  assert.equal(toleratesFailure(code), false, 'a mixed block is not wholly tolerated by one unrelated fallback')
+  assert.deepEqual(
+    unprotectedPipelines(code),
+    ['false | tee test-output.log'],
+    'the fallback belongs only to its own command; the failing producer pipeline still requires pipefail',
   )
 })
 
