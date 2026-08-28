@@ -20,6 +20,7 @@ export type FileEvent =
   | 'delete'
   | 'purge'
   | 'restore'
+  | 'update'
   | 'share'
   | 'unshare'
 
@@ -32,6 +33,7 @@ const EVENT_ACTION: Record<FileEvent, 'insert' | 'update' | 'delete'> = {
   delete: 'delete',
   purge: 'delete',
   restore: 'update',
+  update: 'update',
   share: 'update',
   unshare: 'update',
 }

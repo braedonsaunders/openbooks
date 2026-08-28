@@ -329,24 +329,85 @@ export async function setGrant(input: {
   principalId: string
   access: AccessLevel
   actorId: string
+  audit?: FileMutationAudit
 }): Promise<void> {
-  await db.execute(sql`
-    insert into resource_grants
-      (org_id, resource_type, resource_id, principal_type, principal_id, access, created_by, updated_by, created_at, updated_at)
-    values (${input.orgId}, ${input.resourceType}, ${input.resourceId}, ${input.principalType},
-            ${input.principalId}, ${input.access}, ${input.actorId}, ${input.actorId}, now(), now())
-    on conflict (org_id, resource_type, resource_id, principal_type, principal_id)
-    do update set access = ${input.access}, updated_by = ${input.actorId}, updated_at = now()
-    where resource_grants.org_id = ${input.orgId}
-  `)
+  await inDbTransaction(async (tx) => {
+    const previous = (await tx.execute<{ id: string; access: AccessLevel }>(sql`
+      select id, access
+        from resource_grants
+       where org_id = ${input.orgId}
+         and resource_type = ${input.resourceType}
+         and resource_id = ${input.resourceId}
+         and principal_type = ${input.principalType}
+         and principal_id = ${input.principalId}
+       for update
+    `)).rows[0]
+    const result = (await tx.execute<{ id: string }>(sql`
+      insert into resource_grants
+        (org_id, resource_type, resource_id, principal_type, principal_id, access, created_by, updated_by, created_at, updated_at)
+      values (${input.orgId}, ${input.resourceType}, ${input.resourceId}, ${input.principalType},
+              ${input.principalId}, ${input.access}, ${input.actorId}, ${input.actorId}, now(), now())
+      on conflict (org_id, resource_type, resource_id, principal_type, principal_id)
+      do update set access = ${input.access}, updated_by = ${input.actorId}, updated_at = now()
+      where resource_grants.org_id = ${input.orgId}
+      returning id
+    `)).rows[0]
+    if (!result) throw new Error('grant upsert did not return a row')
+    if (input.audit) {
+      await recordFileEvent({
+        orgId: input.orgId,
+        actorId: input.audit.actorId,
+        table: input.resourceType === 'folder' ? 'folders' : 'files',
+        rowId: input.resourceId,
+        action: 'share',
+        changes: {
+          principalType: input.principalType,
+          principalId: input.principalId,
+          access: input.access,
+          previousAccess: previous?.access ?? null,
+        },
+        executor: tx,
+      })
+    }
+  })
 }
 
-/** Remove a grant by id. Returns false if it did not exist in this org. */
-export async function removeGrant(orgId: string, grantId: string): Promise<boolean> {
-  const r = (await db.execute<{ id: string }>(sql`
-    delete from resource_grants where id = ${grantId} and org_id = ${orgId} returning id
-  `))
-  return r.rows.length > 0
+/** Remove a grant by id, bound to the resource the caller authorized. */
+export async function removeGrant(
+  orgId: string,
+  grantId: string,
+  resourceType: ResourceType,
+  resourceId: string,
+  audit?: FileMutationAudit,
+): Promise<boolean> {
+  return inDbTransaction(async (tx) => {
+    const existing = (await tx.execute<{ id: string; resourceType: ResourceType; resourceId: string }>(sql`
+      select id, resource_type as "resourceType", resource_id as "resourceId"
+        from resource_grants
+       where id = ${grantId} and org_id = ${orgId}
+       for update
+    `)).rows[0]
+    if (!existing || existing.resourceType !== resourceType || existing.resourceId !== resourceId) return false
+    const deleted = (await tx.execute<{ id: string }>(sql`
+      delete from resource_grants
+       where id = ${grantId} and org_id = ${orgId}
+         and resource_type = ${resourceType} and resource_id = ${resourceId}
+      returning id
+    `)).rows.length > 0
+    if (!deleted) return false
+    if (audit) {
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: resourceType === 'folder' ? 'folders' : 'files',
+        rowId: resourceId,
+        action: 'unshare',
+        changes: { grantId },
+        executor: tx,
+      })
+    }
+    return true
+  })
 }
 
 /** Title-case a snake_case identifier: "vendor_bill" -> "Vendor Bill". Must
@@ -691,6 +752,135 @@ export async function updateFolder(
   return r.rows.length > 0
 }
 
+export type FolderPatch = {
+  parentId?: string | null
+  name?: string
+  isPrivate?: boolean
+  isInactive?: boolean
+}
+
+export type FolderPatchResult = { ok: true } | { ok: false; reason: 'not found' | 'cannot move folder' | 'cannot rename system folder' | 'cannot update system folder' }
+
+/**
+ * Apply every requested folder edit and its activity evidence in one
+ * transaction. Validation happens against a locked target before any write,
+ * so a later failure (for example, attempting to rename a system folder) can
+ * never leave an earlier move or flag change committed.
+ */
+export async function patchFolder(
+  orgId: string,
+  id: string,
+  patch: FolderPatch,
+  updatedBy: string,
+  audit: FileMutationAudit,
+): Promise<FolderPatchResult> {
+  const hasParent = Object.prototype.hasOwnProperty.call(patch, 'parentId')
+  const hasName = patch.name !== undefined
+  const hasFlags = patch.isPrivate !== undefined || patch.isInactive !== undefined
+  return inDbTransaction(async (tx) => {
+    const before = (await tx.execute<{
+      id: string
+      name: string
+      parentId: string | null
+      isPrivate: boolean
+      isInactive: boolean
+      isSystem: boolean
+    }>(sql`
+      select id, name, parent_folder_id as "parentId", is_private as "isPrivate",
+             is_inactive as "isInactive", is_system as "isSystem"
+        from folders
+       where id = ${id} and org_id = ${orgId}
+       for update
+    `)).rows[0]
+    if (!before) return { ok: false as const, reason: 'not found' as const }
+
+    if (before.isSystem && hasName) {
+      return { ok: false as const, reason: 'cannot rename system folder' as const }
+    }
+    if (before.isSystem && hasParent) {
+      return { ok: false as const, reason: 'cannot move folder' as const }
+    }
+    if (before.isSystem && hasFlags) {
+      return { ok: false as const, reason: 'cannot update system folder' as const }
+    }
+
+    if (hasParent) {
+      const parentId = patch.parentId ?? null
+      if (parentId === id) return { ok: false as const, reason: 'cannot move folder' as const }
+      if (parentId) {
+        const parent = (await tx.execute<{ id: string }>(sql`
+          select id from folders where id = ${parentId} and org_id = ${orgId} for share
+        `)).rows[0]
+        if (!parent) return { ok: false as const, reason: 'cannot move folder' as const }
+        const cycle = await tx.execute(sql`
+          with recursive ancestors as (
+            select parent_folder_id from folders where id = ${parentId} and org_id = ${orgId}
+            union
+            select f.parent_folder_id from folders f
+            join ancestors a on f.id = a.parent_folder_id and f.org_id = ${orgId}
+            where f.parent_folder_id is not null
+          )
+          select 1 from ancestors where parent_folder_id = ${id} limit 1
+        `)
+        if (cycle.rows.length > 0) return { ok: false as const, reason: 'cannot move folder' as const }
+      }
+    }
+
+    const updates: ReturnType<typeof sql.raw>[] = [sql`updated_by = ${updatedBy}`, sql`updated_at = now()`]
+    if (hasParent) updates.push(sql`parent_folder_id = ${patch.parentId ?? null}`)
+    if (hasName) updates.push(sql`name = ${patch.name}`)
+    if (patch.isPrivate !== undefined) {
+      updates.push(sql`is_private = ${patch.isPrivate}`)
+      if (patch.isPrivate) updates.push(sql`owner_id = coalesce(owner_id, ${updatedBy})`)
+    }
+    if (patch.isInactive !== undefined) updates.push(sql`is_inactive = ${patch.isInactive}`)
+    if (updates.length > 2) {
+      await tx.execute(sql`
+        update folders set ${sql.join(updates, sql`, `)}
+         where id = ${id} and org_id = ${orgId}
+      `)
+    }
+
+    if (hasParent) {
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: 'folders',
+        rowId: id,
+        action: 'move',
+        changes: { fromParentId: before.parentId, toParentId: patch.parentId ?? null },
+        executor: tx,
+      })
+    }
+    if (hasName) {
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: 'folders',
+        rowId: id,
+        action: 'rename',
+        changes: { from: before.name, to: patch.name },
+        executor: tx,
+      })
+    }
+    if (hasFlags) {
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: 'folders',
+        rowId: id,
+        action: 'update',
+        changes: {
+          isPrivate: patch.isPrivate ?? before.isPrivate,
+          isInactive: patch.isInactive ?? before.isInactive,
+        },
+        executor: tx,
+      })
+    }
+    return { ok: true as const }
+  })
+}
+
 const FOLDER_DESCENDANTS = (orgId: string, id: string): SQL => sql`
   with recursive descendants as (
     select id from folders where id = ${id} and org_id = ${orgId}
@@ -704,20 +894,41 @@ const FOLDER_DESCENDANTS = (orgId: string, id: string): SQL => sql`
  * it (sub-folders + their files) so it can be restored. System folders cannot
  * be trashed. Files kept as AP-capture evidence are left in place.
  */
-export async function deleteFolder(orgId: string, id: string): Promise<{ ok: boolean; reason?: string }> {
-  const folder = await getFolder(orgId, id)
-  if (!folder) return { ok: false, reason: 'not found' }
-  if (folder.isSystem) return { ok: false, reason: 'system' }
-  await db.transaction(async (tx) => {
+export async function deleteFolder(
+  orgId: string,
+  id: string,
+  audit?: FileMutationAudit,
+): Promise<{ ok: boolean; reason?: string }> {
+  const result = await inDbTransaction(async (tx) => {
     const descendants = FOLDER_DESCENDANTS(orgId, id)
+    const folder = (await tx.execute<{ id: string; isSystem: boolean }>(sql`
+      select id, is_system as "isSystem"
+        from folders
+       where id = ${id} and org_id = ${orgId}
+       for update
+    `)).rows[0]
+    if (!folder) return { ok: false, reason: 'not found' as const }
+    if (folder.isSystem) return { ok: false, reason: 'system' as const }
     await tx.execute(sql`update folders set is_inactive = true, updated_at = now() where id in (${descendants}) and org_id = ${orgId}`)
     await tx.execute(sql`
       update files set is_inactive = true, updated_at = now()
        where folder_id in (${descendants}) and org_id = ${orgId} and not is_inactive
          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
     `)
+    if (audit) {
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: 'folders',
+        rowId: id,
+        action: 'delete',
+        changes: { permanent: false },
+        executor: tx,
+      })
+    }
+    return { ok: true as const }
   })
-  return { ok: true }
+  return result
 }
 
 /** Restore a trashed folder subtree (folder + descendants + their files). */
@@ -784,31 +995,17 @@ export async function restoreFolder(
  * links, and the folders. Fails if it contains files attached to records
  * (matching source platform). System folders cannot be purged.
  */
-export async function purgeFolder(orgId: string, id: string): Promise<{ ok: boolean; reason?: string }> {
-  const folder = await getFolder(orgId, id)
-  if (!folder) return { ok: false, reason: 'not found' }
-  if (folder.isSystem) return { ok: false, reason: 'system' }
-
-  // Check for attached files in this folder (or descendants)
-  const attached = (await db.execute(sql`
-    with recursive descendants as (
-      select id from folders where id = ${id} and org_id = ${orgId}
-      union
-      select f.id from folders f join descendants d on f.parent_folder_id = d.id and f.org_id = ${orgId}
-    )
-    select 1
-      from file_attachments fa
-      join files fi on fi.id = fa.file_id and fi.org_id = fa.org_id
-      join descendants d on d.id = fi.folder_id
-     where fa.org_id = ${orgId}
-     limit 1
-  `))
-  if (attached.rows.length > 0) return { ok: false, reason: 'has attached files' }
-
-  // Delete files (with their versions, blobs, and attachment links) and the
-  // folder subtree in one transaction. Versions/blobs/links are removed
-  // explicitly so nothing is orphaned even without ON DELETE CASCADE FKs.
-  const s3VersionIds = await db.transaction(async (tx) => {
+export async function purgeFolder(
+  orgId: string,
+  id: string,
+  audit?: FileMutationAudit,
+): Promise<{ ok: boolean; reason?: string }> {
+  // The folder and all descendant file rows are locked before checking
+  // attachments.  Attachment inserts take a key-share lock on their file
+  // through the FK, so a concurrent attach either wins before this check (and
+  // blocks the purge) or waits until after the deleted file is gone and fails.
+  // This closes the check/delete race without relying on a process-local lock.
+  const outcome = await inDbTransaction(async (tx) => {
     const descendants = sql`
       with recursive descendants as (
         select id from folders where id = ${id} and org_id = ${orgId}
@@ -816,6 +1013,33 @@ export async function purgeFolder(orgId: string, id: string): Promise<{ ok: bool
         select f.id from folders f join descendants d on f.parent_folder_id = d.id and f.org_id = ${orgId}
       )
       select id from descendants`
+    const folder = (await tx.execute<{ id: string; isSystem: boolean }>(sql`
+      select id, is_system as "isSystem"
+        from folders
+       where id = ${id} and org_id = ${orgId}
+       for update
+    `)).rows[0]
+    if (!folder) return { ok: false as const, reason: 'not found' as const }
+    if (folder.isSystem) return { ok: false as const, reason: 'system' as const }
+
+    // Lock every file in the subtree before evaluating attachments.  The FK
+    // on file_attachments.file_id serializes inserts against these locks.
+    await tx.execute<{ id: string }>(sql`
+      select fi.id
+        from files fi
+       where fi.org_id = ${orgId} and fi.folder_id in (${descendants})
+       for update
+    `)
+    const attached = await tx.execute(sql`
+      select 1
+        from file_attachments fa
+        join files fi on fi.id = fa.file_id and fi.org_id = fa.org_id
+       where fa.org_id = ${orgId}
+         and fi.folder_id in (${descendants})
+       limit 1
+    `)
+    if (attached.rows.length > 0) return { ok: false as const, reason: 'has attached files' as const }
+
     const s3Versions = (await tx.execute<{ id: string }>(sql`
       select fv.id from file_versions fv
       join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
@@ -849,9 +1073,21 @@ export async function purgeFolder(orgId: string, id: string): Promise<{ ok: bool
       delete from files where folder_id in (${descendants}) and org_id = ${orgId}
     `)
     await tx.execute(sql`delete from folders where id in (${descendants}) and org_id = ${orgId}`)
-    return s3Versions.rows.map((v) => v.id)
+    if (audit) {
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: 'folders',
+        rowId: id,
+        action: 'delete',
+        changes: { permanent: true },
+        executor: tx,
+      })
+    }
+    return { ok: true as const, s3VersionIds: s3Versions.rows.map((v) => v.id) }
   })
-  await deleteS3Blobs(s3VersionIds)
+  if (!outcome.ok) return outcome
+  await deleteS3Blobs(outcome.s3VersionIds)
   return { ok: true }
 }
 
@@ -1138,12 +1374,13 @@ export async function createFile(input: {
   contentType: string
   bytes: Buffer
   createdBy: string | null
+  audit?: FileMutationAudit
 }): Promise<FileMeta> {
   const extension = deriveExtension(input.filename)
   const fileType = deriveFileType(input.contentType)
   const contentHash = createHash('sha256').update(input.bytes).digest('hex')
   const kind = activeStorageKind()
-  return db.transaction(async (tx) => {
+  return inDbTransaction(async (tx) => {
     const fileIns = (await tx.execute<{ id: string }>(sql`
       insert into files (org_id, folder_id, name, extension, file_type, content_type,
                          size_bytes, storage_kind, content_hash, created_by, updated_by,
@@ -1174,6 +1411,18 @@ export async function createFile(input: {
       await tx.execute(sql`
         insert into file_blobs (version_id, bytes) values (${versionId}, ${input.bytes})
       `)
+
+    if (input.audit) {
+      await recordFileEvent({
+        orgId: input.orgId,
+        actorId: input.audit.actorId,
+        table: 'files',
+        rowId: fileId,
+        action: 'upload',
+        changes: { name: input.filename, folderId: input.folderId },
+        executor: tx,
+      })
+    }
 
     const meta = (await tx.execute<FileMeta>(sql`
       select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
