@@ -301,11 +301,12 @@ export async function financialHealth(
   const grossProfit = Number(pl.grossProfit);
   const opex = Number(totalOf(pl.items, ["expense", "expense_deferred"]));
   const otherExpense = Number(totalOf(pl.items, ["expense_other"]));
-  const operatingIncome = revenue - cogs - opex;
+  const operatingIncome = operatingRevenue - cogs - opex;
   const netIncome = Number(pl.netIncome); // = revenue - cogs - opex - otherExpense
 
   const priorRevenue = Number(priorPl.revenue);
-  const priorOpInc = Number(priorPl.revenue) - Number(priorPl.cogs) - Number(totalOf(priorPl.items, ["expense", "expense_deferred"]));
+  const priorOperatingRevenue = Number(totalOf(priorPl.items, ["income"]));
+  const priorOpInc = priorOperatingRevenue - Number(priorPl.cogs) - Number(totalOf(priorPl.items, ["expense", "expense_deferred"]));
   const revenueGrowth = priorRevenue > 0 ? (revenue - priorRevenue) / priorRevenue : 0;
   const opIncGrowth = priorOpInc !== 0 ? (operatingIncome - priorOpInc) / Math.abs(priorOpInc) : 0;
   const operatingLeverage = revenueGrowth !== 0 ? opIncGrowth / revenueGrowth : 1;
