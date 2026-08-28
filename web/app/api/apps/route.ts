@@ -2,11 +2,9 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { installApp, listApps, AppError, type UploadBundle } from '@/lib/apps/store'
-import { parseZipBundle, ZipBundleError } from '@/lib/apps/zip'
+import { MAX_COMPRESSED_BYTES, parseZipBundle, ZipBundleError } from '@/lib/apps/zip'
 
 export const runtime = 'nodejs'
-
-const MAX_ZIP_BYTES = 10 * 1024 * 1024 // 10 MB compressed
 
 /** GET — list installed Apps for the org (admin). */
 export async function GET() {
@@ -31,7 +29,7 @@ export async function POST(req: Request) {
     const form = await req.formData().catch(() => null)
     const file = form?.get('file')
     if (!(file instanceof File)) return NextResponse.json({ error: 'file field required' }, { status: 400 })
-    if (file.size > MAX_ZIP_BYTES) return NextResponse.json({ error: 'zip too large (max 10 MB)' }, { status: 400 })
+    if (file.size > MAX_COMPRESSED_BYTES) return NextResponse.json({ error: 'zip too large (max 10 MB)' }, { status: 400 })
     try {
       const parsed = parseZipBundle(new Uint8Array(await file.arrayBuffer()))
       body = { manifest: parsed.manifest, files: parsed.files }
