@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import type { ForecastCategory } from "../../../../../lib/analytics/cashflow-data";
 
@@ -96,9 +97,18 @@ function clean(raw: unknown): ForecastCategory | null {
     if (c.includeJournals === true) out.includeJournals = true;
   } else {
     // manual_recurring
-    const amount = Number(c.amount);
-    if (!Number.isFinite(amount) || amount <= 0) return null;
-    out.amount = Math.min(1e9, amount);
+    let amount: string;
+    try {
+      amount = normalizeMoney(String(c.amount ?? ""));
+    } catch {
+      return null;
+    }
+    if (compareMoney(amount, "0.0000") <= 0) return null;
+    // ForecastCategory's legacy declaration still says `number`, but the
+    // persisted/read model is an exact numeric(19,4) string. Keep this route
+    // on the exact-money path without crossing through an unsafe float.
+    (out as unknown as { amount?: string }).amount =
+      compareMoney(amount, "100000000.0000") > 0 ? "100000000.0000" : amount;
     out.frequency = FREQUENCIES.has(String(c.frequency)) ? (c.frequency as ForecastCategory["frequency"]) : "monthly";
   }
   return out;
@@ -123,13 +133,51 @@ export async function PUT(req: Request) {
   if (!body || !Array.isArray(body.categories)) return NextResponse.json({ error: "categories array required" }, { status: 400 });
   if (body.categories.length > 50) return NextResponse.json({ error: "too many categories (max 50)" }, { status: 400 });
 
-  const cleaned = body.categories.map(clean).filter((c): c is ForecastCategory => c !== null);
-  await db.execute(sql`
-    update orgs
-    set settings = jsonb_set(
-      jsonb_set(settings, '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
-      '{analytics,cashflowCategories}', ${JSON.stringify(cleaned)}::jsonb, true)
-    where id = ${gate.user.orgId}
-  `);
-  return NextResponse.json({ ok: true, categories: cleaned });
+  const cleaned = body.categories.map(clean);
+  const invalidIndex = cleaned.findIndex((category) => category === null);
+  if (invalidIndex !== -1) {
+    return NextResponse.json(
+      {
+        error: `invalid category at index ${invalidIndex}`,
+        message: "Each category must include a valid name, method, and method-specific configuration.",
+      },
+      { status: 400 },
+    );
+  }
+  const categories = cleaned as ForecastCategory[];
+
+  // Lock the current document and commit its replacement together with complete
+  // before/after audit evidence. A malformed payload returns above, before a
+  // transaction or mutation can begin, while concurrent editors serialize on
+  // the org row and never audit a stale prior state.
+  const result = await db.transaction(async (tx) => {
+    const existing = await tx.execute(sql`
+      select settings -> 'analytics' -> 'cashflowCategories' as cats
+        from orgs where id = ${gate.user.orgId} for update
+    `);
+    if (!existing.rows[0]) return NextResponse.json({ error: "org not found" }, { status: 404 });
+    const rawBefore = existing.rows[0].cats;
+    const before = Array.isArray(rawBefore) ? rawBefore : [];
+    await tx.execute(sql`
+      update orgs
+      set settings = jsonb_set(
+        jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
+        '{analytics,cashflowCategories}', ${JSON.stringify(categories)}::jsonb, true)
+      where id = ${gate.user.orgId}
+    `);
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${gate.user.orgId}, 'orgs', ${gate.user.orgId}, 'update',
+        ${JSON.stringify({
+          before: { analytics: { cashflowCategories: before } },
+          after: { analytics: { cashflowCategories: categories } },
+        })}::jsonb,
+        ${gate.user.id}
+      )
+    `);
+    return null;
+  });
+  if (result instanceof NextResponse) return result;
+  return NextResponse.json({ ok: true, categories });
 }
