@@ -18,7 +18,10 @@ interface Price {
 type FormState = { id: string | null; currency: string; unitPrice: string; lowValue: string; highValue: string; effectiveFrom: string; effectiveTo: string; isActive: boolean }
 
 const field = 'space-y-1.5'
-const num = (v: string | null) => (v != null ? String(Number(v)) : '')
+// PostgreSQL numeric values arrive as decimal strings. Keep them as strings so
+// editing and saving never crosses JavaScript's lossy binary floating-point
+// boundary (especially for values beyond Number.MAX_SAFE_INTEGER).
+const num = (v: string | null) => (v != null ? String(v) : '')
 
 /**
  * Fair-value / standalone selling prices for one item (fair_value_prices),
