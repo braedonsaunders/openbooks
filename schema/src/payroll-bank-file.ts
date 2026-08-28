@@ -126,12 +126,21 @@ export const payRunBankFiles = pgTable(
       sql`status <> 'superseded' or (superseded_at is not null and superseded_by is not null
            and supersede_reason is not null and length(btrim(supersede_reason)) between 5 and 500)`,
     ),
-    // A released file has a release timestamp and a count, and vice versa —
-    // "downloaded but no evidence" must not be representable.
+    // Generated files have no release evidence; released files have a count
+    // and both timestamps. Superseded files retain either complete state,
+    // because the old artifact may have left the building before replacement.
+    // "downloaded but no evidence" and "generated after download" must not be
+    // representable.
     check(
       "pay_run_bank_files_release_evidence",
-      sql`(release_count = 0 and first_released_at is null)
-          or (release_count > 0 and first_released_at is not null and last_released_at is not null)`,
+      sql`(status in ('generated', 'superseded')
+            and release_count = 0
+            and first_released_at is null
+            and last_released_at is null)
+          or (status in ('released', 'superseded')
+            and release_count > 0
+            and first_released_at is not null
+            and last_released_at is not null)`,
     ),
     check("pay_run_bank_files_entry_count", sql`entry_count > 0`),
     check("pay_run_bank_files_control_total", sql`control_total > 0`),
