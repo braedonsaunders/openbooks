@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { db, orgContext, pool } from '@openbooks/engine/src/db.ts'
 import { add, fromUnits, neg, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { directSubcontractOpenCommitment } from './subcontract-commitments'
 
@@ -67,7 +68,16 @@ interface ProjectTimeSqlRow {
   cost: unknown; bill: unknown
 }
 
-export async function projectCostSummary(orgId: string, projectId: string): Promise<ProjectCostSummary> {
+/**
+ * Resolve the summary against the database surface provided by the ambient
+ * tenant context. The public function below owns the transaction boundary;
+ * keeping the read graph here lets an existing caller transaction participate
+ * without opening a second transaction on the same connection.
+ */
+async function projectCostSummaryInSnapshot(
+  orgId: string,
+  projectId: string,
+): Promise<ProjectCostSummary> {
   const [proj, actualRows, committedRows, directSubcontractCommitment, byAccountRows, docRows] = await Promise.all([
     // project custom (contract value) + task cost budget
     db.execute(sql`
@@ -136,6 +146,57 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
     byAccountRows as unknown as QueryRows<ProjectAccountRow>,
     docRows as unknown as QueryRows<ProjectDocumentRow>,
   )
+}
+
+/**
+ * Resolve a project's cost rollup as one committed ledger generation.
+ *
+ * The headline totals, committed amounts, account breakdown, and source
+ * documents are independent statements. Running them as pooled READ COMMITTED
+ * queries allows a posting or order update to land between statements and
+ * produce a response whose totals disagree with its own detail. Pin a
+ * REPEATABLE READ READ ONLY snapshot so every field observes the same ledger
+ * generation. If a caller already owns a tenant transaction, participate in
+ * that transaction instead of opening a nested transaction on its connection.
+ *
+ * The transaction is published through the tenant context so
+ * `directSubcontractOpenCommitment` (and any future helper) resolves its `db`
+ * queries on this same connection and snapshot.
+ */
+export async function projectCostSummary(orgId: string, projectId: string): Promise<ProjectCostSummary> {
+  const active = orgContext.getStore()
+  if (active?.txDb && !active.bypass) {
+    if (orgId !== active.orgId) {
+      throw new Error('cannot change organization inside an active tenant transaction')
+    }
+    return projectCostSummaryInSnapshot(orgId, projectId)
+  }
+
+  const client = await pool.connect()
+  try {
+    await client.query('begin isolation level repeatable read read only')
+    // Scope this transaction after BEGIN so the tenant setting is local to the
+    // snapshot and resets when the client is committed or rolled back.
+    await client.query(
+      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+      [orgId],
+    )
+    const txDb = drizzle({ client })
+    const summary = await orgContext.run({ orgId, bypass: false, txDb }, async () =>
+      await projectCostSummaryInSnapshot(orgId, projectId),
+    )
+    await client.query('commit')
+    return summary
+  } catch (error) {
+    try {
+      await client.query('rollback')
+    } catch {
+      // A broken connection is discarded when released.
+    }
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 function assembleSummary(
