@@ -63,11 +63,15 @@ export function accountRegisterExportHref(
   return `/api/accounts/${encodeURIComponent(accountId)}/register?${query}`
 }
 
-function decimalNumber(value: string): number {
+function decimalText(value: string): string {
+  // Keep ledger amounts as text all the way to the export adapters. A Number
+  // round-trip here would silently alter values once they exceed 2^53.
   if (!/^-?\d+(?:\.\d+)?$/.test(value)) throw new Error('Invalid register amount')
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) throw new Error('Invalid register amount')
-  return parsed
+  return value
+}
+
+function decimalIsZero(value: string): boolean {
+  return /^-?0(?:\.0+)?$/.test(value)
 }
 
 export function accountRegisterExportData(
@@ -89,15 +93,17 @@ export function accountRegisterExportData(
 ): ExportData {
   const accountLabel = `${result.account.number ?? ''} ${result.account.name}`.trim()
   const rows = result.lines.map((line) => {
-    const amount = decimalNumber(line.amount)
+    const amount = decimalText(line.amount)
+    const isZero = decimalIsZero(amount)
+    const isCredit = amount.startsWith('-') && !isZero
     return [
       line.posting_date,
       labels.docType(line.doc_kind),
       line.doc_number || line.entry_number || '',
       line.party || '',
       line.memo ?? line.entry_memo ?? '',
-      amount > 0 ? amount : null,
-      amount < 0 ? Math.abs(amount) : null,
+      !isCredit && !isZero ? amount : null,
+      isCredit ? amount.slice(1) : null,
     ]
   })
 
@@ -105,7 +111,7 @@ export function accountRegisterExportData(
     title: `${accountLabel} — ${labels.register}`,
     dateRangeLabel: labels.dateRange,
     summary: [
-      { label: labels.balance, value: decimalNumber(result.balance) },
+      { label: labels.balance, value: decimalText(result.balance), money: true },
       { label: labels.lines, value: result.total },
     ],
     groups: [{
@@ -121,6 +127,7 @@ export function accountRegisterExportData(
         labels.credit,
       ],
       rows,
+      money: [false, false, false, false, false, true, true],
       align: ['left', 'left', 'left', 'left', 'left', 'right', 'right'],
     }],
   }
