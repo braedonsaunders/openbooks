@@ -118,7 +118,12 @@ async function loadWeekSummary(subjectId: string): Promise<WeekRow | null> {
            coalesce(sum(te.hours) filter (where te.is_billable), 0)::text as billable_hours,
            count(distinct te.project_id)::int as project_count,
            count(te.id)::int as entry_count,
-           min(te.department_id::text) as department_id,
+           -- Department is line-level; a mixed week has no singular routing
+           -- department, so leave it null instead of selecting by UUID order.
+           case when count(distinct te.department_id) = 1
+                then min(te.department_id::text)
+                else null
+           end as department_id,
            coalesce(tw.submitted_by, tw.created_by)::text as submitted_by
       from timesheet_weeks tw
       left join parties employee
