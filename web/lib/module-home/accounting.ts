@@ -1,7 +1,9 @@
 import 'server-only'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { addCalendarDays, businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
+import { getAuthz } from '../authz'
+import { subsidiaryVisibleFilter } from '../subsidiaries'
 
 /**
  * Accounting module home — one light round trip for the financial-control
@@ -32,7 +34,112 @@ export interface AccountingHome {
   }
 }
 
-export async function accountingHome(orgId: string): Promise<AccountingHome> {
+type AccountingSubsidiaryScope = ReadonlySet<string> | null
+
+/**
+ * Close runs persist their legal-entity scope as JSON because one run may
+ * cover several subsidiaries. A restricted reader may see a run only when
+ * every entity in that run is inside the reader's allowlist. An empty scope
+ * means the run is org-wide and therefore fails closed for restricted users.
+ */
+function closeRunScope(allowed: AccountingSubsidiaryScope) {
+  if (allowed === null) return sql``
+  const ids = [...allowed]
+  if (ids.length === 0) return sql` and false`
+  const idArray = sql`${`{${ids.join(',')}}`}::text[]`
+  return sql` and jsonb_array_length(coalesce(r.scope->'subsidiaryIds', '[]'::jsonb)) > 0
+    and not exists (
+      select 1
+        from jsonb_array_elements_text(coalesce(r.scope->'subsidiaryIds', '[]'::jsonb)) scoped(value)
+       where scoped.value <> all(${idArray})
+    )`
+}
+
+/**
+ * A budget scenario has no header subsidiary: its lines carry the account and
+ * optional project dimensions that identify a legal entity. Count only a
+ * scenario with at least one line and reject the whole scenario if any line
+ * points at an entity outside the caller's set.
+ */
+function budgetScope(orgId: string, allowed: AccountingSubsidiaryScope, scenario: SQL) {
+  if (allowed === null) return sql``
+  const ids = [...allowed]
+  if (ids.length === 0) return sql` and false`
+  const idArray = sql`${`{${ids.join(',')}}`}::uuid[]`
+  const hidden = sql`(
+    (ba.subsidiary_id is not null and ba.subsidiary_id <> all(${idArray}))
+    or (bp.subsidiary_id is not null and bp.subsidiary_id <> all(${idArray}))
+  )`
+  const visible = sql`(
+    (ba.subsidiary_id is null or ba.subsidiary_id = any(${idArray}))
+    and (bp.subsidiary_id is null or bp.subsidiary_id = any(${idArray}))
+  )`
+  return sql`
+    and exists (
+      select 1
+        from budget_lines bl
+        left join accounts ba on ba.id = bl.account_id and ba.org_id = bl.org_id
+        left join projects bp on bp.id = bl.project_id and bp.org_id = bl.org_id
+       where bl.org_id = ${orgId} and bl.scenario_id = ${scenario}
+         and ${visible}
+    )
+    and not exists (
+      select 1
+        from budget_lines bl
+        left join accounts ba on ba.id = bl.account_id and ba.org_id = bl.org_id
+        left join projects bp on bp.id = bl.project_id and bp.org_id = bl.org_id
+       where bl.org_id = ${orgId} and bl.scenario_id = ${scenario}
+         and ${hidden}
+    )`
+}
+
+/** Continuous-close findings are polymorphic. Keep only findings whose
+ * subject can be resolved to a scoped account, reconciliation, document, or
+ * budget scenario; period-level findings have no legal-entity dimension and
+ * are omitted for restricted readers.
+ */
+function workItemScope(orgId: string, allowed: AccountingSubsidiaryScope) {
+  if (allowed === null) return sql``
+  const ids = [...allowed]
+  if (ids.length === 0) return sql` and false`
+  const idArray = sql`${`{${ids.join(',')}}`}::uuid[]`
+  const accountVisible = sql`(a.subsidiary_id is null or a.subsidiary_id = any(${idArray}))`
+  const documentVisible = sql`d.subsidiary_id = any(${idArray})`
+  return sql` and (
+    (w.subject_type = 'account' and exists (
+      select 1 from accounts a
+       where a.org_id = ${orgId} and a.id = w.subject_id and ${accountVisible}
+    ))
+    or (w.subject_type = 'reconciliation' and exists (
+      select 1 from reconciliations reconciliation
+      join accounts a on a.id = reconciliation.account_id and a.org_id = reconciliation.org_id
+       where reconciliation.org_id = ${orgId} and reconciliation.id = w.subject_id
+         and ${accountVisible}
+    ))
+    or (w.subject_type = 'documents' and exists (
+      select 1 from documents d
+       where d.org_id = ${orgId} and d.id = w.subject_id and ${documentVisible}
+    ))
+    or (w.subject_type = 'budget' ${budgetScope(orgId, allowed, sql.raw('w.subject_id'))})
+  )`
+}
+
+export async function accountingHome(
+  orgId: string,
+  allowedSubsidiaryIds?: AccountingSubsidiaryScope,
+): Promise<AccountingHome> {
+  // The accounting page historically supplied only orgId. Resolve the same
+  // request authz here when that argument is omitted so direct callers cannot
+  // accidentally turn a restricted page into an org-wide dashboard. Explicit
+  // null remains the deliberate unrestricted/super-admin view; an absent
+  // authz context fails closed.
+  let scope: AccountingSubsidiaryScope
+  if (allowedSubsidiaryIds !== undefined) {
+    scope = allowedSubsidiaryIds
+  } else {
+    const authz = await getAuthz()
+    scope = authz?.user.orgId === orgId ? authz.allowedSubsidiaryIds : new Set<string>()
+  }
   const ago7 = addCalendarDays(await businessToday(orgId), -7)
   const [closeRes, countsRes, workRes] = (await Promise.all([
     // Latest close run + its task progress ('complete'/'approved' = done).
@@ -47,22 +154,31 @@ export async function accountingHome(orgId: string): Promise<AccountingHome> {
                  count(*) filter (where ct.status in ('complete', 'approved')) as done
             from close_run_tasks ct where ct.run_id = r.id and ct.org_id = r.org_id) t on true
        where r.org_id = ${orgId}
+         ${closeRunScope(scope)}
        order by r.created_at desc
        limit 1
     `),
     db.execute(sql`
       select
-        (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status = 'draft') as draft_journals,
+        (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status = 'draft'
+          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, scope)}) as draft_journals,
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status in ('posted', 'reversed')
-          and je.posting_date >= ${ago7}) as posted_7d,
-        (select count(*) from accounts a where a.org_id = ${orgId} and not a.is_summary and a.is_active) as accounts,
-        (select count(*) from budget_scenarios b where b.org_id = ${orgId}) as budgets,
-        (select count(*) from fixed_assets f where f.org_id = ${orgId}) as assets
+          and je.posting_date >= ${ago7}
+          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, scope)}) as posted_7d,
+        (select count(*) from accounts a where a.org_id = ${orgId} and not a.is_summary and a.is_active
+          ${scope === null ? sql`` : [...scope].length
+            ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${[...scope].join(',')}}`}::uuid[]))`
+            : sql` and false`}) as accounts,
+        (select count(*) from budget_scenarios b where b.org_id = ${orgId}
+          ${budgetScope(orgId, scope, sql.raw('b.id'))}) as budgets,
+        (select count(*) from fixed_assets f where f.org_id = ${orgId}
+          ${subsidiaryVisibleFilter(sql`f.subsidiary_id`, scope)}) as assets
     `),
     // Continuous-close open findings by severity.
     db.execute(sql`
       select severity, count(*) as n from ai_work_items w
        where w.org_id = ${orgId} and w.status = 'open'
+         ${workItemScope(orgId, scope)}
        group by severity
     `),
   ]))
