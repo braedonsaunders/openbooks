@@ -1041,6 +1041,9 @@ export async function recordPaymentSettlement(opts: {
     `));
     const instruction = row.rows[0];
     if (!instruction) throw new PaymentError("payment instruction not found");
+    if (["returned", "reversed"].includes(instruction.status) && opts.status === "settled") {
+      throw new PaymentError("a returned or reversed payment instruction cannot be settled");
+    }
     if (!["sent", "settled", "returned"].includes(instruction.status)) {
       throw new PaymentError("only a sent payment can be settled or returned");
     }
