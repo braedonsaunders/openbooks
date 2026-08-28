@@ -287,7 +287,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
         from cand d1
         join cand d2 on d2.party_id = d1.party_id and d2.kind = d1.kind and d2.amt = d1.amt
           and d1.id < d2.id and abs(d2.ddate - d1.ddate) <= ${DUPLICATE_THRESHOLD_DAYS}
-        where d1.ddate >= ${from} and d1.ddate <= ${to}
+        where (d1.ddate between ${from} and ${to} or d2.ddate between ${from} and ${to})
       ), top as (
         select * from pairs order by amount desc, days_between asc, id1, id2 limit 200
       )
@@ -712,7 +712,24 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const flagged: FlaggedDoc[] = [];
   const seen = new Set<string>();
   const push = (f: FlaggedDoc) => { if (!seen.has(f.docId)) { seen.add(f.docId); flagged.push(f); } };
-  for (const d of dupPairs) push({ docId: d.docId1, docNumber: d.docNumber1, kind: d.kind, date: d.date1, amount: d.amount, partyId: d.partyId, partyName: d.partyName, flagType: "duplicate", reason: `Same vendor, kind & amount as ${d.docNumber2 || "pair"} (${d.daysBetween}d apart)`, riskScore: d.riskScore });
+  for (const d of dupPairs) {
+    // The pair scan includes the threshold-sized boundary on both sides of
+    // the report period. Keep the flagged aggregate anchored to whichever
+    // member is actually in-period when the older/lower-ID member is outside.
+    const firstInPeriod = d.date1 >= from && d.date1 <= to;
+    push({
+      docId: firstInPeriod ? d.docId1 : d.docId2,
+      docNumber: firstInPeriod ? d.docNumber1 : d.docNumber2,
+      kind: d.kind,
+      date: firstInPeriod ? d.date1 : d.date2,
+      amount: d.amount,
+      partyId: d.partyId,
+      partyName: d.partyName,
+      flagType: "duplicate",
+      reason: `Same vendor, kind & amount as ${(firstInPeriod ? d.docNumber2 : d.docNumber1) || "pair"} (${d.daysBetween}d apart)`,
+      riskScore: d.riskScore,
+    });
+  }
   for (const w of weekendItems) push(w);
   for (const r of rsfItems) push(r);
   for (const z of zItems) push(z);
