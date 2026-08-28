@@ -9,7 +9,6 @@ import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
 import { publishOverheadRates } from '../../../../../lib/overhead-publish'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
-import { formatMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 
 export const dynamic = 'force-dynamic'
@@ -48,7 +47,7 @@ export async function POST(req: Request) {
         if (exact === null || compareDecimal(exact, '0') < 0) {
           return NextResponse.json({ error: 'ratePerHour must be a non-negative amount' }, { status: 400 })
         }
-        rates.push({ departmentId: r.departmentId, ratePerHour: formatMoney(exact, 2) })
+        rates.push({ departmentId: r.departmentId, ratePerHour: exact })
       }
     }
     const result = await publishOverheadRates(orgId, gate.user.id, effectiveFrom, rates.length ? rates : undefined)
