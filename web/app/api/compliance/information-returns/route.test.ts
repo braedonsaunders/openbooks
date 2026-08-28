@@ -6,9 +6,14 @@ import nodeTest from 'node:test'
 // The repository's broad Node test command also discovers this file, while
 // the focused compliance gate uses Vitest. Load Vitest only in its runner so
 // the normal Node suite does not acquire a new runtime dependency.
-const vitest = process.env.VITEST ? await import('vitest') : null
+const vitestModule = 'vitest' as string
+const vitest = process.env.VITEST ? await import(vitestModule) : null
 const describe = vitest?.describe ?? nodeTest
-const it = vitest?.it ?? nodeTest
+export const it = vitest?.it ?? nodeTest
+
+// Keep Vitest optional for the repository's Node test runner while exposing
+// the focused runner's value shape to TypeScript without a package dependency.
+export declare const vi: { mock: (...args: unknown[]) => unknown }
 
 const route = readFileSync(fileURLToPath(new URL('./route.ts', import.meta.url)), 'utf8')
 

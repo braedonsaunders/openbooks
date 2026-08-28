@@ -27,6 +27,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "vitest": [
+        "./app/api/compliance/information-returns/route.test.ts"
       ]
     }
   },

@@ -44,7 +44,8 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./[id]/pins/route.ts?account-group-pins-test")) as typeof import("./[id]/pins/route.ts");
+const routeUrl = new URL("./[id]/pins/route.ts?account-group-pins-test", import.meta.url).href;
+const { POST } = (await import(routeUrl)) as typeof import("./[id]/pins/route.ts");
 hooks.deregister();
 
 const { db, pool } = await import("@openbooks/engine/src/db.ts");
