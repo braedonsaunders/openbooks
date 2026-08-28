@@ -19,34 +19,41 @@ export interface RunSchedule {
   name: string
   frequency: string
   pay_date_offset_days: number
-  /** Last period end on this schedule (or its anchor when nothing has run). */
-  last_end: string | null
+  /** Canonical next period, derived on the server from the schedule anchor. */
+  next_period_start: string
+  next_period_end: string
+  next_pay_date: string
 }
 
-const DAY = 86_400_000
-const iso = (d: Date) => d.toISOString().slice(0, 10)
-const at = (value: string) => new Date(`${value}T00:00:00Z`)
-
-/** Period length in days for the schedule's cadence (month-ends handled below). */
-function addPeriod(from: Date, frequency: string): Date {
-  const next = new Date(from)
-  switch (frequency) {
-    case 'weekly': next.setUTCDate(next.getUTCDate() + 7); break
-    case 'biweekly': next.setUTCDate(next.getUTCDate() + 14); break
-    case 'semimonthly': next.setUTCDate(next.getUTCDate() + 15); break
-    case 'monthly': next.setUTCMonth(next.getUTCMonth() + 1); break
-    default: next.setUTCDate(next.getUTCDate() + 14)
+/**
+ * The schedule's next period is derived on the server with the same calendar
+ * engine used by run creation. The client only formats the already-canonical
+ * values for the date controls.
+ */
+export function nextPeriod(schedule: RunSchedule): { start: string; end: string; payDate: string } {
+  return {
+    start: schedule.next_period_start,
+    end: schedule.next_period_end,
+    payDate: schedule.next_pay_date,
   }
-  return next
 }
 
-/** The schedule's next period: the day after its last period end, one cadence long. */
-function nextPeriod(schedule: RunSchedule, today: string): { start: string; end: string; payDate: string } {
-  const lastEnd = at(schedule.last_end ?? today)
-  const start = new Date(lastEnd.getTime() + DAY)
-  const end = new Date(addPeriod(start, schedule.frequency).getTime() - DAY)
-  const payDate = new Date(end.getTime() + (schedule.pay_date_offset_days ?? 0) * DAY)
-  return { start: iso(start), end: iso(end), payDate: iso(payDate) }
+/** Keep the server's derived-period path authoritative until an operator edits a date. */
+export function runPayload(
+  scheduleId: string,
+  shown: { start: string; end: string; payDate: string },
+  runType: 'regular' | 'bonus' | 'termination',
+  paidEmployees: readonly string[],
+  touched: boolean,
+): Record<string, unknown> {
+  return {
+    payScheduleId: scheduleId,
+    ...(touched
+      ? { periodStart: shown.start, periodEnd: shown.end, payDate: shown.payDate }
+      : {}),
+    runType,
+    employeePartyIds: runType === 'termination' ? [...paidEmployees] : [],
+  }
 }
 
 async function postRun(body: Record<string, unknown>): Promise<string> {
@@ -110,7 +117,7 @@ export function NewRunButton({
   const [runType, setRunType] = useState<'regular' | 'bonus' | 'termination'>('regular')
   const [paidEmployees, setPaidEmployees] = useState<string[]>([])
   const schedule = schedules.find((s) => s.id === scheduleId) ?? schedules[0]
-  const derived = schedule ? nextPeriod(schedule, today) : { start: '', end: '', payDate: '' }
+  const derived = schedule ? nextPeriod(schedule) : { start: '', end: '', payDate: '' }
   const [period, setPeriod] = useState(derived)
   const [touched, setTouched] = useState(false)
 
@@ -123,7 +130,7 @@ export function NewRunButton({
     // The scope belongs to the schedule that was chosen with it.
     setPaidEmployees([])
     const next = schedules.find((s) => s.id === id)
-    if (next) setPeriod(nextPeriod(next, today))
+    if (next) setPeriod(nextPeriod(next))
   }
 
   function setField(key: 'start' | 'end' | 'payDate', value: string) {
@@ -137,14 +144,7 @@ export function NewRunButton({
     if (!scheduleId) return
     setBusy(true)
     try {
-      const documentId = await postRun({
-        payScheduleId: scheduleId,
-        periodStart: shown.start,
-        periodEnd: shown.end,
-        payDate: shown.payDate,
-        runType,
-        employeePartyIds: runType === 'termination' ? paidEmployees : [],
-      })
+      const documentId = await postRun(runPayload(scheduleId, shown, runType, paidEmployees, touched))
       setOpen(false)
       router.push(`/payroll/runs/${documentId}`)
     } catch (e) {
