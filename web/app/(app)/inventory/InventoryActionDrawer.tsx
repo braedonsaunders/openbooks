@@ -74,6 +74,7 @@ export function InventoryActionDrawer({
         offsetAccountId: offsetAccountId || undefined,
         basis: action === 'landed' ? basis : undefined,
         memo: memo || undefined,
+        idempotencyKey: crypto.randomUUID(),
       }),
     })
     const data = await res.json()
