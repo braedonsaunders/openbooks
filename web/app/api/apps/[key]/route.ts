@@ -26,15 +26,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ key: s
   if (body.status !== 'installed' && body.status !== 'disabled') {
     return NextResponse.json({ error: 'status must be "installed" or "disabled"' }, { status: 400 })
   }
-  await setAppStatus(gate.user.orgId, key, body.status)
+  await setAppStatus(gate.user.orgId, gate.user.id, key, body.status)
   return NextResponse.json({ ok: true })
 }
 
-/** DELETE — uninstall an App (cascades versions, files, storage, run log). */
+/** DELETE — uninstall an App (with an append-only evidence snapshot). */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ key: string }> }) {
   const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key } = await params
-  await deleteApp(gate.user.orgId, key)
+  await deleteApp(gate.user.orgId, gate.user.id, key)
   return NextResponse.json({ ok: true })
 }

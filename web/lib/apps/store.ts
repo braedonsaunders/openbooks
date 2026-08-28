@@ -1,4 +1,5 @@
 import 'server-only'
+import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import {
@@ -242,13 +243,121 @@ async function provisionObjects(
   return { recordTypes: [...recordTypes], customFields: [...customFields] }
 }
 
-export async function setAppStatus(orgId: string, key: string, status: 'installed' | 'disabled'): Promise<void> {
-  await db.execute(sql`update apps set status = ${status}, updated_at = now() where org_id = ${orgId} and key = ${key}`)
+export async function setAppStatus(
+  orgId: string,
+  userId: string,
+  key: string,
+  status: 'installed' | 'disabled',
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const existing = await tx.execute<{
+      id: string
+      key: string
+      name: string
+      status: 'installed' | 'disabled'
+    }>(sql`
+      select id, key, name, status
+        from apps
+       where org_id = ${orgId} and key = ${key}
+       for update`)
+    const app = existing.rows[0]
+    if (!app || app.status === status) return
+
+    await tx.execute(sql`
+      update apps
+         set status = ${status}, updated_at = now(), updated_by = ${userId}
+       where org_id = ${orgId} and id = ${app.id}`)
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'apps', ${app.id}, 'update',
+        ${JSON.stringify({
+          event: 'app_status_changed',
+          before: { key: app.key, name: app.name, status: app.status },
+          after: { key: app.key, name: app.name, status },
+        })}::jsonb,
+        ${userId})`)
+  })
 }
 
-export async function deleteApp(orgId: string, key: string): Promise<void> {
-  // FK cascades drop versions, files, storage, and run log.
-  await db.execute(sql`delete from apps where org_id = ${orgId} and key = ${key}`)
+export async function deleteApp(orgId: string, userId: string, key: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    const existing = await tx.execute<{
+      id: string
+      orgId: string
+      key: string
+      name: string
+      description: string | null
+      iconKey: string
+      status: 'installed' | 'disabled'
+      activeVersionId: string | null
+      grantedPermissions: string[]
+      sortOrder: number
+      provisioned: unknown
+      createdAt: Date
+      createdBy: string | null
+      updatedAt: Date
+      updatedBy: string | null
+      version: string | null
+      manifest: AppManifest | null
+    }>(sql`
+      select a.id, a.org_id as "orgId", a.key, a.name, a.description,
+             a.icon_key as "iconKey", a.status,
+             a.active_version_id as "activeVersionId",
+             a.granted_permissions as "grantedPermissions", a.sort_order as "sortOrder",
+             a.provisioned, a.created_at as "createdAt", a.created_by as "createdBy",
+             a.updated_at as "updatedAt", a.updated_by as "updatedBy",
+             v.version, v.manifest
+        from apps a
+        left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
+       where a.org_id = ${orgId} and a.key = ${key}
+       for update of a`)
+    const app = existing.rows[0]
+    if (!app) return
+
+    // App-owned rows cascade with the app. Capture the complete execution and
+    // code evidence first so the audit row remains useful after uninstall.
+    const versions = await tx.execute(sql`
+      select id, org_id as "orgId", app_id as "appId", version, manifest, status,
+             created_at as "createdAt", created_by as "createdBy",
+             updated_at as "updatedAt", updated_by as "updatedBy"
+        from app_versions
+       where org_id = ${orgId} and app_id = ${app.id}
+       order by created_at, id`)
+    const files = await tx.execute(sql`
+      select id, org_id as "orgId", app_id as "appId", version_id as "versionId", path,
+             kind, content_type as "contentType", content, is_binary as "isBinary", size,
+             created_at as "createdAt", created_by as "createdBy",
+             updated_at as "updatedAt", updated_by as "updatedBy"
+        from app_files
+       where org_id = ${orgId} and app_id = ${app.id}
+       order by version_id, path`)
+    const runs = await tx.execute(sql`
+      select id, org_id as "orgId", app_id as "appId", version_id as "versionId", endpoint,
+             status, units, logs, error_message as "errorMessage", duration_ms as "durationMs",
+             actor_id as "actorId", at
+        from app_runs
+       where org_id = ${orgId} and app_id = ${app.id}
+       order by at, id`)
+
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'apps', ${app.id}, 'delete',
+        ${JSON.stringify({
+          event: 'app_uninstall',
+          // Keep associated versions/files/runs under `before`; unlike the
+          // app row, these children are about to disappear via FK cascade.
+          before: {
+            ...app,
+            versions: versions.rows,
+            files: files.rows,
+            runs: runs.rows,
+          },
+          after: null,
+        })}::jsonb,
+        ${userId})`)
+
+    await tx.execute(sql`delete from apps where org_id = ${orgId} and id = ${app.id}`)
+  })
 }
 
 /** Build the inlined frontend bundle the AppFrame renders. */
@@ -678,46 +787,113 @@ export interface AppMetaUpdate {
   endpoints?: { name: string; file: string; method?: 'GET' | 'POST' | 'ANY' }[]
 }
 
+type MutableAppRow = Pick<AppRow, 'id' | 'key' | 'name' | 'description' | 'iconKey' | 'status' | 'activeVersionId' | 'grantedPermissions' | 'version' | 'manifest'>
+
+/** Load and lock the app + active version before authoring a new revision. */
+async function loadMutableApp(tx: SqlExecutor, orgId: string, key: string): Promise<MutableAppRow | null> {
+  const result = await tx.execute<MutableAppRow>(sql`
+    select a.id, a.key, a.name, a.description, a.icon_key as "iconKey", a.status,
+           a.active_version_id as "activeVersionId", a.granted_permissions as "grantedPermissions",
+           v.version, v.manifest
+      from apps a
+      left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
+     where a.org_id = ${orgId} and a.key = ${key}
+     for update of a`)
+  return result.rows[0] ?? null
+}
+
+/**
+ * Copy the active bundle into a fresh version. Authoring never updates or
+ * deletes rows belonging to a version that an earlier invocation could have
+ * referenced; the new version becomes active only after its complete snapshot
+ * exists. The generated prerelease label is valid manifest syntax and keeps
+ * the user-authored release version visible as its base.
+ */
+async function snapshotActiveVersion(
+  tx: SqlExecutor,
+  orgId: string,
+  userId: string | null,
+  app: MutableAppRow,
+  manifest: AppManifest,
+): Promise<{ id: string; version: string; manifest: AppManifest }> {
+  if (!app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
+
+  // Keep each authoring revision rooted in the release version instead of
+  // recursively growing labels such as `1.0.0-edit-…-edit-…`.
+  const baseVersion = (app.version ?? app.manifest.version).split('-edit-', 1)[0]!
+  const revisionVersion = `${baseVersion}-edit-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`
+  const revisionManifest: AppManifest = { ...manifest, version: revisionVersion }
+  const versionResult = await tx.execute<{ id: string }>(sql`
+    insert into app_versions (org_id, app_id, version, manifest, status, created_by, updated_by)
+    values (${orgId}, ${app.id}, ${revisionVersion}, ${JSON.stringify(revisionManifest)}::jsonb,
+            'active', ${userId}, ${userId})
+    returning id`)
+  const versionId = versionResult.rows[0]?.id
+  if (!versionId) throw new AppError('failed to create app version', 500)
+
+  await tx.execute(sql`
+    insert into app_files (
+      org_id, app_id, version_id, path, kind, content_type, content, is_binary, size,
+      created_at, created_by, updated_at, updated_by
+    )
+    select org_id, app_id, ${versionId}, path, kind, content_type, content, is_binary, size,
+           created_at, created_by, updated_at, updated_by
+      from app_files
+     where org_id = ${orgId} and app_id = ${app.id} and version_id = ${app.activeVersionId}`)
+
+  await tx.execute(sql`
+    update app_versions
+       set status = 'superseded'
+     where org_id = ${orgId} and app_id = ${app.id} and id = ${app.activeVersionId}`)
+  await tx.execute(sql`
+    update apps
+       set active_version_id = ${versionId}, updated_at = now(), updated_by = ${userId}
+     where org_id = ${orgId} and id = ${app.id}`)
+
+  return { id: versionId, version: revisionVersion, manifest: revisionManifest }
+}
+
 /**
  * Form-driven manifest + app-row update. Endpoints must reference existing
  * files; file kinds are re-classified afterward so the runtime picks up
  * endpoint changes immediately.
  */
 export async function updateAppMeta(orgId: string, userId: string, key: string, meta: AppMetaUpdate): Promise<void> {
-  const app = await getAppByKey(orgId, key)
-  if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
-
-  const manifest: AppManifest = { ...app.manifest }
-  if (meta.name !== undefined) {
-    if (!meta.name.trim()) throw new AppError('name required')
-    manifest.name = meta.name.trim().slice(0, 120)
-  }
-  if (meta.description !== undefined) manifest.description = meta.description?.slice(0, 2000) || undefined
-  if (meta.iconKey !== undefined) manifest.icon = meta.iconKey
-  if (meta.grantedPermissions !== undefined) {
-    // Authoring flow: what you grant is what the manifest requests.
-    manifest.permissions = [...new Set(meta.grantedPermissions.filter((p) => typeof p === 'string' && p.length <= 80))]
-  }
-  if (meta.endpoints !== undefined) {
-    const seen = new Set<string>()
-    for (const e of meta.endpoints) {
-      if (!SLUG_RE.test(e.name)) throw new AppError(`endpoint name "${e.name}" must be a slug`)
-      if (seen.has(e.name)) throw new AppError(`duplicate endpoint name "${e.name}"`)
-      seen.add(e.name)
-      if (!FILE_PATH_RE.test(e.file)) throw new AppError(`invalid endpoint file path "${e.file}"`)
-    }
-    manifest.endpoints = meta.endpoints.map((e) => ({ name: e.name, file: e.file, method: e.method ?? 'ANY' }))
-  }
-
-  const paths = (await rows<{ path: string }>(
-    sql`select path from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId}`,
-  )).map((r) => r.path)
-  const vb = validateBundle(manifest, paths)
-  if (!vb.ok) throw new AppError(vb.errors.join('; '))
-
-  const granted = meta.grantedPermissions !== undefined ? manifest.permissions : app.grantedPermissions
-
   await db.transaction(async (tx) => {
+    const app = await loadMutableApp(tx, orgId, key)
+    if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
+
+    const manifest: AppManifest = { ...app.manifest }
+    if (meta.name !== undefined) {
+      if (!meta.name.trim()) throw new AppError('name required')
+      manifest.name = meta.name.trim().slice(0, 120)
+    }
+    if (meta.description !== undefined) manifest.description = meta.description?.slice(0, 2000) || undefined
+    if (meta.iconKey !== undefined) manifest.icon = meta.iconKey
+    if (meta.grantedPermissions !== undefined) {
+      // Authoring flow: what you grant is what the manifest requests.
+      manifest.permissions = [...new Set(meta.grantedPermissions.filter((p) => typeof p === 'string' && p.length <= 80))]
+    }
+    if (meta.endpoints !== undefined) {
+      const seen = new Set<string>()
+      for (const e of meta.endpoints) {
+        if (!SLUG_RE.test(e.name)) throw new AppError(`endpoint name "${e.name}" must be a slug`)
+        if (seen.has(e.name)) throw new AppError(`duplicate endpoint name "${e.name}"`)
+        seen.add(e.name)
+        if (!FILE_PATH_RE.test(e.file)) throw new AppError(`invalid endpoint file path "${e.file}"`)
+      }
+      manifest.endpoints = meta.endpoints.map((e) => ({ name: e.name, file: e.file, method: e.method ?? 'ANY' }))
+    }
+
+    const paths = (await tx.execute<{ path: string }>(
+      sql`select path from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId}`,
+    )).rows.map((r) => r.path)
+    const vb = validateBundle(manifest, paths)
+    if (!vb.ok) throw new AppError(vb.errors.join('; '))
+
+    const granted = meta.grantedPermissions !== undefined ? manifest.permissions : app.grantedPermissions
+    const revision = await snapshotActiveVersion(tx, orgId, userId, app, manifest)
+
     await tx.execute(sql`
       update apps set
         name = ${manifest.name}, description = ${manifest.description ?? null},
@@ -741,12 +917,9 @@ export async function updateAppMeta(orgId: string, userId: string, key: string, 
           })}::jsonb,
           ${userId})`)
     }
-    await tx.execute(sql`
-      update app_versions set manifest = ${JSON.stringify(manifest)}::jsonb, updated_at = now(), updated_by = ${userId}
-      where id = ${app.activeVersionId} and org_id = ${orgId}`)
     // Re-classify kinds so new/changed endpoints load their backend files.
     for (const p of paths) {
-      await tx.execute(sql`update app_files set kind = ${vb.kinds[p]} where version_id = ${app.activeVersionId} and org_id = ${orgId} and path = ${p}`)
+      await tx.execute(sql`update app_files set kind = ${vb.kinds[p]} where version_id = ${revision.id} and org_id = ${orgId} and path = ${p}`)
     }
   })
 }
@@ -796,34 +969,51 @@ export async function writeAppFile(
   if (!FILE_PATH_RE.test(path)) throw new AppError('invalid file path')
   if (path === 'manifest.json') throw new AppError('the manifest is edited through the app settings, not as a file')
   if (content.length > MAX_FILE_BYTES) throw new AppError('file too large (max 2 MB)')
-  const app = await getAppByKey(orgId, key)
-  if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
-
   const { contentType } = contentTypeFor(path)
-  const backendFiles = new Set(app.manifest.endpoints.map((e) => e.file))
-  const kind = backendFiles.has(path)
-    ? 'backend'
-    : path === app.manifest.frontend.entry || path.startsWith('frontend/')
-      ? 'frontend'
-      : 'asset'
 
-  await db.execute(sql`
-    insert into app_files (org_id, app_id, version_id, path, kind, content_type, content, is_binary, size, created_by, updated_by)
-    values (${orgId}, ${app.id}, ${app.activeVersionId}, ${path}, ${kind}, ${contentType},
-            ${content}, ${isBinary}, ${content.length}, ${userId}, ${userId})
-    on conflict (version_id, path) do update set
-      content = excluded.content, is_binary = excluded.is_binary, size = excluded.size,
-      content_type = excluded.content_type, kind = excluded.kind, updated_at = now(), updated_by = ${userId}
-    where app_files.org_id = ${orgId}`)
+  await db.transaction(async (tx) => {
+    const app = await loadMutableApp(tx, orgId, key)
+    if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
+
+    const backendFiles = new Set(app.manifest.endpoints.map((e) => e.file))
+    const kind = backendFiles.has(path)
+      ? 'backend'
+      : path === app.manifest.frontend.entry || path.startsWith('frontend/')
+        ? 'frontend'
+        : 'asset'
+    const revision = await snapshotActiveVersion(tx, orgId, userId, app, app.manifest)
+
+    await tx.execute(sql`
+      insert into app_files (org_id, app_id, version_id, path, kind, content_type, content, is_binary, size, created_by, updated_by)
+      values (${orgId}, ${app.id}, ${revision.id}, ${path}, ${kind}, ${contentType},
+              ${content}, ${isBinary}, ${content.length}, ${userId}, ${userId})
+      on conflict (version_id, path) do update set
+        content = excluded.content, is_binary = excluded.is_binary, size = excluded.size,
+        content_type = excluded.content_type, kind = excluded.kind, updated_at = now(), updated_by = ${userId}
+      where app_files.org_id = ${orgId}`)
+  })
 }
 
-export async function deleteAppFile(orgId: string, key: string, path: string): Promise<void> {
-  const app = await getAppByKey(orgId, key)
-  if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
-  if (path === app.manifest.frontend.entry) throw new AppError('cannot delete the frontend entry file', 409)
-  const endpoint = app.manifest.endpoints.find((e) => e.file === path)
-  if (endpoint) throw new AppError(`cannot delete: endpoint "${endpoint.name}" uses this file`, 409)
-  await db.execute(sql`delete from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId} and path = ${path}`)
+export async function deleteAppFile(orgId: string, key: string, path: string, userId?: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    const app = await loadMutableApp(tx, orgId, key)
+    if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
+    if (path === app.manifest.frontend.entry) throw new AppError('cannot delete the frontend entry file', 409)
+    const endpoint = app.manifest.endpoints.find((e) => e.file === path)
+    if (endpoint) throw new AppError(`cannot delete: endpoint "${endpoint.name}" uses this file`, 409)
+
+    // Preserve the old active version (and avoid creating a no-op revision)
+    // when the requested path is not present.
+    const existing = await tx.execute<{ id: string }>(sql`
+      select id
+        from app_files
+       where org_id = ${orgId} and version_id = ${app.activeVersionId} and path = ${path}
+       limit 1`)
+    if (!existing.rows[0]) return
+
+    const revision = await snapshotActiveVersion(tx, orgId, userId ?? null, app, app.manifest)
+    await tx.execute(sql`delete from app_files where org_id = ${orgId} and version_id = ${revision.id} and path = ${path}`)
+  })
 }
 
 // ---------------------------------------------------------------------------
