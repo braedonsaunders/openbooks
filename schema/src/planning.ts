@@ -52,6 +52,8 @@ export const budgetLines = pgTable(
     scenarioId: uuid("scenario_id").notNull(),
     accountId: uuid("account_id").notNull(),
     periodId: uuid("period_id").notNull(),
+    /** Legal entity whose plan owns this cell. */
+    subsidiaryId: uuid("subsidiary_id").notNull(),
     departmentId: uuid("department_id"),
     projectId: uuid("project_id"),
     locationId: uuid("location_id"),
@@ -62,10 +64,11 @@ export const budgetLines = pgTable(
   },
   (t) => [
     unique("budget_lines_cell")
-      .on(t.scenarioId, t.accountId, t.periodId, t.departmentId, t.projectId, t.locationId, t.classId)
+      .on(t.scenarioId, t.accountId, t.periodId, t.subsidiaryId, t.departmentId, t.projectId, t.locationId, t.classId)
       .nullsNotDistinct(),
     index("budget_lines_scenario").on(t.scenarioId),
     index("budget_lines_org_scenario").on(t.orgId, t.scenarioId),
+    index("budget_lines_org_subsidiary").on(t.orgId, t.subsidiaryId),
   ],
 );
 
