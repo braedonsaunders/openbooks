@@ -103,6 +103,16 @@ function treemapColor(pct: number): string {
   return 'rgb(134,239,172)'
 }
 
+/** Escape tenant-controlled names before inserting them into ECharts' HTML tooltip. */
+function escapeTooltipHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 /* ---------------------------------------------------------- entries drawer */
 
 interface Entry {
@@ -977,7 +987,7 @@ function TreemapSub({ data }: { data: UtilizationData }) {
           height={460}
           option={{
             tooltip: {
-              formatter: (p: any) => `<b>${p.name}</b><br/>${t('table.hours')}: <b>${Math.round(p.value).toLocaleString('en-US')}</b><br/>${t('chart.billable')}: <b>${(p.data?.pct ?? 0).toFixed(1)}%</b>`,
+              formatter: (p: any) => `<b>${escapeTooltipHtml(p.name)}</b><br/>${t('table.hours')}: <b>${Math.round(p.value).toLocaleString('en-US')}</b><br/>${t('chart.billable')}: <b>${(p.data?.pct ?? 0).toFixed(1)}%</b>`,
             },
             series: [{
               type: 'treemap',
