@@ -7,6 +7,7 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
+import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 
 export const runtime = 'nodejs'
 
@@ -46,6 +47,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
                                 ${pct === null || pct === undefined ? sql`'null'::jsonb` : sql`to_jsonb(${pct}::numeric)`}),
              updated_by = ${gate.user.id}, updated_at = now()
        where id = ${id} and org_id = ${orgId}
+       ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
        returning id`))
     if (!updated.rows[0]) return null
     return syncProjectRevenueContractsInTransaction(tx, orgId, gate.user.id, today, id)
