@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
-import { db, withBypass, withOrg } from "./db.ts";
+import { db, orgContext, withBypass, withOrg } from "./db.ts";
 import { allocateDocumentNumber } from "./document-numbering.ts";
 import { addCalendarDays, businessToday } from "./business-date.ts";
 import { now } from "./clock.ts";
@@ -572,6 +572,13 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
   const scanCutoff = asOf ?? addCalendarDays(toIso(now()), 1);
   const result: SubscriptionRunResult = { billed: 0, posted: 0, failed: 0 };
   const orgBusinessDates = new Map<string, string>();
+  // Simulation (and other tenant-scoped callers) run this helper while an
+  // ambient org context is active. Keep that context as a hard candidate
+  // boundary even though the scheduler's unscoped invocation legitimately
+  // scans every production tenant under bypass. Without this predicate, a SaaS
+  // simulation on a shared database would bill unrelated live subscriptions.
+  const scopedOrgId = orgContext.getStore()?.orgId;
+  const orgScope = scopedOrgId ? sql`and s.org_id = ${scopedOrgId}` : sql``;
 
   const due = await withBypass(async () =>
     (await db.execute<{
@@ -598,6 +605,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
          and o.env_kind = 'production'
          and coalesce((o.settings->'features'->>'subscriptionBilling')::boolean, false)
          and (l.id is null or coalesce((o.settings->'features'->>'advancedSubscriptions')::boolean, false))
+         ${orgScope}
     `)),
   );
 
@@ -911,7 +919,7 @@ export async function prorateFirstInvoice(
     const price = row.priceOverride ?? row.planAmount;
     const full = mul(row.quantity, price);
     // Prorate the partial period [startOn, firstBillOn] for the days from start.
-    const amount = prorate(full, row.startOn, firstBillOn, row.startOn > today ? row.startOn : today);
+    const amount = prorate(full, row.startOn, firstBillOn, row.startOn);
     if (toUnits(amount) <= 0n) throw new SubscriptionError("nothing to prorate for the first period");
 
     const gen = await createSubscriptionInvoice({
