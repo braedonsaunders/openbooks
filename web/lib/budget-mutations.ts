@@ -7,6 +7,8 @@ import type { BudgetDimensions } from './budgets'
 import { canonicalDecimal } from './exact-decimal'
 
 export type BudgetCellInput = BudgetDimensions & {
+  /** Legal entity owning this planning cell; omitted inputs resolve to root. */
+  subsidiaryId?: string | null
   accountId: string
   periodId: string
   amount: string
@@ -39,10 +41,11 @@ export function normalizeBudgetAmount(value: unknown): string {
   return normalized
 }
 
-function cellKey(cell: Pick<BudgetCellInput, 'accountId' | 'periodId'> & Partial<BudgetDimensions>) {
+function cellKey(cell: Pick<BudgetCellInput, 'accountId' | 'periodId'> & Partial<BudgetDimensions> & Pick<BudgetCellInput, 'subsidiaryId'>) {
   return [
     cell.accountId,
     cell.periodId,
+    cell.subsidiaryId ?? '',
     cell.departmentId ?? '',
     cell.projectId ?? '',
     cell.locationId ?? '',
@@ -78,6 +81,7 @@ export async function saveBudgetCells(input: {
     ...cell,
     amount: normalizeBudgetAmount(cell.amount),
     note: typeof cell.note === 'string' ? cell.note.trim().slice(0, 2_000) || null : null,
+    subsidiaryId: cell.subsidiaryId ?? null,
     departmentId: cell.departmentId ?? null,
     projectId: cell.projectId ?? null,
     locationId: cell.locationId ?? null,
@@ -120,6 +124,16 @@ export async function saveBudgetCells(input: {
       throw new BudgetMutationError('invalid_period')
     }
 
+    const subsidiaryIds = [...new Set(normalized.map((cell) => cell.subsidiaryId).filter((id): id is string => !!id))]
+    if (subsidiaryIds.length) {
+      const subsidiaries = await tx.execute<{ id: string }>(sql`
+        select id from subsidiaries
+         where org_id = ${input.orgId} and id = any(${uuidArray(subsidiaryIds)}::uuid[])
+           and is_active and not is_elimination
+      `)
+      if (subsidiaries.rows.length !== subsidiaryIds.length) throw new BudgetMutationError('invalid_subsidiary')
+    }
+
     const dimensionIds = {
       departmentId: [...new Set(normalized.map((cell) => cell.departmentId).filter((id): id is string => !!id))],
       projectId: [...new Set(normalized.map((cell) => cell.projectId).filter((id): id is string => !!id))],
@@ -147,7 +161,7 @@ export async function saveBudgetCells(input: {
     })
 
     const beforeRows = (await tx.execute<Record<string, any>>(sql`
-      select account_id, period_id, department_id, project_id, location_id, class_id, amount::text, note
+      select account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id, amount::text, note
         from budget_lines
        where org_id = ${input.orgId} and scenario_id = ${input.scenarioId}
          and account_id = any(${uuidArray(accountIds)}::uuid[])
@@ -158,6 +172,7 @@ export async function saveBudgetCells(input: {
         cellKey({
           accountId: row.account_id,
           periodId: row.period_id,
+          subsidiaryId: row.subsidiary_id,
           departmentId: row.department_id,
           projectId: row.project_id,
           locationId: row.location_id,
@@ -175,6 +190,7 @@ export async function saveBudgetCells(input: {
           delete from budget_lines
            where org_id = ${input.orgId} and scenario_id = ${input.scenarioId}
              and account_id = ${cell.accountId} and period_id = ${cell.periodId}
+             and subsidiary_id is not distinct from ${cell.subsidiaryId}
              and department_id is not distinct from ${cell.departmentId}
              and project_id is not distinct from ${cell.projectId}
              and location_id is not distinct from ${cell.locationId}
@@ -184,10 +200,10 @@ export async function saveBudgetCells(input: {
       } else {
         await tx.execute(sql`
           insert into budget_lines
-            (org_id, scenario_id, account_id, period_id, department_id, project_id, location_id, class_id,
+            (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
              amount, note, created_by, updated_by)
           values
-            (${input.orgId}, ${input.scenarioId}, ${cell.accountId}, ${cell.periodId}, ${cell.departmentId},
+            (${input.orgId}, ${input.scenarioId}, ${cell.accountId}, ${cell.periodId}, ${cell.subsidiaryId}, ${cell.departmentId},
              ${cell.projectId}, ${cell.locationId}, ${cell.classId}, ${cell.amount}, ${cell.note},
              ${input.actorId}, ${input.actorId})
           on conflict on constraint budget_lines_cell do update set

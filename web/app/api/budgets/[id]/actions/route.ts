@@ -2,9 +2,10 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { can } from '../../../../../lib/authz'
+import { can, subsidiariesInScope } from '../../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { BudgetMutationError } from '../../../../../lib/budget-mutations'
 
 export const runtime = 'nodejs'
@@ -14,6 +15,7 @@ type Action = 'archive' | 'copy' | 'copy_prior_actuals' | 'apply_source'
 function dims(body: Record<string, unknown>) {
   const value = (key: string) => typeof body[key] === 'string' && isUuid(body[key] as string) ? body[key] as string : null
   return {
+    subsidiaryId: value('subsidiaryId'),
     departmentId: value('departmentId'),
     projectId: value('projectId'),
     locationId: value('locationId'),
@@ -79,10 +81,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const newId = created.rows[0]!.id
         await tx.execute(sql`
           insert into budget_lines
-            (org_id, scenario_id, account_id, period_id, department_id, project_id, location_id, class_id,
+            (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
              amount, note, created_by, updated_by)
           select ${user.orgId}, ${newId}, bl.account_id, destination.id,
-                 bl.department_id, bl.project_id, bl.location_id, bl.class_id,
+                 bl.subsidiary_id, bl.department_id, bl.project_id, bl.location_id, bl.class_id,
                  bl.amount, bl.note, ${user.id}, ${user.id}
             from budget_lines bl
             join accounting_periods source_period on source_period.id = bl.period_id and source_period.org_id = bl.org_id
@@ -92,6 +94,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
              and destination.fiscal_year = ${targetYear}
              and destination.period_number = source_period.period_number
            where bl.org_id = ${user.orgId} and bl.scenario_id = ${id}
+             ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
         `)
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -104,11 +107,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (action === 'copy_prior_actuals') {
         if (scenario.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
         const selected = dims(body)
+        if (selected.subsidiaryId !== null && !subsidiariesInScope(gate, [selected.subsidiaryId])) {
+          throw new BudgetMutationError('invalid_subsidiary')
+        }
         // A selected dimension filters the source activity and stamps its value
         // onto every copied line. An unselected dimension is copied through:
         // each source line keeps its own value instead of being silently
         // collapsed into the NULL-dimension bucket.
         const sourceDimFilters = [
+          selected.subsidiaryId === null ? null : sql`l.subsidiary_id is not distinct from ${selected.subsidiaryId}`,
           selected.departmentId === null ? null : sql`l.department_id is not distinct from ${selected.departmentId}`,
           selected.projectId === null ? null : sql`l.project_id is not distinct from ${selected.projectId}`,
           selected.locationId === null ? null : sql`l.location_id is not distinct from ${selected.locationId}`,
@@ -117,6 +124,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         // Clear exactly what this copy replaces: the selected dimensions'
         // existing lines, or the whole scenario when nothing narrows the scope.
         const clearDimFilters = [
+          selected.subsidiaryId === null ? null : sql`subsidiary_id is not distinct from ${selected.subsidiaryId}`,
           selected.departmentId === null ? null : sql`department_id is not distinct from ${selected.departmentId}`,
           selected.projectId === null ? null : sql`project_id is not distinct from ${selected.projectId}`,
           selected.locationId === null ? null : sql`location_id is not distinct from ${selected.locationId}`,
@@ -126,13 +134,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           delete from budget_lines
            where org_id = ${user.orgId} and scenario_id = ${id}
              ${clearDimFilters.length > 0 ? sql`and ${sql.join(clearDimFilters, sql` and `)}` : sql``}
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
         `)
         await tx.execute(sql`
           insert into budget_lines
-            (org_id, scenario_id, account_id, period_id, department_id, project_id, location_id, class_id,
+            (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
              amount, created_by, updated_by)
           select ${user.orgId}, ${id}, l.account_id, destination.id,
-                 l.department_id, l.project_id, l.location_id, l.class_id,
+                 l.subsidiary_id, l.department_id, l.project_id, l.location_id, l.class_id,
                  sum(l.amount), ${user.id}, ${user.id}
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = ${user.orgId} and e.status in ('posted', 'reversed')
@@ -146,7 +155,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
            where e.book_id = ${scenario.book_id}
              and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
              ${sourceDimFilters.length > 0 ? sql`and ${sql.join(sourceDimFilters, sql` and `)}` : sql``}
-           group by l.account_id, destination.id, l.department_id, l.project_id, l.location_id, l.class_id
+             ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds)}
+           group by l.account_id, destination.id, l.subsidiary_id, l.department_id, l.project_id, l.location_id, l.class_id
           having sum(l.amount) <> 0
         `)
         const nextRevision = expectedRevision + 1
@@ -173,13 +183,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           select id from budget_scenarios where id = ${sourceScenarioId} and org_id = ${user.orgId}
         `))
         if (!source.rows[0]) throw new BudgetMutationError('invalid_source_scenario')
-        await tx.execute(sql`delete from budget_lines where scenario_id = ${id} and org_id = ${user.orgId}`)
+        await tx.execute(sql`
+          delete from budget_lines
+           where scenario_id = ${id} and org_id = ${user.orgId}
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
+        `)
         await tx.execute(sql`
           insert into budget_lines
-            (org_id, scenario_id, account_id, period_id, department_id, project_id, location_id, class_id,
+            (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
              amount, note, created_by, updated_by)
           select ${user.orgId}, ${id}, bl.account_id, destination.id,
-                 bl.department_id, bl.project_id, bl.location_id, bl.class_id,
+                 bl.subsidiary_id, bl.department_id, bl.project_id, bl.location_id, bl.class_id,
                  bl.amount, bl.note, ${user.id}, ${user.id}
             from budget_lines bl
             join accounting_periods source_period on source_period.id = bl.period_id and source_period.org_id = bl.org_id
@@ -189,6 +203,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
              and destination.fiscal_year = ${scenario.fiscal_year}
              and destination.period_number = source_period.period_number
            where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
+             ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
         `)
         const nextRevision = expectedRevision + 1
         await tx.execute(sql`
