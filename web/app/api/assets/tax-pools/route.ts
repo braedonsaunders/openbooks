@@ -4,6 +4,8 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { listTaxRegimes, runTaxPool } from '@openbooks/engine/src/tax-pool-run.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { guardSubsidiaryScope } from '../../../../lib/authz'
+import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 
 export const runtime = 'nodejs'
 
@@ -32,6 +34,7 @@ export async function GET(req: Request) {
       from tax_pool_periods pp
       join tax_depreciation_pools tp on tp.id = pp.pool_id and tp.org_id = pp.org_id
      where pp.org_id = ${gate.user.orgId} and pp.tax_year = ${taxYear}
+       ${subsidiaryVisibleFilter(sql`tp.subsidiary_id`, gate.allowedSubsidiaryIds)}
      order by tp.class_code`))
   return NextResponse.json({ rows: r.rows })
 }
@@ -56,8 +59,34 @@ export async function POST(req: Request) {
   const yearEnd = body.yearEnd && DATE_RE.test(body.yearEnd) ? body.yearEnd : `${taxYear}-12-31`
 
   const bookId = body.bookId || (await primaryBook(gate.user.orgId))
-  const subsidiaryId = body.subsidiaryId || (await rootSubsidiary(gate.user.orgId))
+
+  // An explicit subsidiary is a write target, not merely a run parameter.
+  // Resolve it inside this org before applying the caller's subsidiary scope;
+  // otherwise an unrestricted caller could even pass a foreign-org UUID into
+  // the engine, while a restricted caller could mutate an entity they cannot
+  // see. Omitting the field keeps the established root-subsidiary default, but
+  // that root is still subject to the same scope gate.
+  const requestedSubsidiaryId = typeof body.subsidiaryId === 'string' && body.subsidiaryId.trim()
+    ? body.subsidiaryId
+    : undefined
+  let subsidiaryId: string | null
+  if (requestedSubsidiaryId) {
+    const requestedDenied = guardSubsidiaryScope(gate, requestedSubsidiaryId)
+    if (requestedDenied) return requestedDenied
+    const subsidiary = await db.execute<{ id: string }>(sql`
+      select id
+        from subsidiaries
+       where id = ${requestedSubsidiaryId} and org_id = ${gate.user.orgId}
+       limit 1`)
+    if (!subsidiary.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    subsidiaryId = subsidiary.rows[0].id
+  } else {
+    subsidiaryId = await rootSubsidiary(gate.user.orgId)
+  }
+
   if (!bookId || !subsidiaryId) return NextResponse.json({ error: 'no accounting book / subsidiary configured' }, { status: 422 })
+  const denied = guardSubsidiaryScope(gate, subsidiaryId)
+  if (denied) return denied
 
   try {
     const result = await runTaxPool(gate.user.orgId, bookId, subsidiaryId, regime, taxYear, {
