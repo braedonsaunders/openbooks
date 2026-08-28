@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import {
   postPaymentWithApplications,
+  updateDraftPayment,
   type PaymentKind,
 } from '@openbooks/engine/src/payments.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
@@ -92,6 +93,17 @@ export async function POST(req: Request) {
       if (!payment) return { kind: 'not_found' as const }
       const previousStatus = payment.status
       if (previousStatus === 'draft') {
+        // The posting body is a convenience for the drawer's final action,
+        // not an unpersisted approval bypass. Save it while the document is
+        // still draft so the exact allocation set is what approval reviews.
+        if (allocations !== undefined) {
+          await updateDraftPayment(
+            documentId,
+            { allocations },
+            authz.user.id,
+            authz.user.orgId,
+          )
+        }
         const submission = await submitAndReleaseIfUngated(
           payment.kind,
           documentId,
