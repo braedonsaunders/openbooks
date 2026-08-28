@@ -1,5 +1,7 @@
-import { date, pgTable, uniqueIndex, uuid, index } from "drizzle-orm/pg-core";
+import { date, foreignKey, index, pgTable, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
+import { documents } from "./documents";
+import { recurringSchedules } from "./time";
 
 /**
  * Per-occurrence dedupe guard for recurring generation. One row per
@@ -24,5 +26,15 @@ export const recurringOccurrenceDocuments = pgTable(
     uniqueIndex("recurring_occurrence_once").on(t.orgId, t.scheduleId, t.occurrenceOn),
     uniqueIndex("recurring_occurrence_document").on(t.documentId),
     index("recurring_occurrence_schedule").on(t.orgId, t.scheduleId, t.occurrenceOn),
+    foreignKey({
+      columns: [t.orgId, t.scheduleId],
+      foreignColumns: [recurringSchedules.orgId, recurringSchedules.id],
+      name: "recurring_occurrence_schedule_fk",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.documentId],
+      foreignColumns: [documents.orgId, documents.id],
+      name: "recurring_occurrence_document_fk",
+    }),
   ],
 );
