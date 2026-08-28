@@ -105,3 +105,36 @@ test("escalating rent levels to straight-line income and the accrual posts once"
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("concurrent levelling runs serialize on the lease and post one accrual", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const slAccountId = randomUUID();
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable,
+                            required_dimensions, custom, subsidiary_include_children)
+      values (${slAccountId}, ${org.orgId}, '1161', 'Concurrent Straight-Line Rent Receivable', 'asset_current_other',
+              false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+    const leaseId = await seedLease(org, slAccountId);
+
+    const runs = await Promise.all([
+      levelLeaseRentStraightLine(org.orgId, null, { asOf: "2026-07-15", onlyLeaseId: leaseId }),
+      levelLeaseRentStraightLine(org.orgId, null, { asOf: "2026-07-15", onlyLeaseId: leaseId }),
+    ]);
+    const results = runs.map((run) => run[0]!);
+    assert.deepEqual(results.map((result) => result.delta).sort(), ["0.0000", "2000.0000"]);
+    assert.equal(results.filter((result) => result.entryId !== null).length, 1);
+
+    const entries = await db.execute<{ count: number }>(sql`
+      select count(*)::int as count
+        from journal_entries
+       where org_id = ${org.orgId}
+         and origin = 'lease'
+         and custom->'propertyManagement'->>'levellingLeaseId' = ${leaseId}`);
+    assert.equal(entries.rows[0]!.count, 1, "concurrent runs must create one levelling entry");
+    assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
+    assert.equal(await glBalance(org.orgId, org.accounts.revenue), -toUnits("2000"));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

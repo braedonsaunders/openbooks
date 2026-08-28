@@ -982,42 +982,36 @@ export async function levelLeaseRentStraightLine(
     }
     const target = straightLine - billed;
 
-    const posted = (await db.execute<{ accrual: string }>(sql`
-      select coalesce(sum(jl.amount), 0)::text as accrual
-        from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted','reversed')
-       where jl.org_id = ${orgId} and je.origin = 'lease'
-         and je.custom->'propertyManagement'->>'levellingLeaseId' = ${lease.id}
-         and (${straightLineRentAccountId}::uuid is null or jl.account_id = ${straightLineRentAccountId}::uuid)
-    `));
-    const postedUnits = toUnits(posted.rows[0]?.accrual ?? "0");
-    const deltaUnits = target - postedUnits;
+    // Serialize balance-changing levelling runs on the lease row. The target
+    // above is deterministic for this lease/asOf, but the posted balance must
+    // be read only after this lock: a concurrent run may have committed while
+    // this call was building its contractual stream.
+    const outcome = await withOrgTransaction(orgId, async () => {
+      const lockedLease = await db.execute<{ id: string }>(sql`
+        select id from property_leases where org_id=${orgId} and id=${lease.id} for update
+      `);
+      if (lockedLease.rows.length === 0) return null;
 
-    const base: LeaseLevellingResult = {
-      leaseId: lease.id,
-      leaseNumber: lease.leaseNumber,
-      straightLineToDate: fromUnits(straightLine),
-      billedToDate: fromUnits(billed),
-      targetAccrual: fromUnits(target),
-      postedAccrual: posted.rows[0]?.accrual ?? "0",
-      delta: fromUnits(deltaUnits),
-      entryId: null,
-    };
+      const posted = (await db.execute<{ accrual: string }>(sql`
+        select coalesce(sum(jl.amount), 0)::text as accrual
+          from journal_lines jl
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted','reversed')
+         where jl.org_id = ${orgId} and je.origin = 'lease'
+           and je.custom->'propertyManagement'->>'levellingLeaseId' = ${lease.id}
+           and (${straightLineRentAccountId}::uuid is null or jl.account_id = ${straightLineRentAccountId}::uuid)
+      `));
+      const postedAccrual = posted.rows[0]?.accrual ?? "0";
+      const deltaUnits = target - toUnits(postedAccrual);
+      if (deltaUnits === 0n) return { postedAccrual, deltaUnits, entryId: null };
+      if (!straightLineRentAccountId) {
+        throw new PropertyManagementError(
+          "Configure the straight-line rent account (Company Settings → controlAccounts.straightLineRent) before levelling lease income",
+        );
+      }
+      if (!lease.rentIncomeAccountId) {
+        throw new PropertyManagementError(`Property for lease ${lease.leaseNumber} has no rent income account`);
+      }
 
-    if (deltaUnits === 0n) {
-      results.push(base);
-      continue;
-    }
-    if (!straightLineRentAccountId) {
-      throw new PropertyManagementError(
-        "Configure the straight-line rent account (Company Settings → controlAccounts.straightLineRent) before levelling lease income",
-      );
-    }
-    if (!lease.rentIncomeAccountId) {
-      throw new PropertyManagementError(`Property for lease ${lease.leaseNumber} has no rent income account`);
-    }
-
-    const entryId = await withOrgTransaction(orgId, async () => {
       const ctx = (await db.execute<{ book_id: string | null; period_id: string | null }>(sql`
         select (select id from accounting_books where org_id = ${orgId} and is_primary limit 1) as book_id,
                (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
@@ -1049,10 +1043,20 @@ export async function levelLeaseRentStraightLine(
       await db.execute(sql`
         update journal_entries set status='posted',posted_at=now(),posted_by=${actorId},updated_at=now(),updated_by=${actorId}
          where org_id=${orgId} and id=${eid}`);
-      return eid;
+      return { postedAccrual, deltaUnits, entryId: eid };
     });
 
-    results.push({ ...base, entryId });
+    if (!outcome) continue;
+    results.push({
+      leaseId: lease.id,
+      leaseNumber: lease.leaseNumber,
+      straightLineToDate: fromUnits(straightLine),
+      billedToDate: fromUnits(billed),
+      targetAccrual: fromUnits(target),
+      postedAccrual: outcome.postedAccrual,
+      delta: fromUnits(outcome.deltaUnits),
+      entryId: outcome.entryId,
+    });
   }
   return results;
 }
