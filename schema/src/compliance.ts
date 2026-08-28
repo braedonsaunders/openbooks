@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   date,
@@ -415,12 +416,15 @@ export const informationReturnFilings = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("information_return_filings_unique").on(
-      t.orgId,
-      t.taxYear,
-      t.formType,
-      t.subsidiaryId,
-    ),
+    // PostgreSQL's normal unique-index semantics treat NULL subsidiary IDs as
+    // distinct. Keep root filings unique with a dedicated partial index, while
+    // preserving one filing per subsidiary in the non-null scope.
+    uniqueIndex("information_return_filings_unique_root")
+      .on(t.orgId, t.taxYear, t.formType)
+      .where(sql`${t.subsidiaryId} IS NULL`),
+    uniqueIndex("information_return_filings_unique_sub")
+      .on(t.orgId, t.taxYear, t.formType, t.subsidiaryId)
+      .where(sql`${t.subsidiaryId} IS NOT NULL`),
     index("information_return_filings_org").on(t.orgId, t.taxYear),
   ],
 );
