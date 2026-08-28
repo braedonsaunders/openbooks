@@ -200,6 +200,7 @@ export async function sendRecordPdfEmail(args: {
     meta: { recordType: args.recordType, recordId: args.id },
     actor,
   })
+  let uncertaintyRecorded = false
   try {
     const outcome = await sendVia(transport, {
       to,
@@ -215,10 +216,15 @@ export async function sendRecordPdfEmail(args: {
     } else {
       // Acceptance state unknown — record it, never claim success or failure.
       await markEmailUncertain(args.orgId, logId, outcome.reason)
+      uncertaintyRecorded = true
       throw new Error(outcome.reason)
     }
   } catch (e) {
-    await markEmailFailed(args.orgId, logId, e instanceof Error ? e.message : String(e))
+    // The uncertainty branch deliberately throws so callers receive an error
+    // response, but its log row must remain uncertain for reconciliation.
+    if (!uncertaintyRecorded) {
+      await markEmailFailed(args.orgId, logId, e instanceof Error ? e.message : String(e))
+    }
     throw e
   }
   return { to, subject: body.subject }
