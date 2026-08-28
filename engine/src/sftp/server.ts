@@ -35,7 +35,7 @@ export interface SftpResolver {
   publicKey?(username: string, keyAlgo: string, keyData: Buffer): Promise<SftpServerConfig | null>;
 }
 
-interface OpenFile { path: string; backend: SftpBackend; write: boolean; buf: Buffer; chunks: Buffer[] }
+interface OpenFile { path: string; backend: SftpBackend; write: boolean; append: boolean; buf: Buffer<ArrayBufferLike> }
 interface OpenDir { entries: { name: string; isDir: boolean; size: number; mtimeMs: number }[]; sent: boolean }
 
 const S_IFDIR = 0o40000, S_IFREG = 0o100000;
@@ -67,7 +67,19 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
         if (ctx.method === "password") config = await opts.resolve.password(ctx.username, ctx.password);
         else if (ctx.method === "publickey" && opts.resolve.publicKey) {
           config = await opts.resolve.publicKey(ctx.username, ctx.key.algo, ctx.key.data);
-          if (config && ctx.signature === undefined) return ctx.accept(); // pubkey probe
+          if (config) {
+            if (ctx.signature === undefined) return ctx.accept(); // pubkey probe
+
+            // ssh2 deliberately leaves public-key signature verification to the
+            // application.  The resolver only establishes that this public key
+            // is authorized; the signed request must still prove possession of
+            // the corresponding private key before the session is accepted.
+            const parsedKey = utils.parseKey(ctx.key.data);
+            if (parsedKey instanceof Error || !ctx.blob
+                || parsedKey.verify(ctx.blob, ctx.signature, ctx.hashAlgo) !== true) {
+              config = null;
+            }
+          }
         }
       } catch { config = null; }
       config ? ctx.accept() : ctx.reject(["password", "publickey"]);
@@ -106,7 +118,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           sftp.on("FSTAT", (reqid, handle) => {
             const f = files.get(handle.toString());
             if (!f) return sftp.status(reqid, STATUS_CODE.FAILURE);
-            sftp.attrs(reqid, attrsFor(false, f.write ? 0 : f.buf.length, Date.now()));
+            sftp.attrs(reqid, attrsFor(false, f.buf.length, Date.now()));
           });
 
           sftp.on("OPENDIR", async (reqid, p) => {
@@ -130,10 +142,27 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             const h = newHandle();
             try {
               if (writing) {
-                files.set(h.toString(), { path: cleanPath(filename), backend, write: true, buf: Buffer.alloc(0), chunks: [] });
+                const path = cleanPath(filename);
+                let buf: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+                if (!(flags & OPEN_MODE.TRUNC)) {
+                  const st = await backend.stat(path);
+                  if (st) {
+                    if (st.isDir) throw new Error("cannot open directory for writing");
+                    buf = await backend.read(path);
+                  } else if (!(flags & OPEN_MODE.CREAT)) {
+                    throw new Error("no such file");
+                  }
+                }
+                files.set(h.toString(), {
+                  path,
+                  backend,
+                  write: true,
+                  append: !!(flags & OPEN_MODE.APPEND),
+                  buf,
+                });
               } else {
                 const buf = await backend.read(filename);
-                files.set(h.toString(), { path: cleanPath(filename), backend, write: false, buf, chunks: [] });
+                files.set(h.toString(), { path: cleanPath(filename), backend, write: false, append: false, buf });
               }
               sftp.handle(reqid, h);
             } catch (e) { fail(reqid, e); }
@@ -144,11 +173,25 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             if (offset >= f.buf.length) return sftp.status(reqid, STATUS_CODE.EOF);
             sftp.data(reqid, f.buf.subarray(offset, Math.min(offset + length, f.buf.length)));
           });
-          sftp.on("WRITE", (reqid, handle, _offset, data) => {
+          sftp.on("WRITE", (reqid, handle, offset, data) => {
             const f = files.get(handle.toString());
             if (!f || !f.write) return sftp.status(reqid, STATUS_CODE.FAILURE);
-            f.chunks.push(Buffer.from(data));
-            sftp.status(reqid, STATUS_CODE.OK);
+            const position = f.append ? f.buf.length : Number(offset);
+            if (!Number.isSafeInteger(position) || position < 0 || position + data.length > 0xFFFFFFFF) {
+              return sftp.status(reqid, STATUS_CODE.FAILURE);
+            }
+            try {
+              const end = position + data.length;
+              if (end > f.buf.length) {
+                const next = Buffer.alloc(end);
+                f.buf.copy(next);
+                f.buf = next;
+              }
+              Buffer.from(data).copy(f.buf, position);
+              sftp.status(reqid, STATUS_CODE.OK);
+            } catch {
+              sftp.status(reqid, STATUS_CODE.FAILURE);
+            }
           });
           sftp.on("CLOSE", async (reqid, handle) => {
             const key = handle.toString();
@@ -156,7 +199,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             if (f) {
               files.delete(key);
               if (f.write) {
-                try { await backend.write(f.path, Buffer.concat(f.chunks)); }
+                try { await backend.write(f.path, f.buf); }
                 catch (e) { return fail(reqid, e); }
               }
             } else dirs.delete(key);
