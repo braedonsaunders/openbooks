@@ -66,7 +66,7 @@ test("direct-debit source contention is a domain failure with durable evidence",
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
       values
-        (${invoiceId}, ${org.orgId}, 'customer_invoice', 'approved', 'INV-CONTENTION',
+        (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-CONTENTION',
          ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
          '125', '0', '125', ${actorId})`);
     await db.execute(sql`
@@ -76,6 +76,10 @@ test("direct-debit source contention is a domain failure with durable evidence",
       values
         (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '125',
          '125', '0', '125')`);
+    await db.execute(sql`
+      update documents
+         set status = 'approved', updated_at = now()
+       where id = ${invoiceId} and org_id = ${org.orgId}`);
     await postDocument(invoiceId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
