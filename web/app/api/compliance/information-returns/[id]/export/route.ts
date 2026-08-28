@@ -9,8 +9,23 @@ import { isUuid } from '@/lib/list-params'
 
 export const runtime = 'nodejs'
 
-function csvCell(value: unknown): string {
+// Keep CSV formula neutralization aligned with @openbooks/office's report
+// serializer. Excel/Sheets evaluate cells beginning with =, +, -, @ (and can
+// smuggle a prefix with tab/CR); numeric strings such as -42.50 are exempt so
+// statutory amount columns retain their number semantics.
+const CSV_FORMULA_PREFIX = /^[=+\-@\t\r]/
+const PLAIN_NUMBER = /^-?\d+(?:[.,]\d+)?$/
+
+function guardCsvCell(value: unknown): string {
   const s = value === null || value === undefined ? '' : String(value)
+  if (typeof value === 'string' && CSV_FORMULA_PREFIX.test(s) && !PLAIN_NUMBER.test(s)) {
+    return `'${s}`
+  }
+  return s
+}
+
+function csvCell(value: unknown): string {
+  const s = guardCsvCell(value)
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
