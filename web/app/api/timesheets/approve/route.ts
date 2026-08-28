@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   const body = (parsedBody.data) as Body
   if (!body.employee || !isUuid(body.employee)) return bad('Invalid employee')
   if (!body.week || !isIsoDate(body.week)) return bad('Invalid week')
-  const ownedEmployee = await pinTimesheetEmployee(orgId, body.employee)
+  const ownedEmployee = await pinTimesheetEmployee(orgId, body.employee, gate.allowedSubsidiaryIds)
   if (!ownedEmployee) return bad('Employee not found')
   const week = weekStart(body.week)
 
@@ -51,6 +51,6 @@ export async function POST(req: Request) {
     )
   }
 
-  const payload = await loadWeek(orgId, ownedEmployee, week)
+  const payload = await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds)
   return NextResponse.json(payload)
 }

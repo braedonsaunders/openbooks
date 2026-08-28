@@ -69,10 +69,10 @@ export async function GET(req: Request) {
   if (!employee || !isUuid(employee)) return bad('Invalid employee')
   if (!weekParam || !isIsoDate(weekParam)) return bad('Invalid week')
 
-  const ownedEmployee = await pinTimesheetEmployee(orgId, employee)
+  const ownedEmployee = await pinTimesheetEmployee(orgId, employee, gate.allowedSubsidiaryIds)
   if (!ownedEmployee) return bad('Employee not found')
 
-  const payload = await loadWeek(orgId, ownedEmployee, weekStart(weekParam))
+  const payload = await loadWeek(orgId, ownedEmployee, weekStart(weekParam), gate.allowedSubsidiaryIds)
   return NextResponse.json(payload)
 }
 
@@ -99,7 +99,7 @@ async function save(req: Request) {
   const days = weekWindow(week)
   if (!Array.isArray(body.rows)) return bad('Rows must be a list')
 
-  const ownedEmployee = await pinTimesheetEmployee(orgId, employee)
+  const ownedEmployee = await pinTimesheetEmployee(orgId, employee, gate.allowedSubsidiaryIds)
   if (!ownedEmployee) return bad('Employee not found')
 
   // Normalize each grid row × day into a flat list of entries to persist.
@@ -151,7 +151,7 @@ async function save(req: Request) {
           itemId,
           timeTypeId,
           departmentId,
-        })
+        }, gate.allowedSubsidiaryIds)
       }
       if (!ownedRefs || ownedRefs.projectId == null) {
         return bad('Invalid project, item, time type, or department')
@@ -251,7 +251,7 @@ async function save(req: Request) {
     }
   })
 
-  const payload = await loadWeek(orgId, ownedEmployee, week)
+  const payload = await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds)
   return NextResponse.json(payload)
 }
 

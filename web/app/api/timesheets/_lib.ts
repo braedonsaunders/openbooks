@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add } from '@openbooks/engine/src/money.ts'
+import { subsidiaryScopeAllows } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import {
   lockReasonsFor,
@@ -101,12 +102,54 @@ export interface WeekRow {
 export async function pinTimesheetEmployee(
   orgId: string,
   employeeId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<string | null> {
-  const owned = (await db.execute<{ id: string }>(sql`
-    select id from parties
+  const owned = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    select id, subsidiary_id from parties
      where org_id = ${orgId} and id = ${employeeId}
      limit 1`))
-  return owned.rows[0]?.id ?? null
+  const row = owned.rows[0]
+  if (!row) return null
+  // Employee parties are single-subsidiary records. A restricted caller must
+  // not be able to reach a week by guessing its employee UUID; null also
+  // fails closed because it cannot be resolved to a legal entity here.
+  if (
+    allowedSubsidiaryIds !== undefined &&
+    !subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)
+  ) {
+    return null
+  }
+  return row.id
+}
+
+/**
+ * Resolve an amendment's source employee without exposing an out-of-scope
+ * entry to the mutation service. The employee party and source entry are both
+ * tenant-pinned; the subsidiary decision happens before any amendment read or
+ * write can proceed.
+ */
+export async function pinTimesheetEntryEmployee(
+  orgId: string,
+  entryId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<string | null> {
+  const source = (await db.execute<{
+    employee_party_id: string
+    subsidiary_id: string | null
+  }>(sql`
+    select te.employee_party_id, p.subsidiary_id
+      from time_entries te
+      join parties p on p.org_id = te.org_id and p.id = te.employee_party_id
+     where te.org_id = ${orgId} and te.id = ${entryId}
+     limit 1`)).rows[0]
+  if (!source) return null
+  if (
+    allowedSubsidiaryIds !== undefined &&
+    !subsidiaryScopeAllows(allowedSubsidiaryIds, source.subsidiary_id)
+  ) {
+    return null
+  }
+  return pinTimesheetEmployee(orgId, source.employee_party_id, allowedSubsidiaryIds)
 }
 
 export interface TimesheetLineRefs {
@@ -124,6 +167,7 @@ export interface TimesheetLineRefs {
 export async function pinTimesheetLineRefs(
   orgId: string,
   refs: TimesheetLineRefs,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<TimesheetLineRefs | null> {
   const pinOne = async (
     table: 'projects' | 'items' | 'time_types' | 'departments',
@@ -131,17 +175,25 @@ export async function pinTimesheetLineRefs(
   ): Promise<string | null | 'missing'> => {
     if (id == null) return null
     const owned = table === 'projects'
-      ? (await db.execute<{ id: string }>(sql`
-          select id from projects where org_id = ${orgId} and id = ${id} limit 1`))
+      ? (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+          select id, subsidiary_id from projects where org_id = ${orgId} and id = ${id} limit 1`))
       : table === 'items'
         ? (await db.execute<{ id: string }>(sql`
             select id from items where org_id = ${orgId} and id = ${id} limit 1`))
         : table === 'time_types'
           ? (await db.execute<{ id: string }>(sql`
               select id from time_types where org_id = ${orgId} and id = ${id} limit 1`))
-          : (await db.execute<{ id: string }>(sql`
-              select id from departments where org_id = ${orgId} and id = ${id} limit 1`))
-    return owned.rows[0]?.id ?? 'missing'
+          : (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+              select id, subsidiary_id from departments where org_id = ${orgId} and id = ${id} limit 1`))
+    const row = owned.rows[0] as { id: string; subsidiary_id?: string | null } | undefined
+    if (!row) return 'missing'
+    if (allowedSubsidiaryIds !== undefined && (table === 'projects' || table === 'departments')) {
+      const orgWideNull = table === 'departments'
+      if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id, { orgWideNull })) {
+        return 'missing'
+      }
+    }
+    return row.id
   }
   const projectId = await pinOne('projects', refs.projectId)
   const itemId = await pinOne('items', refs.itemId)
@@ -195,14 +247,15 @@ export async function loadWeek(
   orgId: string,
   employeeId: string,
   sundayIso: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<WeekPayload> {
-  const ownedEmployee = await pinTimesheetEmployee(orgId, employeeId)
+  const ownedEmployee = await pinTimesheetEmployee(orgId, employeeId, allowedSubsidiaryIds)
   if (!ownedEmployee) throw new Error('employee not found')
   const days = weekWindow(sundayIso)
   const week = days[0]!
   // The header owns the week's lifecycle. It is created on demand so a week
   // that has never been touched still reads consistently.
-  const header = await ensureTimesheetWeek(orgId, ownedEmployee, week)
+  const header = await ensureTimesheetWeek(orgId, ownedEmployee, week, null, allowedSubsidiaryIds)
   const dayIndex = new Map(days.map((d, i) => [d, i]))
 
   const res = (await db.execute<{
@@ -321,8 +374,9 @@ export async function ensureTimesheetWeek(
   employeePartyId: string,
   weekStartIso: string,
   actorId?: string | null,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<{ id: string; status: WeekStatus; rejectionReason: string | null }> {
-  const ownedEmployee = await pinTimesheetEmployee(orgId, employeePartyId)
+  const ownedEmployee = await pinTimesheetEmployee(orgId, employeePartyId, allowedSubsidiaryIds)
   if (!ownedEmployee) throw new Error('employee not found')
   const week = weekStart(weekStartIso)
   const inserted = (await db.execute<{ id: string; status: WeekStatus; rejection_reason: string | null }>(sql`
@@ -369,8 +423,9 @@ export async function setTimesheetWeekStatus(
   status: WeekStatus,
   actorId: string,
   rejectionReason?: string | null,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<void> {
-  const ownedEmployee = await pinTimesheetEmployee(orgId, employeePartyId)
+  const ownedEmployee = await pinTimesheetEmployee(orgId, employeePartyId, allowedSubsidiaryIds)
   if (!ownedEmployee) throw new Error('employee not found')
   const week = weekStart(weekStartIso)
   // Explicit casts: an untyped `null` in a CASE makes postgres infer text for
