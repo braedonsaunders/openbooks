@@ -1,5 +1,6 @@
 import {
   date,
+  foreignKey,
   index,
   integer,
   pgTable,
@@ -9,6 +10,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
+import { documents } from "./documents";
 
 /**
  * Construction progress billing — AIA G702/G703 shaped, on top of projects.
@@ -103,6 +105,11 @@ export const payApplications = pgTable(
   (t) => [
     uniqueIndex("pay_applications_project_number").on(t.orgId, t.projectId, t.applicationNumber),
     index("pay_applications_project").on(t.orgId, t.projectId, t.status),
+    foreignKey({
+      columns: [t.orgId, t.invoiceDocumentId],
+      foreignColumns: [documents.orgId, documents.id],
+      name: "pay_applications_invoice_document_id_fkey",
+    }),
   ],
 );
 
