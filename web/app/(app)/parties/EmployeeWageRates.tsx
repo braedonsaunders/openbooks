@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { PagedTable } from '../../../components/paged-table'
+import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 
 interface RateRow {
   id: string
@@ -85,13 +86,16 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
   }
 
   async function addRate() {
-    const amount = Number(rate)
-    if (rate.trim() === '' || !Number.isFinite(amount) || amount < 0) {
+    // Keep compensation as decimal text all the way to the API. Converting a
+    // valid numeric(19,4) value through Number can round it before the exact
+    // boundary validator gets a chance to persist it.
+    const amount = canonicalDecimal(rate, 4)
+    if (amount === null || compareDecimal(amount, '0') < 0) {
       toast.error(t('rateRequired'))
       return
     }
-    const hours = Number(annualHours)
-    if (basis === 'year' && (!Number.isFinite(hours) || hours <= 0)) {
+    const hours = basis === 'year' ? canonicalDecimal(annualHours, 4) : '2080'
+    if (hours === null || (basis === 'year' && compareDecimal(hours, '0') <= 0)) {
       toast.error(t('annualHoursRequired'))
       return
     }
@@ -109,7 +113,7 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
       currency: currency || data?.defaultCurrency,
       rate: amount,
       basis,
-      annualHours: basis === 'year' ? hours : 2080,
+      annualHours: hours,
       effectiveFrom,
     }, t('saved'))
     if (saved) setRate('')
