@@ -77,6 +77,7 @@ const camPoolSourceAccountOverlapMigrationPath =
   "schema/migrations/generated/0061_cam_pool_source_account_overlap.sql";
 const recognitionEventsMigrationPath =
   "schema/migrations/generated/0062_recognition_events.sql";
+const intentionallySkippedMigrationOrdinals = [80] as const;
 const sandboxWipeGuardAuthorizationMigrationPath =
   "schema/migrations/generated/0078_sandbox_wipe_guard_authorization.sql";
 
@@ -160,7 +161,18 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0076_work_schedule_group_expression_uniqueness.sql",
     "0077_project_overhead_adjustment_reversal_uniqueness.sql",
     "0078_sandbox_wipe_guard_authorization.sql",
+    "0079_budget_subsidiary.sql",
+    // 0080 is intentionally unused; no migration was shipped for this ordinal.
+    "0081_account_group_member_dimension_uniqueness.sql",
   ]);
+  for (const ordinal of intentionallySkippedMigrationOrdinals) {
+    const prefix = ordinal.toString().padStart(4, "0");
+    assert.equal(
+      generated.some((file) => file.startsWith(`${prefix}_`)),
+      false,
+      `migration ordinal ${prefix} is intentionally skipped`,
+    );
+  }
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
     ["environments.sql"],
