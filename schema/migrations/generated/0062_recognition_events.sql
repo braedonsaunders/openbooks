@@ -59,7 +59,7 @@ ALTER TABLE public.recognition_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY org_isolation ON public.recognition_events
     AS permissive
     FOR all
-    TO openbooks_app
+    TO PUBLIC
     USING ((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))
     WITH CHECK ((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)));
 
