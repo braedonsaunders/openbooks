@@ -6,6 +6,8 @@ import { db } from "./db.ts";
 import { sealSecret } from "./secrets.ts";
 import { PayrollError } from "./payroll-error.ts";
 import {
+  registerPayrollFilings,
+  unregisterPayrollFilings,
   yearEndFiling,
   type PayrollFilingCorrectionRow,
 } from "./payroll-filing-registry.ts";
@@ -924,6 +926,108 @@ test(
       assert.equal(lifecycle.rows[0]!.status, "unchanged");
       assert.equal(lifecycle.rows[0]!.lastRevision, "amended");
     } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "an original filing snapshots artifact bytes and slip evidence together",
+  { skip: !DB },
+  async () => {
+    const fx = await seedT4Year();
+    const country = "ZZ";
+    const filingKey = `snapshot-${randomUUID()}`;
+    const settingKey = `payrollSnapshot-${randomUUID()}`;
+    let artifactObserved!: () => void;
+    const artifactReady = new Promise<void>((resolve) => { artifactObserved = resolve; });
+    let releaseArtifact!: () => void;
+    const artifactRelease = new Promise<void>((resolve) => { releaseArtifact = resolve; });
+
+    const readMarker = async (): Promise<string> => {
+      const result = await db.execute<{ marker: string | null }>(sql`
+        select settings->>${settingKey} as marker
+          from orgs
+         where id = ${fx.orgId}
+      `);
+      return result.rows[0]?.marker ?? "";
+    };
+
+    registerPayrollFilings({
+      country,
+      programTypes: [],
+      yearEnd: [{
+        key: filingKey,
+        label: "Snapshot filing",
+        cadence: "annual",
+        population: async () => ({
+          rowKey: "rowId",
+          columns: [{ key: "marker", label: "Marker" }],
+          rows: [{ rowId: "row-1", marker: await readMarker() }],
+        }),
+        slip: {
+          build: async (_orgId, _taxYear, _rowId) => ({
+            formCode: "ZZ_SNAPSHOT",
+            formName: "Snapshot filing",
+            headerFields: [],
+            boxes: [{ code: "marker", label: "Marker", value: await readMarker() }],
+          }),
+        },
+        download: {
+          label: "Download snapshot",
+          build: async () => {
+            const marker = await readMarker();
+            artifactObserved();
+            await artifactRelease;
+            return {
+              filename: "snapshot.txt",
+              contentType: "text/plain",
+              body: marker,
+            };
+          },
+        },
+        amendment: {
+          supported: true,
+          revisions: ["amended"],
+          vehicle: "same_form",
+          downloadRefusal: "not used by this snapshot test",
+        },
+      }],
+    });
+
+    try {
+      await db.execute(sql`
+        update orgs
+           set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({ [settingKey]: "A" })}::jsonb
+         where id = ${fx.orgId}
+      `);
+
+      const issuing = recordFilingIssue({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country,
+        filingKey,
+        taxYear: 2026,
+        revision: "original",
+      });
+      await artifactReady;
+
+      // This commit lands while the issuing transaction is paused after the
+      // artifact builder's read. A statement-level/read-committed sequence
+      // would now persist artifact A beside slip evidence B.
+      await db.execute(sql`
+        update orgs
+           set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({ [settingKey]: "B" })}::jsonb
+         where id = ${fx.orgId}
+      `);
+      releaseArtifact();
+
+      const issued = await issuing;
+      assert.equal(issued.file?.body, "A");
+      assert.equal(issued.submission.slips[0]?.reported.fields[0]?.value, "A");
+    } finally {
+      releaseArtifact();
+      unregisterPayrollFilings(country);
       await dropScratchOrgReporting(fx.orgId);
     }
   },
