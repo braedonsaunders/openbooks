@@ -484,11 +484,19 @@ export function buildNativeFromNetSuite(
       kind === "vendor_payment" ? ctx.control.ap : ctx.control.ar;
     const controlRef = ctx.accountRefById.get(controlId);
     const nonTax = rawLines.filter((l) => l.taxline !== "T");
-    const ctrlLine = nonTax.find(
+    const controlLines = nonTax.filter(
       (l) => (l.expenseaccount ?? l.account) === controlRef,
     );
-    if (!ctrlLine) {
-      // No AP/AR leg → plain money movement → journal pass-through.
+    const counterlegs = nonTax.filter(
+      (l) => (l.expenseaccount ?? l.account) !== controlRef,
+    );
+    // The payment rule has exactly one AP/AR control leg and one bank leg. A
+    // source payment can also carry legitimate counterlegs (discounts, fees,
+    // withholding, realized FX, ...). Do not collapse those into the bank
+    // amount: preserve the complete signed GL as a journal pass-through. The
+    // journal rule still marks entity-bearing AR/AP legs as open items, so
+    // source application links remain settleable.
+    if (controlLines.length !== 1 || counterlegs.length !== 1) {
       for (const l of nonTax) {
         const acct = mkAcct(l);
         if (!acct)
@@ -500,9 +508,8 @@ export function buildNativeFromNetSuite(
       effKind = "journal";
       return finish(nsTaxUnits === 0n);
     }
-    const bank =
-      nonTax.find((l) => (l.expenseaccount ?? l.account) !== controlRef) ??
-      nonTax[0];
+    const ctrlLine = controlLines[0]!;
+    const bank = counterlegs[0];
     if (!bank) return { skip: "payment without bank leg" };
     const acct = mkAcct(bank);
     if (!acct) return { skip: "unmapped bank account" };
