@@ -9,7 +9,6 @@ import {
   type ResourceType,
 } from '../../../lib/file-cabinet'
 import { isUuid } from '../../../lib/list-params'
-import { recordFileEvent } from '../../../lib/file-audit'
 import type { Authz } from '../../../lib/authz'
 import { requireFileAccess, requireFolderAccess } from './lib'
 
@@ -86,14 +85,7 @@ export async function postGrant(
     principalId,
     access,
     actorId: authz.user.id,
-  })
-  await recordFileEvent({
-    orgId: authz.user.orgId,
-    actorId: authz.user.id,
-    table: resourceType === 'folder' ? 'folders' : 'files',
-    rowId: resourceId,
-    action: 'share',
-    changes: { principalType, principalId, access },
+    audit: { actorId: authz.user.id },
   })
   return NextResponse.json({ ok: true }, { status: 201 })
 }
@@ -110,15 +102,13 @@ export async function deleteGrant(
   }
   const gate = await requireManager(authz, resourceType, resourceId)
   if (gate) return gate
-  const ok = await removeGrant(authz.user.orgId, grantId)
+  const ok = await removeGrant(
+    authz.user.orgId,
+    grantId,
+    resourceType,
+    resourceId,
+    { actorId: authz.user.id },
+  )
   if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  await recordFileEvent({
-    orgId: authz.user.orgId,
-    actorId: authz.user.id,
-    table: resourceType === 'folder' ? 'folders' : 'files',
-    rowId: resourceId,
-    action: 'unshare',
-    changes: { grantId },
-  })
   return NextResponse.json({ ok: true })
 }

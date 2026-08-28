@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getFolder, listFiles } from '../../../../lib/file-cabinet'
-import { isUuid, pickString } from '../../../../lib/list-params'
+import { isUuid } from '../../../../lib/list-params'
 import { guardPermission } from '../../../../lib/authz'
 import {
   fileViewer,
@@ -75,15 +75,7 @@ export async function POST(req: Request) {
     contentType: file.type.split(';')[0]!.trim().toLowerCase(),
     bytes,
     createdBy: gate.user.id,
-  })
-  const { recordFileEvent } = await import('../../../../lib/file-audit')
-  await recordFileEvent({
-    orgId: gate.user.orgId,
-    actorId: gate.user.id,
-    table: 'files',
-    rowId: meta.id,
-    action: 'upload',
-    changes: { name: meta.name, folderId },
+    audit: { actorId: gate.user.id },
   })
   return NextResponse.json({ file: meta }, { status: 201 })
 }
