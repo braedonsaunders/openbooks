@@ -173,9 +173,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`,
   )
   if (!scope.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const denied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, {
-    orgWideNull: true,
-  })
+  const denied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
   if (denied) return denied
   const payload = await loadParty(id, gate.user.orgId)
   if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -224,9 +222,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   `)
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const existingParty = existing.rows[0]
-  const scopeDenied = guardSubsidiaryScope(gate, existingParty.subsidiaryId, {
-    orgWideNull: true,
-  })
+  const scopeDenied = guardSubsidiaryScope(gate, existingParty.subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 
   const parsedBody = await parseJsonBody(req, jsonObject)
