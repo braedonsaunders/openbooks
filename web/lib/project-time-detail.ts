@@ -50,6 +50,8 @@ export class ProjectTimeDetailError extends Error {
 export async function loadProjectTimeEntryPage(args: {
   orgId: string
   projectId: string
+  /** Null means unrestricted; a non-null set is the caller's subsidiary scope. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null
   dimension: ProjectTimeDimension
   dimensionId: string | null
   page: number
@@ -58,8 +60,22 @@ export async function loadProjectTimeEntryPage(args: {
   const pageSize = Math.min(Math.max(args.pageSize ?? 100, 1), 200)
   const page = Number.isSafeInteger(args.page) && args.page > 0 ? args.page : 1
   const offset = (page - 1) * pageSize
+
+  // Projects lists use a strict subsidiary predicate: restricted callers may
+  // only open projects explicitly assigned to one of their allowed entities;
+  // an unassigned project is not visible to a restricted caller. Keep this
+  // direct-by-id loader on the same boundary so a guessed UUID cannot bypass
+  // the list scope and expose approved labor, rates, or private job notes.
+  const subsidiaryFilter = args.allowedSubsidiaryIds === null
+    ? sql``
+    : args.allowedSubsidiaryIds.size > 0
+      ? sql` and subsidiary_id = any(${`{${[...args.allowedSubsidiaryIds].join(',')}}`}::uuid[])`
+      : sql` and false`
   const project = await db.execute(sql`
-    select 1 from projects where id = ${args.projectId} and org_id = ${args.orgId}
+    select 1 from projects
+     where id = ${args.projectId}
+       and org_id = ${args.orgId}
+       ${subsidiaryFilter}
   `)
   if (!project.rows[0]) throw new ProjectTimeDetailError('Project not found')
 
