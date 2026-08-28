@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { encryptAccountNumber } from '@openbooks/engine/src/payments.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
@@ -185,75 +185,88 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const accountNumber = body.accountNumber?.trim()
   const country = body.country === undefined ? undefined : normalizeCountryCode(body.country)
-  // Any material edit re-enters approval: pending + inactive + approval
-  // cleared (the source platform workflow's @OLDRECORD@ comparison, done natively).
-  const updated = (await db.execute<{ id: string }>(sql`
-    update party_bank_accounts set
-      bank_name = ${body.bankName !== undefined ? body.bankName?.trim() || null : sql`bank_name`},
-      country = ${body.country !== undefined ? country : sql`country`},
-      currency = ${body.currency !== undefined ? body.currency?.trim().toUpperCase() || null : sql`currency`},
-      routing = ${body.routing !== undefined ? sql`${JSON.stringify(body.routing)}::jsonb` : sql`routing`},
-      account_number_encrypted = ${accountNumber ? encryptAccountNumber(accountNumber) : sql`account_number_encrypted`},
-      account_last_four = ${accountNumber ? accountNumber.slice(-4) : sql`account_last_four`},
-      approval_status = 'pending', is_active = false, approved_at = null, approved_by = null,
-      submitted_by = ${user.id}, submitted_at = now(),
-      updated_at = now(), updated_by = ${user.id}
-    where id = ${accountId}
-      and party_id = ${partyId}
-      and org_id = ${user.orgId}
-      and updated_at = ${existing.rows[0]!.updatedAt}
-      and retired_at is null
-    returning id
-  `))
-  if (!updated.rows[0]) {
-    return NextResponse.json(
-      { error: 'these bank details changed or were retired; reload and review the latest revision' },
-      { status: 409 },
-    )
-  }
-  const cancelledRuns = (await db.execute<{ run_id: string }>(sql`
-    update flow_gates
-       set status = 'cancelled', updated_at = now()
-     where org_id = ${user.orgId}
-       and subject_kind = ${BANK_ACCOUNT_SUBJECT_KIND}
-       and subject_id = ${accountId}
-       and status in ('pending', 'escalated')
-     returning run_id
-  `))
-  const runIds = [...new Set(cancelledRuns.rows.map((row) => row.run_id))]
-  if (runIds.length > 0) {
+  // Keep the material reset, stale-gate cancellation, run completion, audit
+  // evidence, and replacement flow dispatch in one tenant transaction. The
+  // db handle follows this pinned context, so a failure cannot publish only
+  // part of the new bank-detail revision.
+  return withOrgTransaction(user.orgId, async () => {
+    // Any material edit re-enters approval: pending + inactive + approval
+    // cleared (the source platform workflow's @OLDRECORD@ comparison, done natively).
+    const updated = (await db.execute<{ id: string }>(sql`
+      update party_bank_accounts set
+        bank_name = ${body.bankName !== undefined ? body.bankName?.trim() || null : sql`bank_name`},
+        country = ${body.country !== undefined ? country : sql`country`},
+        currency = ${body.currency !== undefined ? body.currency?.trim().toUpperCase() || null : sql`currency`},
+        routing = ${body.routing !== undefined ? sql`${JSON.stringify(body.routing)}::jsonb` : sql`routing`},
+        account_number_encrypted = ${accountNumber ? encryptAccountNumber(accountNumber) : sql`account_number_encrypted`},
+        account_last_four = ${accountNumber ? accountNumber.slice(-4) : sql`account_last_four`},
+        approval_status = 'pending', is_active = false, approved_at = null, approved_by = null,
+        submitted_by = ${user.id}, submitted_at = now(),
+        updated_at = now(), updated_by = ${user.id}
+      where id = ${accountId}
+        and party_id = ${partyId}
+        and org_id = ${user.orgId}
+        and updated_at = ${existing.rows[0]!.updatedAt}
+        and retired_at is null
+      returning id
+    `))
+    if (!updated.rows[0]) {
+      return NextResponse.json(
+        { error: 'these bank details changed or were retired; reload and review the latest revision' },
+        { status: 409 },
+      )
+    }
+    const cancelledRuns = (await db.execute<{ run_id: string }>(sql`
+      update flow_gates
+         set status = 'cancelled', updated_at = now()
+       where org_id = ${user.orgId}
+         and subject_kind = ${BANK_ACCOUNT_SUBJECT_KIND}
+         and subject_id = ${accountId}
+         and status in ('pending', 'escalated')
+       returning run_id
+    `))
+    const runIds = [...new Set(cancelledRuns.rows.map((row) => row.run_id))]
+    if (runIds.length > 0) {
+      await db.execute(sql`
+        update flow_runs
+           set status = 'completed',
+               error = null,
+               finished_at = now()
+         where id = any(${`{${runIds.join(',')}}`}::uuid[])
+           and org_id = ${user.orgId}
+           and status = 'waiting'
+      `)
+    }
     await db.execute(sql`
-      update flow_runs
-         set status = 'completed',
-             error = null,
-             finished_at = now()
-       where id = any(${`{${runIds.join(',')}}`}::uuid[])
-         and org_id = ${user.orgId}
-         and status = 'waiting'
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (
+        ${user.orgId}, 'party_bank_accounts', ${accountId}, 'update',
+        ${JSON.stringify({
+          mode: 'bank_detail_material_change',
+          reason,
+          changedFields,
+          approvalStatus: 'pending',
+        })}::jsonb,
+        ${user.id}, 'ui'
+      )
     `)
-  }
-  await db.execute(sql`
-    insert into audit_log
-      (org_id, table_name, row_id, action, changes, actor_id, request_id)
-    values (
-      ${user.orgId}, 'party_bank_accounts', ${accountId}, 'update',
-      ${JSON.stringify({
-        mode: 'bank_detail_material_change',
-        reason,
-        changedFields,
-        approvalStatus: 'pending',
-      })}::jsonb,
-      ${user.id}, 'ui'
-    )
-  `)
 
-  await runRecordFlows(
-    { kind: 'on_update', source: 'ui', changedFields },
-    BANK_ACCOUNT_SUBJECT_KIND,
-    accountId,
-    { orgId: user.orgId, userId: user.id },
-  )
-  return NextResponse.json({ id: accountId, approvalStatus: 'pending', changedFields })
+    const flows = await runRecordFlows(
+      { kind: 'on_update', source: 'ui', changedFields },
+      BANK_ACCOUNT_SUBJECT_KIND,
+      accountId,
+      { orgId: user.orgId, userId: user.id },
+    )
+    // runRecordFlows records failures instead of throwing so non-transactional
+    // callers can observe them. Here the dispatch is part of the edit's
+    // transaction: a failed replacement workflow must roll back the material
+    // change, cancelled approvals, and audit evidence together.
+    if (flows.failed) {
+      throw new Error('bank-detail approval routing failed; the bank details were not changed')
+    }
+    return NextResponse.json({ id: accountId, approvalStatus: 'pending', changedFields })
+  })
 }
 
 /** Retire approved or rejected bank details without destroying fraud evidence. */
@@ -301,33 +314,37 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       { status: 422 },
     )
   }
-  const updated = (await db.execute<{ id: string }>(sql`
-    update party_bank_accounts
-       set is_active = false,
-           retired_at = now(),
-           retired_by = ${user.id},
-           retirement_reason = ${reason},
-           updated_at = now(),
-           updated_by = ${user.id}
-     where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
-       and retired_at is null
-       and updated_at = ${body.expectedUpdatedAt}
-     returning id
-  `))
-  if (!updated.rows[0]) {
-    return NextResponse.json(
-      { error: 'these bank details changed or were already retired; reload and review the latest revision' },
-      { status: 409 },
-    )
-  }
-  await db.execute(sql`
-    insert into audit_log
-      (org_id, table_name, row_id, action, changes, actor_id, request_id)
-    values (
-      ${user.orgId}, 'party_bank_accounts', ${accountId}, 'update',
-      ${JSON.stringify({ mode: 'bank_detail_retired', reason })}::jsonb,
-      ${user.id}, 'ui'
-    )
-  `)
-  return NextResponse.json({ ok: true })
+  // Retirement and its fraud evidence are one commit unit; an audit failure
+  // must leave the bank details available for a safe retry.
+  return withOrgTransaction(user.orgId, async () => {
+    const updated = (await db.execute<{ id: string }>(sql`
+      update party_bank_accounts
+         set is_active = false,
+             retired_at = now(),
+             retired_by = ${user.id},
+             retirement_reason = ${reason},
+             updated_at = now(),
+             updated_by = ${user.id}
+       where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
+         and retired_at is null
+         and updated_at = ${body.expectedUpdatedAt}
+       returning id
+    `))
+    if (!updated.rows[0]) {
+      return NextResponse.json(
+        { error: 'these bank details changed or were already retired; reload and review the latest revision' },
+        { status: 409 },
+      )
+    }
+    await db.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (
+        ${user.orgId}, 'party_bank_accounts', ${accountId}, 'update',
+        ${JSON.stringify({ mode: 'bank_detail_retired', reason })}::jsonb,
+        ${user.id}, 'ui'
+      )
+    `)
+    return NextResponse.json({ ok: true })
+  })
 }
