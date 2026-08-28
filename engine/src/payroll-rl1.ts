@@ -1,9 +1,17 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { pool, type SqlExecutor } from "./db.ts";
 import { add, cmp } from "./money.ts";
 import { RATES_2026_JAN } from "./payroll/canada/rates.ts";
 import { PayrollError } from "./payroll-error.ts";
 import type { PayrollFilingData } from "./payroll-filing-registry.ts";
+
+// A return is a statutory artifact, so all of its source reads must come from
+// one pinned snapshot. Keep a dedicated handle: callers such as filing pages
+// may already be inside a request transaction whose isolation level was chosen
+// before this function was reached, and the application's `db` proxy would
+// otherwise reuse that transaction instead of applying repeatable-read.
+const rl1Db = drizzle({ client: pool });
 
 /**
  * RL-1 slip data assembly — Revenu Québec's "Revenus d'emploi et revenus
@@ -156,9 +164,13 @@ export function assembleRl1Slip(
  * QC↔elsewhere mover contributes exactly their Québec periods — the same
  * per-province attribution the T4 builder performs, seen from the RQ side.
  */
-export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[]> {
+async function rl1SlipsInSnapshot(
+  runner: SqlExecutor,
+  orgId: string,
+  taxYear: number,
+): Promise<Rl1Slip[]> {
   const caps = rl1YearCaps(taxYear);
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = (await runner.execute<Record<string, unknown>>(sql`
     with committed as (
       select s.*
         from pay_stubs s
@@ -210,6 +222,13 @@ export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[
   }, caps));
 }
 
+export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[]> {
+  return rl1Db.transaction(
+    (tx) => rl1SlipsInSnapshot(tx, orgId, taxYear),
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
+}
+
 /**
  * RL-1 summary (RLZ-1.S worksheet) totals. The employer QPP/QPIP shares come
  * from the employer_contribution stub lines of the same Québec stubs, so the
@@ -243,9 +262,13 @@ export const RLZ1S_GAPS = [
   "remittances made to Revenu Québec are not tracked by the remittance module",
 ];
 
-export async function rl1Summary(orgId: string, taxYear: number): Promise<Rl1SummaryTotals> {
-  const slips = await rl1Slips(orgId, taxYear);
-  const employer = (await db.execute<{ employer_qpp: string | null; employer_qpip: string | null }>(sql`
+async function rl1SummaryInSnapshot(
+  runner: SqlExecutor,
+  orgId: string,
+  taxYear: number,
+  slips: readonly Rl1Slip[],
+): Promise<Rl1SummaryTotals> {
+  const employer = (await runner.execute<{ employer_qpp: string | null; employer_qpip: string | null }>(sql`
     select
       sum(case when pc.system_key in ('cpp', 'cpp2') then l.amount else 0 end) as employer_qpp,
       sum(case when pc.system_key = 'qpip' then l.amount else 0 end) as employer_qpip
@@ -275,6 +298,16 @@ export async function rl1Summary(orgId: string, taxYear: number): Promise<Rl1Sum
   };
 }
 
+export async function rl1Summary(orgId: string, taxYear: number): Promise<Rl1SummaryTotals> {
+  return rl1Db.transaction(
+    async (tx) => {
+      const slips = await rl1SlipsInSnapshot(tx, orgId, taxYear);
+      return rl1SummaryInSnapshot(tx, orgId, taxYear, slips);
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
+}
+
 /** The year's RL-1 return: every QC slip under the org's RQ identification. */
 export interface Rl1Return {
   /** The employer's Revenu Québec identification number, when configured
@@ -285,15 +318,21 @@ export interface Rl1Return {
 }
 
 export async function rl1Return(orgId: string, taxYear: number): Promise<Rl1Return> {
-  const cfg = (await db.execute<{ id_number: string | null }>(sql`
-    select settings#>>'{payroll,rl1Transmitter,identificationNumber}' as id_number
-      from orgs where id = ${orgId}
-  `));
-  return {
-    identificationNumber: cfg.rows[0]?.id_number ?? null,
-    slips: await rl1Slips(orgId, taxYear),
-    summary: await rl1Summary(orgId, taxYear),
-  };
+  return rl1Db.transaction(
+    async (tx) => {
+      const cfg = (await tx.execute<{ id_number: string | null }>(sql`
+        select settings#>>'{payroll,rl1Transmitter,identificationNumber}' as id_number
+          from orgs where id = ${orgId}
+      `));
+      const slips = await rl1SlipsInSnapshot(tx, orgId, taxYear);
+      return {
+        identificationNumber: cfg.rows[0]?.id_number ?? null,
+        slips,
+        summary: await rl1SummaryInSnapshot(tx, orgId, taxYear, slips),
+      };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
 }
 
 /**
@@ -302,48 +341,53 @@ export async function rl1Return(orgId: string, taxYear: number): Promise<Rl1Retu
  * declaration itself lives in engine/src/payroll/canada/filings.ts).
  */
 export async function rl1Population(orgId: string, taxYear: number): Promise<PayrollFilingData> {
-  const summary = await rl1Summary(orgId, taxYear);
-  const slips = await rl1Slips(orgId, taxYear);
-  return {
-    rowKey: "employeePartyId",
-    columns: [
-      { key: "employee", label: "Employee" },
-      { key: "boxA", label: "Box A income", align: "right", money: true },
-      { key: "boxB", label: "Box B.A/B.B QPP", align: "right", money: true },
-      { key: "boxC", label: "Box C EI", align: "right", money: true },
-      { key: "boxE", label: "Box E Québec tax", align: "right", money: true },
-      { key: "boxG", label: "Box G QPP salary", align: "right", money: true },
-      { key: "boxH", label: "Box H QPIP", align: "right", money: true },
-      { key: "boxI", label: "Box I QPIP salary", align: "right", money: true },
-      { key: "boxF", label: "Box F dues", align: "right", money: true },
-    ],
-    rows: slips.map((slip) => ({
-      employeePartyId: slip.employeePartyId,
-      employee: slip.employeeName,
-      boxA: slip.boxA,
-      // B.A + B.B together, as the T4 population shows 16 + 16A.
-      boxB: add(slip.boxBA, slip.boxBB),
-      boxC: slip.boxC,
-      boxE: slip.boxE,
-      boxG: slip.boxG,
-      boxH: slip.boxH,
-      boxI: slip.boxI,
-      boxF: slip.boxF,
-    })),
-    totals: [
-      { label: "Slips", value: String(summary.slips) },
-      { label: "Box A employment income", value: summary.boxA, money: true },
-      {
-        label: "QPP (employee + employer)",
-        value: add(add(summary.boxBA, summary.boxBB), summary.employerQpp),
-        money: true,
-      },
-      {
-        label: "QPIP (employee + employer)",
-        value: add(summary.boxH, summary.employerQpip),
-        money: true,
-      },
-      { label: "Québec income tax", value: summary.boxE, money: true },
-    ],
-  };
+  return rl1Db.transaction(
+    async (tx) => {
+      const slips = await rl1SlipsInSnapshot(tx, orgId, taxYear);
+      const summary = await rl1SummaryInSnapshot(tx, orgId, taxYear, slips);
+      return {
+        rowKey: "employeePartyId",
+        columns: [
+          { key: "employee", label: "Employee" },
+          { key: "boxA", label: "Box A income", align: "right", money: true },
+          { key: "boxB", label: "Box B.A/B.B QPP", align: "right", money: true },
+          { key: "boxC", label: "Box C EI", align: "right", money: true },
+          { key: "boxE", label: "Box E Québec tax", align: "right", money: true },
+          { key: "boxG", label: "Box G QPP salary", align: "right", money: true },
+          { key: "boxH", label: "Box H QPIP", align: "right", money: true },
+          { key: "boxI", label: "Box I QPIP salary", align: "right", money: true },
+          { key: "boxF", label: "Box F dues", align: "right", money: true },
+        ],
+        rows: slips.map((slip) => ({
+          employeePartyId: slip.employeePartyId,
+          employee: slip.employeeName,
+          boxA: slip.boxA,
+          // B.A + B.B together, as the T4 population shows 16 + 16A.
+          boxB: add(slip.boxBA, slip.boxBB),
+          boxC: slip.boxC,
+          boxE: slip.boxE,
+          boxG: slip.boxG,
+          boxH: slip.boxH,
+          boxI: slip.boxI,
+          boxF: slip.boxF,
+        })),
+        totals: [
+          { label: "Slips", value: String(summary.slips) },
+          { label: "Box A employment income", value: summary.boxA, money: true },
+          {
+            label: "QPP (employee + employer)",
+            value: add(add(summary.boxBA, summary.boxBB), summary.employerQpp),
+            money: true,
+          },
+          {
+            label: "QPIP (employee + employer)",
+            value: add(summary.boxH, summary.employerQpip),
+            money: true,
+          },
+          { label: "Québec income tax", value: summary.boxE, money: true },
+        ],
+      };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
 }
