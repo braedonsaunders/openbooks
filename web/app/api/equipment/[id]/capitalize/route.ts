@@ -17,6 +17,18 @@ type CapitalizationResult =
   | { kind: 'invalid_subsidiary' }
   | { kind: 'acquisition_cost_invalid' }
 
+/**
+ * A compare-and-set link that unexpectedly updates no row must abort the
+ * transaction. Returning a result would commit the asset insert and strand an
+ * unlinked fixed asset, even though the source row is the idempotency gate.
+ */
+class CapitalizationLinkConflict extends Error {
+  constructor() {
+    super('equipment unit capitalization compare-and-set conflict')
+    this.name = 'CapitalizationLinkConflict'
+  }
+}
+
 /** Drizzle wraps PostgreSQL errors, so inspect the full cause chain. */
 function isCapitalizationRace(error: unknown): boolean {
   let current: unknown = error
@@ -29,6 +41,7 @@ function isCapitalizationRace(error: unknown): boolean {
       (code === '23505' && constraint === 'fixed_assets_org_asset_number_unique')
       || message.includes('fixed_assets_org_asset_number_unique')
       || message.includes('equipment unit fixed-asset link is immutable after capitalization')
+      || message.includes('equipment unit capitalization compare-and-set conflict')
     ) return true
     current = candidate.cause
   }
@@ -152,7 +165,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
            set fixed_asset_id = ${newId}, updated_at = now(), updated_by = ${userId}
          where id = ${id} and org_id = ${orgId} and fixed_asset_id is null
          returning fixed_asset_id`))
-      if (!linked.rows[0]) return { kind: 'already_capitalized' }
+      // The row lock above makes this path unreachable for a normal race, but
+      // keep the invariant explicit: never commit an asset without its source
+      // linkage if a trigger/RLS rule causes the CAS to affect zero rows.
+      if (!linked.rows[0]) throw new CapitalizationLinkConflict()
 
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
