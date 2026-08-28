@@ -1,4 +1,5 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { isDocumentRevisionToken } from '../../../../../lib/api/registry-data'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -13,6 +14,20 @@ import {
 
 export const runtime = 'nodejs'
 
+const REPORT_DEFINITION_REVISION = sql`to_char(
+  updated_at at time zone 'UTC',
+  'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+)`
+
+async function loadReportDefinitionRevision(orgId: string, id: string): Promise<string | null> {
+  const result = await db.execute<{ updated_at: string }>(sql`
+    select ${REPORT_DEFINITION_REVISION} as updated_at
+      from report_definitions
+     where id = ${id} and org_id = ${orgId}
+  `)
+  return result.rows[0]?.updated_at ?? null
+}
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
@@ -23,7 +38,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!(await canRunReportStatement(gate, def.statement?.kind))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
-  return NextResponse.json({ definition: def })
+  // node-postgres maps timestamptz to Date and drops PostgreSQL's
+  // microseconds. Return the exact wire revision so an autosave can use it as
+  // an optimistic-concurrency precondition without authorizing a lossy token.
+  const updatedAt = await loadReportDefinitionRevision(gate.user.orgId, id)
+  return NextResponse.json({ definition: { ...def, updated_at: updatedAt ?? def.updated_at } })
 }
 
 /**
@@ -46,7 +65,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     description?: string | null
     query?: unknown
     layout?: unknown
+    expectedUpdatedAt?: unknown
   }
+
+  if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    return NextResponse.json(
+      { error: 'the report definition revision is required; reload and review the latest revision' },
+      { status: 409 },
+    )
+  }
+  const expectedUpdatedAt = body.expectedUpdatedAt
 
   let name = existing.name
   let slug = existing.slug
@@ -76,19 +104,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const layout =
     body.layout !== undefined ? validateReportLayout(body.layout) : existing.layout
 
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update report_definitions set
       name = ${name},
       slug = ${slug},
       description = ${body.description !== undefined ? body.description?.trim() || null : existing.description},
       query = ${queryJson}::jsonb,
       layout = ${layout ? JSON.stringify(layout) : null}::jsonb,
-      updated_at = now(), updated_by = ${user.id}
+      updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
     where id = ${id} and org_id = ${user.orgId}
+      and ${REPORT_DEFINITION_REVISION} = ${expectedUpdatedAt}
+    returning id
   `)
 
+  if (!updated.rows[0]) {
+    return NextResponse.json(
+      { error: 'this report definition changed after you opened it; reload and review the latest revision' },
+      { status: 409 },
+    )
+  }
+
   const def = await loadReportDefinition(user.orgId, id)
-  return NextResponse.json({ definition: def })
+  const updatedAt = await loadReportDefinitionRevision(user.orgId, id)
+  return NextResponse.json({ definition: def ? { ...def, updated_at: updatedAt ?? def.updated_at } : def })
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
