@@ -12,6 +12,8 @@ import { agingDetail, transactionDetail } from './reports'
 import { getMoneyFormatter } from './money-server'
 import type { ReportDrillResponse, ReportDrillTarget } from './report-drill'
 import type { StatementDimFilter } from './statement-matrix'
+import type { DimFilter } from './reports'
+import { subsidiaryVisibleFilter } from './subsidiaries'
 import { decimalAdd, decimalCmp, decimalNeg, decimalSum } from './statement-format'
 
 export const REPORT_DRILL_PAGE_SIZE = 50
@@ -44,6 +46,95 @@ const dimSql = (dims: StatementDimFilter | undefined, alias: 'bl' | 'l') => {
     ${dims?.classId ? sql`and ${column('class_id')} = ${dims.classId}` : sql``}`
 }
 
+/** A non-voided order remains open while any line has unconverted quantity. */
+const openOrderPredicate = sql`
+  d.status <> 'voided'
+  and exists (
+    select 1
+      from document_lines line
+     where line.org_id = d.org_id
+       and line.document_id = d.id
+       and line.quantity_billed < line.quantity
+  )`
+
+const linkedOrderPredicate = sql`
+  exists (
+    select 1
+      from document_links link
+     where link.from_document_id = d.id
+       and link.org_id = d.org_id
+  )`
+
+/**
+ * Budget lines have no subsidiary column. A dimension can still carry an
+ * entity owner, so every assigned dimension must either be shared (null owner)
+ * or belong to the caller's allowed subsidiaries. Lines with no entity-owned
+ * dimension cannot be attributed safely and are denied for restricted callers.
+ */
+function budgetSubsidiaryFilter(authz: Authz): ReturnType<typeof sql> {
+  const allowed = authz.allowedSubsidiaryIds
+  if (allowed === null) return sql``
+  if (allowed.size === 0) return sql`and false`
+  const ids = `{${[...allowed].join(',')}}`
+  return sql`and (
+    (
+      (bl.project_id is not null and exists (
+        select 1 from projects bp_owner
+         where bp_owner.id = bl.project_id and bp_owner.org_id = bl.org_id
+           and bp_owner.subsidiary_id = any(${ids}::uuid[])))
+      or (bl.department_id is not null and exists (
+        select 1 from departments bd_owner
+         where bd_owner.id = bl.department_id and bd_owner.org_id = bl.org_id
+           and bd_owner.subsidiary_id = any(${ids}::uuid[])))
+      or (bl.location_id is not null and exists (
+        select 1 from locations bx_owner
+         where bx_owner.id = bl.location_id and bx_owner.org_id = bl.org_id
+           and bx_owner.subsidiary_id = any(${ids}::uuid[])))
+      or (bl.class_id is not null and exists (
+        select 1 from classes bc_owner
+         where bc_owner.id = bl.class_id and bc_owner.org_id = bl.org_id
+           and bc_owner.subsidiary_id = any(${ids}::uuid[])))
+    )
+    and
+    (bl.project_id is null or exists (
+      select 1 from projects bp
+       where bp.id = bl.project_id and bp.org_id = bl.org_id
+         and (bp.subsidiary_id is null or bp.subsidiary_id = any(${ids}::uuid[]))))
+    and (bl.department_id is null or exists (
+      select 1 from departments bd
+       where bd.id = bl.department_id and bd.org_id = bl.org_id
+         and (bd.subsidiary_id is null or bd.subsidiary_id = any(${ids}::uuid[]))))
+    and (bl.location_id is null or exists (
+      select 1 from locations bx
+       where bx.id = bl.location_id and bx.org_id = bl.org_id
+         and (bx.subsidiary_id is null or bx.subsidiary_id = any(${ids}::uuid[]))))
+    and (bl.class_id is null or exists (
+      select 1 from classes bc
+       where bc.id = bl.class_id and bc.org_id = bl.org_id
+         and (bc.subsidiary_id is null or bc.subsidiary_id = any(${ids}::uuid[]))))
+  )`
+}
+
+/** Merge a report-selected subsidiary with the caller's legal-entity scope. */
+function ledgerDims(
+  target: Extract<ReportDrillTarget, { kind: 'ledger' }>,
+  authz: Authz,
+): DimFilter {
+  const rawDims = target.dims as StatementDimFilter & { subsidiaryIds?: string[] } | undefined
+  const requested = target.subsidiaryId
+    ? [target.subsidiaryId]
+    : rawDims?.subsidiaryIds
+  const subsidiaryIds = authz.allowedSubsidiaryIds === null
+    ? requested
+    : requested
+      ? requested.filter((id) => authz.allowedSubsidiaryIds!.has(id))
+      : [...authz.allowedSubsidiaryIds]
+  return {
+    ...target.dims,
+    ...(subsidiaryIds ? { subsidiaryIds } : {}),
+  }
+}
+
 function paginate<T>(rows: T[], page: number): T[] {
   const start = (page - 1) * REPORT_DRILL_PAGE_SIZE
   return rows.slice(start, start + REPORT_DRILL_PAGE_SIZE)
@@ -51,6 +142,7 @@ function paginate<T>(rows: T[], page: number): T[] {
 
 async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>, authz: Authz, page: number): Promise<ReportDrillResponse> {
   const { money } = await getMoneyFormatter(authz.user.orgId)
+  const dims = ledgerDims(target, authz)
   const [tc, tr, result] = await Promise.all([
     getTranslations('common'),
     getTranslations('reports'),
@@ -60,7 +152,7 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
       from: target.from,
       to: target.to,
       mode: target.mode,
-      dims: target.dims,
+      dims,
       basis: target.basis,
       partyIds: target.partyIds,
       projectCustomerId: target.projectCustomerId,
@@ -145,21 +237,22 @@ async function orderData(target: Extract<ReportDrillTarget, { kind: 'orders' }>,
   const { money } = await getMoneyFormatter(authz.user.orgId)
   const [tc, tr] = await Promise.all([getTranslations('common'), getTranslations('reports')])
   const scope = target.scope
+  const subsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)
   const predicate = scope === 'voided'
     ? sql`d.status = 'voided'`
     : scope === 'converted'
-      ? sql`exists (select 1 from document_links dl where dl.from_document_id = d.id and dl.org_id = d.org_id)`
+      ? linkedOrderPredicate
       : scope === 'conversion'
-        ? sql`d.status <> 'voided'`
-        : sql`d.status <> 'voided'`
+        ? sql`d.status <> 'voided' and (${openOrderPredicate} or ${linkedOrderPredicate})`
+        : openOrderPredicate
   const offset = (page - 1) * REPORT_DRILL_PAGE_SIZE
   const [count, result] = await Promise.all([
-    db.execute(sql`select count(*)::int as n from documents d where d.org_id = ${authz.user.orgId} and d.kind = ${target.orderKind} and ${predicate}`),
+    db.execute(sql`select count(*)::int as n from documents d where d.org_id = ${authz.user.orgId} and d.kind = ${target.orderKind} ${subsidiaryFilter} and ${predicate}`),
     db.execute(sql`
       select d.id, d.kind, d.document_number, d.document_date::text as date, d.status,
              p.display_name as party, d.total
         from documents d left join parties p on p.id = d.party_id and p.org_id = d.org_id
-       where d.org_id = ${authz.user.orgId} and d.kind = ${target.orderKind} and ${predicate}
+       where d.org_id = ${authz.user.orgId} and d.kind = ${target.orderKind} ${subsidiaryFilter} and ${predicate}
        order by d.document_date desc, d.document_number desc
        limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`),
   ])
@@ -213,16 +306,23 @@ async function timeData(target: Extract<ReportDrillTarget, { kind: 'time' }>, au
          where p.org_id = ${authz.user.orgId} and p.is_active
       )`
     : sql``
+  const subsidiaryFilter = subsidiaryVisibleFilter(sql`coalesce(p.subsidiary_id, e.subsidiary_id)`, authz.allowedSubsidiaryIds)
   const offset = (page - 1) * REPORT_DRILL_PAGE_SIZE
   const [count, result] = await Promise.all([
-    db.execute(sql`select count(*)::int as n, coalesce(sum(hours), 0) as hours from time_entries te where te.org_id = ${authz.user.orgId} and te.status = 'approved' and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project} ${customer} ${search} ${activeProjects}`),
+    db.execute(sql`select count(*)::int as n, coalesce(sum(te.hours), 0) as hours
+                     from time_entries te
+                     join parties e on e.id = te.employee_party_id and e.org_id = te.org_id
+                     left join projects p on p.id = te.project_id and p.org_id = te.org_id
+                    where te.org_id = ${authz.user.orgId} and te.status = 'approved'
+                      and te.worked_on >= ${target.from} and te.worked_on <= ${target.to}
+                      ${project} ${customer} ${search} ${activeProjects} ${subsidiaryFilter}`),
     db.execute(sql`
       select te.id, te.worked_on::text as date, e.display_name as employee, p.name as project, te.memo, te.hours
         from time_entries te
         join parties e on e.id = te.employee_party_id and e.org_id = te.org_id
         left join projects p on p.id = te.project_id and p.org_id = te.org_id
        where te.org_id = ${authz.user.orgId} and te.status = 'approved'
-         and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project} ${customer} ${search} ${activeProjects}
+         and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project} ${customer} ${search} ${activeProjects} ${subsidiaryFilter}
        order by te.worked_on desc, e.display_name
        limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`),
   ])
@@ -377,6 +477,8 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
     ? sql`and bl.account_id in (with recursive sub as (select id from accounts where org_id = ${authz.user.orgId} and id in ${target.accountIds} union all select a.id from accounts a join sub on a.parent_id = sub.id where a.org_id = ${authz.user.orgId}) select id from sub)`
     : target.accountTypes?.length ? sql`and a.type in ${target.accountTypes}` : sql``
   const dims = dimSql(target.dims, 'bl')
+  const subsidiaryFilter = budgetSubsidiaryFilter(authz)
+  const actualSubsidiaryFilter = subsidiaryVisibleFilter(sql`l.subsidiary_id`, authz.allowedSubsidiaryIds)
   if (target.scope === 'variance') {
     const actualAccount = target.accountIds?.length
       ? sql`and l.account_id in (with recursive sub as (select id from accounts where org_id = ${authz.user.orgId} and id in ${target.accountIds} union all select child.id from accounts child join sub on child.parent_id = sub.id where child.org_id = ${authz.user.orgId}) select id from sub)`
@@ -395,7 +497,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
           left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
          where l.org_id = ${authz.user.orgId} and e.book_id = ${row.book_id}
            and e.posting_date >= ${row.from_date} and e.posting_date <= ${row.to_date}
-           ${actualAccount} ${actualDims}
+           ${actualAccount} ${actualDims} ${actualSubsidiaryFilter}
         union all
         select 'budget'::text as source, bl.id::text as key, ap.starts_on as sort_date,
                ap.name as period, null::text as entry_number,
@@ -406,7 +508,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
           join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
           join accounting_periods ap on ap.id = bl.period_id and ap.org_id = bl.org_id
          where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId}
-           ${account} ${dims}
+           ${account} ${dims} ${subsidiaryFilter}
       )`
     const [totals, rows] = await Promise.all([
       db.execute(sql`${support}
@@ -458,12 +560,13 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
     }
   }
   const [count, rows] = await Promise.all([
-    db.execute(sql`select count(*)::int as n, coalesce(sum(bl.amount), 0) as amount from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId} ${account} ${dims}`),
+    db.execute(sql`select count(*)::int as n, coalesce(sum(bl.amount), 0) as amount from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId} ${account} ${dims} ${subsidiaryFilter}`),
     db.execute(sql`
       select bl.id, ap.name as period, a.number, a.name as account, bl.note, bl.amount
         from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
         join accounting_periods ap on ap.id = bl.period_id and ap.org_id = bl.org_id
        where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId} ${account} ${dims}
+         ${subsidiaryFilter}
        order by ap.starts_on, a.number nulls last, a.name
        limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`),
   ])
