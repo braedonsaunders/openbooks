@@ -47,6 +47,16 @@ const ACCOUNT_KEYS = [
   'vacationPayableAccountId',
 ] as const
 
+const ACCOUNT_TYPES_BY_KEY: Record<typeof ACCOUNT_KEYS[number], readonly string[]> = {
+  wageExpenseAccountId: ['expense', 'expense_other', 'expense_deferred'],
+  burdenExpenseAccountId: ['expense', 'expense_other', 'expense_deferred'],
+  netPayAccountId: ['liability_payable', 'liability_current_other'],
+  cppPayableAccountId: ['liability_payable', 'liability_current_other'],
+  eiPayableAccountId: ['liability_payable', 'liability_current_other'],
+  taxPayableAccountId: ['liability_payable', 'liability_current_other'],
+  vacationPayableAccountId: ['liability_payable', 'liability_current_other'],
+}
+
 /**
  * Payroll jurisdiction packs the org can install — the pack REGISTRY's own
  * `installable` declaration, never a second list. A pack that exists but is
@@ -57,6 +67,74 @@ const installableCountries = (): string[] =>
   Object.values(PAYROLL_COUNTRY_PACKS)
     .filter((pack) => pack.installable)
     .map((pack) => pack.country)
+
+async function validatePayrollAccounts(
+  orgId: string,
+  body: Record<string, unknown>,
+): Promise<NextResponse | null> {
+  const requested = ACCOUNT_KEYS.flatMap((key) => {
+    const value = body[key]
+    return value == null ? [] : [[key, value as string] as const]
+  })
+  if (requested.length === 0) return null
+  const rows = await db.execute<{
+    id: string
+    type: string
+    isActive: boolean
+    isSummary: boolean
+  }>(sql`
+    select id::text as id, type, is_active as "isActive", is_summary as "isSummary"
+      from accounts
+     where org_id = ${orgId}
+       and id in (${sql.join(requested.map(([, id]) => sql`${id}`), sql`, `)})`)
+  const byId = new Map(rows.rows.map((row) => [row.id, row]))
+  for (const [key, id] of requested) {
+    const row = byId.get(id)
+    if (!row) {
+      return NextResponse.json({ error: `invalid ${key}: account is not active in this organization` }, { status: 422 })
+    }
+    if (!row.isActive) {
+      return NextResponse.json({ error: `invalid ${key}: account is inactive` }, { status: 422 })
+    }
+    if (row.isSummary) {
+      return NextResponse.json({ error: `invalid ${key}: summary accounts cannot receive payroll postings` }, { status: 422 })
+    }
+    if (!ACCOUNT_TYPES_BY_KEY[key].includes(row.type)) {
+      return NextResponse.json({ error: `invalid ${key}: account type ${row.type} is not compatible with payroll` }, { status: 422 })
+    }
+  }
+  return null
+}
+
+async function validateRemittanceVendors(
+  orgId: string,
+  body: Record<string, unknown>,
+): Promise<NextResponse | null> {
+  const keys = declaredRemittanceVendorSettingsKeys()
+  const requested = keys.flatMap((key) => {
+    const value = body[key]
+    return value == null ? [] : [[key, value as string] as const]
+  })
+  if (requested.length === 0) return null
+  const rows = await db.execute<{
+    id: string
+    partyActive: boolean
+    roleActive: boolean
+  }>(sql`
+    select p.id::text as id, p.is_active as "partyActive", v.is_active as "roleActive"
+      from parties p
+      join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id
+     where p.org_id = ${orgId}
+       and p.id in (${sql.join(requested.map(([, id]) => sql`${id}`), sql`, `)})`)
+  const byId = new Map(rows.rows.map((row) => [row.id, row]))
+  for (const [key, id] of requested) {
+    const row = byId.get(id)
+    if (!row || !row.partyActive || !row.roleActive) {
+      return NextResponse.json({ error: `invalid ${key}: active vendor in this organization is required` }, { status: 422 })
+    }
+  }
+  return null
+}
 
 async function currentPayrollBlob(
   orgId: string,
@@ -188,7 +266,11 @@ export async function PUT(req: Request) {
     if (!(key in body)) continue
     const v = body[key] ?? null
     if (v !== null && !isUuid(v)) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
-    settings[key] = v
+  }
+  const accountError = await validatePayrollAccounts(orgId, body)
+  if (accountError) return accountError
+  for (const key of ACCOUNT_KEYS) {
+    if (key in body) settings[key] = body[key] ?? null
   }
   // Statutory remittance vendors — exactly the settings keys the pack
   // declarations name (the CRA vendor, the Revenu Québec vendor for the CA
@@ -199,7 +281,11 @@ export async function PUT(req: Request) {
     if (party !== null && !isUuid(party)) {
       return NextResponse.json({ error: `invalid ${vendorKey}` }, { status: 422 })
     }
-    settings[vendorKey] = party
+  }
+  const vendorError = await validateRemittanceVendors(orgId, body)
+  if (vendorError) return vendorError
+  for (const vendorKey of declaredRemittanceVendorSettingsKeys()) {
+    if (vendorKey in body) settings[vendorKey] = body[vendorKey] ?? null
   }
   // The cheque safety net. On by default: a payroll that refuses to run
   // because one employee's void cheque has not been keyed yet fails everybody
