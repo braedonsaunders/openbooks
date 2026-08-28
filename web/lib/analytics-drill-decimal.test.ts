@@ -48,7 +48,13 @@ const hooks = registerHooks({
   },
 })
 
-const { GET, serializeLedgerDecimal } = await import('../app/api/analytics/drill/route.ts?analytics-drill-decimal-test')
+const routeUrl = new URL(
+  '../app/api/analytics/drill/route.ts?analytics-drill-decimal-test',
+  import.meta.url,
+).href
+const { GET, serializeLedgerDecimal } = (await import(routeUrl)) as typeof import(
+  '../app/api/analytics/drill/route.ts'
+)
 hooks.deregister()
 
 test('analytics drill keeps high-precision and unsafe-size decimals exact', () => {

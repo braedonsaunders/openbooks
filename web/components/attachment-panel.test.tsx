@@ -83,7 +83,7 @@ function createReactHookHarness(): ReactHookHarness {
       slots[index] = slot
       pendingEffects.push({ slot, effect })
     },
-    useMemo<T>(factory, deps) {
+    useMemo<T>(factory: () => T, deps: DependencyList): T {
       const index = cursor++
       const existing = slots[index]
       if (existing) {
@@ -97,7 +97,7 @@ function createReactHookHarness(): ReactHookHarness {
       slots[index] = slot
       return slot.value as T
     },
-    useRef<T>(initial) {
+    useRef<T>(initial: T): { current: T } {
       const index = cursor++
       const existing = slots[index]
       if (existing) {
@@ -108,7 +108,7 @@ function createReactHookHarness(): ReactHookHarness {
       slots[index] = { kind: 'ref', value }
       return value
     },
-    useState<T>(initial) {
+    useState<T>(initial: T | (() => T)): [T, (next: T | ((current: T) => T)) => void] {
       const index = cursor++
       let slot = slots[index]
       if (slot) {
@@ -217,8 +217,8 @@ const testState: AttachmentPanelTestState = {
 ] = testState
 // tsx compiles this legacy JSX module with the classic runtime in the test
 // process; provide the tiny createElement surface its output calls.
-;(globalThis as typeof globalThis & { React?: unknown }).React = {
-  createElement(type: unknown, props: Record<string, unknown> | null, ...children: unknown[]) {
+const reactShim = {
+  createElement(type: unknown, props: Record<string, unknown> | null | undefined, ...children: unknown[]) {
     return {
       type,
       props: {
@@ -228,6 +228,7 @@ const testState: AttachmentPanelTestState = {
     }
   },
 }
+Reflect.set(globalThis, 'React', reactShim)
 
 const mockUrls = new Map<string, string>([
   ['react', 'mock:react'],
@@ -338,7 +339,8 @@ const hooks = registerHooks({
   },
 })
 
-const { AttachmentPanel } = await import('./attachment-panel.tsx?attachment-panel-test')
+const componentUrl = new URL('./attachment-panel.tsx?attachment-panel-test', import.meta.url).href
+const { AttachmentPanel } = await import(componentUrl)
 hooks.deregister()
 
 function attachment(id: string, name: string): Attachment {
@@ -368,7 +370,7 @@ function installDeferredFetch(): { requests: RequestRecord[]; restore(): void } 
     const url = new URL(String(input), 'http://openbooks.test')
     const targetId = url.searchParams.get('targetId')
     assert.ok(targetId, 'attachment requests must identify their target record')
-    const request = { targetId, signal: init?.signal, response: deferred<Response>() }
+    const request = { targetId, signal: init?.signal ?? undefined, response: deferred<Response>() }
     requests.push(request)
     return request.response.promise
   }) as typeof fetch
@@ -428,7 +430,9 @@ test('switching records aborts A, clears its state, and fences late A success/fi
   assert.match(renderedText(tree), /A\.pdf/)
   assert.equal(loadingVisible(tree), false)
 
-  buttonWithLabel(tree, 'expandPreviewAria').props.onClick?.()
+  const expandPreview = buttonWithLabel(tree, 'expandPreviewAria').props.onClick
+  assert.equal(typeof expandPreview, 'function')
+  ;(expandPreview as () => void)()
   tree = renderPanel('record-a')
   assert.equal(findRenderedElement(tree, (element) => element.type === 'aside'), null)
 

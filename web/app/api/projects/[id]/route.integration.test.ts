@@ -147,7 +147,8 @@ const hooks = registerHooks({
   },
 })
 
-const { GET, PATCH } = (await import('./route.ts?project-detail-scope-test')) as typeof import('./route.ts')
+const routeUrl = new URL('./route.ts?project-detail-scope-test', import.meta.url).href
+const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
 const PROJECT_ID = '00000000-0000-4000-8000-000000000001'

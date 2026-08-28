@@ -172,8 +172,9 @@ function mockedQuery(query: unknown): { rows: Record<string, unknown>[] } {
 }
 
 let POST: typeof import('./route.ts')['POST']
+const vitestModule = 'vitest' as string
 if (process.env.VITEST) {
-  const { vi } = await import('vitest')
+  const { vi } = await import(vitestModule)
   vi['mock']('../../../../../lib/api/json', () => ({
     jsonObject: {},
     parseJsonBody: async (request: Request) => ({ ok: true, data: await request.json() }),
@@ -261,7 +262,7 @@ function sourceCopyQuery(): string {
 }
 
 const testCase: (name: string, run: () => Promise<void>) => unknown = process.env.VITEST
-  ? ((await import('vitest')).it as unknown as (name: string, run: () => Promise<void>) => unknown)
+  ? ((await import(vitestModule)).it as unknown as (name: string, run: () => Promise<void>) => unknown)
   : test
 
 testCase('rejects invalid actions and malformed scenario ids', async () => {
