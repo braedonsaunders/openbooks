@@ -316,9 +316,12 @@ export const documentLines = pgTable(
     billAmount: money("bill_amount"),
     recoveryAccountId: uuid("recovery_account_id"),
 
-    // Order-state denormalization (orders → fulfillment → billing chain):
-    quantityFulfilled: money("quantity_fulfilled").notNull().default("0"),
-    quantityBilled: money("quantity_billed").notNull().default("0"),
+    // Order-state denormalization (orders → fulfillment → billing chain).
+    // These are commercial quantities, not posted money amounts: preserve the
+    // same eight decimal places as quantity so partial fulfillment and billing
+    // cannot silently truncate a valid order line.
+    quantityFulfilled: numeric("quantity_fulfilled", { precision: 28, scale: 8 }).notNull().default("0"),
+    quantityBilled: numeric("quantity_billed", { precision: 28, scale: 8 }).notNull().default("0"),
 
     /** Stock location for an inventory item line — where a bill receives stock
      *  or an invoice/shipment issues it. Null lines fall back to the single
