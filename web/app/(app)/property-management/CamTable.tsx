@@ -4,6 +4,18 @@ import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow }
 import { Empty, Small, Status } from "./workspace-ui";
 import type { CamPool, Money, PropertyAction, PropertyWorkspace } from "./types";
 
+export function camMoneyOptions(currency?: string) {
+  return currency ? { currency } : undefined;
+}
+
+export function formatCamAmount(
+  value: string | number | null | undefined,
+  money: Money,
+  currency?: string,
+) {
+  return money(value ?? 0, camMoneyOptions(currency));
+}
+
 export function CamTable({
   data,
   propertyId,
@@ -44,6 +56,7 @@ export function CamTable({
         const allocations = data.camAllocations.filter(
           (item) => item.poolId === pool.id,
         );
+        const moneyOptions = camMoneyOptions(property?.currency);
         return (
           <div key={pool.id} className="space-y-3 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -134,24 +147,14 @@ export function CamTable({
             <div className="grid gap-3 sm:grid-cols-3">
               <Small
                 label="Budget"
-                value={money(
-                  pool.budgetAmount,
-                  property?.currency
-                    ? { currency: property.currency }
-                    : undefined,
-                )}
+                value={money(pool.budgetAmount, moneyOptions)}
               />
               <Small
                 label="Actual"
                 value={
                   pool.actualAmount == null
                     ? "—"
-                    : money(
-                        pool.actualAmount,
-                        property?.currency
-                          ? { currency: property.currency }
-                          : undefined,
-                      )
+                    : money(pool.actualAmount, moneyOptions)
                 }
               />
               <Small
@@ -187,13 +190,25 @@ export function CamTable({
                           {allocation.sharePercent}%
                         </TableCell>
                         <TableCell className="text-right">
-                          {money(allocation.actualAllocation ?? 0)}
+                          {formatCamAmount(
+                            allocation.actualAllocation,
+                            money,
+                            property?.currency,
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
-                          {money(allocation.billedEstimate)}
+                          {formatCamAmount(
+                            allocation.billedEstimate,
+                            money,
+                            property?.currency,
+                          )}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {money(allocation.reconciliationAmount ?? 0)}
+                          {formatCamAmount(
+                            allocation.reconciliationAmount,
+                            money,
+                            property?.currency,
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
