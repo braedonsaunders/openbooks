@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { ControlAccountsIncompleteError } from "./control-accounts.ts";
 import { db } from "./db.ts";
 import { runRevaluation } from "./fx-revaluation.ts";
 import {
@@ -11,6 +12,30 @@ import {
 } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+test("period-end FX revaluation rejects a balance-sheet unrealized gain/loss account", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // A legacy/direct settings write can point the P&L leg at an active,
+    // postable balance-sheet account. The shared control-account loader must
+    // reject the role before revaluation can construct or post any journals.
+    await db.execute(sql`
+      update orgs
+         set settings = settings || jsonb_build_object('controlAccounts',
+              coalesce(settings->'controlAccounts', '{}'::jsonb) ||
+              jsonb_build_object('fxUnrealizedGainLoss', ${org.accounts.ar}::text))
+       where id = ${org.orgId}`);
+
+    await assert.rejects(
+      () => runRevaluation(org.orgId, org.periodId, null),
+      (error: unknown) =>
+        error instanceof ControlAccountsIncompleteError &&
+        /fxUnrealizedGainLoss control account type asset_receivable is incompatible/.test(error.message),
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 /**
  * journal_entries_org_number is unique per ORG, but the revaluation duplicate
