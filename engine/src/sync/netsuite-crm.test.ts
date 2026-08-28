@@ -23,6 +23,13 @@ test('account-profile upserts pin the known tenant on the party_id conflict writ
   )
 })
 
+test('CRM imports append lifecycle transition events with the prior stage', () => {
+  assert.match(crmSource, /select id,lifecycle_stage[\s\S]*?from crm_account_profiles[\s\S]*?for update/)
+  assert.match(crmSource, /insert into crm_account_stage_events\(org_id,account_profile_id,from_stage,to_stage,source_kind/)
+  assert.match(crmSource, /const fromStage = profileExists && stageChanged \? previousStage : null/)
+  assert.match(crmSource, /const eventGuard = profileExists && stageChanged/)
+})
+
 test('maps typed recent-activity notes into sales visits and account links', () => {
   const visit = normalizeNetSuiteRecentActivityNote({
     id: '1845',
