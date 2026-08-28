@@ -720,9 +720,8 @@ export async function runDepreciation(
   allowedSubsidiaryIds?: string[],
   bookId?: string,
 ): Promise<RunDepreciationResult> {
-  const subsidiaryContext = await loadSubsidiaryContext(db, orgId);
-
-  // Due, unposted lines with their asset + resolved accounts + period window.
+  // Due, unposted lines are only a candidate list. Account, dimension, and
+  // other posting fields are reloaded under locks inside each line transaction.
   const due = (await db.execute<any>(sql`
     select l.id            as line_id,
            l.planned_amount as planned,
@@ -772,88 +771,195 @@ export async function runDepreciation(
   };
 
   for (const row of due.rows) {
-    if (row.period_closed) {
-      result.skipped++;
-      result.problems.push(`${row.asset_number} ${row.period_name}: GL period closed`);
-      continue;
-    }
-
-    const accounts = resolveAssetAccounts(
-      {
-        assetAccountId: row.asset_account,
-        accumulatedDepreciationAccountId: row.asset_accum,
-        depreciationExpenseAccountId: row.asset_expense,
-      },
-      {
-        assetAccountId: row.cat_asset,
-        accumulatedDepreciationAccountId: row.cat_accum,
-        depreciationExpenseAccountId: row.cat_expense,
-      },
-    );
-
-    const preliminaryLines = [
-      { accountId: accounts.depreciationExpenseAccountId, amount: String(row.planned) },
-      { accountId: accounts.accumulatedDepreciationAccountId, amount: neg(String(row.planned)) },
-    ];
-    try {
-      await validateSubsidiaryRestrictions(db, {
-        orgId,
-        ctx: subsidiaryContext,
-        docSubsidiaryId: row.subsidiary_id,
-        lines: preliminaryLines.map((line) => ({
-          ...line,
-          subsidiaryId: row.subsidiary_id,
-          departmentId: row.department_id,
-          projectId: row.project_id,
-          locationId: row.location_id,
-        })),
-      });
-    } catch (error) {
-      result.problems.push(`${row.asset_number} ${row.period_name}: ${(error as Error).message}`);
-      continue;
-    }
-    assertFinalKernelBalance(preliminaryLines.map((line) => ({ amount: line.amount, subsidiaryId: row.subsidiary_id })));
-
-    const postingDate: string = row.period_ends_on;
     try {
       const posted = await db.transaction(async (tx) => {
+        // Serialize against the authoritative asset edit path before reading
+        // any account or dimension-bearing fields. The due query above is only
+        // a candidate list; every posting input is reloaded after this lock.
+        const assetLock = (await tx.execute<{ category_id: string; subsidiary_id: string }>(sql`
+          select category_id, subsidiary_id
+            from fixed_assets
+           where id = ${row.asset_id} and org_id = ${orgId}
+           for update`));
+        const assetKey = assetLock.rows[0];
+        if (!assetKey) return null;
+
+        // Category account defaults are another authoritative source. Lock it
+        // before resolving native asset overrides so a concurrent category edit
+        // cannot be mixed with this asset snapshot.
+        const categoryLock = (await tx.execute<{ id: string }>(sql`
+          select id from asset_categories
+           where id = ${assetKey.category_id} and org_id = ${orgId}
+           for update`));
+        if (!categoryLock.rows[0]) throw new Error("asset category not found");
+
+        // Restriction validation depends on the complete subsidiary tree. Lock
+        // that tree before loading it so parent/active-state edits cannot race
+        // the account and dimension checks below.
+        await tx.execute(sql`
+          select id from subsidiaries
+           where org_id = ${orgId}
+           order by id
+           for update`);
+
         // Claim the schedule line inside the posting transaction. Concurrent
-        // runners serialize here and the loser observes posted_amount.
-        const claim = (await tx.execute<{ planned_amount: string; period_closed: boolean }>(sql`
-          select l.planned_amount,
-                 (period_module_is_closed(${orgId}, l.period_id, s.book_id, a.subsidiary_id, 'assets')
-                   or period_module_is_closed(${orgId}, l.period_id, s.book_id, a.subsidiary_id, 'gl')) as period_closed
+        // runners serialize here and the loser observes posted_amount. The
+        // asset/category/subsidiary locks above ensure every selected field is
+        // the current committed configuration for this posting.
+        const claim = (await tx.execute<{
+          line_id: string;
+          planned_amount: string;
+          period_id: string;
+          book_id: string;
+          period_name: string;
+          period_ends_on: string;
+          period_closed: boolean;
+          asset_id: string;
+          subsidiary_id: string;
+          base_currency: string;
+          asset_number: string;
+          asset_name: string;
+          asset_account: string | null;
+          asset_accum: string | null;
+          asset_expense: string | null;
+          department_id: string | null;
+          project_id: string | null;
+          location_id: string | null;
+          cat_asset: string;
+          cat_accum: string;
+          cat_expense: string;
+        }>(sql`
+          select l.id as line_id,
+                 l.planned_amount,
+                 l.period_id,
+                 s.book_id,
+                 p.name as period_name,
+                 p.ends_on as period_ends_on,
+                 (period_module_is_closed(${orgId}, p.id, s.book_id, a.subsidiary_id, 'assets')
+                   or period_module_is_closed(${orgId}, p.id, s.book_id, a.subsidiary_id, 'gl')) as period_closed,
+                 a.id as asset_id,
+                 a.subsidiary_id,
+                 sub.base_currency,
+                 a.asset_number,
+                 a.name as asset_name,
+                 a.asset_account_id as asset_account,
+                 a.accumulated_depreciation_account_id as asset_accum,
+                 a.depreciation_expense_account_id as asset_expense,
+                 a.department_id,
+                 a.project_id,
+                 a.location_id,
+                 c.asset_account_id as cat_asset,
+                 c.accumulated_depreciation_account_id as cat_accum,
+                 c.depreciation_expense_account_id as cat_expense
             from depreciation_schedule_lines l
             join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+            join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.posts_gl and bk.is_active
             join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
-           where l.id = ${row.line_id} and l.org_id = ${orgId} and l.posted_amount is null
+            join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
+            join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
+            join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
+           where l.id = ${row.line_id}
+             and l.org_id = ${orgId}
+             and l.posted_amount is null
+             and a.status not in ('disposed', 'written_off')
+             and p.ends_on <= ${asOfDate}
+             ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
            for update of l`));
         const claimed = claim.rows[0];
         if (!claimed) return null;
-        if (claimed.period_closed) throw new Error("GL period closed");
+
+        if (claimed.period_closed) {
+          return {
+            entryId: null,
+            amount: String(claimed.planned_amount),
+            periodClosed: true,
+            assetNumber: claimed.asset_number,
+            periodName: claimed.period_name,
+          };
+        }
+
+        const accounts = resolveAssetAccounts(
+          {
+            assetAccountId: claimed.asset_account,
+            accumulatedDepreciationAccountId: claimed.asset_accum,
+            depreciationExpenseAccountId: claimed.asset_expense,
+          },
+          {
+            assetAccountId: claimed.cat_asset,
+            accumulatedDepreciationAccountId: claimed.cat_accum,
+            depreciationExpenseAccountId: claimed.cat_expense,
+          },
+        );
+
+        // Lock every account and dimension that will be validated/read by the
+        // journal insert. Their rows may carry subsidiary restrictions, so the
+        // validation below must run after these locks on this same snapshot.
+        const accountIds = [...new Set([
+          accounts.assetAccountId,
+          accounts.accumulatedDepreciationAccountId,
+          accounts.depreciationExpenseAccountId,
+        ])];
+        await tx.execute(sql`
+          select id from accounts
+           where org_id = ${orgId}
+             and id in (${sql.join(accountIds.map((id) => sql`${id}`), sql`, `)})
+           order by id
+           for update`);
+
+        const dimensions = [
+          { table: "departments", id: claimed.department_id },
+          { table: "projects", id: claimed.project_id },
+          { table: "locations", id: claimed.location_id },
+        ] as const;
+        for (const dimension of dimensions) {
+          if (!dimension.id) continue;
+          await tx.execute(sql`
+            select id from ${sql.raw(dimension.table)}
+             where org_id = ${orgId} and id = ${dimension.id}
+             for update`);
+        }
+
+        const subsidiaryContext = await loadSubsidiaryContext(tx, orgId);
         const planned = String(claimed.planned_amount);
+        const lines = [
+          { accountId: accounts.depreciationExpenseAccountId, amount: planned },
+          { accountId: accounts.accumulatedDepreciationAccountId, amount: neg(planned) },
+        ];
+        await validateSubsidiaryRestrictions(tx, {
+          orgId,
+          ctx: subsidiaryContext,
+          docSubsidiaryId: claimed.subsidiary_id,
+          lines: lines.map((line) => ({
+            ...line,
+            subsidiaryId: claimed.subsidiary_id,
+            departmentId: claimed.department_id,
+            projectId: claimed.project_id,
+            locationId: claimed.location_id,
+          })),
+        });
+        assertFinalKernelBalance(lines.map((line) => ({ amount: line.amount, subsidiaryId: claimed.subsidiary_id })));
         if (isZero(planned)) {
           await tx.execute(sql`
             update depreciation_schedule_lines
                set posted_amount = '0', updated_at = now(), updated_by = ${actorId}
              where id = ${row.line_id} and org_id = ${orgId} and posted_amount is null`);
-          return { entryId: null, amount: planned };
+          return {
+            entryId: null,
+            amount: planned,
+            assetNumber: claimed.asset_number,
+            periodName: claimed.period_name,
+          };
         }
 
-        const lines = [
-          { accountId: accounts.depreciationExpenseAccountId, amount: planned },
-          { accountId: accounts.accumulatedDepreciationAccountId, amount: neg(planned) },
-        ];
-        assertFinalKernelBalance(lines.map((line) => ({ amount: line.amount, subsidiaryId: row.subsidiary_id })));
         // Corrections create another line for the same asset and period, so the
         // schedule-line id distinguishes every physical journal generation.
         const entryRes = (await tx.execute<{ id: string }>(sql`
           insert into journal_entries
             (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-          values (${orgId}, ${row.book_id}, ${row.subsidiary_id},
-                  ${`DEP-${row.asset_number}-${row.period_name}-${row.line_id}`},
-                  ${postingDate}, ${row.period_id},
-                  ${`Depreciation — ${row.asset_name} (${row.period_name})`},
+          values (${orgId}, ${claimed.book_id}, ${claimed.subsidiary_id},
+                  ${`DEP-${claimed.asset_number}-${claimed.period_name}-${claimed.line_id}`},
+                  ${claimed.period_ends_on}, ${claimed.period_id},
+                  ${`Depreciation — ${claimed.asset_name} (${claimed.period_name})`},
                   'draft', 'depreciation', ${actorId}, ${actorId})
           returning id`));
         const eid = entryRes.rows[0]!.id;
@@ -864,9 +970,9 @@ export async function runDepreciation(
             insert into journal_lines
               (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
                department_id, project_id, location_id, memo)
-            values (${orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${row.subsidiary_id}, ${l.amount}, ${row.base_currency}, ${l.amount}, 1,
-                    ${row.department_id}, ${row.project_id}, ${row.location_id},
-                    ${`Depreciation ${row.period_name}`})`);
+            values (${orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${claimed.subsidiary_id}, ${l.amount}, ${claimed.base_currency}, ${l.amount}, 1,
+                    ${claimed.department_id}, ${claimed.project_id}, ${claimed.location_id},
+                    ${`Depreciation ${claimed.period_name}`})`);
         }
 
         await tx.execute(sql`
@@ -878,11 +984,21 @@ export async function runDepreciation(
              set posted_amount = ${planned}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
            where id = ${row.line_id} and org_id = ${orgId}`);
 
-        return { entryId: eid, amount: planned };
+        return {
+          entryId: eid,
+          amount: planned,
+          assetNumber: claimed.asset_number,
+          periodName: claimed.period_name,
+        };
       });
 
       if (!posted) {
         result.skipped++;
+        continue;
+      }
+      if (posted.periodClosed) {
+        result.skipped++;
+        result.problems.push(`${posted.assetNumber} ${posted.periodName}: GL period closed`);
         continue;
       }
       if (!posted.entryId) {
@@ -892,8 +1008,8 @@ export async function runDepreciation(
       result.posted++;
       result.totalAmount = add(result.totalAmount, posted.amount);
       result.entries.push({
-        assetNumber: row.asset_number,
-        period: row.period_name,
+        assetNumber: posted.assetNumber,
+        period: posted.periodName,
         amount: posted.amount,
         entryId: posted.entryId,
       });
