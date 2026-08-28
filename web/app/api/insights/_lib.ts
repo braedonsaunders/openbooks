@@ -166,7 +166,7 @@ export async function resolveHomeDashboard(
          or d.home_for_role = ${role}
          or d.is_home = true
        )
-     order by priority asc
+     order by priority asc, d.id asc
      limit 1
   `))
 
