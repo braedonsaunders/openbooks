@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { db } from "./db.ts";
 import {
   capAnnualEarnings,
   carryOpeningYearEndYtd,
   openingYtdIntoT4Slip,
   openingYtdIntoW2Slip,
   seedOpeningOnlySlips,
+  t4Slips,
+  w2Slips,
 } from "./payroll-yearend.ts";
 import type { OpeningYearEndYtd, T4Slip, W2Slip } from "./payroll-yearend.ts";
 
@@ -176,4 +179,68 @@ test("opening bases are capped together with committed T4 bases", () => {
   assert.equal(capped[0]!.box26CppPensionable, "85000");
   assert.equal(capped[1]!.box24EiInsurable, "0");
   assert.equal(capped[1]!.box26CppPensionable, "0");
+});
+
+test("an opening with no country profile is Canadian, while an explicit US opening is W-2-only", async (t) => {
+  const nullProfileEmployee = "00000000-0000-4000-8000-000000000001";
+  const usEmployee = "00000000-0000-4000-8000-000000000002";
+  const orgId = "00000000-0000-4000-8000-000000000099";
+  const population = [
+    { employeePartyId: nullProfileEmployee, profileCountry: null, taxableYtd: "12000" },
+    { employeePartyId: usEmployee, profileCountry: "US", taxableYtd: "34000" },
+  ] as const;
+  const countryRows = (country: string) => population.filter((row) =>
+    (row.profileCountry ?? "CA") === country);
+  const queries: { sql: string; params: unknown[] }[] = [];
+  const dialect = (db as unknown as {
+    dialect: { sqlToQuery(query: Parameters<typeof db.execute>[0]): { sql: string; params: unknown[] } };
+  }).dialect;
+
+  t.mock.method(db, "execute", async (query: Parameters<typeof db.execute>[0]) => {
+    const built = dialect.sqlToQuery(query);
+    queries.push({ sql: built.sql, params: built.params });
+    if (built.sql.includes("from payroll_opening_balances")) {
+      const country = String(built.params[0]);
+      return {
+        rows: countryRows(country).map((row) => ({
+          employee_party_id: row.employeePartyId,
+          pensionable_ytd: "0", insurable_ytd: "0", cpp_ytd: "0", cpp2_ytd: "0",
+          ei_ytd: "0", qpip_ytd: "0", taxable_ytd: row.taxableYtd, tax_ytd: "0",
+        })),
+      };
+    }
+    if (built.sql.includes("left join employee_payroll_profiles")) {
+      const country = String(built.params[0]);
+      return {
+        rows: countryRows(country).map((row) => ({
+          employee_party_id: row.employeePartyId,
+          display_name: row.employeePartyId === nullProfileEmployee ? "Null Profile" : "US Employee",
+          province: row.profileCountry === "US" ? "CA" : "ON",
+          filing_account_id: null,
+        })),
+      };
+    }
+    // No committed stubs: both populations are opening-only and are seeded by
+    // their country-filtered opening rows above.
+    return { rows: [] };
+  });
+
+  const ca = await t4Slips(orgId, 2026);
+  const us = await w2Slips(orgId, 2026);
+
+  assert.deepEqual(ca.map((slip) => slip.employeePartyId), [nullProfileEmployee]);
+  assert.equal(ca[0]!.box14EmploymentIncome, "12000.0000");
+  assert.deepEqual(us.map((slip) => slip.employeePartyId), [usEmployee]);
+  assert.equal(us[0]!.box1Wages, "34000.0000");
+
+  const countryQueries = queries.filter((query) =>
+    query.sql.includes("coalesce(prof.country")
+    && (query.sql.includes("from payroll_opening_balances")
+      || query.sql.includes("left join employee_payroll_profiles")));
+  assert.equal(countryQueries.length, 4);
+  assert.deepEqual(countryQueries.map((query) => query.params[0]), ["CA", "CA", "US", "US"]);
+  for (const query of countryQueries) {
+    assert.match(query.sql, /coalesce\(prof\.country, 'CA'\) = \$1/);
+    assert.doesNotMatch(query.sql, /coalesce\(prof\.country, \$1\)/);
+  }
 });
