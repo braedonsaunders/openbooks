@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { loadControlAccounts } from "./control-accounts.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "./money.ts";
 import { loadSubsidiaryContext } from "./subsidiaries.ts";
 
@@ -134,10 +135,12 @@ const ALREADY_REVALUED = "already revalued for this period";
 
 /** org unrealized-FX gain/loss control account (orgs.settings.controlAccounts.fxUnrealizedGainLoss). */
 async function unrealizedAccount(orgId: string): Promise<string> {
-  const r = (await db.execute<{ acct: string | null }>(
-    sql`select settings->'controlAccounts'->>'fxUnrealizedGainLoss' as acct from orgs where id = ${orgId}`,
-  ));
-  const acct = r.rows[0]?.acct;
+  // Use the centralized control-account reader so this P&L leg observes the
+  // same organization, active/non-summary, and role-type policy as every
+  // other posting path. Reading the JSON setting directly would allow a
+  // balance-sheet account to silently absorb unrealized FX gains/losses.
+  const controls = await loadControlAccounts(orgId);
+  const acct = controls.fxUnrealizedGainLoss;
   if (!acct) {
     throw new RevaluationError(
       "unrealized FX gain/loss account is not configured (orgs.settings.controlAccounts.fxUnrealizedGainLoss)",
