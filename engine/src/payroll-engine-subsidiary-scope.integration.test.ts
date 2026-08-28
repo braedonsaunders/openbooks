@@ -18,6 +18,10 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const source = (file: string) =>
   readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
+const profilesRoute = readFileSync(
+  new URL("../../web/app/api/payroll/profiles/route.ts", import.meta.url),
+  "utf8",
+);
 
 test("payroll engine scope policy fails closed for a restricted direct caller", () => {
   const allowed = new Set(["11111111-1111-4111-8111-111111111111"]);
@@ -52,6 +56,27 @@ test("every shared payroll engine entry point carries the caller scope to its bo
       `${file} must enforce the scope policy at the engine boundary`,
     );
   }
+});
+
+test("payroll profiles keep scoped schedules on the employee's subsidiary", () => {
+  // The route resolves both legal entities before the profile upsert. A
+  // scoped schedule must match the employee; NULL is the explicit org-wide
+  // schedule convention and remains available to every employee.
+  assert.match(profilesRoute, /const employeeSubsidiaryId = .*subsidiaryId/);
+  assert.match(profilesRoute, /const scheduleSubsidiaryId = .*subsidiaryId/);
+  assert.match(
+    profilesRoute,
+    /if \(scheduleSubsidiaryId !== null && employeeSubsidiaryId !== scheduleSubsidiaryId\)/,
+  );
+  assert.match(
+    profilesRoute,
+    /employee and pay schedule must belong to the same subsidiary.*status: 422/s,
+  );
+  assert.ok(
+    profilesRoute.indexOf("scheduleSubsidiaryId !== null && employeeSubsidiaryId !== scheduleSubsidiaryId")
+      < profilesRoute.indexOf("insert into employee_payroll_profiles"),
+    "the mismatch refusal must precede the profile upsert",
+  );
 });
 
 test(
