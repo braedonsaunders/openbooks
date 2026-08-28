@@ -160,6 +160,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0076_work_schedule_group_expression_uniqueness.sql",
     "0077_project_overhead_adjustment_reversal_uniqueness.sql",
     "0078_sandbox_wipe_guard_authorization.sql",
+    "0079_budget_subsidiary.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
