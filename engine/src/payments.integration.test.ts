@@ -1238,6 +1238,16 @@ test("the instruction fence is enforced by storage: superseded claim tokens cann
          where id = ${seeded.instructionIds[2]!} and org_id = ${org.orgId}
       `)),
     );
+    // A stale writer cannot bundle a financial or remittance mutation with
+    // the settlement-style status carve-out.
+    await assertInstructionFenceRejected(
+      withPostingClaim(org, seeded.runId, supersededToken, (tx) => tx.execute(sql`
+        update payment_instructions
+           set amount = '99', payment_reference = 'stale-writer',
+               status = 'returned', updated_at = now(), updated_by = ${actorId}
+         where id = ${seeded.instructionIds[2]!} and org_id = ${org.orgId}
+      `)),
+    );
 
     // An unclaimed writer is equally powerless: the posting advance and
     // metadata edits are refused…

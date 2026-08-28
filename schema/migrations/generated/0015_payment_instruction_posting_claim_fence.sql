@@ -9,8 +9,9 @@
 -- lease via the transaction-local `openbooks.payment_run_claim` setting
 -- (`<runId>:<postingClaimToken>`) or its mutation is rejected, with one
 -- carve-out: settlement-style lifecycle retreats (`settled`, `returned`,
--- `rejected`) stay available to the bank-outcome writer, which serializes on
--- the run row in the same lock order as posting.
+-- `rejected`) stay available to the bank-outcome writer when every other
+-- instruction field is unchanged; that writer serializes on the run row in
+-- the same lock order as posting.
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -61,10 +62,13 @@ BEGIN
     RETURN COALESCE(NEW, OLD);
   END IF;
 
-  -- Without the live claim, only a settlement-style retreat may move a row.
+  -- Without the live claim, only a settlement-style retreat may move a row,
+  -- and it may change only status plus the normal audit stamps.
   IF TG_OP = 'UPDATE'
      AND OLD.status IS DISTINCT FROM NEW.status
-     AND NEW.status IN ('settled', 'returned', 'rejected') THEN
+     AND NEW.status IN ('settled', 'returned', 'rejected')
+     AND (to_jsonb(NEW) - 'status' - 'updated_at' - 'updated_by')
+         = (to_jsonb(OLD) - 'status' - 'updated_at' - 'updated_by') THEN
     RETURN NEW;
   END IF;
 
