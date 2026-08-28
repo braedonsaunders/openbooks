@@ -43,6 +43,20 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
 }
 
+/**
+ * Carry the caller's role-based subsidiary visibility into report queries.
+ * `null` is the explicit unrestricted sentinel; a non-null empty set stays an
+ * empty array so report layers can fail closed rather than widening to the org.
+ */
+function reportDims(authz: Authz): { subsidiaryIds: string[] } | undefined {
+  if (authz.allowedSubsidiaryIds === null) return undefined;
+  return { subsidiaryIds: [...authz.allowedSubsidiaryIds] };
+}
+
+function reportScopeDenied(authz: Authz): ToolResult | null {
+  return authz.allowedSubsidiaryIds?.size === 0 ? { ok: false, error: "forbidden" } : null;
+}
+
 /** Preserve ledger money as its canonical numeric(19,4) string at the tool boundary. */
 function money(v: unknown): string {
   return normalizeMoneyValue(String(v ?? "0"));
@@ -563,9 +577,13 @@ const profitAndLossTool: AssistantToolDef = {
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as RangeArgs & { departmentId?: string; projectId?: string };
+    const denied = reportScopeDenied(authz);
+    if (denied) return denied;
     const range = await resolveToolRange(authz.user.orgId, a);
     if ("error" in range) return { ok: false, error: range.error };
+    const dims = reportDims(authz);
     const r = await profitAndLoss(range.from, range.to, {
+      ...dims,
       departmentId: a.departmentId,
       projectId: a.projectId,
     }, authz.user.orgId);
@@ -607,7 +625,9 @@ const balanceSheetTool: AssistantToolDef = {
   inputSchema: z.object({ asOf: dateInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { asOf: string };
-    const r = await balanceSheet(a.asOf, authz.user.orgId);
+    const denied = reportScopeDenied(authz);
+    if (denied) return denied;
+    const r = await balanceSheet(a.asOf, authz.user.orgId, undefined, reportDims(authz));
     const section = (rows: typeof r.assets) =>
       capItems(
         rows.map((i) => ({
@@ -643,7 +663,9 @@ const trialBalanceTool: AssistantToolDef = {
   inputSchema: z.object({ asOf: dateInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { asOf: string };
-    const rows = await trialBalance(a.asOf, undefined, authz.user.orgId);
+    const denied = reportScopeDenied(authz);
+    if (denied) return denied;
+    const rows = await trialBalance(a.asOf, reportDims(authz), authz.user.orgId);
     const { items, truncated } = capItems(
       rows.map((r) => ({
         number: r.number,
@@ -674,9 +696,11 @@ const agingTool: AssistantToolDef = {
     if (!can(authz, a.side === "ar" ? "ar.read" : "ap.read")) {
       return { ok: false, error: "forbidden" };
     }
+    const denied = reportScopeDenied(authz);
+    if (denied) return denied;
     const limit = Math.min(a.limit ?? 30, 100);
     const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
-    const r = await agingByParty(a.side, asOf, undefined, authz.user.orgId);
+    const r = await agingByParty(a.side, asOf, reportDims(authz), authz.user.orgId);
     return {
       ok: true,
       data: {
@@ -709,9 +733,11 @@ const cashFlowTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({ ...rangeInputFields }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    const denied = reportScopeDenied(authz);
+    if (denied) return denied;
     const range = await resolveToolRange(authz.user.orgId, raw as RangeArgs);
     if ("error" in range) return { ok: false, error: range.error };
-    const r = await cashFlow(range.from, range.to, undefined, authz.user.orgId);
+    const r = await cashFlow(range.from, range.to, reportDims(authz), authz.user.orgId);
     return {
       ok: true,
       data: {
