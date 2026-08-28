@@ -57,6 +57,59 @@ CREATE UNIQUE INDEX IF NOT EXISTS recurring_occurrence_document
 CREATE INDEX IF NOT EXISTS recurring_occurrence_schedule
   ON public.recurring_occurrence_documents USING btree (org_id, schedule_id, occurrence_on DESC);
 
+-- Existing installations may already have rows from the original guard, whose
+-- single-column foreign keys did not prove that the schedule and document
+-- belonged to this occurrence's organization. Refuse the upgrade rather than
+-- rewriting immutable financial lineage; the operator must reconcile the
+-- source evidence before the ownership constraints can be installed.
+DO $preflight$
+DECLARE
+  mismatch record;
+BEGIN
+  SELECT occurrence.id AS occurrence_id,
+         occurrence.org_id,
+         occurrence.schedule_id,
+         schedule_row.org_id AS schedule_org_id,
+         occurrence.document_id,
+         document_row.org_id AS document_org_id
+    INTO mismatch
+    FROM public.recurring_occurrence_documents occurrence
+    LEFT JOIN public.recurring_schedules schedule_row
+      ON schedule_row.id = occurrence.schedule_id
+    LEFT JOIN public.documents document_row
+      ON document_row.id = occurrence.document_id
+   WHERE schedule_row.org_id IS DISTINCT FROM occurrence.org_id
+      OR document_row.org_id IS DISTINCT FROM occurrence.org_id
+   ORDER BY occurrence.id
+   LIMIT 1;
+
+  IF FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '23514',
+      MESSAGE = 'legacy data violates tenant coherence: public.recurring_occurrence_documents',
+      DETAIL = jsonb_build_object(
+        'table', 'recurring_occurrence_documents',
+        'row_id', mismatch.occurrence_id,
+        'org_id', mismatch.org_id,
+        'schedule_id', mismatch.schedule_id,
+        'schedule_org_id', mismatch.schedule_org_id,
+        'document_id', mismatch.document_id,
+        'document_org_id', mismatch.document_org_id
+      )::text,
+      HINT = 'Reconcile the lineage row to schedule and document references owned by the same organization, then retry the upgrade. This migration will not rewrite financial history.';
+  END IF;
+END
+$preflight$;
+
+-- PostgreSQL requires an exact unique key for each composite foreign key.
+-- The document key is present in the canonical baseline; both statements are
+-- intentionally idempotent so this migration also repairs upgraded databases
+-- that predate either key.
+CREATE UNIQUE INDEX IF NOT EXISTS recurring_schedules_org_id_id_unique
+  ON public.recurring_schedules USING btree (org_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS documents_org_id_id_unique
+  ON public.documents USING btree (org_id, id);
+
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -70,31 +123,27 @@ BEGIN
 END
 $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-     WHERE conname = 'recurring_occurrence_schedule_fk'
-  ) THEN
-    ALTER TABLE ONLY public.recurring_occurrence_documents
-      ADD CONSTRAINT recurring_occurrence_schedule_fk
-      FOREIGN KEY (schedule_id) REFERENCES public.recurring_schedules(id) DEFERRABLE;
-  END IF;
-END
-$$;
+-- Replace the original global-id references with tenant-coherent equivalents.
+-- NOT VALID keeps the DDL bounded while the explicit preflight above reports a
+-- precise legacy row; VALIDATE below makes the constraint trusted thereafter.
+ALTER TABLE public.recurring_occurrence_documents
+  DROP CONSTRAINT IF EXISTS recurring_occurrence_schedule_fk,
+  DROP CONSTRAINT IF EXISTS recurring_occurrence_document_fk;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-     WHERE conname = 'recurring_occurrence_document_fk'
-  ) THEN
-    ALTER TABLE ONLY public.recurring_occurrence_documents
-      ADD CONSTRAINT recurring_occurrence_document_fk
-      FOREIGN KEY (document_id) REFERENCES public.documents(id) DEFERRABLE;
-  END IF;
-END
-$$;
+ALTER TABLE public.recurring_occurrence_documents
+  ADD CONSTRAINT recurring_occurrence_schedule_fk
+  FOREIGN KEY (org_id, schedule_id)
+  REFERENCES public.recurring_schedules(org_id, id)
+  DEFERRABLE NOT VALID,
+  ADD CONSTRAINT recurring_occurrence_document_fk
+  FOREIGN KEY (org_id, document_id)
+  REFERENCES public.documents(org_id, id)
+  DEFERRABLE NOT VALID;
+
+ALTER TABLE public.recurring_occurrence_documents
+  VALIDATE CONSTRAINT recurring_occurrence_schedule_fk;
+ALTER TABLE public.recurring_occurrence_documents
+  VALIDATE CONSTRAINT recurring_occurrence_document_fk;
 
 CREATE OR REPLACE FUNCTION public.recurring_occurrence_document_immutable_guard() RETURNS trigger
     LANGUAGE plpgsql
@@ -151,4 +200,4 @@ COMMENT ON POLICY org_isolation ON public.recurring_occurrence_documents IS 'ope
 ALTER TABLE public.recurring_occurrence_documents ENABLE ROW LEVEL SECURITY;
 
 COMMENT ON TABLE public.recurring_occurrence_documents IS
-  'Per-occurrence dedupe guard for recurring generation. Inserted inside the generation transaction next to the cloned document; a retried or racing tick replays the named document instead of re-posting the occurrence.';
+  'Per-occurrence dedupe guard for recurring generation. Inserted inside the generation transaction next to the cloned document; a retried or racing tick replays the named document instead of re-posting the occurrence. Composite tenant-scoped foreign keys keep schedule and document lineage inside one organization.';
