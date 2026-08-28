@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { getAuthz } from "../../../lib/authz";
 import { isLocale } from "../../../i18n/config";
@@ -38,7 +38,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "unsupported nav mode" }, { status: 400 });
   }
 
-  const sets = [];
+  const sets: SQL[] = [];
   const changes: Record<string, string | null> = {};
   if (hasLocale) {
     const locale = body.locale as string | null;
