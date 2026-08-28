@@ -7,8 +7,9 @@
 // matching day-of-week (weekly) or day-of-month (monthly). Daily simply rolls
 // forward by 24h. We use Intl.DateTimeFormat with the target timezone to read
 // out local Y/M/D/h/m/dow, then construct UTC instants by iterating the
-// timezone offset (a 3-step iteration nails accuracy for any
-// non-pathological zone).
+// timezone offset. The iteration compares exact calendar timestamps so a
+// month boundary (including a DST fall-back day) cannot cancel out in the
+// correction.
 
 export type ReportCadence = 'daily' | 'weekly' | 'monthly'
 export const REPORT_CADENCES: ReportCadence[] = ['daily', 'weekly', 'monthly']
@@ -146,11 +147,14 @@ function zonedDateTimeToUtc(
     const guess = new Date(utcMs)
     const have = tzReadAll(guess, tz)
     const want = { year, month, day, hour, minute }
+    // Treat both sets of local fields as UTC calendar values only for the
+    // purpose of finding their exact difference. Approximating months as 30
+    // days makes a target on the first of a month appear to be on the same
+    // day as a probe on the prior month's last day; around a repeated DST
+    // hour that can converge to the wrong date and skip the occurrence.
     const diff =
-      (want.year - have.year) * 365 * 24 * 3600 * 1000 +
-      ((want.month - have.month) * 30 + (want.day - have.day)) * 24 * 3600 * 1000 +
-      (want.hour - have.hour) * 3600 * 1000 +
-      (want.minute - have.minute) * 60 * 1000
+      Date.UTC(want.year, want.month - 1, want.day, want.hour, want.minute) -
+      Date.UTC(have.year, have.month - 1, have.day, have.hour, have.minute)
     if (diff === 0) break
     utcMs += diff
   }
