@@ -76,6 +76,15 @@ if (checkpoint && !(checkpoint.counts?.postedEntries > 0)) {
   process.exit(1);
 }
 
+// Fail loudly if BOTH inputs are missing — that means the workflow is broken,
+// and publishing an all-grey page as if it were a result would be misleading.
+// Keep this guard before creating or mutating the output directory so a failed
+// publication cannot overwrite the last trustworthy evidence.
+if (!conformance && !checkpoint) {
+  console.error("no evidence artifacts found — refusing to publish an empty trust page");
+  process.exit(1);
+}
+
 mkdirSync(outDir, { recursive: true });
 
 // -- badges -----------------------------------------------------------------
@@ -164,10 +173,3 @@ const lines = [
   `  history:     ${history.length} published commits`,
 ];
 console.log(lines.join("\n"));
-
-// Fail loudly if BOTH inputs are missing — that means the workflow is broken,
-// and publishing an all-grey page as if it were a result would be misleading.
-if (!conformance && !checkpoint) {
-  console.error("\nno evidence artifacts found — refusing to publish an empty trust page");
-  process.exit(1);
-}
