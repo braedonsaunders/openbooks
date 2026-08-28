@@ -133,7 +133,7 @@ function RosterSection({
       </div>
       <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
         {accounts.map((a) => {
-          const statementAge = daysSince(a.lastImportedAt)
+          const statementAge = daysSince(a.lastStatementDate)
           const stale = a.lastStatementDate !== null && statementAge !== null && statementAge > STALE_STATEMENT_DAYS
           return (
             <li key={a.id}>

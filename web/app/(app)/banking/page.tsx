@@ -267,7 +267,7 @@ function needsAttention(accounts: BankingAccountRow[], t: T) {
     }
   }
   for (const a of accounts) {
-    const age = daysSince(a.lastImportedAt)
+    const age = daysSince(a.lastStatementDate)
     if (a.lastStatementDate === null) {
       items.push({ tone: 'warning', text: t('home.attention.noStatement', { account: a.name }), href: `/banking/${a.id}` })
     } else if (age !== null && age > STALE_STATEMENT_DAYS) {
