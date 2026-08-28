@@ -12,7 +12,13 @@ export interface SourceFiscalYear {
 
 const iso = (date: Date) => date.toISOString().slice(0, 10);
 const utc = (value: string) => new Date(`${value}T00:00:00Z`);
-const addMonths = (date: Date, months: number) => new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, date.getUTCDate()));
+const addMonths = (date: Date, months: number) => {
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + months;
+  const day = date.getUTCDate();
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month, Math.min(day, lastDay)));
+};
 const dayBefore = (date: Date) => new Date(date.getTime() - 86_400_000);
 
 /** Build exact monthly posting periods inside source fiscal-year boundaries. */
