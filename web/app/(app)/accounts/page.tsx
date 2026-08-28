@@ -24,6 +24,7 @@ import { NewAccountButton } from './NewAccountButton'
 import { AccountsHierarchyTable, type HierarchyAccountGroup } from './AccountsHierarchyTable'
 import { accountParentPath, orderAccountHierarchy } from '../../../lib/account-hierarchy'
 import { ModuleHomeTabs } from '../../../components/module-home/ui'
+import { decimalAdd, decimalCmp, decimalSum } from '../../../lib/statement-format'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,18 +80,18 @@ export default async function Accounts({
   const canManageAccounts = can(authz, 'gl.manage')
   const creating = pickString(sp.accountNew) === '1' && canManageAccounts
 
-  const accounts = await accountsWithBalances(authz.user.orgId)
+  const accounts = await accountsWithBalances(authz.user.orgId, undefined, authz.allowedSubsidiaryIds)
   const visibleAccounts = showInactive ? accounts : accounts.filter((account) => account.is_active)
 
   // roll balances up through summary parents (needed in both modes)
   const byId = new Map(accounts.map((a) => [a.id, a]))
-  const rolled = new Map<string, number>(accounts.map((a) => [a.id, Number(a.balance)]))
+  const rolled = new Map<string, string>(accounts.map((a) => [a.id, a.balance]))
   for (const a of accounts) {
     let p = a.parent_id
     const visited = new Set<string>()
     while (p && !visited.has(p)) {
       visited.add(p)
-      rolled.set(p, (rolled.get(p) ?? 0) + Number(a.balance))
+      rolled.set(p, decimalAdd(rolled.get(p) ?? '0.0000', a.balance))
       p = byId.get(p)?.parent_id ?? null
     }
   }
@@ -243,7 +244,7 @@ export default async function Accounts({
           </TableHeader>
           <TableBody>
             {pageRows.map((a) => {
-              const bal = rolled.get(a.id) ?? 0
+              const bal = rolled.get(a.id) ?? '0.0000'
               return (
                 <TableRow key={a.id}>
                   <TableCell>
@@ -261,7 +262,7 @@ export default async function Accounts({
                     </div>
                   </TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{typeLabel(a.type)}</TableCell>
-                  <TableCell className={cn('text-right tabular-nums', bal < 0 && 'text-red-600 dark:text-red-400')}>
+                  <TableCell className={cn('text-right tabular-nums', decimalCmp(bal, '0.0000') < 0 && 'text-red-600 dark:text-red-400')}>
                     {money(bal)}
                   </TableCell>
                   <TableCell className="text-right">
@@ -292,15 +293,15 @@ export default async function Accounts({
     .filter((classKey) => !cls || cls === classKey)
     .map((classKey) => {
       const { members: classAccounts, ordered, parentIds } = orderAccountHierarchy(visibleAccounts, classKey, CLASS_OF)
-      const classBalance = classAccounts.reduce((sum, account) => sum + Number(account.balance), 0)
+      const classBalance = decimalSum(classAccounts.map((account) => account.balance))
       return {
         key: classKey,
         label: t(`classes.${CLASS_KEYS[classKey]}`),
         count: classAccounts.length,
         balance: money(classBalance),
-        balanceNegative: classBalance < 0,
+        balanceNegative: decimalCmp(classBalance, '0.0000') < 0,
         rows: ordered.map((account) => {
-          const balance = rolled.get(account.id) ?? 0
+          const balance = rolled.get(account.id) ?? '0.0000'
           return {
             id: account.id,
             parentId: parentIds.get(account.id) ?? null,
@@ -310,7 +311,7 @@ export default async function Accounts({
             isSummary: account.is_summary,
             isActive: account.is_active,
             balance: money(balance),
-            balanceNegative: balance < 0,
+            balanceNegative: decimalCmp(balance, '0.0000') < 0,
             detailHref: mergeHref('/accounts', sp, { account: account.id, accountNew: undefined }),
           }
         }),

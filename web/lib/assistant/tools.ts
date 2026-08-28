@@ -118,7 +118,7 @@ const findAccounts: AssistantToolDef = {
       limit?: number;
     };
     const limit = Math.min(a.limit ?? 25, 50);
-    const all = await accountsWithBalances(authz.user.orgId, a.asOf);
+    const all = await accountsWithBalances(authz.user.orgId, a.asOf, authz.allowedSubsidiaryIds);
     const q = a.query?.trim().toLowerCase();
     const matches = all.filter((r) => {
       if (!a.includeInactive && !r.is_active) return false;
@@ -140,7 +140,7 @@ const findAccounts: AssistantToolDef = {
           type: r.type,
           isSummary: r.is_summary,
           isActive: r.is_active,
-          balance: money(r.balance),
+          balance: r.balance,
         })),
       },
     };
