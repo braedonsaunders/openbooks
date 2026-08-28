@@ -241,53 +241,127 @@ async function runPools(
 ): Promise<TaxPoolRunResult> {
   const { orgId, taxYear } = run;
 
-  // Additions this year + whether the class still holds assets at year-end.
-  // Classes are resolved in an inner select so GROUP BY/ORDER BY reference the
-  // plain `class_code` column instead of re-binding the attribute key (distinct
-  // placeholders make otherwise identical JSON-key expressions incomparable).
-  const classRows = (await tx.execute<{ class_code: string; additions: string; has_assets: boolean }>(sql`
-    select class_code,
-           coalesce(sum(case when placed_on between ${run.yearStart} and ${run.yearEnd}
-                             then acquisition_cost else 0 end), 0)::text as additions,
-           bool_or(status not in ('disposed', 'written_off')) as has_assets
-      from (
-        select a.acquisition_cost, a.status,
-               coalesce(a.in_service_on, a.acquired_on) as placed_on,
-               c.tax_attributes->>${attr} as class_code
-          from fixed_assets a
-          join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
-         where a.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
-           and coalesce(c.tax_attributes->>${attr}, '') <> ''
-      ) classified
-     group by class_code
-     order by class_code`));
+  // Read every classified asset before doing any computation.  We resolve the
+  // class in code (rather than joining only tenant rows) because built-in
+  // classes need to participate in per-asset cost caps too.  A disposal event
+  // is effective for a historical run only when it occurred by year-end and
+  // has not itself been reversed by that year-end; the mutable present-day
+  // asset status is deliberately not consulted.
+  const assetRows = (await tx.execute<{
+    acquisition_cost: string;
+    placed_on: string | null;
+    class_code: string;
+    held_at_year_end: boolean;
+  }>(sql`
+    select a.acquisition_cost::text,
+           coalesce(a.in_service_on, a.acquired_on)::text as placed_on,
+           c.tax_attributes->>${attr} as class_code,
+           (
+             coalesce(a.in_service_on, a.acquired_on) is not null
+             and coalesce(a.in_service_on, a.acquired_on) <= ${run.yearEnd}
+             and not exists (
+               select 1
+                 from asset_events disposal
+                where disposal.org_id = a.org_id and disposal.asset_id = a.id
+                  and disposal.kind in ('disposed', 'written_off')
+                  and disposal.occurred_on <= ${run.yearEnd}
+                  and not exists (
+                    select 1
+                      from asset_events reversal
+                     where reversal.org_id = disposal.org_id
+                       and reversal.reverses_event_id = disposal.id
+                       and reversal.occurred_on <= ${run.yearEnd}
+                  )
+             )
+           ) as held_at_year_end
+      from fixed_assets a
+      join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
+     where a.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
+       and coalesce(c.tax_attributes->>${attr}, '') <> ''
+     order by class_code, a.id`));
 
-  // Dispositions this year: Σ least(proceeds, capital cost) per class.
-  const dispRows = (await tx.execute<{ class_code: string; dispositions: string }>(sql`
-    select class_code,
-           coalesce(sum(least(amount, capital_cost)), 0)::text as dispositions
-      from (
-        select e.amount, a.acquisition_cost as capital_cost,
-               c.tax_attributes->>${attr} as class_code
-          from asset_events e
-          join fixed_assets a on a.id = e.asset_id and a.org_id = e.org_id
-          join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
-         where e.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
-           and e.kind in ('disposed', 'written_off')
-           and e.occurred_on between ${run.yearStart} and ${run.yearEnd}
-           and coalesce(c.tax_attributes->>${attr}, '') <> ''
-      ) classified
-     group by class_code`));
-  const dispByClass = new Map(dispRows.rows.map((r) => [r.class_code, r.dispositions]));
+  const unknownClasses = [...new Set(assetRows.rows
+    .map((row) => row.class_code)
+    .filter((classCode) => !classes.has(classCode)))].sort();
+  if (unknownClasses.length > 0) {
+    throw new TaxPoolError(
+      `unknown tax class code(s) for regime "${run.regime}": ${unknownClasses.join(", ")}`,
+    );
+  }
+
+  type ClassAggregate = { additions: bigint; dispositions: bigint; hasAssets: boolean };
+  const aggregateByClass = new Map<string, ClassAggregate>();
+  const addAggregate = (classCode: string): ClassAggregate => {
+    const existing = aggregateByClass.get(classCode);
+    if (existing) return existing;
+    const created: ClassAggregate = { additions: 0n, dispositions: 0n, hasAssets: false };
+    aggregateByClass.set(classCode, created);
+    return created;
+  };
+  const cappedCost = (cost: string, classDef: PoolClassDef): string => {
+    const cap = classDef.costCap == null ? null : normalizeMoney(classDef.costCap);
+    if (cap == null || toUnits(cost) <= toUnits(cap)) return cost;
+    return cap;
+  };
+
+  for (const row of assetRows.rows) {
+    const classDef = classes.get(row.class_code)!;
+    const aggregate = addAggregate(row.class_code);
+    const capitalCost = cappedCost(row.acquisition_cost, classDef);
+    if (row.placed_on && row.placed_on >= run.yearStart && row.placed_on <= run.yearEnd) {
+      aggregate.additions += toUnits(capitalCost);
+    }
+    if (row.held_at_year_end) aggregate.hasAssets = true;
+  }
+
+  // Dispositions this year: Σ least(proceeds, each asset's effective capital
+  // cost), where effective capital cost applies the class's per-asset ceiling.
+  const dispRows = (await tx.execute<{
+    amount: string | null;
+    acquisition_cost: string;
+    class_code: string;
+  }>(sql`
+    select e.amount::text, a.acquisition_cost::text,
+           c.tax_attributes->>${attr} as class_code
+      from asset_events e
+      join fixed_assets a on a.id = e.asset_id and a.org_id = e.org_id
+      join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
+     where e.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
+       and e.kind in ('disposed', 'written_off')
+       and e.occurred_on between ${run.yearStart} and ${run.yearEnd}
+       and coalesce(c.tax_attributes->>${attr}, '') <> ''
+       and not exists (
+         select 1
+           from asset_events reversal
+          where reversal.org_id = e.org_id
+            and reversal.reverses_event_id = e.id
+            and reversal.occurred_on <= ${run.yearEnd}
+       )`));
+  for (const row of dispRows.rows) {
+    const classDef = classes.get(row.class_code)!;
+    const aggregate = addAggregate(row.class_code);
+    const capitalCost = cappedCost(row.acquisition_cost, classDef);
+    const proceeds = row.amount ?? "0";
+    aggregate.dispositions += toUnits(toUnits(proceeds) <= toUnits(capitalCost) ? proceeds : capitalCost);
+  }
+
+  const classRows = [...aggregateByClass.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([classCode, aggregate]) => ({
+      class_code: classCode,
+      additions: fromUnits(aggregate.additions),
+      dispositions: fromUnits(aggregate.dispositions),
+      has_assets: aggregate.hasAssets,
+    }));
 
   // Compute every class FIRST (reads only once pools exist), then persist all
   // results below in this same transaction — the year lands whole or not at all.
   const prepared: { poolId: string; classCode: string; def: PoolClassDef; result: PoolYearResult; enhancedMultiplier: string | null }[] = [];
-  for (const row of classRows.rows) {
+  for (const row of classRows) {
     const classCode = row.class_code;
     const classDef = classes.get(classCode);
-    if (!classDef) continue; // unknown class code — skip rather than guess
-    const dispositions = dispByClass.get(classCode) ?? "0";
+    if (!classDef) throw new TaxPoolError(`unknown tax class code "${classCode}"`);
+    const dispositions = row.dispositions;
 
     const pool = await ensurePool(tx, run, classDef);
     const openingBalance = await openingForTaxYear(tx, orgId, pool.id, taxYear, pool.openingBalance);
@@ -383,6 +457,15 @@ async function runMacrs(
        and coalesce(a.in_service_on, a.acquired_on) is not null
        and coalesce(a.custom->'taxDepreciation'->${run.regime}->>'classCode', c.tax_attributes->>${attr}, '') <> ''`));
 
+  const unknownClasses = [...new Set(assets.rows
+    .map((asset) => asset.class_code)
+    .filter((classCode) => !classes.has(classCode)))].sort();
+  if (unknownClasses.length > 0) {
+    throw new TaxPoolError(
+      `unknown tax class code(s) for regime "${run.regime}": ${unknownClasses.join(", ")}`,
+    );
+  }
+
   // The mid-quarter test is made per placed-in-service vintage. If more than
   // 40% of eligible basis was placed in service in the final three months,
   // that vintage uses mid-quarter instead of half-year for its full schedule.
@@ -401,7 +484,10 @@ async function runMacrs(
   const grouped = new Map<string, { def: PoolClassDef; assets: MacrsAssetRow[] }>();
   for (const asset of assets.rows) {
     const def = classes.get(asset.class_code);
-    if (!def?.recoveryPeriodYears || !def.macrsMethod || !def.convention) continue;
+    if (!def) throw new TaxPoolError(`unknown tax class code "${asset.class_code}"`);
+    if (!def.recoveryPeriodYears || !def.macrsMethod || !def.convention) {
+      throw new TaxPoolError(`incomplete tax class configuration for "${asset.class_code}" in regime "${run.regime}"`);
+    }
     const group = grouped.get(asset.class_code) ?? { def, assets: [] };
     group.assets.push(asset);
     grouped.set(asset.class_code, group);
