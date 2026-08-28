@@ -39,9 +39,18 @@ type RemainingLayer = {
   received_at: string;
   remaining_quantity: string;
   unit_cost: string;
-  source_kind: string;
+  source_kind: string | null;
+  source_status: string | null;
   source_unit_cost: string | null;
 };
+
+/** Inbound movements that can authoritatively seed a cost layer. */
+const SUPPORTED_INBOUND_LAYER_KINDS = new Set([
+  "receipt",
+  "return",
+  "transfer_in",
+  "assembly_build",
+]);
 
 /**
  * Set one layer's remaining value to exactly `targetUnits` (4dp money units).
@@ -58,6 +67,7 @@ async function setLayerValueExactly(
   layer: RemainingLayer,
   targetUnits: bigint,
   actorId: string | null,
+  respectSourceCeiling = false,
 ): Promise<void> {
   const quantityUnits = toUnits(layer.remaining_quantity);
   if (quantityUnits <= 0n) throw new InventoryNrvError("cannot revalue an empty layer");
@@ -98,8 +108,32 @@ async function setLayerValueExactly(
     mainRate -= 1n;
     mainValue = valueAt(mainQuantityUnits, mainRate);
   }
+  // Keep both fragments at or below the immutable source rate when this is a
+  // reversal. A floor average can leave a one-unit residual just above source
+  // cost because of four-decimal multiplication rounding (for example,
+  // 3 × 1.0001 with a 3.0002 target). Move the main fragment up, while still
+  // below the target, until the residual has the same ceiling.
+  const sourceRate =
+    respectSourceCeiling && layer.source_unit_cost != null
+      ? toUnits(layer.source_unit_cost)
+      : null;
+  if (sourceRate != null) {
+    while (mainValue < targetUnits - sourceRate && mainRate < sourceRate) {
+      mainRate += 1n;
+      mainValue = valueAt(mainQuantityUnits, mainRate);
+    }
+    if (mainValue > targetUnits) {
+      while (mainValue > targetUnits && mainRate > 0n) {
+        mainRate -= 1n;
+        mainValue = valueAt(mainQuantityUnits, mainRate);
+      }
+    }
+  }
   const roundingValue = targetUnits - mainValue;
   if (roundingValue < 0n) throw new InventoryNrvError("NRV remeasurement produced an invalid layer split");
+  if (sourceRate != null && roundingValue > sourceRate) {
+    throw new InventoryNrvError("NRV remeasurement exceeded an inventory layer's original source cost");
+  }
 
   const splitLayerId = randomUUID();
   await tx.execute(sql`
@@ -130,7 +164,8 @@ function shareByValue(layers: { value: bigint }[], deltaUnits: bigint): bigint[]
   let remainder = magnitude - base.reduce((a, b) => a + b, 0n);
   // Largest-remainder assignment, stable by index.
   const order = weights
-    .map((w, i) => ({ i, frac: (magnitude * w) % total }))
+    .map((w, i) => ({ i, w, frac: (magnitude * w) % total }))
+    .filter((entry) => entry.w > 0n)
     .sort((a, b) => (b.frac > a.frac ? 1 : b.frac < a.frac ? -1 : a.i - b.i));
   let k = 0;
   while (remainder > 0n) {
@@ -139,6 +174,32 @@ function shareByValue(layers: { value: bigint }[], deltaUnits: bigint): bigint[]
     k++;
   }
   return base.map((b) => (deltaUnits < 0n ? -b : b));
+}
+
+/**
+ * Allocate a positive reversal only across each layer's available original-
+ * cost headroom. The bigint largest-remainder arithmetic is deterministic and
+ * returns shares whose sum is exactly `deltaUnits`.
+ */
+function shareByHeadroom(headrooms: bigint[], deltaUnits: bigint): bigint[] {
+  if (deltaUnits < 0n) throw new InventoryNrvError("reversal allocation cannot be negative");
+  const total = headrooms.reduce((a, b) => a + b, 0n);
+  if (total <= 0n) throw new InventoryNrvError("no remaining layer headroom to remeasure");
+  if (deltaUnits > total) throw new InventoryNrvError("reversal exceeds remaining layer headroom");
+
+  const shares = headrooms.map((headroom) => (deltaUnits * headroom) / total);
+  let remainder = deltaUnits - shares.reduce((a, b) => a + b, 0n);
+  const order = headrooms
+    .map((headroom, i) => ({ i, headroom, frac: (deltaUnits * headroom) % total }))
+    .filter((entry) => entry.headroom > 0n)
+    .sort((a, b) => (b.frac > a.frac ? 1 : b.frac < a.frac ? -1 : a.i - b.i));
+  let k = 0;
+  while (remainder > 0n) {
+    shares[order[k % order.length]!.i]! += 1n;
+    remainder -= 1n;
+    k++;
+  }
+  return shares;
 }
 
 async function remainingLayers(
@@ -154,16 +215,17 @@ async function remainingLayers(
            layer.received_at::text as received_at,
            layer.remaining_quantity::text as remaining_quantity,
            layer.unit_cost::text as unit_cost,
-           source.kind as source_kind, source.unit_cost::text as source_unit_cost
+           source.kind as source_kind, source.status as source_status,
+           source.unit_cost::text as source_unit_cost
       from cost_layers layer
-      join inventory_movements source
+      left join inventory_movements source
         on source.id = layer.source_movement_id and source.org_id = layer.org_id
      where layer.org_id = ${orgId} and layer.item_id = ${itemId}
        and layer.stock_location_id = ${stockLocationId}
        ${ownerScope}
        and layer.remaining_quantity > 0
      order by layer.received_at, layer.id
-     for update`));
+     for update of layer`));
   return r.rows;
 }
 
@@ -462,50 +524,58 @@ export async function reverseInventoryWritedown(
         onHandQuantityUnits < rowQuantityUnits ? onHandQuantityUnits : rowQuantityUnits;
       return total + (toUnits(row.remaining) * survivingQuantityUnits) / rowQuantityUnits;
     }, 0n);
-    // For ordinary receipt layers, the source movement's immutable unit cost
-    // gives a second, layer-specific ceiling. This catches FIFO cases where an
-    // issue removes a high-cost layer while a low-cost layer remains: a
-    // position-wide quantity ratio would otherwise assign the sold layer's
-    // write-down to the cheap inventory still on hand. Transfers, assemblies,
-    // and blended layers do not retain an independent historical unit cost, so
-    // the quantity-aware evidence cap above remains the authoritative fallback.
-    const sourceCostsTrusted = layers.every(
-      (layer) =>
-        layer.source_kind === "receipt" &&
-        layer.source_unit_cost != null &&
-        toUnits(layer.source_unit_cost) >= toUnits(layer.unit_cost),
+    // Every remaining layer must carry immutable provenance for its original
+    // cost ceiling. A position-wide source-cost total is insufficient: it can
+    // spend a cheap layer's headroom on a fresh, already-at-cost receipt.
+    // Supported inbound movement kinds all persist their original unit_cost;
+    // anything else (or a missing source row/cost) fails closed.
+    const enriched = layers.map((layer) => {
+      if (
+        layer.source_kind == null ||
+        layer.source_status !== "posted" ||
+        !SUPPORTED_INBOUND_LAYER_KINDS.has(layer.source_kind) ||
+        layer.source_unit_cost == null
+      ) {
+        throw new InventoryNrvError(
+          "inventory layer original-cost provenance is unavailable; reversal is refused",
+        );
+      }
+      const originalRateUnits = toUnits(layer.source_unit_cost);
+      if (originalRateUnits < 0n) {
+        throw new InventoryNrvError(
+          "inventory layer original-cost provenance is invalid; reversal is refused",
+        );
+      }
+      const value = valueAt(toUnits(layer.remaining_quantity), toUnits(layer.unit_cost));
+      const originalValue = valueAt(toUnits(layer.remaining_quantity), originalRateUnits);
+      const headroom = originalValue > value ? originalValue - value : 0n;
+      return { layer, value, headroom };
+    });
+    const layerHeadroom = enriched.reduce((total, layer) => total + layer.headroom, 0n);
+    const increaseCap = [totalReversible, reversibleForOnHand, layerHeadroom].reduce(
+      (cap, candidate) => (candidate < cap ? candidate : cap),
     );
-    const sourceCostRoom = sourceCostsTrusted
-      ? (() => {
-          const sourceCost = layers.reduce(
-            (total, layer) =>
-              total + valueAt(toUnits(layer.remaining_quantity), toUnits(layer.source_unit_cost!)),
-            0n,
-          );
-          const room = sourceCost - previousUnits;
-          return room > 0n ? room : 0n;
-        })()
-      : null;
-    const increaseCap = [
-      totalReversible,
-      reversibleForOnHand,
-      ...(sourceCostRoom == null ? [] : [sourceCostRoom]),
-    ].reduce((cap, candidate) => (candidate < cap ? candidate : cap));
     const increase = requested < increaseCap ? requested : increaseCap;
     if (increase <= 0n) {
       throw new InventoryNrvError(
-        "no unreversed write-down remains on inventory still on hand",
+        "no unreversed write-down remains within original cost of inventory still on hand",
       );
     }
     const targetUnits = previousUnits + increase;
 
-    const enriched = layers.map((layer) => ({
-      layer,
-      value: valueAt(toUnits(layer.remaining_quantity), toUnits(layer.unit_cost)),
-    }));
-    const shares = shareByValue(enriched, increase);
+    const shares = shareByHeadroom(
+      enriched.map((layer) => layer.headroom),
+      increase,
+    );
     for (let i = 0; i < enriched.length; i++) {
-      await setLayerValueExactly(tx, orgId, enriched[i]!.layer, enriched[i]!.value + shares[i]!, actorId);
+      await setLayerValueExactly(
+        tx,
+        orgId,
+        enriched[i]!.layer,
+        enriched[i]!.value + shares[i]!,
+        actorId,
+        true,
+      );
     }
 
     // Consume the open write-downs oldest-first.
