@@ -26,6 +26,63 @@ async function glBalance(orgId: string, accountId: string): Promise<bigint> {
   return toUnits(r.rows[0]!.bal);
 }
 
+type NrvLayerAudit = {
+  id: string;
+  sourceMovementId: string;
+  remainingQuantity: string;
+  unitCost: string;
+  sourceKind: string | null;
+  sourceUnitCost: string | null;
+  value: string;
+};
+
+async function nrvLayerAudit(
+  orgId: string,
+  itemId: string,
+  stockLocationId: string,
+  subsidiaryId: string,
+): Promise<NrvLayerAudit[]> {
+  const r = await db.execute<NrvLayerAudit>(sql`
+    select layer.id,
+           layer.source_movement_id as "sourceMovementId",
+           layer.remaining_quantity::text as "remainingQuantity",
+           layer.unit_cost::text as "unitCost",
+           source.kind as "sourceKind",
+           source.unit_cost::text as "sourceUnitCost",
+           round(layer.remaining_quantity * layer.unit_cost, 4)::text as value
+      from cost_layers layer
+      left join inventory_movements source
+        on source.id = layer.source_movement_id and source.org_id = layer.org_id
+     where layer.org_id = ${orgId}
+       and layer.item_id = ${itemId}
+       and layer.stock_location_id = ${stockLocationId}
+       and layer.subsidiary_id = ${subsidiaryId}
+       and layer.remaining_quantity > 0
+     order by layer.received_at, layer.id`);
+  return r.rows;
+}
+
+function valuesBySource(layers: NrvLayerAudit[]): Map<string, bigint> {
+  const values = new Map<string, bigint>();
+  for (const layer of layers) {
+    values.set(
+      layer.sourceMovementId,
+      (values.get(layer.sourceMovementId) ?? 0n) + toUnits(layer.value),
+    );
+  }
+  return values;
+}
+
+function assertLayerOriginalCostCeilings(layers: NrvLayerAudit[]): void {
+  for (const layer of layers) {
+    assert.ok(layer.sourceUnitCost != null, `layer ${layer.id} is missing source cost provenance`);
+    assert.ok(
+      toUnits(layer.unitCost) <= toUnits(layer.sourceUnitCost!),
+      `layer ${layer.id} exceeds its source unit cost`,
+    );
+  }
+}
+
 async function setFramework(orgId: string, framework: "us_gaap" | "ifrs"): Promise<void> {
   await db.execute(sql`
     update orgs set settings = settings || ${JSON.stringify({ reportingFramework: framework })}::jsonb
@@ -236,6 +293,13 @@ test("NRV reversal only restores the written-down quantity that remains after is
       offsetAccountId: org.accounts.cogs,
       date: org.date,
     });
+    const beforeReversal = await nrvLayerAudit(
+      org.orgId,
+      org.items.fifo,
+      org.stockLocationId,
+      org.subsidiaryId,
+    );
+    const beforeValues = valuesBySource(beforeReversal);
     const reversal = await reverseInventoryWritedown(org.orgId, null, {
       itemId: org.items.fifo,
       stockLocationId: org.stockLocationId,
@@ -250,6 +314,297 @@ test("NRV reversal only restores the written-down quantity that remains after is
     const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
     assert.equal(toUnits(onHand.quantity), toUnits("1"));
     assert.equal(toUnits(onHand.value), toUnits("10"));
+    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("10"));
+    const afterReversal = await nrvLayerAudit(
+      org.orgId,
+      org.items.fifo,
+      org.stockLocationId,
+      org.subsidiaryId,
+    );
+    assertLayerOriginalCostCeilings(afterReversal);
+    const afterValues = valuesBySource(afterReversal);
+    const shareTotal = [...new Set([...beforeValues.keys(), ...afterValues.keys()])].reduce(
+      (total, sourceId) => total + (afterValues.get(sourceId) ?? 0n) - (beforeValues.get(sourceId) ?? 0n),
+      0n,
+    );
+    assert.equal(shareTotal, toUnits(reversal.amount));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("NRV reversal never spends an old layer's headroom on a fresh receipt", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await setFramework(org.orgId, "ifrs");
+    const original = await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "10",
+      unitCost: "10",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.ap,
+      date: org.date,
+    });
+    await writeDownInventoryToNrv(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      nrvPerUnit: "5",
+    });
+    await issueInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "9",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.cogs,
+      date: org.date,
+    });
+    const fresh = await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "1",
+      unitCost: "20",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.ap,
+      date: org.date,
+    });
+
+    const before = valuesBySource(
+      await nrvLayerAudit(org.orgId, org.items.fifo, org.stockLocationId, org.subsidiaryId),
+    );
+    const reversal = await reverseInventoryWritedown(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      nrvPerUnit: "100",
+    });
+    assert.equal(reversal.amount, "5.0000");
+
+    const afterLayers = await nrvLayerAudit(
+      org.orgId,
+      org.items.fifo,
+      org.stockLocationId,
+      org.subsidiaryId,
+    );
+    assertLayerOriginalCostCeilings(afterLayers);
+    const after = valuesBySource(afterLayers);
+    assert.equal(
+      (after.get(original.movementId) ?? 0n) - (before.get(original.movementId) ?? 0n),
+      toUnits("5"),
+    );
+    assert.equal(
+      (after.get(fresh.movementId) ?? 0n) - (before.get(fresh.movementId) ?? 0n),
+      0n,
+    );
+    const shareTotal = [...new Set([...before.keys(), ...after.keys()])].reduce(
+      (total, sourceId) => total + (after.get(sourceId) ?? 0n) - (before.get(sourceId) ?? 0n),
+      0n,
+    );
+    assert.equal(shareTotal, toUnits(reversal.amount));
+    const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+    assert.equal(toUnits(onHand.value), toUnits("30"));
+    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("30"));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("NRV reversal apportions heterogeneous FIFO headroom without crossing any source cost", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await setFramework(org.orgId, "ifrs");
+    const low = await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "5",
+      unitCost: "6",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.ap,
+      date: org.date,
+    });
+    const high = await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "5",
+      unitCost: "7",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.ap,
+      date: org.date,
+    });
+    await writeDownInventoryToNrv(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      nrvPerUnit: "5",
+    });
+    // FIFO consumes two units from the $6 layer, leaving 3 @ $5 and 5 @ $5.
+    await issueInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "2",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.cogs,
+      date: org.date,
+    });
+
+    const before = valuesBySource(
+      await nrvLayerAudit(org.orgId, org.items.fifo, org.stockLocationId, org.subsidiaryId),
+    );
+    const reversal = await reverseInventoryWritedown(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      nrvPerUnit: "6.25",
+    });
+    assert.equal(reversal.amount, "9.2306");
+
+    const afterLayers = await nrvLayerAudit(
+      org.orgId,
+      org.items.fifo,
+      org.stockLocationId,
+      org.subsidiaryId,
+    );
+    assertLayerOriginalCostCeilings(afterLayers);
+    const after = valuesBySource(afterLayers);
+    assert.ok((after.get(low.movementId) ?? 0n) >= (before.get(low.movementId) ?? 0n));
+    assert.ok((after.get(high.movementId) ?? 0n) >= (before.get(high.movementId) ?? 0n));
+    const shareTotal = [...new Set([...before.keys(), ...after.keys()])].reduce(
+      (total, sourceId) => total + (after.get(sourceId) ?? 0n) - (before.get(sourceId) ?? 0n),
+      0n,
+    );
+    assert.equal(shareTotal, toUnits(reversal.amount));
+    const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+    assert.equal(toUnits(onHand.value), toUnits("50"));
+    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("50"));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("NRV reversal preserves exact fractional shares when a layer must split for precision", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await setFramework(org.orgId, "ifrs");
+    const first = await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "3",
+      unitCost: "1",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.ap,
+      date: org.date,
+    });
+    const second = await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "7",
+      unitCost: "1.03",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.ap,
+      date: org.date,
+    });
+    await writeDownInventoryToNrv(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      nrvPerUnit: "0.55",
+    });
+    const beforeLayers = await nrvLayerAudit(
+      org.orgId,
+      org.items.fifo,
+      org.stockLocationId,
+      org.subsidiaryId,
+    );
+    const before = valuesBySource(beforeLayers);
+
+    const reversal = await reverseInventoryWritedown(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      nrvPerUnit: "0.65",
+    });
+    assert.equal(reversal.amount, "1.0000");
+
+    const afterLayers = await nrvLayerAudit(
+      org.orgId,
+      org.items.fifo,
+      org.stockLocationId,
+      org.subsidiaryId,
+    );
+    assert.ok(afterLayers.length > beforeLayers.length, "fractional share should create a rounding layer");
+    assertLayerOriginalCostCeilings(afterLayers);
+    const after = valuesBySource(afterLayers);
+    const shareTotal = [...new Set([...before.keys(), ...after.keys()])].reduce(
+      (total, sourceId) => total + (after.get(sourceId) ?? 0n) - (before.get(sourceId) ?? 0n),
+      0n,
+    );
+    assert.equal(shareTotal, toUnits(reversal.amount));
+    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("6.50"));
+    const firstShare = (after.get(first.movementId) ?? 0n) - (before.get(first.movementId) ?? 0n);
+    const secondShare = (after.get(second.movementId) ?? 0n) - (before.get(second.movementId) ?? 0n);
+    assert.equal(firstShare + secondShare, toUnits(reversal.amount));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("NRV reversal fails closed when a remaining layer has no source-cost provenance", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await setFramework(org.orgId, "ifrs");
+    const receipt = await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "2",
+      unitCost: "10",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.ap,
+      date: org.date,
+    });
+    await writeDownInventoryToNrv(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      nrvPerUnit: "5",
+    });
+    // The posted movement guard permits a transition to pending, which lets
+    // this live regression model a legacy row whose immutable source cost was
+    // never captured. Reversal must refuse before touching layers or GL.
+    await db.execute(sql`
+      update inventory_movements
+         set status = 'pending', unit_cost = null
+       where id = ${receipt.movementId} and org_id = ${org.orgId}`);
+    const before = await nrvLayerAudit(
+      org.orgId,
+      org.items.fifo,
+      org.stockLocationId,
+      org.subsidiaryId,
+    );
+    await assert.rejects(
+      reverseInventoryWritedown(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "10",
+      }),
+      /original-cost provenance is unavailable/,
+    );
+    const after = await nrvLayerAudit(
+      org.orgId,
+      org.items.fifo,
+      org.stockLocationId,
+      org.subsidiaryId,
+    );
+    assert.deepEqual(after, before);
     assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("10"));
   } finally {
     await dropScratchOrg(org.orgId);
