@@ -30,7 +30,25 @@ export async function GET(req: Request) {
   // The cockpit's subsidiary view must be reproduced or the drill would show
   // transactions the page's own totals excluded.
   const subParam = url.searchParams.get("sub");
-  const subIds = subParam ? subParam.split(",").filter(Boolean) : undefined;
+  const requestedSubIds = subParam ? subParam.split(",").filter(Boolean) : undefined;
+  if (gate.allowedSubsidiaryIds) {
+    // A restricted caller's drill must never widen the page's subsidiary
+    // scope. An explicit out-of-scope (or empty) selection is indistinguishable
+    // from a missing view, while an omitted selection inherits every visible
+    // subsidiary instead of falling through to cashPosition's whole-company
+    // default.
+    if (
+      gate.allowedSubsidiaryIds.size === 0 ||
+      (requestedSubIds !== undefined &&
+        (requestedSubIds.length === 0 ||
+          requestedSubIds.some((id) => !gate.allowedSubsidiaryIds!.has(id))))
+    ) {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
+  }
+  const subIds = gate.allowedSubsidiaryIds
+    ? requestedSubIds ?? [...gate.allowedSubsidiaryIds]
+    : requestedSubIds;
 
   try {
     const cfg = await analyticsConfig(user.orgId, "cashflow");
