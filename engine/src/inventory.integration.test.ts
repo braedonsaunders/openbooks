@@ -1619,6 +1619,10 @@ test("both inventory HTTP routes thread every monetary action through the idempo
     new URL("../../web/app/api/inventory/actions/route.ts", import.meta.url),
     "utf8",
   );
+  const actionDrawer = readFileSync(
+    new URL("../../web/app/(app)/inventory/InventoryActionDrawer.tsx", import.meta.url),
+    "utf8",
+  );
   for (const operation of [
     "inventory.receive",
     "inventory.issue",
@@ -1632,6 +1636,11 @@ test("both inventory HTTP routes thread every monetary action through the idempo
   }
   assert.match(actionsRoute, /executeIdempotentInventoryAction/);
   assert.match(actionsRoute, /idempotencyKey: body\.idempotencyKey/);
+  assert.match(
+    actionDrawer,
+    /body:\s*JSON\.stringify\(\{[\s\S]*idempotencyKey:\s*crypto\.randomUUID\(\)/,
+    "the inventory action drawer mints a key for every posting",
+  );
   // Key reuse with different input maps to 409, ahead of InventoryError's 422.
   assert.match(actionsRoute, /instanceof InventoryIdempotencyConflictError[\s\S]*?\? 409/);
 
