@@ -1494,10 +1494,24 @@ export async function cancelRevenueRecognitionForInvoice(input: {
   const reason = cancellationReason(input.reason);
   const reversalDate = cancellationDate(input.reversalDate);
 
-  const recognitionReversalEntryIds = await withOrg(input.orgId, () =>
-    db.transaction(async (tx) => {
-      const document = (await tx.execute<{ id: string; status: string }>(sql`
-        select id, status
+  // Keep the recognition reversals and the invoice's controlled-void request
+  // in one transaction. A void can fail after its request is claimed (for
+  // example, because a downstream transaction or a closed subledger period
+  // blocks the final reversal). Calling the void path after this transaction
+  // commits would leave the recognition lineage cancelled while the invoice
+  // remains posted. The org transaction boundary is reused by the document
+  // void helpers, so every effect rolls back together on any failure.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await withOrg(input.orgId, () =>
+        db.transaction(async (tx) => {
+      const document = (await tx.execute<{
+        id: string;
+        status: string;
+        reversal_entry_id: string | null;
+        void_requested_at: Date | null;
+      }>(sql`
+        select id, status, reversal_entry_id, void_requested_at
           from documents
          where id = ${input.documentId}
            and org_id = ${input.orgId}
@@ -1704,48 +1718,30 @@ export async function cancelRevenueRecognitionForInvoice(input: {
           ${input.actorId}, 'revenue_recognition_cancellation'
         )
       `);
-      return reversalIds;
-    }),
-  );
+      if (doc.status === "voided") {
+        return {
+          status: "cancelled" as const,
+          recognitionReversalEntryIds: reversalIds,
+          invoiceReversalEntryId: doc.reversal_entry_id,
+          runId: null,
+        };
+      }
 
-  // The normal void path owns document reversal, approval routing, audit
-  // snapshots, applications, and period controls. Handle an overlapping retry
-  // by observing or completing the stored request instead of creating another.
-  const {
-    completeRequestedDocumentVoid,
-    requestDocumentVoid,
-  } = await import("./document-void.ts");
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const current = (await db.execute<{
-        status: string;
-        reversal_entry_id: string | null;
-        void_requested_at: Date | null;
-      }>(sql`
-      select status, reversal_entry_id, void_requested_at
-        from documents
-       where id = ${input.documentId} and org_id = ${input.orgId}
-    `));
-    const doc = current.rows[0];
-    if (!doc) {
-      throw new RevenueRecognitionCancellationError(
-        "customer invoice disappeared during cancellation",
-      );
-    }
-    if (doc.status === "voided") {
-      return {
-        status: "cancelled",
-        recognitionReversalEntryIds,
-        invoiceReversalEntryId: doc.reversal_entry_id,
-        runId: null,
-      };
-    }
-    try {
+      // The normal void path owns document reversal, approval routing, audit
+      // snapshots, applications, and period controls. Run it while this
+      // transaction is still open so a failure rolls back the recognition
+      // reversals as well. An overlapping request is completed rather than
+      // claimed a second time.
+      const {
+        completeRequestedDocumentVoid,
+        requestDocumentVoid,
+      } = await import("./document-void.ts");
       if (doc.void_requested_at) {
         const invoiceReversalEntryId =
           await completeRequestedDocumentVoid(input.documentId, input.orgId);
         return {
-          status: "cancelled",
-          recognitionReversalEntryIds,
+          status: "cancelled" as const,
+          recognitionReversalEntryIds: reversalIds,
           invoiceReversalEntryId,
           runId: null,
         };
@@ -1761,11 +1757,15 @@ export async function cancelRevenueRecognitionForInvoice(input: {
       return {
         status:
           requested.status === "voided" ? "cancelled" : "pending_approval",
-        recognitionReversalEntryIds,
+        recognitionReversalEntryIds: reversalIds,
         invoiceReversalEntryId: requested.reversalEntryId,
         runId: requested.runId,
       };
+    }),
+  );
     } catch (error) {
+      // Preserve the previous bounded retry behavior, but retry the complete
+      // unit so a failed void never leaves durable recognition side effects.
       if (attempt === 2) throw error;
     }
   }
