@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -312,9 +313,12 @@ export const payrollParallelFindings = pgTable(
     index("payroll_parallel_findings_comparison").on(t.comparisonId, t.sequence),
     index("payroll_parallel_findings_class").on(t.orgId, t.comparisonId, t.classification),
     // A cell is one row. Repeating it would double-count a difference.
-    uniqueIndex("payroll_parallel_findings_cell").on(
-      t.comparisonId, t.employeePartyId, t.kind, t.slot,
-    ),
+    // NULLS NOT DISTINCT: the population-level `unattributed` finding has
+    // no employee. Without this, PostgreSQL treats every NULL employee key as
+    // distinct and the same total cell can be written more than once.
+    unique("payroll_parallel_findings_cell")
+      .on(t.comparisonId, t.employeePartyId, t.kind, t.slot)
+      .nullsNotDistinct(),
     check(
       "payroll_parallel_findings_difference_present",
       sql`(${t.priorAmount} is null and ${t.ourAmount} is null) or ${t.difference} is not null`,
