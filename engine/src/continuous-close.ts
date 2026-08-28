@@ -308,17 +308,17 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
       }>(sql`
       select r.id, r.account_id, r.through_date, r.statement_balance::text,
              a.number, a.name,
-           (r.statement_balance - coalesce((
-             select sum(jl.amount)
+           (r.statement_balance - (
+             select coalesce(sum(jl.txn_amount), 0)
                from journal_lines jl
                join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
-              where jl.org_id = r.org_id and jl.account_id = r.account_id
-                and (jl.reconciled_at is not null or exists (
-                  select 1 from reconciliation_matches m
-                   where m.reconciliation_id = r.id and m.journal_line_id = jl.id
-                     and m.org_id = r.org_id
-                ))
-           ), 0))::text as difference
+              where jl.org_id = ${orgId} and jl.account_id = r.account_id
+                and jl.currency = r.currency
+                and je.posting_date <= r.through_date
+                and (jl.reconciled_at is not null or jl.id in (select journal_line_id from reconciliation_matches rm
+                              where reconciliation_id = r.id
+                                and org_id = ${orgId}))
+           ))::text as difference
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.org_id = ${orgId} and r.status = 'in_progress'
