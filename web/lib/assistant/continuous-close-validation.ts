@@ -44,11 +44,42 @@ function narrativeText(narrative: NarrativeForValidation): string {
   ].join('\n')
 }
 
-function containsExactAmount(text: string, value: number): boolean {
-  const fixed = Math.abs(value).toFixed(2)
-  const english = Math.abs(value).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const french = Math.abs(value).toLocaleString('fr-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return text.includes(fixed) || text.includes(english) || text.includes(french)
+const DECIMAL_AMOUNT = /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/
+
+/** Keep ledger decimal strings exact until Intl performs display rounding. */
+function decimalText(value: unknown): string | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : null
+  if (typeof value === 'bigint') return value.toString()
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return DECIMAL_AMOUNT.test(trimmed) ? trimmed : null
+}
+
+function formattedAmount(value: unknown, locale: string, useGrouping: boolean): string | null {
+  const raw = decimalText(value)
+  if (raw === null) return null
+  const absolute = raw.replace(/^[+-]/, '')
+  try {
+    const formatted = new Intl.NumberFormat(locale, {
+      useGrouping,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(absolute as never)
+    // Intl renders out-of-range exponent values as infinity; those are not
+    // finite ledger totals and must remain invalid rather than matching text.
+    return formatted.includes('∞') ? null : formatted
+  } catch {
+    return null
+  }
+}
+
+function containsExactAmount(text: string, value: unknown): boolean {
+  const candidates = [
+    formattedAmount(value, 'en-CA', false),
+    formattedAmount(value, 'en-CA', true),
+    formattedAmount(value, 'fr-CA', true),
+  ]
+  return candidates.some((candidate) => candidate !== null && text.includes(candidate))
 }
 
 /** Fail-closed checks for the core facts that previously produced misleading reports. */
@@ -72,12 +103,12 @@ export function validateFinanceNarrative(
   for (const side of ['ar', 'ap'] as const) {
     const aging = record(evidence[`aging_${side}_current`])
     const totals = record(aging?.totals)
-    const total = Number(totals?.total)
+    const total = totals?.total
     const expectedHref = requiredDate ? `/reports/aging?side=${side}&asOf=${requiredDate}` : null
     if (!expectedHref || !narrative.citations.some((citation) => citation.href === expectedHref)) {
       issues.push(`missing_current_${side}_citation`)
     }
-    if (!Number.isFinite(total) || !containsExactAmount(text, total)) {
+    if (!containsExactAmount(text, total)) {
       issues.push(`missing_exact_${side}_total`)
     }
     const wrongAgingCitation = narrative.citations.find((citation) =>
