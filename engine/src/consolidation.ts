@@ -53,7 +53,8 @@ function persistDerivedFxRate(value: unknown): string {
 }
 
 type OwnershipInterest = {
-  id: string; subsidiary_id: string; method: "full" | "proportionate" | "equity";
+  id: string; subsidiary_id: string; effective_from: string; effective_to: string | null;
+  method: "full" | "proportionate" | "equity";
   ownership_percent: string; acquisition_date: string; acquisition_cost: string;
   fair_value_net_assets: string; acquisition_rate: string; nci_measurement: "proportionate" | "fair_value";
   nci_fair_value: string | null; investment_account_id: string; equity_income_account_id: string;
@@ -178,6 +179,8 @@ async function runOwnershipConsolidationIn(
   for (const interest of interests.rows) {
     // Source scope = the destination book: only primary-book entries feed
     // consolidated adjustments (alternate books keep their own ledgers).
+    // The policy window is inclusive; acquisition_date is guaranteed to be
+    // on or before effective_from by the ownership policy constraint.
     const periodActivity = (await tx.execute<{ profit: string; distributions: string }>(sql`
       select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
              coalesce(sum(l.amount) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions
@@ -185,6 +188,8 @@ async function runOwnershipConsolidationIn(
         join accounts a on a.id=l.account_id and a.org_id=l.org_id
        where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
          and l.subsidiary_id=${interest.subsidiary_id} and e.period_id=${periodId}
+         and e.posting_date between ${interest.effective_from}
+             and coalesce(${interest.effective_to}, 'infinity'::date)
     `));
     const profit = periodActivity.rows[0]!.profit;
     const distributions = periodActivity.rows[0]!.distributions;
@@ -429,14 +434,22 @@ async function runAutoEliminationIn(
 
   // Source scope = the destination book: only primary-book entries feed the
   // consolidated elimination.
+  // Flow accounts use the period average rate, while balance-sheet accounts
+  // use the period-end current rate, matching statement translation semantics.
   const activity = (await tx.execute<{ accountId: string; subsidiaryId: string; total: string | null; missingRate: boolean }>(sql`
     select l.account_id as "accountId", l.subsidiary_id as "subsidiaryId",
            sum(round(l.amount * case
              when source_sub.base_currency = ${elim.baseCurrency} then 1
+             when a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+               then consolidated.average_rate
              else consolidated.current_rate
            end, 4))::text as total,
            bool_or(source_sub.base_currency <> ${elim.baseCurrency}
-                   and consolidated.current_rate is null) as "missingRate"
+                   and (case
+                     when a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+                       then consolidated.average_rate
+                     else consolidated.current_rate
+                   end) is null) as "missingRate"
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
