@@ -562,18 +562,28 @@ export async function computeFixedAssetDifferences(
       select (select id from accounting_books where org_id = ${orgId} and is_primary) as primary_id,
              (select id from accounting_books where org_id = ${orgId} and code = 'tax' and is_active) as tax_id
     )
-    select a.subsidiary_id, sub.name as subsidiary_name,
+    select a.subsidiary_id, a.subsidiary_name,
            coalesce(sum(a.acquisition_cost), 0)::text as cost,
-           coalesce(sum(l.posted_amount) filter (where s.book_id = (select primary_id from books)), 0)::text as book_dep,
-           coalesce(sum(l.posted_amount) filter (where s.book_id = (select tax_id from books)), 0)::text as tax_dep
-      from fixed_assets a
-      join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
-      join depreciation_schedules s on s.asset_id = a.id and s.org_id = a.org_id
-      join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id and l.journal_entry_id is not null
-      join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
-     where a.org_id = ${orgId} and p.ends_on <= ${fyEnd}
-       and (select tax_id from books) is not null
-     group by a.subsidiary_id, sub.name
+           coalesce(sum(a.book_dep), 0)::text as book_dep,
+           coalesce(sum(a.tax_dep), 0)::text as tax_dep
+      from (
+        -- Collapse each asset's schedules and lines before summing acquisition
+        -- cost. This keeps cost cardinality at one row per asset while still
+        -- retaining every posted depreciation line in each book.
+        select fa.id, fa.subsidiary_id, sub.name as subsidiary_name,
+               fa.acquisition_cost,
+               coalesce(sum(l.posted_amount) filter (where s.book_id = (select primary_id from books)), 0) as book_dep,
+               coalesce(sum(l.posted_amount) filter (where s.book_id = (select tax_id from books)), 0) as tax_dep
+          from fixed_assets fa
+          join subsidiaries sub on sub.id = fa.subsidiary_id and sub.org_id = fa.org_id
+          join depreciation_schedules s on s.asset_id = fa.id and s.org_id = fa.org_id
+          join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id and l.journal_entry_id is not null
+          join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
+         where fa.org_id = ${orgId} and p.ends_on <= ${fyEnd}
+           and (select tax_id from books) is not null
+         group by fa.id, fa.subsidiary_id, sub.name, fa.acquisition_cost
+      ) a
+     group by a.subsidiary_id, a.subsidiary_name
      order by a.subsidiary_id
   `));
   const out: DifferenceInput[] = [];
@@ -1330,16 +1340,27 @@ interface IncomeTaxControlAccounts {
   valuationAllowance?: string;
 }
 
+/** Stable, collision-resistant identity for one organization's legal entity.
+ * The full digest avoids truncating UUIDs (which can collide in practice) and
+ * keeps the organization boundary explicit even though entry numbers are
+ * currently unique within an organization. */
+function provisionEntityIdentity(orgId: string, subsidiaryId: string): string {
+  return createHash("sha256")
+    .update(`${orgId}\u0000${subsidiaryId}`)
+    .digest("hex");
+}
+
 /** Deterministic, collision-free journal numbering: the run's (fiscal year,
- *  version) is unique per org and the entity fragment separates the per-entity
- *  journals of one run, so any number of reposts in a fiscal year produce
- *  distinct, reproducible numbers. */
+ *  version) is unique per org and the organization/entity identity separates
+ *  the per-entity journals of one run, so any number of reposts in a fiscal
+ *  year produce distinct, reproducible numbers. */
 export function provisionEntryNumber(
   fiscalYear: number,
   version: number,
+  orgId: string,
   subsidiaryId: string,
 ): string {
-  return `ITX-FY${fiscalYear}-v${version}-${subsidiaryId.replace(/-/g, "").slice(0, 8)}`;
+  return `ITX-FY${fiscalYear}-v${version}-${provisionEntityIdentity(orgId, subsidiaryId)}`;
 }
 
 /** The reversal of the entry a superseded run of `supersededVersion` posted
@@ -1349,9 +1370,10 @@ export function provisionEntryNumber(
 export function provisionReversalEntryNumber(
   fiscalYear: number,
   supersededVersion: number,
+  orgId: string,
   subsidiaryId: string,
 ): string {
-  return `ITX-REV-FY${fiscalYear}-v${supersededVersion}-${subsidiaryId.replace(/-/g, "").slice(0, 8)}`;
+  return `ITX-REV-FY${fiscalYear}-v${supersededVersion}-${provisionEntityIdentity(orgId, subsidiaryId)}`;
 }
 
 /**
@@ -1593,7 +1615,7 @@ export async function postProvisionRun(
           insert into journal_entries
             (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)
           values (${reversalEntryId}, ${orgId}, ${bookId}, ${priorEntry.subsidiary_id},
-                  ${provisionReversalEntryNumber(run.fiscalYear, priorRun.version, priorEntry.subsidiary_id)},
+                  ${provisionReversalEntryNumber(run.fiscalYear, priorRun.version, orgId, priorEntry.subsidiary_id)},
                   ${run.periodTo}, ${periodId}, ${`Reverse income tax provision FY${run.fiscalYear}`}, 'draft', 'tax_provision',
                   ${priorEntry.id}, ${actorId}, ${actorId})
         `);
@@ -1645,7 +1667,7 @@ export async function postProvisionRun(
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
         values (${entryId}, ${orgId}, ${bookId}, ${plan.entity.subsidiaryId},
-                ${provisionEntryNumber(run.fiscalYear, run.version, plan.entity.subsidiaryId)},
+                ${provisionEntryNumber(run.fiscalYear, run.version, orgId, plan.entity.subsidiaryId)},
                 ${run.periodTo}, ${periodId}, ${`Income tax provision FY${run.fiscalYear} (v${run.version})`}, 'draft', 'tax_provision',
                 ${actorId}, ${actorId})
       `);
