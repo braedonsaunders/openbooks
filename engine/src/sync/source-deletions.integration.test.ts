@@ -29,7 +29,7 @@ test(
           (id, org_id, kind, status, document_number, subsidiary_id, party_id,
            document_date, currency, fx_rate, subtotal, tax_total, total, custom)
         values (
-          ${documentId}, ${org.orgId}, 'customer_invoice', 'approved', 'INV-SOURCE-DELETE',
+          ${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-SOURCE-DELETE',
           ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
           '100', '0', '100', ${JSON.stringify({ nsId: sourceRef })}::jsonb
         )`);
@@ -41,6 +41,11 @@ test(
           ${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, '1', '100',
           '100', '0', '0'
         )`);
+      await db.execute(sql`
+        update documents
+           set status = 'approved', updated_at = now()
+         where id = ${documentId} and org_id = ${org.orgId}
+      `);
       await postDocument(documentId, {
         control: {
           ar: org.accounts.ar,

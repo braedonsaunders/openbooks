@@ -29,7 +29,7 @@ test("equipment charge posts balanced job cost and recovery with unit attributio
     await db.execute(sql`
       insert into documents (id, org_id, kind, document_number, document_date, posting_date, currency, status,
                              project_id, subsidiary_id, subtotal, tax_total, total, custom, extra_dims)
-      values (${documentId}, ${org.orgId}, 'project_charge', 'CHG-1', ${org.date}, ${org.date}, 'CAD', 'approved',
+      values (${documentId}, ${org.orgId}, 'project_charge', 'CHG-1', ${org.date}, ${org.date}, 'CAD', 'draft',
               ${projectId}, ${org.subsidiaryId}, '125.3750', '0', '125.3750', '{}'::jsonb, '{}'::jsonb)`);
     await db.execute(sql`
       insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, description,
@@ -38,6 +38,11 @@ test("equipment charge posts balanced job cost and recovery with unit attributio
       values (${randomUUID()}, ${org.orgId}, ${documentId}, 1, ${itemId}, ${org.accounts.cogs}, 'Excavator usage',
               '1', '125.3750', ${projectId}, ${equipmentId}, ${org.accounts.adjustment},
               '125.3750', '250.0000', '125.3750', '250.0000', true, '{}'::jsonb, '{}'::jsonb)`);
+    await db.execute(sql`
+      update documents
+         set status = 'approved', updated_at = now()
+       where id = ${documentId} and org_id = ${org.orgId}
+    `);
 
     const entryId = await postDocument(documentId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },

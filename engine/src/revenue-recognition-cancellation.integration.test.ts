@@ -16,6 +16,42 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+/** Provision every month covered by the service item's 12-month term. */
+async function seedRecognitionTermPeriods(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+): Promise<void> {
+  const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
+    select fiscal_calendar_id
+      from accounting_periods
+     where id = ${org.periodId} and org_id = ${org.orgId}
+  `);
+  const fiscalCalendarId = calendar.rows[0]?.fiscal_calendar_id;
+  assert.ok(fiscalCalendarId);
+  const periods = [
+    [2026, 8, "2026-08-01", "2026-08-31"],
+    [2026, 9, "2026-09-01", "2026-09-30"],
+    [2026, 10, "2026-10-01", "2026-10-31"],
+    [2026, 11, "2026-11-01", "2026-11-30"],
+    [2026, 12, "2026-12-01", "2026-12-31"],
+    [2027, 1, "2027-01-01", "2027-01-31"],
+    [2027, 2, "2027-02-01", "2027-02-28"],
+    [2027, 3, "2027-03-01", "2027-03-31"],
+    [2027, 4, "2027-04-01", "2027-04-30"],
+    [2027, 5, "2027-05-01", "2027-05-31"],
+    [2027, 6, "2027-06-01", "2027-06-30"],
+  ] as const;
+  for (const [fiscalYear, periodNumber, startsOn, endsOn] of periods) {
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+         starts_on, ends_on, is_adjustment, custom)
+      values (${randomUUID()}, ${org.orgId}, ${fiscalCalendarId}, ${fiscalYear},
+              ${periodNumber}, ${startsOn.slice(0, 7)}, ${startsOn}, ${endsOn},
+              false, '{}'::jsonb)
+    `);
+  }
+}
+
 function errorChainMatches(error: unknown, pattern: RegExp): boolean {
   let current: unknown = error;
   while (current instanceof Error) {
@@ -33,6 +69,7 @@ test(
     const actors = await seedFlowActors(org.orgId);
     const documentId = randomUUID();
     try {
+      await seedRecognitionTermPeriods(org);
       await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, subsidiary_id,
@@ -42,7 +79,7 @@ test(
         values
           (${documentId}, ${org.orgId}, 'customer_invoice', 'REV-CANCEL-001',
            ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           ${org.date}, 'CAD', 1, 'approved', 1200, 0, 1200, false,
+           ${org.date}, 'CAD', 1, 'draft', 1200, 0, 1200, false,
            '{}'::jsonb, '{}'::jsonb, ${actors.adminId}, ${actors.adminId})
       `);
       await db.execute(sql`
@@ -56,6 +93,11 @@ test(
            ${org.items.service}, ${org.accounts.revenue}, 1, 1200, 1200, 0,
            false, 0, 0, '{}'::jsonb, false, '{}'::jsonb,
            ${actors.adminId}, ${actors.adminId})
+      `);
+      await db.execute(sql`
+        update documents
+           set status = 'approved', updated_at = now()
+         where id = ${documentId} and org_id = ${org.orgId}
       `);
       await postDocument(
         documentId,

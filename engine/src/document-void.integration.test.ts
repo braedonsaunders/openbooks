@@ -98,7 +98,7 @@ async function seedPostedCheck(
        posting_date, currency, status, subtotal, tax_total, total, created_by)
     values (
       ${documentId}, ${org.orgId}, 'check', ${documentNumber},
-      ${org.subsidiaryId}, ${org.date}, ${org.date}, 'CAD', 'approved',
+      ${org.subsidiaryId}, ${org.date}, ${org.date}, 'CAD', 'draft',
       '25', '0', '25', ${actorId}
     )
   `);
@@ -110,6 +110,11 @@ async function seedPostedCheck(
       ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs},
       ${org.subsidiaryId}, '1', '25', '25', '0', ${actorId}
     )
+  `);
+  await db.execute(sql`
+    update documents
+       set status = 'approved', updated_at = now()
+     where id = ${documentId} and org_id = ${org.orgId}
   `);
   const entryId = await postDocument(
     documentId,
@@ -222,7 +227,7 @@ test("controlled void preserves the source and posts an exact open-period revers
       values (
         ${documentId}, ${org.orgId}, 'vendor_bill', 'BILL-VOID-1',
         ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-        'CAD', '1', 'approved', '125', '0', '125', ${actorId}
+        'CAD', '1', 'draft', '125', '0', '125', ${actorId}
       )
     `);
     await db.execute(sql`
@@ -233,6 +238,11 @@ test("controlled void preserves the source and posts an exact open-period revers
         ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, '1',
         '125', '125', '0', ${actorId}
       )
+    `);
+    await db.execute(sql`
+      update documents
+         set status = 'approved', updated_at = now()
+       where id = ${documentId} and org_id = ${org.orgId}
     `);
     const sourceEntryId = await postDocument(
       documentId,

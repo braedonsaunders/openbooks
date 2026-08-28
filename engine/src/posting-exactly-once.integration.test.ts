@@ -25,13 +25,18 @@ test("concurrent posts of one document produce exactly one journal entry", { ski
       insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
                              currency, fx_rate, status, subtotal, tax_total, total, is_final_invoice, custom, extra_dims)
       values (${docId}, ${org.orgId}, 'vendor_bill', 'BILL-RACE', ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-              'CAD', 1, 'approved', '100', '0', '100', false, '{}'::jsonb, '{}'::jsonb)`);
+              'CAD', 1, 'draft', '100', '0', '100', false, '{}'::jsonb, '{}'::jsonb)`);
     await db.execute(sql`
       insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount,
                                  tax_amount, is_billable, quantity_fulfilled, quantity_billed, stock_location_id, custom,
                                  tax_overridden, extra_dims)
       values (${randomUUID()}, ${org.orgId}, ${docId}, 1, null, ${org.accounts.cogs}, '1', '100', '100', '0',
               false, '0', '0', null, '{}'::jsonb, false, '{}'::jsonb)`);
+    await db.execute(sql`
+      update documents
+         set status = 'approved', updated_at = now()
+       where id = ${docId} and org_id = ${org.orgId}
+    `);
 
     // Fire two posts at once.
     const results = await Promise.allSettled([postDocument(docId, deps), postDocument(docId, deps)]);

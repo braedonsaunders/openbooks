@@ -78,7 +78,7 @@ test(
            subtotal, tax_total, total, custom)
         values (${documentId}, ${org.orgId}, 'vendor_bill',
                 'BILL-NO-RESOLVABLE-ACCOUNT', ${org.vendorId}, null,
-                ${org.date}, ${org.date}, 'CAD', 1, 'approved',
+                ${org.date}, ${org.date}, 'CAD', 1, 'draft',
                 '20', '0', '20', '{}'::jsonb)`);
       await db.execute(sql`
         insert into document_lines
@@ -89,6 +89,12 @@ test(
         values (${lineId}, ${org.orgId}, ${documentId}, 1, ${itemId}, null,
                 '10', '2', '20', '0', false, '0', '0', null, '{}'::jsonb,
                 false)`);
+
+      await db.execute(sql`
+        update documents
+           set status = 'approved', updated_at = now()
+         where id = ${documentId} and org_id = ${org.orgId}
+      `);
 
       const deps = {
         control: {
@@ -138,9 +144,19 @@ test(
                 ${org.accounts.adjustment}, ${org.accounts.adjustment},
                 ${org.accounts.clearing}, 'ea', '{}'::jsonb)`);
       await db.execute(sql`
+        update documents
+           set status = 'draft', updated_at = now()
+         where org_id = ${org.orgId} and id = ${documentId}
+      `);
+      await db.execute(sql`
         update document_lines
            set stock_location_id = ${org.stockLocationId}
          where org_id = ${org.orgId} and id = ${lineId}`);
+      await db.execute(sql`
+        update documents
+           set status = 'approved', updated_at = now()
+         where org_id = ${org.orgId} and id = ${documentId}
+      `);
 
       assert.ok(await postDocument(documentId, deps));
       const posted = (await db.execute<{

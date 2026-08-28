@@ -37,7 +37,7 @@ test(
         values
           (${documentId}, ${org.orgId}, 'vendor_bill', 'REPLAY-IMMUTABLE',
            ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 1, 'approved', '100', '0', '100', false, '{}'::jsonb,
+           'CAD', 1, 'draft', '100', '0', '100', false, '{}'::jsonb,
            '{}'::jsonb)
       `);
       await db.execute(sql`
@@ -48,6 +48,11 @@ test(
         values
           (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs},
            1, 100, 100, 0, false, 0, 0, '{}'::jsonb, false, '{}'::jsonb)
+      `);
+      await db.execute(sql`
+        update documents
+           set status = 'approved', updated_at = now()
+         where id = ${documentId} and org_id = ${org.orgId}
       `);
       const entryId = await postDocument(documentId, deps);
       const before = (await db.execute<Record<string, unknown>>(sql`
@@ -89,6 +94,7 @@ test(
 
       await assert.rejects(
         db.transaction(async (tx) => {
+          await tx.execute(sql`set local openbooks.migration = on`);
           await tx.execute(sql`set local openbooks.amend = on`);
           await tx.execute(sql`
             update documents
@@ -111,6 +117,14 @@ test(
         insert into currencies (code, name, minor_units)
         values ('USD', 'US Dollar', 2)
         on conflict (code) do nothing
+      `);
+      // Foreign-currency replay resolves through stored spot evidence, so
+      // provide the USD→CAD rate that a source mirror would have synced.
+      await db.execute(sql`
+        insert into fx_rates (id, org_id, from_currency, to_currency, as_of,
+                              rate_type, rate, source)
+        values (${randomUUID()}, ${org.orgId}, 'USD', 'CAD', '2026-07-01',
+                'spot', '1.35', 'test')
       `);
       await assert.rejects(
         db.transaction(async (tx) => {
