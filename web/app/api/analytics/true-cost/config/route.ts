@@ -6,7 +6,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
-import { loadTrueCostConfig, type TrueCostProfile, type CustomCategory } from "../../../../../lib/analytics/true-cost-data";
+import { DEFAULT_PROFILE, type TrueCostConfig, type TrueCostProfile, type CustomCategory } from "../../../../../lib/analytics/true-cost-data";
 import { ALLOCATION_BASES, ALLOCATION_METHODS, RATE_FORMATS, COMPOSITE_METHODS, type AllocationBase, type AllocationMethod, type RateFormat, type CompositeMethod } from "../../../../../lib/analytics/true-cost-engine";
 
 export const runtime = "nodejs";
@@ -16,12 +16,57 @@ export const runtime = "nodejs";
  * categories, composite method, base overrides. Stored at
  * orgs.settings.analytics.trueCost. GET returns the resolved config; PUT
  * replaces the whole config (validated), gated on the Setup permission.
+ *
+ * The config is an aggregate edited by several setup controls. Its revision is
+ * persisted alongside the aggregate so a stale whole-object PUT cannot erase a
+ * concurrent administrator's change. The revision check and replacement happen
+ * in one UPDATE statement, which PostgreSQL serializes on the org row.
  */
 const BASE_KEYS = new Set(Object.keys(ALLOCATION_BASES));
 const METHOD_KEYS = new Set(Object.keys(ALLOCATION_METHODS));
 const FORMAT_KEYS = new Set(Object.keys(RATE_FORMATS));
 const COMPOSITE_KEYS = new Set(Object.keys(COMPOSITE_METHODS));
 const CUSTOM_TYPES = new Set(["manual", "derived", "formula"]);
+const INITIAL_REVISION = 0;
+
+type PersistedTrueCostConfig = Partial<TrueCostConfig> & { revision?: unknown };
+type TrueCostSnapshotRow = { cfg: PersistedTrueCostConfig | null };
+
+function parseRevision(value: unknown): number | null {
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value : "";
+  if (!/^\d+$/.test(text)) return null;
+  const revision = Number(text);
+  // A successful write increments the token, so reserve the largest safe
+  // integer rather than allowing it to round in JavaScript before persisting.
+  return Number.isSafeInteger(revision) && revision >= INITIAL_REVISION && revision < Number.MAX_SAFE_INTEGER ? revision : null;
+}
+
+async function loadTrueCostSnapshot(orgId: string): Promise<{
+  revision: number;
+  activeProfileId: string;
+  profiles: TrueCostProfile[];
+}> {
+  // Read the aggregate and its OCC token in one statement. Separate reads can
+  // otherwise combine profiles from revision N with a token from revision N+1.
+  const row = (await db.execute<TrueCostSnapshotRow>(sql`
+    select settings -> 'analytics' -> 'trueCost' as cfg
+      from orgs where id = ${orgId}
+  `)).rows[0];
+  const raw = row?.cfg;
+  const profiles: TrueCostProfile[] = Array.isArray(raw?.profiles) && raw.profiles.length
+    ? raw.profiles.map((p) => ({
+        ...DEFAULT_PROFILE,
+        ...p,
+        categorySettings: p.categorySettings ?? {},
+        customCategories: p.customCategories ?? [],
+        baseOverrides: p.baseOverrides ?? {},
+      }))
+    : [DEFAULT_PROFILE];
+  const activeProfileId = raw?.activeProfileId && profiles.some((p) => p.id === raw.activeProfileId)
+    ? raw.activeProfileId
+    : profiles[0]!.id;
+  return { revision: parseRevision(raw?.revision) ?? INITIAL_REVISION, activeProfileId, profiles };
+}
 
 class InvalidTrueCostAmount extends Error {
   constructor() {
@@ -144,8 +189,7 @@ function cleanProfile(raw: unknown): TrueCostProfile | null {
 export async function GET() {
   const gate = await guardFeaturePermission("reports.read", "projects");
   if (gate instanceof NextResponse) return gate;
-  const cfg = await loadTrueCostConfig(gate.user.orgId);
-  return NextResponse.json({ activeProfileId: cfg.activeProfileId, profiles: cfg.profiles });
+  return NextResponse.json(await loadTrueCostSnapshot(gate.user.orgId));
 }
 
 export async function PUT(req: Request) {
@@ -153,9 +197,17 @@ export async function PUT(req: Request) {
   if (gate instanceof NextResponse) return gate;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { activeProfileId?: string; profiles?: unknown[] } | null;
+  const body = (parsedBody.data) as { expectedRevision?: unknown; activeProfileId?: string; profiles?: unknown[] } | null;
   if (!body || !Array.isArray(body.profiles)) return NextResponse.json({ error: "profiles array required" }, { status: 400 });
   if (body.profiles.length > 20) return NextResponse.json({ error: "too many profiles (max 20)" }, { status: 400 });
+
+  const expectedRevision = parseRevision(body.expectedRevision);
+  if (expectedRevision === null) {
+    return NextResponse.json(
+      { error: "the True Cost configuration revision is required; reload and review the latest revision" },
+      { status: 409 },
+    );
+  }
 
   let profiles: TrueCostProfile[];
   try {
@@ -168,13 +220,23 @@ export async function PUT(req: Request) {
   }
   if (!profiles.length) return NextResponse.json({ error: "at least one valid profile required" }, { status: 400 });
   const activeProfileId = body.activeProfileId && profiles.some((p) => p.id === body.activeProfileId) ? body.activeProfileId : profiles[0]!.id;
+  const revision = expectedRevision + 1;
+  const config = { revision, activeProfileId, profiles };
 
-  await db.execute(sql`
+  const updated = await db.execute(sql`
     update orgs
     set settings = jsonb_set(
       jsonb_set(settings, '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
-      '{analytics,trueCost}', ${JSON.stringify({ activeProfileId, profiles })}::jsonb, true)
+      '{analytics,trueCost}', ${JSON.stringify(config)}::jsonb, true)
     where id = ${gate.user.orgId}
+      and coalesce(settings -> 'analytics' -> 'trueCost' ->> 'revision', '0') = ${String(expectedRevision)}
+    returning settings -> 'analytics' -> 'trueCost' ->> 'revision' as revision
   `);
-  return NextResponse.json({ ok: true, activeProfileId, profiles });
+  if (!updated.rows.length) {
+    return NextResponse.json(
+      { error: "this True Cost configuration changed after you opened it; reload and review the latest revision" },
+      { status: 409 },
+    );
+  }
+  return NextResponse.json({ ok: true, revision, activeProfileId, profiles });
 }
