@@ -10,7 +10,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
-  const run = await getProvisionRun(gate.user.orgId, id);
+  const run = await getProvisionRun(gate.user.orgId, id, gate.allowedSubsidiaryIds);
   if (!run) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json(run);
 }
