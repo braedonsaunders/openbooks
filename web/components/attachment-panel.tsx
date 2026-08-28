@@ -77,6 +77,7 @@ export function AttachmentPanel({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [previewExpanded, setPreviewExpanded] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const loadGeneration = useRef(0)
 
   const query = (searchParams.get('attq') ?? '').trim().toLocaleLowerCase()
   const group = searchParams.get('atttype') ?? ''
@@ -87,28 +88,42 @@ export function AttachmentPanel({
     [searchParams],
   )
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal: AbortSignal, generation: number) => {
     setLoading(true)
     try {
       const res = await fetch(
         `/api/file-cabinet/attachments?targetTable=${encodeURIComponent(targetTable)}&targetId=${targetId}`,
+        { signal },
       )
       if (!res.ok) throw new Error('load failed')
       const data = (await res.json()) as { attachments: AttachedFile[] }
+      if (signal.aborted || generation !== loadGeneration.current) return
       setItems(data.attachments)
       setSelectedId((current) => {
         if (current && data.attachments.some((item) => item.id === current)) return current
         return data.attachments.find(previewable)?.id ?? data.attachments[0]?.id ?? null
       })
     } catch {
+      if (signal.aborted || generation !== loadGeneration.current) return
       toast.error(t('loadFailed'))
     } finally {
-      setLoading(false)
+      if (generation === loadGeneration.current) setLoading(false)
     }
   }, [targetTable, targetId, t])
 
   useEffect(() => {
-    void load()
+    const controller = new AbortController()
+    const generation = ++loadGeneration.current
+    setItems([])
+    setSelectedId(null)
+    setPreviewExpanded(false)
+    void load(controller.signal, generation)
+    return () => {
+      controller.abort()
+      // Invalidate the request before the next effect starts, including fetch
+      // implementations that resolve despite an abort signal.
+      if (loadGeneration.current === generation) loadGeneration.current += 1
+    }
   }, [load])
 
   const counts = useMemo(() => ({
