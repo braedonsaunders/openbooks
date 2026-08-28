@@ -3,6 +3,7 @@
 import { useMoney } from '@/components/money-provider'
 import { useTranslations } from 'next-intl'
 import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
+import { add, neg, sum } from '@openbooks/engine/src/money.ts'
 import { RunRecognitionButton } from './RunRecognitionButton'
 import type { ContractPayload } from './_lib'
 
@@ -13,6 +14,15 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
   cancelled: 'warning',
   open: 'success',
   satisfied: 'secondary',
+}
+
+export function contractSummaryTotals(
+  obligations: ReadonlyArray<Pick<ContractPayload['obligations'][number], 'planned' | 'recognized'>>,
+): { recognized: string; deferred: string } {
+  return {
+    recognized: sum(obligations.map((obligation) => obligation.recognized)),
+    deferred: sum(obligations.map((obligation) => add(obligation.planned, neg(obligation.recognized)))),
+  }
 }
 
 /**
@@ -26,6 +36,7 @@ export function ContractDrawer({ payload, canRun, closeHref = '/revenue' }: { pa
   const t = useTranslations('revenue')
   const tCommon = useTranslations('common')
   const c = payload.contract
+  const totals = contractSummaryTotals(payload.obligations)
 
   return (
     <UrlDrawer
@@ -45,16 +56,8 @@ export function ContractDrawer({ payload, canRun, closeHref = '/revenue' }: { pa
         <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat label={t('labels.total')} value={money(c.total_transaction_price)} />
           <Stat label={t('drawer.obligations')} value={String(payload.obligations.length)} />
-          <Stat
-            label={t('labels.recognized')}
-            value={money(payload.obligations.reduce((a, o) => a + Number(o.recognized), 0).toFixed(4))}
-          />
-          <Stat
-            label={t('labels.deferred')}
-            value={money(
-              payload.obligations.reduce((a, o) => a + (Number(o.planned) - Number(o.recognized)), 0).toFixed(4),
-            )}
-          />
+          <Stat label={t('labels.recognized')} value={money(totals.recognized)} />
+          <Stat label={t('labels.deferred')} value={money(totals.deferred)} />
         </section>
 
         {/* -- obligations + schedules -------------------------------- */}
