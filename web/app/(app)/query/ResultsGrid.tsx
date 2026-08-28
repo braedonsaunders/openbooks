@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@openbooks/ui'
+import { compareDecimal } from '../../../lib/exact-decimal'
 
 export interface QueryResult {
   columns: string[]
@@ -23,6 +24,19 @@ function cellText(v: unknown): string {
   if (v === null || v === undefined) return ''
   if (typeof v === 'object') return JSON.stringify(v)
   return String(v)
+}
+
+function decimalText(v: unknown): string | null {
+  const text = cellText(v).trim().replace(/,/g, '')
+  return /^[+-]?\d+(?:\.\d+)?$/.test(text) ? text : null
+}
+
+/** Compare numeric cells without coercing exact database decimals to Number. */
+export function compareNumericValues(left: unknown, right: unknown): number {
+  const leftDecimal = decimalText(left)
+  const rightDecimal = decimalText(right)
+  if (leftDecimal !== null && rightDecimal !== null) return compareDecimal(leftDecimal, rightDecimal)
+  return cellText(left).localeCompare(cellText(right), undefined, { numeric: true })
 }
 
 type SortDir = 'asc' | 'desc' | null
@@ -64,7 +78,7 @@ export function ResultsGrid({ result, filter }: { result: QueryResult; filter: s
       const bv = b[sortCol]
       if (av === null || av === undefined) return 1
       if (bv === null || bv === undefined) return -1
-      if (num) return (Number(String(av).replace(/,/g, '')) - Number(String(bv).replace(/,/g, ''))) * dir
+      if (num) return compareNumericValues(av, bv) * dir
       return cellText(av).localeCompare(cellText(bv), undefined, { numeric: true }) * dir
     })
   }, [filtered, sortCol, sortDir, numericCols])
