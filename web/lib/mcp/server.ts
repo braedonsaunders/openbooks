@@ -47,24 +47,20 @@ function auditHook(requestContext: OpenBooksMcpRequestContext) {
     // A mutating tool's fresh execution already committed its durable evidence
     // inside its own idempotency claim transaction (via context.requestAudit);
     // the consumed marker suppresses a duplicate row. Everything else — read
-    // tools, replays, failures — is evidenced here. The registrar does not
-    // await this hook (vendored contract), so this write cannot fail the
-    // response; material safety never depends on it, and a failure is logged
-    // loudly rather than swallowed.
-    try {
-      if (!takeClaimedCommandEvidence(requestContext.auth.audit)) {
-        await insertApiKeyEvent(transportEvent(
-          requestContext.auth.audit,
-          { orgId: requestContext.auth.user.orgId, keyId: requestContext.auth.keyId },
-          {
-            statusCode: event.status === "ok" ? 200 : event.statusCode ?? 500,
-            ...(event.errorSummary ? { error: event.errorSummary } : {}),
-          },
-          { method: "MCP", path: `/mcp/tools/${event.name}` },
-        ));
-      }
-    } catch (cause) {
-      console.error("[mcp] tool execution evidence unavailable", cause);
+    // tools, replays, failures — is evidenced here. The registrar awaits this
+    // hook before returning the tool result, so the event is durable before a
+    // response can escape. A persistence failure is intentionally propagated
+    // and fails the request closed rather than returning unaudited evidence.
+    if (!takeClaimedCommandEvidence(requestContext.auth.audit)) {
+      await insertApiKeyEvent(transportEvent(
+        requestContext.auth.audit,
+        { orgId: requestContext.auth.user.orgId, keyId: requestContext.auth.keyId },
+        {
+          statusCode: event.status === "ok" ? 200 : event.statusCode ?? 500,
+          ...(event.errorSummary ? { error: event.errorSummary } : {}),
+        },
+        { method: "MCP", path: `/mcp/tools/${event.name}` },
+      ));
     }
   };
 }
