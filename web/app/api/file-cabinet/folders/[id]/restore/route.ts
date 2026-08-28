@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { restoreFolder } from '../../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../../lib/list-params'
-import { recordFileEvent } from '../../../../../../lib/file-audit'
 import { requireFolderAccess, requireSession } from '../../../lib'
 
 export const runtime = 'nodejs'
@@ -14,14 +13,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const access = await requireFolderAccess(gate, id, 'manager')
   if (access) return access
-  const ok = await restoreFolder(gate.user.orgId, id)
+  const ok = await restoreFolder(gate.user.orgId, id, { actorId: gate.user.id })
   if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  await recordFileEvent({
-    orgId: gate.user.orgId,
-    actorId: gate.user.id,
-    table: 'folders',
-    rowId: id,
-    action: 'restore',
-  })
   return NextResponse.json({ ok: true })
 }
