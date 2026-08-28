@@ -341,10 +341,21 @@ export async function POST(req: Request) {
   // The employee and schedule are both payroll records. Resolve their legal
   // entities before the upsert so a restricted operator cannot re-home a
   // profile or edit another subsidiary by guessing an employee id.
-  const employeeDenied = guardSubsidiaryScope(gate, (refs[0].rows[0] as { subsidiaryId: string | null }).subsidiaryId)
+  const employeeSubsidiaryId = (refs[0].rows[0] as { subsidiaryId: string | null }).subsidiaryId
+  const scheduleSubsidiaryId = (refs[1].rows[0] as { subsidiaryId: string | null }).subsidiaryId
+  const employeeDenied = guardSubsidiaryScope(gate, employeeSubsidiaryId)
   if (employeeDenied) return employeeDenied
-  const scheduleDenied = guardSubsidiaryScope(gate, (refs[1].rows[0] as { subsidiaryId: string | null }).subsidiaryId)
+  const scheduleDenied = guardSubsidiaryScope(gate, scheduleSubsidiaryId)
   if (scheduleDenied) return scheduleDenied
+  // A scoped schedule pins the run's legal entity, currency, and employee
+  // population. An org-wide NULL schedule deliberately remains a wildcard;
+  // a non-NULL schedule may only be assigned to an employee of that entity.
+  if (scheduleSubsidiaryId !== null && employeeSubsidiaryId !== scheduleSubsidiaryId) {
+    return NextResponse.json(
+      { error: 'employee and pay schedule must belong to the same subsidiary' },
+      { status: 422 },
+    )
+  }
   const filingDenied = await guardPayrollFilingAccounts(gate, [filingAccountId])
   if (filingDenied) return filingDenied
   if (filingAccountId !== null) {
