@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { sealSecret } from '@openbooks/engine/src/secrets.ts'
 import { FORM_TYPES, type FormType } from '@openbooks/engine/src/information-returns.ts'
 import { guardPermission } from '@/lib/authz'
@@ -23,6 +23,28 @@ const TAX_CLASSIFICATIONS = new Set([
   'other',
 ])
 const TIN_TYPES = new Set(['ssn', 'ein', 'itin', 'atin', 'sin', 'bn', 'unknown'])
+
+/**
+ * The compliance mutation's audit envelope is a complete snapshot of every
+ * field this route owns, plus row identity/attribution.  `tin_encrypted` is
+ * intentionally represented only by presence: ciphertext is sensitive too,
+ * while `tin_last4` gives the reviewer enough evidence to identify a change.
+ */
+const VENDOR_ROLE_AUDIT_COLUMNS = sql`
+  id, org_id, party_id, compliance_class_id, information_return_form,
+  information_return_box, tax_classification,
+  (tin_encrypted is not null) as tin_present, tin_last4, tin_type,
+  backup_withholding, is_t4a, is_active, created_at, created_by,
+  updated_at, updated_by`
+
+type VendorRoleAuditRow = Record<string, unknown>
+
+/** Every compliance save is attributable even when the UI supplies no note. */
+function auditReason(raw: unknown): string {
+  return typeof raw === 'string' && raw.trim()
+    ? raw.trim().slice(0, 500)
+    : 'vendor compliance updated'
+}
 
 /**
  * A vendor's compliance classification and taxpayer identification.
@@ -56,16 +78,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
     tinType?: string | null
     backupWithholding?: boolean
     reportable?: boolean
+    reason?: string
   }
 
   if (body.complianceClassId && !isUuid(body.complianceClassId)) {
     return NextResponse.json({ error: 'invalid compliance class' }, { status: 400 })
-  }
-  if (body.complianceClassId) {
-    const exists = (await db.execute(sql`
-      select 1 from compliance_classes
-       where org_id = ${orgId} and id = ${body.complianceClassId} and is_active`))
-    if (exists.rows.length === 0) return NextResponse.json({ error: 'unknown compliance class' }, { status: 400 })
   }
   if (
     body.informationReturnForm &&
@@ -99,38 +116,62 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
     }
   }
 
-  const role = (await db.execute<Record<string, unknown>>(sql`
-    select party_id, compliance_class_id, information_return_form, tin_last4, tax_classification
-      from vendor_roles where org_id = ${orgId} and party_id = ${partyId}`))
-  if (role.rows.length === 0) {
-    return NextResponse.json({ error: 'this party is not a vendor' }, { status: 404 })
-  }
-
+  const reason = auditReason(body.reason)
+  let notFound = false
   try {
-    await db.execute(sql`
-      update vendor_roles set
-        compliance_class_id = ${body.complianceClassId === undefined ? sql`compliance_class_id` : sql`${body.complianceClassId}::uuid`},
-        information_return_form = ${body.informationReturnForm === undefined ? sql`information_return_form` : sql`${body.informationReturnForm}`},
-        information_return_box = ${body.informationReturnBox === undefined ? sql`information_return_box` : sql`${body.informationReturnBox}`},
-        tax_classification = ${body.taxClassification === undefined ? sql`tax_classification` : sql`${body.taxClassification}`},
-        tin_encrypted = ${tinEncrypted === undefined ? sql`tin_encrypted` : sql`${tinEncrypted}`},
-        tin_last4 = ${tinLast4 === undefined ? sql`tin_last4` : sql`${tinLast4}`},
-        tin_type = ${body.tinType === undefined ? sql`tin_type` : sql`${body.tinType}`},
-        backup_withholding = coalesce(${body.backupWithholding ?? null}, backup_withholding),
-        is_t4a = coalesce(${body.reportable ?? null}, is_t4a),
-        updated_at = now(), updated_by = ${actorId}
-      where org_id = ${orgId} and party_id = ${partyId}`)
-    await db.execute(sql`
-      insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'vendor_roles', ${partyId}, 'update',
-              ${JSON.stringify({
-                before: role.rows[0],
-                // The TIN itself is never written to the audit trail; the fact
-                // that it changed, and its last four, is enough evidence.
-                after: { ...body, tin: body.tin === undefined ? undefined : 'changed', tinLast4 },
-              })}::jsonb, ${actorId})`)
+    await withOrgTransaction(orgId, async () => {
+      // Lock the authoritative tenant row before reading its before-state.
+      // Every subsequent write and the audit insert participates in this same
+      // pinned transaction, so concurrent saves serialize and an audit error
+      // rolls the sensitive compliance/TIN mutation back with it.
+      const role = await db.execute<VendorRoleAuditRow>(sql`
+        select ${VENDOR_ROLE_AUDIT_COLUMNS}
+          from vendor_roles
+         where org_id = ${orgId} and party_id = ${partyId}
+         for update`)
+      const before = role.rows[0]
+      if (!before) {
+        notFound = true
+        return
+      }
+
+      if (body.complianceClassId) {
+        const exists = await db.execute(sql`
+          select 1 from compliance_classes
+           where org_id = ${orgId} and id = ${body.complianceClassId} and is_active`)
+        if (exists.rows.length === 0) throw new Error('unknown compliance class')
+      }
+
+      const updated = await db.execute<VendorRoleAuditRow>(sql`
+        update vendor_roles set
+          compliance_class_id = ${body.complianceClassId === undefined ? sql`compliance_class_id` : sql`${body.complianceClassId}::uuid`},
+          information_return_form = ${body.informationReturnForm === undefined ? sql`information_return_form` : sql`${body.informationReturnForm}`},
+          information_return_box = ${body.informationReturnBox === undefined ? sql`information_return_box` : sql`${body.informationReturnBox}`},
+          tax_classification = ${body.taxClassification === undefined ? sql`tax_classification` : sql`${body.taxClassification}`},
+          tin_encrypted = ${tinEncrypted === undefined ? sql`tin_encrypted` : sql`${tinEncrypted}`},
+          tin_last4 = ${tinLast4 === undefined ? sql`tin_last4` : sql`${tinLast4}`},
+          tin_type = ${body.tinType === undefined ? sql`tin_type` : sql`${body.tinType}`},
+          backup_withholding = coalesce(${body.backupWithholding ?? null}, backup_withholding),
+          is_t4a = coalesce(${body.reportable ?? null}, is_t4a),
+          updated_at = now(), updated_by = ${actorId}
+        where org_id = ${orgId} and party_id = ${partyId}
+        returning ${VENDOR_ROLE_AUDIT_COLUMNS}`)
+      const after = updated.rows[0]
+      if (!after) throw new Error('this party is not a vendor')
+
+      // The audit row is immutable at the database layer. Its actor_id and at
+      // columns are written by PostgreSQL, while changes.reason and the exact
+      // secret-free before/after snapshots make the evidence attributable and
+      // complete without ever persisting TIN ciphertext in the trail.
+      await db.execute(sql`
+        insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'vendor_roles', ${partyId}, 'update',
+                ${JSON.stringify({ reason, before, after })}::jsonb, ${actorId})`)
+    })
+    if (notFound) return NextResponse.json({ error: 'this party is not a vendor' }, { status: 404 })
     return NextResponse.json({ partyId })
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'save failed' }, { status: 400 })
+    const message = e instanceof Error ? e.message : 'save failed'
+    return NextResponse.json({ error: message }, { status: 400 })
   }
 }
