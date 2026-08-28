@@ -1,6 +1,5 @@
 'use client'
 
-import { useAnalyticsMoney } from '../analytics/_ui/format'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -9,6 +8,7 @@ import {
   Layers, PieChart as PieIcon, TrendingUp, UserRound,
 } from 'lucide-react'
 import { cn, Badge } from '@openbooks/ui'
+import { useMoney } from '@/components/money-provider'
 import type { ExpensesDashboardData } from '../../../lib/expenses-dashboard'
 import { KpiCard } from '../analytics/_ui/KpiCard'
 import { Panel } from '../analytics/_ui/Panel'
@@ -30,13 +30,14 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning'> = {
  * this month. Queue rows open the report's native flyout on the list route.
  */
 export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
-  const money0 = (n: number) => fmtMoney(n)
+  const { money: formatMoney, moneyCompact } = useMoney()
+  const money = (value: string | number) => moneyCompact(value)
+  const money0 = (value: string | number) => formatMoney(value, { maximumFractionDigits: 0 })
   const t = useTranslations('expenses.dashboard')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const topCats = data.categories.slice(0, 8)
   const drillRow = 'cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50'
+  const isPositiveMoney = (value: string) => value !== '0.0000' && !value.startsWith('-')
 
   return (
     <div className="space-y-5">
@@ -79,7 +80,7 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
           label={t('vitals.creep')}
           value={money(data.summary.categoryIncreaseTotal)}
           sub={t('vitals.creepSub')}
-          tone={data.summary.categoryIncreaseTotal > 0 ? 'negative' : 'neutral'}
+          tone={isPositiveMoney(data.summary.categoryIncreaseTotal) ? 'negative' : 'neutral'}
         />
       </div>
 
@@ -87,7 +88,7 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         <div className="lg:col-span-4">
           <Panel title={t('panels.categories')} icon={PieIcon} hint={t('panels.categoriesHint')}>
-            <Donut data={topCats.map((c) => ({ name: c.categoryName, value: c.currentAmount }))} height={250} />
+            <Donut data={topCats.map((c) => ({ name: c.categoryName, value: Number(c.currentAmount) }))} height={250} />
           </Panel>
         </div>
         <div className="lg:col-span-8">
@@ -97,12 +98,12 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
               option={{
                 grid: { top: 26, bottom: 26, left: 60, right: 12 },
                 legend: { top: 0 },
-                tooltip: { trigger: 'axis', valueFormatter: (v: any) => money0(Number(v ?? 0)) },
+                tooltip: { trigger: 'axis', valueFormatter: (v: any) => money0(v ?? 0) },
                 xAxis: { type: 'category', data: data.monthlyTrends.map((m) => m.month) },
                 yAxis: { type: 'value', axisLabel: { formatter: (v: number) => money(v) } },
                 series: [
-                  { name: t('series.bills'), type: 'bar', stack: 's', data: data.monthlyTrends.map((m) => m.billAmount), itemStyle: { color: '#6366f1' } },
-                  { name: t('series.expenses'), type: 'bar', stack: 's', data: data.monthlyTrends.map((m) => m.expenseAmount), itemStyle: { color: '#ec4899' } },
+                  { name: t('series.bills'), type: 'bar', stack: 's', data: data.monthlyTrends.map((m) => Number(m.billAmount)), itemStyle: { color: '#6366f1' } },
+                  { name: t('series.expenses'), type: 'bar', stack: 's', data: data.monthlyTrends.map((m) => Number(m.expenseAmount)), itemStyle: { color: '#ec4899' } },
                 ],
               }}
             />
