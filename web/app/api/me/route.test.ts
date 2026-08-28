@@ -13,6 +13,7 @@ interface PendingWrite {
 }
 interface RouteState {
   executed: string[];
+  queries: unknown[];
   committed: PendingWrite[];
   pending: PendingWrite[];
   inTx: boolean;
@@ -23,6 +24,7 @@ interface RouteState {
 
 const state: RouteState = {
   executed: [],
+  queries: [],
   committed: [],
   pending: [],
   inTx: false,
@@ -46,6 +48,7 @@ function sqlText(query: unknown): string {
     .join("");
 }
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextMe = sqlText;
+;(globalThis as typeof globalThis & Record<string, unknown>).openbooksMeSqlText = sqlText;
 
 const ORG_ID = "00000000-0000-4000-8000-00000000a001";
 const USER_ID = "00000000-0000-4000-8000-00000000a002";
@@ -59,6 +62,7 @@ const mockSources = new Map<string, string>([
       const classify = (text) => text.includes('update users') ? 'user' : text.includes('insert into audit_log') ? 'audit' : null
       const execute = async (query) => {
         const text = sqlText(query)
+        state.queries.push(query)
         state.executed.push(text)
         if (state.failOnText && text.includes(state.failOnText)) {
           throw new Error('forced storage failure: ' + state.failOnText)
@@ -144,6 +148,7 @@ hooks.deregister();
 
 function reset(): void {
   state.executed = [];
+  state.queries = [];
   state.committed = [];
   state.pending = [];
   state.inTx = false;
@@ -208,4 +213,22 @@ test("a forced audit failure rolls back the preference row", async () => {
     "the user preference remains unchanged after the audit failure",
   );
   assert.deepEqual(state.committed, [], "the failed unit committed no user row or audit record");
+});
+
+test("profile PATCH joins every requested preference fragment in the user update", async () => {
+  reset();
+
+  const response = await patch({ locale: "fr", navMode: "topbar" });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    locale: "fr",
+    navMode: "topbar",
+  });
+  assert.equal(state.queries.length, 2, "profile update and audit must both execute");
+  const update = sqlText(state.queries[0]);
+  assert.match(update, /update users set/);
+  assert.match(update, /locale/);
+  assert.match(update, /nav_mode/);
 });
