@@ -30,8 +30,10 @@ export async function POST(
     const source = buildSource(conn);
     if (source.ping) {
       const r = await source.ping();
+      const status = r.ok ? "active" : "error";
+      const lastError = r.ok ? null : (r.detail ?? "connection ping failed");
       await db.execute(
-        sql`update connections set status = 'active', last_error = null, updated_at = now() where id = ${id} and org_id = ${gate.user.orgId}`,
+        sql`update connections set status = ${status}, last_error = ${lastError}, updated_at = now() where id = ${id} and org_id = ${gate.user.orgId}`,
       );
       return NextResponse.json({ ok: r.ok, detail: r.detail });
     }
