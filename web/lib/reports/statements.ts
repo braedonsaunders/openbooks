@@ -156,9 +156,20 @@ export async function profitAndLoss(from: string, to: string, dims?: DimFilter, 
   return { items, revenue, cogs, grossProfit, expenses, netIncome: decimalSubtract(grossProfit, expenses) };
 }
 
-export async function balanceSheet(asOf: string, orgId?: string, bookId?: string | null) {
+/**
+ * Balance sheet through an inclusive date. The dimensions argument is kept at
+ * the end for backwards compatibility with callers that use the historical
+ * `(asOf, orgId, bookId)` shape; subsidiary-aware callers can pass it as the
+ * fourth argument without changing those call sites.
+ */
+export async function balanceSheet(
+  asOf: string,
+  orgId?: string,
+  bookId?: string | null,
+  dims?: DimFilter,
+) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
-  const rows = await summaryAccountBalances(resolvedOrgId, null, asOf, undefined, bookId);
+  const rows = await summaryAccountBalances(resolvedOrgId, null, asOf, dims?.subsidiaryIds, bookId);
   const assets = treeify(rows, ["asset_bank", "asset_receivable", "asset_current_other", "asset_fixed", "asset_other"]);
   const liabilities = treeify(rows, ["liability_payable", "liability_card", "liability_current_other", "liability_long_term"]);
   const equity = treeify(rows, ["equity"]);
