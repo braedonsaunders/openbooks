@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { FileDown, History } from 'lucide-react'
 import {
@@ -13,10 +13,12 @@ import {
   FieldLabel,
   Input,
   Skeleton,
+  Textarea,
 } from '@openbooks/ui'
 import type { YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
 import type { PayrollFilingSlipData } from '@openbooks/engine/src/payroll-filing-registry.ts'
 import { useMoney } from '../../../../components/money-provider'
+import { confirmDialog } from '../../../../lib/confirm'
 import { payrollSlipFacsimile } from '../../../../lib/payroll-slip-facsimile'
 import { renderTaxFormFacsimileBody } from '../../../../lib/tax-form-facsimile-html'
 
@@ -434,8 +436,25 @@ export function FilingCorrectionSection({
   const [error, setError] = useState('')
   const [preview, setPreview] = useState<
     { status: 'idle' } | { status: 'loading' } | { status: 'error'; message: string }
-    | { status: 'ready'; slip: PayrollFilingSlipData; orgName: string; revision: 'amended' | 'cancelled' }
+    | {
+      status: 'ready'
+      slip: PayrollFilingSlipData
+      orgName: string
+      revision: 'amended' | 'cancelled'
+      rowId: string
+    }
   >({ status: 'idle' })
+  const [cancellationReason, setCancellationReason] = useState('')
+  const previewRequest = useRef(0)
+
+  // A preview is evidence for this exact row and revision. Never let a
+  // preview from a different row survive a drawer/navigation update.
+  useEffect(() => {
+    previewRequest.current += 1
+    setPreview({ status: 'idle' })
+    setCancellationReason('')
+    setError('')
+  }, [review.rowId, review.lastRevision])
 
   const amendment = lifecycle.amendment
   const show = (value: string | null) =>
@@ -448,32 +467,87 @@ export function FilingCorrectionSection({
     + (format === 'pdf' ? '&format=pdf' : '')
 
   async function loadPreview(revision: 'amended' | 'cancelled') {
+    const request = ++previewRequest.current
+    const rowId = review.rowId
     setPreview({ status: 'loading' })
+    // Starting a new revision review invalidates any explanation typed for a
+    // previous cancellation preview.
+    setCancellationReason('')
     try {
       const res = await fetch(correctionHref(revision, 'json'))
       const body = (await res.json()) as { slip?: PayrollFilingSlipData; orgName?: string; error?: string }
       if (!res.ok || !body.slip) throw new Error(body.error ?? res.statusText)
-      setPreview({ status: 'ready', slip: body.slip, orgName: body.orgName ?? '', revision })
+      if (request !== previewRequest.current) return
+      setPreview({
+        status: 'ready',
+        slip: body.slip,
+        orgName: body.orgName ?? '',
+        revision,
+        rowId,
+      })
     } catch (e) {
+      if (request !== previewRequest.current) return
       setPreview({ status: 'error', message: (e as Error).message })
     }
   }
 
   async function issue(revision: 'amended' | 'cancelled') {
     setError('')
+
+    const reason = cancellationReason.trim()
+    if (revision === 'cancelled') {
+      const cancellationPreviewLoaded = preview.status === 'ready'
+        && preview.revision === 'cancelled'
+        && preview.rowId === review.rowId
+      if (!cancellationPreviewLoaded) {
+        setError(text(
+          'lifecycle.cancelPreviewRequired',
+          'Load the cancellation preview for this slip before cancelling it.',
+        ))
+        return
+      }
+      if (!reason) {
+        setError(text(
+          'lifecycle.cancelReasonRequired',
+          'A cancellation reason is required.',
+        ))
+        return
+      }
+      const confirmed = await confirmDialog({
+        title: text('lifecycle.cancelConfirmTitle', 'Confirm cancellation'),
+        message: text(
+          'lifecycle.cancelConfirmMessage',
+          'This is an irreversible filing-history act. The reviewed slip will be reported as cancelled. Continue?',
+        ),
+        confirmLabel: text('lifecycle.confirmCancellation', 'Confirm cancellation'),
+        tone: 'danger',
+      })
+      if (!confirmed) return
+    }
+
     setBusy(revision)
     try {
+      const payload: Record<string, unknown> = {
+        country: section.country,
+        filing: section.key,
+        year,
+        revision,
+        rowIds: [review.rowId],
+      }
+      if (revision === 'cancelled') {
+        payload.confirmedCancellation = true
+        payload.reason = reason
+      }
       const res = await fetch('/api/payroll/year-end/amendments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          country: section.country, filing: section.key, year, revision, rowIds: [review.rowId],
-        }),
+        body: JSON.stringify(payload),
       })
-      const body = (await res.json()) as { error?: string; fileRefusal?: string | null }
-      if (!res.ok) throw new Error(body.error ?? res.statusText)
-      if (body.fileRefusal) setError(body.fileRefusal)
+      const responseBody = (await res.json()) as { error?: string; fileRefusal?: string | null }
+      if (!res.ok) throw new Error(responseBody.error ?? res.statusText)
+      if (responseBody.fileRefusal) setError(responseBody.fileRefusal)
       setPreview({ status: 'idle' })
+      if (revision === 'cancelled') setCancellationReason('')
       onIssued()
     } catch (e) {
       setError((e as Error).message)
@@ -494,6 +568,9 @@ export function FilingCorrectionSection({
   const canCancel = amendment.supported
     && amendment.revisions.includes('cancelled')
     && (review.status === 'absent' || review.status === 'changed' || review.status === 'unchanged')
+  const cancellationPreviewLoaded = preview.status === 'ready'
+    && preview.revision === 'cancelled'
+    && preview.rowId === review.rowId
 
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
@@ -647,7 +724,7 @@ export function FilingCorrectionSection({
                 <Button
                   size="sm"
                   variant="destructive"
-                  disabled={busy != null}
+                  disabled={busy != null || !cancellationPreviewLoaded || !cancellationReason.trim()}
                   onClick={() => void issue('cancelled')}
                 >
                   {text('lifecycle.issueCancelled', 'Cancel this slip')}
@@ -660,6 +737,31 @@ export function FilingCorrectionSection({
               </span>
             )}
           </div>
+
+          {canCancel && (
+            <div className="space-y-1.5">
+              <FieldLabel
+                htmlFor={`cancellation-reason-${review.rowId}`}
+                help={text(
+                  'lifecycle.cancelReasonHelp',
+                  'Explain why this issued slip should never have existed. The reason is retained in the filing history.',
+                )}
+              >
+                {text('lifecycle.cancelReason', 'Cancellation reason')}
+              </FieldLabel>
+              <Textarea
+                id={`cancellation-reason-${review.rowId}`}
+                rows={3}
+                value={cancellationReason}
+                onChange={(event) => setCancellationReason(event.target.value)}
+                placeholder={text(
+                  'lifecycle.cancelReasonPlaceholder',
+                  'Why should this slip be cancelled?',
+                )}
+                maxLength={500}
+              />
+            </div>
+          )}
 
           {preview.status === 'loading' && <Skeleton className="h-40 w-full" />}
           {preview.status === 'error' && (

@@ -528,6 +528,12 @@ export interface RecordFilingIssueInput {
    */
   rowIds?: readonly string[];
   note?: string | null;
+  /**
+   * The operator's explanation for a cancellation. The API requires this
+   * separately from the generic filing note; accepting it here also makes the
+   * engine boundary explicit for trusted internal callers.
+   */
+  reason?: string | null;
   /** Extra parameters the filing's own download builder parses. */
   params?: Record<string, string>;
 }
@@ -562,13 +568,26 @@ export async function recordFilingIssue(
   input: RecordFilingIssueInput,
 ): Promise<RecordFilingIssueResult> {
   const { orgId, actorId, country, filingKey, taxYear, revision } = input;
+  const cancellationReason = input.reason?.trim() || input.note?.trim() || null;
+  if (revision === "cancelled" && !cancellationReason) {
+    throw new PayrollError(
+      "a nonblank cancellation reason is required and is retained in the filing history",
+    );
+  }
   const filing = yearEndFiling(country, filingKey);
   const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
 
+  // Normalize the evidence once at the service boundary. A trusted caller
+  // may use `reason`, while older callers may already supply the filing note;
+  // either way a cancellation is persisted with the confirmed explanation.
+  const normalizedInput = revision === "cancelled"
+    ? { ...input, note: cancellationReason }
+    : input;
+
   if (revision === "original") {
-    return await issueOriginal(input, filing, submissions);
+    return await issueOriginal(normalizedInput, filing, submissions);
   }
-  return await issueCorrection(input, filing, submissions, revision);
+  return await issueCorrection(normalizedInput, filing, submissions, revision);
 }
 
 async function issueOriginal(

@@ -1017,13 +1017,25 @@ test(
         /cancel them instead/,
       );
 
+      // The UI confirmation is not an authorization boundary. Internal
+      // callers must still provide the explanation that becomes audit
+      // evidence before the service can create a cancellation artifact.
+      await assert.rejects(
+        recordFilingIssue({
+          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
+          taxYear: 2026, revision: "cancelled", rowIds: [fx.rowId],
+        }),
+        /nonblank cancellation reason/,
+      );
+
       const cancelled = await recordFilingIssue({
         orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
         taxYear: 2026, revision: "cancelled", rowIds: [fx.rowId],
-        note: "Employee belonged to the other entity",
+        reason: "Employee belonged to the other entity",
       });
       assert.equal(cancelled.submission.revision, "cancelled");
       assert.equal(cancelled.submission.supersedesId, issued.submission.id);
+      assert.equal(cancelled.submission.note, "Employee belonged to the other entity");
       assert.match(cancelled.file!.body, /<rpt_tcd>C<\/rpt_tcd>/);
       assert.match(cancelled.file!.body, /<RPT_TCD>C<\/RPT_TCD>/);
       // The CRA's instruction: a cancelled slip carries the SAME information

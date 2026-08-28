@@ -110,6 +110,8 @@ export async function POST(req: Request) {
     revision?: string
     rowIds?: string[]
     note?: string
+    reason?: string
+    confirmedCancellation?: boolean
   } | null
   if (!body) return NextResponse.json({ error: 'a JSON body is required' }, { status: 422 })
   const year = Number(body.year)
@@ -122,6 +124,20 @@ export async function POST(req: Request) {
       { error: 'revision must be original, amended or cancelled' },
       { status: 422 },
     )
+  }
+  if (revision === 'cancelled') {
+    if (body.confirmedCancellation !== true) {
+      return NextResponse.json(
+        { error: 'cancellation must be explicitly confirmed' },
+        { status: 422 },
+      )
+    }
+    if (typeof body.reason !== 'string' || body.reason.trim() === '') {
+      return NextResponse.json(
+        { error: 'a nonblank cancellation reason is required' },
+        { status: 422 },
+      )
+    }
   }
   const country = body.country ?? ''
   const filing = body.filing ?? ''
@@ -137,16 +153,21 @@ export async function POST(req: Request) {
     }
   }
   try {
-    const result = await recordFilingIssue({
+    const issueInput = {
       orgId: gate.user.orgId,
       actorId: gate.user.id,
       country,
       filingKey: filing,
       taxYear: year,
-      revision,
+      revision: revision as 'original' | 'amended' | 'cancelled',
       rowIds: Array.isArray(body.rowIds) ? body.rowIds.map(String) : undefined,
-      note: body.note?.trim() || null,
-    })
+      // A cancellation's explanation is its audit evidence. Keep it in the
+      // existing filing note column so history readers show the same reason
+      // that was confirmed at the destructive boundary.
+      note: revision === 'cancelled' ? body.reason!.trim() : body.note?.trim() || null,
+      ...(revision === 'cancelled' ? { reason: body.reason!.trim() } : {}),
+    }
+    const result = await recordFilingIssue(issueInput)
     return NextResponse.json({
       submission: {
         id: result.submission.id,
