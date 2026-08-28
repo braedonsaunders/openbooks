@@ -1582,7 +1582,7 @@ const FIELD_TICKET: RecordTypeMeta = {
       operators: OPERATORS_BY_KIND.select,
       options: [
         { value: "draft", labelKey: "common.status.draft" },
-        { value: "pending_approval", labelKey: "common.status.pending_approval" },
+        { value: "pending_approval", labelKey: "common.status.pendingApproval" },
         { value: "approved", labelKey: "common.status.approved" },
         { value: "voided", labelKey: "common.status.voided" },
       ],
