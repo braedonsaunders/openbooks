@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { sql } from "drizzle-orm";
 import {
   captureContentMatchesMime,
   extractAzureInvoice,
@@ -7,8 +9,20 @@ import {
   normalizeCapturedDecimal,
   validateNormalizedCapture,
   validatePurchaseOrderQuantities,
+  type NormalizedCapture,
 } from "./ap-capture.ts";
-import { billableRemainderUnits, matchPurchaseOrderLine } from "./ap-capture-service.ts";
+import { db } from "./db.ts";
+import { fromUnits, toUnits } from "./money.ts";
+import {
+  billableRemainderUnits,
+  CaptureMaterializationError,
+  materializeCapture,
+  matchPurchaseOrderLine,
+  purchaseOrderBilledQuantityDelta,
+} from "./ap-capture-service.ts";
+import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
+
+const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("upload signature validation accepts supported formats and rejects mislabeled content", () => {
   assert.equal(captureContentMatchesMime(new Uint8Array([0x25, 0x50, 0x44, 0x46]), "application/pdf"), true);
@@ -175,3 +189,193 @@ test("PO match accepts captures within the price tolerance unchanged", () => {
   assert.deepEqual(matchPurchaseOrderLine({ ...stockPoLine, invoiceUnitPrice: "10.1500" }), []);
   assert.deepEqual(matchPurchaseOrderLine({ ...stockPoLine, invoiceUnitPrice: "10.2000" }), []);
 });
+
+test("PO capture billing deltas move in the document's commercial direction", () => {
+  assert.equal(purchaseOrderBilledQuantityDelta("vendor_bill", "2.1250"), "2.1250");
+  assert.equal(purchaseOrderBilledQuantityDelta("vendor_credit", "2.1250"), "-2.1250");
+  assert.throws(
+    () => purchaseOrderBilledQuantityDelta("vendor_credit", "0.0000"),
+    /quantity must be positive/,
+  );
+});
+
+test("PO vendor credits release billed quantity and reject over-credit", () => {
+  assert.deepEqual(
+    matchPurchaseOrderLine({
+      ...stockPoLine,
+      billedQuantity: "6.0000",
+      fulfilledQuantity: "6.0000",
+      invoiceUnitPrice: "10.0000",
+      documentKind: "vendor_credit",
+    }),
+    [],
+  );
+  assert.deepEqual(
+    matchPurchaseOrderLine({
+      ...stockPoLine,
+      billedQuantity: "1.0000",
+      fulfilledQuantity: "6.0000",
+      invoiceUnitPrice: "10.0000",
+      documentKind: "vendor_credit",
+    }).map((matchIssue) => matchIssue.code),
+    ["po_quantity_exceeded"],
+  );
+});
+
+function captureNormalized(
+  invoiceNumber: string,
+  quantity: string,
+  purchaseOrderLineId: string,
+  accountId: string,
+): NormalizedCapture {
+  const amount = fromUnits((toUnits(quantity) * toUnits("10.0000")) / 10_000n);
+  return {
+    vendorName: "Acme Vendor",
+    vendorTaxId: null,
+    invoiceNumber,
+    invoiceDate: "2026-07-15",
+    dueDate: null,
+    purchaseOrderNumber: null,
+    currency: "CAD",
+    subtotal: amount,
+    taxTotal: "0.0000",
+    total: amount,
+    memo: null,
+    lines: [{
+      description: "Regression line",
+      productCode: null,
+      quantity,
+      unit: "ea",
+      unitPrice: "10.0000",
+      amount,
+      taxAmount: "0.0000",
+      accountId,
+      itemId: null,
+      purchaseOrderLineId,
+      confidence: "1.0000",
+    }],
+  };
+}
+
+test(
+  "AP capture advances and releases PO billed quantity transactionally",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = null;
+    const poId = randomUUID();
+    const poLineId = randomUUID();
+    const folderId = randomUUID();
+    const fileId = randomUUID();
+    try {
+      await db.execute(sql`
+        insert into vendor_roles (org_id, party_id, ap_account_id, default_expense_account_id)
+        values (${org.orgId}, ${org.vendorId}, ${org.accounts.ap}, ${org.accounts.cogs})
+      `);
+      await db.execute(sql`
+        insert into folders (id, org_id, name)
+        values (${folderId}, ${org.orgId}, 'AP capture regression')
+      `);
+      await db.execute(sql`
+        insert into files (id, org_id, folder_id, name, content_type, size_bytes)
+        values (${fileId}, ${org.orgId}, ${folderId}, 'capture.pdf', 'application/pdf', 4)
+      `);
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, party_id, subsidiary_id,
+           document_date, currency, subtotal, tax_total, total, created_by)
+        values (${poId}, ${org.orgId}, 'purchase_order', 'draft', 'PO-CAPTURE-REG',
+                ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, 'CAD', 100, 0, 100, ${actorId})
+      `);
+      await db.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, account_id, description,
+           quantity, unit, unit_price, amount, tax_amount, is_billable,
+           quantity_fulfilled, quantity_billed, custom, extra_dims)
+        values (${poLineId}, ${org.orgId}, ${poId}, 1, null, ${org.accounts.cogs},
+                'PO regression line', 10, 'ea', 10, 100, 0, false, 0, 4, '{}'::jsonb, '{}'::jsonb)
+      `);
+      await db.execute(sql`
+        update documents set status = 'approved', updated_at = now()
+         where id = ${poId} and org_id = ${org.orgId}
+      `);
+
+      async function insertCapture(
+        documentKind: "vendor_bill" | "vendor_credit",
+        invoiceNumber: string,
+        quantity: string,
+      ): Promise<string> {
+        const captureId = randomUUID();
+        const normalized = captureNormalized(invoiceNumber, quantity, poLineId, org.accounts.cogs);
+        await db.execute(sql`
+          insert into ap_capture_items
+            (id, org_id, file_id, status, original_filename, content_hash,
+             document_kind, normalized, validation_issues, vendor_candidate_id, purchase_order_id,
+             created_by, updated_by)
+          values (${captureId}, ${org.orgId}, ${fileId}, 'ready', ${invoiceNumber + '.pdf'},
+                  ${randomUUID().replaceAll('-', '').padEnd(64, '0')}, ${documentKind},
+                  ${JSON.stringify(normalized)}::jsonb, '[]'::jsonb, ${org.vendorId}, ${poId},
+                  ${actorId}, ${actorId})
+        `);
+        return captureId;
+      }
+
+      const billId = await insertCapture("vendor_bill", "BILL-CAPTURE-REG", "2.1250");
+      const bill = await materializeCapture({ orgId: org.orgId, captureItemId: billId, actorId });
+      assert.ok(bill.documentId);
+      let billed = (await db.execute<{ quantity_billed: string }>(sql`
+        select quantity_billed::text from document_lines where id = ${poLineId}
+      `)).rows[0]!.quantity_billed;
+      assert.equal(billed, "6.1250", "a positive vendor bill increases PO billed quantity");
+
+      const replay = await materializeCapture({ orgId: org.orgId, captureItemId: billId, actorId });
+      assert.equal(replay.documentId, bill.documentId, "replaying a materialized capture is idempotent");
+      billed = (await db.execute<{ quantity_billed: string }>(sql`
+        select quantity_billed::text from document_lines where id = ${poLineId}
+      `)).rows[0]!.quantity_billed;
+      assert.equal(billed, "6.1250");
+
+      const creditId = await insertCapture("vendor_credit", "CREDIT-CAPTURE-REG", "2.1250");
+      const credit = await materializeCapture({ orgId: org.orgId, captureItemId: creditId, actorId });
+      assert.ok(credit.documentId);
+      billed = (await db.execute<{ quantity_billed: string }>(sql`
+        select quantity_billed::text from document_lines where id = ${poLineId}
+      `)).rows[0]!.quantity_billed;
+      assert.equal(billed, "4.0000", "a positive vendor credit decreases PO billed quantity");
+
+      const overCreditId = await insertCapture("vendor_credit", "CREDIT-CAPTURE-OVER", "4.0001");
+      await assert.rejects(
+        materializeCapture({ orgId: org.orgId, captureItemId: overCreditId, actorId }),
+        (error: unknown) => error instanceof CaptureMaterializationError && /insufficient billed quantity/.test(error.message),
+      );
+      billed = (await db.execute<{ quantity_billed: string }>(sql`
+        select quantity_billed::text from document_lines where id = ${poLineId}
+      `)).rows[0]!.quantity_billed;
+      assert.equal(billed, "4.0000", "an over-credit cannot underflow the PO billed balance");
+
+      const racingBillA = await insertCapture("vendor_bill", "BILL-CAPTURE-RACE-A", "4.0000");
+      const racingBillB = await insertCapture("vendor_bill", "BILL-CAPTURE-RACE-B", "4.0000");
+      const raced = await Promise.allSettled([
+        materializeCapture({ orgId: org.orgId, captureItemId: racingBillA, actorId }),
+        materializeCapture({ orgId: org.orgId, captureItemId: racingBillB, actorId }),
+      ]);
+      assert.equal(raced.filter((result) => result.status === "fulfilled").length, 1);
+      assert.equal(raced.filter((result) => result.status === "rejected").length, 1);
+      billed = (await db.execute<{ quantity_billed: string }>(sql`
+        select quantity_billed::text from document_lines where id = ${poLineId}
+      `)).rows[0]!.quantity_billed;
+      assert.equal(billed, "8.0000", "the locked PO line admits only one concurrent bill");
+    } finally {
+      // Capture evidence is intentionally append-only in production. Remove
+      // this disposable fixture's events through a transaction-local trigger
+      // disable before the generic scratch wipe reaches its source files.
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`alter table public.ap_capture_events disable trigger ap_capture_events_append_only`);
+        await tx.execute(sql`delete from ap_capture_events where org_id = ${org.orgId}`);
+        await tx.execute(sql`alter table public.ap_capture_events enable trigger ap_capture_events_append_only`);
+        await tx.execute(sql`delete from ap_capture_items where org_id = ${org.orgId}`);
+      });
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

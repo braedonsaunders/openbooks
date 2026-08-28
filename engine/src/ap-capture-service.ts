@@ -156,6 +156,8 @@ export type PurchaseOrderMatchIssue = {
   actual: string;
 };
 
+type CaptureDocumentKind = CaptureRow["document_kind"];
+
 /**
  * The one three-way match every billing channel shares: ordered quantity,
  * received quantity (for stock kinds) and price. Extraction validation calls
@@ -172,15 +174,26 @@ export function matchPurchaseOrderLine(input: {
   poUnitPrice: string;
   itemId: string | null;
   itemKind: string | null;
+  documentKind?: CaptureDocumentKind;
 }): PurchaseOrderMatchIssue[] {
   const invoiceQuantity = fromUnits(toUnits(input.invoiceQuantity));
-  const issues: PurchaseOrderMatchIssue[] = validatePurchaseOrderQuantities({
-    invoiceQuantity,
-    orderedQuantity: input.orderedQuantity,
-    billedQuantity: input.billedQuantity,
-    fulfilledQuantity: input.fulfilledQuantity,
-    requiresReceipt: input.itemId !== null && lineRequiresReceipt(input.itemKind),
-  });
+  const issues: PurchaseOrderMatchIssue[] = input.documentKind === "vendor_credit"
+    ? (() => {
+        // A credit releases quantity that a prior bill consumed. It is
+        // therefore bounded by the already-billed quantity, not by the
+        // remaining ordered/received headroom used by a vendor bill.
+        const billed = fromUnits(toUnits(input.billedQuantity));
+        return toUnits(invoiceQuantity) <= 0n || cmp(invoiceQuantity, billed) > 0
+          ? [{ code: "po_quantity_exceeded" as const, expected: billed, actual: invoiceQuantity }]
+          : [];
+      })()
+    : validatePurchaseOrderQuantities({
+        invoiceQuantity,
+        orderedQuantity: input.orderedQuantity,
+        billedQuantity: input.billedQuantity,
+        fulfilledQuantity: input.fulfilledQuantity,
+        requiresReceipt: input.itemId !== null && lineRequiresReceipt(input.itemKind),
+      });
   if (!priceWithinTolerance(input.poUnitPrice, input.invoiceUnitPrice)) {
     issues.push({
       code: "po_price_variance",
@@ -189,6 +202,21 @@ export function matchPurchaseOrderLine(input: {
     });
   }
   return issues;
+}
+
+/**
+ * Exact quantity_billed movement for a PO-backed AP capture. Capture lines
+ * retain their positive physical quantity (vendor-credit inventory returns
+ * depend on that), while the PO's billed balance moves in the document's
+ * commercial direction.
+ */
+export function purchaseOrderBilledQuantityDelta(
+  documentKind: CaptureDocumentKind,
+  quantity: string,
+): string {
+  const units = toUnits(quantity);
+  if (units <= 0n) throw new Error("purchase-order capture quantity must be positive");
+  return fromUnits(documentKind === "vendor_credit" ? -units : units);
 }
 
 /** Received-and-unbilled headroom a purchase-order line can still be billed for. */
@@ -225,6 +253,7 @@ async function mapLines(
   capture: NormalizedCapture,
   vendorId: string | null,
   purchaseOrderId: string | null,
+  documentKind: CaptureDocumentKind,
 ): Promise<{ lines: CaptureLine[]; issues: CaptureIssue[] }> {
   const issues: CaptureIssue[] = [];
   if (purchaseOrderId) {
@@ -259,6 +288,7 @@ async function mapLines(
         poUnitPrice: String(po.unit_price),
         itemId: po.item_id,
         itemKind: po.item_kind,
+        documentKind,
       })) {
         issues.push(issue(matchIssue.code, "blocking", { lineIndex, expected: matchIssue.expected, actual: matchIssue.actual }));
       }
@@ -335,6 +365,7 @@ export async function resolveAndValidateCapture(input: {
   confidenceThreshold: string;
   vendorId?: string | null;
   purchaseOrderId?: string | null;
+  documentKind?: CaptureDocumentKind;
 }): Promise<{
   normalized: NormalizedCapture;
   vendorId: string | null;
@@ -342,6 +373,13 @@ export async function resolveAndValidateCapture(input: {
   issues: CaptureIssue[];
   duplicate: boolean;
 }> {
+  // Review PATCHes historically omitted the kind from this helper's input.
+  // Read the persisted kind in that case so a previously selected vendor
+  // credit receives credit matching during re-resolution as well.
+  const documentKind = input.documentKind ?? (await db.execute<{ document_kind: CaptureDocumentKind }>(sql`
+    select document_kind from ap_capture_items
+     where org_id = ${input.orgId} and id = ${input.captureItemId}
+  `)).rows[0]?.document_kind ?? "vendor_bill";
   let vendorId = input.vendorId === undefined ? await resolveVendor(input.orgId, input.normalized) : input.vendorId;
   if (vendorId) {
     const valid = (await db.execute(sql`
@@ -363,7 +401,7 @@ export async function resolveAndValidateCapture(input: {
     if (!valid.rows[0]) purchaseOrderId = null;
     else if (!vendorId && valid.rows[0].party_id) vendorId = valid.rows[0].party_id;
   }
-  const mapped = await mapLines(input.orgId, input.normalized, vendorId, purchaseOrderId);
+  const mapped = await mapLines(input.orgId, input.normalized, vendorId, purchaseOrderId, documentKind);
   const normalized = { ...input.normalized, lines: mapped.lines };
   const issues = [...validateNormalizedCapture(normalized, input.confidenceThreshold), ...mapped.issues];
   if (!vendorId) issues.push(issue("vendor_unresolved", "blocking", { field: "vendorName" }));
@@ -426,6 +464,7 @@ export async function processCaptureItem(input: { orgId: string; captureItemId: 
       captureItemId: item.id,
       normalized: extracted.normalized,
       confidenceThreshold: settings.confidenceThreshold,
+      documentKind: item.document_kind,
     });
     if (extracted.overallConfidence && cmp(extracted.overallConfidence, settings.confidenceThreshold) < 0) {
       resolved.issues.push(issue("document_low_confidence", "warning", { field: "document" }));
@@ -562,12 +601,20 @@ export async function materializeCapture(input: {
     }
     // Re-run the shared three-way match against fresh purchase-order rows at
     // the write boundary: a stored review verdict can be stale, and this is
-    // the path production actually bills through. Locking every PO line up
-    // front also serializes this materialize against convertOrder on the
-    // same order, so the two channels cannot overbill each other.
+    // the path production actually bills through. Lock the PO parent before
+    // its lines, matching convertOrder's lock order so the two channels cannot
+    // deadlock while advancing the same order.
     const priceVariances: Array<{ lineIndex: number; expected: string; actual: string }> = [];
     const poLineLocations = new Map<string, string | null>();
     if (item.purchase_order_id) {
+      const purchaseOrder = (await tx.execute<{ id: string; kind: string; status: string }>(sql`
+        select id, kind, status from documents
+         where org_id = ${input.orgId} and id = ${item.purchase_order_id}
+         for update
+      `)).rows[0];
+      if (!purchaseOrder || purchaseOrder.kind !== "purchase_order" || purchaseOrder.status !== "approved") {
+        throw new CaptureMaterializationError("The purchase order is no longer approved");
+      }
       await tx.execute(sql`
         select id from document_lines
          where org_id = ${input.orgId} and document_id = ${item.purchase_order_id}
@@ -608,13 +655,16 @@ export async function materializeCapture(input: {
           poUnitPrice: po.unit_price,
           itemId: po.item_id,
           itemKind: po.item_kind,
+          documentKind: item.document_kind,
         })) {
           if (matchIssue.code === "po_price_variance") {
             priceVariances.push({ lineIndex, expected: matchIssue.expected, actual: matchIssue.actual });
             continue;
           }
           throw new CaptureMaterializationError(
-            `Purchase order line ${lineIndex + 1} cannot bill ${matchIssue.actual}: only ${matchIssue.expected} remains`,
+            item.document_kind === "vendor_credit"
+              ? `Purchase order line ${lineIndex + 1} has insufficient billed quantity for this credit: ${matchIssue.actual} exceeds ${matchIssue.expected}`
+              : `Purchase order line ${lineIndex + 1} cannot bill ${matchIssue.actual}: only ${matchIssue.expected} remains`,
           );
         }
       });
@@ -704,6 +754,21 @@ export async function materializeCapture(input: {
       returning id
     `));
     const documentId = inserted.rows[0]!.id;
+    const hasPoLineAdvances = item.purchase_order_id !== null
+      && capture.lines.some((line) => line.purchaseOrderLineId !== null && line.purchaseOrderLineId !== undefined);
+    if (hasPoLineAdvances) {
+      // Migration 0034 protects approved source lines as immutable commercial
+      // facts. quantity_billed is operational reconciliation state, so reopen
+      // the already-locked PO only for these advances, then restore approved
+      // before commit. Any failure rolls the status and the whole materialize
+      // back together.
+      const reopened = (await tx.execute<{ id: string }>(sql`
+        update documents set status = 'draft', updated_at = now(), updated_by = ${input.actorId}
+         where id = ${item.purchase_order_id} and org_id = ${input.orgId} and status = 'approved'
+         returning id
+      `)).rows[0];
+      if (!reopened) throw new CaptureMaterializationError("The purchase order changed while it was being materialized", 409);
+    }
     for (let index = 0; index < capture.lines.length; index += 1) {
       const line = capture.lines[index]!;
       // A PO-backed bill receives into the warehouse named by the locked PO
@@ -724,21 +789,46 @@ export async function materializeCapture(input: {
                 ${input.actorId}, ${input.actorId})
       `);
       if (line.purchaseOrderLineId) {
-        const advanced = (await tx.execute<{ id: string }>(sql`
-          update document_lines dl set quantity_billed = dl.quantity_billed + ${line.quantity},
-                 updated_at = now(), updated_by = ${input.actorId}
-           where dl.id = ${line.purchaseOrderLineId} and dl.org_id = ${input.orgId}
-             and dl.quantity_billed + ${line.quantity} <= dl.quantity
+        let billedDelta: string;
+        try {
+          billedDelta = purchaseOrderBilledQuantityDelta(item.document_kind, line.quantity);
+        } catch {
+          throw new CaptureMaterializationError(
+            `Purchase order line ${index + 1} quantity must be positive`,
+          );
+        }
+        const billedGuard = item.document_kind === "vendor_credit"
+          ? sql`and dl.quantity_billed + ${billedDelta} >= 0`
+          : sql`and dl.quantity_billed + ${billedDelta} <= dl.quantity
              and (dl.item_id is null or exists (
                select 1 from items i
                 where i.id = dl.item_id and i.org_id = ${input.orgId}
                   and (i.kind in (${receiptExemptItemKindsSql})
-                       or dl.quantity_fulfilled - dl.quantity_billed >= ${line.quantity})
-             ))
+                       or dl.quantity_fulfilled - dl.quantity_billed >= ${billedDelta})
+             ))`;
+        const advanced = (await tx.execute<{ id: string }>(sql`
+          update document_lines dl set quantity_billed = dl.quantity_billed + ${billedDelta},
+                 updated_at = now(), updated_by = ${input.actorId}
+           where dl.id = ${line.purchaseOrderLineId} and dl.org_id = ${input.orgId}
+             ${billedGuard}
           returning id
         `));
-        if (!advanced.rows[0]) throw new CaptureMaterializationError(`Purchase order line ${index + 1} is no longer billable`);
+        if (!advanced.rows[0]) {
+          throw new CaptureMaterializationError(
+            item.document_kind === "vendor_credit"
+              ? `Purchase order line ${index + 1} has insufficient billed quantity for this credit`
+              : `Purchase order line ${index + 1} is no longer billable`,
+          );
+        }
       }
+    }
+    if (hasPoLineAdvances) {
+      const restored = (await tx.execute<{ id: string }>(sql`
+        update documents set status = 'approved', updated_at = now(), updated_by = ${input.actorId}
+         where id = ${item.purchase_order_id} and org_id = ${input.orgId} and status = 'draft'
+         returning id
+      `)).rows[0];
+      if (!restored) throw new CaptureMaterializationError("The purchase order changed while it was being materialized", 409);
     }
     if (item.purchase_order_id) {
       await tx.execute(sql`
