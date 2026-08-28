@@ -16,6 +16,7 @@ import { isFeatureEnabled } from "../features";
 import { apPosition } from "../cash/ap-position";
 import { arPosition } from "../cash/ar-position";
 import { cashPosition } from "../cash/cash-position";
+import { normalizeMoneyValue } from "../cash/core";
 import type { CategoryWeekly, ForecastEntry, WeekRow } from "../cash/core";
 
 /**
@@ -46,7 +47,7 @@ function slimEntry(e: ForecastEntry) {
     docKind: e.docKind,
     docNumber: e.docNumber,
     partyName: e.partyName,
-    amount: num(e.amount),
+    amount: e.amount,
     tranDate: e.tranDate,
     dueDate: e.dueDate,
     predictedDate: e.predictedDate,
@@ -60,15 +61,15 @@ function slimWeek(w: WeekRow) {
     weekStart: w.weekStart,
     weekEnd: w.weekEnd,
     label: w.label,
-    inflow: num(w.inflow),
-    outflow: num(w.outflow),
-    net: num(w.net),
-    startingCash: num(w.startingCash),
-    endingCash: num(w.endingCash),
-    dynamicInflow: num(w.dynamicInflow),
-    dynamicOutflow: num(w.dynamicOutflow),
-    deferredOut: num(w.deferredOut),
-    apCapacity: w.apCapacity === null ? null : num(w.apCapacity),
+    inflow: w.inflow,
+    outflow: w.outflow,
+    net: w.net,
+    startingCash: w.startingCash,
+    endingCash: w.endingCash,
+    dynamicInflow: w.dynamicInflow,
+    dynamicOutflow: w.dynamicOutflow,
+    deferredOut: w.deferredOut,
+    apCapacity: w.apCapacity,
   };
 }
 
@@ -79,16 +80,16 @@ function slimCategory(c: CategoryWeekly) {
     name: c.name,
     direction: c.direction,
     method: c.method,
-    total: num(c.total),
-    weekly: c.weekly.map((n) => num(n)),
+    total: c.total,
+    weekly: c.weekly,
   };
 }
 
 /** The org's AP capacity-scheduling knobs, exactly as the AP/AR/Cash pages
  *  build them from the cashflow analytics config. */
-async function loadApSettings(orgId: string): Promise<{ weeklyCap: number; restrictToSafe: boolean }> {
+async function loadApSettings(orgId: string): Promise<{ weeklyCap: string; restrictToSafe: boolean }> {
   const cfg = await analyticsConfig(orgId, "cashflow");
-  return { weeklyCap: cfg.weeklyApCap ?? 0, restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 };
+  return { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 };
 }
 
 // ---------------------------------------------------------------------------
@@ -335,14 +336,14 @@ const cashflowTool: AssistantToolDef = {
       data: {
         asOf: r.asOf,
         horizonWeeks: r.horizonWeeks,
-        startingCash: num(r.startingCash),
+        startingCash: r.startingCash,
         summary: r.summary,
         ar: r.ar,
         ap: r.ap,
         apSettings: r.apSettings,
-        deferredBeyondHorizon: num(r.deferredBeyondHorizon),
+        deferredBeyondHorizon: r.deferredBeyondHorizon,
         bankAccounts: capList(
-          r.bankAccounts.map((b) => ({ id: b.id, name: b.name, number: b.number, balance: num(b.balance) })),
+          r.bankAccounts.map((b) => ({ id: b.id, name: b.name, number: b.number, balance: b.balance })),
           50,
         ),
         weeks: r.weeks.map(slimWeek),
@@ -696,45 +697,45 @@ const apPositionTool: AssistantToolDef = {
     });
     return {
       ok: true,
-      note: `Open payables ${num(r.outstanding)} (${num(r.overdue)} overdue across ${r.overdueCount} bills); ${num(r.dueThisWeek)} predicted due this week, pay run recommends ${num(r.payPlan.recommendedTotal)}.`,
+      note: `Open payables ${r.outstanding} (${r.overdue} overdue across ${r.overdueCount} bills); ${r.dueThisWeek} predicted due this week, pay run recommends ${r.payPlan.recommendedTotal}.`,
       data: {
         asOf: r.asOf,
         horizonWeeks: r.horizonWeeks,
-        outstanding: num(r.outstanding),
-        overdue: num(r.overdue),
+        outstanding: r.outstanding,
+        overdue: r.overdue,
         overdueCount: r.overdueCount,
-        dueThisWeek: num(r.dueThisWeek),
-        dueNext30: num(r.dueNext30),
-        dpo: num(r.dpo),
+        dueThisWeek: r.dueThisWeek,
+        dueNext30: r.dueNext30,
+        dpo: r.dpo,
         summary: r.summary,
         weeks: r.weeks.map((w) => ({
           weekStart: w.weekStart,
           weekEnd: w.weekEnd,
           label: w.label,
-          amount: num(w.amount),
+          amount: w.amount,
           count: w.count,
         })),
         byVendor: capList(
           r.byVendor.map((v) => ({
             partyId: v.partyId,
             partyName: v.partyName,
-            amount: num(v.amount),
+            amount: v.amount,
             count: v.count,
-            overdue: num(v.overdue),
+            overdue: v.overdue,
             oldestDue: v.oldestDue,
           })),
           50,
         ),
         worklist: capList(r.worklist.map(slimEntry), 50),
         payPlan: {
-          weeklyCap: num(r.payPlan.weeklyCap),
+          weeklyCap: r.payPlan.weeklyCap,
           restrictToSafe: r.payPlan.restrictToSafe,
           scheduling: r.payPlan.scheduling,
-          capacity: r.payPlan.capacity === null ? null : num(r.payPlan.capacity),
-          startingCash: num(r.payPlan.startingCash),
-          recommendedTotal: num(r.payPlan.recommendedTotal),
-          deferredThisWeek: num(r.payPlan.deferredThisWeek),
-          deferredBeyondHorizon: num(r.payPlan.deferredBeyondHorizon),
+          capacity: r.payPlan.capacity,
+          startingCash: r.payPlan.startingCash,
+          recommendedTotal: r.payPlan.recommendedTotal,
+          deferredThisWeek: r.payPlan.deferredThisWeek,
+          deferredBeyondHorizon: r.payPlan.deferredBeyondHorizon,
           recommended: capList(r.payPlan.recommended.map(slimEntry), 50),
         },
         categories: capList(r.categories.map(slimCategory), 50),
@@ -764,31 +765,31 @@ const arPositionTool: AssistantToolDef = {
     });
     return {
       ok: true,
-      note: `Open receivables ${num(r.outstanding)} (${num(r.overdue)} overdue across ${r.overdueCount} invoices); ${num(r.expectedThisWeek)} expected this week, ${num(r.expectedNext30)} within 30 days.`,
+      note: `Open receivables ${r.outstanding} (${r.overdue} overdue across ${r.overdueCount} invoices); ${r.expectedThisWeek} expected this week, ${r.expectedNext30} within 30 days.`,
       data: {
         asOf: r.asOf,
         horizonWeeks: r.horizonWeeks,
-        outstanding: num(r.outstanding),
-        overdue: num(r.overdue),
+        outstanding: r.outstanding,
+        overdue: r.overdue,
         overdueCount: r.overdueCount,
-        expectedThisWeek: num(r.expectedThisWeek),
-        expectedNext30: num(r.expectedNext30),
-        dso: num(r.dso),
+        expectedThisWeek: r.expectedThisWeek,
+        expectedNext30: r.expectedNext30,
+        dso: r.dso,
         summary: r.summary,
         weeks: r.weeks.map((w) => ({
           weekStart: w.weekStart,
           weekEnd: w.weekEnd,
           label: w.label,
-          amount: num(w.amount),
+          amount: w.amount,
           count: w.count,
         })),
         byCustomer: capList(
           r.byCustomer.map((c) => ({
             partyId: c.partyId,
             partyName: c.partyName,
-            amount: num(c.amount),
+            amount: c.amount,
             count: c.count,
-            overdue: num(c.overdue),
+            overdue: c.overdue,
             oldestDue: c.oldestDue,
           })),
           50,
@@ -825,29 +826,29 @@ const cashPositionTool: AssistantToolDef = {
     });
     return {
       ok: true,
-      note: `Cash ${num(r.startingCash)} as of ${r.asOf}, projected ${num(r.projectedEnd)} after ${r.horizonWeeks} weeks (lowest ${num(r.lowestCash)} in week of ${r.lowestWeek}); runway ${r.runwayStatus}.`,
+      note: `Cash ${r.startingCash} as of ${r.asOf}, projected ${r.projectedEnd} after ${r.horizonWeeks} weeks (lowest ${r.lowestCash} in week of ${r.lowestWeek}); runway ${r.runwayStatus}.`,
       data: {
         asOf: r.asOf,
         horizonWeeks: r.horizonWeeks,
-        startingCash: num(r.startingCash),
-        totalInflows: num(r.totalInflows),
-        totalOutflows: num(r.totalOutflows),
-        netChange: num(r.netChange),
-        projectedEnd: num(r.projectedEnd),
-        lowestCash: num(r.lowestCash),
+        startingCash: r.startingCash,
+        totalInflows: r.totalInflows,
+        totalOutflows: r.totalOutflows,
+        netChange: r.netChange,
+        projectedEnd: r.projectedEnd,
+        lowestCash: r.lowestCash,
         lowestWeek: r.lowestWeek,
-        burnRate: num(r.burnRate),
-        runwayWeeks: r.runwayWeeks === null ? null : num(r.runwayWeeks),
+        burnRate: r.burnRate,
+        runwayWeeks: r.runwayWeeks,
         runwayStatus: r.runwayStatus,
-        deferredBeyondHorizon: num(r.deferredBeyondHorizon),
-        dso: num(r.dso),
-        dpo: num(r.dpo),
-        arOutstanding: num(r.arOutstanding),
-        apOutstanding: num(r.apOutstanding),
+        deferredBeyondHorizon: r.deferredBeyondHorizon,
+        dso: r.dso,
+        dpo: r.dpo,
+        arOutstanding: r.arOutstanding,
+        apOutstanding: r.apOutstanding,
         arCoverage: r.arCoverage,
         apSettings: r.apSettings,
         bankAccounts: capList(
-          r.bankAccounts.map((b) => ({ id: b.id, name: b.name, number: b.number, balance: num(b.balance) })),
+          r.bankAccounts.map((b) => ({ id: b.id, name: b.name, number: b.number, balance: b.balance })),
           50,
         ),
         weeks: r.weeks.map(slimWeek),

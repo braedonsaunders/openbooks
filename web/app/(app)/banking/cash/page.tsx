@@ -6,7 +6,7 @@ import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { SubsidiarySwitcher } from '../../../../components/subsidiary-switcher'
 import { requirePermission, can } from '../../../../lib/authz'
 import { analyticsConfig } from '../../../../lib/analytics/config'
-import { withoutWeekEntries } from '@/lib/cash/core'
+import { normalizeMoneyValue, withoutWeekEntries } from '@/lib/cash/core'
 import { cashPosition } from '../../../../lib/cash/cash-position'
 import { resolveAsOf } from '../../../../lib/cash/core'
 import { reportSubsidiaryView } from '../../../../lib/consolidation'
@@ -45,7 +45,7 @@ export default async function BankingCashPage({
   const subView = await reportSubsidiaryView(sp.sub, asOfIso)
 
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
-  const apSettings = { weeklyCap: cfg.weeklyApCap ?? 0, restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
+  const apSettings = { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
   const [position, layoutPrefs] = await Promise.all([
     cashPosition(authz.user.orgId, horizon, apSettings, undefined, subView.subsidiary?.ids),
     userPageLayout(authz.user.id, 'banking-cash'),

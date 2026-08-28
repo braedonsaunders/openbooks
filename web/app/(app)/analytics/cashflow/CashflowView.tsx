@@ -21,11 +21,12 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
+import { cmp as compareMoney, div as divideMoney, sum as sumMoney } from '@openbooks/engine/src/money.ts'
 import type { CashflowData, SideSummary } from '../../../../lib/analytics/cashflow-data'
 import { Panel } from '../_ui/Panel'
 import { TrendChart, Chart, cashBridgeOption } from '../_ui/charts'
 import { Vital } from '../_ui/Vital'
-import { useAnalyticsMoney } from '../_ui/format'
+import { formatExactPercent, formatExactRatio, toChartNumber, useAnalyticsMoney } from '../_ui/format'
 
 // Analysis only — the interactive surfaces this view used to carry moved to
 // their operational homes at full fidelity: the weekly timeline + forecast
@@ -37,7 +38,7 @@ const BUCKET_COLORS: Record<string, string> = { Current: '#10b981', '1-30': '#14
 
 export function CashflowView({ data }: { data: CashflowData }) {
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: string | number) => fmtMoney(n, { compact: true })
   const [tab, setTab] = useState<Tab>('overview')
   const s = data.summary
 
@@ -45,9 +46,9 @@ export function CashflowView({ data }: { data: CashflowData }) {
     <div className="space-y-5">
       {/* KPI row: Current Cash / Projected End / Lowest Point / Inflows / Outflows */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <Kpi icon={University} accent="slate" label="Current Cash" value={money(s.startingCash)} tone={s.startingCash < 0 ? 'neg' : undefined} />
-        <Kpi icon={Wallet} accent="sky" label="Projected End" value={money(s.projectedEnd)} sub={`${s.netChange >= 0 ? '+' : ''}${money(s.netChange)} net`} tone={s.netChange >= 0 ? 'pos' : 'neg'} />
-        <Kpi icon={TriangleAlert} accent={s.lowestCash < 0 ? 'red' : 'amber'} label="Lowest Point" value={money(s.lowestCash)} sub={new Date(s.lowestWeek + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })} tone={s.lowestCash < 0 ? 'neg' : undefined} />
+        <Kpi icon={University} accent="slate" label="Current Cash" value={money(s.startingCash)} tone={compareMoney(s.startingCash, '0.0000') < 0 ? 'neg' : undefined} />
+        <Kpi icon={Wallet} accent="sky" label="Projected End" value={money(s.projectedEnd)} sub={`${compareMoney(s.netChange, '0.0000') >= 0 ? '+' : ''}${money(s.netChange)} net`} tone={compareMoney(s.netChange, '0.0000') >= 0 ? 'pos' : 'neg'} />
+        <Kpi icon={TriangleAlert} accent={compareMoney(s.lowestCash, '0.0000') < 0 ? 'red' : 'amber'} label="Lowest Point" value={money(s.lowestCash)} sub={new Date(s.lowestWeek + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })} tone={compareMoney(s.lowestCash, '0.0000') < 0 ? 'neg' : undefined} />
         <Kpi icon={ArrowDown} accent="emerald" label="Inflows" value={money(s.totalInflows)} tone="pos" />
         <Kpi icon={ArrowUp} accent="red" label="Outflows" value={money(s.totalOutflows)} tone="neg" />
       </div>
@@ -85,7 +86,7 @@ export function CashflowView({ data }: { data: CashflowData }) {
 /* ---------------------------------------------------------------- Overview */
 function OverviewTab({ data }: { data: CashflowData }) {
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: string | number) => fmtMoney(n, { compact: true })
   const tCharts = useTranslations('analytics.charts')
   const s = data.summary
   const bridgeLabels = {
@@ -101,10 +102,10 @@ function OverviewTab({ data }: { data: CashflowData }) {
       {/* Vitals hero */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         <Vital icon={Flame} ring="from-violet-500 to-fuchsia-500" label="Cash Burn Rate" value={money(s.burnRate)} hint="Avg weekly outflow" badge="Weekly" />
-        <Vital icon={ShieldCheck} ring="from-sky-500 to-blue-500" label="AR Coverage" value={s.arCoverage === null ? '—' : `${s.arCoverage.toFixed(2)}×`} hint="(Cash + AR) / AP" />
+        <Vital icon={ShieldCheck} ring="from-sky-500 to-blue-500" label="AR Coverage" value={s.arCoverage === null ? '—' : `${formatExactRatio(s.arCoverage)}×`} hint="(Cash + AR) / AP" />
         <Vital icon={RefreshCw} ring="from-teal-500 to-emerald-500" label="Cash Cycle" value={`${s.dso ?? '—'} / ${s.dpo ?? '—'}`} hint="DSO / DPO" split />
-        <Vital icon={ArrowLeftRight} ring={s.netChange >= 0 ? 'from-emerald-500 to-teal-500' : 'from-red-500 to-orange-500'} label="Net Period Flow" value={money(s.netChange)} hint="Inflows − Outflows" />
-        <Vital icon={Route} ring="from-indigo-500 to-violet-500" label="Cash Runway" value={s.runwayWeeks === null ? '∞' : `${s.runwayWeeks.toFixed(1)}w`} hint={s.runwayStatus === 'critical' ? 'Critical' : s.runwayStatus === 'caution' ? 'Caution' : 'Healthy'} status={s.runwayStatus} />
+        <Vital icon={ArrowLeftRight} ring={compareMoney(s.netChange, '0.0000') >= 0 ? 'from-emerald-500 to-teal-500' : 'from-red-500 to-orange-500'} label="Net Period Flow" value={money(s.netChange)} hint="Inflows − Outflows" />
+        <Vital icon={Route} ring="from-indigo-500 to-violet-500" label="Cash Runway" value={s.runwayWeeks === null ? '∞' : `${formatExactRatio(s.runwayWeeks, 1)}w`} hint={s.runwayStatus === 'critical' ? 'Critical' : s.runwayStatus === 'caution' ? 'Caution' : 'Healthy'} status={s.runwayStatus} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -112,7 +113,7 @@ function OverviewTab({ data }: { data: CashflowData }) {
           <Chart option={bridgeOption} height={260} />
         </Panel>
         <Panel title="Cash Position Forecast" icon={AreaChart}>
-          <TrendChart labels={data.weeks.map((w) => w.label.split(' – ')[0]!)} area height={260} series={[{ name: 'Ending cash', data: data.weeks.map((w) => w.endingCash), color: '#0d9488' }]} />
+          <TrendChart labels={data.weeks.map((w) => w.label.split(' – ')[0]!)} area height={260} series={[{ name: 'Ending cash', data: data.weeks.map((w) => toChartNumber(w.endingCash)), color: '#0d9488' }]} />
         </Panel>
       </div>
 
@@ -126,10 +127,10 @@ function OverviewTab({ data }: { data: CashflowData }) {
 
 function AgingPanel({ title, side, accent }: { title: string; side: SideSummary; accent: string }) {
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
-  const total = side.outstanding || 1
+  const money = (n: string | number) => fmtMoney(n, { compact: true })
+  const total = compareMoney(side.outstanding, '0.0000') > 0 ? side.outstanding : '1.0000'
   return (
-    <Panel title={title} icon={ListOrdered} hint={`${money(side.outstanding)} · ${side.pctCurrent.toFixed(0)}% current`}>
+    <Panel title={title} icon={ListOrdered} hint={`${money(side.outstanding)} · ${formatExactPercent(side.pctCurrent)} current`}>
       <div className="space-y-2">
         {side.buckets.map((b) => (
           <div key={b.label}>
@@ -141,7 +142,7 @@ function AgingPanel({ title, side, accent }: { title: string; side: SideSummary;
               <span className={cn('tabular-nums', accent)}>{money(b.amount)}</span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-              <div className="h-full rounded-full" style={{ width: `${Math.max(0, (b.amount / total) * 100)}%`, backgroundColor: BUCKET_COLORS[b.label] }} />
+              <div className="h-full rounded-full" style={{ width: `${Math.max(0, toChartNumber(divideMoney(b.amount, total)) * 100)}%`, backgroundColor: BUCKET_COLORS[b.label] }} />
             </div>
           </div>
         ))}
@@ -153,12 +154,12 @@ function AgingPanel({ title, side, accent }: { title: string; side: SideSummary;
 /* --------------------------------------------------------- Category Analysis */
 function CategoryTab({ data }: { data: CashflowData }) {
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: string | number) => fmtMoney(n, { compact: true })
   const [side, setSide] = useState<'ar' | 'ap'>('ap')
   // Already grouped server-side — the page no longer ships every week's
   // transactions just so this tab can total them by counterparty.
   const entries = data.partyTotals[side]
-  const total = entries.reduce((a, e) => a + e.amount, 0)
+  const total = sumMoney(entries.map((e) => e.amount))
 
   return (
     <div className="space-y-4">
@@ -183,7 +184,7 @@ function CategoryTab({ data }: { data: CashflowData }) {
                   </td>
                   <td className="px-4 py-2.5"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{c.method.replace(/_/g, ' ')}</span></td>
                   <td className="px-4 py-2.5 text-xs text-slate-500 dark:text-slate-400">{c.logic || '—'}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(c.total / Math.max(1, c.weekly.length))}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(divideMoney(c.total, String(Math.max(1, c.weekly.length))))}</td>
                   <td className={cn('px-4 py-2.5 text-right font-medium tabular-nums', c.direction === 'inflow' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(c.total)}</td>
                 </tr>
               ))}
@@ -221,7 +222,7 @@ function CategoryTab({ data }: { data: CashflowData }) {
                   <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{e.name}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{e.count}</td>
                   <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(e.amount)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{total > 0 ? `${((e.amount / total) * 100).toFixed(1)}%` : '—'}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{compareMoney(total, '0.0000') > 0 ? formatExactPercent(divideMoney(e.amount, total), 1) : '—'}</td>
                 </tr>
               ))}
             </tbody>

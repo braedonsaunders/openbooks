@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { parseISO, type OpenItem, type Side } from './core'
+import { normalizeMoneyValue, parseISO, type OpenItem, type Side } from './core'
 
 function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
   return subIds && subIds.length > 0
@@ -64,6 +64,10 @@ export async function openItems(
     partyName: row.party_name,
     tranDate: parseISO(row.tran_date),
     dueDate: row.due_date ? parseISO(row.due_date) : null,
-    remaining: Number(row.remaining),
+    // PostgreSQL numeric values are returned as decimal text. Keep that text
+    // exact at the boundary; converting to Number would round valid
+    // numeric(19,4) balances before the forecast has a chance to aggregate
+    // them.
+    remaining: normalizeMoneyValue(String(row.remaining)),
   }))
 }

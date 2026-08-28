@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/src/money.ts";
 
 /**
  * Per-organization analytics dashboard settings for the editable Configuration
@@ -18,7 +19,14 @@ export interface ConfigField {
   step: number;
 }
 
-export const ANALYTICS_CONFIG: Record<string, { fields: ConfigField[]; defaults: Record<string, number> }> = {
+export type AnalyticsConfigValues = Record<string, number | string>;
+
+export interface CashflowConfig {
+  weeklyApCap: string;
+  restrictToSafe: number;
+}
+
+export const ANALYTICS_CONFIG: Record<string, { fields: ConfigField[]; defaults: AnalyticsConfigValues }> = {
   financialHealth: {
     defaults: {
       grossMarginTarget: 40,
@@ -79,7 +87,9 @@ export const ANALYTICS_CONFIG: Record<string, { fields: ConfigField[]; defaults:
     ],
   },
   cashflow: {
-    defaults: { weeklyApCap: 0, restrictToSafe: 0 },
+    // AP caps are ledger money. Keep them as canonical strings from storage
+    // through the config API so a cap never crosses a Number boundary.
+    defaults: { weeklyApCap: "0.0000", restrictToSafe: 0 },
     fields: [
       { key: "weeklyApCap", label: "Weekly AP cap ($)", help: "Maximum payables paid per week — 0 means unlimited (no scheduling)", min: 0, max: 100_000_000, step: 1000 },
       { key: "restrictToSafe", label: "Restrict to safe capacity (0/1)", help: "1 = never schedule payments beyond available cash that week; overflow defers", min: 0, max: 1, step: 1 },
@@ -109,19 +119,32 @@ export const ANALYTICS_CONFIG: Record<string, { fields: ConfigField[]; defaults:
 
 export type AnalyticsDashboard = keyof typeof ANALYTICS_CONFIG;
 
-function clampTo(field: ConfigField, v: unknown): number | null {
+function clampTo(dashboard: AnalyticsDashboard, field: ConfigField, v: unknown): number | string | null {
+  if (dashboard === "cashflow" && field.key === "weeklyApCap") {
+    try {
+      const amount = normalizeMoney(String(v ?? "0"));
+      if (compareMoney(amount, "0.0000") < 0) return "0.0000";
+      if (compareMoney(amount, "100000000.0000") > 0) return "100000000.0000";
+      return amount;
+    } catch {
+      return null;
+    }
+  }
   const n = Number(v);
   if (!Number.isFinite(n)) return null;
   return Math.min(field.max, Math.max(field.min, n));
 }
 
 /** Merge stored per-org overrides over the defaults, clamped per field. */
-export function mergeConfig(dashboard: AnalyticsDashboard, stored: unknown): Record<string, number> {
+export function mergeConfig(dashboard: "cashflow", stored: unknown): CashflowConfig;
+export function mergeConfig(dashboard: Exclude<AnalyticsDashboard, "cashflow">, stored: unknown): Record<string, number>;
+export function mergeConfig(dashboard: AnalyticsDashboard, stored: unknown): AnalyticsConfigValues;
+export function mergeConfig(dashboard: AnalyticsDashboard, stored: unknown): any {
   const spec = ANALYTICS_CONFIG[dashboard]!;
   const out = { ...spec.defaults };
   if (stored && typeof stored === "object") {
     for (const f of spec.fields) {
-      const v = clampTo(f, (stored as Record<string, unknown>)[f.key]);
+      const v = clampTo(dashboard, f, (stored as Record<string, unknown>)[f.key]);
       if (v !== null) out[f.key] = v;
     }
   }
@@ -129,7 +152,10 @@ export function mergeConfig(dashboard: AnalyticsDashboard, stored: unknown): Rec
 }
 
 /** Effective config for one dashboard: org overrides over defaults. */
-export async function analyticsConfig(orgId: string, dashboard: AnalyticsDashboard): Promise<Record<string, number>> {
+export async function analyticsConfig(orgId: string, dashboard: "cashflow"): Promise<CashflowConfig>;
+export async function analyticsConfig(orgId: string, dashboard: Exclude<AnalyticsDashboard, "cashflow">): Promise<Record<string, number>>;
+export async function analyticsConfig(orgId: string, dashboard: AnalyticsDashboard): Promise<AnalyticsConfigValues>;
+export async function analyticsConfig(orgId: string, dashboard: AnalyticsDashboard): Promise<any> {
   const r = ((await db.execute(sql`
     select settings -> 'analytics' -> ${dashboard} as cfg from orgs where id = ${orgId}
   `)));
