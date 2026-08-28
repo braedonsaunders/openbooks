@@ -171,7 +171,23 @@ async function claimDueFlowOccurrences(
  * updated rows and skips. Returns the new attempt count, or null when the
  * claim was not takeable (already being handled elsewhere).
  */
-async function takeOccurrenceForFiring(claimId: string): Promise<number | null> {
+interface OccurrenceTakeFence {
+  /** The attempt count observed by the caller before it selected the claim. */
+  attemptCount: number;
+  /**
+   * The exact database timestamp observed by recovery. Keep this as text so
+   * PostgreSQL's microsecond precision is not truncated by JavaScript Date.
+   */
+  updatedAt?: string;
+}
+
+async function takeOccurrenceForFiring(
+  claimId: string,
+  fence: OccurrenceTakeFence,
+): Promise<number | null> {
+  const expectedUpdatedAt = fence.updatedAt
+    ? sql`and updated_at = ${fence.updatedAt}::timestamptz`
+    : sql``;
   const taken = await withBypassContext(() =>
     db.execute<{ attempt_count: number }>(sql`
       update flow_scheduled_occurrences
@@ -179,7 +195,10 @@ async function takeOccurrenceForFiring(claimId: string): Promise<number | null> 
              attempt_count = attempt_count + 1,
              result = null,
              updated_at = now()
-       where id = ${claimId} and status in ('open', 'firing')
+       where id = ${claimId}
+         and status in ('open', 'firing')
+         and attempt_count = ${fence.attemptCount}
+         ${expectedUpdatedAt}
       returning attempt_count
     `));
   return taken.rows[0]?.attempt_count ?? null;
@@ -310,7 +329,7 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
       // never breaks the rest of the scan.
       let attempt: number | null;
       try {
-        attempt = await takeOccurrenceForFiring(claim.id);
+        attempt = await takeOccurrenceForFiring(claim.id, { attemptCount: 0 });
       } catch (e) {
         result.errors++;
         console.error(`[flows] scheduled firing take failed for flow ${flow.id}:`, e);
@@ -356,8 +375,17 @@ export async function recoverLostScheduledFlows(now = new Date()): Promise<void>
   // 2) Resume open ('open' = died between claim and take; 'firing' = died mid
   //    firing) stale occurrences within the retry budget, oldest first.
   const stale = await withBypassContext(() =>
-    db.execute<{ id: string; org_id: string; flow_id: string; node_id: string; occurred_at: Date | string }>(sql`
-      select occ.id, occ.org_id, occ.flow_id, occ.node_id, occ.occurred_at
+    db.execute<{
+      id: string;
+      org_id: string;
+      flow_id: string;
+      node_id: string;
+      occurred_at: Date | string;
+      attempt_count: number;
+      updated_at: string;
+    }>(sql`
+      select occ.id, occ.org_id, occ.flow_id, occ.node_id, occ.occurred_at,
+             occ.attempt_count, occ.updated_at::text as updated_at
         from flow_scheduled_occurrences occ
         join orgs organization on organization.id = occ.org_id
        where occ.status in ('open', 'firing')
@@ -378,7 +406,10 @@ export async function recoverLostScheduledFlows(now = new Date()): Promise<void>
     // CAS bump: a concurrent completion/recovery skips; survivors are fenced.
     let attempt: number | null;
     try {
-      attempt = await takeOccurrenceForFiring(claim.id);
+      attempt = await takeOccurrenceForFiring(claim.id, {
+        attemptCount: row.attempt_count,
+        updatedAt: row.updated_at,
+      });
     } catch (e) {
       console.error(`[flows] recovery take failed for flow ${claim.flowId}:`, e);
       continue;
