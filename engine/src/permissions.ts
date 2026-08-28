@@ -688,6 +688,13 @@ export function permissionSetCovers(permissions: ReadonlySet<string>, perm: stri
  */
 export function applyPermissionDenies(permissions: Set<string>, denies: string[]): void {
   const specificDenies = denies.filter((deny) => !deny.endsWith(".*"));
+  // A full wildcard must be materialized before denies are applied. Leaving
+  // `*` in the set would make permissionSetCovers return true immediately,
+  // bypassing every specific (or module-scoped) deny.
+  if (permissions.has("*") && denies.length > 0) {
+    permissions.delete("*");
+    for (const key of PERMISSION_CATALOGUE) permissions.add(key);
+  }
   for (const grant of [...permissions]) {
     if (!grant.endsWith(".*")) continue;
     const prefix = grant.slice(0, -1);
