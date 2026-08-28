@@ -569,11 +569,6 @@ export async function recordFilingIssue(
 ): Promise<RecordFilingIssueResult> {
   const { orgId, actorId, country, filingKey, taxYear, revision } = input;
   const cancellationReason = input.reason?.trim() || input.note?.trim() || null;
-  if (revision === "cancelled" && !cancellationReason) {
-    throw new PayrollError(
-      "a nonblank cancellation reason is required and is retained in the filing history",
-    );
-  }
   const filing = yearEndFiling(country, filingKey);
   const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
 
@@ -696,6 +691,11 @@ async function issueCorrection(
       `these rows were never issued on a ${filing.label} for ${taxYear}, so they cannot be `
       + `${revision === "cancelled" ? "cancelled" : "amended"}: `
       + unknown.map((rowId) => byRow.get(rowId)?.label || rowId).join(", "),
+    );
+  }
+  if (revision === "cancelled" && !cancellationReason) {
+    throw new PayrollError(
+      "a nonblank cancellation reason is required and is retained in the filing history",
     );
   }
   if (revision === "amended") {
