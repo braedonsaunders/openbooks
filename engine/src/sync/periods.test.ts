@@ -31,3 +31,20 @@ test("monthlySourcePeriods carries source lock state per module", () => {
   assert.equal((rows[1]?.fields.moduleStates as Record<string, string>).gl, "closed");
   assert.equal((rows[2]?.fields.moduleStates as Record<string, string>).gl, "open");
 });
+
+test("monthlySourcePeriods keeps a February period after a month-end rollover", () => {
+  const rows = monthlySourcePeriods(
+    "test",
+    [{ key: "2026", fiscalYear: 2026, startsOn: "2026-01-31", endsOn: "2026-04-30" }],
+    () => allModules("closed"),
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.fields.name, row.fields.startsOn, row.fields.endsOn]),
+    [
+      ["2026-01", "2026-01-31", "2026-02-27"],
+      ["2026-02", "2026-02-28", "2026-03-27"],
+      ["2026-03", "2026-03-28", "2026-04-27"],
+      ["2026-04", "2026-04-28", "2026-04-30"],
+    ],
+  );
+});
