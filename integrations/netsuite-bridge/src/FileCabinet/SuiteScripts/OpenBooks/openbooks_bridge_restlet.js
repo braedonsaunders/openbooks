@@ -295,10 +295,22 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
     const exportFiles = (input) => {
       const jobId = safeId(input.jobId, 'jobId');
       const folder = jobsFolder();
+      // Search each artifact prefix with a delimiter after the job ID. A
+      // contains filter would make a job such as "abc" match another job
+      // such as "xabc" or "abc2", allowing status and cleanup to cross the
+      // ownership boundary.
+      const jobFileFilters = [
+        ['name', 'startswith', `ob-request-${jobId}-`], 'OR',
+        ['name', 'startswith', `ob-complete-${jobId}-`], 'OR',
+        ['name', 'startswith', `ob-chunk-${jobId}-`], 'OR',
+        ['name', 'startswith', `ob-error-${jobId}-`], 'OR',
+        ['name', 'startswith', `ob-failed-${jobId}-`], 'OR',
+        ['name', 'is', `ob-summary-${jobId}.json`],
+      ];
       const rows = [];
       search.create({
         type: 'file',
-        filters: [['folder', 'anyof', folder], 'AND', ['name', 'contains', jobId]],
+        filters: [['folder', 'anyof', folder], 'AND', jobFileFilters],
         columns: ['name', 'documentsize', 'created', 'modified'],
       }).run().each((result) => {
         rows.push({
@@ -311,7 +323,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
         return true;
       });
       rows.sort((a, b) => a.name.localeCompare(b.name));
-      const failed = rows.some((row) => row.name.includes('-error'));
+      const failed = rows.some((row) => row.name.startsWith(`ob-error-${jobId}-`));
       const summarized = rows.some((row) => row.name === `ob-summary-${jobId}.json`);
       return { schemaVersion: SCHEMA_VERSION, jobId, status: failed ? 'failed' : summarized ? 'complete' : 'running', files: rows };
     };
