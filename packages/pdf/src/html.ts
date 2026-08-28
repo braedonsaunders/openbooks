@@ -4,8 +4,9 @@
 //
 // Safety model: authored HTML is sanitized at save time (template.ts) and merge
 // values are escaped at render time. Belt-and-braces here anyway: JavaScript is
-// disabled in the print page and subresource loading is restricted to images,
-// fonts and stylesheets.
+// disabled in the print page and subresource loading is restricted to inline
+// data URLs for images, fonts and stylesheets. Template-authored network URLs
+// are never fetched by the renderer.
 
 import puppeteer, { type Browser, type Page } from 'puppeteer-core'
 import type { PdfPaperSize } from './types'
@@ -48,18 +49,37 @@ async function getBrowser(): Promise<Browser> {
   return browserPromise
 }
 
-/** New page hardened for printing: no JS, subresources limited to visuals. */
+const INLINE_RESOURCE_TYPES = new Set(['image', 'font', 'stylesheet'])
+
+/**
+ * Return whether a request is safe for the print page to continue.
+ *
+ * The document created by `page.setContent` has the `about:blank` URL. All
+ * template-controlled visual resources must be inline `data:` URLs; allowing
+ * an HTTP(S) resource here would let an authored template make a request from
+ * the OpenBooks server network (including redirects to private destinations).
+ */
+export function isAllowedPdfRequest(resourceType: string, requestUrl: string): boolean {
+  let url: URL
+  try {
+    url = new URL(requestUrl)
+  } catch {
+    return false
+  }
+
+  if (resourceType === 'document') {
+    return url.href === 'about:blank'
+  }
+  return url.protocol === 'data:' && INLINE_RESOURCE_TYPES.has(resourceType)
+}
+
+/** New page hardened for printing: no JS, no template-controlled network. */
 async function newPdfPage(browser: Browser): Promise<Page> {
   const page = await browser.newPage()
   await page.setJavaScriptEnabled(false)
   await page.setRequestInterception(true)
   page.on('request', (request) => {
-    const type = request.resourceType()
-    const url = request.url()
-    if (type === 'document' || url.startsWith('data:')) {
-      void request.continue()
-    } else if (type === 'image' || type === 'font' || type === 'stylesheet') {
-      // Visual subresources (logos, fonts) may load over http(s).
+    if (isAllowedPdfRequest(request.resourceType(), request.url())) {
       void request.continue()
     } else {
       void request.abort()
