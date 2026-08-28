@@ -75,7 +75,12 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
       where ${where}
     `),
     db.execute(sql`
-      select status, count(*)::int as n from ap_capture_items where org_id = ${authz.user.orgId} group by status
+      select ci.status, count(*)::int as n from ap_capture_items ci
+      left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+      left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+       where ci.org_id = ${authz.user.orgId}
+         ${subsidiaryScope}
+       group by ci.status
     `),
     getDocumentCaptureSettings(authz.user.orgId),
     db.execute(sql`select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled from orgs where id = ${authz.user.orgId}`),
