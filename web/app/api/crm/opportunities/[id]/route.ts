@@ -17,6 +17,8 @@ export const runtime = 'nodejs'
 const CATEGORIES = ['omitted', 'worst_case', 'most_likely', 'upside']
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
+class OpportunityDisappeared extends Error {}
+
 function textOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
@@ -54,16 +56,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     select o.*, s.is_closed, s.is_won from crm_opportunities o
     join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
     where o.id = ${id} and o.org_id = ${user.orgId}`))
-  const current = existing.rows[0]
+  let current = existing.rows[0]
   if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data)
-  const partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId)
-  const contactId = body.primaryContactId === undefined ? current.primary_contact_id : textOrNull(body.primaryContactId)
-  const ownerUserId = body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId)
-  const salesTeamId = body.salesTeamId === undefined ? current.sales_team_id : textOrNull(body.salesTeamId)
-  const leadSourceId = body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId)
+  let partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId)
+  let contactId = body.primaryContactId === undefined ? current.primary_contact_id : textOrNull(body.primaryContactId)
+  let ownerUserId = body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId)
+  let salesTeamId = body.salesTeamId === undefined ? current.sales_team_id : textOrNull(body.salesTeamId)
+  let leadSourceId = body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId)
   if (!await orgUuidExists('parties', partyId, user.orgId)) return NextResponse.json({ error: 'invalid account' }, { status: 422 })
   if (!await orgUuidExists('contacts', contactId, user.orgId)) return NextResponse.json({ error: 'invalid contact' }, { status: 422 })
   if (contactId && !((await db.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId}`))).rows[0]) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
@@ -71,37 +73,39 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!await orgUuidExists('crm_sales_teams', salesTeamId, user.orgId)) return NextResponse.json({ error: 'invalid sales team' }, { status: 422 })
   if (!await orgUuidExists('crm_lead_sources', leadSourceId, user.orgId)) return NextResponse.json({ error: 'invalid lead source' }, { status: 422 })
 
-  const statusId = body.statusId === undefined ? current.status_id : textOrNull(body.statusId)
+  let statusId = body.statusId === undefined ? current.status_id : textOrNull(body.statusId)
   if (!statusId || !isUuid(statusId)) return NextResponse.json({ error: 'status is required' }, { status: 422 })
   const status = (await db.execute(sql`
     select * from crm_opportunity_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`))
-  const nextStatus = status.rows[0]
-  if (!nextStatus) return NextResponse.json({ error: 'invalid status' }, { status: 422 })
+  const initialStatus = status.rows[0]
+  if (!initialStatus) return NextResponse.json({ error: 'invalid status' }, { status: 422 })
+  let nextStatus = initialStatus
   if (nextStatus.is_closed) {
     const closeGate = await guardPermission('crm.opportunities.close')
     if (closeGate instanceof NextResponse) return closeGate
   }
-  const probability = body.probability === undefined
+  let probability = body.probability === undefined
     ? statusId !== current.status_id ? Number(nextStatus.probability) : Number(current.probability)
     : Number(body.probability)
   if (!Number.isInteger(probability) || probability < 0 || probability > 100) return NextResponse.json({ error: 'probability must be from 0 to 100' }, { status: 422 })
-  const category = body.forecastCategory ?? (statusId !== current.status_id ? nextStatus.default_forecast_category : current.forecast_category)
+  let category = body.forecastCategory ?? (statusId !== current.status_id ? nextStatus.default_forecast_category : current.forecast_category)
   if (!CATEGORIES.includes(category)) return NextResponse.json({ error: 'invalid forecast category' }, { status: 422 })
-  const title = body.title === undefined ? current.title : textOrNull(body.title)
+  let title = body.title === undefined ? current.title : textOrNull(body.title)
   if (!title) return NextResponse.json({ error: 'title is required' }, { status: 422 })
   if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, 'multiCurrency'))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
-  const currency = body.currency === undefined ? current.currency : String(body.currency).toUpperCase()
+  let currency = body.currency === undefined ? current.currency : String(body.currency).toUpperCase()
   if (!((await db.execute(sql`select 1 from currencies where code = ${currency}`))).rows[0]) return NextResponse.json({ error: 'invalid currency' }, { status: 422 })
-  const winLossReason = body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason)
+  let winLossReason = body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason)
   if (nextStatus.is_closed && !nextStatus.is_won && !winLossReason) return NextResponse.json({ error: 'a loss reason is required' }, { status: 422 })
   const lines = (body.lines)
   let calculated: ReturnType<typeof computeOpportunityTotals> | null = null
+  let lineMathInputs: Parameters<typeof computeOpportunityTotals>[0] | null = null
   if (lines) {
     if (!Array.isArray(lines)) return NextResponse.json({ error: 'lines must be an array' }, { status: 422 })
     try {
-      calculated = computeOpportunityTotals(lines.map((line) => {
+      lineMathInputs = lines.map((line) => {
         const quantity = canonicalDecimal(line.quantity, 4)
         const unitPrice = canonicalDecimal(line.unitPrice, 4)
         if (quantity === null || unitPrice === null) throw new Error('invalid lines')
@@ -110,7 +114,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           unitPrice: normalizeMoney(unitPrice),
           probability: line.probability == null ? null : Number(line.probability),
         }
-      }), probability)
+      })
+      calculated = computeOpportunityTotals(lineMathInputs, probability)
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : 'invalid lines' }, { status: 422 })
     }
@@ -173,7 +178,48 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const rangeHigh = body.rangeHigh !== undefined ? rangeMoney(body.rangeHigh) : undefined
   if (rangeLow === 'invalid' || rangeHigh === 'invalid') return NextResponse.json({ error: 'range must be a non-negative amount' }, { status: 422 })
 
-  await db.transaction(async (tx) => {
+  try {
+    await db.transaction(async (tx) => {
+    // All values that default from the opportunity must come from the row
+    // locked by this write transaction.  The preflight snapshot above may have
+    // gone stale while validation was running; using it here would let a later
+    // save restore fields changed by an earlier concurrent save.
+    const lockedResult = (await tx.execute<any>(sql`
+      select o.*, s.is_closed, s.is_won, s.probability as status_probability,
+             s.default_forecast_category as status_default_forecast_category
+        from crm_opportunities o
+        join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
+       where o.id = ${id} and o.org_id = ${user.orgId}
+       for update of o`))
+    current = lockedResult.rows[0]
+    if (!current) throw new OpportunityDisappeared()
+
+    partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId)
+    contactId = body.primaryContactId === undefined ? current.primary_contact_id : textOrNull(body.primaryContactId)
+    ownerUserId = body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId)
+    salesTeamId = body.salesTeamId === undefined ? current.sales_team_id : textOrNull(body.salesTeamId)
+    leadSourceId = body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId)
+    statusId = body.statusId === undefined ? current.status_id : textOrNull(body.statusId)
+    if (body.statusId === undefined) {
+      // The status join is part of the locked read, so defaults and lifecycle
+      // flags are refreshed together with the opportunity itself.
+      nextStatus = {
+        ...nextStatus,
+        is_closed: current.is_closed,
+        is_won: current.is_won,
+        probability: current.status_probability ?? nextStatus.probability,
+        default_forecast_category: current.status_default_forecast_category ?? nextStatus.default_forecast_category,
+      }
+    }
+    probability = body.probability === undefined
+      ? statusId !== current.status_id ? Number(nextStatus.probability) : Number(current.probability)
+      : Number(body.probability)
+    category = body.forecastCategory ?? (statusId !== current.status_id ? nextStatus.default_forecast_category : current.forecast_category)
+    title = body.title === undefined ? current.title : textOrNull(body.title)
+    currency = body.currency === undefined ? current.currency : String(body.currency).toUpperCase()
+    winLossReason = body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason)
+    if (lineMathInputs) calculated = computeOpportunityTotals(lineMathInputs, probability)
+
     if (lines && calculated) {
       await tx.execute(sql`delete from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId}`)
       for (let index = 0; index < lines.length; index++) {
@@ -229,7 +275,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${user.orgId}, 'crm_opportunities', ${id}, 'update', ${JSON.stringify({ before: current, requested: body })}::jsonb, ${user.id})`)
-  })
+    })
+  } catch (error) {
+    if (error instanceof OpportunityDisappeared) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    throw error
+  }
   return NextResponse.json(await loadOpportunity(id, user.orgId))
 }
 
