@@ -37,20 +37,43 @@ export async function POST(req: Request) {
   if (!parsed.ok) return parsed.response
   const body = parsed.data
   const asOfDate = body.asOfDate ?? (await businessToday(user.orgId))
+  // Snapshot the authorization set once and carry that exact policy through
+  // both project synchronization and recognition posting. `null` means
+  // unrestricted; an empty Set is a restricted caller with no permitted legal
+  // entities and must not reach either engine boundary.
+  const allowedSubsidiaryIds = gate.allowedSubsidiaryIds === null
+    ? undefined
+    : [...gate.allowedSubsidiaryIds]
+
+  if (allowedSubsidiaryIds?.length === 0) {
+    return NextResponse.json({
+      posted: 0,
+      skipped: 0,
+      totalAmount: '0',
+      entries: [],
+      problems: [],
+    })
+  }
 
   try {
     // Refresh fixed-price project contracts first (percent complete → catch-up
     // schedule lines), so the run below posts current project progress too.
     const projectsEnabled = await isFeatureEnabled(user.orgId, 'projects')
     const projectSync = projectsEnabled
-      ? await syncProjectRevenueContracts(user.orgId, user.id, asOfDate)
+      ? await syncProjectRevenueContracts(
+          user.orgId,
+          user.id,
+          asOfDate,
+          undefined,
+          allowedSubsidiaryIds,
+        )
       : { problems: [] }
     const result = await runRevenueRecognition(
       user.orgId,
       asOfDate,
       user.id,
       body.obligationId,
-      gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : undefined,
+      allowedSubsidiaryIds,
     )
     result.problems.push(...projectSync.problems)
     return NextResponse.json(result)
