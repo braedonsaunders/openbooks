@@ -21,6 +21,7 @@ import type {
   ProvisionSourceSnapshot,
 } from "./income-tax-provision.ts";
 import { postDocument } from "./posting.ts";
+import { closeApprovedRun, startCloseRun } from "./close.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
 import {
   TaxFilingError,
@@ -993,23 +994,33 @@ test("mark-filed refuses a filing while its covered period is not closed", { ski
   }
 });
 
-test("mark-filed refuses a filing whose covered period is closed only at subsidiary scope", { skip: !DB }, async () => {
+test("mark-filed refuses a filing when one covered subsidiary is still open", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
     const taxCodeId = await seedFilingFingerprintFixture(org);
     await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-3b", taxAmount: "5.00" });
     const prepared = await prepareFiling(org, userId);
 
-    // Entity-scope closure only: gl and tax locked for one subsidiary, no
-    // tenant-wide row. A filing certifies the whole organization, so an
-    // entity's closed lock must never stand in for the org-wide close.
+    // Entity-scope closure only for the root: the child has no locks. A filing
+    // certifies every active legal entity, so a partial scoped close must not
+    // stand in for a complete close and must leave the filing untouched.
     await db.execute(sql`
       insert into period_locks (id, org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
       values (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl',
               'closed', now(), 'test: subsidiary-scope close only'),
              (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'tax',
               'closed', now(), 'test: subsidiary-scope close only')`);
+
+    assert.equal(
+      (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from period_locks
+         where org_id = ${org.orgId} and period_id = ${org.periodId}
+           and book_id = ${org.bookId} and subsidiary_id = ${childId}`)).rows[0]!.n,
+      0,
+      "the uncovered child must remain visibly unlocked",
+    );
 
     await assert.rejects(
       () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
@@ -1022,47 +1033,70 @@ test("mark-filed refuses a filing whose covered period is closed only at subsidi
   }
 });
 
-test("mark-filed requires an org-wide closed lock, not a subsidiary-scoped or lapsed-reopen stand-in", { skip: !DB }, async () => {
+test("mark-filed accepts complete subsidiary closure without implying an org-wide lock", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
     const taxCodeId = await seedFilingFingerprintFixture(org);
     await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-5", taxAmount: "11.00" });
-    const prepared = await prepareFiling(org, userId);
 
-    // No org-wide closed lock exists: the tenant-wide rows sit OPEN on lapsed
-    // reopen windows and the only closed rows are subsidiary-scoped — exactly
-    // the configuration the posting guard's shadowing order would read as
-    // closed. The statutory fence must rest on the tenant-wide closed lock
-    // itself, so this must refuse to file.
+    // Drive the real close writer with a non-empty legal-entity scope. The
+    // approval row is seeded exactly as the close-flow integration tests do;
+    // closeApprovedRun still performs its final refresh, blocker check, lock
+    // writes, run-state transition, and close event atomically.
+    const runId = await startCloseRun({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      actorId: userId,
+      subsidiaryIds: [org.subsidiaryId, childId],
+    });
+    await db.execute(sql`
+      update close_runs set status = 'approved', current_stage = 'lock', approved_at = now(),
+             approved_by = ${userId}, updated_at = now(), updated_by = ${userId}
+       where id = ${runId} and org_id = ${org.orgId}`);
+    await closeApprovedRun(org.orgId, runId, userId);
+
+    // The tenant-wide rows remain OPEN (with a lapsed reopen window), while
+    // both active legal entities are explicitly closed. Complete subsidiary
+    // evidence is sufficient; the filing must not require an artificial
+    // org-wide lock row.
     await db.execute(sql`
       insert into period_locks (id, org_id, period_id, book_id, subsidiary_id, module, state, reopen_expires_at, locked_at, reason)
       values
         (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl',
          'open', now() - interval '1 hour', now(), 'test: lapsed reopen'),
         (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'tax',
-         'open', now() - interval '1 hour', now(), 'test: lapsed reopen'),
-        (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl',
-         'closed', null, now(), 'test: entity-scoped close'),
-        (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'tax',
-         'closed', null, now(), 'test: entity-scoped close')`);
+         'open', now() - interval '1 hour', now(), 'test: lapsed reopen')`);
 
-    await assert.rejects(
-      () => markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-002"),
-      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
-    );
-    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
-    assert.equal((await filingAudits(org.orgId, prepared.id)).rows[0]!.n, 0);
+    const prepared = await prepareFiling(org, userId);
 
-    // Closing the tenant-wide rows themselves is what unlocks the filing —
-    // the scoped rows and the reopen history were never the evidence.
-    await db.execute(sql`
-      update period_locks set state = 'closed', reopen_expires_at = null
-       where org_id = ${org.orgId} and period_id = ${org.periodId} and book_id = ${org.bookId}
-         and subsidiary_id is null`);
     const updated = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-002");
     assert.ok(updated.filedAt);
     assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
+    assert.equal(
+      (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from period_locks
+         where org_id = ${org.orgId} and period_id = ${org.periodId}
+           and book_id = ${org.bookId} and subsidiary_id is null and state = 'closed'`)).rows[0]!.n,
+      0,
+      "scoped closes must not imply an org-wide closed lock",
+    );
+
+    // Reopening either legal entity invalidates the effective closure even
+    // though the other entity and the org-wide defaults remain unchanged.
+    const second = await prepareFiling(org, userId);
+    await db.execute(sql`
+      update period_locks set state = 'open', reopen_expires_at = now() + interval '1 hour'
+       where org_id = ${org.orgId} and period_id = ${org.periodId} and book_id = ${org.bookId}
+         and subsidiary_id = ${childId} and module = 'gl'`);
+    await assert.rejects(
+      () => markTaxFilingFiled(org.orgId, second.id, userId, "GOV-003"),
+      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+    );
+    assert.equal((await filingState(org.orgId, second.id)).status, "prepared");
+    assert.equal((await filingAudits(org.orgId, second.id)).rows[0]!.n, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }

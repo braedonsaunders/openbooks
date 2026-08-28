@@ -99,11 +99,13 @@ type FilingRow = {
 
 /**
  * Every accounting period the filing window touches, closed for gl AND tax on
- * the primary book. The certification is statutory and tenant-wide, so only
- * the org-wide lock row (subsidiary_id IS NULL) evidences closure: a
- * subsidiary-scoped row never governs this fence, and an open row on a lapsed
- * reopen window is not a closed lock. No period rows, no primary book, or any
- * covered period without an org-wide closed row fails closed.
+ * the primary book. A tax return is organization-scoped, so its covered legal
+ * entities are the active, non-elimination subsidiaries. The effective lock
+ * for each entity is its subsidiary row when one exists, otherwise the
+ * org-wide default. This means an org-wide close may govern every entity, but
+ * a scoped close must cover every entity and a scoped reopen cannot be hidden
+ * by an older org-wide close. Only an explicit `closed` state is evidence;
+ * open, soft-closed, or lapsed-reopen rows fail closed.
  */
 async function assertCoveredPeriodsClosed(
   orgId: string,
@@ -129,15 +131,58 @@ async function assertCoveredPeriodsClosed(
 
   for (const module of ["gl", "tax"] as const) {
     for (const period of periods.rows) {
-      const closed = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from period_locks
-         where org_id = ${orgId} and period_id = ${period.id}
-           and book_id = ${bookId} and module = ${module}
-           and subsidiary_id is null and state = 'closed'`));
-      if ((closed.rows[0]?.n ?? 0) === 0) {
+      const closure = (await db.execute<{
+        covered: number;
+        closed: number;
+        org_wide_closed: number;
+      }>(sql`
+        with covered_entities as (
+          select s.id
+            from subsidiaries s
+           where s.org_id = ${orgId}
+             and s.is_active
+             and not s.is_elimination
+        )
+        select
+          count(*)::int as covered,
+          count(*) filter (
+            where coalesce(scoped.state, org_wide.state) = 'closed'
+          )::int as closed,
+          (
+            select count(*)::int
+              from period_locks l
+             where l.org_id = ${orgId}
+               and l.period_id = ${period.id}
+               and l.book_id = ${bookId}
+               and l.module = ${module}
+               and l.subsidiary_id is null
+               and l.state = 'closed'
+          ) as org_wide_closed
+          from covered_entities entity
+          left join period_locks scoped
+            on scoped.org_id = ${orgId}
+           and scoped.period_id = ${period.id}
+           and scoped.book_id = ${bookId}
+           and scoped.module = ${module}
+           and scoped.subsidiary_id = entity.id
+          left join period_locks org_wide
+            on org_wide.org_id = ${orgId}
+           and org_wide.period_id = ${period.id}
+           and org_wide.book_id = ${bookId}
+           and org_wide.module = ${module}
+           and org_wide.subsidiary_id is null`));
+      const row = closure.rows[0];
+      const covered = Number(row?.covered ?? 0);
+      const closed = Number(row?.closed ?? 0);
+      const orgWideClosed = Number(row?.org_wide_closed ?? 0) > 0;
+      // Organizations normally always have a root subsidiary. If malformed
+      // data leaves no active legal entity, retain the historical org-wide
+      // fence rather than accidentally treating an empty set as closed.
+      const satisfiesFence = covered === 0 ? orgWideClosed : closed === covered;
+      if (!satisfiesFence) {
         throw new TaxFilingError(
           "period-not-closed",
-          `period ${period.name} must be closed for ${module} before the filing can be marked filed`,
+          `period ${period.name} must be closed for ${module} across every covered subsidiary before the filing can be marked filed`,
         );
       }
     }
