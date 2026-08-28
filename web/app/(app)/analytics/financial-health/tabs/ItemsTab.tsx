@@ -9,7 +9,7 @@ import { KpiCard } from '../../_ui/KpiCard'
 import { DivergingBar } from '../../_ui/charts'
 import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
 
-type SortKey = 'current' | 'change' | 'changePct' | 'contribution'
+type SortKey = 'prior' | 'current' | 'change' | 'changePct' | 'contribution'
 
 export function ItemsTab({ data, onDrill }: { data: HealthData; onDrill: (id: string, name: string) => void }) {
   const fmtMoney = useAnalyticsMoney()
@@ -49,7 +49,7 @@ export function ItemsTab({ data, onDrill }: { data: HealthData; onDrill: (id: st
                 <thead className="sticky top-0 bg-white dark:bg-slate-900">
                   <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
                     <th className="px-4 py-2 text-left font-medium">Item</th>
-                    <Th label="Prior" onClick={() => setSort('current')} active={false} />
+                    <Th label="Prior" onClick={() => setSort('prior')} active={sort === 'prior'} />
                     <Th label="Current" onClick={() => setSort('current')} active={sort === 'current'} />
                     <Th label="Δ" onClick={() => setSort('change')} active={sort === 'change'} />
                     <Th label="Δ %" onClick={() => setSort('changePct')} active={sort === 'changePct'} />
