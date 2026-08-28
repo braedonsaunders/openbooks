@@ -8,8 +8,8 @@
  * the genuine pre-migration state by replaying every published migration file
  * that precedes the evidence migration (byte-exact, in bootstrap's
  * lexicographic apply order) on a throwaway database, seeding the legacy rows
- * an upgrading installation would hold, and then running the published files
- * themselves:
+ * an upgrading installation would hold, and then running the published tail
+ * through the same production bootstrap path used by deployments:
  *
  *   - the fail-closed verification gate refuses an uncovered legacy row,
  *   - legacy statements receive honest append-only gap attestations (never a
@@ -25,12 +25,15 @@
  * already-migrated schema.
  */
 import assert from "node:assert/strict";
-import { randomBytes, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { promisify } from "node:util";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import pg from "pg";
 
+const execFileAsync = promisify(execFile);
 const root = join(import.meta.dirname, "..", "..");
 const generatedDir = join(root, "schema", "migrations", "generated");
 const EVIDENCE_FILE = "0010_bank_statement_source_evidence.sql";
@@ -79,6 +82,7 @@ interface LegacyFixture {
   control: pg.Client;
   client: pg.Client;
   databaseName: string;
+  databaseUrl: string;
   orgId: string;
   accountId: string;
   /** Statements stored without any source reference by the pre-0010 release. */
@@ -181,6 +185,7 @@ async function buildScratch(): Promise<LegacyFixture> {
     control,
     client,
     databaseName,
+    databaseUrl: sandboxUrl.href,
     orgId,
     accountId,
     legacyStatementIds,
@@ -188,6 +193,54 @@ async function buildScratch(): Promise<LegacyFixture> {
     retainedPointer,
     retainedSha256,
   };
+}
+
+/**
+ * The upgrade fixture has already replayed the pre-evidence files directly.
+ * Seed that immutable history in the same ledger bootstrap uses, then invoke
+ * the real production bootstrap so every post-evidence migration—including
+ * 0064's governed-view repair boundary—runs through its production path.
+ */
+async function applyTailThroughBootstrap(fixture: LegacyFixture): Promise<void> {
+  await fixture.client.query(`
+    create table if not exists public._applied_migrations (
+      filename text primary key,
+      sha256 text not null,
+      applied_at timestamptz not null default now()
+    )`);
+
+  for (const { name, content } of [
+    ...PRE_EVIDENCE_FILES,
+    { name: EVIDENCE_FILE, content: evidenceMigration },
+  ]) {
+    await fixture.client.query(
+      `insert into public._applied_migrations (filename, sha256)
+       values ($1, $2)
+       on conflict (filename) do nothing`,
+      [`generated/${name}`, createHash("sha256").update(content).digest("hex")],
+    );
+  }
+
+  await execFileAsync(
+    process.execPath,
+    ["--import", "tsx", "scripts/bootstrap.ts"],
+    {
+      cwd: root,
+      env: {
+        ...process.env,
+        NODE_ENV: "test",
+        OPENBOOKS_DB_URL: fixture.databaseUrl,
+        OPENBOOKS_RUNTIME_DB_URL: "",
+        OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION: "",
+        ORG_CURRENCY: "CAD",
+        ORG_COUNTRY: "CA",
+        OPENBOOKS_DATA_KEY:
+          process.env.OPENBOOKS_DATA_KEY
+          ?? "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      },
+      maxBuffer: 2 * 1024 * 1024,
+    },
+  );
 }
 
 test.after(async () => {
@@ -370,13 +423,7 @@ test("reapplying the published evidence migration creates no second attestations
 test("the rest of the published chain completes over the upgraded data", { skip: !DB, timeout: 300_000 }, async () => {
   const fixture = await scratch();
 
-  for (const { name, content } of TAIL_FILES) {
-    try {
-      await fixture.client.query(content);
-    } catch (error) {
-      throw new Error(`published migration ${name} failed after the upgrade: ${(error as Error).message}`);
-    }
-  }
+  await applyTailThroughBootstrap(fixture);
 
   // The governed catalog scopes reads through its temp-table context (the same
   // mechanism the SQL workbench uses), not a GUC.
