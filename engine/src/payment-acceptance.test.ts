@@ -73,6 +73,13 @@ test("stripe webhook: signature verified, tamper rejected", () => {
   assert.equal(ok.linkToken, "tok_abc");
   assert.equal(ok.paidAmount, "103.0000");
 
+  const zeroDecimal = stripeEvent(secret, "checkout.session.completed", {
+    id: "cs_jpy_1", client_reference_id: "tok_jpy", amount_total: 1000, currency: "jpy",
+  });
+  assert.ok(zeroDecimal);
+  assert.equal(zeroDecimal.paidCurrency, "JPY");
+  assert.equal(zeroDecimal.paidAmount, "1000.0000", "Stripe zero-decimal amounts are already major units");
+
   const tamperedBody = JSON.stringify({
     id: "evt_1",
     type: "checkout.session.completed",
