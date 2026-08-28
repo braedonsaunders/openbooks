@@ -3,6 +3,22 @@ import { db } from './db.ts'
 import { add, mulRate } from './money.ts'
 import { evaluateUsNexus, type NexusEvaluation, type StateSales } from './us-nexus.ts'
 
+/** Role-derived subsidiary visibility; null/undefined means unrestricted. */
+export type UsNexusSubsidiaryScope = ReadonlySet<string> | null | undefined
+
+/**
+ * Restrict legal-entity-owned documents to the caller's visible subsidiaries.
+ * A present empty set is deliberately deny-all; posted documents with no
+ * subsidiary also fail closed for restricted callers.
+ */
+function subsidiaryScopeFilter(allowedSubsidiaryIds: UsNexusSubsidiaryScope) {
+  if (allowedSubsidiaryIds == null) return sql``
+  const ids = [...allowedSubsidiaryIds]
+  return ids.length > 0
+    ? sql`and d.subsidiary_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
+    : sql`and false`
+}
+
 /**
  * Aggregate US sales by destination state and evaluate economic nexus.
  *
@@ -21,7 +37,12 @@ export interface UsNexusResult {
   unattributed: { salesUsd: string; txnCount: number }
 }
 
-export async function computeUsNexusStatus(orgId: string, from: string, to: string): Promise<UsNexusResult> {
+export async function computeUsNexusStatus(
+  orgId: string,
+  from: string,
+  to: string,
+  allowedSubsidiaryIds?: UsNexusSubsidiaryScope,
+): Promise<UsNexusResult> {
   const rows = (await db.execute<{
     state: string
     currency: string
@@ -47,6 +68,7 @@ export async function computeUsNexusStatus(orgId: string, from: string, to: stri
        and d.kind in ('customer_invoice', 'customer_credit')
        and d.status = 'posted'
        and coalesce(d.posting_date, d.document_date) between ${from} and ${to}
+       ${subsidiaryScopeFilter(allowedSubsidiaryIds)}
   `))
 
   const usdByState = new Map<string, { sales: string; txnCount: number }>()

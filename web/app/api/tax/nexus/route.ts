@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'from and to dates (YYYY-MM-DD) are required' }, { status: 422 })
   }
   try {
-    return NextResponse.json(await computeUsNexusStatus(gate.user.orgId, from, to))
+    return NextResponse.json(await computeUsNexusStatus(gate.user.orgId, from, to, gate.allowedSubsidiaryIds))
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'nexus evaluation failed' }, { status: 422 })
   }
