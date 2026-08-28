@@ -124,7 +124,8 @@ const hooks = registerHooks({
   },
 })
 
-const { POST } = (await import('./route.ts?recognition-subsidiary-scope-test')) as typeof import('./route.ts')
+const routeUrl = new URL('./route.ts?recognition-subsidiary-scope-test', import.meta.url).href
+const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
 function reset(allowedSubsidiaryIds: Set<string> | null): void {

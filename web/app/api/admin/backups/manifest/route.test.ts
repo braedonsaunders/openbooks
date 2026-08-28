@@ -15,7 +15,13 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   },
 });
-const { contentDisposition } = await import("../../../../../lib/export.ts?backup-manifest-filename-test");
+const exportUrl = new URL(
+  "../../../../../lib/export.ts?backup-manifest-filename-test",
+  import.meta.url,
+).href;
+const { contentDisposition } = (await import(exportUrl)) as typeof import(
+  "../../../../../lib/export.ts"
+);
 hooks.deregister();
 
 test("manifest downloads use a distinct JSON sidecar filename", () => {
