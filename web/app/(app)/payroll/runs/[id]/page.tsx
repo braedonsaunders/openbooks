@@ -219,19 +219,18 @@ export default async function PayRunPage({
      where org_id = ${orgId} and slug = 'payroll-register' limit 1
   `))).rows[0] ?? null
 
-  const bankAccounts = ((await db.execute<{ id: string; label: string }>(sql`
-    select id, concat_ws(' · ', number, name) as label from accounts
-     where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
-     order by number nulls last, name`))).rows
-
   // Readiness, staleness, funding and the per-employee diff are engine-owned
   // (one source of truth for what blocks a run, what it costs, and what moved).
   const [readiness, staleness, funding, changes] = await Promise.all([
     payRunReadiness(orgId, id),
     payRunStaleness(orgId, id),
-    payRunFunding(orgId, id),
+    payRunFunding(orgId, id, authz.allowedSubsidiaryIds),
     payRunChanges(orgId, id),
   ])
+  // The funding service is the authority for both the account scope and its
+  // current book balances. Reuse its scoped rows for the settlement picker so
+  // a restricted caller cannot select an account the funding panel omitted.
+  const bankAccounts = funding.accounts.map(({ id, label }) => ({ id, label }))
 
   const moduleTabs = await groupTabs('payroll', '/payroll/runs', { orgId })
 
