@@ -1298,6 +1298,7 @@ const poolMockSources = new Map<string, string>([
           from(value) { selectedTable = value; return builder },
           where() { return builder },
           orderBy() { return builder },
+          for() { return builder },
           then(resolve, reject) {
             return Promise.resolve().then(() => state.selectRows(selectedTable, projection)).then(resolve, reject)
           },
