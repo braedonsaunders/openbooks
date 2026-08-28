@@ -9,7 +9,7 @@ import {
   InformationReturnError,
   type FormType,
 } from '@openbooks/engine/src/information-returns.ts'
-import { guardPermission } from '@/lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadFilings } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 
@@ -20,7 +20,7 @@ export async function GET() {
   if (gate instanceof NextResponse) return gate
   const blocked = await guardComplianceFeature(gate.user.orgId)
   if (blocked) return blocked
-  return NextResponse.json({ filings: await loadFilings(gate.user.orgId) })
+  return NextResponse.json({ filings: await loadFilings(gate.user.orgId, gate.allowedSubsidiaryIds) })
 }
 
 /**
@@ -54,7 +54,28 @@ export async function POST(req: Request) {
   if (!FORM_TYPES.includes(body.formType as FormType)) {
     return NextResponse.json({ error: `formType must be one of ${FORM_TYPES.join(', ')}` }, { status: 400 })
   }
-  const subsidiaryId = body.subsidiaryId && isUuid(body.subsidiaryId) ? body.subsidiaryId : null
+  let subsidiaryId: string | null = null
+  if (Object.prototype.hasOwnProperty.call(body, 'subsidiaryId')) {
+    const rawSubsidiaryId = body.subsidiaryId
+    if (rawSubsidiaryId !== null && (typeof rawSubsidiaryId !== 'string' || !isUuid(rawSubsidiaryId))) {
+      return NextResponse.json({ error: 'subsidiaryId must be a valid UUID' }, { status: 400 })
+    }
+    subsidiaryId = rawSubsidiaryId ?? null
+  }
+  const scopeDenied = guardSubsidiaryScope(gate, subsidiaryId)
+  if (scopeDenied) return scopeDenied
+
+  if (subsidiaryId !== null) {
+    const [subsidiary] = (
+      await db.execute<{ id: string }>(sql`
+        select id
+          from subsidiaries
+         where id = ${subsidiaryId}
+           and org_id = ${orgId}
+           and is_active`)
+    ).rows
+    if (!subsidiary) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   const [org] = (
     (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
