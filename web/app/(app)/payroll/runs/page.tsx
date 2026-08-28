@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowUpRight } from 'lucide-react'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { nextPeriodAfter } from '@openbooks/engine/src/payroll-run.ts'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
@@ -38,16 +39,42 @@ export default async function PayRunsPage({
   const t = await getTranslations('payroll')
   const sp = await searchParams
 
-  const schedules = canRun
-    ? (((await db.execute<{ id: string; name: string; frequency: string; pay_date_offset_days: number; last_end: string | null }>(sql`
+  const scheduleRows = canRun
+    ? (((await db.execute<{
+        id: string
+        name: string
+        frequency: string
+        pay_date_offset_days: number
+        anchor_period_end: string
+        last_end: string | null
+      }>(sql`
         select s.id, s.name, s.frequency, s.pay_date_offset_days,
-               coalesce(max(r.period_end), s.anchor_period_end)::text as last_end
+               s.anchor_period_end::text as anchor_period_end,
+               max(r.period_end)::text as last_end
           from pay_schedules s
           left join pay_runs r on r.pay_schedule_id = s.id and r.org_id = s.org_id
          where s.org_id = ${orgId} and s.is_active
          group by s.id, s.name, s.frequency, s.pay_date_offset_days, s.anchor_period_end
          order by s.name`))).rows)
     : []
+
+  // Keep the date controls on the exact same calendar as createPayRun. The
+  // client receives a canonical preview, while an untouched submit still lets
+  // the server derive the period again inside its transaction.
+  const schedules = scheduleRows.map((schedule) => {
+    const next = nextPeriodAfter(schedule, schedule.last_end)
+    const payDate = new Date(`${next.periodEnd}T00:00:00Z`)
+    payDate.setUTCDate(payDate.getUTCDate() + schedule.pay_date_offset_days)
+    return {
+      id: schedule.id,
+      name: schedule.name,
+      frequency: schedule.frequency,
+      pay_date_offset_days: schedule.pay_date_offset_days,
+      next_period_start: next.periodStart,
+      next_period_end: next.periodEnd,
+      next_pay_date: payDate.toISOString().slice(0, 10),
+    }
+  })
 
   // A final pay run must NAME the employees it pays (it clears every accrued
   // bank), and the engine will only calculate one for people whose employment
