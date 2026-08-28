@@ -449,3 +449,62 @@ test(
     }
   },
 );
+
+test(
+  "occurrence lineage rejects cross-tenant schedule and document references",
+  { skip: !DB },
+  async () => {
+    const owner = await createScratchOrg();
+    const foreign = await createScratchOrg();
+    try {
+      const ownerActor = await createScratchUser(owner.orgId, "Owner scheduler", "admin");
+      const foreignActor = await createScratchUser(foreign.orgId, "Foreign scheduler", "admin");
+      const ownerScheduleId = await seedInvoiceSchedule(owner, ownerActor);
+      const foreignScheduleId = await seedInvoiceSchedule(foreign, foreignActor);
+      const ownerTemplateId = (await db.execute<{ id: string }>(sql`
+        select template_document_id::text as id
+          from recurring_schedules
+         where id = ${ownerScheduleId}
+      `)).rows[0]!.id;
+      const foreignTemplateId = (await db.execute<{ id: string }>(sql`
+        select template_document_id::text as id
+          from recurring_schedules
+         where id = ${foreignScheduleId}
+      `)).rows[0]!.id;
+
+      await assert.rejects(
+        db.execute(sql`
+          insert into recurring_occurrence_documents
+            (org_id, schedule_id, occurrence_on, document_id)
+          values (${owner.orgId}, ${foreignScheduleId}, '2026-07-15', ${ownerTemplateId})
+        `),
+        (error: unknown) => /foreign key|recurring_occurrence_schedule_fk/i.test(
+          [error, (error as { cause?: unknown })?.cause].map(String).join(": "),
+        ),
+        "a lineage row cannot name another tenant's schedule",
+      );
+
+      await assert.rejects(
+        db.execute(sql`
+          insert into recurring_occurrence_documents
+            (org_id, schedule_id, occurrence_on, document_id)
+          values (${owner.orgId}, ${ownerScheduleId}, '2026-08-15', ${foreignTemplateId})
+        `),
+        (error: unknown) => /foreign key|recurring_occurrence_document_fk/i.test(
+          [error, (error as { cause?: unknown })?.cause].map(String).join(": "),
+        ),
+        "a lineage row cannot name another tenant's document",
+      );
+
+      const persisted = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n
+          from recurring_occurrence_documents
+         where org_id = ${owner.orgId}
+      `)).rows[0]!;
+      assert.equal(Number(persisted.n), 0, "rejected cross-tenant rows leave no lineage evidence");
+    } finally {
+      await dropScratchOrgReporting(owner.orgId);
+      await dropScratchOrgReporting(foreign.orgId);
+    }
+  },
+);
