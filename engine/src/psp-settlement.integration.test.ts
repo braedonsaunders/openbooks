@@ -347,3 +347,76 @@ test(
     }
   },
 );
+
+test(
+  "PSP settlement refuses FX adjustments when no realized FX account is configured",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const parsed: ParsedSettlement = {
+        provider: "stripe",
+        externalRef: `payout-fx-unconfigured-${org.orgId}`,
+        settlementDate: org.date,
+        currency: "CAD",
+        lines: [
+          {
+            kind: "charge",
+            amount: "100.0000",
+            currency: "CAD",
+            externalRef: "charge-1",
+          },
+          {
+            kind: "fx_adjustment",
+            amount: "1.2500",
+            currency: "CAD",
+            externalRef: "fx-1",
+          },
+        ],
+      };
+      const { batchId } = await importSettlementBatch(org.orgId, actor, parsed, {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.freight,
+        disputeAccountId: org.accounts.adjustment,
+        clearingAccountId: org.accounts.clearing,
+        subsidiaryId: org.subsidiaryId,
+      });
+
+      await db.execute(sql`
+        update orgs
+           set settings = settings #- '{controlAccounts,fxRealizedGainLoss}'
+         where id = ${org.orgId}
+      `);
+
+      await assert.rejects(
+        postSettlementBatch(org.orgId, batchId, actor),
+        (error: unknown) =>
+          error instanceof PspSettlementError &&
+          error.message === "realized FX gain/loss account is not configured",
+      );
+
+      const state = (await db.execute<{
+        status: string;
+        journal_entry_id: string | null;
+        journal_entries: number;
+      }>(sql`
+        select b.status,
+               b.journal_entry_id,
+               (select count(*)::int
+                  from journal_entries j
+                 where j.org_id = b.org_id
+                   and j.id = b.journal_entry_id) as journal_entries
+          from psp_settlement_batches b
+         where b.id = ${batchId} and b.org_id = ${org.orgId}
+      `));
+      assert.deepEqual(state.rows[0], {
+        status: "draft",
+        journal_entry_id: null,
+        journal_entries: 0,
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
