@@ -114,6 +114,21 @@ const listReportDefinitions: AssistantToolDef = {
 
 const MAX_REPORT_ROWS = 200;
 
+/**
+ * Convert the request authorization scope to the report layer's dimension
+ * filter. `null` is the explicit unrestricted sentinel; a non-null empty set
+ * remains an empty array so callers can fail closed instead of widening to
+ * the whole organization.
+ */
+function reportDims(authz: Authz): { subsidiaryIds: string[] } | undefined {
+  if (authz.allowedSubsidiaryIds === null) return undefined;
+  return { subsidiaryIds: [...authz.allowedSubsidiaryIds] };
+}
+
+function reportScopeDenied(authz: Authz): ToolResult | null {
+  return authz.allowedSubsidiaryIds?.size === 0 ? { ok: false, error: "forbidden" } : null;
+}
+
 const runReport: AssistantToolDef = {
   name: "run_report",
   description:
@@ -127,6 +142,11 @@ const runReport: AssistantToolDef = {
     toDate: dateInput.optional(),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    // The generic saved-report resolver has no authorization-scope parameter;
+    // running it for a restricted caller would silently widen subsidiary
+    // visibility. Keep this tool available only for the explicit unrestricted
+    // sentinel until the resolver can carry the allowlist end to end.
+    if (authz.allowedSubsidiaryIds !== null) return { ok: false, error: "forbidden" };
     const a = raw as RangeArgs & { definitionId: string };
     const orgId = authz.user.orgId;
     const def = (await db.execute<{ entity: string | null; statement_kind: string | null }>(sql`
@@ -193,11 +213,14 @@ const generalLedgerTool: AssistantToolDef = {
     accountId: uuidInput.optional(),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    const denied = reportScopeDenied(authz);
+    if (denied) return denied;
     const a = raw as RangeArgs & { accountId?: string };
     const range = await resolveToolRange(authz.user.orgId, a);
     if ("error" in range) return { ok: false, error: range.error };
     const r = await generalLedger(range.from, range.to, {
       accountId: a.accountId,
+      dims: reportDims(authz),
       orgId: authz.user.orgId,
       maxLines: a.accountId ? MAX_REPORT_ROWS : 1000,
     });
@@ -243,8 +266,10 @@ const agingDetailTool: AssistantToolDef = {
     if (!can(authz, a.side === "ar" ? "ar.read" : "ap.read")) {
       return { ok: false, error: "forbidden" };
     }
+    const denied = reportScopeDenied(authz);
+    if (denied) return denied;
     const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
-    const r = await agingDetail(a.side, asOf, undefined, authz.user.orgId);
+    const r = await agingDetail(a.side, asOf, reportDims(authz), authz.user.orgId);
     const limit = Math.min(a.limit ?? 100, 200);
     return {
       ok: true,
@@ -269,9 +294,11 @@ const cashFlowIndirectTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({ ...rangeInputFields }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    const denied = reportScopeDenied(authz);
+    if (denied) return denied;
     const range = await resolveToolRange(authz.user.orgId, raw as RangeArgs);
     if ("error" in range) return { ok: false, error: range.error };
-    const r = await cashFlowIndirect(range.from, range.to, undefined, authz.user.orgId);
+    const r = await cashFlowIndirect(range.from, range.to, reportDims(authz), authz.user.orgId);
     return {
       ok: true,
       data: {
@@ -305,12 +332,15 @@ const partnerStatementTool: AssistantToolDef = {
     if (!can(authz, a.side === "ar" ? "ar.read" : "ap.read")) {
       return { ok: false, error: "forbidden" };
     }
+    const denied = reportScopeDenied(authz);
+    if (denied) return denied;
     const range = await resolveToolRange(authz.user.orgId, a);
     if ("error" in range) return { ok: false, error: range.error };
     const r = await partnerStatement(a.partyId, authz.user.orgId, {
       from: range.from,
       to: range.to,
       side: a.side,
+      dims: reportDims(authz),
     });
     const { items: lines, truncated } = capList(r.lines);
     return {
