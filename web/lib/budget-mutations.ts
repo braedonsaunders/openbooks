@@ -77,7 +77,7 @@ export async function saveBudgetCells(input: {
     throw new BudgetMutationError('cells_must_contain_1_to_1000_rows')
   }
 
-  const normalized = input.cells.map((cell) => ({
+  let normalized = input.cells.map((cell) => ({
     ...cell,
     amount: normalizeBudgetAmount(cell.amount),
     note: typeof cell.note === 'string' ? cell.note.trim().slice(0, 2_000) || null : null,
@@ -87,9 +87,6 @@ export async function saveBudgetCells(input: {
     locationId: cell.locationId ?? null,
     classId: cell.classId ?? null,
   }))
-  if (new Set(normalized.map(cellKey)).size !== normalized.length) {
-    throw new BudgetMutationError('duplicate_cells_in_request')
-  }
 
   return db.transaction(async (tx) => {
     const locked = (await tx.execute<{ status: string; revision: number; fiscal_year: number }>(sql`
@@ -102,6 +99,26 @@ export async function saveBudgetCells(input: {
     if (!scenario) throw new BudgetMutationError('not_found', 404)
     if (scenario.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
     if (Number(scenario.revision) !== input.expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
+
+    // The database trigger resolves an omitted entity to the tenant root. Do
+    // the same before deriving keys/evidence so an omitted cell and an
+    // explicitly-rooted cell cannot bypass duplicate detection, and a delete
+    // or before-image lookup targets the row the trigger will actually write.
+    if (normalized.some((cell) => cell.subsidiaryId === null)) {
+      const root = await tx.execute<{ id: string }>(sql`
+        select id from subsidiaries
+         where org_id = ${input.orgId}
+           and parent_id is null and is_active and not is_elimination
+         order by created_at, id
+         limit 1
+      `)
+      const rootId = root.rows[0]?.id
+      if (!rootId) throw new BudgetMutationError('invalid_subsidiary')
+      normalized = normalized.map((cell) => ({ ...cell, subsidiaryId: cell.subsidiaryId ?? rootId }))
+    }
+    if (new Set(normalized.map(cellKey)).size !== normalized.length) {
+      throw new BudgetMutationError('duplicate_cells_in_request')
+    }
 
     const accountIds = normalized.map((cell) => cell.accountId)
     const periodIds = normalized.map((cell) => cell.periodId)
