@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { add, neg, sum } from "@openbooks/engine/src/money.ts";
 import { resolveOrgId } from "./org-scope";
 import type { DimFilter } from "./reports";
 
@@ -24,7 +25,7 @@ export type LayoutRow =
 export interface RenderedLine {
   kind: "header" | "account" | "total" | "spacer";
   label: string;
-  amount?: number;
+  amount?: string;
   accountId?: string;
   number?: string | null;
   emphasis?: boolean;
@@ -46,6 +47,11 @@ const CREDIT_NORMAL = new Set([
   "equity",
 ]);
 const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_other", "expense_deferred"];
+const BALANCE_SHEET_TYPES = [
+  "asset_bank", "asset_receivable", "asset_current_other", "asset_fixed", "asset_other",
+  "liability_payable", "liability_card", "liability_current_other", "liability_long_term",
+  "equity",
+];
 
 export async function layoutsFor(statement: "pnl" | "balance_sheet", orgId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId);
@@ -70,6 +76,7 @@ export async function renderLayout(
   let dimSql = sql`true`;
   if (dims?.departmentId) dimSql = sql`${dimSql} and l.department_id = ${dims.departmentId}`;
   if (dims?.projectId) dimSql = sql`${dimSql} and l.project_id = ${dims.projectId}`;
+  const accountTypes = lay.rows[0].statement === "balance_sheet" ? BALANCE_SHEET_TYPES : PNL_TYPES;
 
   const balances = (await db.execute(sql`
     select a.id, a.number, a.name, a.type, sum(l.amount) as raw
@@ -78,25 +85,25 @@ export async function renderLayout(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${resolvedOrgId}
        and a.org_id = ${resolvedOrgId}
-       and a.type in ${PNL_TYPES}
+       and a.type in ${accountTypes}
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and ${dimSql}
      group by a.id having abs(sum(l.amount)) > 0
      order by a.number nulls last, a.name
   `));
 
-  type Acct = { id: string; number: string | null; name: string; type: string; value: number };
+  type Acct = { id: string; number: string | null; name: string; type: string; value: string };
   const accounts: Acct[] = balances.rows.map((r: any) => ({
     id: r.id, number: r.number, name: r.name, type: r.type,
-    value: CREDIT_NORMAL.has(r.type) ? -Number(r.raw) : Number(r.raw),
+    value: CREDIT_NORMAL.has(r.type) ? neg(String(r.raw)) : String(r.raw),
   }));
 
   const claimed = new Set<string>();
-  const computed = new Map<string, number>();
+  const computed = new Map<string, string>();
   const lines: RenderedLine[] = [];
 
   const emitGroup = (label: string, members: Acct[], collapsed: boolean, leftover = false) => {
-    const total = members.reduce((a, m) => a + m.value, 0);
+    const total = sum(members.map((member) => member.value));
     lines.push(leftover ? { kind: "header", label, auto: "other" } : { kind: "header", label });
     if (!collapsed) {
       for (const m of members) {
@@ -126,15 +133,16 @@ export async function renderLayout(
       continue;
     }
     if (row.kind === "subtotal") {
-      const total = row.of.reduce((a, label) => a + (computed.get(label) ?? 0), 0);
+      const total = sum(row.of.map((label) => computed.get(label) ?? "0"));
       lines.push({ kind: "total", label: row.label, amount: total, emphasis: true });
       computed.set(row.label, total);
       continue;
     }
     // formula
-    const total =
-      (row.plus ?? []).reduce((a, l) => a + (computed.get(l) ?? 0), 0) -
-      (row.minus ?? []).reduce((a, l) => a + (computed.get(l) ?? 0), 0);
+    const total = add(
+      sum((row.plus ?? []).map((label) => computed.get(label) ?? "0")),
+      neg(sum((row.minus ?? []).map((label) => computed.get(label) ?? "0"))),
+    );
     lines.push({ kind: "total", label: row.label, amount: total, emphasis: true });
     computed.set(row.label, total);
   }

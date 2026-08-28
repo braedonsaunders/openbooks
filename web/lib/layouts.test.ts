@@ -100,7 +100,7 @@ const hooks = registerHooks({
   },
 });
 
-const { renderLayout } = await import("./layouts.ts?layouts-test");
+const { renderLayout } = await import("./layouts.ts");
 hooks.deregister();
 
 function resetFixture(input: Pick<LayoutFixture, "layout" | "accounts">): void {
