@@ -156,6 +156,11 @@ export async function loadAttachmentTarget(orgId: string, targetTable: string, t
 export function attachmentTargetInScope(authz: Authz, target: AttachmentTarget): boolean {
   if (authz.allowedSubsidiaryIds === null) return true
 
+  // Rate-card versions are org-wide setup records: the table has no
+  // subsidiary dimension, and the rate-book APIs intentionally expose them to
+  // any caller holding admin.setup.manage regardless of subsidiary scope.
+  if (target.targetTable === 'item_rate_versions') return true
+
   if (target.targetTable === 'parties') {
     return subsidiaryScopeAllows(authz.allowedSubsidiaryIds, target.subsidiaryId, { orgWideNull: true })
   }

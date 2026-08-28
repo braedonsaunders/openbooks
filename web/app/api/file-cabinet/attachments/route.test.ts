@@ -167,6 +167,19 @@ test('GET hides out-of-scope targets before listing their attachments', async ()
   assert.equal(routeState.listCalls, 0)
 })
 
+test('GET keeps org-wide rate-card targets visible to restricted setup users', async () => {
+  reset({
+    permissions: ['admin.setup.manage'],
+    allowedSubsidiaryIds: ['00000000-0000-4000-8000-000000000099'],
+    targetRows: [[{}]],
+  })
+
+  const response = await get('item_rate_versions')
+
+  assert.equal(response.status, 200)
+  assert.equal(routeState.listCalls, 1)
+})
+
 test('GET filters attachment metadata through file visibility', async () => {
   reset({
     permissions: ['compliance.read'],
