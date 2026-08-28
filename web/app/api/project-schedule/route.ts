@@ -177,7 +177,7 @@ export async function POST(req: Request) {
         if (!body.id || !isUuid(body.id)) {
           return NextResponse.json({ error: 'id required' }, { status: 400 })
         }
-        await deleteScheduleCalendar(orgId, body.id)
+        await deleteScheduleCalendar(orgId, projectId, body.id)
         return NextResponse.json({ ok: true })
       }
       case 'saveResource': {
@@ -188,7 +188,7 @@ export async function POST(req: Request) {
         if (!body.id || !isUuid(body.id)) {
           return NextResponse.json({ error: 'id required' }, { status: 400 })
         }
-        await deleteScheduleResource(orgId, body.id)
+        await deleteScheduleResource(orgId, projectId, body.id)
         return NextResponse.json({ ok: true })
       }
       default:
