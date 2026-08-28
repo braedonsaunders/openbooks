@@ -7,6 +7,7 @@ import { isZero, sum } from "./money.ts";
 import {
   IncomeTaxProvisionError,
   buildProvision,
+  computeFixedAssetDifferences,
   computeProvisionRun,
   consolidateEntityResults,
   detectProvisionSourceDrift,
@@ -498,26 +499,125 @@ test("consolidation translates each entity before summing — never a raw unit s
   assert.equal(alone.totalExpense, root.computation.totalExpense);
 });
 
-test("provision journal numbering is deterministic and collision-free through repeated same-year reposts", () => {
-  const sub = randomUUID();
-  const otherSub = randomUUID();
-  const mains = [1, 2, 3].map((v) => provisionEntryNumber(2026, v, sub));
-  const reversals = [1, 2, 3].map((v) => provisionReversalEntryNumber(2026, v, sub));
+test("provision journal numbering is deterministic and collision-free through repeated reposts and UUID-prefix collisions", () => {
+  const orgId = randomUUID();
+  // These legal-entity IDs deliberately share the old eight-hex prefix.
+  const sub = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const otherSub = "aaaaaaaa-aaaa-4aaa-8aaa-bbbbbbbbbbbb";
+  const mains = [1, 2, 3].map((v) => provisionEntryNumber(2026, v, orgId, sub));
+  const reversals = [1, 2, 3].map((v) => provisionReversalEntryNumber(2026, v, orgId, sub));
   assert.equal(new Set([...mains, ...reversals]).size, 6, "all six numbers distinct");
   for (const number of [...mains, ...reversals]) {
     // Deterministic: recomputing yields the identical string.
     const version = Number(number.match(/-v(\d+)-/)![1]!);
     const expected = number.startsWith("ITX-REV-")
-      ? provisionReversalEntryNumber(2026, version, sub)
-      : provisionEntryNumber(2026, version, sub);
+      ? provisionReversalEntryNumber(2026, version, orgId, sub)
+      : provisionEntryNumber(2026, version, orgId, sub);
     assert.equal(number, expected);
   }
-  assert.notEqual(provisionEntryNumber(2026, 1, sub), provisionEntryNumber(2026, 1, otherSub));
+  assert.notEqual(
+    provisionEntryNumber(2026, 1, orgId, sub),
+    provisionEntryNumber(2026, 1, orgId, otherSub),
+    "entities sharing the first eight UUID hex characters still have distinct identities",
+  );
+  assert.notEqual(
+    provisionEntryNumber(2026, 1, orgId, sub),
+    provisionEntryNumber(2026, 1, randomUUID(), sub),
+    "organization identity is part of the deterministic suffix",
+  );
 });
 
 // ---------------------------------------------------------------------------
 // DB-backed regression cases (one per defect, plus unchanged-input controls).
 // ---------------------------------------------------------------------------
+
+test("fixed-asset tax basis counts each equal-cost asset once across multi-line schedules", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Fixed Asset Tester", "admin");
+    const taxBookId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+      values (${taxBookId}, ${org.orgId}, 'tax', 'Tax', false, true, true)`);
+
+    const categoryId = randomUUID();
+    await db.execute(sql`
+      insert into asset_categories
+        (id, org_id, name, asset_account_id, accumulated_depreciation_account_id,
+         depreciation_expense_account_id, default_method, default_convention, tax_attributes, is_active)
+      values (${categoryId}, ${org.orgId}, 'Equipment', ${org.accounts.invAsset}, ${org.accounts.clearing},
+              ${org.accounts.adjustment}, 'straight_line', 'full_month', '{}'::jsonb, true)`);
+
+    // A real posted entry supplies the immutable posting reference required by
+    // depreciation schedule lines without introducing a second posting path.
+    await postInvoice(org, {
+      subsidiaryId: org.subsidiaryId,
+      amount: "100",
+      number: "INV-FA-BASIS",
+      userId,
+    });
+    const journalEntryId = (await db.execute<{ id: string }>(sql`
+      select id from journal_entries
+       where org_id = ${org.orgId} and entry_number = 'INV-FA-BASIS'
+    `)).rows[0]!.id;
+
+    const calendarId = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+      select fiscal_calendar_id from accounting_periods where id = ${org.periodId}
+    `)).rows[0]!.fiscal_calendar_id;
+    const secondPeriodId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      values (${secondPeriodId}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calendarId})`);
+
+    const assets = [randomUUID(), randomUUID()];
+    for (const [index, assetId] of assets.entries()) {
+      await db.execute(sql`
+        insert into fixed_assets
+          (id, org_id, subsidiary_id, category_id, asset_number, name, status,
+           acquired_on, in_service_on, acquisition_cost, salvage_value,
+           depreciation_method, useful_life_months, custom)
+        values (${assetId}, ${org.orgId}, ${org.subsidiaryId}, ${categoryId}, ${`FA-BASIS-${index + 1}`},
+                ${`Equal-cost asset ${index + 1}`}, 'in_service', ${org.date}, ${org.date}, '10000', '0',
+                'straight_line', 12, '{}'::jsonb)`);
+    }
+
+    const schedules = [
+      { assetId: assets[0]!, bookId: org.bookId, id: randomUUID(), amounts: ["1000", "500"] },
+      { assetId: assets[0]!, bookId: taxBookId, id: randomUUID(), amounts: ["2000", "1000"] },
+      { assetId: assets[1]!, bookId: org.bookId, id: randomUUID(), amounts: ["1200", "300"] },
+      { assetId: assets[1]!, bookId: taxBookId, id: randomUUID(), amounts: ["2500", "500"] },
+    ];
+    for (const schedule of schedules) {
+      await db.execute(sql`
+        insert into depreciation_schedules
+          (id, org_id, asset_id, book_id, method, life_months, created_by, updated_by)
+        values (${schedule.id}, ${org.orgId}, ${schedule.assetId}, ${schedule.bookId}, 'straight_line', 12,
+                ${userId}, ${userId})`);
+      for (const [index, amount] of schedule.amounts.entries()) {
+        await db.execute(sql`
+          insert into depreciation_schedule_lines
+            (id, org_id, schedule_id, period_id, sequence, planned_amount, posted_amount,
+             journal_entry_id, source, created_by, updated_by)
+          values (${randomUUID()}, ${org.orgId}, ${schedule.id},
+                  ${index === 0 ? org.periodId : secondPeriodId}, ${index + 1}, ${amount}, ${amount},
+                  ${journalEntryId}, 'formula', ${userId}, ${userId})`);
+      }
+    }
+
+    const differences = await computeFixedAssetDifferences(org.orgId, "2026-12-31");
+    assert.equal(differences.length, 1);
+    const difference = differences[0]!;
+    // Each asset costs 10,000, so equal-cost rows must still sum to 20,000.
+    // Book depreciation is 3,000 and tax depreciation is 6,000 across all
+    // four schedules and their two posted lines each.
+    assert.equal(difference.bookBasis, "17000.0000");
+    assert.equal(difference.taxBasis, "14000.0000");
+    assert.equal(difference.difference, "3000.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test("posting refuses a stale draft after ledger activity changes and zero rows are written", { skip: !DB }, async () => {
   const org = await createScratchOrg();
