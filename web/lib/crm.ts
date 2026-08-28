@@ -138,6 +138,15 @@ export interface ForecastScope {
 export async function calculateForecast(scope: ForecastScope) {
   const ownerFilter = scope.ownerUserId ? sql`and o.owner_user_id = ${scope.ownerUserId}` : sql``
   const teamFilter = scope.salesTeamId ? sql`and o.sales_team_id = ${scope.salesTeamId}` : sql``
+  const actualsTeamFilter = scope.salesTeamId ? sql`
+           and exists (
+             select 1
+               from crm_opportunity_documents od
+               join crm_opportunities o on o.id = od.opportunity_id and o.org_id = od.org_id
+              where od.org_id = ${scope.orgId}
+                and od.document_id = d.id
+                and o.sales_team_id = ${scope.salesTeamId}
+           )` : sql``
   const rows = (await db.execute<Record<string, string>>(sql`
     with opportunity_base as (
       select o.currency, o.projected_amount, o.weighted_amount, o.forecast_category, s.is_closed, s.is_won
@@ -151,6 +160,7 @@ export async function calculateForecast(scope: ForecastScope) {
        where d.org_id = ${scope.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
          and d.document_date between ${scope.periodStart}::date and ${scope.periodEnd}::date
          ${scope.ownerUserId ? sql`and exists (select 1 from crm_account_profiles cp where cp.org_id = ${scope.orgId} and cp.party_id = d.party_id and cp.owner_user_id = ${scope.ownerUserId})` : sql``}
+         ${actualsTeamFilter}
        group by d.currency
     ), currencies as (
       select currency from opportunity_base union select currency from actuals
