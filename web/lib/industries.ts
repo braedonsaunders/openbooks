@@ -622,7 +622,6 @@ export const INDUSTRIES: IndustryDef[] = [
       { number: '1500', name: 'Equipment', type: 'asset_fixed' },
       { number: '1510', name: 'Accumulated Depreciation', type: 'asset_fixed' },
       ...standardLiabilities(),
-      ...standardEquity(),
       { number: '3000', name: 'Unrestricted Net Assets', type: 'equity' },
       { number: '3100', name: 'Temporarily Restricted Net Assets', type: 'equity' },
       { number: '3200', name: 'Permanently Restricted Net Assets', type: 'equity' },
