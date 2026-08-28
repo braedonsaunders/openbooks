@@ -694,6 +694,28 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "applied the prior migration already have an equivalent schema before "
       + "and after the restamp.",
   },
+  {
+    filename: "generated/0006_recurring_occurrence_guard.sql",
+    from: "e67de81a35d3e27db9494395d444380361b92d44ba84ecbe72ac8ca976a860c1",
+    to: "8bb20d32a74195e630747f48024f5e35e5d72457fa7669d2d80a409b53d72510",
+    strategy: "reapply",
+    reason:
+      "corrective revision adds tenant-coherent composite foreign keys for "
+      + "recurring occurrence lineage, after a preflight that refuses to rewrite "
+      + "mismatched legacy rows. It drops the original global-id references and "
+      + "rebuilds the constraints idempotently against the prior migration state.",
+  },
+  {
+    filename: "generated/0060_lease_base_rent_window_exclusive.sql",
+    from: "03f488dd20d7e56efc3a1a4ccc7d5d20977c9f88b821561186a902bb30535e9c",
+    to: "72410c818c0c0b5bd006d29cbc7d281f6097f90ca5833690219554b81cabd4da",
+    strategy: "restamp",
+    reason:
+      "corrective revision fixes only the cumulative cancellation count in the "
+      + "legacy-overlap repair notice; the exclusion constraint and repaired "
+      + "schema/data outcome are unchanged, so existing installations need only "
+      + "the reviewed digest restamp.",
+  },
 ];
 
 async function executeTrackedMigration(
