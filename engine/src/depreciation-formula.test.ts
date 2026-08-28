@@ -48,6 +48,14 @@ test("rejects unknown variables and injection attempts", () => {
   assert.throws(() => evalDepFormula("(OC", ctx()), DepreciationFormulaError);
 });
 
+test("rejects division by zero instead of silently producing a zero charge", () => {
+  const formula = "(OC-RV)/0";
+  assert.throws(() => evalDepFormula(formula, ctx()), /formula denominator cannot be zero/);
+  assert.throws(() => computeScheduleByFormula({
+    cost: "100.0000", salvage: "0", lifePeriods: 2, formula, endOfLife: "retain_balance",
+  }), /formula denominator cannot be zero/);
+});
+
 // --- formula-driven schedule ------------------------------------------------
 
 const money = (lines: { planned: string }[]) => lines.reduce((total, line) => total + toUnits(line.planned), 0n);

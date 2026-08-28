@@ -85,7 +85,10 @@ export function exactRatio(numerator: DecimalInput, denominator: DecimalInput): 
 }
 
 const mulExact = (a: bigint, b: bigint): bigint => roundDiv(a * b, EXACT_SCALE);
-const divExact = (a: bigint, b: bigint): bigint => b === 0n ? 0n : roundDiv(a * EXACT_SCALE, b < 0n ? -b : b) * (b < 0n ? -1n : 1n);
+const divExact = (a: bigint, b: bigint): bigint => {
+  if (b === 0n) throw new DepreciationFormulaError("formula denominator cannot be zero");
+  return roundDiv(a * EXACT_SCALE, b < 0n ? -b : b) * (b < 0n ? -1n : 1n);
+};
 
 function powExact(base: bigint, exponent: bigint): bigint {
   if (exponent % EXACT_SCALE !== 0n) {
