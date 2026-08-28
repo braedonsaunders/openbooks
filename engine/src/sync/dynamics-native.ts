@@ -107,6 +107,7 @@ export function buildNativeFromBC(
   const detail = (side: "sales" | "purchase"): NativeDocLine[] | { skip: string } => {
     const out: NativeDocLine[] = [];
     const taxByCode = new Map<string, bigint>();
+    const taxCarrierByCode = new Map<string, NativeDocLine>();
     for (const l of t.lines ?? []) {
       if (l.lineType === "Comment" || (l.amountExcludingTax ?? 0) === 0) continue;
       let acct: string | null = null;
@@ -123,11 +124,18 @@ export function buildNativeFromBC(
       if (!acct) return { skip: `unresolved ${l.lineType} line account (${l.lineObjectNumber ?? l.itemId ?? "?"})` };
       out.push(mk(acct, home(l.amountExcludingTax), l.description ?? null));
       const tax = home(l.totalTaxAmount);
-      if (tax !== 0n && l.taxCode) taxByCode.set(l.taxCode, (taxByCode.get(l.taxCode) ?? 0n) + (tax < 0n ? -tax : tax));
+      if (tax !== 0n && l.taxCode) {
+        taxByCode.set(l.taxCode, (taxByCode.get(l.taxCode) ?? 0n) + (tax < 0n ? -tax : tax));
+        // Keep each source tax code on a detail line that carries that code.
+        // A single carrier can represent the aggregate for repeated lines with
+        // the same code, but different codes must remain separate for posting.
+        if (!taxCarrierByCode.has(l.taxCode)) taxCarrierByCode.set(l.taxCode, out[out.length - 1]!);
+      }
     }
     if (out.length === 0) return { skip: "no detail lines" };
     for (const [code, amt] of taxByCode) {
-      const carrier = out[0]!;
+      const carrier = taxCarrierByCode.get(code);
+      if (!carrier) continue;
       carrier.taxAmount = fromUnits(toUnits(carrier.taxAmount) + amt);
       carrier.taxOverridden = true;
       if (!carrier.taxCodeId) carrier.taxCodeId = ctx.taxCodeByRef.get(code) ?? null;
