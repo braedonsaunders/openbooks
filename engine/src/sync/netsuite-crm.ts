@@ -308,11 +308,31 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
     const lifecycle = stage(customer.stage)
     const party = (await db.execute<{ id: string }>(sql`select id from parties where org_id=${orgId} and custom->>'nsId'=${customer.id} limit 1`))
     if (!party.rows[0]) { report.missingParties++; continue }
+    const partyId = party.rows[0].id
     const scoreText = (probField ? (customer as Record<string, string | undefined>)[probField] : undefined) ?? customer.probability
     const score = scoreText == null || scoreText === '' ? null : Math.max(0, Math.min(100, Math.round(Number(scoreText))))
     const statusId = customer.entitystatus ? statusIds.get(`${lifecycle}:${customer.entitystatus}`) ?? null : null
-    const saved = (await db.execute<{ id: string }>(sql`insert into crm_account_profiles(org_id,party_id,lifecycle_stage,status_id,qualification_score,qualified_at,converted_at,acquired_on,is_active,custom,created_by,updated_by) values(${orgId},${party.rows[0].id},${lifecycle},${statusId},${score},${lifecycle !== 'lead' ? date(customer.dateprospect ?? customer.datecreated) : null},${lifecycle === 'customer' ? date(customer.dateclosed ?? customer.datecreated) : null},${lifecycle === 'customer' ? date(customer.dateclosed ?? customer.datecreated) : null},true,${JSON.stringify({ netsuite: { id: customer.id, stage: customer.stage, statusId: customer.entitystatus } })}::jsonb,${actorId},${actorId}) on conflict(party_id) do update set lifecycle_stage=excluded.lifecycle_stage,status_id=excluded.status_id,qualification_score=excluded.qualification_score,qualified_at=coalesce(crm_account_profiles.qualified_at,excluded.qualified_at),converted_at=coalesce(crm_account_profiles.converted_at,excluded.converted_at),acquired_on=coalesce(crm_account_profiles.acquired_on,excluded.acquired_on),is_active=true,custom=crm_account_profiles.custom||excluded.custom,updated_at=now(),updated_by=${actorId} where crm_account_profiles.org_id=${orgId} returning id`))
-    await db.execute(sql`insert into crm_account_stage_events(org_id,account_profile_id,to_stage,source_kind,reason,occurred_at,created_by,updated_by) select ${orgId},${saved.rows[0]!.id},${lifecycle},'import','Imported lifecycle from source',coalesce(${date(customer.dateclosed ?? customer.dateprospect ?? customer.datecreated)}::timestamptz,now()),${actorId},${actorId} where not exists(select 1 from crm_account_stage_events where org_id=${orgId} and account_profile_id=${saved.rows[0]!.id} and source_kind='import')`)
+    await db.transaction(async (tx) => {
+      // Lock the profile while comparing stages so concurrent imports cannot
+      // both observe the same old stage and lose a transition event.
+      const existing = await tx.execute<{ id: string; lifecycle_stage: 'lead' | 'prospect' | 'customer' }>(sql`
+        select id,lifecycle_stage
+         from crm_account_profiles
+         where org_id=${orgId} and party_id=${partyId}
+         for update`)
+      const previousStage = existing.rows[0]?.lifecycle_stage ?? null
+      const profileExists = existing.rows.length > 0
+      const stageChanged = previousStage !== lifecycle
+      const fromStage = profileExists && stageChanged ? previousStage : null
+      const saved = (await tx.execute<{ id: string }>(sql`insert into crm_account_profiles(org_id,party_id,lifecycle_stage,status_id,qualification_score,qualified_at,converted_at,acquired_on,is_active,custom,created_by,updated_by) values(${orgId},${partyId},${lifecycle},${statusId},${score},${lifecycle !== 'lead' ? date(customer.dateprospect ?? customer.datecreated) : null},${lifecycle === 'customer' ? date(customer.dateclosed ?? customer.datecreated) : null},${lifecycle === 'customer' ? date(customer.dateclosed ?? customer.datecreated) : null},true,${JSON.stringify({ netsuite: { id: customer.id, stage: customer.stage, statusId: customer.entitystatus } })}::jsonb,${actorId},${actorId}) on conflict(party_id) do update set lifecycle_stage=excluded.lifecycle_stage,status_id=excluded.status_id,qualification_score=excluded.qualification_score,qualified_at=coalesce(crm_account_profiles.qualified_at,excluded.qualified_at),converted_at=coalesce(crm_account_profiles.converted_at,excluded.converted_at),acquired_on=coalesce(crm_account_profiles.acquired_on,excluded.acquired_on),is_active=true,custom=crm_account_profiles.custom||excluded.custom,updated_at=now(),updated_by=${actorId} where crm_account_profiles.org_id=${orgId} returning id`))
+      // A new profile (or one created before import history existed) gets one
+      // initial import event. Existing imported profiles append every stage
+      // transition, including reversions reported by the source.
+      const eventGuard = profileExists && stageChanged
+        ? sql`true`
+        : sql`not exists(select 1 from crm_account_stage_events where org_id=${orgId} and account_profile_id=${saved.rows[0]!.id} and source_kind='import')`
+      await tx.execute(sql`insert into crm_account_stage_events(org_id,account_profile_id,from_stage,to_stage,source_kind,reason,occurred_at,created_by,updated_by) select ${orgId},${saved.rows[0]!.id},${fromStage},${lifecycle},'import','Imported lifecycle from source',coalesce(${date(customer.dateclosed ?? customer.dateprospect ?? customer.datecreated)}::timestamptz,now()),${actorId},${actorId} where ${eventGuard}`)
+    })
     report.accounts++
   }
 
