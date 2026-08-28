@@ -571,6 +571,11 @@ export async function postSettlementBatch(
     `));
     const c = controls.rows[0]?.c ?? {};
     const fxAcct = b.fx_account_id ?? c.fxRealizedGainLoss ?? null;
+    if (!isZero(b.fx_amount) && !fxAcct) {
+      throw new PspSettlementError(
+        "realized FX gain/loss account is not configured",
+      );
+    }
     const disputeAcct = b.dispute_account_id ?? b.fee_account_id;
 
     const periodId = await periodForDate(orgId, b.settlement_date);
