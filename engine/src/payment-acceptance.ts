@@ -953,7 +953,7 @@ async function loadQuotedSurchargeFeeIncomeAccount(
        and table_name = 'payment_links'
        and row_id = ${linkId}
        and action = 'insert'
-     order by created_at desc
+     order by at desc, id desc
      limit 1
   `);
   const changes = result.rows[0]?.changes;
