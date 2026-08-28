@@ -149,10 +149,11 @@ async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumb
   if (rows.rows.length === 0) return null
 
   const entries = rows.rows.map((row: any) => ({ ...row, bill_amount: '0.0000' }))
-  const groups = new Map<string, { lineAmount: MoneyInput; indexes: number[]; nativeBillAmounts: MoneyInput[] }>()
+  type TimesheetGroup = { lineAmount: MoneyInput; indexes: number[]; nativeBillAmounts: MoneyInput[] }
+  const groups = new Map<string, TimesheetGroup>()
   entries.forEach((row: any, index: number) => {
     const lineId = String(row.line_id)
-    const group = groups.get(lineId) ?? { lineAmount: row.line_amount, indexes: [], nativeBillAmounts: [] }
+    const group: TimesheetGroup = groups.get(lineId) ?? { lineAmount: row.line_amount, indexes: [], nativeBillAmounts: [] }
     group.indexes.push(index)
     group.nativeBillAmounts.push(row.native_bill_amount)
     groups.set(lineId, group)
