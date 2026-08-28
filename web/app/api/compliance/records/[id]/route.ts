@@ -73,74 +73,90 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'a superseded certificate is history and cannot be changed' }, { status: 422 })
   }
 
+  if (action === 'verify' && record.created_by === actorId) {
+    // Whoever produced the record cannot also attest to it. Administrators are
+    // no exception: a single-person control is not a control.
+    return NextResponse.json(
+      { error: 'a certificate must be verified by someone other than the person who recorded it' },
+      { status: 422 },
+    )
+  }
+
+  let rejectionReason = ''
+  let coverageAmount: string | null | undefined
+  let aggregateAmount: string | null | undefined
   try {
-    if (action === 'verify') {
-      // Whoever produced the record cannot also attest to it. Administrators are
-      // no exception: a single-person control is not a control.
-      if (record.created_by === actorId) {
-        return NextResponse.json(
-          { error: 'a certificate must be verified by someone other than the person who recorded it' },
-          { status: 422 },
-        )
+    if (action === 'reject') {
+      rejectionReason = (body.reason ?? '').trim()
+      if (!rejectionReason) {
+        return NextResponse.json({ error: 'a rejection needs a reason' }, { status: 400 })
       }
-      await db.execute(sql`
-        update compliance_records
-           set status = 'active', verified_at = now(), verified_by = ${actorId},
-               rejected_reason = null, updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${id}`)
-    } else if (action === 'reject') {
-      const reason = (body.reason ?? '').trim()
-      if (!reason) return NextResponse.json({ error: 'a rejection needs a reason' }, { status: 400 })
-      await db.execute(sql`
-        update compliance_records
-           set status = 'rejected', rejected_reason = ${reason},
-               verified_at = null, verified_by = null,
-               updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${id}`)
-    } else if (action === 'reopen') {
-      await db.execute(sql`
-        update compliance_records
-           set status = 'pending_review', rejected_reason = null,
-               verified_at = null, verified_by = null,
-               updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${id}`)
-    } else {
-      const coverageAmount = body.coverageAmount === undefined
-        ? undefined
-        : optionalCoverageMoney(body.coverageAmount)
-      const aggregateAmount = body.aggregateAmount === undefined
-        ? undefined
-        : optionalCoverageMoney(body.aggregateAmount)
-      if (coverageAmount === 'invalid') {
-        return NextResponse.json({ error: 'coverage amount must be a number with no more than four decimal places' }, { status: 422 })
-      }
-      if (aggregateAmount === 'invalid') {
-        return NextResponse.json({ error: 'aggregate amount must be a number with no more than four decimal places' }, { status: 422 })
-      }
-      // Editing the substance of a VERIFIED certificate voids its verification:
-      // the attestation was about the old numbers.
-      await db.execute(sql`
-        update compliance_records
-           set issuer_name = coalesce(${body.issuerName ?? null}, issuer_name),
-               policy_number = coalesce(${body.policyNumber ?? null}, policy_number),
-               effective_from = coalesce(${body.effectiveFrom ?? null}::date, effective_from),
-               expires_on = ${body.expiresOn === undefined ? sql`expires_on` : sql`${body.expiresOn}::date`},
-               coverage_amount = ${coverageAmount === undefined ? sql`coverage_amount` : sql`${coverageAmount}`},
-               aggregate_amount = ${aggregateAmount === undefined ? sql`aggregate_amount` : sql`${aggregateAmount}`},
-               coverage_currency = coalesce(${body.coverageCurrency ?? null}, coverage_currency),
-               additional_insured = coalesce(${body.additionalInsured ?? null}, additional_insured),
-               waiver_of_subrogation = coalesce(${body.waiverOfSubrogation ?? null}, waiver_of_subrogation),
-               primary_noncontributory = coalesce(${body.primaryNoncontributory ?? null}, primary_noncontributory),
-               notes = coalesce(${body.notes ?? null}, notes),
-               status = case when status = 'active' then 'pending_review' else status end,
-               verified_at = null, verified_by = null,
-               updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${id}`)
     }
-    await db.execute(sql`
-      insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'compliance_records', ${id}, ${action === 'update' ? 'update' : action},
-              ${JSON.stringify({ before: record, after: body })}::jsonb, ${actorId})`)
+
+    coverageAmount = action === 'update' && body.coverageAmount !== undefined
+      ? optionalCoverageMoney(body.coverageAmount)
+      : undefined
+    aggregateAmount = action === 'update' && body.aggregateAmount !== undefined
+      ? optionalCoverageMoney(body.aggregateAmount)
+      : undefined
+    if (coverageAmount === 'invalid') {
+      return NextResponse.json({ error: 'coverage amount must be a number with no more than four decimal places' }, { status: 422 })
+    }
+    if (aggregateAmount === 'invalid') {
+      return NextResponse.json({ error: 'aggregate amount must be a number with no more than four decimal places' }, { status: 422 })
+    }
+
+    // Keep the certificate mutation and its immutable audit evidence in one
+    // transaction. If recording the evidence fails, PostgreSQL rolls back the
+    // action as well, so callers never observe a committed change without a
+    // corresponding legal audit event.
+    await db.transaction(async (tx) => {
+      if (action === 'verify') {
+        await tx.execute(sql`
+          update compliance_records
+             set status = 'active', verified_at = now(), verified_by = ${actorId},
+                 rejected_reason = null, updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and id = ${id}`)
+      } else if (action === 'reject') {
+        await tx.execute(sql`
+          update compliance_records
+             set status = 'rejected', rejected_reason = ${rejectionReason},
+                 verified_at = null, verified_by = null,
+                 updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and id = ${id}`)
+      } else if (action === 'reopen') {
+        await tx.execute(sql`
+          update compliance_records
+             set status = 'pending_review', rejected_reason = null,
+                 verified_at = null, verified_by = null,
+                 updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and id = ${id}`)
+      } else {
+        // Editing the substance of a VERIFIED certificate voids its verification:
+        // the attestation was about the old numbers.
+        await tx.execute(sql`
+          update compliance_records
+             set issuer_name = coalesce(${body.issuerName ?? null}, issuer_name),
+                 policy_number = coalesce(${body.policyNumber ?? null}, policy_number),
+                 effective_from = coalesce(${body.effectiveFrom ?? null}::date, effective_from),
+                 expires_on = ${body.expiresOn === undefined ? sql`expires_on` : sql`${body.expiresOn}::date`},
+                 coverage_amount = ${coverageAmount === undefined ? sql`coverage_amount` : sql`${coverageAmount}`},
+                 aggregate_amount = ${aggregateAmount === undefined ? sql`aggregate_amount` : sql`${aggregateAmount}`},
+                 coverage_currency = coalesce(${body.coverageCurrency ?? null}, coverage_currency),
+                 additional_insured = coalesce(${body.additionalInsured ?? null}, additional_insured),
+                 waiver_of_subrogation = coalesce(${body.waiverOfSubrogation ?? null}, waiver_of_subrogation),
+                 primary_noncontributory = coalesce(${body.primaryNoncontributory ?? null}, primary_noncontributory),
+                 notes = coalesce(${body.notes ?? null}, notes),
+                 status = case when status = 'active' then 'pending_review' else status end,
+                 verified_at = null, verified_by = null,
+                 updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and id = ${id}`)
+      }
+      await tx.execute(sql`
+        insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'compliance_records', ${id}, ${action === 'update' ? 'update' : action},
+                ${JSON.stringify({ before: record, after: body })}::jsonb, ${actorId})`)
+    })
     return NextResponse.json({ id })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'save failed' }, { status: 400 })
