@@ -197,7 +197,7 @@ export async function RecordListView({
 
   const extraQuickFilters = await Promise.all((source.quickFilters ?? []).map(async (quick) => {
     const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
-    const options = quick.loadOptions ? await quick.loadOptions(orgId) : (filterMeta?.options ?? []).map((option) => ({
+    const options = quick.loadOptions ? await quick.loadOptions(orgId, allowedSubs) : (filterMeta?.options ?? []).map((option) => ({
       value: option.value,
       label: option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, ' '),
     }))
