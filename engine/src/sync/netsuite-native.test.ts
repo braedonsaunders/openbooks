@@ -135,6 +135,149 @@ test("NetSuite posting transactions fail closed without an exact source period",
   );
 });
 
+test("NetSuite payments preserve additional non-control GL legs", () => {
+  const paymentContext = {
+    ...context,
+    accountByRef: new Map([
+      ...context.accountByRef,
+      [
+        "30",
+        {
+          id: "account-ap",
+          number: "2000",
+          name: "Accounts Payable",
+          type: "liability_payable",
+        },
+      ],
+    ]),
+    accountRefById: new Map([
+      ["account-ap", "30"],
+      ["account-a", "10"],
+      ["account-b", "20"],
+    ]),
+    control: {
+      ar: "account-ar",
+      ap: "account-ap",
+      bank: "account-a",
+    },
+  } as unknown as NativeContext;
+  const lines: NsLine[] = [
+    {
+      transaction: "5001",
+      id: "1",
+      mainline: "T",
+      taxline: "F",
+      account: "30",
+      netamount: "100",
+    },
+    {
+      transaction: "5001",
+      id: "2",
+      mainline: "F",
+      taxline: "F",
+      account: "10",
+      netamount: "-95",
+    },
+    {
+      transaction: "5001",
+      id: "3",
+      mainline: "F",
+      taxline: "F",
+      account: "20",
+      netamount: "-5",
+    },
+  ];
+
+  const built = buildNativeFromNetSuite(
+    paymentContext,
+    {
+      id: "5001",
+      tranid: "VP-5001",
+      ttype: "VendPymt",
+      trandate: "07/15/2026",
+      posting: "T",
+      postingperiod: "17",
+    },
+    lines,
+  );
+
+  assert.ok(!("skip" in built));
+  assert.equal(built.doc.kind, "journal");
+  assert.deepEqual(
+    built.doc.lines.map((line) => [line.accountId, line.amount]),
+    [
+      ["account-ap", "100.0000"],
+      ["account-a", "-95.0000"],
+      ["account-b", "-5.0000"],
+    ],
+  );
+  assert.equal(built.doc.subtotal, "0.0000");
+  assert.equal(built.doc.total, "0.0000");
+});
+
+test("NetSuite two-leg payments retain their payment kind", () => {
+  const paymentContext = {
+    ...context,
+    accountByRef: new Map([
+      ...context.accountByRef,
+      [
+        "30",
+        {
+          id: "account-ap",
+          number: "2000",
+          name: "Accounts Payable",
+          type: "liability_payable",
+        },
+      ],
+    ]),
+    accountRefById: new Map([
+      ["account-ap", "30"],
+      ["account-a", "10"],
+    ]),
+    control: {
+      ar: "account-ar",
+      ap: "account-ap",
+      bank: "account-a",
+    },
+  } as unknown as NativeContext;
+  const built = buildNativeFromNetSuite(
+    paymentContext,
+    {
+      id: "5002",
+      tranid: "VP-5002",
+      ttype: "VendPymt",
+      trandate: "07/15/2026",
+      posting: "T",
+      postingperiod: "17",
+    },
+    [
+      {
+        transaction: "5002",
+        id: "1",
+        mainline: "T",
+        taxline: "F",
+        account: "30",
+        netamount: "100",
+      },
+      {
+        transaction: "5002",
+        id: "2",
+        mainline: "F",
+        taxline: "F",
+        account: "10",
+        netamount: "-100",
+      },
+    ],
+  );
+
+  assert.ok(!("skip" in built));
+  assert.equal(built.doc.kind, "vendor_payment");
+  assert.deepEqual(
+    built.doc.lines.map((line) => [line.accountId, line.amount]),
+    [["account-a", "100.0000"]],
+  );
+});
+
 test("pending NetSuite expense reports remain pending native expense reports", () => {
   const expenseContext = {
     ...context,
