@@ -62,6 +62,83 @@ function printDiffs(label: string, diffs: SnapshotDiff[]): void {
   }
 }
 
+type JsonObject = Record<string, unknown>;
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return isJsonObject(error) && error.code === "ENOENT";
+}
+
+function parseDecimalMap(value: unknown, field: string): Record<string, string> {
+  if (!isJsonObject(value)) throw new Error(`${field} must be an object of decimal strings`);
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw !== "string") throw new Error(`${field}.${key} must be a decimal string`);
+    // diffKeyed performs the canonical money parsing; run it here so a
+    // malformed published value cannot be mistaken for an absent file.
+    try {
+      diffKeyed({ [key]: raw }, {});
+    } catch (error) {
+      throw new Error(`${field}.${key} is not a valid decimal: ${errorMessage(error)}`, { cause: error });
+    }
+    out[key] = raw;
+  }
+  return out;
+}
+
+function parseOpenBalances(value: unknown, field: string): ExpectedBalances["openBalances"] {
+  if (!isJsonObject(value)) throw new Error(`${field} must be an object keyed by party`);
+  const out: ExpectedBalances["openBalances"] = {};
+  for (const [party, rawSides] of Object.entries(value)) {
+    if (!isJsonObject(rawSides)) throw new Error(`${field}.${party} must be an object with ar/ap balances`);
+    const sides: { ar?: string; ap?: string } = {};
+    for (const [side, raw] of Object.entries(rawSides)) {
+      if (side !== "ar" && side !== "ap") throw new Error(`${field}.${party} has unsupported balance side "${side}"`);
+      if (typeof raw !== "string") throw new Error(`${field}.${party}.${side} must be a decimal string`);
+      try {
+        diffKeyed({ [`${party}.${side}`]: raw }, {});
+      } catch (error) {
+        throw new Error(`${field}.${party}.${side} is not a valid decimal: ${errorMessage(error)}`, { cause: error });
+      }
+      sides[side] = raw;
+    }
+    out[party] = sides;
+  }
+  return out;
+}
+
+function parsePublishedExpected(value: unknown, expected: ExpectedBalances, path: string): ExpectedBalances {
+  if (!isJsonObject(value)) throw new Error(`${path} must contain a JSON object`);
+  if (value.schemaVersion !== 1) throw new Error(`${path}.schemaVersion must be 1`);
+  if (value.corpus !== expected.corpus) throw new Error(`${path}.corpus does not match the corpus being checked`);
+  if (value.seed !== expected.seed) throw new Error(`${path}.seed does not match the corpus being checked`);
+  if (value.eventCount !== expected.eventCount) throw new Error(`${path}.eventCount does not match the corpus being checked`);
+  return {
+    schemaVersion: 1,
+    corpus: expected.corpus,
+    seed: expected.seed,
+    trialBalance: parseDecimalMap(value.trialBalance, `${path}.trialBalance`),
+    openBalances: parseOpenBalances(value.openBalances, `${path}.openBalances`),
+    eventCount: expected.eventCount,
+  };
+}
+
+function flatOpenBalances(m: ExpectedBalances["openBalances"]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [party, sides] of Object.entries(m)) {
+    if (sides.ar !== undefined) out[`${party}.ar`] = sides.ar;
+    if (sides.ap !== undefined) out[`${party}.ap`] = sides.ap;
+  }
+  return out;
+}
+
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   const cmd = argv[0];
@@ -95,17 +172,29 @@ async function main(): Promise<number> {
     }, null, 2));
     // If a published expected file sits beside the corpus, verify it matches.
     const expectedPath = argv[1]!.replace(/corpus-([^/]+)\.json$/, "expected-$1.json");
+    let publishedRaw: string;
     try {
-      const published = JSON.parse(readFileSync(expectedPath, "utf8")) as ExpectedBalances;
-      const tbDiffs = diffKeyed(published.trialBalance, expected.trialBalance);
-      if (tbDiffs.length > 0) {
-        printDiffs("published expected vs recomputed", tbDiffs);
-        return 1;
-      }
-      console.log(`published expected file matches recomputation: ${expectedPath}`);
-    } catch {
-      /* no published expected file — nothing to cross-check */
+      publishedRaw = readFileSync(expectedPath, "utf8");
+    } catch (error) {
+      if (isMissingFileError(error)) return 0;
+      console.error(`failed to read published expected file ${expectedPath}: ${errorMessage(error)}`);
+      return 1;
     }
+    let published: ExpectedBalances;
+    try {
+      published = parsePublishedExpected(JSON.parse(publishedRaw) as unknown, expected, expectedPath);
+    } catch (error) {
+      console.error(`invalid published expected file ${expectedPath}: ${errorMessage(error)}`);
+      return 1;
+    }
+    const tbDiffs = diffKeyed(published.trialBalance, expected.trialBalance);
+    const openDiffs = diffKeyed(flatOpenBalances(published.openBalances), flatOpenBalances(expected.openBalances));
+    if (tbDiffs.length > 0 || openDiffs.length > 0) {
+      if (tbDiffs.length > 0) printDiffs("published expected vs recomputed", tbDiffs);
+      if (openDiffs.length > 0) printDiffs("published expected open balances vs recomputed", openDiffs);
+      return 1;
+    }
+    console.log(`published expected file matches recomputation: ${expectedPath}`);
     return 0;
   }
 
@@ -134,15 +223,7 @@ async function main(): Promise<number> {
     ] as const);
 
     const tbDiffs = diffKeyed(tb, expected.trialBalance);
-    const flatOpens = (m: Record<string, { ar?: string; ap?: string }>) => {
-      const out: Record<string, string> = {};
-      for (const [party, sides] of Object.entries(m)) {
-        if (sides.ar !== undefined) out[`${party}.ar`] = sides.ar;
-        if (sides.ap !== undefined) out[`${party}.ap`] = sides.ap;
-      }
-      return out;
-    };
-    const openDiffs = diffKeyed(flatOpens(opens), flatOpens(expected.openBalances));
+    const openDiffs = diffKeyed(flatOpenBalances(opens), flatOpenBalances(expected.openBalances));
 
     const pass = replay.failures.length === 0 && tbDiffs.length === 0 && openDiffs.length === 0 && integrity.pass;
 
