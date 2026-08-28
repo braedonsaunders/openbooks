@@ -42,9 +42,9 @@ export const sectionKey = (section: YearEndFilingSection) => `${section.country}
 const issueKey = (section: YearEndFilingSection, row: FilingRow) =>
   `${section.country}:${section.key}:${String(row[section.data.rowKey] ?? '')}`
 
-const fileHref = (section: YearEndFilingSection, year: number, extra?: string) =>
+const fileHref = (section: YearEndFilingSection, year: number) =>
   `/api/payroll/year-end/file?country=${encodeURIComponent(section.country)}`
-  + `&filing=${encodeURIComponent(section.key)}&year=${year}${extra ?? ''}`
+  + `&filing=${encodeURIComponent(section.key)}&year=${year}`
 
 /**
  * The shared filing machinery every filing surface composes — the year-end
@@ -76,17 +76,38 @@ export function useFilingIssues(year: number) {
       .join(',')
   }
 
+  const issueSelectionCount = (section: YearEndFilingSection): number => {
+    if (!section.issue) return 0
+    return section.data.rows.filter((row) => reasons[issueKey(section, row)]).length
+  }
+
   /** Fetch-based download so a refusal (422) lands as a callout, not a JSON tab. */
   async function downloadFile(section: YearEndFilingSection) {
     const key = sectionKey(section)
     const selection = issueSelection(section)
-    const href = section.issue
-      ? fileHref(section, year, `&${section.issue.param}=${selection}`)
-      : fileHref(section, year)
+    const selectedCount = issueSelectionCount(section)
     setDownloadError((prev) => ({ ...prev, [key]: '' }))
+    if (section.issue && selectedCount > section.issue.maxSelection) {
+      setDownloadError((prev) => ({
+        ...prev,
+        [key]: `Select no more than ${section.issue!.maxSelection} employees for this filing`,
+      }))
+      return
+    }
     setDownloadBusy(key)
     try {
-      const res = await fetch(href)
+      const res = section.issue
+        ? await fetch('/api/payroll/year-end/file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              country: section.country,
+              filing: section.key,
+              year,
+              [section.issue.param]: selection,
+            }),
+          })
+        : await fetch(fileHref(section, year))
       if (!res.ok) {
         let message = res.statusText
         try {
