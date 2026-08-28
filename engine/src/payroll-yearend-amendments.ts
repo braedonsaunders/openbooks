@@ -648,6 +648,7 @@ async function issueCorrection(
   revision: PayrollFilingCorrectionKind,
 ): Promise<RecordFilingIssueResult> {
   const { orgId, country, filingKey, taxYear } = input;
+  const cancellationReason = input.reason?.trim() || input.note?.trim() || null;
   const amendment = filing.amendment;
 
   // The pack's own refusal, by name. This is the doctrine the product's
