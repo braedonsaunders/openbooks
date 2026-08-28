@@ -163,7 +163,8 @@ registerHooks({
   },
 })
 
-const { loadPdfRecordValues } = await import('./values.ts?us-ytd-tax-test')
+const valuesUrl = new URL('./values.ts?us-ytd-tax-test', import.meta.url).href
+const { loadPdfRecordValues } = (await import(valuesUrl)) as typeof import('./values.ts')
 
 test('US pay-stub YTD income tax includes federal FIT and preserves pay totals', async () => {
   const record = await loadPdfRecordValues('pay_stub', 'org-1', state.stub.id)
