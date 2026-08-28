@@ -395,11 +395,13 @@ export const payRuns = pgTable(
   },
   (t) => [
     index("pay_runs_org_period").on(t.orgId, t.periodStart, t.periodEnd),
-    // One REGULAR run per schedule period; off-cycle bonus and termination
-    // runs deliberately land inside a period already paid by a regular run.
+    // One live REGULAR run per schedule period; a voided run remains immutable
+    // history but releases the period so an exact replacement can be opened.
+    // Off-cycle bonus and termination runs deliberately land inside a period
+    // already paid by a regular run.
     uniqueIndex("pay_runs_schedule_period")
       .on(t.orgId, t.payScheduleId, t.periodEnd)
-      .where(sql`run_type = 'regular'`),
+      .where(sql`run_type = 'regular' and run_status <> 'voided'`),
     check("pay_runs_period_order", sql`${t.periodEnd} >= ${t.periodStart}`),
     check("pay_runs_pay_date", sql`${t.payDate} >= ${t.periodEnd}`),
     check(
