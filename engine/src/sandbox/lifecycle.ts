@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, schema, withOrg } from "../db.ts";
+import { db, orgContext, schema, withMaintenanceTransaction, withOrg } from "../db.ts";
 import {
   deferredDeletionTables,
   deletionOrder,
@@ -277,6 +277,24 @@ export interface RefreshOptions {
 }
 
 /**
+ * Run refresh work in one timeout-free transaction while keeping the existing
+ * clone/wipe helpers on their normal `withOrg(null)` entry points. Those
+ * helpers reuse an active transaction only when its context is non-bypass;
+ * the maintenance transaction itself is (correctly) marked bypass. Reusing
+ * its pinned executor under a non-bypass context is safe here because the
+ * connection's transaction-local GUC remains `app.bypass_rls = on`; it simply
+ * makes nested `withOrg(null)` calls participate instead of opening a second
+ * transaction that could commit a partial wipe.
+ */
+async function inRefreshTransaction<T>(work: () => Promise<T>): Promise<T> {
+  return withMaintenanceTransaction(null, async () => {
+    const active = orgContext.getStore();
+    if (!active?.txDb) throw new Error("refresh transaction was not pinned");
+    return await orgContext.run({ ...active, bypass: false }, async () => await work());
+  });
+}
+
+/**
  * Refresh a sandbox from its production source. Non-destructive by default: the
  * sandbox's customization layer is preserved (only business/master data is
  * re-pulled). `keepCustomizations: false` is a full reset. The whole operation
@@ -296,40 +314,43 @@ export async function refreshSandbox(
   const seed = (await db.execute(sql`select sandbox_seed from orgs where id = ${s.org_id}`));
   const sandboxSeed = seed.rows[0]?.sandbox_seed as string;
 
-  await db.execute(sql`
-    update sandboxes
-       set status = 'refreshing', last_error = null, updated_at = now()
-     where id = ${sandboxId} and org_id = ${s.org_id}`);
   try {
-    const { rebaseSet } = await loadCatalog();
-    // Which tables to wipe + re-copy. Keeping customizations means leaving the
-    // customization layer untouched and refreshing everything else.
-    const target = new Set(
-      [...rebaseSet].filter((t) => !(keep && CUSTOMIZATION_LAYER.has(t))),
-    );
-    await wipeSandbox(s.org_id, target);
+    await inRefreshTransaction(async () => {
+      await db.execute(sql`
+        update sandboxes
+           set status = 'refreshing', last_error = null, updated_at = now()
+         where id = ${sandboxId} and org_id = ${s.org_id}`);
 
-    // Re-copy only the target tables (deterministic ids → preserved
-    // customization rows keep resolving their references to the fresh data).
-    await runClone({
-      productionOrgId: s.production_org_id,
-      sandboxOrgId: s.org_id,
-      seed: sandboxSeed,
-      tier: s.tier,
-      masked: s.masked,
-      asOfPeriod: await asOfPeriodOf(s.as_of_period_id, s.production_org_id),
-      onlyTables: target,
-    });
-    await rebaseSandboxControlAccounts({
-      productionOrgId: s.production_org_id,
-      sandboxOrgId: s.org_id,
-      seed: sandboxSeed,
-    });
+      const { rebaseSet } = await loadCatalog();
+      // Which tables to wipe + re-copy. Keeping customizations means leaving the
+      // customization layer untouched and refreshing everything else.
+      const target = new Set(
+        [...rebaseSet].filter((t) => !(keep && CUSTOMIZATION_LAYER.has(t))),
+      );
+      await wipeSandbox(s.org_id, target);
 
-    await db.execute(sql`
-      update sandboxes
-         set status = 'ready', last_refresh_at = now(), last_error = null, updated_at = now()
-       where id = ${sandboxId} and org_id = ${s.org_id}`);
+      // Re-copy only the target tables (deterministic ids → preserved
+      // customization rows keep resolving their references to the fresh data).
+      await runClone({
+        productionOrgId: s.production_org_id,
+        sandboxOrgId: s.org_id,
+        seed: sandboxSeed,
+        tier: s.tier,
+        masked: s.masked,
+        asOfPeriod: await asOfPeriodOf(s.as_of_period_id, s.production_org_id),
+        onlyTables: target,
+      });
+      await rebaseSandboxControlAccounts({
+        productionOrgId: s.production_org_id,
+        sandboxOrgId: s.org_id,
+        seed: sandboxSeed,
+      });
+
+      await db.execute(sql`
+        update sandboxes
+           set status = 'ready', last_refresh_at = now(), last_error = null, updated_at = now()
+         where id = ${sandboxId} and org_id = ${s.org_id}`);
+    });
   } catch (err) {
     await db.execute(sql`
       update sandboxes
