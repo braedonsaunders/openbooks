@@ -77,6 +77,10 @@ const SUB_REGION_ENGINE_CODE: Readonly<Record<string, string>> = {
 export interface UsWithholdingInput {
   levy: ResolvedWithholdingLevy;
   payDate: string;
+  /** First day of the payroll period; Utah's tables key to this date. */
+  periodStart?: string;
+  /** Employer headcount for state-specific statutory thresholds. */
+  employerEmployeeCount?: number;
   /**
    * The last day of the payroll period. Ohio keys its table sets to the period
    * END rather than the pay date and REFUSES without it — see
@@ -88,6 +92,8 @@ export interface UsWithholdingInput {
   wages: string;
   /** Supplemental wages this period. */
   supplemental?: string;
+  /** Tax-qualified deductions from this period, used by Nebraska's floor. */
+  taxQualifiedDeductions?: string;
   /**
    * The employee's resolved answers on a pack-declared certificate, or null
    * when they have filed none of that certificate.
@@ -132,10 +138,13 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     if (!engine) return null;
     const result = engine.compute({
       payDate: input.payDate,
+      periodStart: input.periodStart,
+      employerEmployeeCount: input.employerEmployeeCount,
       periodEnd: input.periodEnd,
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
       supplemental: input.supplemental,
+      taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
       basis: levy.reach,
       regionTax: input.regionTax,
@@ -157,10 +166,13 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     }
     const result = engine.compute({
       payDate: input.payDate,
+      periodStart: input.periodStart,
+      employerEmployeeCount: input.employerEmployeeCount,
       periodEnd: input.periodEnd,
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
       supplemental: input.supplemental,
+      taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
       basis: levy.reach,
       regionTax: input.regionTax,

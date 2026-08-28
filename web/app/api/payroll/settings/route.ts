@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import {
   payrollSettings,
   seedPayrollComponents,
@@ -47,6 +47,16 @@ const ACCOUNT_KEYS = [
   'vacationPayableAccountId',
 ] as const
 
+const ACCOUNT_TYPES_BY_KEY: Record<typeof ACCOUNT_KEYS[number], readonly string[]> = {
+  wageExpenseAccountId: ['expense', 'expense_other', 'expense_deferred'],
+  burdenExpenseAccountId: ['expense', 'expense_other', 'expense_deferred'],
+  netPayAccountId: ['liability_payable', 'liability_current_other'],
+  cppPayableAccountId: ['liability_payable', 'liability_current_other'],
+  eiPayableAccountId: ['liability_payable', 'liability_current_other'],
+  taxPayableAccountId: ['liability_payable', 'liability_current_other'],
+  vacationPayableAccountId: ['liability_payable', 'liability_current_other'],
+}
+
 /**
  * Payroll jurisdiction packs the org can install — the pack REGISTRY's own
  * `installable` declaration, never a second list. A pack that exists but is
@@ -58,9 +68,80 @@ const installableCountries = (): string[] =>
     .filter((pack) => pack.installable)
     .map((pack) => pack.country)
 
-async function currentPayrollBlob(orgId: string): Promise<Record<string, unknown>> {
+async function validatePayrollAccounts(
+  orgId: string,
+  body: Record<string, unknown>,
+): Promise<NextResponse | null> {
+  const requested = ACCOUNT_KEYS.flatMap((key) => {
+    const value = body[key]
+    return value == null ? [] : [[key, value as string] as const]
+  })
+  if (requested.length === 0) return null
+  const rows = await db.execute<{
+    id: string
+    type: string
+    isActive: boolean
+    isSummary: boolean
+  }>(sql`
+    select id::text as id, type, is_active as "isActive", is_summary as "isSummary"
+      from accounts
+     where org_id = ${orgId}
+       and id in (${sql.join(requested.map(([, id]) => sql`${id}`), sql`, `)})`)
+  const byId = new Map(rows.rows.map((row) => [row.id, row]))
+  for (const [key, id] of requested) {
+    const row = byId.get(id)
+    if (!row) {
+      return NextResponse.json({ error: `invalid ${key}: account is not active in this organization` }, { status: 422 })
+    }
+    if (!row.isActive) {
+      return NextResponse.json({ error: `invalid ${key}: account is inactive` }, { status: 422 })
+    }
+    if (row.isSummary) {
+      return NextResponse.json({ error: `invalid ${key}: summary accounts cannot receive payroll postings` }, { status: 422 })
+    }
+    if (!ACCOUNT_TYPES_BY_KEY[key].includes(row.type)) {
+      return NextResponse.json({ error: `invalid ${key}: account type ${row.type} is not compatible with payroll` }, { status: 422 })
+    }
+  }
+  return null
+}
+
+async function validateRemittanceVendors(
+  orgId: string,
+  body: Record<string, unknown>,
+): Promise<NextResponse | null> {
+  const keys = declaredRemittanceVendorSettingsKeys()
+  const requested = keys.flatMap((key) => {
+    const value = body[key]
+    return value == null ? [] : [[key, value as string] as const]
+  })
+  if (requested.length === 0) return null
+  const rows = await db.execute<{
+    id: string
+    partyActive: boolean
+    roleActive: boolean
+  }>(sql`
+    select p.id::text as id, p.is_active as "partyActive", v.is_active as "roleActive"
+      from parties p
+      join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id
+     where p.org_id = ${orgId}
+       and p.id in (${sql.join(requested.map(([, id]) => sql`${id}`), sql`, `)})`)
+  const byId = new Map(rows.rows.map((row) => [row.id, row]))
+  for (const [key, id] of requested) {
+    const row = byId.get(id)
+    if (!row || !row.partyActive || !row.roleActive) {
+      return NextResponse.json({ error: `invalid ${key}: active vendor in this organization is required` }, { status: 422 })
+    }
+  }
+  return null
+}
+
+async function currentPayrollBlob(
+  orgId: string,
+  lock = false,
+): Promise<Record<string, unknown>> {
   const r = (await db.execute<{ p: Record<string, unknown> | null }>(
-    sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
+    sql`select settings->'payroll' as p from orgs where id = ${orgId}${lock ? sql` for update` : sql``}`,
   ))
   return r.rows[0]?.p ?? {}
 }
@@ -68,6 +149,7 @@ async function currentPayrollBlob(orgId: string): Promise<Record<string, unknown
 async function writePayrollBlob(
   orgId: string,
   actorId: string,
+  before: Record<string, unknown>,
   settings: Record<string, unknown>,
 ): Promise<void> {
   await db.execute(sql`
@@ -75,7 +157,33 @@ async function writePayrollBlob(
      where id = ${orgId}`)
   await db.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({ payroll: settings })}, ${actorId})`)
+    values (${orgId}, 'orgs', ${orgId}, 'update',
+            ${JSON.stringify({ before: { payroll: before }, after: { payroll: settings } })}, ${actorId})`)
+}
+
+async function currentSlotAccounts(
+  orgId: string,
+  slotAccounts: Record<string, Record<string, string | null>>,
+): Promise<Record<string, Record<string, string | null>>> {
+  const before: Record<string, Record<string, string | null>> = {}
+  for (const [country, slots] of Object.entries(slotAccounts)) {
+    const pack = PAYROLL_COUNTRY_PACKS[country]
+    if (!pack) continue
+    before[country] = {}
+    for (const slotKey of Object.keys(slots)) {
+      const slot = pack.statutorySlots.find((candidate) => candidate.key === slotKey)
+      if (!slot) continue
+      const componentCodes = `{${slot.components.map((component) => component.code).join(',')}}`
+      const row = await db.execute<{ accountId: string | null }>(sql`
+        select liability_account_id::text as "accountId"
+          from pay_components
+         where org_id = ${orgId} and code = any(${componentCodes}::text[])
+         order by liability_account_id nulls last
+         limit 1`)
+      before[country][slotKey] = row.rows[0]?.accountId ?? null
+    }
+  }
+  return before
 }
 
 async function pickerOptions(
@@ -151,12 +259,18 @@ export async function PUT(req: Request) {
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
 
-  const settings: Record<string, unknown> = await currentPayrollBlob(orgId)
+  return withOrgTransaction(orgId, async () => {
+  const settings: Record<string, unknown> = await currentPayrollBlob(orgId, true)
+  const before = JSON.parse(JSON.stringify(settings)) as Record<string, unknown>
   for (const key of ACCOUNT_KEYS) {
     if (!(key in body)) continue
     const v = body[key] ?? null
     if (v !== null && !isUuid(v)) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
-    settings[key] = v
+  }
+  const accountError = await validatePayrollAccounts(orgId, body)
+  if (accountError) return accountError
+  for (const key of ACCOUNT_KEYS) {
+    if (key in body) settings[key] = body[key] ?? null
   }
   // Statutory remittance vendors — exactly the settings keys the pack
   // declarations name (the CRA vendor, the Revenu Québec vendor for the CA
@@ -167,7 +281,11 @@ export async function PUT(req: Request) {
     if (party !== null && !isUuid(party)) {
       return NextResponse.json({ error: `invalid ${vendorKey}` }, { status: 422 })
     }
-    settings[vendorKey] = party
+  }
+  const vendorError = await validateRemittanceVendors(orgId, body)
+  if (vendorError) return vendorError
+  for (const vendorKey of declaredRemittanceVendorSettingsKeys()) {
+    if (vendorKey in body) settings[vendorKey] = body[vendorKey] ?? null
   }
   // The cheque safety net. On by default: a payroll that refuses to run
   // because one employee's void cheque has not been keyed yet fails everybody
@@ -274,6 +392,10 @@ export async function PUT(req: Request) {
         }
       }
     }
+    const slotAccountsBefore = await currentSlotAccounts(
+      orgId,
+      slotAccounts as Record<string, Record<string, string | null>>,
+    )
     for (const [country, slots] of Object.entries(slotAccounts as Record<string, Record<string, string | null>>)) {
       for (const [slotKey, accountId] of Object.entries(slots)) {
         await setPackSlotAccount(orgId, gate.user.id, country, slotKey, accountId)
@@ -282,11 +404,12 @@ export async function PUT(req: Request) {
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'pay_components', ${orgId}, 'update',
-              ${JSON.stringify({ payrollSlotAccounts: body.slotAccounts })}, ${gate.user.id})`)
+              ${JSON.stringify({ before: { payrollSlotAccounts: slotAccountsBefore }, after: { payrollSlotAccounts: body.slotAccounts } })}, ${gate.user.id})`)
   }
 
-  await writePayrollBlob(orgId, gate.user.id, settings)
+  await writePayrollBlob(orgId, gate.user.id, before, settings)
   return NextResponse.json({ ok: true })
+  })
 }
 
 export async function POST(req: Request) {
@@ -306,10 +429,16 @@ export async function POST(req: Request) {
     if (!installableCountries().includes(country)) {
       return NextResponse.json({ error: 'unknown country pack' }, { status: 422 })
     }
-    await seedPayrollComponents(
-      gate.user.orgId, gate.user.id, country, gate.allowedSubsidiaryIds,
-    )
-    return NextResponse.json({ ok: true })
+    return withOrgTransaction(gate.user.orgId, async () => {
+      await seedPayrollComponents(
+        gate.user.orgId, gate.user.id, country, gate.allowedSubsidiaryIds,
+      )
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${gate.user.orgId}, 'pay_components', ${gate.user.orgId}, 'insert',
+                ${JSON.stringify({ before: null, after: { payrollPack: country } })}, ${gate.user.id})`)
+      return NextResponse.json({ ok: true })
+    })
   }
   if (body.action === 'install-pack') {
     const country = String(body.country ?? '')
@@ -318,20 +447,27 @@ export async function POST(req: Request) {
     }
     // A pack = its statutory component set (the engine wiring) plus the pack
     // marker the setup workspace and wizard read back.
-    await seedPayrollComponents(
-      gate.user.orgId, gate.user.id, country, gate.allowedSubsidiaryIds,
-    )
-    const settings = await currentPayrollBlob(gate.user.orgId)
-    const countries = Array.isArray(settings.countries) ? settings.countries.map(String) : []
-    // A NEW payroll org (first pack, nothing decided yet) starts with
-    // statutory holiday pay ON; an existing tenant's stubs must not change on
-    // an upgrade or a second-pack install, so an absent key stays absent.
-    if (countries.length === 0 && !('statutoryHolidayPay' in settings)) {
-      settings.statutoryHolidayPay = true
-    }
-    settings.countries = [...new Set([...countries, country])]
-    await writePayrollBlob(gate.user.orgId, gate.user.id, settings)
-    return NextResponse.json({ ok: true })
+    return withOrgTransaction(gate.user.orgId, async () => {
+      await seedPayrollComponents(
+        gate.user.orgId, gate.user.id, country, gate.allowedSubsidiaryIds,
+      )
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${gate.user.orgId}, 'pay_components', ${gate.user.orgId}, 'insert',
+                ${JSON.stringify({ before: null, after: { payrollPack: country } })}, ${gate.user.id})`)
+      const settings = await currentPayrollBlob(gate.user.orgId, true)
+      const before = JSON.parse(JSON.stringify(settings)) as Record<string, unknown>
+      const countries = Array.isArray(settings.countries) ? settings.countries.map(String) : []
+      // A NEW payroll org (first pack, nothing decided yet) starts with
+      // statutory holiday pay ON; an existing tenant's stubs must not change on
+      // an upgrade or a second-pack install, so an absent key stays absent.
+      if (countries.length === 0 && !('statutoryHolidayPay' in settings)) {
+        settings.statutoryHolidayPay = true
+      }
+      settings.countries = [...new Set([...countries, country])]
+      await writePayrollBlob(gate.user.orgId, gate.user.id, before, settings)
+      return NextResponse.json({ ok: true })
+    })
   }
   if (body.action === 'uninstall-pack') {
     const country = String(body.country ?? '')
@@ -339,8 +475,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'unknown country pack' }, { status: 422 })
     }
     try {
-      const result = await uninstallPayrollPack(gate.user.orgId, gate.user.id, country)
-      return NextResponse.json({ ok: true, ...result })
+      return await withOrgTransaction(gate.user.orgId, async () => {
+        const before = await currentPayrollBlob(gate.user.orgId, true)
+        const result = await uninstallPayrollPack(gate.user.orgId, gate.user.id, country)
+        const after = await currentPayrollBlob(gate.user.orgId)
+        await db.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${gate.user.orgId}, 'orgs', ${gate.user.orgId}, 'update',
+                  ${JSON.stringify({ before: { payroll: before }, after: { payroll: after } })}, ${gate.user.id})`)
+        return NextResponse.json({ ok: true, ...result })
+      })
     } catch (error) {
       if (error instanceof PayrollPackError) {
         return NextResponse.json({ error: error.message }, { status: 409 })

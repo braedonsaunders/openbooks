@@ -40,6 +40,7 @@ test("NE Weekly Wage Bracket — $500–$510 / Single / 0 allowances: $14.38", (
   // $505 × 52 = $26,260. Table 7: $747.70. $747.70 ÷ 52 = $14.38.
   const result = NE_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "505.00",
+    employerEmployeeCount: 0,
     basis: "resident",
     certificate: cert({ filing_status: "single", allowances: "0" }),
   });
@@ -53,10 +54,12 @@ test("NE Weekly Wage Bracket — $500–$510 / Single / 0 allowances: $14.38", (
 test("NE no W-4N withholds as single with zero allowances", () => {
   const empty = NE_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "505.00",
+    employerEmployeeCount: 0,
     basis: "resident", certificate: resolveCertificate({ certificate: NE_CERTIFICATE }),
   });
   const singleZero = NE_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "505.00",
+    employerEmployeeCount: 0,
     basis: "resident",
     certificate: cert({ filing_status: "single", allowances: "0" }),
   });
@@ -67,26 +70,71 @@ test("NE no W-4N withholds as single with zero allowances", () => {
 test("NE extra withholding is added, exempt is zero, and an unpublished period is refused", () => {
   assert.equal(NE_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "505.00",
+    employerEmployeeCount: 0,
     basis: "resident",
     certificate: cert({ filing_status: "single", allowances: "0", additional_per_period: "5.00" }),
   }).tax, money("19.38"));
   assert.equal(NE_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "505.00",
+    employerEmployeeCount: 0,
     basis: "resident", certificate: cert({ exempt: "true" }),
   }).tax, money("0"));
   assert.throws(
     () => NE_WITHHOLDING.compute({
       payDate: "2026-03-15", periodsPerYear: 13, wages: "505",
+      employerEmployeeCount: 0,
       basis: "resident", certificate: cert({ filing_status: "single" }),
     }),
     /publishes withholding tables/,
   );
 });
 
+test("Nebraska special withholding applies the 1.5% minimum unless lesser withholding is documented", () => {
+  // Circular EN's special procedure applies to employers with more than 24
+  // employees. Without supporting evidence, an exempt claim cannot silently
+  // turn into a zero-dollar Nebraska deduction: 1.5% of $1,000 is $15.00.
+  const minimum = NE_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1000.00",
+    employerEmployeeCount: 25,
+    basis: "resident", certificate: cert({ exempt: "true" }),
+  });
+  assert.equal(minimum.tax, money("15.00"));
+  assert.equal(minimum.factors.NE_SPECIAL_MINIMUM, money("15.00"));
+
+  // The statutory base excludes tax-qualified deductions before applying the
+  // floor: $1,000 wages − $500 qualified = $500 × 1.5% = $7.50.
+  const deductible = NE_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1000.00",
+    employerEmployeeCount: 25, taxQualifiedDeductions: "500.00",
+    basis: "resident", certificate: cert({ exempt: "true" }),
+  });
+  assert.equal(deductible.tax, money("7.50"));
+  assert.equal(deductible.factors.NE_SPECIAL_MINIMUM_BASE, money("500.00"));
+
+  // Employee evidence is the statutory exception: the same valid exemption
+  // remains zero when the lesser-withholding documentation flag is recorded.
+  const documented = NE_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1000.00",
+    employerEmployeeCount: 25,
+    basis: "resident",
+    certificate: cert({ exempt: "true", lesser_withholding_documented: "true" }),
+  });
+  assert.equal(documented.tax, money("0"));
+
+  // The threshold is employer-scoped: a 24-employee employer keeps the
+  // ordinary exemption behavior even without the special-procedure evidence.
+  assert.equal(NE_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1000.00",
+    employerEmployeeCount: 24,
+    basis: "resident", certificate: cert({ exempt: "true" }),
+  }).tax, money("0"));
+});
+
 test("NE refuses a year it has not transcribed", () => {
   assert.throws(
     () => NE_WITHHOLDING.compute({
       payDate: "2027-01-15", periodsPerYear: 52, wages: "505",
+      employerEmployeeCount: 0,
       basis: "resident", certificate: cert({ filing_status: "single" }),
     }),
     /2027 Nebraska income tax withholding tables are not loaded.*Never extrapolate the prior year/s,

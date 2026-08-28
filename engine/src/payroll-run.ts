@@ -997,6 +997,37 @@ async function takeEmployeeTaxYearFences(
 }
 
 /**
+ * Count the employer's employee population for jurisdiction rules that key off
+ * headcount (Nebraska's special withholding procedure is one). This is not
+ * the number paid on this run: an employer may have employees on another
+ * schedule, and Nebraska's threshold applies to the employer as a whole.
+ * The paying subsidiary is the legal-employer boundary, so employees of a
+ * sibling entity can never activate this threshold accidentally.
+ */
+async function employerEmployeeCount(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  subsidiaryId: string,
+): Promise<number> {
+  const result = await tx.execute<{ employee_count: string | number }>(sql`
+    select count(distinct prof.employee_party_id)::int as employee_count
+      from employee_payroll_profiles prof
+      join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+     where prof.org_id = ${orgId}
+       and prof.is_active
+       and p.is_active
+       and p.subsidiary_id = ${subsidiaryId}
+  `);
+  const count = Number(result.rows[0]?.employee_count ?? 0);
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new PayrollError(
+      `the paying employer's employee headcount is invalid (${String(result.rows[0]?.employee_count)})`,
+    );
+  }
+  return count;
+}
+
+/**
  * Every tax certificate this employee has on file, as `resolveCertificate`
  * reads them.
  *
@@ -1768,6 +1799,14 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       order by roster.display_name
     `));
 
+    // Resolve the statutory employer headcount once for the run. It is
+    // deliberately independent of this run's roster: Nebraska's special
+    // procedure follows the legal employer's full population, not merely the
+    // employees paid on one schedule today.
+    const employerCount = await employerEmployeeCount(
+      tx, orgId, runContext.subsidiaryId,
+    );
+
     // Fence the calculation on the EMPLOYEE-AND-TAX-YEAR identity (see
     // `employeeTaxYearFenceKey`) BEFORE any year-to-date is read and before a
     // single stub row is written. Two runs sharing an employee and year used
@@ -1860,7 +1899,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         });
         const result = await calculateStub(tx, {
           orgId, actorId, documentId, run, emp, runContext, jurisdiction,
-          periodsPerYear: P, need, components: components.rows,
+          periodsPerYear: P, employerEmployeeCount: employerCount, need, components: components.rows,
           eftFallbackToCheque,
           statHolidayPay,
           simulate: input.simulate === true,
@@ -3053,6 +3092,7 @@ async function calculateStub(
     /** This employee's place in it, already asserted to agree with the run's. */
     jurisdiction: EmployeePayrollContext;
     periodsPerYear: number | undefined;
+    employerEmployeeCount: number;
     need: (systemKey: string, kind: string) => Record<string, unknown>;
     components: Record<string, unknown>[];
     /** orgs.settings.payroll.eftFallbackToCheque, read once for the run. */
@@ -3328,7 +3368,8 @@ async function calculateStub(
       employeeName: emp.display_name ?? employeePartyId,
       taxYear, country, region: province, run, emp,
       filingAccountId: jurisdiction.filingAccountId,
-      periodsPerYear: P, income, nonPeriodic, pensionable, insurable, deduction,
+      periodsPerYear: P, employerEmployeeCount: ctx.employerEmployeeCount,
+      income, nonPeriodic, pensionable, insurable, deduction,
       pushStatutory, storedCertificates, certificateFor, bool,
       assertRegionSupported: (region) => assertPayrollRegionSupported(country, region),
       employerLevies,

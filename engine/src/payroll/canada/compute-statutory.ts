@@ -5,7 +5,7 @@ import { calculateTp1015 } from "./quebec/tp1015.ts";
 import type { Province } from "./rates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 
-type YtdRow = {
+export type CanadaYtdRow = {
   pensionable: string;
   insurable: string;
   cpp: string;
@@ -17,11 +17,16 @@ type YtdRow = {
   qc_csb: string;
 };
 
-async function employeeYtd(
+/**
+ * Read the employee's year-to-date statutory inputs from committed payroll.
+ * Calculated runs are drafts and may be abandoned; counting them would let
+ * unpaid figures consume CPP/EI/tax room in a later run.
+ */
+export async function employeeYtd(
   ctx: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId">,
-): Promise<YtdRow> {
+): Promise<CanadaYtdRow> {
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
-  const r = (await tx.execute<YtdRow>(sql`
+  const r = (await tx.execute<CanadaYtdRow>(sql`
     select
       coalesce((select pensionable_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
@@ -51,7 +56,7 @@ async function employeeYtd(
     join documents d on d.id = r.document_id and d.org_id = r.org_id
     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
       and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${documentId}
-      and r.run_status in ('calculated', 'committed')
+      and r.run_status = 'committed'
       and d.status <> 'voided'
   `));
   return r.rows[0]!;

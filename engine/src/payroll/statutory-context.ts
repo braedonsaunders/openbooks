@@ -86,6 +86,8 @@ export interface PayrollStatutoryComputeContext {
   emp: Record<string, string | null>;
   filingAccountId: string | null;
   periodsPerYear: number;
+  /** Employee headcount of the paying employer, isolated to its legal entity. */
+  employerEmployeeCount?: number;
   income: string;
   nonPeriodic: string;
   pensionable: string;
