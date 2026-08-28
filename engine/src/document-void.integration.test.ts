@@ -3,14 +3,18 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { setPeriodLockState } from "./close.ts";
-import { db } from "./db.ts";
+import { db, withOrgTransaction } from "./db.ts";
 import { deleteDocument } from "./document-delete.ts";
 import { DocumentVoidError, requestDocumentVoid } from "./document-void.ts";
+import { submitForApproval } from "./flows/submit.ts";
 import { postDocument } from "./posting.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
+  seedApprovalFlow,
+  seedDraftDocument,
+  seedFlowActors,
   type ScratchOrg,
 } from "./test-fixtures.ts";
 
@@ -84,6 +88,23 @@ async function seedBeforeVoidScript(
 async function countRows(query: ReturnType<typeof sql>): Promise<number> {
   const result = await db.execute<{ count: number }>(query);
   return Number(result.rows[0]!.count);
+}
+
+/** Poll until the expected number of document lifecycle commands waits on a row lock. */
+async function waitForDocumentLockWaiters(expected: number): Promise<void> {
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const waiting = await db.execute<{ count: number }>(sql`
+      select count(*)::int as count
+        from pg_stat_activity
+       where datname = current_database()
+         and state = 'active'
+         and wait_event_type = 'Lock'
+         and query ilike '%documents%'
+         and query ilike '%for update%'`);
+    if (Number(waiting.rows[0]?.count ?? 0) >= expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.fail(`timed out waiting for ${expected} document lock waiter(s)`);
 }
 
 async function seedPostedCheck(
@@ -357,6 +378,93 @@ test("controlled void preserves the source and posts an exact open-period revers
       reason: "Duplicate vendor invoice entered in error",
     });
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("delete and submit serialize on the document row before approval gates commit", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let releaseHolder = () => {};
+  let holder: Promise<void> | undefined;
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+    });
+    const documentId = await seedDraftDocument(org.orgId, {
+      kind: "vendor_bill",
+      createdBy: actors.submitterId,
+    });
+
+    let rowLocked!: () => void;
+    const lockReady = new Promise<void>((resolve) => {
+      rowLocked = resolve;
+    });
+    const holderReleased = new Promise<void>((resolve) => {
+      releaseHolder = resolve;
+    });
+    holder = withOrgTransaction(org.orgId, async () => {
+      await db.execute(sql`
+        select id
+          from documents
+         where id = ${documentId} and org_id = ${org.orgId}
+         for update`);
+      rowLocked();
+      await holderReleased;
+    });
+    await lockReady;
+
+    // Queue submission first, then deletion, behind the same held row lock.
+    // Releasing the holder lets PostgreSQL grant the lock in queue order.
+    const submitting = submitForApproval("vendor_bill", documentId, actors.submitterId);
+    await waitForDocumentLockWaiters(1);
+    const deleting = deleteDocument(documentId, actors.submitterId, org.orgId, { source: "test" });
+    await waitForDocumentLockWaiters(2);
+    releaseHolder();
+
+    const [submitted, deleted] = await Promise.allSettled([submitting, deleting]);
+    if (submitted.status !== "fulfilled") throw submitted.reason;
+    assert.equal(submitted.value.gated, true, "submission creates the approval gate");
+    if (deleted.status !== "rejected") {
+      assert.fail("deletion unexpectedly committed after submission acquired the row lock");
+    }
+    assert.match(String(deleted.reason), /cannot be deleted.*controlled void/i);
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from documents
+         where id = ${documentId}
+           and org_id = ${org.orgId}
+           and status = 'pending_approval'`),
+      1,
+      "the submitted document remains as immutable approval evidence",
+    );
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from flow_gates
+         where subject_id = ${documentId}
+           and org_id = ${org.orgId}
+           and status = 'pending'`),
+      1,
+      "the approval gate is not orphaned by the rejected deletion",
+    );
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from audit_log
+         where org_id = ${org.orgId}
+           and table_name = 'documents'
+           and row_id = ${documentId}
+           and action = 'delete'`),
+      0,
+      "the rejected deletion leaves no physical-delete audit record",
+    );
+  } finally {
+    releaseHolder();
+    await holder?.catch(() => {});
     await dropScratchOrg(org.orgId);
   }
 });

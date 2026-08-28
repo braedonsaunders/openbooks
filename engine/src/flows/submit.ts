@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db, schema } from "../db.ts";
+import { db, schema, withOrgTransaction } from "../db.ts";
 import { runTriggerScripts, type ScriptContext } from "../scripting.ts";
 import { runRecordFlows } from "./run.ts";
 
@@ -40,7 +40,26 @@ export async function submitForApproval(
   targetId: string,
   actorId?: string | null,
 ): Promise<SubmitResult> {
-  const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, targetId));
+  // Resolve the tenant before opening the transaction. The transaction then
+  // locks the document row and keeps that lock through flow planning, gate
+  // creation, and the lifecycle update. A concurrent draft deletion therefore
+  // either wins before this lock (submission finds no row) or waits until the
+  // pending-approval status is committed and refuses the delete.
+  const [candidate] = await db.select().from(schema.documents).where(eq(schema.documents.id, targetId));
+  if (!candidate) throw new Error("target document not found");
+  return withOrgTransaction(candidate.orgId, () => submitForApprovalLocked(targetId, actorId, candidate.orgId));
+}
+
+async function submitForApprovalLocked(
+  targetId: string,
+  actorId: string | null | undefined,
+  orgId: string,
+): Promise<SubmitResult> {
+  const [doc] = await db
+    .select()
+    .from(schema.documents)
+    .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, orgId)))
+    .for("update");
   if (!doc) throw new Error("target document not found");
   if (doc.status !== "draft") throw new Error(`document is ${doc.status}, not draft`);
   const blockedCorrection = (await db.execute<{ document_number: string }>(sql`
@@ -97,7 +116,7 @@ export async function submitForApproval(
     userId: actorId ?? doc.createdBy,
   });
   if (flowResult.gatesCreated > 0) {
-    await db
+    const updated = await db
       .update(schema.documents)
       .set({
         status: "pending_approval",
@@ -106,7 +125,11 @@ export async function submitForApproval(
         updatedBy: actorId ?? doc.createdBy,
         updatedAt: new Date(),
       })
-      .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, doc.orgId)));
+      .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, doc.orgId)))
+      .returning({ id: schema.documents.id });
+    if (updated.length !== 1) {
+      throw new Error("document changed while submission was being recorded");
+    }
     const gatedRun = flowResult.runs.find((r) => r.gatesCreated > 0);
     return { gated: true, runId: gatedRun?.runId ?? flowResult.runs[0]!.runId, flowError: null };
   }
@@ -119,7 +142,7 @@ export async function submitForApproval(
     return { gated: false, runId: null, flowError: reason };
   }
 
-  await db
+  const updated = await db
     .update(schema.documents)
     .set({
       submittedBy: actorId ?? doc.createdBy,
@@ -127,7 +150,11 @@ export async function submitForApproval(
       updatedBy: actorId ?? doc.createdBy,
       updatedAt: new Date(),
     })
-    .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, doc.orgId)));
+    .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, doc.orgId)))
+    .returning({ id: schema.documents.id });
+  if (updated.length !== 1) {
+    throw new Error("document changed while submission was being recorded");
+  }
   return { gated: false, runId: null, flowError: null };
 }
 
@@ -142,32 +169,38 @@ export async function submitAndReleaseIfUngated(
   targetId: string,
   actorId: string | null,
 ): Promise<SubmissionReleaseResult> {
-  const result = await submitForApproval(targetKind, targetId, actorId);
-  if (result.gated || result.flowError) {
-    return { ...result, autoApproved: false };
-  }
-  const [current] = await db
+  const [candidate] = await db
     .select({ orgId: schema.documents.orgId })
     .from(schema.documents)
     .where(eq(schema.documents.id, targetId));
-  if (!current) throw new Error("document changed while submission was being released");
-  const released = await db
-    .update(schema.documents)
-    .set({
-      status: "approved",
-      updatedBy: actorId,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(schema.documents.id, targetId),
-        eq(schema.documents.orgId, current.orgId),
-        eq(schema.documents.status, "draft"),
-      ),
-    )
-    .returning({ id: schema.documents.id });
-  if (released.length !== 1) {
-    throw new Error("document changed while submission was being released");
-  }
-  return { ...result, autoApproved: true };
+  if (!candidate) throw new Error("target document not found");
+
+  // Keep the ungated release in the same transaction as submitForApproval.
+  // Otherwise a deletion could wait for the submit transaction, observe the
+  // still-draft status, and remove the document before this final transition.
+  return withOrgTransaction(candidate.orgId, async () => {
+    const result = await submitForApproval(targetKind, targetId, actorId);
+    if (result.gated || result.flowError) {
+      return { ...result, autoApproved: false };
+    }
+    const released = await db
+      .update(schema.documents)
+      .set({
+        status: "approved",
+        updatedBy: actorId,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.documents.id, targetId),
+          eq(schema.documents.orgId, candidate.orgId),
+          eq(schema.documents.status, "draft"),
+        ),
+      )
+      .returning({ id: schema.documents.id });
+    if (released.length !== 1) {
+      throw new Error("document changed while submission was being released");
+    }
+    return { ...result, autoApproved: true };
+  });
 }
