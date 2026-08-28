@@ -50,6 +50,21 @@ async function seedAsset(
   return id;
 }
 
+async function seedDisposalEvent(
+  org: ScratchOrg,
+  actorId: string,
+  assetId: string,
+  occurredOn: string,
+  amount: string,
+): Promise<void> {
+  await db.execute(sql`
+    insert into asset_events (org_id, asset_id, kind, occurred_on, amount, created_by, updated_by)
+    values (${org.orgId}, ${assetId}, 'disposed', ${occurredOn}, ${amount}, ${actorId}, ${actorId})`);
+  // The run must derive historical ownership from the dated event, not this
+  // mutable present-day status (which is what a real disposal workflow sets).
+  await db.execute(sql`update fixed_assets set status = 'disposed', updated_by = ${actorId} where org_id = ${org.orgId} and id = ${assetId}`);
+}
+
 /** Tenant-defined pool class (e.g. a code the built-in regime doesn't ship). */
 async function seedPoolClass(org: ScratchOrg, classCode: string): Promise<void> {
   await db.execute(sql`
@@ -106,6 +121,72 @@ const poolsFor = async (orgId: string): Promise<PoolRow[]> =>
       from tax_depreciation_pools
      where org_id = ${orgId}
      order by class_code`)).rows;
+
+test("unknown pool and MACRS class codes fail closed without persisting a partial run", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const categoryId = await seedTaxCategory(org, "Unmapped tax asset", {
+      ca_cca_class: "tenant_typo",
+      us_macrs_class: "tenant_typo",
+    });
+    await seedAsset(org, actorId, categoryId, "10000.00", "2023-05-01");
+
+    await assert.rejects(
+      runYear(org, actorId, "ca_cca", 2023),
+      (error: unknown) => error instanceof TaxPoolError && /unknown tax class.*tenant_typo/.test(error.message),
+    );
+    assert.equal((await periodsFor(org.orgId)).length, 0, "unknown pool class leaves no period behind");
+    assert.equal((await poolsFor(org.orgId)).length, 0, "unknown pool class leaves no pool behind");
+
+    await assert.rejects(
+      runYear(org, actorId, "us_macrs", 2023),
+      (error: unknown) => error instanceof TaxPoolError && /unknown tax class.*tenant_typo/.test(error.message),
+    );
+    assert.equal((await periodsFor(org.orgId)).length, 0, "unknown MACRS class leaves no period behind");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("Canadian vehicle cost caps apply to additions and disposition capital cost per asset", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const categoryId = await seedTaxCategory(org, "Passenger vehicle", { ca_cca_class: "10.1" });
+    const assetId = await seedAsset(org, actorId, categoryId, "60000.00", "2023-05-01");
+
+    const first = await runYear(org, actorId, "ca_cca", 2023);
+    assert.deepEqual(first.lines.map((line) => [line.classCode, line.additions, line.allowance, line.closingBalance]), [
+      ["10.1", "37000.00", "5550.00", "31450.00"],
+    ]);
+
+    await seedDisposalEvent(org, actorId, assetId, "2024-05-01", "60000.00");
+    const second = await runYear(org, actorId, "ca_cca", 2024);
+    assert.deepEqual(second.lines.map((line) => [line.classCode, line.dispositions, line.recapture, line.closingBalance]), [
+      ["10.1", "37000.00", "0.00", "0.00"],
+    ]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("terminal-loss ownership is evaluated at the requested year-end date", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const categoryId = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
+    const assetId = await seedAsset(org, actorId, categoryId, "10000.00", "2023-05-01");
+    await runYear(org, actorId, "ca_cca", 2023);
+
+    // It was still owned at 2024 year-end; only a 2025 disposal changes the
+    // current status.  A rerun of 2024 must not manufacture a terminal loss.
+    await seedDisposalEvent(org, actorId, assetId, "2025-01-01", "10000.00");
+    const result = await runYear(org, actorId, "ca_cca", 2024);
+    assert.deepEqual(result.lines.map((line) => [line.allowance, line.terminalLoss, line.closingBalance]), [
+      ["1800.00", "0.00", "7200.00"],
+    ]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test("a failing class persists nothing — the whole year rolls back atomically", { skip: !DB }, async () => {
   const { org, actorId } = await seededOrg();
