@@ -365,6 +365,22 @@ test('the field-ticket drawer sends expectedRevision on header and grid saves an
   assert.equal(requests[1]!.body.expectedRevision, SAVED_REVISION, 'grid save chains the refreshed token')
 })
 
+test('field-ticket multi-section saves fence each request with the prior response revision', () => {
+  const call = FIELD_TICKET_DRAWER_SOURCE.slice(
+    FIELD_TICKET_DRAWER_SOURCE.indexOf('async function call('),
+    FIELD_TICKET_DRAWER_SOURCE.indexOf('async function saveHeader('),
+  )
+  assert.match(call, /revision: latestRevisionRef\.current/)
+  assert.match(call, /latestRevisionRef\.current = result\.revision/)
+  assert.doesNotMatch(call, /revision: ticket\.revision/)
+
+  const saveAll = FIELD_TICKET_DRAWER_SOURCE.slice(
+    FIELD_TICKET_DRAWER_SOURCE.indexOf('async function saveAll('),
+    FIELD_TICKET_DRAWER_SOURCE.indexOf('async function submit('),
+  )
+  assert.match(saveAll, /await saveHeader\(\)[\s\S]*await saveGrid\(\)/)
+})
+
 test('each editor surfaces a genuinely stale token as the server 409 and never retries or re-mints a token', async () => {
   // The server holds CONCURRENT_REVISION; every editor only holds OPENED_REVISION.
   const { transport: conflictTransport } = scriptedServer([
