@@ -40,6 +40,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json(await loadProjectTimeEntryPage({
       orgId: gate.user.orgId,
       projectId: id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       dimension: rawDimension as ProjectTimeDimension,
       dimensionId: rawKey === 'unassigned' ? null : rawKey,
       page,
