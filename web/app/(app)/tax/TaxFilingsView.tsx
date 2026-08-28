@@ -39,6 +39,20 @@ type Result = {
   watermark: string | null
   boxes: Box[]
 }
+type FilingObligation = {
+  returnFormCode: string | null
+  reportableFrom: string
+  reportableTo: string
+}
+
+/** Return a reportable window only when the obligation belongs to this form. */
+export function obligationPeriodForForm(
+  obligations: readonly FilingObligation[],
+  formCode: string,
+): { from: string; to: string } | null {
+  const match = obligations.find((obligation) => obligation.returnFormCode === formCode)
+  return match ? { from: match.reportableFrom, to: match.reportableTo } : null
+}
 
 function monthBounds(today: string): { from: string; to: string } {
   const [year, month] = today.split('-').map(Number)
@@ -88,13 +102,12 @@ export function TaxFilingsView({
     let cancelled = false
     void fetch(`/api/tax/filings?from=${bounds.from.slice(0, 4)}-01-01&to=${bounds.to}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { obligations?: { returnFormCode: string | null; reportableFrom: string; reportableTo: string }[] } | null) => {
+      .then((data: { obligations?: FilingObligation[] } | null) => {
         if (cancelled || !data?.obligations?.length) return
-        const match = data.obligations.find((o) => o.returnFormCode === code)
-          ?? data.obligations[data.obligations.length - 1]
+        const match = obligationPeriodForForm(data.obligations, code)
         if (match) {
-          setFrom(match.reportableFrom)
-          setTo(match.reportableTo)
+          setFrom(match.from)
+          setTo(match.to)
         }
       })
     return () => { cancelled = true }
@@ -172,6 +185,8 @@ export function TaxFilingsView({
                   value={code}
                   onChange={(event) => {
                     setCode(event.target.value)
+                    setFrom(bounds.from)
+                    setTo(bounds.to)
                     setAdjustments({})
                     setResult(null)
                   }}
