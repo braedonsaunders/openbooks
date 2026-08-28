@@ -153,6 +153,7 @@ export async function computeUsStatutory(
     const withheld = computeUsWithholding({
       levy,
       payDate: run.pay_date!,
+      periodStart: run.period_start!,
       periodEnd: run.period_end!,
       periodsPerYear: P,
       wages: income,

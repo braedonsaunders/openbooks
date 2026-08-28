@@ -74,6 +74,20 @@ export interface UsStateWithholdingInput {
   /** Pay date — selects the edition (tax year). */
   payDate: string;
   /**
+   * Employer headcount for state rules that apply only once an employer
+   * reaches a statutory threshold (Nebraska's special procedure is one).
+   * The payroll run resolves this from the paying legal entity; standalone
+   * conformance callers may omit it for states that have no such rule.
+   */
+  employerEmployeeCount?: number;
+  /**
+   * First day of the payroll period this payment covers, when the caller
+   * knows it. Utah keys its tables to the period START rather than the pay
+   * date; that engine refuses without this field instead of applying a table
+   * based on an unrelated date.
+   */
+  periodStart?: string;
+  /**
    * The last day of the payroll period this payment covers, when the caller
    * knows it.
    *

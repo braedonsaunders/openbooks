@@ -77,6 +77,10 @@ const SUB_REGION_ENGINE_CODE: Readonly<Record<string, string>> = {
 export interface UsWithholdingInput {
   levy: ResolvedWithholdingLevy;
   payDate: string;
+  /** First day of the payroll period; Utah's tables key to this date. */
+  periodStart?: string;
+  /** Employer headcount for state-specific statutory thresholds. */
+  employerEmployeeCount?: number;
   /**
    * The last day of the payroll period. Ohio keys its table sets to the period
    * END rather than the pay date and REFUSES without it — see
@@ -132,6 +136,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     if (!engine) return null;
     const result = engine.compute({
       payDate: input.payDate,
+      periodStart: input.periodStart,
+      employerEmployeeCount: input.employerEmployeeCount,
       periodEnd: input.periodEnd,
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
@@ -157,6 +163,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     }
     const result = engine.compute({
       payDate: input.payDate,
+      periodStart: input.periodStart,
+      employerEmployeeCount: input.employerEmployeeCount,
       periodEnd: input.periodEnd,
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
