@@ -49,11 +49,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
       ) {
         return NextResponse.json({ error: 'not found' }, { status: 404 })
       }
-      const before = (await db.execute<Record<string, unknown>>(sql`
-        select * from payment_formats where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom'
-      `))
-      if (!before.rows[0]) return NextResponse.json({ error: 'built-in payment formats are read-only' }, { status: 409 })
-      await db.transaction(async (tx) => {
+      const formatWrite = await db.transaction(async (tx) => {
+        // Lock the row before taking the audit snapshot. This serializes
+        // concurrent edits so each audit event records the state immediately
+        // preceding its own update rather than a stale pre-transaction read.
+        const before = (await tx.execute<Record<string, unknown>>(sql`
+          select * from payment_formats where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom' for update
+        `))
+        if (!before.rows[0]) return 'missing'
         const updated = (await tx.execute<Record<string, unknown>>(sql`
           update payment_formats set
             name = coalesce(${body.name?.trim() ?? null}, name),
@@ -66,9 +69,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
           where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom'
           returning *
         `))
+        if (!updated.rows[0]) return 'missing'
         await auditConfigChange(tx, gate.user.orgId, 'payment_formats', id, 'update',
           { before: before.rows[0], after: updated.rows[0] }, gate.user.id, req.headers.get('X-Request-Id'))
+        return 'updated'
       })
+      if (formatWrite === 'missing') {
+        return NextResponse.json({ error: 'built-in payment formats are read-only' }, { status: 409 })
+      }
     } else if (resource === 'schedules') {
       const current = (await db.execute<{ cron: string; timezone: string }>(sql`select cron, timezone from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}`))
       if (!current.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
