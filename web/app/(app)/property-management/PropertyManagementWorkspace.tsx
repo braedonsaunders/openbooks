@@ -8,6 +8,7 @@ import type { FormLayoutConfig, ListViewConfig } from "@openbooks/customization"
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
 import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
+import { decimalCmp, decimalSum } from "../../../lib/statement-format";
 import { Metric, type Option } from "./workspace-ui";
 import { PropertiesTable } from "./PropertiesTable";
 import { RentRollTable } from "./RentRollTable";
@@ -154,9 +155,8 @@ export function PropertyManagementWorkspace({
   const occupied = data.units.filter(
     (unit) => unit.status === "occupied",
   ).length;
-  const monthlyRent = activeLeases.reduce(
-    (total, lease) =>
-      total +
+  const monthlyRent = decimalSum(
+    activeLeases.flatMap((lease) =>
       data.charges
         .filter(
           (charge) =>
@@ -165,12 +165,12 @@ export function PropertyManagementWorkspace({
             charge.effectiveFrom <= today &&
             (!charge.effectiveTo || charge.effectiveTo >= today),
         )
-        .reduce((n, charge) => n + Number(charge.amount), 0),
-    0,
+        .map((charge) => charge.amount),
+    ),
   );
   // One rent invoice can contain several schedule lines. Age the native posted
   // document's remaining balance once, rather than summing its original lines.
-  const overdueInvoices = new Map<string, number>();
+  const overdueInvoices = new Map<string, string>();
   for (const line of data.schedules) {
     if (
       line.invoiceDocumentId &&
@@ -180,17 +180,13 @@ export function PropertyManagementWorkspace({
     ) {
       overdueInvoices.set(
         line.invoiceDocumentId,
-        Number(line.invoiceOpenBalance ?? 0),
+        line.invoiceOpenBalance ?? "0",
       );
     }
   }
-  const overdue = [...overdueInvoices.values()].reduce(
-    (total, amount) => total + amount,
-    0,
-  );
-  const depositsHeld = data.leases.reduce(
-    (n, lease) => n + Number(lease.depositBalance ?? 0),
-    0,
+  const overdue = decimalSum([...overdueInvoices.values()]);
+  const depositsHeld = decimalSum(
+    data.leases.map((lease) => lease.depositBalance ?? "0"),
   );
   const selectedLease =
     data.leases.find((lease) => lease.id === selectedLeaseId) ?? null;
@@ -224,7 +220,7 @@ export function PropertyManagementWorkspace({
           label={t("metrics.rentPastDue")}
           value={money(overdue)}
           hint={t("metrics.agingHint")}
-          tone={overdue > 0 ? "danger" : undefined}
+          tone={decimalCmp(overdue, "0") > 0 ? "danger" : undefined}
           icon="circle-alert"
           accent="red"
         />
