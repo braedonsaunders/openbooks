@@ -123,8 +123,28 @@ export interface T4Slip {
   stubCount: number;
 }
 
-/** A pre-adoption carry-in that lands on a slip's income-tax boxes. */
-export interface OpeningTaxYtd {
+/**
+ * The statutory year-to-date carried in when payroll adopts OpenBooks
+ * mid-year. These are per-employee facts (one row in
+ * `payroll_opening_balances`) and map directly to the year-end slip boxes.
+ *
+ * Keep this shape in lockstep with `OPENING_BALANCE_FIELDS`: omitting one of
+ * the statutory columns here makes it impossible for a year-end return to
+ * reconcile to the prior provider's YTD report.
+ */
+export interface OpeningYearEndYtd {
+  /** pensionable_ytd — T4 box 26 / W-2 boxes 3 and 5 wage bases. */
+  pensionableYtd: string;
+  /** insurable_ytd — T4 box 24 EI-insurable earnings. */
+  insurableYtd: string;
+  /** cpp_ytd — T4 box 16 CPP/QPP contributions. */
+  cppYtd: string;
+  /** cpp2_ytd — T4 box 16A second additional CPP contributions. */
+  cpp2Ytd: string;
+  /** ei_ytd — T4 box 18 EI premiums. */
+  eiYtd: string;
+  /** qpip_ytd — T4 box 55 QPIP premiums. */
+  qpipYtd: string;
   /** taxable_ytd — T4 box 14 / W-2 box 1 earnings paid before adoption. */
   taxableYtd: string;
   /** tax_ytd — income tax withheld before adoption (box 22 / W-2 box 2). */
@@ -153,7 +173,7 @@ export interface OpeningTaxYtd {
  */
 /**
  * Mid-year adopters can have opening YTD and no committed stub in this
- * system. `carryOpeningTaxYtd` only folds onto existing slips, so those
+ * system. `carryOpeningYearEndYtd` only folds onto existing slips, so those
  * employees would otherwise disappear from T4/W-2. Seed a zero slip for
  * each opening employee the stub query did not produce; the carry-in then
  * lands on it.
@@ -171,10 +191,10 @@ export function seedOpeningOnlySlips<S extends { employeePartyId: string }>(
   return extra.length ? [...extra, ...slips] : [...slips];
 }
 
-export function carryOpeningTaxYtd<S extends { employeePartyId: string }>(
+export function carryOpeningYearEndYtd<S extends { employeePartyId: string }>(
   slips: readonly S[],
-  openings: ReadonlyMap<string, OpeningTaxYtd>,
-  into: (slip: S, opening: OpeningTaxYtd) => S,
+  openings: ReadonlyMap<string, OpeningYearEndYtd>,
+  into: (slip: S, opening: OpeningYearEndYtd) => S,
 ): S[] {
   const carried = new Set<string>();
   return slips.map((slip) => {
@@ -185,33 +205,64 @@ export function carryOpeningTaxYtd<S extends { employeePartyId: string }>(
   });
 }
 
-/** The T4 boxes a carry-in lands in: 14 (employment income) and 22 (income tax). */
-export function openingYtdIntoT4Slip(slip: T4Slip, opening: OpeningTaxYtd): T4Slip {
+/**
+ * T4 boxes a carry-in lands in: 14, 16, 16A, 18, 22, 24 and 26. Box 56 is
+ * deliberately absent: `insurable_ytd` is the EI base and the model has no
+ * distinct QPIP-insurable earnings source, so inventing one would misstate a
+ * Quebec return.
+ */
+export function openingYtdIntoT4Slip(slip: T4Slip, opening: OpeningYearEndYtd): T4Slip {
   return {
     ...slip,
     box14EmploymentIncome: add(slip.box14EmploymentIncome, opening.taxableYtd),
+    box16Cpp: add(slip.box16Cpp, opening.cppYtd),
+    box16aCpp2: add(slip.box16aCpp2, opening.cpp2Ytd),
+    box18Ei: add(slip.box18Ei, opening.eiYtd),
     box22IncomeTax: add(slip.box22IncomeTax, opening.taxYtd),
+    box24EiInsurable: add(slip.box24EiInsurable, opening.insurableYtd),
+    box26CppPensionable: add(slip.box26CppPensionable, opening.pensionableYtd),
+    box55Qpip: add(slip.box55Qpip, opening.qpipYtd),
   };
 }
 
 /**
- * The taxable-earnings and tax-withheld carry-ins for one org-year, keyed by
- * employee. Employees whose row carries neither are left out entirely, so a
+ * The statutory carry-ins for one org-year, keyed by employee. Employees
+ * whose row carries no statutory amount are left out entirely, so a
  * population with no opening balances produces byte-identical slips.
  */
-async function openingTaxYtdByEmployee(
+async function openingYearEndYtdByEmployee(
   orgId: string,
   taxYear: number,
-): Promise<Map<string, OpeningTaxYtd>> {
+  country: "CA" | "US",
+): Promise<Map<string, OpeningYearEndYtd>> {
   const rows = (await db.execute<{
-    employee_party_id: string; taxable_ytd: unknown; tax_ytd: unknown;
+    employee_party_id: string;
+    pensionable_ytd: unknown; insurable_ytd: unknown;
+    cpp_ytd: unknown; cpp2_ytd: unknown; ei_ytd: unknown; qpip_ytd: unknown;
+    taxable_ytd: unknown; tax_ytd: unknown;
   }>(sql`
-    select employee_party_id, taxable_ytd, tax_ytd
-      from payroll_opening_balances
-     where org_id = ${orgId} and tax_year = ${taxYear}
-       and (coalesce(taxable_ytd, 0) <> 0 or coalesce(tax_ytd, 0) <> 0)
+    select b.employee_party_id,
+           b.pensionable_ytd, b.insurable_ytd, b.cpp_ytd, b.cpp2_ytd, b.ei_ytd, b.qpip_ytd,
+           b.taxable_ytd, b.tax_ytd
+      from payroll_opening_balances b
+      join employee_payroll_profiles prof
+        on prof.org_id = b.org_id and prof.employee_party_id = b.employee_party_id
+       and coalesce(prof.country, ${country}) = ${country}
+     where b.org_id = ${orgId} and b.tax_year = ${taxYear}
+       and (
+         coalesce(b.pensionable_ytd, 0) <> 0 or coalesce(b.insurable_ytd, 0) <> 0
+         or coalesce(b.cpp_ytd, 0) <> 0 or coalesce(b.cpp2_ytd, 0) <> 0
+         or coalesce(b.ei_ytd, 0) <> 0 or coalesce(b.qpip_ytd, 0) <> 0
+         or coalesce(b.taxable_ytd, 0) <> 0 or coalesce(b.tax_ytd, 0) <> 0
+       )
   `));
   return new Map(rows.rows.map((row) => [row.employee_party_id, {
+    pensionableYtd: normalizeMoney(String(row.pensionable_ytd ?? "0")),
+    insurableYtd: normalizeMoney(String(row.insurable_ytd ?? "0")),
+    cppYtd: normalizeMoney(String(row.cpp_ytd ?? "0")),
+    cpp2Ytd: normalizeMoney(String(row.cpp2_ytd ?? "0")),
+    eiYtd: normalizeMoney(String(row.ei_ytd ?? "0")),
+    qpipYtd: normalizeMoney(String(row.qpip_ytd ?? "0")),
     taxableYtd: normalizeMoney(String(row.taxable_ytd ?? "0")),
     taxYtd: normalizeMoney(String(row.tax_ytd ?? "0")),
   }]));
@@ -307,23 +358,9 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
      order by p.display_name, min(c.pay_date), c.province
   `));
 
-  // The annual maxima are per EMPLOYEE, so they are consumed across that
-  // employee's slips in the chronological order the query just produced.
-  const capped = capAnnualEarnings(
-    rows.rows.map((row) => ({
-      employeePartyId: String(row.employee_party_id),
-      insurable: num(row.insurable),
-      pensionable: num(row.pensionable),
-    })),
-    caps,
-  );
-
   const capMoney = (value: string, cap: string) => (cmp(value, cap) > 0 ? cap : value);
-  // The carry-in lands on box 14 / box 22 only — the capped boxes (24/26/56)
-  // measure the CPP/EI bases these stubs were assessed against, which an
-  // opening balance is not part of here.
-  const openings = await openingTaxYtdByEmployee(orgId, taxYear);
-  const stubSlips = rows.rows.map((row, index) => {
+  const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "CA");
+  const stubSlips = rows.rows.map((row) => {
       const province = String(row.province ?? "");
       const isQuebec = province === "QC";
       return {
@@ -337,8 +374,11 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
         box16aCpp2: num(row.cpp2),
         box18Ei: num(row.ei),
         box22IncomeTax: num(row.income_tax),
-        box24EiInsurable: capped[index]!.box24EiInsurable,
-        box26CppPensionable: capped[index]!.box26CppPensionable,
+        // Keep the uncapped bases here. The opening carry-in is folded into
+        // these same boxes below, then the annual maxima are consumed across
+        // the complete (opening + committed) year-to-date.
+        box24EiInsurable: num(row.insurable),
+        box26CppPensionable: num(row.pensionable),
         box44UnionDues: num(row.union_dues),
         box55Qpip: num(row.qpip),
         // Box 56 is only reported for Quebec employment, and only up to the
@@ -370,7 +410,25 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
       stubCount: 0,
     };
   });
-  return carryOpeningTaxYtd(seeded, openings, openingYtdIntoT4Slip);
+  const carried = carryOpeningYearEndYtd(seeded, openings, openingYtdIntoT4Slip);
+  // The annual maxima are per EMPLOYEE, so they are consumed across that
+  // employee's slips in the chronological order the query (and seeded
+  // opening-only rows) supplies. Folding first is important: an adopter who
+  // already used part of the annual EI/CPP base with the prior provider must
+  // have only the remaining room on OpenBooks' slips.
+  const capped = capAnnualEarnings(
+    carried.map((slip) => ({
+      employeePartyId: slip.employeePartyId,
+      insurable: slip.box24EiInsurable,
+      pensionable: slip.box26CppPensionable,
+    })),
+    caps,
+  );
+  return carried.map((slip, index) => ({
+    ...slip,
+    box24EiInsurable: capped[index]!.box24EiInsurable,
+    box26CppPensionable: capped[index]!.box26CppPensionable,
+  }));
 }
 
 /**
@@ -837,12 +895,19 @@ export interface W2Slip {
   box6MedicareTax: string;
 }
 
-/** The W-2 boxes a carry-in lands in: 1 (wages) and 2 (federal income tax). */
-export function openingYtdIntoW2Slip(slip: W2Slip, opening: OpeningTaxYtd): W2Slip {
+/**
+ * W-2 boxes a carry-in lands in: 1 (wages), 2 (federal income tax), 3 (Social
+ * Security wages) and 5 (Medicare wages). `pensionable_ytd` is the prior
+ * provider's FICA wage base for both boxes; no opening tax field exists for
+ * boxes 4/6, so those remain the committed FICA taxes.
+ */
+export function openingYtdIntoW2Slip(slip: W2Slip, opening: OpeningYearEndYtd): W2Slip {
   return {
     ...slip,
     box1Wages: add(slip.box1Wages, opening.taxableYtd),
     box2FederalIncomeTax: add(slip.box2FederalIncomeTax, opening.taxYtd),
+    box3SsWages: add(slip.box3SsWages, opening.pensionableYtd),
+    box5MedicareWages: add(slip.box5MedicareWages, opening.pensionableYtd),
   };
 }
 
@@ -877,10 +942,9 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       -- under more than one EIN needs a deterministic order, not just name.
      order by p.display_name, min(s.pay_date)
    `));
-  // The carry-in lands on box 1 / box 2 only — the SS and Medicare wage bases
-  // (boxes 3–6) are the FICA bases these stubs were assessed against, which an
-  // opening balance is not part of here.
-  const openings = await openingTaxYtdByEmployee(orgId, taxYear);
+  // The carry-in lands on boxes 1 / 2 / 3 / 5. The SS and Medicare wage bases
+  // are explicitly stored as `pensionable_ytd` for US openings.
+  const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "US");
   const stubSlips = rows.rows.map((row) => {
     const states = ((row.states as string[] | null) ?? []).filter(Boolean);
     return {
@@ -915,7 +979,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       box6MedicareTax: "0",
     };
   });
-  return carryOpeningTaxYtd(seeded, openings, openingYtdIntoW2Slip);
+  return carryOpeningYearEndYtd(seeded, openings, openingYtdIntoW2Slip);
 }
 
 // ---------------------------------------------------------------------------
