@@ -17,6 +17,24 @@ const METHODS = ['straight_line', 'declining_balance', 'double_declining', 'unit
 const CONVENTIONS = ['full_month', 'mid_month', 'half_year'] as const
 type Method = (typeof METHODS)[number]
 
+interface ExistingAsset extends Record<string, unknown> {
+  id: string
+  status: string
+  custom: Record<string, unknown> | null
+  acquisition_cost: string
+  salvage_value: string
+  in_service_on: string | null
+  depreciation_method: Method | null
+  depreciation_method_id: string | null
+  useful_life_months: number | null
+  depreciation_rate_percent: string | null
+  depreciation_units_total: string | null
+  depreciation_convention: (typeof CONVENTIONS)[number] | null
+}
+
+/** Raised inside the save transaction when a posting won the basis race. */
+class PostedBasisEditConflict extends Error {}
+
 function bad(error: string) {
   return NextResponse.json({ error }, { status: 422 })
 }
@@ -106,20 +124,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const existRes = (await db.execute<{
-    id: string
-    status: string
-    custom: Record<string, unknown> | null
-    acquisition_cost: string
-    salvage_value: string
-    in_service_on: string | null
-    depreciation_method: Method | null
-    depreciation_method_id: string | null
-    useful_life_months: number | null
-    depreciation_rate_percent: string | null
-    depreciation_units_total: string | null
-    depreciation_convention: (typeof CONVENTIONS)[number] | null
-  }>(sql`
+  const existRes = (await db.execute<ExistingAsset>(sql`
     select id, status, custom, acquisition_cost, salvage_value, in_service_on,
            depreciation_method, depreciation_method_id, useful_life_months,
            depreciation_rate_percent, depreciation_units_total, depreciation_convention
@@ -352,8 +357,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
      limit 1`))
   const basisConflict = postedAssetBasisEditRefusal(!!postedRes.rows[0], existing, requestedBasis)
   if (basisConflict) return NextResponse.json({ error: basisConflict }, { status: 409 })
-  // A basis change that IS allowed (nothing has posted) is still audited.
-  const basisChanges = assetBasisChanges(existing, requestedBasis)
 
   if ((method !== undefined && method !== existing.depreciation_method) || (depreciationMethodId !== undefined && depreciationMethodId !== existing.depreciation_method_id)) {
     const inputEvidence = (await db.execute(sql`
@@ -366,6 +369,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   try {
     await db.transaction(async (tx) => {
+      // The reads above are only an early refusal. Lock and reload the
+      // authoritative asset inside the save transaction so a depreciation
+      // posting that commits while this request is preparing cannot be
+      // followed by a stale basis update or stale audit before-image.
+      const lockedRes = (await tx.execute<ExistingAsset>(sql`
+        select id, status, custom, acquisition_cost, salvage_value, in_service_on,
+               depreciation_method, depreciation_method_id, useful_life_months,
+               depreciation_rate_percent, depreciation_units_total, depreciation_convention
+          from fixed_assets
+         where id = ${id} and org_id = ${user.orgId}
+         for update`))
+      const lockedExisting = lockedRes.rows[0]
+      if (!lockedExisting) throw new Error('asset not found')
+
+      const lockedPostedRes = (await tx.execute(sql`
+        select 1 from depreciation_schedules s
+        join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
+         where s.asset_id = ${id} and s.org_id = ${user.orgId} and l.posted_amount is not null
+         limit 1`))
+      const lockedBasisConflict = postedAssetBasisEditRefusal(!!lockedPostedRes.rows[0], lockedExisting, requestedBasis)
+      if (lockedBasisConflict) throw new PostedBasisEditConflict(lockedBasisConflict)
+
+      // A basis change that IS allowed (nothing has posted) is still audited.
+      const basisChanges = assetBasisChanges(lockedExisting, requestedBasis)
       await tx.execute(sql`
         update fixed_assets set
       name = ${body.name !== undefined ? body.name.trim() || 'New asset' : sql`name`},
@@ -396,8 +423,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${user.orgId}, 'fixed_assets', ${id}, 'update',
                   ${JSON.stringify({
-                    before: mergedAssetBasis(existing, {}),
-                    after: mergedAssetBasis(existing, requestedBasis),
+                    before: mergedAssetBasis(lockedExisting, {}),
+                    after: mergedAssetBasis(lockedExisting, requestedBasis),
                     fields: basisChanges,
                   })}::jsonb, ${user.id})`)
       }
@@ -409,6 +436,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     })
   } catch (error) {
+    if (error instanceof PostedBasisEditConflict) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
+    }
     return bad(error instanceof Error ? error.message : 'Could not build depreciation schedule')
   }
 
