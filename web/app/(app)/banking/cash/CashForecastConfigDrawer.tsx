@@ -1,6 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
+import { cmp as compareMoney } from '@openbooks/engine/src/money.ts'
 import Link from 'next/link'
 import { Drawer } from '@openbooks/ui'
 import { SlidersHorizontal, Landmark, ArrowUpRight } from 'lucide-react'
@@ -36,7 +37,7 @@ export function CashForecastConfigDrawer({
   horizonWeeks: number
   dso: number
   dpo: number
-  weeklyCap: number
+  weeklyCap: string
   restrictToSafe: boolean
   vendorOptions: CatOption[]
   accountOptions: AccountOption[]
@@ -84,7 +85,7 @@ export function CashForecastConfigDrawer({
                   <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Weekly pay cap</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Most payables paid per week; the rest defers</p>
                 </div>
-                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{weeklyCap > 0 ? money(weeklyCap) : 'Unlimited'}</span>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{compareMoney(weeklyCap, '0.0000') > 0 ? money(weeklyCap) : 'Unlimited'}</span>
               </li>
               <li className="flex items-start justify-between gap-4 px-4 py-3">
                 <div className="min-w-0">

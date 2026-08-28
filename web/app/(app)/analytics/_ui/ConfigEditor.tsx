@@ -28,17 +28,19 @@ export function ConfigEditor({
 }: {
   dashboard: string
   fields: EditorField[]
-  values: Record<string, number>
-  defaults: Record<string, number>
+  values: Record<string, string | number>
+  defaults: Record<string, string | number>
 }) {
   const router = useRouter()
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(fields.map((f) => [f.key, String(values[f.key] ?? defaults[f.key])])))
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
-  const dirty = fields.some((f) => Number(draft[f.key]) !== (values[f.key] ?? defaults[f.key]))
+  const dirty = fields.some((f) => f.key === 'weeklyApCap'
+    ? draft[f.key] !== String(values[f.key] ?? defaults[f.key])
+    : Number(draft[f.key]) !== Number(values[f.key] ?? defaults[f.key]))
 
-  const save = async (payload: Record<string, number>) => {
+  const save = async (payload: Record<string, string | number>) => {
     setBusy(true)
     setMsg(null)
     const r = await fetch(`/api/analytics/config/${dashboard}`, {
@@ -83,7 +85,7 @@ export function ConfigEditor({
         <button
           type="button"
           disabled={busy || !dirty}
-          onClick={() => save(Object.fromEntries(fields.map((f) => [f.key, Number(draft[f.key])])))}
+          onClick={() => save(Object.fromEntries(fields.map((f) => [f.key, draft[f.key]!])))}
           className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 hover:bg-teal-700"
         >
           Save configuration
@@ -93,7 +95,7 @@ export function ConfigEditor({
           disabled={busy}
           onClick={() => {
             setDraft(Object.fromEntries(fields.map((f) => [f.key, String(defaults[f.key])])))
-            void save({ ...defaults })
+            void save(Object.fromEntries(fields.map((f) => [f.key, defaults[f.key]!])))
           }}
           className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
         >

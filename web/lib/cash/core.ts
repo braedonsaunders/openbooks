@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
+import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mulDecimal, neg as moneyNeg, normalizeMoney, sum as moneySum } from "@openbooks/engine/src/money.ts";
 import { evaluateFormula } from "./formula";
 import { getMoneyFormatter } from '../money-server'
 import { resolveOrgId } from '../org-scope'
@@ -22,6 +23,17 @@ export { openItems } from './open-items'
  */
 
 export const MS_DAY = 86_400_000;
+/** Canonical numeric(19,4) zero used by every cash forecast money field. */
+export const ZERO_MONEY = "0.0000";
+export type Money = string;
+export const addMoney = moneyAdd;
+export const subtractMoney = (a: Money, b: Money): Money => moneyAdd(a, moneyNeg(b));
+export const compareMoney = moneyCmp;
+export const absMoney = moneyAbs;
+export const sumMoney = (values: readonly Money[]): Money => moneySum([...values]);
+export const normalizeMoneyValue = (value: string): Money => normalizeMoney(value);
+export const divideMoney = moneyDiv;
+export const multiplyMoney = mulDecimal;
 export const parseISO = (s: string) => new Date(s + "T00:00:00Z");
 export const toISO = (d: Date) => d.toISOString().slice(0, 10);
 export const addDays = (d: Date, n: number) => new Date(d.getTime() + n * MS_DAY);
@@ -44,7 +56,7 @@ export type Side = "ar" | "ap";
 
 export interface Bucket {
   label: string;
-  amount: number;
+  amount: Money;
 }
 export interface ForecastEntry {
   id: string;
@@ -54,7 +66,7 @@ export interface ForecastEntry {
   docId: string | null;
   partyId: string | null;
   partyName: string;
-  amount: number;
+  amount: Money;
   tranDate: string;
   dueDate: string | null;
   predictedDate: string;
@@ -66,11 +78,11 @@ export interface WeekRow {
   weekStart: string;
   weekEnd: string;
   label: string;
-  inflow: number;
-  outflow: number;
-  net: number;
-  startingCash: number;
-  endingCash: number;
+  inflow: Money;
+  outflow: Money;
+  net: Money;
+  startingCash: Money;
+  endingCash: Money;
   /**
    * The week's transactions. Omitted from a page's initial payload — a cockpit
    * ships thousands of these per week and renders them only when a week is
@@ -81,17 +93,17 @@ export interface WeekRow {
   arEntries: ForecastEntry[];
   apEntries: ForecastEntry[];
   /** Always present, even when the entry arrays have been withheld. */
-  arTotal: number;
-  apTotal: number;
+  arTotal: Money;
+  apTotal: Money;
   arCount: number;
   apCount: number;
   /** Non-AR/AP forecast flows from configured categories. */
-  dynamicInflow: number;
-  dynamicOutflow: number;
+  dynamicInflow: Money;
+  dynamicOutflow: Money;
   /** AP scheduled but pushed to a later week by the capacity scheduler. */
-  deferredOut: number;
+  deferredOut: Money;
   /** Available AP capacity this week (null = unlimited, no scheduling). */
-  apCapacity: number | null;
+  apCapacity: Money | null;
 }
 
 /**
@@ -136,7 +148,7 @@ export interface ForecastCategory {
   cardAccountIds?: string[];
   significantPaymentThreshold?: number;
   // manual_recurring
-  amount?: number;
+  amount?: Money;
   frequency?: "weekly" | "biweekly" | "bi_weekly" | "monthly";
   // formula_expression
   formula?: string;
@@ -154,9 +166,9 @@ export interface ForecastCategory {
  * ({AR_IN}, {AP_OUT}, {NET_FLOW}, {CASH_START}).
  */
 export interface CategoryContext {
-  arWeekly: Record<string, number>;
-  apWeekly: Record<string, number>;
-  cashStart: number;
+  arWeekly: Record<string, Money>;
+  apWeekly: Record<string, Money>;
+  cashStart: Money;
   /** Active subsidiary view — SQL-backed strategies scope their history to it
    * (manual/formula strategies are org-level models and ignore it). */
   subIds?: string[];
@@ -166,7 +178,7 @@ export interface CategoryContext {
 export interface CategoryBreakdownRow {
   name: string;
   date?: string;
-  amount: number;
+  amount: Money;
   type: string;
   /** Extra context (payment counts, projection method, memo…). */
   details?: string;
@@ -177,8 +189,8 @@ export interface CategoryWeekly {
   name: string;
   direction: "inflow" | "outflow";
   method: ForecastCategory["method"];
-  weekly: number[]; // aligned with weeks[]
-  total: number;
+  weekly: Money[]; // aligned with weeks[]
+  total: Money;
   /** Human explanation of the computation (the Forecast Logic card). */
   logic: string;
   /** Display method label and the numbers behind the estimate. */
@@ -188,9 +200,10 @@ export interface CategoryWeekly {
 }
 
 export interface SideSummary {
-  outstanding: number;
-  scheduled: number; // amount predicted within the horizon
-  pctCurrent: number;
+  outstanding: Money;
+  scheduled: Money; // amount predicted within the horizon
+  /** Current-bucket share as an exact 0..1 ratio. */
+  pctCurrent: Money;
   avgDays: number;
   buckets: Bucket[];
 }
@@ -205,7 +218,7 @@ export interface OpenItem {
   partyName: string;
   tranDate: Date;
   dueDate: Date | null;
-  remaining: number;
+  remaining: Money;
 }
 
 export type PaymentStats = { map: Map<string, { avg: number; sd: number }>; globalAvg: number };
@@ -395,7 +408,15 @@ export async function categoryWeekly(
 ): Promise<CategoryWeekly> {
   const { money } = await getMoneyFormatter(orgId)
   const n = weekStarts.length;
-  const weekly = new Array<number>(n).fill(0);
+  // Strategy implementations use ordinary numbers for non-ledger model
+  // coefficients (proration, cadence and formula evaluation), but every
+  // monetary result is canonicalized to a four-decimal string at this
+  // function's return boundary. SQL money values are never exposed as a
+  // JavaScript Number.
+  // Formula evaluation is the sole numeric model path; its rounded result is
+  // immediately canonicalized back to exact money before leaving this scope.
+  const weekly = new Array<Money>(n).fill(ZERO_MONEY);
+  const weeklyExact = new Array<Money | null>(n).fill(null);
   const asOf = parseISO(asOfIso);
   const tStart = parseISO(weekStarts[0]!);
   const tEnd = addDays(parseISO(weekStarts[n - 1]!), 6);
@@ -404,30 +425,28 @@ export async function categoryWeekly(
   let meta: CategoryWeekly["meta"] = { method: "Unknown" };
   let breakdown: CategoryBreakdownRow[] = [];
   const wkIndex = new Map(weekStarts.map((w, i) => [w, i]));
-  const put = (wk: string, amount: number) => {
-    const i = wkIndex.get(wk);
-    if (i !== undefined) weekly[i] = (weekly[i] ?? 0) + amount;
-  };
 
   if (cat.method === "manual_recurring") {
-    const amount = Math.abs(cat.amount ?? 0);
+    const amount = absMoney(normalizeMoneyValue(cat.amount ?? ZERO_MONEY));
     const freqRaw = cat.frequency ?? "monthly";
     const freq = freqRaw === "bi_weekly" ? "biweekly" : freqRaw;
     let curr = new Date(tStart);
     while (curr <= tEnd) {
       const wk = toISO(weekStart(curr));
-      let currentAmount = amount;
-      if (freq === "weekly") currentAmount *= getProrationFactor(curr, asOf, null, null);
-      put(wk, currentAmount);
+      const currentAmount = freq === "weekly"
+        ? multiplyMoney(amount, String(getProrationFactor(curr, asOf, null, null)))
+        : amount;
+      const i = wkIndex.get(wk);
+      if (i !== undefined) weeklyExact[i] = addMoney(weeklyExact[i] ?? ZERO_MONEY, currentAmount);
       if (freq === "monthly") curr = addMonthsUTC(curr, 1);
       else if (freq === "biweekly") curr = addDays(curr, 14);
       else curr = addDays(curr, 7);
     }
     logic = `${money(amount, { maximumFractionDigits: 0 })} ${freq}`;
-    meta = { method: "Manual Recurring", amount: Math.round(amount), frequency: freq };
+    meta = { method: "Manual Recurring", amount, frequency: freq };
     breakdown = weekStarts
-      .map((w, i) => ({ name: `Manual (${freq})`, date: w, amount: round2(weekly[i] ?? 0), type: "Scheduled" }))
-      .filter((row) => row.amount > 0);
+      .map((w, i) => ({ name: `Manual (${freq})`, date: w, amount: weeklyExact[i] ?? ZERO_MONEY, type: "Scheduled" }))
+      .filter((row) => compareMoney(String(row.amount), ZERO_MONEY) > 0);
   } else if (cat.method === "gl_history_average" && cat.accountIds?.length) {
     const historyWeeks = Math.max(1, Math.min(52, cat.historyWeeks ?? 12));
     const useNet = cat.useNetAmt === true;
@@ -446,42 +465,43 @@ export async function categoryWeekly(
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${toISO(tEnd)}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1, a.number, a.name
     `));
-    const weeklyHistory: Record<string, number> = {};
-    const accountTotals = new Map<string, number>();
+    const weeklyHistory: Record<string, Money> = {};
+    const accountTotals = new Map<string, Money>();
     for (const x of r.rows as any[]) {
-      const v = useNet ? Number(x.net) : Math.abs(Number(x.net));
-      weeklyHistory[x.wk] = (weeklyHistory[x.wk] ?? 0) + v;
+      const net = normalizeMoneyValue(String(x.net));
+      const v = useNet ? net : absMoney(net);
+      weeklyHistory[x.wk] = addMoney(weeklyHistory[x.wk] ?? ZERO_MONEY, v);
       const label = [x.number, x.name].filter(Boolean).join(" · ");
-      accountTotals.set(label, (accountTotals.get(label) ?? 0) + Math.abs(Number(x.net)));
+      accountTotals.set(label, addMoney(accountTotals.get(label) ?? ZERO_MONEY, absMoney(net)));
     }
-    let totalHistory = 0;
+    let totalHistory = ZERO_MONEY;
     let weeksCounted = 0;
     const startKey = toISO(tStart);
     for (const k of Object.keys(weeklyHistory)) {
-      if (k < startKey) { totalHistory += weeklyHistory[k]!; weeksCounted++; }
+      if (k < startKey) { totalHistory = addMoney(totalHistory, weeklyHistory[k]!); weeksCounted++; }
     }
     const divisor = weeksCounted > 0 ? weeksCounted : historyWeeks;
-    let weeklyAvg = (useNet ? totalHistory : Math.abs(totalHistory)) / divisor;
-    if (adj !== 0) weeklyAvg = weeklyAvg * (1 + adj);
-    const forecastAmount = isSet(cat.expectedWeek) ? weeklyAvg * 4.345 : weeklyAvg;
+    let weeklyAvg = divideMoney(useNet ? totalHistory : absMoney(totalHistory), String(divisor));
+    if (adj !== 0) weeklyAvg = multiplyMoney(weeklyAvg, String(1 + adj));
+    const forecastAmount = isSet(cat.expectedWeek) ? multiplyMoney(weeklyAvg, "4.345") : weeklyAvg;
     weekStarts.forEach((k, i) => {
-      const actual = weeklyHistory[k] ?? 0;
-      let amount = actual > 0 ? actual : forecastAmount;
-      amount *= getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek);
-      weekly[i] = round2(amount);
+      const actual = weeklyHistory[k] ?? ZERO_MONEY;
+      const amount = compareMoney(actual, ZERO_MONEY) > 0 ? actual : forecastAmount;
+      const factor = getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek);
+      weeklyExact[i] = multiplyMoney(amount, String(factor));
     });
     logic = `${historyWeeks}-week GL average${adj ? ` ${adj > 0 ? "+" : ""}${Math.round(adj * 100)}%` : ""} across ${cat.accountIds.length} account${cat.accountIds.length === 1 ? "" : "s"}`;
     meta = {
       method: "GL Average",
-      sourceTotal: round2(Math.abs(totalHistory)),
+      sourceTotal: absMoney(totalHistory),
       weeksUsed: divisor,
-      rawAverage: round2(Math.abs(totalHistory) / divisor),
+      rawAverage: divideMoney(absMoney(totalHistory), String(divisor)),
       adjustmentPct: Math.round(adj * 100),
-      finalAverage: round2(weeklyAvg),
+      finalAverage: weeklyAvg,
     };
     breakdown = [...accountTotals.entries()]
-      .map(([name, amount]) => ({ name, amount: round2(amount), type: "Source Data" }))
-      .sort((a, b) => b.amount - a.amount);
+      .map(([name, amount]) => ({ name, amount, type: "Source Data" }))
+      .sort((a, b) => compareMoney(b.amount, a.amount));
   } else if (cat.method === "vendor_payment_history" && (cat.partyIds?.length || cat.partyId)) {
     const vids = cat.partyIds?.length ? cat.partyIds : [cat.partyId!];
     const historyMonths = Math.max(1, Math.min(36, cat.historyMonths ?? 12));
@@ -495,24 +515,24 @@ export async function categoryWeekly(
         and coalesce(d.document_date, d.posting_date) <= ${asOfIso}::date${subScope(sql`d.subsidiary_id`, context.subIds)}
       group by 1
     `));
-    const months = (r.rows).map((x) => Number(x.paid)).filter((v) => v > 0).sort((a, b) => a - b);
+    const months = (r.rows).map((x) => normalizeMoneyValue(String(x.paid))).filter((v) => compareMoney(v, ZERO_MONEY) > 0).sort(compareMoney);
     const mid = Math.floor(months.length / 2);
-    const median = months.length ? (months.length % 2 !== 0 ? months[mid]! : (months[mid - 1]! + months[mid]!) / 2) : 0;
-    let baseAmount = isSet(cat.expectedWeek) ? median : median / 4.345;
-    if (adj !== 0) baseAmount = baseAmount * (1 + adj);
+    const median = months.length ? (months.length % 2 !== 0 ? months[mid]! : divideMoney(addMoney(months[mid - 1]!, months[mid]!), "2")) : ZERO_MONEY;
+    let baseAmount = isSet(cat.expectedWeek) ? median : divideMoney(median, "4.345");
+    if (adj !== 0) baseAmount = multiplyMoney(baseAmount, String(1 + adj));
     weekStarts.forEach((k, i) => {
-      weekly[i] = round2(baseAmount * getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek));
+      weeklyExact[i] = multiplyMoney(baseAmount, String(getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek)));
     });
     logic = `median of ${months.length} monthly payments${isSet(cat.expectedWeek) ? "" : " ÷ 4.345"}`;
     meta = {
       method: "Vendor History (Median)",
-      monthlyMedian: round2(median),
-      finalWeekly: round2(median / 4.345),
+      monthlyMedian: median,
+      finalWeekly: divideMoney(median, "4.345"),
       vendors: vids.length,
       ...(cat.partyName ? { vendor: cat.partyName } : {}),
     };
     breakdown = (r.rows)
-      .map((x) => ({ name: String(x.month), amount: round2(Number(x.paid)), type: "Source Month" }))
+      .map((x) => ({ name: String(x.month), amount: normalizeMoneyValue(String(x.paid)), type: "Source Month" }))
       .sort((a, b) => a.name.localeCompare(b.name));
   } else if (cat.method === "credit_card_cycle" && (cat.cardAccountIds?.length || cat.accountIds?.length)) {
     const accountIds = cat.cardAccountIds?.length ? cat.cardAccountIds : cat.accountIds!;
@@ -537,21 +557,21 @@ export async function categoryWeekly(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       where l.org_id = ${orgId} and l.account_id in (${ids}) and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
     `));
-    const totalCurrentBalance = Math.abs(Number(balR.rows[0]?.bal ?? 0));
+    const totalCurrentBalance = absMoney(normalizeMoneyValue(String(balR.rows[0]?.bal ?? ZERO_MONEY)));
 
-    interface DayTotals { date: Date; spend: number; paid: number }
-    const days: DayTotals[] = (r.rows as any[]).map((x) => ({ date: parseISO(x.day), spend: Number(x.spend), paid: Number(x.paid) }));
-    const grandTotalSpend = days.reduce((a, d) => a + d.spend, 0);
+    interface DayTotals { date: Date; spend: Money; paid: Money }
+    const days: DayTotals[] = (r.rows as any[]).map((x) => ({ date: parseISO(x.day), spend: normalizeMoneyValue(String(x.spend)), paid: normalizeMoneyValue(String(x.paid)) }));
+    const grandTotalSpend = sumMoney(days.map((d) => d.spend));
 
     // Monthly payment rollups with the largest payment's day of month.
-    const monthly = new Map<string, { total: number; count: number; largestDay: number | null; largestAmt: number }>();
+    const monthly = new Map<string, { total: Money; count: number; largestDay: number | null; largestAmt: Money }>();
     for (const d of days) {
-      if (d.paid <= 0) continue;
+      if (compareMoney(d.paid, ZERO_MONEY) <= 0) continue;
       const mKey = toISO(d.date).slice(0, 7);
-      const m = monthly.get(mKey) ?? { total: 0, count: 0, largestDay: null, largestAmt: 0 };
-      m.total += d.paid;
+      const m = monthly.get(mKey) ?? { total: ZERO_MONEY, count: 0, largestDay: null, largestAmt: ZERO_MONEY };
+      m.total = addMoney(m.total, d.paid);
       m.count += 1;
-      if (d.paid > m.largestAmt) { m.largestAmt = d.paid; m.largestDay = d.date.getUTCDate(); }
+      if (compareMoney(d.paid, m.largestAmt) > 0) { m.largestAmt = d.paid; m.largestDay = d.date.getUTCDate(); }
       monthly.set(mKey, m);
     }
     const monthlyTotals = [...monthly.entries()]
@@ -560,26 +580,28 @@ export async function categoryWeekly(
     const currentMonth = asOfIso.slice(0, 7);
     const dayOfMonth = asOf.getUTCDate();
     const completedMonths = monthlyTotals.filter((m) =>
-      m.month < currentMonth || (m.month === currentMonth && m.total > 0 && m.largestPaymentDay !== null && dayOfMonth >= m.largestPaymentDay));
+      m.month < currentMonth || (m.month === currentMonth && compareMoney(m.total, ZERO_MONEY) > 0 && m.largestPaymentDay !== null && dayOfMonth >= m.largestPaymentDay));
 
-    let medianPayment = 0;
-    let avgPayment = 0;
-    let paymentTrend = 0;
+    let medianPayment: Money = ZERO_MONEY;
+    let avgPayment: Money = ZERO_MONEY;
+    let paymentTrend: Money = ZERO_MONEY;
     if (completedMonths.length > 0) {
       const amounts = completedMonths.map((m) => m.total);
-      const sorted = [...amounts].sort((a, b) => a - b);
+      const sorted = [...amounts].sort(compareMoney);
       const mid = Math.floor(sorted.length / 2);
-      medianPayment = sorted.length % 2 !== 0 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
-      avgPayment = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+      medianPayment = sorted.length % 2 !== 0 ? sorted[mid]! : divideMoney(addMoney(sorted[mid - 1]!, sorted[mid]!), "2");
+      avgPayment = divideMoney(sumMoney(amounts), String(amounts.length));
       if (completedMonths.length >= 4) {
         const recent = completedMonths.slice(-3);
         const older = completedMonths.slice(0, -3);
-        const recentAvg = recent.reduce((s, m) => s + m.total, 0) / recent.length;
-        const olderAvg = older.reduce((s, m) => s + m.total, 0) / older.length;
-        paymentTrend = olderAvg > 0 ? ((recentAvg - olderAvg) / olderAvg) * 100 : 0;
+        const recentAvg = divideMoney(sumMoney(recent.map((m) => m.total)), String(recent.length));
+        const olderAvg = divideMoney(sumMoney(older.map((m) => m.total)), String(older.length));
+        paymentTrend = compareMoney(olderAvg, ZERO_MONEY) > 0
+          ? divideMoney(subtractMoney(recentAvg, olderAvg), olderAvg)
+          : ZERO_MONEY;
       }
     } else {
-      const monthlySpendRate = (grandTotalSpend / lookbackDays) * 30;
+      const monthlySpendRate = multiplyMoney(divideMoney(grandTotalSpend, String(lookbackDays)), "30");
       medianPayment = monthlySpendRate;
       avgPayment = monthlySpendRate;
     }
@@ -598,11 +620,11 @@ export async function categoryWeekly(
       }
     }
 
-    const dailyBurnRate = grandTotalSpend / lookbackDays;
+    const dailyBurnRate = divideMoney(grandTotalSpend, String(lookbackDays));
     const effectiveThreshold = (cat.significantPaymentThreshold ?? 0) > 0
-      ? cat.significantPaymentThreshold!
-      : medianPayment > 0 ? medianPayment * 0.5 : 10000;
-    const significantPayments = days.filter((d) => d.paid > effectiveThreshold).sort((a, b) => b.date.getTime() - a.date.getTime());
+      ? normalizeMoneyValue(String(cat.significantPaymentThreshold))
+      : compareMoney(medianPayment, ZERO_MONEY) > 0 ? multiplyMoney(medianPayment, "0.5") : normalizeMoneyValue("10000");
+    const significantPayments = days.filter((d) => compareMoney(d.paid, effectiveThreshold) > 0).sort((a, b) => b.date.getTime() - a.date.getTime());
     const lastPaymentDate = significantPayments[0]?.date ?? null;
     const daysSinceLastPayment = lastPaymentDate ? Math.ceil((asOf.getTime() - lastPaymentDate.getTime()) / MS_DAY) : 30;
 
@@ -616,26 +638,34 @@ export async function categoryWeekly(
 
     // Projected growth to statement close, then trajectory/median blend.
     const daysFromPaymentToStatementClose = 27;
-    const cycleProgress = medianPayment > 0 ? Math.min(totalCurrentBalance / medianPayment, 1) : 1;
-    const daysRemainingToAccrue = Math.max(0, daysFromPaymentToStatementClose - cycleProgress * daysFromPaymentToStatementClose);
-    const trajectoryEstimate = totalCurrentBalance + dailyBurnRate * daysRemainingToAccrue;
-    const varianceFromMedian = medianPayment > 0 ? Math.abs(trajectoryEstimate - medianPayment) / medianPayment : 0;
-    let projectedPayment: number;
+    const cycleProgress = compareMoney(medianPayment, ZERO_MONEY) > 0
+      ? compareMoney(totalCurrentBalance, medianPayment) >= 0
+        ? "1.0000"
+        : divideMoney(totalCurrentBalance, medianPayment)
+      : "1.0000";
+    const daysRemainingToAccrue = compareMoney(cycleProgress, "1.0000") >= 0
+      ? ZERO_MONEY
+      : multiplyMoney(String(daysFromPaymentToStatementClose), subtractMoney("1.0000", cycleProgress));
+    const trajectoryEstimate = addMoney(totalCurrentBalance, multiplyMoney(dailyBurnRate, daysRemainingToAccrue));
+    const varianceFromMedian = compareMoney(medianPayment, ZERO_MONEY) > 0
+      ? divideMoney(absMoney(subtractMoney(trajectoryEstimate, medianPayment)), medianPayment)
+      : ZERO_MONEY;
+    let projectedPayment: Money;
     let projectionMethod: string;
-    if (varianceFromMedian <= 0.2) {
+    if (compareMoney(varianceFromMedian, "0.2000") <= 0) {
       projectedPayment = trajectoryEstimate;
       projectionMethod = "Current Cycle Trajectory";
-    } else if (trajectoryEstimate < medianPayment) {
+    } else if (compareMoney(trajectoryEstimate, medianPayment) < 0) {
       projectedPayment = medianPayment;
       projectionMethod = "Historical Median (Low Trajectory)";
     } else {
-      projectedPayment = medianPayment * 0.7 + trajectoryEstimate * 0.3;
+      projectedPayment = addMoney(multiplyMoney(medianPayment, "0.7"), multiplyMoney(trajectoryEstimate, "0.3"));
       projectionMethod = "Blended (High Trajectory)";
     }
 
     breakdown = completedMonths.map((m) => ({
       name: new Date(m.month + "-01T00:00:00Z").toLocaleString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }),
-      amount: round2(m.total),
+      amount: m.total,
       type: "Historical",
       details: `${m.paymentCount} payment(s), Day ${m.largestPaymentDay}`,
     }));
@@ -643,8 +673,9 @@ export async function categoryWeekly(
     let isFirstPayment = true;
     while (paymentDate <= tEnd) {
       const wk = toISO(weekStart(paymentDate));
-      const amountToPay = round2(isFirstPayment ? projectedPayment : medianPayment);
-      put(wk, amountToPay);
+      const amountToPay = isFirstPayment ? projectedPayment : medianPayment;
+      const weekIndex = wkIndex.get(wk);
+      if (weekIndex !== undefined) weeklyExact[weekIndex] = addMoney(weeklyExact[weekIndex] ?? ZERO_MONEY, amountToPay);
       if (isFirstPayment) {
         breakdown.unshift({ name: "Next Payment", amount: amountToPay, date: toISO(paymentDate), type: "Projection", details: projectionMethod });
         isFirstPayment = false;
@@ -653,23 +684,23 @@ export async function categoryWeekly(
       paymentDate.setUTCDate(Math.min(detectedPaymentDay, daysInMonthUTC(paymentDate)));
       paymentDate = businessDay(paymentDate);
     }
-    breakdown.push({ name: "Current Balance", amount: round2(totalCurrentBalance), type: "Info", details: `${daysSinceLastPayment} days since last payment` });
+    breakdown.push({ name: "Current Balance", amount: totalCurrentBalance, type: "Info", details: `${daysSinceLastPayment} days since last payment` });
 
-    logic = `card cycle · pays day ${detectedPaymentDay} · median ${Math.round(medianPayment).toLocaleString()}`;
+    logic = `card cycle · pays day ${detectedPaymentDay} · median ${money(medianPayment, { maximumFractionDigits: 0 })}`;
     meta = {
       method: "Credit Card Cycle",
       detectedPaymentDay,
-      medianPayment: round2(medianPayment),
-      avgPayment: round2(avgPayment),
-      currentBalance: round2(totalCurrentBalance),
+      medianPayment,
+      avgPayment,
+      currentBalance: totalCurrentBalance,
       daysSinceLastPayment,
-      dailyBurnRate: round2(dailyBurnRate),
-      monthlySpendRate: round2(dailyBurnRate * 30),
-      paymentTrend: `${round2(paymentTrend)}%`,
+      dailyBurnRate,
+      monthlySpendRate: multiplyMoney(dailyBurnRate, "30"),
+      paymentTrend: `${multiplyMoney(paymentTrend, "100")}%`,
       monthsAnalyzed: completedMonths.length,
       accountsIncluded: accountIds.length,
       nextPaymentDate: toISO(nextPaymentDate),
-      projectedGrowth: round2(projectedPayment - totalCurrentBalance),
+      projectedGrowth: subtractMoney(projectedPayment, totalCurrentBalance),
     };
   } else if (cat.method === "formula_expression" && cat.formula) {
     let expression = cat.formula.toUpperCase();
@@ -681,8 +712,8 @@ export async function categoryWeekly(
     weekStarts.forEach((k, i) => {
       const cur = parseISO(k);
       const weekIndex = i + 1;
-      const valAR = context.arWeekly[k] ?? 0;
-      const valAP = context.apWeekly[k] ?? 0;
+      const valAR = context.arWeekly[k] ?? ZERO_MONEY;
+      const valAP = context.apWeekly[k] ?? ZERO_MONEY;
       const monthNum = cur.getUTCMonth() + 1;
       const dayOfMonth = cur.getUTCDate();
       const weekEnd = addDays(cur, 6);
@@ -690,7 +721,7 @@ export async function categoryWeekly(
       const isMonthEnd = weekEnd.getUTCMonth() !== cur.getUTCMonth() || dayOfMonth >= 25 ? 1 : 0;
       const evalStr = expression
         .replace(/{AR_IN}/g, String(valAR)).replace(/{AP_OUT}/g, String(valAP))
-        .replace(/{NET_FLOW}/g, String(valAR - valAP)).replace(/{CASH_START}/g, String(context.cashStart))
+        .replace(/{NET_FLOW}/g, subtractMoney(valAR, valAP)).replace(/{CASH_START}/g, String(context.cashStart))
         .replace(/{WEEK_NUM}/g, String(weekIndex)).replace(/{MONTH}/g, String(monthNum))
         .replace(/{QUARTER}/g, String(Math.ceil(monthNum / 3))).replace(/{YEAR}/g, String(cur.getUTCFullYear()))
         .replace(/{DAY}/g, String(dayOfMonth))
@@ -709,11 +740,11 @@ export async function categoryWeekly(
       } catch {
         result = 0;
       }
-      weekly[i] = round2(result);
+      weekly[i] = normalizeMoneyValue(String(round2(result)));
     });
     logic = cat.formula.length > 60 ? `${cat.formula.slice(0, 57)}…` : cat.formula;
     meta = { method: "Calculated Formula", formula: cat.formula };
-    breakdown = [{ name: "Computed via Formula", amount: round2(weekly.reduce((a, v) => a + v, 0)), type: "Formula" }];
+    breakdown = [{ name: "Computed via Formula", amount: sumMoney(weekly), type: "Formula" }];
   } else if (cat.method === "vendor_recurring_average" && (cat.partyIds?.length || cat.partyId)) {
     const vids = cat.partyIds?.length ? cat.partyIds : [cat.partyId!];
     const historyMonths = Math.max(1, Math.min(36, cat.historyMonths ?? 3));
@@ -727,7 +758,7 @@ export async function categoryWeekly(
       group by 1
     `));
     const events = (r.rows as any[])
-      .map((x) => ({ date: parseISO(x.day), amount: Number(x.paid) }))
+      .map((x) => ({ date: parseISO(x.day), amount: normalizeMoneyValue(String(x.paid)) }))
       .sort((a, b) => b.date.getTime() - a.date.getTime());
     if (events.length >= 2) {
       const intervals: number[] = [];
@@ -741,24 +772,35 @@ export async function categoryWeekly(
       if (medianInterval >= 5 && medianInterval <= 9) { frequencyLabel = "Weekly"; nextIntervalDays = 7; }
       else if (medianInterval >= 12 && medianInterval <= 16) { frequencyLabel = "Bi-Weekly"; nextIntervalDays = 14; }
       const amounts = events.map((e) => e.amount);
-      const mean = amounts.reduce((a, b) => a + b, 0) / amounts.length;
-      const variance = amounts.reduce((a, b) => a + (b - mean) ** 2, 0) / amounts.length;
-      const stdDev = Math.sqrt(variance);
+      const mean = divideMoney(sumMoney(amounts), String(amounts.length));
+      const variance = compareMoney(mean, ZERO_MONEY) > 0
+        ? divideMoney(sumMoney(amounts.map((amount) => {
+            const ratio = divideMoney(subtractMoney(amount, mean), mean);
+            return multiplyMoney(ratio, ratio);
+          })), String(amounts.length))
+        : ZERO_MONEY;
+      const varianceThreshold = multiplyMoney(variance, "4");
       let filtered = amounts;
-      if (amounts.length >= 4 && stdDev > 0) filtered = amounts.filter((a) => Math.abs(a - mean) <= 2 * stdDev);
-      let avgAmount = filtered.reduce((a, b) => a + b, 0) / filtered.length;
-      if (adj !== 0) avgAmount = avgAmount * (1 + adj);
+      if (amounts.length >= 4 && compareMoney(variance, ZERO_MONEY) > 0 && compareMoney(mean, ZERO_MONEY) > 0) {
+        filtered = amounts.filter((amount) => {
+          const ratio = divideMoney(absMoney(subtractMoney(amount, mean)), mean);
+          return compareMoney(multiplyMoney(ratio, ratio), varianceThreshold) <= 0;
+        });
+      }
+      let avgAmount = divideMoney(sumMoney(filtered), String(filtered.length));
+      if (adj !== 0) avgAmount = multiplyMoney(avgAmount, String(1 + adj));
       let nextDate = addDays(events[0]!.date, nextIntervalDays);
       while (nextDate < asOf) nextDate = addDays(nextDate, nextIntervalDays);
       while (nextDate <= tEnd) {
-        put(toISO(weekStart(nextDate)), round2(avgAmount));
+        const weekIndex = wkIndex.get(toISO(weekStart(nextDate)));
+        if (weekIndex !== undefined) weeklyExact[weekIndex] = addMoney(weeklyExact[weekIndex] ?? ZERO_MONEY, avgAmount);
         nextDate = addDays(nextDate, nextIntervalDays);
       }
-      logic = `${frequencyLabel.toLowerCase()} cadence auto-detected · avg ${Math.round(avgAmount).toLocaleString()}`;
+      logic = `${frequencyLabel.toLowerCase()} cadence auto-detected · avg ${money(avgAmount, { maximumFractionDigits: 0 })}`;
       meta = {
         method: "Vendor Recurring (Auto)",
         frequency: frequencyLabel,
-        avgAmount: round2(avgAmount),
+        avgAmount,
         samples: events.length,
         interval: medianInterval,
         vendors: vids.length,
@@ -767,7 +809,7 @@ export async function categoryWeekly(
       logic = "not enough payment history to detect a cadence";
       meta = { method: "Vendor Recurring (Auto)", samples: events.length };
     }
-    breakdown = events.map((e) => ({ name: "Historical Payment", amount: round2(e.amount), date: toISO(e.date), type: "Source Data" }));
+    breakdown = events.map((e) => ({ name: "Historical Payment", amount: e.amount, date: toISO(e.date), type: "Source Data" }));
   } else if (cat.method === "bank_register_history" && cat.bankAccountIds?.length) {
     const historyWeeks = Math.max(1, Math.min(52, cat.historyWeeks ?? 12));
     const historyStart = addDays(tStart, -historyWeeks * 7);
@@ -797,66 +839,68 @@ export async function categoryWeekly(
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${toISO(tEnd)}
         and (${kindFilter})${memoFilter}${subScope(sql`l.subsidiary_id`, context.subIds)}
     `));
-    const weeklyHistory: Record<string, number> = {};
+    const weeklyHistory: Record<string, Money> = {};
     const currentWeekKey = toISO(weekStart(asOf));
     const startKey = toISO(tStart);
     for (const x of r.rows as any[]) {
-      const amount = Number(x.amount);
-      if (amount <= 0) continue;
+      const amount = normalizeMoneyValue(String(x.amount));
+      if (compareMoney(amount, ZERO_MONEY) <= 0) continue;
       const wk = toISO(weekStart(parseISO(x.day)));
-      weeklyHistory[wk] = (weeklyHistory[wk] ?? 0) + amount;
+      weeklyHistory[wk] = addMoney(weeklyHistory[wk] ?? ZERO_MONEY, amount);
       const isCurrentWeek = wk === currentWeekKey;
       if (x.day < startKey || isCurrentWeek) {
         breakdown.push({
           name: `${x.day} ${x.kind} ${x.party}${x.doc_number ? ` (${x.doc_number})` : ""}`.trim(),
-          amount: round2(amount),
+          amount,
           date: x.day,
           type: isCurrentWeek ? "This Week (Applied)" : "Bank Register",
           ...(x.memo ? { details: String(x.memo) } : {}),
         });
       }
     }
-    let totalHistory = 0;
+    let totalHistory = ZERO_MONEY;
     let weeksCounted = 0;
     for (const k of Object.keys(weeklyHistory)) {
-      if (k < startKey) { totalHistory += weeklyHistory[k]!; weeksCounted++; }
+      if (k < startKey) { totalHistory = addMoney(totalHistory, weeklyHistory[k]!); weeksCounted++; }
     }
     const divisor = weeksCounted > 0 ? weeksCounted : historyWeeks;
-    let weeklyAvg = totalHistory / divisor;
-    if (adj !== 0) weeklyAvg = weeklyAvg * (1 + adj);
+    let weeklyAvg = divideMoney(totalHistory, String(divisor));
+    if (adj !== 0) weeklyAvg = multiplyMoney(weeklyAvg, String(1 + adj));
     weekStarts.forEach((k, i) => {
-      const actual = weeklyHistory[k] ?? 0;
-      let amount: number;
-      if (k === currentWeekKey && actual > 0) amount = Math.max(0, weeklyAvg - actual);
-      else if (actual > 0 && k > currentWeekKey) amount = actual;
+      const actual = weeklyHistory[k] ?? ZERO_MONEY;
+      let amount: Money;
+      if (k === currentWeekKey && compareMoney(actual, ZERO_MONEY) > 0) {
+        const remainder = subtractMoney(weeklyAvg, actual);
+        amount = compareMoney(remainder, ZERO_MONEY) > 0 ? remainder : ZERO_MONEY;
+      } else if (compareMoney(actual, ZERO_MONEY) > 0 && k > currentWeekKey) amount = actual;
       else amount = weeklyAvg;
-      amount *= getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek);
-      weekly[i] = round2(amount);
+      weeklyExact[i] = multiplyMoney(amount, String(getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek)));
     });
     logic = `${historyWeeks}-week bank register average${adj ? ` ${adj > 0 ? "+" : ""}${Math.round(adj * 100)}%` : ""}${keywords.length ? ` · memo: ${keywords.join(", ")}` : ""}`;
     meta = {
       method: "Bank Register History",
       bankAccounts: cat.bankAccountIds.length,
       historyWeeks,
-      rawAverage: round2(totalHistory / divisor || 0),
-      finalAverage: round2(weeklyAvg),
+      rawAverage: divideMoney(totalHistory, String(divisor)),
+      finalAverage: weeklyAvg,
       weeksUsed: divisor,
-      currentWeekApplied: round2(weeklyHistory[currentWeekKey] ?? 0),
+      currentWeekApplied: weeklyHistory[currentWeekKey] ?? ZERO_MONEY,
       ...(keywords.length ? { memoKeywords: keywords.join(", ") } : {}),
     };
     breakdown.sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
   }
 
+  const finalWeekly = weekly.map((v, i) => weeklyExact[i] ?? v);
   return {
     id: cat.id,
     name: cat.name,
     direction: cat.direction === "inflow" ? "inflow" : "outflow",
     method: cat.method,
-    weekly: weekly.map((v) => Math.round(v)),
-    total: Math.round(weekly.reduce((a, v) => a + v, 0)),
+    weekly: finalWeekly,
+    total: sumMoney(finalWeekly),
     logic,
     meta,
-    breakdown,
+    breakdown: breakdown.map((row) => ({ ...row, amount: normalizeMoneyValue(String(row.amount)) })),
   };
 }
 
@@ -910,7 +954,7 @@ export async function bankBalances(asOf: string, subIds?: string[]) {
     id: String(x.id),
     name: String(x.name),
     number: x.number == null ? null : String(x.number),
-    balance: Number(x.balance),
+    balance: normalizeMoneyValue(String(x.balance)),
   }));
 }
 
@@ -953,22 +997,22 @@ export function predict(
   return { date: businessDay(date), method };
 }
 
-export function summariseSide(items: OpenItem[], asOf: Date, scheduled: number, avgDays: number): SideSummary {
-  const buckets = new Map<string, number>([
-    ["Current", 0], ["1-30", 0], ["31-60", 0], ["61-90", 0], ["90+", 0],
+export function summariseSide(items: OpenItem[], asOf: Date, scheduled: Money, avgDays: number): SideSummary {
+  const buckets = new Map<string, Money>([
+    ["Current", ZERO_MONEY], ["1-30", ZERO_MONEY], ["31-60", ZERO_MONEY], ["61-90", ZERO_MONEY], ["90+", ZERO_MONEY],
   ]);
-  let outstanding = 0;
+  let outstanding = ZERO_MONEY;
   for (const it of items) {
-    outstanding += it.remaining;
+    outstanding = addMoney(outstanding, it.remaining);
     const dpd = it.dueDate ? daysBetween(it.dueDate, asOf) : 0;
     const b = bucketOf(dpd);
-    buckets.set(b, (buckets.get(b) ?? 0) + it.remaining);
+    buckets.set(b, addMoney(buckets.get(b) ?? ZERO_MONEY, it.remaining));
   }
-  const current = buckets.get("Current") ?? 0;
+  const current = buckets.get("Current") ?? ZERO_MONEY;
   return {
     outstanding,
     scheduled,
-    pctCurrent: outstanding > 0 ? (current / outstanding) * 100 : 0,
+    pctCurrent: compareMoney(outstanding, ZERO_MONEY) > 0 ? divideMoney(current, outstanding) : ZERO_MONEY,
     avgDays,
     buckets: [...buckets.entries()].map(([label, amount]) => ({ label, amount })),
   };
@@ -986,10 +1030,10 @@ export function scheduleForecast(
   asOf: Date,
   start: Date,
   end: Date,
-): { byWeek: Map<string, ForecastEntry[]>; entries: ForecastEntry[]; scheduled: number } {
+): { byWeek: Map<string, ForecastEntry[]>; entries: ForecastEntry[]; scheduled: Money } {
   const byWeek = new Map<string, ForecastEntry[]>();
   const entries: ForecastEntry[] = [];
-  let scheduled = 0;
+  let scheduled = ZERO_MONEY;
   for (const it of items) {
     const { date, method } = predict(it, asOf, stats);
     if (date < start || date > end) continue;
@@ -1014,7 +1058,7 @@ export function scheduleForecast(
     if (!byWeek.has(wk)) byWeek.set(wk, []);
     byWeek.get(wk)!.push(entry);
     entries.push(entry);
-    scheduled += it.remaining;
+    scheduled = addMoney(scheduled, it.remaining);
   }
   return { byWeek, entries, scheduled };
 }

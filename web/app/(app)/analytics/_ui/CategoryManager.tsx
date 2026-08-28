@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Pencil, Plus, SlidersHorizontal } from 'lucide-react'
 import { Button, Select, cn } from '@openbooks/ui'
+import { cmp as compareMoney } from '@openbooks/engine/src/money.ts'
 import type { ForecastCategory, ForecastCategoryMethod } from '../../../../lib/cash/core'
 import { Panel } from './Panel'
 
@@ -159,7 +160,7 @@ export function CategoryManager({
   const dayOptions = DAY_KEYS.map((key, idx) => ({ value: String(idx - 1), label: key === '' ? t('days.distributed') : t(`days.${key}`) }))
   const weekOptions = WEEK_KEYS.map((key, idx) => ({ value: idx === 0 ? '' : String(idx), label: key === '' ? t('weeks.distributed') : t(`weeks.${key}`) }))
   const draftValid = !!draft && !!draft.name.trim() && (
-    draft.method === 'manual_recurring' ? (draft.amount ?? 0) > 0
+    draft.method === 'manual_recurring' ? compareMoney(draft.amount || '0.0000', '0.0000') > 0
     : draft.method === 'gl_history_average' ? (draft.accountIds?.length ?? 0) > 0
     : draft.method === 'credit_card_cycle' ? (draft.cardAccountIds?.length ?? 0) > 0
     : draft.method === 'formula_expression' ? !!draft.formula?.trim()
@@ -316,7 +317,7 @@ export function CategoryManager({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelCls}>{tForm('amount')}</label>
-                <input type="number" min={0} value={draft.amount ?? ''} onChange={(e) => set({ amount: Number(e.target.value) })} className={numCls} />
+                <input type="number" min={0} step="0.0001" value={draft.amount ?? ''} onChange={(e) => set({ amount: e.target.value })} className={numCls} />
               </div>
               <div>
                 <label className={labelCls}>{tForm('frequency')}</label>

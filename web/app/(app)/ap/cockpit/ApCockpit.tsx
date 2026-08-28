@@ -3,6 +3,7 @@
 import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { cmp as compareMoney, div as divideMoney } from '@openbooks/engine/src/money.ts'
 import {
   Wallet,
   TriangleAlert,
@@ -17,6 +18,7 @@ import {
 import type { ApPosition } from '../../../../lib/cash/ap-position'
 import { StatTile, CockpitPanel, AgingBars, ScheduleBars } from '../../../../components/cockpit/ui'
 import { CashWeekFlyout } from '../../analytics/_ui/CashWeekFlyout'
+import { formatExactPercent } from '../../analytics/_ui/format'
 import { EntityDrawer } from '../../analytics/_ui/EntityDrawer'
 import { ApSelectionConfigDrawer } from './ApSelectionConfigDrawer'
 import { PayRunPlanner } from './PayRunPlanner'
@@ -35,7 +37,9 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
   const [drillWeek, setDrillWeek] = useState<number | null>(null)
   const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
 
-  const overduePct = data.outstanding > 0 ? Math.round((data.overdue / data.outstanding) * 100) : 0
+  const overduePct = compareMoney(data.outstanding, '0.0000') > 0
+    ? formatExactPercent(divideMoney(data.overdue, data.outstanding))
+    : '0%'
   const gear = canConfigure ? (
     <button
       type="button"
@@ -53,7 +57,7 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
       {/* Vitals */}
       <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatTile icon={Wallet} accent="indigo" label={t('stats.openPayables')} value={moneyCompact(data.outstanding)} />
-        <StatTile icon={TriangleAlert} accent="red" label={t('stats.overdue')} value={moneyCompact(data.overdue)} sub={t('stats.overdueSub', { count: data.overdueCount, pct: overduePct })} tone={data.overdue > 0 ? 'negative' : 'neutral'} />
+        <StatTile icon={TriangleAlert} accent="red" label={t('stats.overdue')} value={moneyCompact(data.overdue)} sub={t('stats.overdueSub', { count: data.overdueCount, pct: overduePct })} tone={compareMoney(data.overdue, '0.0000') > 0 ? 'negative' : 'neutral'} />
         <StatTile icon={CalendarClock} accent="amber" label={t('stats.dueThisWeek')} value={moneyCompact(data.dueThisWeek)} tone="warning" />
         <StatTile icon={CalendarRange} accent="sky" label={t('stats.next30')} value={moneyCompact(data.dueNext30)} />
         <StatTile icon={Timer} accent="violet" label={t('stats.dpo')} value={t('stats.days', { n: data.dpo })} sub={t('stats.dpoSub')} />
@@ -81,7 +85,7 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
         </CockpitPanel>
 
         <div className="flex min-h-0 flex-col gap-5">
-          <CockpitPanel title={t('panels.aging')} icon={ListOrdered} hint={`${moneyCompact(data.outstanding)} · ${data.summary.pctCurrent.toFixed(0)}% ${t('current')}`} className="shrink-0">
+          <CockpitPanel title={t('panels.aging')} icon={ListOrdered} hint={`${moneyCompact(data.outstanding)} · ${formatExactPercent(data.summary.pctCurrent)} ${t('current')}`} className="shrink-0">
             <AgingBars buckets={data.summary.buckets} accent="text-red-600 dark:text-red-400" />
           </CockpitPanel>
 
@@ -115,7 +119,7 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
                       >
                         <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{v.partyName}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {v.overdue > 0 ? <span className="text-red-600 dark:text-red-400">{moneyCompact(v.overdue)}</span> : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                          {compareMoney(v.overdue, '0.0000') > 0 ? <span className="text-red-600 dark:text-red-400">{moneyCompact(v.overdue)}</span> : <span className="text-slate-300 dark:text-slate-600">—</span>}
                         </td>
                         <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(v.amount)}</td>
                       </tr>

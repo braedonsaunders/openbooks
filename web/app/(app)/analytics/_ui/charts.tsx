@@ -2,7 +2,8 @@
 
 import { useTranslations } from 'next-intl'
 import { InsightChart } from '@openbooks/analytics/viz'
-import { useAnalyticsMoney } from './format'
+import { neg as moneyNeg } from '@openbooks/engine/src/money.ts'
+import { boundChartNumber, toChartNumber, useAnalyticsMoney } from './format'
 
 /** Loose ECharts option shape — mirrors the analytics package's own alias. */
 type EChartsOption = Record<string, unknown>
@@ -29,7 +30,9 @@ export const PALETTE = ['#0d9488', '#6366f1', '#f59e0b', '#ec4899', '#14b8a6', '
 const POS = '#10b981'
 const NEG = '#ef4444'
 
-type MoneyLabel = (value: number) => string
+/** Formatters receive canonical money strings from ledger-backed charts as
+ * well as numeric values from chart-only series. */
+type MoneyLabel = (value: string | number) => string
 
 function useChartMoney(): MoneyLabel {
   const formatMoney = useAnalyticsMoney()
@@ -282,25 +285,32 @@ export interface CashBridgeLabels {
 /** Waterfall bridge: Start → +Inflows → −Outflows → Projected End (the
  * cashflow dashboard's signature chart, shared by analytics and the Cash
  * cockpit — moved verbatim from CashflowView). */
-export function cashBridgeOption(startCash: number, inflows: number, outflows: number, end: number, money: MoneyLabel, labels: CashBridgeLabels): EChartsOption {
-  const afterIn = startCash + inflows
+export function cashBridgeOption(startCash: string, inflows: string, outflows: string, end: string, money: MoneyLabel, labels: CashBridgeLabels): EChartsOption {
+  // Keep exact strings for labels/tooltips; only the chart geometry crosses the
+  // bounded numeric projection boundary.
+  const startValue = toChartNumber(startCash)
+  const inflowValue = toChartNumber(inflows)
+  const outflowValue = toChartNumber(outflows)
+  const endValue = toChartNumber(end)
+  const afterIn = boundChartNumber(startValue + inflowValue)
   const steps = [
-    { label: labels.start, from: 0, to: startCash, color: '#94a3b8' },
-    { label: labels.inflows, from: startCash, to: afterIn, color: '#10b981' },
-    { label: labels.outflows, from: afterIn, to: end, color: '#ef4444' },
-    { label: labels.projectedEnd, from: 0, to: end, color: '#0d9488' },
+    { label: labels.start, from: 0, to: startValue, color: '#94a3b8' },
+    { label: labels.inflows, from: startValue, to: afterIn, color: '#10b981' },
+    { label: labels.outflows, from: afterIn, to: endValue, color: '#ef4444' },
+    { label: labels.projectedEnd, from: 0, to: endValue, color: '#0d9488' },
   ]
   const base = steps.map((s) => Math.min(s.from, s.to))
-  const bar = steps.map((s) => Math.abs(s.to - s.from))
+  const bar = steps.map((s) => boundChartNumber(Math.abs(s.to - s.from)))
+  const exactValues = [startCash, inflows, moneyNeg(outflows), end]
   return {
     grid: baseGrid,
-    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => `${ps[0]?.axisValue}: ${money([startCash, inflows, -outflows, end][ps[0]?.dataIndex ?? -1]!)}` },
+    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => `${ps[0]?.axisValue}: ${money(exactValues[ps[0]?.dataIndex ?? -1]!)}` },
     xAxis: catAxis(steps.map((s) => s.label)),
     yAxis: valAxis(money),
     series: [
       { type: 'bar', stack: 'b', data: base.map(() => ({ value: 0, itemStyle: { color: 'transparent' } })), silent: true },
       { type: 'bar', stack: 'b', data: base.map((b) => ({ value: b, itemStyle: { color: 'transparent' } })), silent: true },
-      { type: 'bar', stack: 'b', data: bar.map((v, i) => ({ value: v, itemStyle: { color: steps[i]!.color, borderRadius: 3 } })), barMaxWidth: 46, label: { show: true, position: 'top', color: AXIS, fontSize: 9, formatter: (p: ChartParam) => money([startCash, inflows, -outflows, end][p.dataIndex]!) } },
+      { type: 'bar', stack: 'b', data: bar.map((v, i) => ({ value: v, itemStyle: { color: steps[i]!.color, borderRadius: 3 } })), barMaxWidth: 46, label: { show: true, position: 'top', color: AXIS, fontSize: 9, formatter: (p: ChartParam) => money(exactValues[p.dataIndex]!) } },
     ],
   }
 }
@@ -319,11 +329,13 @@ export interface CashForecastLabels {
  * guard-line and the lowest week flagged; tooltip breaks each week into
  * in / out / net / ending. */
 export function cashForecastOption(
-  weeks: { label: string; inflow: number; outflow: number; net: number; endingCash: number }[],
+  weeks: { label: string; inflow: string; outflow: string; net: string; endingCash: string }[],
   money: MoneyLabel,
   labels: CashForecastLabels,
 ): EChartsOption {
-  const ending = weeks.map((w) => w.endingCash)
+  // This conversion is intentionally chart-only. Tooltips retain the exact
+  // canonical values from the timeline rows.
+  const ending = weeks.map((w) => toChartNumber(w.endingCash))
   const min = Math.min(0, ...ending)
   const lowestIdx = ending.indexOf(Math.min(...ending))
   return {

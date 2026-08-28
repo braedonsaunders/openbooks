@@ -3,16 +3,23 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import {
   addDays,
+  addMoney,
+  compareMoney,
+  divideMoney,
   bankBalances,
   buildWeekGrid,
   categoryWeekly,
   loadCategories,
   openItems,
+  normalizeMoneyValue,
   parseISO,
   paymentStats,
   resolveAsOf,
   scheduleForecast,
+  subtractMoney,
+  sumMoney,
   toISO,
+  ZERO_MONEY,
   weekLabel,
   type CategoryWeekly,
   type ForecastEntry,
@@ -21,16 +28,16 @@ import {
 
 /** AP capacity-scheduling knobs (the cashflow config). */
 export interface ApSettings {
-  weeklyCap: number;
+  weeklyCap: string;
   restrictToSafe: boolean;
 }
 
 export interface TimelineResult {
   weeks: WeekRow[];
-  totalInflows: number;
-  totalOutflows: number;
+  totalInflows: string;
+  totalOutflows: string;
   /** AP predicted inside the horizon but unpayable under the cap — spills past the end. */
-  deferredBeyondHorizon: number;
+  deferredBeyondHorizon: string;
 }
 
 /**
@@ -44,67 +51,75 @@ export interface TimelineResult {
  */
 export function buildTimeline(args: {
   weekStarts: string[];
-  startingCash: number;
+  startingCash: string;
   arByWeek: Map<string, ForecastEntry[]>;
   apByWeek: Map<string, ForecastEntry[]>;
   categories: CategoryWeekly[];
   apSettings: ApSettings;
 }): TimelineResult {
   const { weekStarts, startingCash, arByWeek, apByWeek, categories, apSettings } = args;
-  const schedulingOn = apSettings.weeklyCap > 0 || apSettings.restrictToSafe;
+  const weeklyCap = normalizeMoneyValue(apSettings.weeklyCap);
+  const schedulingOn = compareMoney(weeklyCap, ZERO_MONEY) > 0 || apSettings.restrictToSafe;
 
   const weeks: WeekRow[] = [];
-  let running = startingCash;
-  let totalIn = 0;
-  let totalOut = 0;
+  const exactStartingCash = normalizeMoneyValue(startingCash);
+  let running = exactStartingCash;
+  let totalIn = ZERO_MONEY;
+  let totalOut = ZERO_MONEY;
   let backlog: ForecastEntry[] = [];
   weekStarts.forEach((k, wi) => {
     const cur = parseISO(k);
-    const arEntries = (arByWeek.get(k) ?? []).sort((a, b) => b.amount - a.amount);
+    const arEntries = (arByWeek.get(k) ?? []).sort((a, b) => compareMoney(b.amount, a.amount));
     const dueThisWeek = apByWeek.get(k) ?? [];
-    const dynamicInflow = categories.filter((c) => c.direction === "inflow").reduce((a, c) => a + (c.weekly[wi] ?? 0), 0);
-    const dynamicOutflow = categories.filter((c) => c.direction === "outflow").reduce((a, c) => a + (c.weekly[wi] ?? 0), 0);
-    const arInflow = arEntries.reduce((a, e) => a + e.amount, 0);
+    const dynamicInflow = sumMoney(categories.filter((c) => c.direction === "inflow").map((c) => c.weekly[wi] ?? ZERO_MONEY));
+    const dynamicOutflow = sumMoney(categories.filter((c) => c.direction === "outflow").map((c) => c.weekly[wi] ?? ZERO_MONEY));
+    const arInflow = sumMoney(arEntries.map((e) => e.amount));
 
     let apEntries: ForecastEntry[];
-    let deferredOut = 0;
-    let apCapacity: number | null = null;
+    let deferredOut = ZERO_MONEY;
+    let apCapacity: string | null = null;
     if (schedulingOn) {
       // Oldest due date first, then largest amount (the backlog order).
       backlog = [...backlog, ...dueThisWeek].sort((a, b) => {
         const ad = a.dueDate ?? a.predictedDate;
         const bd = b.dueDate ?? b.predictedDate;
-        return ad < bd ? -1 : ad > bd ? 1 : b.amount - a.amount;
+        return ad < bd ? -1 : ad > bd ? 1 : compareMoney(b.amount, a.amount);
       });
-      const safe = apSettings.restrictToSafe ? Math.max(0, running + arInflow + dynamicInflow - dynamicOutflow) : Infinity;
-      const cap = Math.min(apSettings.weeklyCap > 0 ? apSettings.weeklyCap : Infinity, safe);
-      apCapacity = Number.isFinite(cap) ? cap : null;
+      const safe = apSettings.restrictToSafe
+        ? (() => {
+            const available = subtractMoney(addMoney(addMoney(running, arInflow), dynamicInflow), dynamicOutflow);
+            return compareMoney(available, ZERO_MONEY) > 0 ? available : ZERO_MONEY;
+          })()
+        : null;
+      apCapacity = safe === null
+        ? (compareMoney(weeklyCap, ZERO_MONEY) > 0 ? weeklyCap : null)
+        : compareMoney(weeklyCap, ZERO_MONEY) > 0 && compareMoney(weeklyCap, safe) < 0 ? weeklyCap : safe;
       const paid: ForecastEntry[] = [];
-      let spent = 0;
+      let spent = ZERO_MONEY;
       const remaining: ForecastEntry[] = [];
       for (const e of backlog) {
-        if (apCapacity === null || spent + e.amount <= apCapacity) {
-          spent += e.amount;
+        if (apCapacity === null || compareMoney(addMoney(spent, e.amount), apCapacity) <= 0) {
+          spent = addMoney(spent, e.amount);
           paid.push(e.weekStart === k ? e : { ...e, weekStart: k, method: `${e.method} (deferred from ${e.weekStart})` });
         } else {
           remaining.push(e);
         }
       }
       backlog = remaining;
-      deferredOut = remaining.reduce((a, e) => a + e.amount, 0);
-      apEntries = paid.sort((a, b) => b.amount - a.amount);
+      deferredOut = sumMoney(remaining.map((e) => e.amount));
+      apEntries = paid.sort((a, b) => compareMoney(b.amount, a.amount));
     } else {
-      apEntries = dueThisWeek.sort((a, b) => b.amount - a.amount);
+      apEntries = dueThisWeek.sort((a, b) => compareMoney(b.amount, a.amount));
     }
 
-    const apOutflow = apEntries.reduce((a, e) => a + e.amount, 0);
-    const inflow = arInflow + dynamicInflow;
-    const outflow = apOutflow + dynamicOutflow;
-    const net = inflow - outflow;
+    const apOutflow = sumMoney(apEntries.map((e) => e.amount));
+    const inflow = addMoney(arInflow, dynamicInflow);
+    const outflow = addMoney(apOutflow, dynamicOutflow);
+    const net = subtractMoney(inflow, outflow);
     const startingWk = running;
-    running += net;
-    totalIn += inflow;
-    totalOut += outflow;
+    running = addMoney(running, net);
+    totalIn = addMoney(totalIn, inflow);
+    totalOut = addMoney(totalOut, outflow);
     weeks.push({
       weekStart: k,
       weekEnd: toISO(addDays(cur, 6)),
@@ -117,7 +132,7 @@ export function buildTimeline(args: {
       arEntries,
       apEntries,
       arTotal: arInflow,
-      apTotal: apEntries.reduce((a, e) => a + e.amount, 0),
+      apTotal: sumMoney(apEntries.map((e) => e.amount)),
       arCount: arEntries.length,
       apCount: apEntries.length,
       dynamicInflow,
@@ -126,33 +141,33 @@ export function buildTimeline(args: {
       apCapacity,
     });
   });
-  const deferredBeyondHorizon = backlog.reduce((a, e) => a + e.amount, 0);
+  const deferredBeyondHorizon = sumMoney(backlog.map((e) => e.amount));
   return { weeks, totalInflows: totalIn, totalOutflows: totalOut, deferredBeyondHorizon };
 }
 
 export interface CashPosition {
   asOf: string;
   horizonWeeks: number;
-  startingCash: number;
-  bankAccounts: { id: string; name: string; number: string | null; balance: number }[];
+  startingCash: string;
+  bankAccounts: { id: string; name: string; number: string | null; balance: string }[];
   weeks: WeekRow[];
-  totalInflows: number;
-  totalOutflows: number;
-  netChange: number;
-  projectedEnd: number;
-  lowestCash: number;
+  totalInflows: string;
+  totalOutflows: string;
+  netChange: string;
+  projectedEnd: string;
+  lowestCash: string;
   lowestWeek: string;
-  burnRate: number;
-  runwayWeeks: number | null;
+  burnRate: string;
+  runwayWeeks: string | null;
   runwayStatus: "healthy" | "caution" | "critical";
-  deferredBeyondHorizon: number;
+  deferredBeyondHorizon: string;
   /** Global avg collect / pay days (forecast-model fallbacks). */
   dso: number;
   dpo: number;
   /** Open AR / AP totals and coverage ratio: (cash + AR) / AP. */
-  arOutstanding: number;
-  apOutstanding: number;
-  arCoverage: number | null;
+  arOutstanding: string;
+  apOutstanding: string;
+  arCoverage: string | null;
   /** Configured recurring forecast flows, per-week — powers the drill + config. */
   categories: CategoryWeekly[];
   apSettings: ApSettings;
@@ -201,21 +216,22 @@ export async function cashPosition(
       from parties p
       where p.org_id = ${orgId}
         and exists (
-          select 1 from documents d
+           select 1 from documents d
            where d.org_id = ${orgId} and d.party_id = p.id and d.voided_at is null
              and d.kind in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')
+             ${subIds && subIds.length > 0 ? sql`and (d.subsidiary_id is null or d.subsidiary_id = any(${`{${subIds.join(",")}}`}::uuid[]))` : sql``}
         )
       order by 2
     `),
   ]);
 
-  const startingCash = banks.reduce((a, b) => a + b.balance, 0);
-  const arOutstanding = arItems.reduce((a, i) => a + i.remaining, 0);
-  const apOutstanding = apItems.reduce((a, i) => a + i.remaining, 0);
+  const startingCash = sumMoney(banks.map((b) => b.balance));
+  const arOutstanding = sumMoney(arItems.map((i) => i.remaining));
+  const apOutstanding = sumMoney(apItems.map((i) => i.remaining));
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
-  const weekTotals = (byWeek: Map<string, { amount: number }[]>): Record<string, number> =>
-    Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, es.reduce((a, e) => a + e.amount, 0)]));
+  const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
+    Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
   const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, subIds };
   const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
   const timeline = buildTimeline({
@@ -230,17 +246,17 @@ export async function cashPosition(
   let lowestCash = startingCash;
   let lowestWeek = toISO(grid.start);
   for (const w of timeline.weeks) {
-    if (w.endingCash < lowestCash) {
+    if (compareMoney(w.endingCash, lowestCash) < 0) {
       lowestCash = w.endingCash;
       lowestWeek = w.weekStart;
     }
   }
   const n = timeline.weeks.length;
-  const burnRate = n ? timeline.totalOutflows / n : 0;
-  const netBurn = burnRate - (n ? timeline.totalInflows / n : 0);
-  const runwayWeeks = netBurn > 0 && startingCash > 0 ? startingCash / netBurn : startingCash > 0 ? null : 0;
+  const burnRate = n ? divideMoney(timeline.totalOutflows, String(n)) : ZERO_MONEY;
+  const netBurn = subtractMoney(burnRate, n ? divideMoney(timeline.totalInflows, String(n)) : ZERO_MONEY);
+  const runwayWeeks = compareMoney(netBurn, ZERO_MONEY) > 0 && compareMoney(startingCash, ZERO_MONEY) > 0 ? divideMoney(startingCash, netBurn) : compareMoney(startingCash, ZERO_MONEY) > 0 ? null : ZERO_MONEY;
   const runwayStatus: CashPosition["runwayStatus"] =
-    lowestCash < 0 ? "critical" : runwayWeeks !== null && runwayWeeks < 8 ? "caution" : "healthy";
+    compareMoney(lowestCash, ZERO_MONEY) < 0 ? "critical" : runwayWeeks !== null && compareMoney(runwayWeeks, "8.0000") < 0 ? "caution" : "healthy";
   const projectedEnd = timeline.weeks.length ? timeline.weeks[timeline.weeks.length - 1]!.endingCash : startingCash;
 
   return {
@@ -251,7 +267,7 @@ export async function cashPosition(
     weeks: timeline.weeks,
     totalInflows: timeline.totalInflows,
     totalOutflows: timeline.totalOutflows,
-    netChange: timeline.totalInflows - timeline.totalOutflows,
+    netChange: subtractMoney(timeline.totalInflows, timeline.totalOutflows),
     projectedEnd,
     lowestCash,
     lowestWeek,
@@ -264,9 +280,9 @@ export async function cashPosition(
     arOutstanding,
     apOutstanding,
     // Coverage formula: (starting cash + AR outstanding) / AP outstanding.
-    arCoverage: apOutstanding > 0 ? (startingCash + arOutstanding) / apOutstanding : null,
+    arCoverage: compareMoney(apOutstanding, ZERO_MONEY) > 0 ? divideMoney(addMoney(startingCash, arOutstanding), apOutstanding) : null,
     categories,
-    apSettings,
+    apSettings: { ...apSettings, weeklyCap: normalizeMoneyValue(apSettings.weeklyCap) },
     vendorOptions: (vendorRows.rows as any[]).map((v) => ({ id: v.id, name: v.name })),
     accountOptions: (accountRows.rows as any[]).map((a) => ({ id: a.id, number: a.number ?? null, name: a.name, type: a.type })),
   };

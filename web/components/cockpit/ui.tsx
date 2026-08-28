@@ -1,9 +1,11 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
+import { cmp as compareMoney, div as divideMoney, sum as sumMoney } from '@openbooks/engine/src/money.ts'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@openbooks/ui'
+import { toChartNumber } from '../../app/(app)/analytics/_ui/format'
 
 /**
  * Cockpit UI kit — the shared visual language of the domain control centers
@@ -102,9 +104,10 @@ const BUCKET_COLOR: Record<string, string> = {
 }
 
 /** Aging bucket bars (Current → 90+). */
-export function AgingBars({ buckets, accent }: { buckets: { label: string; amount: number }[]; accent: string }) {
+export function AgingBars({ buckets, accent }: { buckets: { label: string; amount: string }[]; accent: string }) {
   const { moneyCompact } = useMoney()
-  const total = buckets.reduce((a, b) => a + b.amount, 0) || 1
+  const total = sumMoney(buckets.map((b) => b.amount))
+  const widthTotal = compareMoney(total, '0.0000') > 0 ? total : '1.0000'
   return (
     <div className="space-y-2.5">
       {buckets.map((b) => (
@@ -117,7 +120,7 @@ export function AgingBars({ buckets, accent }: { buckets: { label: string; amoun
             <span className={cn('tabular-nums', accent)}>{moneyCompact(b.amount)}</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-            <div className="h-full rounded-full" style={{ width: `${Math.max(0, (b.amount / total) * 100)}%`, backgroundColor: BUCKET_COLOR[b.label] }} />
+            <div className="h-full rounded-full" style={{ width: `${Math.max(0, toChartNumber(divideMoney(b.amount, widthTotal)) * 100)}%`, backgroundColor: BUCKET_COLOR[b.label] }} />
           </div>
         </div>
       ))}
@@ -132,12 +135,12 @@ export function ScheduleBars({
   barClass = 'bg-red-400 dark:bg-red-500',
   onSelect,
 }: {
-  weeks: { label: string; amount: number }[]
+  weeks: { label: string; amount: string }[]
   barClass?: string
   onSelect?: (index: number) => void
 }) {
   const { moneyCompact } = useMoney()
-  const max = Math.max(1, ...weeks.map((w) => w.amount))
+  const max = weeks.reduce((current, w) => compareMoney(w.amount, current) > 0 ? w.amount : current, '1.0000')
   return (
     <div className="space-y-1">
       {weeks.map((w, i) => {
@@ -145,9 +148,9 @@ export function ScheduleBars({
           <>
             <span className="w-24 shrink-0 truncate text-xs text-slate-500 dark:text-slate-400">{w.label}</span>
             <div className="h-4 min-w-0 flex-1 overflow-hidden rounded bg-slate-50 dark:bg-slate-800/50">
-              <div className={cn('h-full rounded transition-all', barClass)} style={{ width: `${(w.amount / max) * 100}%` }} />
+              <div className={cn('h-full rounded transition-all', barClass)} style={{ width: `${Math.max(0, toChartNumber(divideMoney(w.amount, max)) * 100)}%` }} />
             </div>
-            <span className="w-16 shrink-0 text-right text-xs tabular-nums text-slate-600 dark:text-slate-300">{w.amount > 0 ? moneyCompact(w.amount) : '—'}</span>
+            <span className="w-16 shrink-0 text-right text-xs tabular-nums text-slate-600 dark:text-slate-300">{compareMoney(w.amount, '0.0000') > 0 ? moneyCompact(w.amount) : '—'}</span>
           </>
         )
         return onSelect ? (
