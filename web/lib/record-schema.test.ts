@@ -192,3 +192,82 @@ test('withComputedFormulas computes per-row formulas and the header rollup', () 
   assert.equal(lines[1]!.amount, 30) // 3 * 10
   assert.equal(out.grand_total, 40) // sum of amounts
 })
+
+test('withComputedFormulas resolves chained formulas in headers and repeating rows', () => {
+  const sections: FormSection[] = [
+    {
+      id: 'main',
+      title: 'Details',
+      fields: [
+        { id: 'base', type: 'number', label: 'Base' },
+        {
+          id: 'plus_one',
+          type: 'formula',
+          label: 'Plus one',
+          formula: {
+            kind: 'sum',
+            of: [
+              { kind: 'field_ref', fieldKey: 'double' },
+              { kind: 'literal', value: 1 },
+            ],
+          },
+        },
+        {
+          id: 'double',
+          type: 'formula',
+          label: 'Double',
+          formula: {
+            kind: 'product',
+            of: [
+              { kind: 'field_ref', fieldKey: 'base' },
+              { kind: 'literal', value: 2 },
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 'lines',
+      title: 'Lines',
+      repeating: true,
+      fields: [
+        { id: 'qty', type: 'number', label: 'Qty' },
+        {
+          id: 'row_plus_one',
+          type: 'formula',
+          label: 'Plus one',
+          formula: {
+            kind: 'sum',
+            of: [
+              { kind: 'field_ref', fieldKey: 'row_double_qty' },
+              { kind: 'literal', value: 1 },
+            ],
+          },
+        },
+        {
+          id: 'row_double_qty',
+          type: 'formula',
+          label: 'Double quantity',
+          formula: {
+            kind: 'product',
+            of: [
+              { kind: 'field_ref', fieldKey: 'qty' },
+              { kind: 'literal', value: 2 },
+            ],
+          },
+        },
+      ],
+    },
+  ]
+
+  const out = withComputedFormulas(sections, {
+    base: 5,
+    // Simulate an edit where previously persisted formula values are stale.
+    double: 999,
+    lines: [{ qty: 4, row_double_qty: 999 }],
+  })
+  assert.equal(out.plus_one, 11)
+  assert.equal(out.double, 10)
+  assert.equal((out.lines as Array<Record<string, unknown>>)[0]!.row_plus_one, 9)
+  assert.equal((out.lines as Array<Record<string, unknown>>)[0]!.row_double_qty, 8)
+})
