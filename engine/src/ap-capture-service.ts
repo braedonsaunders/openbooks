@@ -128,7 +128,7 @@ const receiptExemptItemKindsSql = sql.join(
 );
 
 export function lineRequiresReceipt(itemKind: string | null | undefined): boolean {
-  return typeof itemKind === "string" && !RECEIPT_EXEMPT_ITEM_KINDS.has(itemKind);
+  return typeof itemKind !== "string" || !RECEIPT_EXEMPT_ITEM_KINDS.has(itemKind);
 }
 
 /** Line-level unit-price tolerance against the ordered price, as a percent. */
