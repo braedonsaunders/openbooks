@@ -1,36 +1,23 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { attachExisting, getFile, listAttachments, uploadAndAttach } from '../../../../lib/file-cabinet'
+import { attachExisting, getFile, uploadAndAttach } from '../../../../lib/file-cabinet'
 import { isUuid } from '../../../../lib/list-params'
 import { can, getAuthz } from '../../../../lib/authz'
 import {
-  attachmentTargetExists,
+  attachmentReadPermission,
+  attachmentTargetInScope,
+  attachmentTargetVisible,
   canMutateFiles,
   fileViewer,
   isAllowedContentType,
   isAttachableTargetTable,
+  listVisibleAttachments,
+  loadAttachmentTarget,
   MAX_BYTES,
   requireSession,
 } from '../lib'
 
 export const runtime = 'nodejs'
-
-/**
- * The attach target must exist and be visible to the caller. fixed_assets adds
- * subsidiary scoping; every other allowlisted table is org-scoped with a
- * trivial existence probe.
- */
-async function attachTargetVisible(authz: NonNullable<Awaited<ReturnType<typeof getAuthz>>>, targetTable: string, targetId: string): Promise<boolean> {
-  if (targetTable !== 'fixed_assets') {
-    return attachmentTargetExists(authz.user.orgId, targetTable, targetId)
-  }
-  const visible = (await db.execute(sql`
-    select 1 from fixed_assets where id=${targetId} and org_id=${authz.user.orgId}
-    ${authz.allowedSubsidiaryIds ? sql`and subsidiary_id=any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}`))
-  return Boolean(visible.rows[0])
-}
 
 /** List files attached to a record (metadata only). */
 export async function GET(req: Request) {
@@ -45,15 +32,14 @@ export async function GET(req: Request) {
   }
   const gate = await getAuthz()
   if (!gate) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  const allowed = targetTable === 'fixed_assets' ? can(gate, 'assets.read') : can(gate, 'documents.read')
-  if (!allowed) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  if (targetTable === 'fixed_assets') {
-    const visible = (await db.execute(sql`
-      select 1 from fixed_assets where id=${targetId} and org_id=${gate.user.orgId}
-      ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id=any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}`))
-    if (!visible.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const target = await loadAttachmentTarget(gate.user.orgId, targetTable, targetId)
+  if (!target || !attachmentTargetInScope(gate, target)) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
-  const items = await listAttachments(gate.user.orgId, targetTable, targetId)
+  const permission = attachmentReadPermission(targetTable, target.kind)
+  if (!permission) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!can(gate, permission)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  const items = await listVisibleAttachments(gate.user.orgId, targetTable, targetId, fileViewer(gate))
   return NextResponse.json({ attachments: items })
 }
 
@@ -85,7 +71,7 @@ export async function POST(req: Request) {
     if (!canMutateFiles(gate, targetTable)) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     }
-    if (!(await attachTargetVisible(gate, targetTable, targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!(await attachmentTargetVisible(gate, targetTable, targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (!isAllowedContentType(file.type)) {
       return NextResponse.json({ error: `unsupported file type: ${file.type || 'unknown'}` }, { status: 415 })
     }
@@ -108,8 +94,8 @@ export async function POST(req: Request) {
   }
 
   // JSON mode: attach an existing file
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
+  const parsedBody = await parseJsonBody(req, jsonObject)
+  if (!parsedBody.ok) return parsedBody.response
   const body = parsedBody.data
   if (!body || !isUuid(body.fileId) || !body.targetTable || !isUuid(body.targetId)) {
     return NextResponse.json({ error: 'fileId, targetTable, and targetId are required' }, { status: 400 })
@@ -120,7 +106,7 @@ export async function POST(req: Request) {
   if (!canMutateFiles(gate, body.targetTable)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
-  if (!(await attachTargetVisible(gate, body.targetTable, body.targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await attachmentTargetVisible(gate, body.targetTable, body.targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
   // The file must belong to the caller's org and be visible to them —
   // blocks cross-org links and attaching out of someone else's private folder.
   if (!(await getFile(gate.user.orgId, body.fileId, fileViewer(gate)))) {
