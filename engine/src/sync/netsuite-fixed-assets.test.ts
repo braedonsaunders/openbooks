@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { netSuiteFamDate, netSuiteFamState } from "./netsuite-fixed-assets.ts";
+import { netSuiteFamDate, netSuiteFamPeriodForDate, netSuiteFamState } from "./netsuite-fixed-assets.ts";
 
 const source = readFileSync(new URL("./netsuite-fixed-assets.ts", import.meta.url), "utf8");
 
@@ -9,6 +9,14 @@ test("NetSuite FAM dates remain date-only", () => {
   assert.equal(netSuiteFamDate("11/14/2021"), "2021-11-14");
   assert.equal(netSuiteFamDate("2026-07-21T14:00:00Z"), "2026-07-21");
   assert.equal(netSuiteFamDate(null), null);
+});
+
+test("NetSuite FAM depreciation dates outside the accounting calendar are not shifted", () => {
+  const periods = [
+    { id: "2026-12", starts_on: "2026-12-01", ends_on: "2026-12-31", is_adjustment: false },
+  ];
+  assert.equal(netSuiteFamPeriodForDate(periods, "2027-01-15"), null);
+  assert.equal(netSuiteFamPeriodForDate(periods, "2026-12-15")?.id, "2026-12");
 });
 
 test("NetSuite FAM state reconciles current cost to exact book value", () => {

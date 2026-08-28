@@ -158,11 +158,12 @@ function optionalRef(map: Map<string, string>, sourceRef: unknown, label: string
   return id;
 }
 
-function periodForDate(periods: { id: string; starts_on: string; ends_on: string; is_adjustment: boolean }[], date: string) {
+export function netSuiteFamPeriodForDate(
+  periods: { id: string; starts_on: string; ends_on: string; is_adjustment: boolean }[],
+  date: string,
+) {
   return periods.find((period) => !period.is_adjustment && period.starts_on <= date && period.ends_on >= date)
     ?? periods.find((period) => period.starts_on <= date && period.ends_on >= date)
-    ?? [...periods].reverse().find((period) => period.ends_on <= date)
-    ?? periods.at(-1)
     ?? null;
 }
 
@@ -266,7 +267,7 @@ export async function syncNetSuiteFixedAssets(
       select id, starts_on::text, ends_on::text, is_adjustment
         from accounting_periods where org_id = ${options.orgId} order by starts_on, ends_on
     `));
-    const asOfPeriod = periodForDate(periodResult.rows, asOf);
+    const asOfPeriod = netSuiteFamPeriodForDate(periodResult.rows, asOf);
     if (!asOfPeriod) throw new Error(`the organization has no accounting period for the FAM snapshot ${asOf}`);
 
     let createdCategories = 0;
@@ -502,7 +503,12 @@ export async function syncNetSuiteFixedAssets(
         const amountUnits = toUnits(amount);
         if (amountUnits === 0n) continue;
         const lineDate = netSuiteFamDate(history.custrecord_deprhistdate) ?? asOf;
-        const linePeriod = periodForDate(periodResult.rows, lineDate) ?? asOfPeriod;
+        const linePeriod = netSuiteFamPeriodForDate(periodResult.rows, lineDate);
+        if (!linePeriod) {
+          throw new Error(
+            `NetSuite FAM depreciation history for asset ${state.sourceId} has no accounting period for ${lineDate}`,
+          );
+        }
         importedDepreciation += amountUnits;
         const prior = importedByPeriod.get(linePeriod.id);
         importedByPeriod.set(linePeriod.id, { period: linePeriod, units: (prior?.units ?? 0n) + amountUnits });
