@@ -10,7 +10,12 @@ import {
   type PostingDocument,
   type PostingDocumentLine,
 } from "./posting.ts";
-import { SubsidiaryError, uuidArray } from "./subsidiaries.ts";
+import {
+  intercompanyBalancingLegs,
+  SubsidiaryError,
+  type SubsidiaryContext,
+  uuidArray,
+} from "./subsidiaries.ts";
 import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -23,6 +28,91 @@ test("uuid-array binding rejects a nullish element instead of emitting a hole", 
     (error: unknown) =>
       error instanceof SubsidiaryError && /element 2/.test(error.message),
   );
+});
+
+test("intercompany FX residual keeps the origin leg transaction amount in document currency", async () => {
+  const originSubId = randomUUID();
+  const counterSubId = randomUUID();
+  const originDueFrom = randomUUID();
+  const counterDueTo = randomUUID();
+  const fxRate = "0.3333333333";
+  const ctx: SubsidiaryContext = {
+    byId: new Map([
+      [originSubId, {
+        id: originSubId,
+        parentId: null,
+        name: "Origin",
+        baseCurrency: "CAD",
+        isElimination: false,
+        isActive: true,
+      }],
+      [counterSubId, {
+        id: counterSubId,
+        parentId: originSubId,
+        name: "Counter",
+        baseCurrency: "USD",
+        isElimination: false,
+        isActive: true,
+      }],
+    ]),
+    rootId: originSubId,
+    multi: true,
+  };
+  const runner = {
+    execute: async () => ({
+      rows: [{
+        fromId: originSubId,
+        toId: counterSubId,
+        dueFrom: originDueFrom,
+        dueTo: counterDueTo,
+      }],
+    }),
+  } as unknown as Pick<typeof db, "execute">;
+  const legs = await intercompanyBalancingLegs(runner, {
+    orgId: randomUUID(),
+    ctx,
+    originSubId,
+    originFxRate: fxRate,
+    lines: [
+      {
+        accountId: randomUUID(),
+        amount: "-33.3334",
+        currency: "EUR",
+        txnAmount: "-100",
+        fxRate,
+        subsidiaryId: originSubId,
+      },
+      {
+        accountId: randomUUID(),
+        amount: "100",
+        currency: "EUR",
+        txnAmount: "100",
+        fxRate: "1",
+        subsidiaryId: counterSubId,
+      },
+    ],
+  });
+
+  assert.deepEqual(legs, [
+    {
+      accountId: counterDueTo,
+      amount: "-100.0000",
+      currency: "EUR",
+      txnAmount: "-100.0000",
+      fxRate: "1",
+      subsidiaryId: counterSubId,
+      memo: "Intercompany with Origin",
+    },
+    {
+      accountId: originDueFrom,
+      amount: "33.3334",
+      currency: "EUR",
+      txnAmount: "100.0000",
+      fxRate,
+      subsidiaryId: originSubId,
+      memo: "Intercompany with Counter",
+    },
+  ]);
 });
 
 test("an unresolved inventory account is named at the posting-rule boundary", () => {

@@ -373,8 +373,9 @@ export async function intercompanyBalancingLegs(
   }
 
   // Line-by-line FX rounding can leave a few functional-currency ten-thousandths
-  // at the origin. Keep the original rate economics, but absorb that rounding
-  // on the final origin due-to/from leg so the database invariant is exact.
+  // at the origin. Keep the original rate economics and transaction-currency
+  // evidence, but absorb that rounding on the final origin due-to/from leg so
+  // the database invariant is exact.
   const originLegs = legs.filter((leg) => leg.subsidiaryId === originSubId);
   if (originLegs.length > 0) {
     let residual = bySub.get(originSubId) ?? "0";
@@ -382,7 +383,6 @@ export async function intercompanyBalancingLegs(
     if (!isZero(residual)) {
       const last = originLegs[originLegs.length - 1]!;
       last.amount = add(last.amount, neg(residual));
-      last.txnAmount = last.amount;
     }
   }
 
