@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, pool } from "./db.ts";
 import { add, cmp, toUnits } from "./money.ts";
 import { encryptAccountNumber } from "./payments.ts";
 import {
@@ -1176,4 +1176,72 @@ test("every release is audited, and tampered bytes are refused", { skip: !DB }, 
     releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId),
     /no longer matches its recorded sha256/,
   );
+});
+
+test("concurrent releases receive distinct audit sequence numbers", { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  const { documentId } = await mixedRun(fx);
+  await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
+  const artifact = await generatePayRunBankFile({
+    orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+  });
+
+  // Hold both callers after their pre-transaction reads have completed. This
+  // makes them share the same stale releaseCount snapshot, deterministically
+  // exercising the row-lock serialization in the release transaction.
+  let releaseReads = 0;
+  let releaseReadsReady!: () => void;
+  const bothReleaseReads = new Promise<void>((resolve) => { releaseReadsReady = resolve; });
+  let releaseReadsGo!: () => void;
+  const releaseReadsBarrier = new Promise<void>((resolve) => { releaseReadsGo = resolve; });
+  const originalQuery = pool.query;
+  const pooledQuery = originalQuery.bind(pool) as unknown as (
+    text: unknown,
+    values?: unknown[],
+  ) => Promise<unknown>;
+  const textOf = (query: unknown): string =>
+    typeof query === "string" ? query : String((query as { text?: unknown }).text ?? "");
+  (pool as unknown as { query: unknown }).query = async (
+    text: unknown,
+    values?: unknown[],
+  ) => {
+    const result = await pooledQuery(text, values);
+    const queryText = textOf(text);
+    if (queryText.includes("file_blobs fb") && queryText.includes("pay_run_bank_files f")) {
+      releaseReads += 1;
+      if (releaseReads === 2) releaseReadsReady();
+      await releaseReadsBarrier;
+    }
+    return result;
+  };
+
+  const releases = [
+    releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId),
+    releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId),
+  ];
+  try {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      bothReleaseReads,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("timed out waiting for concurrent release reads")),
+          5_000,
+        );
+      }),
+    ]);
+    if (timeout) clearTimeout(timeout);
+  } finally {
+    releaseReadsGo();
+    (pool as unknown as { query: unknown }).query = originalQuery;
+  }
+  await Promise.all(releases);
+
+  const audit = await payRunBankFileAudit(fx.orgId, documentId);
+  const releaseNumbers = audit
+    .filter((entry) => entry.event === "release")
+    .map((entry) => Number(entry.changes.releaseNumber))
+    .sort((a, b) => a - b);
+  assert.deepEqual(releaseNumbers, [1, 2]);
+  assert.equal((await listPayRunBankFiles(fx.orgId, documentId))[0]!.releaseCount, 2);
 });
