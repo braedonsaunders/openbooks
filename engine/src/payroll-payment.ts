@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, neg, sum } from "./money.ts";
+import { add, cmp, mulRate, neg, sum } from "./money.ts";
 import {
   PayrollError,
   payrollSettings,
@@ -9,6 +9,11 @@ import {
   payrollSubsidiaryScopeFilter,
   type PayrollSubsidiaryScope,
 } from "./payroll-run.ts";
+import {
+  intercompanyBalancingLegs,
+  loadSubsidiaryContext,
+  SubsidiaryError,
+} from "./subsidiaries.ts";
 
 /**
  * Pay-run payment: the GL settlement of net pay.
@@ -28,10 +33,12 @@ import {
  * how the money is instructed to leave, not what the books record: every
  * employee's net pay is relieved off the same payable against the same bank
  * account, because that is the account both the direct-deposit debit and the
- * cheques are drawn on. The split is reported (`eft` / `cheque` below, and on
- * the funding panel) so a controller can see what each rail costs, and each
- * cheque's number rides its own settlement line's memo so the bank
- * reconciliation can match paper to ledger.
+ * cheques are drawn on. When employees belong to several legal entities, the
+ * due-to/due-from legs make the cash-funded entry balance on each subsidiary's
+ * books before the kernel's deferred balance check runs. The split is reported
+ * (`eft` / `cheque` below, and on the funding panel) so a controller can see
+ * what each rail costs, and each cheque's number rides its own settlement
+ * line's memo so the bank reconciliation can match paper to ledger.
  */
 export async function recordPayRunPayment(input: {
   orgId: string;
@@ -97,8 +104,12 @@ export async function recordPayRunPayment(input: {
     if (!bank.rows[0]) throw new PayrollError("choose an active bank account");
 
     // The run's per-employee net-pay open items (credits on the payable).
-    const openItems = (await tx.execute<{ id: string; party_id: string; amount: string; subsidiary_id: string; currency: string }>(sql`
-      select jl.id, jl.party_id, jl.amount, jl.subsidiary_id, jl.currency
+    const openItems = (await tx.execute<{
+      id: string; party_id: string; amount: string; txn_amount: string;
+      fx_rate: string; subsidiary_id: string; currency: string;
+    }>(sql`
+      select jl.id, jl.party_id, jl.amount, jl.txn_amount, jl.fx_rate,
+             jl.subsidiary_id, jl.currency
         from journal_lines jl
         join parties p on p.id = jl.party_id and p.org_id = jl.org_id
        where jl.org_id = ${orgId} and jl.entry_id = ${run.posted_entry_id}
@@ -131,6 +142,40 @@ export async function recordPayRunPayment(input: {
     `));
     if (!period.rows[0]) throw new PayrollError(`no accounting period covers ${paidOn}`);
 
+    const originSubId = run.subsidiary_id;
+    const runCurrency = run.currency;
+    if (!originSubId || !runCurrency) {
+      throw new PayrollError("the posted pay run has no originating subsidiary or currency");
+    }
+    const subsidiaries = await loadSubsidiaryContext(tx, orgId);
+    const origin = subsidiaries.byId.get(originSubId);
+    if (!origin) throw new PayrollError("the posted pay run's subsidiary is missing or inactive");
+
+    // Pay-run documents are denominated in their originating subsidiary's
+    // functional currency. Keep the lookup defensive for hand-built/legacy
+    // runs whose header currency was changed after posting.
+    let originFxRate = "1";
+    if (origin.baseCurrency !== runCurrency) {
+      const fx = (await tx.execute<{ rate: string }>(sql`
+        select rate::text from (
+          select rate, as_of from fx_rates
+           where org_id = ${orgId} and from_currency = ${runCurrency}
+             and to_currency = ${origin.baseCurrency} and rate_type = 'spot'
+             and as_of <= ${paidOn}
+          union all
+          select (1 / rate)::numeric(19,10) as rate, as_of from fx_rates
+           where org_id = ${orgId} and from_currency = ${origin.baseCurrency}
+             and to_currency = ${runCurrency} and rate_type = 'spot'
+             and as_of <= ${paidOn}
+        ) candidates order by as_of desc limit 1`));
+      originFxRate = fx.rows[0]?.rate ?? "";
+      if (!originFxRate) {
+        throw new PayrollError(
+          `no spot rate for ${runCurrency}→${origin.baseCurrency} on or before ${paidOn}`,
+        );
+      }
+    }
+
     const entryNumber = `PAYD-${run.document_number}-${randomUUID().slice(0, 6)}`;
     const entry = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries (org_id, book_id, subsidiary_id, entry_number, posting_date,
@@ -144,16 +189,54 @@ export async function recordPayRunPayment(input: {
     const entryId = entry.rows[0]!.id;
 
     let lineNumber = 1;
-    const total = sum(openItems.rows.map((item) => neg(item.amount)));
+    // `txn_amount` is the pay-run currency (the currency the bank actually
+    // leaves). `amount` is each employee subsidiary's functional amount, so it
+    // cannot be summed across entities when their base currencies differ.
+    const total = sum(openItems.rows.map((item) => neg(item.txn_amount)));
     if (cmp(total, "0") <= 0) throw new PayrollError("nothing to pay");
-    const settlements: { fromLineId: string; toLineId: string; amount: string; currency: string }[] = [];
+    const bankAmount = neg(mulRate(total, originFxRate));
+    const settlementLines = openItems.rows.map((item) => ({
+      accountId: netPayable,
+      amount: neg(item.amount),
+      txnAmount: neg(item.txn_amount),
+      currency: item.currency,
+      fxRate: item.fx_rate,
+      subsidiaryId: item.subsidiary_id,
+    }));
+    settlementLines.push({
+      accountId: input.bankAccountId,
+      amount: bankAmount,
+      txnAmount: neg(total),
+      currency: runCurrency,
+      fxRate: originFxRate,
+      subsidiaryId: originSubId,
+    });
+    let intercompanyLegs: Awaited<ReturnType<typeof intercompanyBalancingLegs>>;
+    try {
+      intercompanyLegs = await intercompanyBalancingLegs(tx, {
+        orgId,
+        ctx: subsidiaries,
+        originSubId,
+        originFxRate,
+        lines: settlementLines,
+      });
+    } catch (error) {
+      if (error instanceof SubsidiaryError) throw new PayrollError(error.message);
+      throw error;
+    }
+
+    const settlements: {
+      fromLineId: string; toLineId: string; amount: string;
+      txnAmount: string; currency: string;
+    }[] = [];
     let eft = "0";
     let cheque = "0";
     for (const item of openItems.rows) {
       const debit = neg(item.amount); // positive
+      const txnDebit = neg(item.txn_amount);
       const paid = rail.get(item.party_id);
-      if (paid?.payment_method === "cheque") cheque = add(cheque, debit);
-      else if (paid?.payment_method === "eft") eft = add(eft, debit);
+      if (paid?.payment_method === "cheque") cheque = add(cheque, txnDebit);
+      else if (paid?.payment_method === "eft") eft = add(eft, txnDebit);
       const memo = paid?.cheque_number
         ? `Net pay ${run.document_number} · cheque ${paid.cheque_number}`
         : `Net pay ${run.document_number}`;
@@ -161,19 +244,40 @@ export async function recordPayRunPayment(input: {
         insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id,
                                    amount, currency, txn_amount, fx_rate, party_id, is_open_item, memo)
         values (${orgId}, ${entryId}, ${lineNumber++}, ${netPayable}, ${item.subsidiary_id},
-                ${debit}, ${item.currency}, ${debit}, 1, ${item.party_id}, true,
+                ${debit}, ${item.currency}, ${txnDebit}, ${item.fx_rate}, ${item.party_id}, true,
                 ${memo})
         returning id
       `));
-      settlements.push({ fromLineId: line.rows[0]!.id, toLineId: item.id, amount: debit, currency: item.currency });
+      settlements.push({
+        fromLineId: line.rows[0]!.id,
+        toLineId: item.id,
+        amount: debit,
+        txnAmount: txnDebit,
+        currency: item.currency,
+      });
     }
     await tx.execute(sql`
       insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id,
                                  amount, currency, txn_amount, fx_rate, is_open_item, memo)
-      values (${orgId}, ${entryId}, ${lineNumber}, ${input.bankAccountId}, ${run.subsidiary_id},
-              ${neg(total)}, ${run.currency}, ${neg(total)}, 1, false,
+      values (${orgId}, ${entryId}, ${lineNumber++}, ${input.bankAccountId}, ${run.subsidiary_id},
+              ${bankAmount}, ${runCurrency}, ${neg(total)}, ${originFxRate}, false,
               ${`Net pay ${run.document_number}`})
     `);
+    for (const leg of intercompanyLegs) {
+      await tx.execute(sql`
+        insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id,
+                                   amount, currency, txn_amount, fx_rate, is_open_item, memo)
+        values (${orgId}, ${entryId}, ${lineNumber++}, ${leg.accountId}, ${leg.subsidiaryId},
+                ${leg.amount}, ${leg.currency}, ${leg.txnAmount}, ${leg.fxRate}, false,
+                ${leg.memo})
+      `);
+    }
+    if (intercompanyLegs.length > 0) {
+      await tx.execute(sql`
+        update journal_entries set origin = 'intercompany', updated_at = now(), updated_by = ${actorId}
+         where org_id = ${orgId} and id = ${entryId}
+      `);
+    }
 
     // The kernel requires both entries posted before applications connect them.
     await tx.execute(sql`
@@ -189,8 +293,8 @@ export async function recordPayRunPayment(input: {
                                   settlement_rate, settlement_rate_source, settlement_rate_reference,
                                   applied_on, created_by, updated_by)
         values (${orgId}, ${settlement.fromLineId}, ${settlement.toLineId}, ${settlement.amount},
-                ${settlement.amount}, ${settlement.amount}, ${settlement.currency},
-                ${settlement.amount}, ${settlement.currency},
+                ${settlement.amount}, ${settlement.txnAmount}, ${settlement.currency},
+                ${settlement.txnAmount}, ${settlement.currency},
                 1, 'same_currency', ${`Pay run ${run.document_number} settlement`},
                 ${paidOn}, ${actorId}, ${actorId})
       `);
