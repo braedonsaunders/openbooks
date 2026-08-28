@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import type { PoolClient } from 'pg'
@@ -8,6 +9,10 @@ import { createScratchOrg, dropScratchOrg } from './test-fixtures.ts'
 import { listSchema, runUserSql } from './sqlapi.ts'
 
 const DB = !!process.env.OPENBOOKS_DB_URL
+const PRIVATE_PROJECTION_MIGRATION = readFileSync(
+  new URL('../../schema/migrations/generated/0070_governed_query_private_projection.sql', import.meta.url),
+  'utf8',
+)
 
 test('governed SQL catalog enforces tenant RLS and denies credential surfaces', { skip: !DB }, async () => {
   const first = await withBypass(() => createScratchOrg())
@@ -213,6 +218,63 @@ test('governed SQL stays available while the ordinary request pool is saturated'
     assert.ok(finalOutcome.value[1].length > 0)
   } finally {
     for (const client of heldClients) client.release()
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('governed SQL redacts private CRM bodies and time-entry memos after migration replay', { skip: !DB, timeout: 120_000 }, async () => {
+  // Replay the forward migration twice before exercising the real SQL API.
+  // This catches both an unsafe refresh implementation and non-idempotent DDL.
+  await pool.query(PRIVATE_PROJECTION_MIGRATION)
+  await pool.query(PRIVATE_PROJECTION_MIGRATION)
+
+  const org = await withBypass(() => createScratchOrg())
+  const privateActivityId = randomUUID()
+  const publicActivityId = randomUUID()
+  const privateTimeEntryId = randomUUID()
+  const publicTimeEntryId = randomUUID()
+  try {
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into crm_activities
+          (id, org_id, kind, status, subject, body, is_private)
+        values
+          (${privateActivityId}, ${org.orgId}, 'note', 'planned', 'Private note', 'CRM secret body', true),
+          (${publicActivityId}, ${org.orgId}, 'note', 'planned', 'Public note', 'CRM public body', false)
+      `)
+      await db.execute(sql`
+        insert into time_entries
+          (id, org_id, employee_party_id, worked_on, hours, memo, memo_is_private, status)
+        values
+          (${privateTimeEntryId}, ${org.orgId}, ${org.customerId}, ${org.date}, '2.5000', 'Payroll secret memo', true, 'approved'),
+          (${publicTimeEntryId}, ${org.orgId}, ${org.customerId}, ${org.date}, '1.2500', 'Timesheet public memo', false, 'approved')
+      `)
+    })
+
+    const activities = await runUserSql(
+      `select id::text as id, subject, body, is_private
+        from crm_activities
+        where id in ('${privateActivityId}', '${publicActivityId}')
+        order by subject`,
+      { orgId: org.orgId },
+    )
+    assert.deepEqual(activities.rows, [
+      { id: privateActivityId, subject: 'Private note', body: null, is_private: true },
+      { id: publicActivityId, subject: 'Public note', body: 'CRM public body', is_private: false },
+    ])
+
+    const timeEntries = await runUserSql(
+      `select id::text as id, hours::text as hours, memo, memo_is_private
+        from time_entries
+        where id in ('${privateTimeEntryId}', '${publicTimeEntryId}')
+        order by hours desc`,
+      { orgId: org.orgId },
+    )
+    assert.deepEqual(timeEntries.rows, [
+      { id: privateTimeEntryId, hours: '2.5000', memo: null, memo_is_private: true },
+      { id: publicTimeEntryId, hours: '1.2500', memo: 'Timesheet public memo', memo_is_private: false },
+    ])
+  } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
   }
 })
