@@ -61,7 +61,16 @@ export function assertSubsidiaryAccess(
   subsidiaryId: string | null | undefined,
 ): void {
   const allowed = context.authz.allowedSubsidiaryIds;
-  if (subsidiaryId && allowed !== null && !allowed.has(subsidiaryId)) {
+  // `null` is the explicit unrestricted sentinel. Every other context is
+  // restricted, so an unresolved subsidiary (null/undefined/empty) must fail
+  // closed just like an id outside the allowed set.
+  if (
+    allowed !== null &&
+    (subsidiaryId === null ||
+      subsidiaryId === undefined ||
+      subsidiaryId === "" ||
+      !allowed.has(subsidiaryId))
+  ) {
     throw forbidden("subsidiary.restricted");
   }
 }
