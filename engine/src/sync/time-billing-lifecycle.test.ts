@@ -80,6 +80,26 @@ test("complete-population financial sync reconciles every material time fact", (
   assert.match(financialSync, /beforeBillRate/);
 });
 
+test("project-financial sync preserves consumed time evidence", () => {
+  for (const evidenceColumn of [
+    "invoiced_by_line_id",
+    "cost_journal_entry_id",
+    "overhead_journal_entry_id",
+    "payroll_batch_ref",
+  ]) {
+    assert.match(financialSync, new RegExp(evidenceColumn));
+  }
+  assert.match(financialSync, /immutableFactChange/);
+  assert.match(
+    financialSync,
+    /corrections must be new offsetting entries/,
+  );
+  assert.match(
+    financialSync,
+    /te\.invoiced_by_line_id is null[\s\S]*te\.cost_journal_entry_id is null[\s\S]*te\.payroll_batch_ref is null/,
+  );
+});
+
 test("project-financial input sync cannot rematerialize documents, GL, files, or PDFs", () => {
   assert.match(financialSync, /update time_entries/i);
   assert.match(financialSync, /update projects/i);
