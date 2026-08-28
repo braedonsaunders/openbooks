@@ -11,14 +11,19 @@ import { calculatePub15T } from "./pub15t.ts";
 import { computeUsWithholding, usSubRegionRateIndex } from "./withholding.ts";
 import { usPayrollConfig } from "./config.ts";
 
-type UsYtdRow = {
+export type UsYtdRow = {
   fica: string;
   futa: string;
   supplemental: string;
   fica_tax: string;
 };
 
-async function usEmployeeYtd(
+/**
+ * Read the employee's year-to-date statutory inputs from committed payroll.
+ * Calculated runs are drafts and may be abandoned; counting them would let
+ * unpaid figures consume FICA/FUTA/SUI room in a later run.
+ */
+export async function usEmployeeYtd(
   ctx: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId">,
 ): Promise<UsYtdRow> {
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
@@ -41,7 +46,7 @@ async function usEmployeeYtd(
     join documents d on d.id = r.document_id and d.org_id = r.org_id
     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
       and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${documentId}
-      and r.run_status in ('calculated', 'committed')
+      and r.run_status = 'committed'
       and d.status <> 'voided'
   `));
   return r.rows[0]!;
@@ -54,7 +59,8 @@ export async function computeUsStatutory(
   const {
     tx, orgId, documentId, employeePartyId, employeeName, taxYear, country, region,
     run, emp, filingAccountId, periodsPerYear: P, income, nonPeriodic, pensionable,
-    insurable, pushStatutory, storedCertificates, certificateFor, bool, assertRegionSupported,
+    insurable, employerEmployeeCount, deduction, pushStatutory, storedCertificates, certificateFor, bool,
+    assertRegionSupported,
   } = ctx;
 
   assertRegionSupported(region);
@@ -149,15 +155,24 @@ export async function computeUsStatutory(
 
   let regionTax: string | undefined;
   let sequence = 140;
+  // Nebraska's special minimum is measured on gross wages after tax-qualified
+  // deductions. The pack's deduction treatment is the authoritative source
+  // for which current-period lines qualify; no state-specific component query
+  // or floating-point recomputation is introduced here.
+  const taxQualifiedDeductions = sum([
+    deduction("pension_f"), deduction("union_dues"), deduction("alimony"),
+  ]);
   for (const levy of resolution.levies) {
     const withheld = computeUsWithholding({
       levy,
       payDate: run.pay_date!,
       periodStart: run.period_start!,
+      employerEmployeeCount,
       periodEnd: run.period_end!,
       periodsPerYear: P,
       wages: income,
       supplemental: nonPeriodic,
+      taxQualifiedDeductions,
       certificateFor,
       regionTax,
       socialInsuranceDeducted: {

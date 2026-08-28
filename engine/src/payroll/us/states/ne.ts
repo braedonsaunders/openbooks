@@ -13,10 +13,12 @@
  *       non-shaded cells from the mid-point of the wage bracket; that mid-point
  *       is $505, and Table 7 on $505 × 52 reproduces the printed $14.38.
  *
- * The 1.5% special income-tax withholding procedure is gated on employer
- * headcount (more than 24 employees) and on employee documentation for a
- * lesser amount. This engine does not receive either fact, so it computes the
- * percentage method and does not invent the floor.
+ * The 1.5% special income-tax withholding procedure applies to an employer
+ * with more than 24 employees. A lesser amount (including an exemption) is
+ * permitted only when the employee's supporting documentation is recorded on
+ * Form W-4N. The run supplies the employer headcount and the certificate's
+ * evidence flag; the engine never silently treats an ordinary zero result as
+ * an acceptable special-procedure withholding.
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
@@ -68,6 +70,7 @@ const R421 = pctToRate("4.21");
 const R435 = pctToRate("4.35");
 const R448 = pctToRate("4.48");
 const R460 = pctToRate("4.60");
+const SPECIAL_MINIMUM_RATE = pctToRate("1.5");
 
 export const NE_RATES_2026: NeYearRates = {
   year: 2026,
@@ -138,10 +141,25 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("NE_EXEMPT", 1n);
-    return { state: "NE", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+  if (input.employerEmployeeCount == null) {
+    throw new Error(
+      "Nebraska employer employee count is required to determine whether the "
+      + "special withholding procedure applies; payroll must resolve it from the paying legal entity",
+    );
   }
+  const employerEmployeeCount = input.employerEmployeeCount;
+  if (!Number.isInteger(employerEmployeeCount) || employerEmployeeCount < 0) {
+    throw new Error(
+      `Nebraska employer employee count must be a non-negative integer, got ${employerEmployeeCount}`,
+    );
+  }
+  const specialProcedure = employerEmployeeCount > 24;
+  const lesserWithholdingDocumented = certificateFlag(
+    input.certificate, "lesser_withholding_documented",
+  );
+  trace("NE_EMPLOYER_EMPLOYEE_COUNT", U(String(employerEmployeeCount)));
+  trace("NE_SPECIAL_PROCEDURE", specialProcedure ? 1n : 0n);
+  trace("NE_LESSER_WITHHOLDING_DOCUMENTED", lesserWithholdingDocumented ? 1n : 0n);
 
   // No W-4 / W-4N: "withhold as if the employee was single and claimed no
   // withholding allowances regardless" of marital status.
@@ -149,6 +167,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
   const wages = U(input.wages) + U(input.supplemental ?? "0");
+  const exempt = certificateFlag(input.certificate, "exempt");
+  if (exempt) trace("NE_EXEMPT", 1n);
   const annualWages = wages * BigInt(P);
   trace("NE_ANNUAL_WAGES", annualWages);
 
@@ -157,11 +177,23 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const taxable = max0(annualWages - personal);
   trace("NE_TAXABLE", taxable);
 
-  const annualTax = neAnnualTax(taxable, married, rates);
+  const annualTax = exempt ? 0n : neAnnualTax(taxable, married, rates);
   trace("NE_ANNUAL_TAX", annualTax);
   const periodTax = divIntCents(annualTax, P);
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
-  const total = periodTax + extra;
+  const ordinary = periodTax + extra;
+  const taxQualifiedDeductions = U(input.taxQualifiedDeductions ?? "0");
+  if (taxQualifiedDeductions < 0n) {
+    throw new Error("Nebraska tax-qualified deductions cannot be negative");
+  }
+  const specialMinimumBase = max0(wages - taxQualifiedDeductions);
+  const specialMinimum = specialProcedure && !lesserWithholdingDocumented
+    ? mulRateCents(specialMinimumBase, SPECIAL_MINIMUM_RATE)
+    : 0n;
+  trace("NE_SPECIAL_MINIMUM_BASE", specialMinimumBase);
+  trace("NE_TAX_QUALIFIED_DEDUCTIONS", taxQualifiedDeductions);
+  trace("NE_SPECIAL_MINIMUM", specialMinimum);
+  const total = ordinary > specialMinimum ? ordinary : specialMinimum;
   trace("NE_WITHHELD", total);
 
   return {
@@ -208,7 +240,8 @@ export const NE_CERTIFICATE: PayrollCertificate = {
   summary:
     "Sets Nebraska marital status and withholding allowances. If the employee "
     + "does not furnish a W-4N or federal W-4, Circular EN requires withholding "
-    + "as single with no allowances.",
+    + "as single with no allowances. Employers with more than 24 employees must "
+    + "also retain supporting documentation for any lesser withholding amount.",
   storage: "certificate_rows",
   fields: [
     {
@@ -251,10 +284,20 @@ export const NE_CERTIFICATE: PayrollCertificate = {
       label: "Exempt from Nebraska withholding",
       kind: "flag",
       help:
-        "A current exempt claim withholds zero. Circular EN warns that the "
-        + "1.5% special procedure (employers with more than 24 employees) may "
-        + "overrule an exempt claim; that procedure is not applied here "
-        + "because this engine does not receive employer headcount.",
+        "A current exempt claim normally withholds zero. For an employer with "
+        + "more than 24 employees, Circular EN requires at least 1.5% unless "
+        + "the employee records supporting documentation below.",
+    },
+    {
+      key: "lesser_withholding_documented",
+      label: "Documentation supporting lesser Nebraska withholding",
+      kind: "flag",
+      help:
+        "Check only when the employee has supplied satisfactory supporting "
+        + "documentation (for example dependents, marital status, or itemized "
+        + "deductions) justifying less than the 1.5% special minimum. The "
+        + "documentation permits the ordinary percentage-method result, "
+        + "including an exempt claim, for employers with more than 24 employees.",
     },
   ],
 };
