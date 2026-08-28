@@ -1322,6 +1322,67 @@ test("worker-written terminal evidence closes an orphaned occurrence without a r
   }
 });
 
+// When multiple stale occurrences are open, worker evidence is not tied to an
+// occurrence id. Recovery therefore assigns it to the oldest open occurrence;
+// newer occurrences remain eligible for their own one-time retry.
+test("worker evidence closes the oldest open occurrence before a newer claim", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const scriptId = await seedDueScheduledScript(
+      org.orgId,
+      'function main(ctx) { return "newer-retry"; }',
+    );
+    const oldestAt = new Date(Date.now() - 30 * 60_000);
+    const newerAt = new Date(Date.now() - 20 * 60_000);
+    const workerAt = new Date(Date.now() - 10 * 60_000);
+    await db.execute(sql`
+      update user_scripts set next_run_at = ${new Date(Date.now() + 3_600_000)} where id = ${scriptId}
+    `);
+    for (const scheduledFor of [oldestAt, newerAt]) {
+      await db.execute(sql`
+        insert into script_runs (org_id, script_id, target_kind, target_id, status, logs, at)
+        values (${org.orgId}, ${scriptId}, 'scheduled_occurrence', null, 'queued',
+                jsonb_build_array(jsonb_build_object(
+                  'event', 'claimed',
+                  'occurrence', ${scriptOccurrenceKey(scriptId, scheduledFor)}::text,
+                  'scheduledFor', ${scheduledFor.toISOString()}::text,
+                  'attempt', 1)),
+                ${scheduledFor})
+      `);
+    }
+    // The worker completed after the newer occurrence was claimed. Without
+    // oldest-first recovery, this evidence is absorbed by the newer row and
+    // the oldest row is dispatched again.
+    await db.execute(sql`
+      insert into script_runs (org_id, script_id, target_kind, status, duration_ms, logs, at)
+      values (${org.orgId}, ${scriptId}, 'scheduled', 'ok', 120, '[{"event":"done"}]'::jsonb,
+              ${workerAt})
+    `);
+
+    await recoverLostScriptOccurrences();
+
+    const occurrences = (
+      await db.execute<{ status: string; logs: OccurrenceEventRow[] }>(sql`
+        select status, logs
+          from script_runs
+         where script_id = ${scriptId} and target_kind = 'scheduled_occurrence'
+         order by at
+      `)
+    ).rows;
+    assert.equal(occurrences.length, 2);
+    const [oldest, newer] = occurrences;
+    assert.equal(oldest!.status, "ok");
+    assert.ok(oldest!.logs.some((event) => event.event === "completed_on_worker"));
+    assert.ok(!oldest!.logs.some((event) => event.event === "recover"), "oldest occurrence was not retried");
+    assert.equal(newer!.status, "ok");
+    assert.ok(newer!.logs.some((event) => event.event === "recover" && event.attempt === 2));
+    assert.ok(newer!.logs.some((event) => event.event === "ran_inline" && event.attempt === 2));
+    assert.equal(await countScheduledRuns(scriptId), 2, "one worker run plus one newer-occurrence retry");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 // fnd_mt97sc1r_null regression — "durable claim before script execution": the
 // audited scheduler advanced user_scripts.next_run_at in its own committed
 // statement BEFORE any durable run/job existed, so a crash inside that window
