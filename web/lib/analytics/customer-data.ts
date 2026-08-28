@@ -490,9 +490,9 @@ export async function customerData(period: { from: string; to: string; label: st
     (db.execute(sql`
       with inv as (
         select d.id, d.party_id, d.posting_date, d.due_date, abs(d.total) as total,
-          -- `documents.total` is denominated in the invoice transaction
+          -- documents.total is denominated in the invoice transaction
           -- currency, so compare it with the transaction-currency leg of an
-          -- application. `applications.amount` is the base-currency carrying
+          -- application. applications.amount is the base-currency carrying
           -- amount and is not comparable for FX invoices.
           coalesce(sum(ap.target_transaction_amount), 0) as applied,
           max(pe.posting_date) as last_payment
