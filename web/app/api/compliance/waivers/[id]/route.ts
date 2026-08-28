@@ -28,19 +28,24 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const reason = (body.reason ?? '').trim()
   if (!reason) return NextResponse.json({ error: 'a revocation needs a reason' }, { status: 400 })
 
-  const updated = (await db.execute<{ id: string }>(sql`
-    update compliance_waivers
-       set revoked_at = now(), revoked_by = ${actorId}, revoke_reason = ${reason},
-           updated_at = now(), updated_by = ${actorId}
-     where org_id = ${orgId} and id = ${id} and revoked_at is null
-    returning id
-  `))
-  if (updated.rows.length === 0) {
+  const revokedId = await db.transaction(async (tx) => {
+    const updated = (await tx.execute<{ id: string }>(sql`
+      update compliance_waivers
+         set revoked_at = now(), revoked_by = ${actorId}, revoke_reason = ${reason},
+             updated_at = now(), updated_by = ${actorId}
+       where org_id = ${orgId} and id = ${id} and revoked_at is null
+      returning id
+    `))
+    if (updated.rows.length === 0) return null
+
+    await tx.execute(sql`
+      insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'compliance_waivers', ${id}, 'update',
+              ${JSON.stringify({ after: { revoked: true, reason } })}::jsonb, ${actorId})`)
+    return updated.rows[0]!.id
+  })
+  if (revokedId === null) {
     return NextResponse.json({ error: 'not found or already revoked' }, { status: 404 })
   }
-  await db.execute(sql`
-    insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'compliance_waivers', ${id}, 'update',
-            ${JSON.stringify({ after: { revoked: true, reason } })}::jsonb, ${actorId})`)
-  return NextResponse.json({ id })
+  return NextResponse.json({ id: revokedId })
 }
