@@ -4,7 +4,7 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { postDocument } from '@openbooks/engine/src/posting.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { startReconciliation, createMatch, excludeStatementLine } from '@openbooks/engine/src/banking.ts'
+import { startReconciliation, createMatchWithJournal, excludeStatementLine } from '@openbooks/engine/src/banking.ts'
 import { controlDeps } from './documents'
 import { nextDocumentNumber } from './bills'
 import {
@@ -205,23 +205,23 @@ async function postCategorizeForLine(
   const headerParty = outcome.partyId ?? null
   const memo = outcome.memo ?? line.description ?? rule.name
 
-  const bankJournalLineId = await createCategorizingJournal(orgId, userId, {
-    bankAccountId,
-    splits,
-    headerPartyId: headerParty,
-    amount: line.amount,
-    date: line.posted_on,
-    memo,
-    currency: line.currency,
-  })
-  await createMatch(
-    { reconciliationId, statementLineId: line.id, journalLineIds: [bankJournalLineId] },
+  await createMatchWithJournal(
+    {
+      reconciliationId,
+      statementLineId: line.id,
+      matchedBy: 'rule',
+      createJournal: () => createCategorizingJournal(orgId, userId, {
+        bankAccountId,
+        splits,
+        headerPartyId: headerParty,
+        amount: line.amount,
+        date: line.posted_on,
+        memo,
+        currency: line.currency,
+      }),
+    },
     ctx,
   )
-  await db.execute(sql`
-    update reconciliation_matches set matched_by = 'rule'
-     where reconciliation_id = ${reconciliationId} and statement_line_id = ${line.id} and org_id = ${orgId}
-  `)
 }
 
 export interface PreviewMatch {
@@ -440,16 +440,20 @@ export async function addJournalMatchFromLine(
   `))
   const line = lineRes.rows[0]
   if (!line) throw new Error('Statement line not found or already matched')
-  const bankJournalLineId = await createCategorizingJournal(orgId, userId, {
-    bankAccountId: line.account_id,
-    splits: [{ accountId: opts.offsetAccountId, portion: { kind: 'remainder' } }],
-    amount: line.amount,
-    date: line.posted_on,
-    memo: line.description,
-    currency: line.currency,
-  })
-  await createMatch(
-    { reconciliationId: opts.reconciliationId, statementLineId: opts.statementLineId, journalLineIds: [bankJournalLineId] },
+  await createMatchWithJournal(
+    {
+      reconciliationId: opts.reconciliationId,
+      statementLineId: opts.statementLineId,
+      matchedBy: 'manual',
+      createJournal: () => createCategorizingJournal(orgId, userId, {
+        bankAccountId: line.account_id,
+        splits: [{ accountId: opts.offsetAccountId, portion: { kind: 'remainder' } }],
+        amount: line.amount,
+        date: line.posted_on,
+        memo: line.description,
+        currency: line.currency,
+      }),
+    },
     ctx,
   )
 }

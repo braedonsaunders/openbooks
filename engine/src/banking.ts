@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, schema, type SqlExecutor } from "./db.ts";
+import { db, inDbTransaction, schema, type SqlExecutor, withOrgTransaction } from "./db.ts";
 import { fromUnits, isZero, sum, toUnits } from "./money.ts";
 
 /**
@@ -1264,6 +1264,7 @@ export interface ReconciliationTotals {
 }
 
 type BankingSqlExecutor = SqlExecutor;
+type BankingTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 async function reconciliationTotalsUsing(
   executor: BankingSqlExecutor,
@@ -1447,87 +1448,136 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
   });
 }
 
+type MatchOptions = {
+  reconciliationId: string;
+  statementLineId: string;
+};
+
+type MatchOrigin = "auto" | "manual" | "rule";
+
+/**
+ * Validate and persist a match on an already-open transaction. The statement
+ * line lock is deliberately acquired before the optional journal factory: a
+ * concurrent rule invocation therefore waits for the winner and then fails
+ * without creating/posting a second journal.
+ */
+async function createMatchInTransaction(
+  tx: BankingTransaction,
+  opts: MatchOptions,
+  ctx: BankingContext,
+  journalLineIdsOrFactory: string[] | (() => Promise<string>),
+  matchedBy: MatchOrigin,
+): Promise<ReconciliationTotals> {
+  const reconResult = (await tx.execute<ReconciliationRow>(sql`
+    select id, account_id, through_date, currency, statement_balance, status
+      from reconciliations
+     where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
+     for update
+  `));
+  const recon = reconResult.rows[0];
+  if (!recon) throw new BankingError("Reconciliation not found");
+  if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
+
+  const stmt = (await tx.execute<{ id: string; amount: string; currency: string }>(sql`
+    select l.id, l.amount, l.currency
+      from bank_statement_lines l
+     where l.id = ${opts.statementLineId} and l.org_id = ${ctx.orgId}
+       and l.account_id = ${recon.account_id}
+       and l.currency = ${recon.currency}
+       and l.posted_on <= ${recon.through_date}
+       and l.match_status = 'unmatched'
+     for update
+  `));
+  if (!stmt.rows[0]) {
+    throw new BankingError(
+      "Statement line is unavailable, outside the reconciliation cutoff, or already matched",
+    );
+  }
+
+  const journalLineIds = [...new Set(
+    typeof journalLineIdsOrFactory === "function"
+      ? [await journalLineIdsOrFactory()]
+      : journalLineIdsOrFactory,
+  )];
+  if (journalLineIds.length === 0) throw new BankingError("Select at least one journal line");
+
+  const gl = (await tx.execute<{ id: string; amount: string }>(sql`
+    select jl.id, jl.txn_amount as amount
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
+     where jl.id = any(${sql.param(journalLineIds)}::uuid[])
+       and jl.org_id = ${ctx.orgId}
+       and jl.account_id = ${recon.account_id}
+       and jl.currency = ${recon.currency}
+       and jl.reconciled_at is null
+       and je.posting_date <= ${recon.through_date}
+       and not exists (
+         select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id
+       )
+     order by jl.id
+     for update of jl
+  `));
+  if (gl.rows.length !== journalLineIds.length) {
+    throw new BankingError(
+      "One or more journal lines are unavailable, outside the cutoff, already reconciled, or already matched",
+    );
+  }
+  const journalTotal = sum(gl.rows.map((line) => line.amount));
+  if (toUnits(journalTotal) !== toUnits(stmt.rows[0].amount)) {
+    throw new BankingError(
+      `Selected journal lines total ${journalTotal}; the statement line is ${fromUnits(toUnits(stmt.rows[0].amount))}`,
+    );
+  }
+
+  await tx.insert(schema.reconciliationMatches).values(
+    journalLineIds.map((journalLineId) => ({
+      orgId: ctx.orgId,
+      reconciliationId: recon.id,
+      statementLineId: opts.statementLineId,
+      journalLineId,
+      matchedBy,
+      confidence: null,
+      createdBy: ctx.userId,
+    })),
+  );
+  await tx.execute(sql`
+    update bank_statement_lines
+       set match_status = 'matched', updated_at = now(), updated_by = ${ctx.userId}
+       where id = ${opts.statementLineId} and org_id = ${ctx.orgId}
+  `);
+  return refreshStatus(recon, ctx, tx);
+}
+
+/**
+ * Claim an unmatched statement line and create/match its journal atomically.
+ * The callback runs while the line row is locked and inside the transaction
+ * pinned by `withOrgTransaction`; engine/web calls that use the shared `db`
+ * handle therefore join this exact transaction. If the line was claimed by a
+ * concurrent invocation, the callback is never called and no journal exists
+ * to orphan.
+ */
+export async function createMatchWithJournal(
+  opts: MatchOptions & { createJournal: () => Promise<string>; matchedBy?: MatchOrigin },
+  ctx: BankingContext,
+): Promise<ReconciliationTotals> {
+  return withOrgTransaction(ctx.orgId, () =>
+    inDbTransaction((tx) =>
+      createMatchInTransaction(tx, opts, ctx, opts.createJournal, opts.matchedBy ?? "rule"),
+    ),
+  );
+}
+
 /** Manually pair one statement line with one or more journal lines. */
 export async function createMatch(
-  opts: { reconciliationId: string; statementLineId: string; journalLineIds: string[] },
+  opts: MatchOptions & { journalLineIds: string[] },
   ctx: BankingContext,
 ): Promise<ReconciliationTotals> {
   const journalLineIds = [...new Set(opts.journalLineIds)];
   if (journalLineIds.length === 0) throw new BankingError("Select at least one journal line");
 
-  return db.transaction(async (tx) => {
-    const reconResult = (await tx.execute<ReconciliationRow>(sql`
-      select id, account_id, through_date, currency, statement_balance, status
-        from reconciliations
-       where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
-       for update
-    `));
-    const recon = reconResult.rows[0];
-    if (!recon) throw new BankingError("Reconciliation not found");
-    if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
-
-    const stmt = (await tx.execute<{ id: string; amount: string; currency: string }>(sql`
-      select l.id, l.amount, l.currency
-        from bank_statement_lines l
-       where l.id = ${opts.statementLineId} and l.org_id = ${ctx.orgId}
-         and l.account_id = ${recon.account_id}
-         and l.currency = ${recon.currency}
-         and l.posted_on <= ${recon.through_date}
-         and l.match_status = 'unmatched'
-       for update
-    `));
-    if (!stmt.rows[0]) {
-      throw new BankingError(
-        "Statement line is unavailable, outside the reconciliation cutoff, or already matched",
-      );
-    }
-
-    const gl = (await tx.execute<{ id: string; amount: string }>(sql`
-      select jl.id, jl.txn_amount as amount
-        from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
-       where jl.id = any(${sql.param(journalLineIds)}::uuid[])
-         and jl.org_id = ${ctx.orgId}
-         and jl.account_id = ${recon.account_id}
-         and jl.currency = ${recon.currency}
-         and jl.reconciled_at is null
-         and je.posting_date <= ${recon.through_date}
-         and not exists (
-           select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id
-         )
-       order by jl.id
-       for update of jl
-    `));
-    if (gl.rows.length !== journalLineIds.length) {
-      throw new BankingError(
-        "One or more journal lines are unavailable, outside the cutoff, already reconciled, or already matched",
-      );
-    }
-    const journalTotal = sum(gl.rows.map((line) => line.amount));
-    if (toUnits(journalTotal) !== toUnits(stmt.rows[0].amount)) {
-      throw new BankingError(
-        `Selected journal lines total ${journalTotal}; the statement line is ${fromUnits(toUnits(stmt.rows[0].amount))}`,
-      );
-    }
-
-    await tx.insert(schema.reconciliationMatches).values(
-      journalLineIds.map((journalLineId) => ({
-        orgId: ctx.orgId,
-        reconciliationId: recon.id,
-        statementLineId: opts.statementLineId,
-        journalLineId,
-        matchedBy: "manual" as const,
-        confidence: null,
-        createdBy: ctx.userId,
-      })),
-    );
-    await tx.execute(sql`
-      update bank_statement_lines
-         set match_status = 'matched', updated_at = now(), updated_by = ${ctx.userId}
-         where id = ${opts.statementLineId} and org_id = ${ctx.orgId}
-    `);
-    return refreshStatus(recon, ctx, tx);
-  });
+  return db.transaction((tx) =>
+    createMatchInTransaction(tx, opts, ctx, journalLineIds, "manual"),
+  );
 }
 
 /** Undo all of a statement line's matches within a session. */
