@@ -151,6 +151,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0066_change_set_review_approval_audit.sql",
     "0067_insights_home_uniqueness.sql",
     "0068_equipment_capitalization_concurrency.sql",
+    "0069_lease_cancelled_lines_accumulation.sql",
     "0070_governed_query_private_projection.sql",
     "0071_information_return_root_uniqueness.sql",
     "0072_payroll_parallel_unattributed_uniqueness.sql",
