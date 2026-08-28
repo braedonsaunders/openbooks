@@ -247,7 +247,7 @@ async function openingYearEndYtdByEmployee(
       from payroll_opening_balances b
       join employee_payroll_profiles prof
         on prof.org_id = b.org_id and prof.employee_party_id = b.employee_party_id
-       and coalesce(prof.country, ${country}) = ${country}
+       and coalesce(prof.country, 'CA') = ${country}
      where b.org_id = ${orgId} and b.tax_year = ${taxYear}
        and (
          coalesce(b.pensionable_ytd, 0) <> 0 or coalesce(b.insurable_ytd, 0) <> 0
@@ -283,7 +283,7 @@ async function openingEmployeeProfiles(
       from parties p
       left join employee_payroll_profiles prof
         on prof.org_id = p.org_id and prof.employee_party_id = p.id
-       and coalesce(prof.country, ${country}) = ${country}
+       and coalesce(prof.country, 'CA') = ${country}
      where p.org_id = ${orgId} and p.id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})
   `));
   return new Map(rows.rows.map((row) => [row.employee_party_id, {
