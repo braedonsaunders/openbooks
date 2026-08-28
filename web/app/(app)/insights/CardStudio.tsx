@@ -169,30 +169,95 @@ export function CardStudio({
     }),
     [name, description, query, vizType, vizSettings],
   )
+
+  // Card revisions are opaque, lossless PostgreSQL timestamps. The page's
+  // server-rendered row may have passed through a lossy Date, so hydrate the
+  // exact token from the API before the first debounced save is allowed to
+  // write. Every subsequent response advances this token for the next save.
+  const revisionRef = useRef<string | null>(null)
+  const revisionReadyRef = useRef<Promise<void> | null>(null)
+  useEffect(() => {
+    revisionRef.current = null
+    const controller = new AbortController()
+    const ready = (async () => {
+      try {
+        const res = await fetch(`/api/insights/cards/${card.id}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+        const data = (await res.json()) as { updated_at?: unknown }
+        if (!res.ok || typeof data.updated_at !== 'string') throw new Error('card revision unavailable')
+        revisionRef.current = data.updated_at
+      } catch (error) {
+        if ((error as { name?: string })?.name !== 'AbortError') revisionRef.current = null
+      }
+    })()
+    revisionReadyRef.current = ready
+    return () => controller.abort()
+  }, [card.id])
+
   const first = useRef(true)
+  const saveSeq = useRef(0)
+  const saveAbort = useRef<AbortController | null>(null)
   useEffect(() => {
     if (ro) return
     if (first.current) {
       first.current = false
       return
     }
+    const seq = ++saveSeq.current
+    saveAbort.current?.abort()
+    saveAbort.current = null
     setSaveState('dirty')
-    const timer = setTimeout(async () => {
-      setSaveState('saving')
-      const res = await fetch(`/api/insights/cards/${card.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(savePayload),
-      })
-      if (res.ok) {
-        setSaveState('saved')
-        router.refresh()
-      } else {
-        setSaveState('error')
-        toast.error((await res.json()).error ?? t('autosave.failed'))
-      }
+    const timer = setTimeout(() => {
+      void (async () => {
+        const revisionReady = revisionReadyRef.current
+        if (revisionReady) await revisionReady
+        if (seq !== saveSeq.current) return
+        const expectedUpdatedAt = revisionRef.current
+        if (!expectedUpdatedAt) {
+          setSaveState('error')
+          toast.error(t('autosave.failed'))
+          return
+        }
+
+        const controller = new AbortController()
+        saveAbort.current = controller
+        setSaveState('saving')
+        try {
+          const res = await fetch(`/api/insights/cards/${card.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...savePayload, expectedUpdatedAt }),
+            signal: controller.signal,
+          })
+          const data = (await res.json().catch(() => null)) as { error?: unknown; updated_at?: unknown } | null
+          // A request can commit just as its fetch is aborted. Keep its token
+          // for the next save even when this completion is no longer current.
+          if (res.ok && typeof data?.updated_at === 'string') revisionRef.current = data.updated_at
+          if (seq !== saveSeq.current) return
+          if (res.ok) {
+            if (typeof data?.updated_at !== 'string') throw new Error('card revision unavailable')
+            setSaveState('saved')
+            router.refresh()
+          } else {
+            setSaveState('error')
+            toast.error(typeof data?.error === 'string' ? data.error : t('autosave.failed'))
+          }
+        } catch (error) {
+          if (seq !== saveSeq.current || (error as { name?: string })?.name === 'AbortError') return
+          setSaveState('error')
+          toast.error(t('autosave.failed'))
+        } finally {
+          if (saveAbort.current === controller) saveAbort.current = null
+        }
+      })()
     }, 600)
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      saveAbort.current?.abort()
+      saveAbort.current = null
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savePayload, ro])
 
