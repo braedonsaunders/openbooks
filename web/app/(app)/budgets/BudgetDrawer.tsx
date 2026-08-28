@@ -19,6 +19,15 @@ import { ReadOnlyValue } from '../../../components/read-only-value'
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error'
 type Cell = { accountId: string; periodId: string; amount: string }
+type PendingCellSnapshot = { key: string; cell: Cell; version: number }
+
+/** Only retry a failed cell when no newer edit has superseded its snapshot. */
+export function restoreFailedBudgetCells(
+  snapshots: readonly PendingCellSnapshot[],
+  latestVersions: ReadonlyMap<string, number>,
+): Cell[] {
+  return snapshots.filter(({ key, version }) => latestVersions.get(key) === version).map(({ cell }) => cell)
+}
 
 const CREDIT_NORMAL = new Set(['income', 'income_other'])
 
@@ -67,6 +76,7 @@ export function BudgetDrawer({
   const [uplift, setUplift] = useState('')
   const chainRef = useRef<Promise<unknown>>(Promise.resolve())
   const pendingRef = useRef(new Map<string, Cell>())
+  const pendingVersionsRef = useRef(new Map<string, number>())
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const metadataTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const metadataBaselineRef = useRef(JSON.stringify([name, description, kind, bookId, fiscalYear]))
@@ -105,16 +115,22 @@ export function BudgetDrawer({
 
   const flushCells = useCallback(async (): Promise<boolean> => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    const pending = [...pendingRef.current.values()]
+    const pending: PendingCellSnapshot[] = [...pendingRef.current.entries()].map(([key, cell]) => ({
+      key,
+      cell,
+      version: pendingVersionsRef.current.get(key) ?? 0,
+    }))
     pendingRef.current.clear()
     if (pending.length === 0) return true
     try {
       await execute(`/api/budgets/${scenario.id}/lines`, 'PATCH', {
-        cells: pending.map((cell) => ({ ...cell, amount: toStorage(cell.accountId, cell.amount), ...dims })),
+        cells: pending.map(({ cell }) => ({ ...cell, amount: toStorage(cell.accountId, cell.amount), ...dims })),
       })
       return true
     } catch {
-      pending.forEach((cell) => pendingRef.current.set(`${cell.accountId}|${cell.periodId}`, cell))
+      restoreFailedBudgetCells(pending, pendingVersionsRef.current).forEach((cell) => {
+        pendingRef.current.set(`${cell.accountId}|${cell.periodId}`, cell)
+      })
       setSaveState('error')
       toast.error(t('workspace.saveFailed'))
       return false
@@ -125,6 +141,7 @@ export function BudgetDrawer({
     const key = `${cell.accountId}|${cell.periodId}`
     setValues((current) => ({ ...current, [key]: cell.amount }))
     pendingRef.current.set(key, cell)
+    pendingVersionsRef.current.set(key, (pendingVersionsRef.current.get(key) ?? 0) + 1)
     setSaveState('dirty')
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => void flushCells(), 700)
