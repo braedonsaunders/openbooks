@@ -21,6 +21,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       ? sql`and e.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
       : sql`and false`
     : sql``
+  const lineSubsidiaryFilter = authz.allowedSubsidiaryIds
+    ? authz.allowedSubsidiaryIds.size > 0
+      ? sql`and l.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
+      : sql`and false`
+    : sql``
 
   const e = (await db.execute<Record<string, unknown>>(sql`
     select e.id, e.entry_number, e.posting_date::text as date, e.memo, e.origin, e.status,
@@ -46,6 +51,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       left join departments d on d.id = l.department_id and d.org_id = l.org_id
       left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
      where l.entry_id = ${id} and l.org_id = ${authz.user.orgId}
+       ${lineSubsidiaryFilter}
      order by l.line_number
   `))
 
