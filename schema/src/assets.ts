@@ -66,7 +66,7 @@ export const assetCategories = pgTable("asset_categories", {
   taxAttributes: jsonb("tax_attributes").notNull().default({}),
   isActive: boolean("is_active").notNull().default(true),
   ...auditColumns,
-});
+}, (t) => [uniqueIndex("asset_categories_org_name").on(t.orgId, t.name)]);
 
 export const fixedAssets = pgTable(
   "fixed_assets",
@@ -114,7 +114,13 @@ export const fixedAssets = pgTable(
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },
-  (t) => [index("assets_org_status").on(t.orgId, t.status)],
+  (t) => [
+    uniqueIndex("fixed_assets_org_asset_number_unique").on(
+      t.orgId,
+      t.assetNumber,
+    ),
+    index("assets_org_status").on(t.orgId, t.status),
+  ],
 );
 
 /**
