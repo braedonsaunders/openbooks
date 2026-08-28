@@ -50,6 +50,7 @@ import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { countryOptions } from '../../../lib/countries'
 import { ReadOnlyValue } from '../../../components/read-only-value'
 import { promptDialog } from '../../../lib/prompt'
+import { formatMoney } from '@openbooks/engine/src/money.ts'
 type Opt = {
   id: string
   name?: string
@@ -214,6 +215,17 @@ export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | '
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'
 const field = 'space-y-1.5'
 
+/**
+ * Format a persisted credit limit for the two-decimal editor without first
+ * coercing the PostgreSQL numeric string through JavaScript's Number type.
+ * Credit limits use the ledger's exact numeric representation, so the bigint
+ * money formatter preserves values beyond Number.MAX_SAFE_INTEGER and rounds
+ * fractional cents deterministically.
+ */
+export function formatCreditLimit(value: string | number | null | undefined): string {
+  return value == null ? '' : formatMoney(value, 2)
+}
+
 export function PartyDrawer({
   payload,
   paymentTerms,
@@ -322,7 +334,7 @@ export function PartyDrawer({
   const [customer, setCustomer] = useState({
     enabled: !!payload.customer && payload.customer.is_active !== false,
     paymentTermsId: payload.customer?.payment_terms_id ?? '',
-    creditLimit: payload.customer?.credit_limit != null ? Number(payload.customer.credit_limit).toFixed(2) : '',
+    creditLimit: formatCreditLimit(payload.customer?.credit_limit),
     currency: payload.customer?.currency ?? '',
     arAccountId: payload.customer?.ar_account_id ?? '',
     salesRepId: payload.customer?.sales_rep_id ?? '',
@@ -466,7 +478,7 @@ export function PartyDrawer({
     setCustomer({
       enabled: !!payload.customer && payload.customer.is_active !== false,
       paymentTermsId: payload.customer?.payment_terms_id ?? '',
-      creditLimit: payload.customer?.credit_limit != null ? Number(payload.customer.credit_limit).toFixed(2) : '',
+      creditLimit: formatCreditLimit(payload.customer?.credit_limit),
       currency: payload.customer?.currency ?? '',
       arAccountId: payload.customer?.ar_account_id ?? '',
       salesRepId: payload.customer?.sales_rep_id ?? '',
