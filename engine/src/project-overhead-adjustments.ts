@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
-import { db } from "./db.ts";
+import { db, inDbTransaction } from "./db.ts";
 import { isZero, neg, normalizeMoney } from "./money.ts";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -33,6 +33,94 @@ export interface ProjectOverheadAdjustmentRecord {
   id: string;
   amount: string;
   existing: boolean;
+}
+
+type OverheadAdjustmentTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function recordProjectOverheadAdjustmentWithinTransaction(
+  tx: OverheadAdjustmentTransaction,
+  input: RecordProjectOverheadAdjustmentInput,
+  amount: string,
+  reason: string,
+  sourceSystem: string | null,
+  sourceRef: string | null,
+  evidence: Record<string, unknown>,
+): Promise<ProjectOverheadAdjustmentRecord> {
+  if (sourceSystem && sourceRef) {
+    const prior = (await tx.execute<{
+        id: string;
+        project_id: string;
+        adjustment_date: string;
+        amount: string;
+        reason: string;
+        reverses_adjustment_id: string | null;
+        evidence_matches: boolean;
+      }>(sql`
+      select id, project_id, adjustment_date::text as adjustment_date,
+             amount::text, reason, reverses_adjustment_id,
+             evidence = ${JSON.stringify(evidence)}::jsonb as evidence_matches
+        from project_overhead_adjustments
+       where org_id = ${input.orgId}
+         and source_system = ${sourceSystem}
+         and source_ref = ${sourceRef}
+       for update
+    `));
+    const existing = prior.rows[0];
+    if (existing) {
+      const equivalent =
+        existing.project_id === input.projectId &&
+        existing.adjustment_date === input.adjustmentDate &&
+        normalizeMoney(existing.amount) === amount &&
+        existing.reason === reason &&
+        existing.reverses_adjustment_id ===
+          (input.reversesAdjustmentId ?? null) &&
+        existing.evidence_matches;
+      if (!equivalent) {
+        throw new Error(
+          `overhead adjustment source identity ${sourceSystem}/${sourceRef} already has different evidence`,
+        );
+      }
+      return { id: existing.id, amount, existing: true };
+    }
+  }
+
+  const inserted = (await tx.execute<{ id: string }>(sql`
+    insert into project_overhead_adjustments (
+      org_id, project_id, adjustment_date, amount, reason,
+      source_system, source_ref, reverses_adjustment_id, evidence,
+      created_by, updated_by
+    )
+    values (
+      ${input.orgId}, ${input.projectId}, ${input.adjustmentDate}, ${amount},
+      ${reason}, ${sourceSystem}, ${sourceRef},
+      ${input.reversesAdjustmentId ?? null}, ${JSON.stringify(evidence)}::jsonb,
+      ${input.actorId ?? null}, ${input.actorId ?? null}
+    )
+    returning id
+  `));
+  const id = inserted.rows[0]!.id;
+  await tx.execute(sql`
+    insert into audit_log (
+      org_id, table_name, row_id, action, changes, actor_id
+    )
+    values (
+      ${input.orgId}, 'project_overhead_adjustments', ${id}, 'insert',
+      ${JSON.stringify({
+        after: {
+          projectId: input.projectId,
+          adjustmentDate: input.adjustmentDate,
+          amount,
+          reason,
+          sourceSystem,
+          sourceRef,
+          reversesAdjustmentId: input.reversesAdjustmentId ?? null,
+          evidence,
+        },
+      })}::jsonb,
+      ${input.actorId ?? null}
+    )
+  `);
+  return { id, amount, existing: false };
 }
 
 /**
@@ -70,83 +158,17 @@ export async function recordProjectOverheadAdjustment(
     throw new Error("overhead adjustment evidence must be an object");
   }
 
-  return db.transaction(async (tx) => {
-    if (sourceSystem && sourceRef) {
-      const prior = (await tx.execute<{
-          id: string;
-          project_id: string;
-          adjustment_date: string;
-          amount: string;
-          reason: string;
-          reverses_adjustment_id: string | null;
-          evidence_matches: boolean;
-        }>(sql`
-        select id, project_id, adjustment_date::text as adjustment_date,
-               amount::text, reason, reverses_adjustment_id,
-               evidence = ${JSON.stringify(evidence)}::jsonb as evidence_matches
-          from project_overhead_adjustments
-         where org_id = ${input.orgId}
-           and source_system = ${sourceSystem}
-           and source_ref = ${sourceRef}
-         for update
-      `));
-      const existing = prior.rows[0];
-      if (existing) {
-        const equivalent =
-          existing.project_id === input.projectId &&
-          existing.adjustment_date === input.adjustmentDate &&
-          normalizeMoney(existing.amount) === amount &&
-          existing.reason === reason &&
-          existing.reverses_adjustment_id ===
-            (input.reversesAdjustmentId ?? null) &&
-          existing.evidence_matches;
-        if (!equivalent) {
-          throw new Error(
-            `overhead adjustment source identity ${sourceSystem}/${sourceRef} already has different evidence`,
-          );
-        }
-        return { id: existing.id, amount, existing: true };
-      }
-    }
-
-    const inserted = (await tx.execute<{ id: string }>(sql`
-      insert into project_overhead_adjustments (
-        org_id, project_id, adjustment_date, amount, reason,
-        source_system, source_ref, reverses_adjustment_id, evidence,
-        created_by, updated_by
-      )
-      values (
-        ${input.orgId}, ${input.projectId}, ${input.adjustmentDate}, ${amount},
-        ${reason}, ${sourceSystem}, ${sourceRef},
-        ${input.reversesAdjustmentId ?? null}, ${JSON.stringify(evidence)}::jsonb,
-        ${input.actorId ?? null}, ${input.actorId ?? null}
-      )
-      returning id
-    `));
-    const id = inserted.rows[0]!.id;
-    await tx.execute(sql`
-      insert into audit_log (
-        org_id, table_name, row_id, action, changes, actor_id
-      )
-      values (
-        ${input.orgId}, 'project_overhead_adjustments', ${id}, 'insert',
-        ${JSON.stringify({
-          after: {
-            projectId: input.projectId,
-            adjustmentDate: input.adjustmentDate,
-            amount,
-            reason,
-            sourceSystem,
-            sourceRef,
-            reversesAdjustmentId: input.reversesAdjustmentId ?? null,
-            evidence,
-          },
-        })}::jsonb,
-        ${input.actorId ?? null}
-      )
-    `);
-    return { id, amount, existing: false };
-  });
+  return inDbTransaction((tx) =>
+    recordProjectOverheadAdjustmentWithinTransaction(
+      tx,
+      input,
+      amount,
+      reason,
+      sourceSystem,
+      sourceRef,
+      evidence,
+    ),
+  );
 }
 
 export async function reverseProjectOverheadAdjustment(input: {
@@ -158,30 +180,101 @@ export async function reverseProjectOverheadAdjustment(input: {
   sourceSystem?: string | null;
   sourceRef?: string | null;
 }): Promise<ProjectOverheadAdjustmentRecord> {
-  const original = (await db.execute<{
-      project_id: string;
-      amount: string;
-      evidence: Record<string, unknown>;
-    }>(sql`
-    select project_id, amount::text, evidence
-      from project_overhead_adjustments
-     where org_id = ${input.orgId} and id = ${input.adjustmentId}
-  `));
-  const row = original.rows[0];
-  if (!row) throw new Error("overhead adjustment not found");
-  return recordProjectOverheadAdjustment({
-    orgId: input.orgId,
-    projectId: row.project_id,
-    adjustmentDate: input.adjustmentDate,
-    amount: neg(row.amount),
-    reason: input.reason,
-    actorId: input.actorId,
-    sourceSystem: input.sourceSystem,
-    sourceRef: input.sourceRef,
-    reversesAdjustmentId: input.adjustmentId,
-    evidence: {
+  if (!DATE.test(input.adjustmentDate)) {
+    throw new Error("adjustmentDate must be YYYY-MM-DD");
+  }
+  const reason = input.reason.trim();
+  if (reason.length < 8 || reason.length > 500) {
+    throw new Error("overhead adjustment reason must be 8-500 characters");
+  }
+  const sourceSystem = input.sourceSystem?.trim() || null;
+  const sourceRef = input.sourceRef?.trim() || null;
+  if ((sourceSystem === null) !== (sourceRef === null)) {
+    throw new Error(
+      "sourceSystem and sourceRef must either both be provided or both be absent",
+    );
+  }
+
+  // Lock the source row before checking its reversal lineage. This is the
+  // serialization point for concurrent retries: a second caller waits for
+  // the first transaction to commit, then returns its existing reversal.
+  return inDbTransaction(async (tx) => {
+    const original = (await tx.execute<{
+        project_id: string;
+        amount: string;
+        evidence: Record<string, unknown>;
+      }>(sql`
+      select project_id, amount::text, evidence
+        from project_overhead_adjustments
+       where org_id = ${input.orgId} and id = ${input.adjustmentId}
+       for update
+    `));
+    const row = original.rows[0];
+    if (!row) throw new Error("overhead adjustment not found");
+
+    const reversalAmount = neg(row.amount);
+    const reversalEvidence = {
       reversalOf: input.adjustmentId,
       originalEvidence: row.evidence,
-    },
+    };
+    const existing = (await tx.execute<{
+      id: string;
+      project_id: string;
+      adjustment_date: string;
+      amount: string;
+      reason: string;
+      source_system: string | null;
+      source_ref: string | null;
+      evidence_matches: boolean;
+    }>(sql`
+      select id, project_id, adjustment_date::text as adjustment_date,
+             amount::text, reason, source_system, source_ref,
+             evidence = ${JSON.stringify(reversalEvidence)}::jsonb as evidence_matches
+        from project_overhead_adjustments
+       where org_id = ${input.orgId}
+         and reverses_adjustment_id = ${input.adjustmentId}
+       for update
+    `)).rows[0];
+    if (existing) {
+      const equivalent =
+        existing.project_id === row.project_id &&
+        existing.adjustment_date === input.adjustmentDate &&
+        normalizeMoney(existing.amount) === normalizeMoney(reversalAmount) &&
+        existing.reason === reason &&
+        existing.source_system === sourceSystem &&
+        existing.source_ref === sourceRef &&
+        existing.evidence_matches;
+      if (!equivalent) {
+        throw new Error(
+          `overhead adjustment ${input.adjustmentId} already has a reversal with different evidence`,
+        );
+      }
+      return {
+        id: existing.id,
+        amount: normalizeMoney(existing.amount),
+        existing: true,
+      };
+    }
+
+    return recordProjectOverheadAdjustmentWithinTransaction(
+      tx,
+      {
+        orgId: input.orgId,
+        projectId: row.project_id,
+        adjustmentDate: input.adjustmentDate,
+        amount: reversalAmount,
+        reason,
+        actorId: input.actorId,
+        sourceSystem,
+        sourceRef,
+        reversesAdjustmentId: input.adjustmentId,
+        evidence: reversalEvidence,
+      },
+      reversalAmount,
+      reason,
+      sourceSystem,
+      sourceRef,
+      reversalEvidence,
+    );
   });
 }
