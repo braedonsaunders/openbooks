@@ -1276,6 +1276,14 @@ export async function payRunFunding(
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
          where jl.org_id = a.org_id and jl.account_id = a.id) bal on true
      where a.org_id = ${orgId} and a.is_active and not a.is_summary and a.type = 'asset_bank'
+       ${allowedSubsidiaryIds == null
+         ? sql``
+         : allowedSubsidiaryIds.size > 0
+           ? sql`and (a.subsidiary_id is null or a.subsidiary_id in (${sql.join(
+               [...allowedSubsidiaryIds].map((id) => sql`${id}`),
+               sql`, `,
+             )}))`
+           : sql`and false`}
      order by a.number nulls last, a.name
   `));
 

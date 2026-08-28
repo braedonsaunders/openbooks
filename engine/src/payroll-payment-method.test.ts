@@ -16,7 +16,7 @@ import { payRunFunding, payRunReadiness } from "./payroll-readiness.ts";
 import {
   calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
 } from "./payroll-run.ts";
-import { createScratchOrg, seedFlowActors } from "./test-fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
 /**
  * How an employee gets paid, end to end.
@@ -165,13 +165,20 @@ interface Fixture {
   accounts: Record<string, string>;
 }
 
-const account = async (orgId: string, number: string, name: string, type: string) => {
+const account = async (
+  orgId: string,
+  number: string,
+  name: string,
+  type: string,
+  subsidiaryId: string | null = null,
+) => {
   const id = randomUUID();
   await db.execute(sql`
     insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                          reconcilable, required_dimensions, custom, subsidiary_include_children)
+                          reconcilable, required_dimensions, custom, subsidiary_id,
+                          subsidiary_include_children)
     values (${id}, ${orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-            '[]'::jsonb, '{}'::jsonb, true)`);
+            '[]'::jsonb, '{}'::jsonb, ${subsidiaryId}, true)`);
   return id;
 };
 
@@ -355,5 +362,60 @@ test(
       (await payRunCheques(fx.orgId, run.documentId)).cheques.map((c) => c.chequeNumber),
       batch.cheques.map((c) => c.chequeNumber),
     );
+  },
+);
+
+test(
+  "pay-run funding exposes shared and permitted subsidiary banks only",
+  { skip: !DB },
+  async () => {
+    const fx = await payrollOrg();
+    const childSubsidiaryId = randomUUID();
+    try {
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country,
+                                  tax_ids, is_elimination, is_active, custom)
+        values (${childSubsidiaryId}, ${fx.orgId}, ${fx.subsidiaryId}, 'Child Co', 'CAD', 'CA',
+                '{}'::jsonb, false, true, '{}'::jsonb)`);
+      const sharedBankId = await account(fx.orgId, "9000", "Shared Payroll Bank", "asset_bank");
+      const rootBankId = await account(
+        fx.orgId, "9010", "Root Payroll Bank", "asset_bank", fx.subsidiaryId,
+      );
+      const childBankId = await account(
+        fx.orgId, "9020", "Child Payroll Bank", "asset_bank", childSubsidiaryId,
+      );
+      const run = await createPayRun({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
+      });
+
+      const unrestricted = await payRunFunding(fx.orgId, run.documentId);
+      const unrestrictedIds = new Set(unrestricted.accounts.map((row) => row.id));
+      assert.ok(unrestrictedIds.has(sharedBankId));
+      assert.ok(unrestrictedIds.has(rootBankId));
+      assert.ok(unrestrictedIds.has(childBankId));
+
+      const restricted = await payRunFunding(
+        fx.orgId,
+        run.documentId,
+        new Set([fx.subsidiaryId]),
+      );
+      const restrictedIds = new Set(restricted.accounts.map((row) => row.id));
+      assert.ok(restrictedIds.has(sharedBankId));
+      assert.ok(restrictedIds.has(rootBankId));
+      assert.equal(restrictedIds.has(childBankId), false);
+
+      await assert.rejects(
+        payRunFunding(fx.orgId, run.documentId, new Set()),
+        /pay run not found/,
+      );
+    } finally {
+      // The scratch-org teardown removes the child subsidiary and all account
+      // rows with it, including the balances read by the funding query.
+      await dropScratchOrgReporting(fx.orgId);
+    }
   },
 );
