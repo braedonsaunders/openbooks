@@ -12,6 +12,7 @@ import {
   MAX_EXPORT_ROWS,
   orgFeatureEnabled,
   RefResolver,
+  type ReadCtx,
   type DataResource,
   type WriteCtx,
 } from './resource-core'
@@ -94,6 +95,21 @@ interface TxnLineInput {
   unitPrice?: unknown
 }
 
+/**
+ * Transaction rows carry their subsidiary on the document header. Keep this
+ * predicate local so the transaction adapter remains usable by the lightweight
+ * import harness, while sharing the same fail-closed contract as the registry
+ * scope helper.
+ */
+function transactionSubsidiaryFilter(
+  allowed: ReadonlySet<string> | null | undefined,
+): ReturnType<typeof sql> {
+  if (allowed === null || allowed === undefined) return sql``
+  const ids = [...allowed]
+  if (ids.length === 0) return sql` and false`
+  return sql` and d.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])`
+}
+
 // Kept in lockstep with parse.ts and the import route's reserved mapping keys.
 // Formula provenance starts under CELL_PROVENANCE_KEY on a parsed row; the
 // route retains the selected source entries under that key and records each
@@ -114,7 +130,11 @@ function formulaDerivedField(src: Record<string, unknown>, field: string): boole
   return direct?.[source] === 'formula' || mapped?.[source] === 'formula'
 }
 
-export function transactionResource(cfg: DocKindConfig, orgId: string): DataResource {
+export function transactionResource(
+  cfg: DocKindConfig,
+  orgId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): DataResource {
   const cols = transactionFields(cfg)
   return {
     descriptor: transactionDescriptor(cfg),
@@ -129,13 +149,15 @@ export function transactionResource(cfg: DocKindConfig, orgId: string): DataReso
         .filter((f) => !['account', 'amount', 'description', 'taxCode'].includes(f.key))
         .map((f) => ({ key: f.key, label: f.label }))
     },
-    async read() {
+    async read(readCtx?: ReadCtx) {
       const resolver = new RefResolver(orgId)
+      const subsidiaryScope = readCtx ? readCtx.allowedSubsidiaryIds : allowedSubsidiaryIds
       const docs = (await db.execute(sql`
         select d.id, d.document_number, d.document_date, d.due_date, d.currency, d.memo,
                d.reference_number, d.status, p.short_code as party
           from documents d left join parties p on p.id = d.party_id and p.org_id = d.org_id
          where d.org_id = ${orgId} and d.kind = ${cfg.kind}
+           ${transactionSubsidiaryFilter(subsidiaryScope)}
          order by d.document_date desc, d.document_number
          limit ${MAX_EXPORT_ROWS}`)) as {
         rows: {
