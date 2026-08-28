@@ -14,10 +14,12 @@ import {
   createPaymentDocument,
   openItemsForParty,
   postPaymentWithApplications,
+  paymentControlDeps,
   sameCurrencyAllocation,
   updateDraftPayment,
   type AllocationInput,
 } from "./payments.ts";
+import { postDocument } from "./posting.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 
 /**
@@ -267,13 +269,21 @@ function normalizeStripeNotification(event: any): WebhookEvent | null {
       event.type === "checkout.session.async_payment_succeeded" ||
       paymentStatus === "paid" ||
       paymentStatus === "no_payment_required";
+    const currency = typeof obj.currency === "string" ? obj.currency.toUpperCase() : null;
     return {
       externalRef: String(obj.id ?? ""),
       intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
       linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
       status: settled ? "succeeded" : "processing",
-      paidAmount: settled && obj.amount_total != null ? fromUnits(BigInt(obj.amount_total) * 100n) : null,
-      paidCurrency: settled && typeof obj.currency === "string" ? obj.currency.toUpperCase() : null,
+      // Stripe's amount_total is expressed in the currency's smallest unit.
+      // Zero-decimal currencies (for example JPY) therefore arrive as whole
+      // major units, while two-decimal currencies arrive as cents. Convert
+      // both forms into OpenBooks' four-decimal money scale exactly.
+      paidAmount:
+        settled && obj.amount_total != null
+          ? fromUnits(BigInt(obj.amount_total) * (currency && ZERO_DECIMAL.has(currency) ? 10_000n : 100n))
+          : null,
+      paidCurrency: settled ? currency : null,
       raw: event,
     };
   }
@@ -741,11 +751,14 @@ async function validateConfiguredSurchargeRule(
 async function validateProviderConfigReferences(
   orgId: string,
   config: ProviderConfigRow,
+  options: { validateSurchargeRule?: boolean } = {},
 ): Promise<void> {
   if (config.default_bank_account_id !== null) {
     await validateAcceptanceBankAccount(orgId, config.default_bank_account_id);
   }
-  await validateConfiguredSurchargeRule(orgId, config.provider, config.surcharge_rule_id);
+  if (options.validateSurchargeRule !== false) {
+    await validateConfiguredSurchargeRule(orgId, config.provider, config.surcharge_rule_id);
+  }
 }
 
 /** Pure surcharge math: percent / fixed / percent+fixed, optional cap. */
@@ -891,7 +904,15 @@ export async function createPaymentLink(
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'payment_links', ${id.rows[0]!.id}, 'insert',
-              ${JSON.stringify({ after: { documentId: doc.id, documentNumber: doc.document_number, provider: input.provider, amount: doc.open_balance, surcharge: surcharge.amount } })}::jsonb,
+              ${JSON.stringify({ after: {
+                documentId: doc.id,
+                documentNumber: doc.document_number,
+                provider: input.provider,
+                amount: doc.open_balance,
+                surcharge: surcharge.amount,
+                surchargeRuleId: surcharge.ruleId,
+                feeIncomeAccountId: surcharge.feeIncomeAccountId,
+              } })}::jsonb,
               ${actorId})
     `);
     const links = await listPaymentLinks(orgId, doc.id);
@@ -912,6 +933,38 @@ export async function voidPaymentLink(orgId: string, actorId: string, linkId: st
       values (${orgId}, 'payment_links', ${linkId}, 'void', ${JSON.stringify({ before: { status: "active" }, after: { status: "void" } })}::jsonb, ${actorId})
     `);
   });
+}
+
+/**
+ * Surcharge amounts are frozen on payment_links, while the fee-income
+ * destination historically lived only in the rule that produced the quote.
+ * New links also record that destination in their creation audit evidence so
+ * checkout can keep posting a quoted fee even after the rule is edited or
+ * retired. Older links fall back to the live rule lookup at checkout.
+ */
+async function loadQuotedSurchargeFeeIncomeAccount(
+  orgId: string,
+  linkId: string,
+): Promise<string | null> {
+  const result = await db.execute<{ changes: Record<string, unknown> | null }>(sql`
+    select changes
+      from audit_log
+     where org_id = ${orgId}
+       and table_name = 'payment_links'
+       and row_id = ${linkId}
+       and action = 'insert'
+     order by created_at desc
+     limit 1
+  `);
+  const changes = result.rows[0]?.changes;
+  const after = changes && typeof changes === 'object' && !Array.isArray(changes)
+    ? (changes.after as Record<string, unknown> | undefined)
+    : undefined;
+  const accountId = typeof after?.feeIncomeAccountId === 'string'
+    ? after.feeIncomeAccountId
+    : null;
+  if (accountId !== null) await validateSurchargeIncomeAccount(orgId, accountId);
+  return accountId;
 }
 
 // ---------------------------------------------------------------------------
@@ -1073,14 +1126,46 @@ export async function createCheckoutSession(
 
     const config = await loadProviderConfig(link.orgId, link.provider);
     if (!config?.is_enabled || !config.acceptance_enabled) throw new PaymentAcceptanceError("provider is not configured");
-    await validateProviderConfigReferences(link.orgId, config);
-    await validateAcceptanceBankAccount(link.orgId, link.bankAccountId);
-    const surcharge = await resolveSurcharge(link.orgId, {
-      provider: link.provider,
-      amount: openBalance,
-      onDate: await businessToday(link.orgId),
-      configuredRuleId: config.surcharge_rule_id,
+    // A link with a frozen surcharge is independent of the provider's current
+    // surcharge-rule reference. Do not reject a valid quoted checkout merely
+    // because that rule was later edited, expired, or retired; legacy links
+    // with no stored amount still require the live reference validation.
+    await validateProviderConfigReferences(link.orgId, config, {
+      validateSurchargeRule: link.surchargeAmount === null,
     });
+    await validateAcceptanceBankAccount(link.orgId, link.bankAccountId);
+    // The amount shown to the customer is the quote captured on the link.
+    // Never let a changed rule or balance replace that amount. New links also
+    // carry the quoted fee account in their creation audit evidence; only
+    // legacy links (which have no such evidence) need a live surcharge lookup.
+    let surcharge: { amount: string; feeIncomeAccountId: string | null };
+    if (link.surchargeAmount !== null) {
+      const quotedFeeAccount = await loadQuotedSurchargeFeeIncomeAccount(link.orgId, link.id);
+      if (quotedFeeAccount !== null) {
+        surcharge = { amount: link.surchargeAmount, feeIncomeAccountId: quotedFeeAccount };
+      } else if (cmp(link.surchargeAmount, "0") === 0) {
+        surcharge = { amount: link.surchargeAmount, feeIncomeAccountId: null };
+      } else {
+        const resolvedSurcharge = await resolveSurcharge(link.orgId, {
+          provider: link.provider,
+          amount: openBalance,
+          onDate: await businessToday(link.orgId),
+          configuredRuleId: config.surcharge_rule_id,
+        });
+        surcharge = { amount: link.surchargeAmount, feeIncomeAccountId: resolvedSurcharge.feeIncomeAccountId };
+      }
+    } else {
+      const resolvedSurcharge = await resolveSurcharge(link.orgId, {
+        provider: link.provider,
+        amount: openBalance,
+        onDate: await businessToday(link.orgId),
+        configuredRuleId: config.surcharge_rule_id,
+      });
+      surcharge = { amount: resolvedSurcharge.amount, feeIncomeAccountId: resolvedSurcharge.feeIncomeAccountId };
+    }
+    if (cmp(surcharge.amount, "0") > 0 && surcharge.feeIncomeAccountId === null) {
+      throw new PaymentAcceptanceError("quoted surcharge has no fee income account");
+    }
 
     // Reuse a live initiated attempt (same provider object) when amounts match.
     const existing = (await db.execute<{ id: string; external_ref: string; event_payload: { redirectUrl?: string; invoiceAmount?: string; surchargeAmount?: string } | null }>(sql`
@@ -1575,7 +1660,9 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
       link_id: string; document_id: string; party_id: string; subsidiary_id: string; bank_account_id: string; currency: string;
       link_created_by: string | null;
     }>(sql`
-    select a.id, a.amount, a.surcharge_amount, a.payment_document_id, a.event_payload,
+    select a.id, coalesce(a.amount, l.amount) as amount,
+           coalesce(a.surcharge_amount, l.surcharge_amount) as surcharge_amount,
+           a.payment_document_id, a.event_payload,
            l.id as link_id, l.document_id, l.party_id, l.subsidiary_id, l.bank_account_id, l.currency, l.created_by as link_created_by
       from payment_attempts a
       join payment_links l on l.id = a.link_id and l.org_id = a.org_id
@@ -1597,24 +1684,21 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
   `));
   const invoice = doc.rows[0];
   if (!invoice) throw new PaymentAcceptanceError("invoice not found");
-  if (cmp(invoice.open_balance, "0") <= 0) {
-    // Paid through another channel meanwhile — nothing to settle.
-    await db.execute(sql`
-      update payment_attempts set status = 'succeeded', updated_at = now() where id = ${attemptId} and org_id = ${orgId}
-    `);
-    await db.execute(sql`
-      update payment_links set status = 'paid', paid_at = now(), updated_at = now()
-       where id = ${a.link_id} and org_id = ${orgId} and status = 'active'
-    `);
-    return "posted";
-  }
+  // If another channel cleared the invoice after checkout, the provider's
+  // collection is still real money. Continue by posting the full receipt as
+  // an unapplied AR credit instead of marking the attempt settled without a
+  // bank/AR journal entry.
+  const invoiceAlreadySettled = cmp(invoice.open_balance, "0") <= 0;
 
-  // Auto-apply to the invoice's open-item line, capped at its open balance.
-  const openItems = await openItemsForParty(a.party_id, "ar", orgId);
-  const item = openItems.find((i) => i.documentId === invoice.id);
-  if (!item) throw new PaymentAcceptanceError("invoice open item not found");
-  const invoicePortion = cmp(a.amount ?? invoice.open_balance, invoice.open_balance) < 0 ? (a.amount ?? invoice.open_balance) : invoice.open_balance;
-  const allocations: AllocationInput[] = [sameCurrencyAllocation(item.lineId, invoicePortion)];
+  let allocations: AllocationInput[] = [];
+  if (!invoiceAlreadySettled) {
+    // Auto-apply to the invoice's open-item line, capped at its open balance.
+    const openItems = await openItemsForParty(a.party_id, "ar", orgId);
+    const item = openItems.find((i) => i.documentId === invoice.id);
+    if (!item) throw new PaymentAcceptanceError("invoice open item not found");
+    const invoicePortion = cmp(a.amount ?? invoice.open_balance, invoice.open_balance) < 0 ? (a.amount ?? invoice.open_balance) : invoice.open_balance;
+    allocations = [sameCurrencyAllocation(item.lineId, invoicePortion)];
+  }
 
   const actorId = a.link_created_by as string; // receipts attribute to the link creator
 
@@ -1660,19 +1744,49 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
   if (!resumedApproved) {
     const feeAmount = a.surcharge_amount ?? "0";
     const feeIncomeAccountId = a.event_payload?.feeIncomeAccountId ?? null;
-    // Applying replaces the stored allocations and fee leg (update semantics,
-    // not append), so resuming a half-built draft cannot double either.
-    await updateDraftPayment(
-      paymentId,
-      {
-        allocations,
-        referenceNumber: `link:${a.link_id.slice(0, 8)}`,
-        feeAmount,
-        feeIncomeAccountId,
-      },
-      actorId,
-      orgId,
-    );
+    if (invoiceAlreadySettled) {
+      // updateDraftPayment intentionally requires at least one allocation at
+      // posting time. An invoice already paid elsewhere has no open item to
+      // allocate, so construct the same validated draft shape directly: the
+      // customer_payment posting rule will create an open AR credit for the
+      // collected invoice amount (plus its surcharge fee leg).
+      const receiptAmount = a.amount ?? invoice.open_balance;
+      const total = add(receiptAmount, feeAmount);
+      if (cmp(total, "0") <= 0) throw new PaymentAcceptanceError("provider receipt amount must be positive");
+      await db.execute(sql`delete from document_lines where document_id = ${paymentId} and org_id = ${orgId}`);
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount)
+        values (${orgId}, ${paymentId}, 1, ${a.bank_account_id}, '1', ${total}, ${total}, '0')
+      `);
+      await db.execute(sql`
+        update documents
+           set reference_number = ${`link:${a.link_id.slice(0, 8)}`},
+               custom = coalesce(custom, '{}'::jsonb) || ${JSON.stringify({
+                 allocations: [],
+                 feeAmount,
+                 feeIncomeAccountId,
+               })}::jsonb,
+               subtotal = ${total}, tax_total = '0', total = ${total},
+               updated_at = now(), updated_by = ${actorId}
+         where id = ${paymentId} and org_id = ${orgId} and status = 'draft'
+      `);
+    } else {
+      // Applying replaces the stored allocations and fee leg (update
+      // semantics, not append), so resuming a half-built draft cannot double
+      // either.
+      await updateDraftPayment(
+        paymentId,
+        {
+          allocations,
+          referenceNumber: `link:${a.link_id.slice(0, 8)}`,
+          feeAmount,
+          feeIncomeAccountId,
+        },
+        actorId,
+        orgId,
+      );
+    }
     const submission = await submitAndReleaseIfUngated(
       "customer_payment",
       paymentId,
@@ -1688,7 +1802,11 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
     }
   }
 
-  await postPaymentWithApplications(paymentId, allocations, actorId);
+  if (invoiceAlreadySettled) {
+    await postDocument(paymentId, await paymentControlDeps(orgId));
+  } else {
+    await postPaymentWithApplications(paymentId, allocations, actorId);
+  }
   await finalizePaymentAcceptanceForDocument(paymentId);
   return "posted";
 }
