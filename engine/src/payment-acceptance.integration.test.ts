@@ -968,6 +968,37 @@ test("pay page shows the stored link surcharge even after surcharge rules change
   }
 });
 
+test("hosted checkout reads the quoted fee account from payment-link audit evidence", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const fx = await seedAcceptance(org, "INV-PAY-AUDIT-FEE");
+    await db.execute(sql`
+      update payment_surcharge_rules set percent = '10', effective_from = '2020-01-01'
+       where org_id = ${org.orgId}
+    `);
+
+    const session = await createCheckoutSession(
+      fx.link.token,
+      `https://app.test/pay/${fx.link.token}`,
+      async () => ({
+        status: 200,
+        json: async () => ({ id: "cs_audit_fee", url: "https://checkout.stripe.test/cs_audit_fee" }),
+      }),
+    );
+    assert.deepEqual(session, { redirectUrl: "https://checkout.stripe.test/cs_audit_fee" });
+
+    const attempt = (await db.execute<{ surcharge_amount: string; fee_income_account_id: string | null }>(sql`
+      select surcharge_amount, event_payload->>'feeIncomeAccountId' as fee_income_account_id
+        from payment_attempts
+       where org_id = ${org.orgId} and external_ref = 'cs_audit_fee'
+    `)).rows[0]!;
+    assert.equal(attempt.surcharge_amount, "3.0000");
+    assert.equal(attempt.fee_income_account_id, org.accounts.revenue);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 /**
  * F-payment-method: surcharge rules carry a payment-method dimension
  * (all / card / bank_debit) and hosted checkout collects cards on Stripe/Adyen
