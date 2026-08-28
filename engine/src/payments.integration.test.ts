@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
-import { db, withBypass, withOrgContext, withOrgTransaction } from "./db.ts";
+import { db, pool, withBypass, withOrgContext, withOrgTransaction } from "./db.ts";
 import {
   generatePaymentFileArtifact,
   recordPaymentSettlement,
@@ -24,6 +25,14 @@ import { postDocument } from "./posting.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+const paymentInstructionClaimFenceBundleGuardMigration = readFileSync(
+  new URL(
+    "../../schema/migrations/generated/0080_payment_instruction_claim_fence_bundle_guard.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 /** The storage-enforced duplicate-live-reservation violation, anywhere in a cause chain. */
 function isLiveSourceConflict(error: unknown): boolean {
@@ -1196,6 +1205,113 @@ test("one concurrent payment-run poster owns the processing claim and its eviden
   }
 });
 
+test("0080 payment-instruction claim-fence bundle guard replays safely", { skip: !DB }, async () => {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(paymentInstructionClaimFenceBundleGuardMigration);
+    await client.query(paymentInstructionClaimFenceBundleGuardMigration);
+
+    const functionState = await client.query<{ definition: string; trigger_count: number }>(`
+      select pg_get_functiondef(
+               'public.enforce_payment_instruction_posting_claim()'::regprocedure
+             ) as definition,
+             (select count(*)::int
+                from pg_trigger
+               where tgrelid = 'public.payment_instructions'::regclass
+                 and tgname = 'payment_instructions_posting_claim_fence'
+                 and not tgisinternal) as trigger_count
+    `);
+    assert.match(functionState.rows[0]!.definition, /to_jsonb\(new\).*status/i);
+    assert.equal(functionState.rows[0]!.trigger_count, 1);
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+});
+
+test("0080 payment-instruction claim fence rejects an untrusted sandbox-wipe GUC", { skip: !DB }, async () => {
+  // Keep this regression self-contained: a focused run must exercise the
+  // forward migration after 0078 just as a full bootstrap does.
+  const migrationClient = await pool.connect();
+  try {
+    await migrationClient.query("begin");
+    await migrationClient.query(paymentInstructionClaimFenceBundleGuardMigration);
+    await migrationClient.query(paymentInstructionClaimFenceBundleGuardMigration);
+    await migrationClient.query("commit");
+  } catch (error) {
+    await migrationClient.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    migrationClient.release();
+  }
+
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Sandbox-wipe fence", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
+    await installPostingClaim(org, seeded.runId, actorId);
+
+    const withRawSandboxWipe = <T>(
+      work: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>,
+    ): Promise<T> => withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+      await tx.execute(sql`
+        select set_config('openbooks.sandbox_wipe', 'on', true)
+      `);
+      return work(tx);
+    }));
+
+    // The caller-controlled GUC is not teardown authority for a production
+    // tenant: every trigger operation remains behind the processing claim.
+    await assertInstructionFenceRejected(
+      withRawSandboxWipe((tx) => tx.execute(sql`
+        insert into payment_instructions
+          (id, org_id, payment_run_id, payee_party_id, amount, currency,
+           status, created_by, updated_by)
+        values
+          (${randomUUID()}, ${org.orgId}, ${seeded.runId}, ${org.vendorId},
+           '25', 'CAD', 'pending', ${actorId}, ${actorId})
+      `)),
+    );
+    await assertInstructionFenceRejected(
+      withRawSandboxWipe((tx) => tx.execute(sql`
+        update payment_instructions
+           set amount = '99', updated_at = now(), updated_by = ${actorId}
+         where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
+      `)),
+    );
+    await assertInstructionFenceRejected(
+      withRawSandboxWipe((tx) => tx.execute(sql`
+        delete from payment_instructions
+         where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
+      `)),
+    );
+
+    // Once the tenant is explicitly classified as a sandbox, the same
+    // transaction-local GUC is an authorized teardown context for DELETE.
+    await withBypass(() => db.execute(sql`
+      update orgs set env_kind = 'sandbox'
+       where id = ${org.orgId} and name like 'Scratch %'
+    `));
+    await withRawSandboxWipe((tx) => tx.execute(sql`
+      delete from payment_instructions
+       where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
+    `));
+    const remaining = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ count: number }>(sql`
+        select count(*)::int as count
+          from payment_instructions
+         where payment_run_id = ${seeded.runId} and org_id = ${org.orgId}
+      `)).rows[0]?.count);
+    assert.equal(remaining, 1);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("the instruction fence is enforced by storage: superseded claim tokens cannot mutate instructions", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
@@ -1235,6 +1351,17 @@ test("the instruction fence is enforced by storage: superseded claim tokens cann
     await assertInstructionFenceRejected(
       withPostingClaim(org, seeded.runId, supersededToken, (tx) => tx.execute(sql`
         delete from payment_instructions
+         where id = ${seeded.instructionIds[2]!} and org_id = ${org.orgId}
+      `)),
+    );
+    // A stale writer cannot bundle financial or payment-file metadata with
+    // the settlement-style status carve-out. The row-wide guard also covers
+    // payment_run_id and payee_bank_account_id mutations.
+    await assertInstructionFenceRejected(
+      withPostingClaim(org, seeded.runId, supersededToken, (tx) => tx.execute(sql`
+        update payment_instructions
+           set amount = '99', payment_reference = 'stale-writer',
+               status = 'returned', updated_at = now(), updated_by = ${actorId}
          where id = ${seeded.instructionIds[2]!} and org_id = ${org.orgId}
       `)),
     );
