@@ -43,9 +43,38 @@ interface ChangeDiffRow extends Record<string, unknown> {
   sbx_id: string; prod_id: string | null; sbx_row: Record<string, unknown>; prod_row: Record<string, unknown> | null;
 }
 interface IdRow extends Record<string, unknown> { id: string }
-interface ChangeSetRow extends Record<string, unknown> { org_id: string; status: string }
+interface ChangeSetRow extends Record<string, unknown> {
+  org_id: string;
+  status: string;
+  capture_complete: boolean;
+  item_count: number;
+  created_by: string | null;
+  reviewed_by: string | null;
+  approved_by: string | null;
+}
 interface ChangeSetItemRow extends Record<string, unknown> {
   table_name: string; target_id: string; op: "insert" | "update" | "delete"; payload: Record<string, unknown> | null;
+}
+
+/** Every lifecycle transition must carry a real, active production user. */
+function requireActor(actorId: string | null | undefined, label: string): string {
+  if (!actorId) throw new Error(`${label} actor is required`);
+  return assertUuid(actorId);
+}
+
+async function assertActiveActor(actorId: string, orgId: string): Promise<void> {
+  const actor = await db.execute<{ id: string }>(sql`
+    select id from users where id = ${actorId} and org_id = ${orgId} and is_active`);
+  if (!actor.rows[0]) throw new Error(`actor ${actorId} is not an active user of the production organization`);
+}
+
+async function assertDistinctActors(
+  actorId: string,
+  existing: ReadonlyArray<[string, string | null]>,
+): Promise<void> {
+  for (const [label, prior] of existing) {
+    if (prior === actorId) throw new Error(`${label} and lifecycle actor must be different users`);
+  }
 }
 
 function contentSig(row: Record<string, unknown> | null): string {
@@ -60,86 +89,179 @@ export async function buildChangeSet(
   name: string,
   createdBy?: string | null,
 ): Promise<{ changeSetId: string; itemCount: number }> {
-  const s = await db.execute<SandboxTargetRow>(sql`
-    select org_id, production_org_id from sandboxes where id = ${sandboxId}`);
-  const row = s.rows[0];
-  if (!row) throw new Error(`sandbox not found: ${sandboxId}`);
-  const sbx = assertUuid(row.org_id);
-  const prod = assertUuid(row.production_org_id);
-  const seedRes = await db.execute<SandboxSeedRow>(sql`select sandbox_seed from orgs where id = ${row.org_id}`);
-  const seedRow = seedRes.rows[0];
-  if (!seedRow) throw new Error(`sandbox organization not found: ${row.org_id}`);
-  const seed = assertUuid(seedRow.sandbox_seed);
+  // A null creator is retained for trusted non-interactive/CLI captures.  The
+  // production server action always supplies its authenticated user; review,
+  // approval, and application actors are mandatory regardless.
+  const creator = createdBy == null ? null : requireActor(createdBy, "change-set creation");
+  // The header and every item are one trusted, cross-tenant transaction.  A
+  // failed catalog read or item insert therefore rolls back the header too;
+  // no partially captured draft can become an applyable artifact.
+  return withMaintenanceTransaction(null, async () => {
+    const s = await db.execute<SandboxTargetRow>(sql`
+      select org_id, production_org_id from sandboxes where id = ${sandboxId}`);
+    const row = s.rows[0];
+    if (!row) throw new Error(`sandbox not found: ${sandboxId}`);
+    const sbx = assertUuid(row.org_id);
+    const prod = assertUuid(row.production_org_id);
+    if (creator) await assertActiveActor(creator, prod);
+    const seedRes = await db.execute<SandboxSeedRow>(sql`select sandbox_seed from orgs where id = ${row.org_id}`);
+    const seedRow = seedRes.rows[0];
+    if (!seedRow) throw new Error(`sandbox organization not found: ${row.org_id}`);
+    const seed = assertUuid(seedRow.sandbox_seed);
 
-  const cs = (await db
-    .insert(schema.changeSets)
-    .values({ orgId: prod, sandboxOrgId: sbx, name, status: "draft", createdBy: createdBy ?? null })
-    .returning({ id: schema.changeSets.id }))[0]!;
-
-  // Which promotable tables actually exist and carry org_id + id.
-  const present = await db.execute<TableNameRow>(sql`
-    select table_name from information_schema.columns
-     where table_schema = 'public' and column_name = 'org_id'
-       and table_name = any(${PROMOTABLE_ARRAY}::text[])`);
-  const tables = present.rows.map((r) => r.table_name);
-
-  let itemCount = 0;
-  for (const t of tables) {
-    // Inserts + updates: every sandbox row, matched to its production origin.
-    const diff = await db.execute<ChangeDiffRow>(sql.raw(`
-      select s.id as sbx_id, p.id as prod_id, row_to_json(s) as sbx_row, row_to_json(p) as prod_row
-        from "${t}" s
-        left join "${t}" p on p.org_id = '${prod}' and ob_rebase(p.id, '${seed}') = s.id
-       where s.org_id = '${sbx}'`));
-    for (const d of diff.rows) {
-      if (contentSig(d.sbx_row) === contentSig(d.prod_row)) continue; // unchanged
-      const targetId = d.prod_id ?? randomUUID();
-      const payload = { ...d.sbx_row, id: targetId, org_id: prod, created_by: null, updated_by: null };
-      await db.insert(schema.changeSetItems).values({
+    const cs = (await db
+      .insert(schema.changeSets)
+      .values({
         orgId: prod,
-        changeSetId: cs.id,
-        tableName: t,
-        targetId,
-        op: d.prod_id ? "update" : "insert",
-        payload,
-      });
-      itemCount++;
+        sandboxOrgId: sbx,
+        name,
+        status: "draft",
+        captureComplete: false,
+        itemCount: 0,
+        createdBy: creator,
+      })
+      .returning({ id: schema.changeSets.id }))[0]!;
+
+    // Which promotable tables actually exist and carry org_id + id.
+    const present = await db.execute<TableNameRow>(sql`
+      select table_name from information_schema.columns
+       where table_schema = 'public' and column_name = 'org_id'
+         and table_name = any(${PROMOTABLE_ARRAY}::text[])`);
+    const tables = present.rows.map((r) => r.table_name);
+
+    let itemCount = 0;
+    for (const t of tables) {
+      // Inserts + updates: every sandbox row, matched to its production origin.
+      const diff = await db.execute<ChangeDiffRow>(sql.raw(`
+        select s.id as sbx_id, p.id as prod_id, row_to_json(s) as sbx_row, row_to_json(p) as prod_row
+          from "${t}" s
+          left join "${t}" p on p.org_id = '${prod}' and ob_rebase(p.id, '${seed}') = s.id
+         where s.org_id = '${sbx}'`));
+      for (const d of diff.rows) {
+        if (contentSig(d.sbx_row) === contentSig(d.prod_row)) continue; // unchanged
+        const targetId = d.prod_id ?? randomUUID();
+        const payload = { ...d.sbx_row, id: targetId, org_id: prod, created_by: null, updated_by: null };
+        await db.insert(schema.changeSetItems).values({
+          orgId: prod,
+          changeSetId: cs.id,
+          tableName: t,
+          targetId,
+          op: d.prod_id ? "update" : "insert",
+          payload,
+        });
+        itemCount++;
+      }
+      // Deletes: production rows with no sandbox counterpart.
+      const dels = await db.execute<IdRow>(sql.raw(`
+        select p.id from "${t}" p
+         where p.org_id = '${prod}'
+           and not exists (select 1 from "${t}" s where s.org_id = '${sbx}' and s.id = ob_rebase(p.id, '${seed}'))`));
+      for (const dr of dels.rows) {
+        await db.insert(schema.changeSetItems).values({
+          orgId: prod,
+          changeSetId: cs.id,
+          tableName: t,
+          targetId: dr.id,
+          op: "delete",
+          payload: null,
+        });
+        itemCount++;
+      }
     }
-    // Deletes: production rows with no sandbox counterpart.
-    const dels = await db.execute<IdRow>(sql.raw(`
-      select p.id from "${t}" p
-       where p.org_id = '${prod}'
-         and not exists (select 1 from "${t}" s where s.org_id = '${sbx}' and s.id = ob_rebase(p.id, '${seed}'))`));
-    for (const dr of dels.rows) {
-      await db.insert(schema.changeSetItems).values({
-        orgId: prod,
-        changeSetId: cs.id,
-        tableName: t,
-        targetId: dr.id,
-        op: "delete",
-        payload: null,
-      });
-      itemCount++;
-    }
-  }
-  return { changeSetId: cs.id, itemCount };
+    // The marker is written only after all item inserts have succeeded.  The
+    // count is checked again by review and apply to detect any tampering.
+    await db.execute(sql`
+      update change_sets
+         set capture_complete = true, item_count = ${itemCount}, updated_at = now(), updated_by = ${creator}
+       where id = ${cs.id} and org_id = ${prod}`);
+    return { changeSetId: cs.id, itemCount };
+  });
 }
 
-/** Apply a draft change set to production in one transaction. */
-export async function applyChangeSet(changeSetId: string): Promise<void> {
-  const cs = await db.execute<ChangeSetRow>(sql`select org_id, status from change_sets where id = ${changeSetId}`);
-  const c = cs.rows[0];
-  if (!c) throw new Error(`change set not found: ${changeSetId}`);
-  if (c.status !== "draft") throw new Error(`change set is ${c.status}, not draft`);
-  const prod = assertUuid(c.org_id);
+/** Mark a complete capture as reviewed by an independent production actor. */
+export async function reviewChangeSet(changeSetId: string, reviewerId?: string | null): Promise<void> {
+  const id = assertUuid(changeSetId);
+  const actor = requireActor(reviewerId, "change-set review");
+  await withMaintenanceTransaction(null, async () => {
+    const result = await db.execute<ChangeSetRow>(sql`
+      select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
+        from change_sets where id = ${id} for update`);
+    const c = result.rows[0];
+    if (!c) throw new Error(`change set not found: ${id}`);
+    const prod = assertUuid(c.org_id);
+    await assertActiveActor(actor, prod);
+    if (c.status !== "draft") throw new Error(`change set is ${c.status}, not draft`);
+    if (!c.capture_complete) throw new Error("change set capture is incomplete");
+    await assertDistinctActors(actor, [["creator", c.created_by]]);
+    const count = await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`);
+    if (Number(count.rows[0]?.count ?? -1) !== Number(c.item_count)) {
+      throw new Error("change set item count does not match its captured snapshot");
+    }
+    await db.execute(sql`
+      update change_sets
+         set status = 'reviewed', reviewed_at = now(), reviewed_by = ${actor}, updated_at = now(), updated_by = ${actor}
+       where id = ${id} and org_id = ${prod} and status = 'draft'`);
+  });
+}
 
-  const items = await db.execute<ChangeSetItemRow>(sql`
-    select table_name, target_id, op, payload from change_set_items
-     where change_set_id = ${changeSetId} and org_id = ${prod} order by created_at`);
+/** Approve a reviewed capture by a second independent production actor. */
+export async function approveChangeSet(changeSetId: string, approverId?: string | null): Promise<void> {
+  const id = assertUuid(changeSetId);
+  const actor = requireActor(approverId, "change-set approval");
+  await withMaintenanceTransaction(null, async () => {
+    const result = await db.execute<ChangeSetRow>(sql`
+      select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
+        from change_sets where id = ${id} for update`);
+    const c = result.rows[0];
+    if (!c) throw new Error(`change set not found: ${id}`);
+    const prod = assertUuid(c.org_id);
+    await assertActiveActor(actor, prod);
+    if (c.status !== "reviewed") throw new Error(`change set is ${c.status}, not reviewed`);
+    if (!c.capture_complete) throw new Error("change set capture is incomplete");
+    await assertDistinctActors(actor, [["creator", c.created_by], ["reviewer", c.reviewed_by]]);
+    const count = await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`);
+    if (Number(count.rows[0]?.count ?? -1) !== Number(c.item_count)) {
+      throw new Error("change set item count does not match its captured snapshot");
+    }
+    await db.execute(sql`
+      update change_sets
+         set status = 'approved', approved_at = now(), approved_by = ${actor}, updated_at = now(), updated_by = ${actor}
+       where id = ${id} and org_id = ${prod} and status = 'reviewed'`);
+  });
+}
 
-  await withMaintenanceTransaction(prod, async () => {
+/** Apply an approved change set to production in one transaction. */
+export async function applyChangeSet(changeSetId: string, applierId?: string | null): Promise<void> {
+  const id = assertUuid(changeSetId);
+  const actor = requireActor(applierId, "change-set application");
+  await withMaintenanceTransaction(null, async () => {
+    const result = await db.execute<ChangeSetRow>(sql`
+      select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
+        from change_sets where id = ${id} for update`);
+    const c = result.rows[0];
+    if (!c) throw new Error(`change set not found: ${id}`);
+    const prod = assertUuid(c.org_id);
+    await assertActiveActor(actor, prod);
+    if (c.status !== "approved") throw new Error(`change set is ${c.status}, not approved`);
+    if (!c.capture_complete) throw new Error("change set capture is incomplete");
+    await assertDistinctActors(actor, [
+      ["creator", c.created_by],
+      ["reviewer", c.reviewed_by],
+      ["approver", c.approved_by],
+    ]);
+
+    const items = await db.execute<ChangeSetItemRow>(sql`
+      select table_name, target_id, op, payload from change_set_items
+       where change_set_id = ${id} and org_id = ${prod} order by created_at, id`);
+    if (items.rows.length !== Number(c.item_count)) {
+      throw new Error("change set item count does not match its captured snapshot");
+    }
+
     for (const it of items.rows) {
       const t = it.table_name as string;
+      if (!PROMOTABLE.includes(t)) throw new Error(`change set contains non-promotable table: ${t}`);
       const target = assertUuid(it.target_id);
       if (it.op === "delete") {
         await db.execute(sql.raw(`delete from "${t}" where id = '${target}' and org_id = '${prod}'`));
@@ -151,6 +273,9 @@ export async function applyChangeSet(changeSetId: string): Promise<void> {
         sql`insert into ${sql.raw(`"${t}"`)} select * from jsonb_populate_record(null::${sql.raw(`"${t}"`)}, ${JSON.stringify(it.payload)}::jsonb)`,
       );
     }
-    await db.execute(sql`update change_sets set status = 'applied', applied_at = now() where id = ${changeSetId} and org_id = ${prod}`);
+    await db.execute(sql`
+      update change_sets
+         set status = 'applied', applied_at = now(), applied_by = ${actor}, updated_at = now(), updated_by = ${actor}
+       where id = ${id} and org_id = ${prod} and status = 'approved'`);
   });
 }
