@@ -36,6 +36,20 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/
 
+function isValidCalendarDate(value: string): boolean {
+  const year = Number(value.slice(0, 4))
+  const month = Number(value.slice(5, 7))
+  const day = Number(value.slice(8, 10))
+
+  if (month < 1 || month > 12 || day < 1) return false
+
+  const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  if (month === 2 && (year % 4 === 0 && year % 100 !== 0 || year % 400 === 0)) {
+    return day <= 29
+  }
+  return day <= daysInMonth[month - 1]!
+}
+
 function isEmpty(v: unknown): boolean {
   if (v === undefined || v === null) return true
   if (typeof v === 'string' && v.trim() === '') return true
@@ -126,7 +140,12 @@ function fieldValueErrors(field: FormField, value: unknown): string[] {
     }
 
     case 'date': {
-      if (typeof value !== 'string' || !DATE_RE.test(value) || Number.isNaN(Date.parse(value))) {
+      if (
+        typeof value !== 'string' ||
+        !DATE_RE.test(value) ||
+        !isValidCalendarDate(value) ||
+        Number.isNaN(Date.parse(value))
+      ) {
         fail('Must be a valid date (yyyy-mm-dd)')
       }
       break
@@ -136,6 +155,7 @@ function fieldValueErrors(field: FormField, value: unknown): string[] {
       if (
         typeof value !== 'string' ||
         !DATETIME_RE.test(value) ||
+        !isValidCalendarDate(value) ||
         Number.isNaN(Date.parse(value))
       ) {
         fail('Must be a valid date and time')
