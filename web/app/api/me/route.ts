@@ -51,13 +51,15 @@ export async function PATCH(req: Request) {
     changes.navMode = navMode;
   }
 
-  await db.execute(sql`
-    update users set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
-     where id = ${user.id} and org_id = ${user.orgId}`);
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${user.orgId}, 'users', ${user.id}, 'update',
-            ${JSON.stringify(changes)}, ${user.id})`);
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      update users set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
+       where id = ${user.id} and org_id = ${user.orgId}`);
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${user.orgId}, 'users', ${user.id}, 'update',
+              ${JSON.stringify(changes)}, ${user.id})`);
+  });
 
   return NextResponse.json({ ok: true, ...changes });
 }
