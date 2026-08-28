@@ -36,15 +36,31 @@ export async function GET(req: Request) {
   const orgId = gate.user.orgId;
   const url = new URL(req.url);
   const view = url.searchParams.get("view") ?? "transfers";
+  // `null` means org-wide visibility. A non-null empty set means the caller
+  // has no subsidiary grants and must see no rows or aggregate metadata.
+  const allowedSubsidiaryIds = gate.allowedSubsidiaryIds
+    ? [...gate.allowedSubsidiaryIds]
+    : null;
+  const scopeFor = (column: ReturnType<typeof sql>) =>
+    allowedSubsidiaryIds === null
+      ? sql``
+      : allowedSubsidiaryIds.length === 0
+        ? sql`and false`
+        : sql`and ${column} in (${sql.join(
+            allowedSubsidiaryIds.map((id) => sql`${id}::uuid`),
+            sql`, `,
+          )})`;
 
   if (view === "recall") {
-    const rows = await queryLotRecall(orgId, {
+    const recallFilter = {
       lotNumber: url.searchParams.get("lotNumber") ?? undefined,
       lotId: url.searchParams.get("lotId") ?? undefined,
       itemId: url.searchParams.get("itemId") ?? undefined,
       expiresOnOrBefore: url.searchParams.get("expiresOnOrBefore") ?? undefined,
       includeExpiryOnly: url.searchParams.get("expiring") === "1",
-    });
+      subsidiaryIds: allowedSubsidiaryIds,
+    } as Parameters<typeof queryLotRecall>[1];
+    const rows = await queryLotRecall(orgId, recallFilter);
     return NextResponse.json({ rows });
   }
 
@@ -56,8 +72,10 @@ export async function GET(req: Request) {
                - coalesce(sum(case when im.quantity < 0 then -im.quantity else 0 end), 0) as "approxQty"
         from lots l
         left join items i on i.id = l.item_id and i.org_id = l.org_id
-        left join inventory_movements im on im.lot_id = l.id and im.org_id = l.org_id
+        left join inventory_movements im on im.lot_id = l.id and im.org_id = l.org_id ${scopeFor(sql`im.subsidiary_id`)}
        where l.org_id = ${orgId}
+         ${allowedSubsidiaryIds === null || allowedSubsidiaryIds.length > 0 ? sql`` : sql`and false`}
+         ${allowedSubsidiaryIds && allowedSubsidiaryIds.length > 0 ? sql`and im.id is not null` : sql``}
        group by l.id, i.code, i.name
        order by l.lot_number
        limit 200
@@ -69,6 +87,7 @@ export async function GET(req: Request) {
     const rows = (await db.execute(sql`
       select id, document_number as "documentNumber", status, amount, basis, voucher_date as "voucherDate", memo
         from landed_cost_vouchers where org_id = ${orgId}
+       ${scopeFor(sql`subsidiary_id`)}
        order by voucher_date desc limit 50
     `));
     return NextResponse.json({ vouchers: rows.rows });
@@ -79,9 +98,10 @@ export async function GET(req: Request) {
            t.shipped_on as "shippedOn", t.received_on as "receivedOn", t.memo,
            sf.code as "fromCode", st.code as "toCode"
       from transfer_orders t
-      left join stock_locations sf on sf.id = t.from_stock_location_id and sf.org_id = t.org_id
-      left join stock_locations st on st.id = t.to_stock_location_id and st.org_id = t.org_id
+     left join stock_locations sf on sf.id = t.from_stock_location_id and sf.org_id = t.org_id
+     left join stock_locations st on st.id = t.to_stock_location_id and st.org_id = t.org_id
      where t.org_id = ${orgId}
+       ${scopeFor(sql`t.subsidiary_id`)}
      order by t.ordered_on desc, t.created_at desc
      limit 50
   `));

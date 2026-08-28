@@ -682,6 +682,7 @@ export async function revalueOpenLayersToStandardCost(
       orgId,
       bookId,
       subsidiaryId: ownerSubsidiaryId,
+      actorId,
       currency,
       periodId,
       date,
@@ -954,6 +955,8 @@ export async function postInventoryEntry(
     orgId: string;
     bookId: string;
     subsidiaryId: string;
+    /** Authenticated actor retained on both draft and posted journal audit columns. */
+    actorId?: string | null;
     currency: string;
     periodId: string;
     date: string;
@@ -969,9 +972,9 @@ export async function postInventoryEntry(
     throw new InventoryError(`inventory entry does not balance (sum=${bal})`);
   const entryRes = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
-      (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, custom, created_by, updated_by)
+      (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, custom, created_by, updated_by, posted_by)
     values (${p.orgId}, ${p.bookId}, ${p.subsidiaryId}, ${p.entryNumber}, ${p.date}, ${p.periodId}, ${p.memo},
-            'draft', 'inventory', ${JSON.stringify(p.custom ?? {})}::jsonb, null, null)
+            'draft', 'inventory', ${JSON.stringify(p.custom ?? {})}::jsonb, ${p.actorId ?? null}, ${p.actorId ?? null}, null)
     returning id`));
   const eid = entryRes.rows[0]!.id;
   for (let i = 0; i < p.lines.length; i++) {
@@ -984,7 +987,7 @@ export async function postInventoryEntry(
               ${l.departmentId ?? null}, ${l.projectId ?? null}, ${l.locationId ?? null}, ${l.memo ?? p.memo})`);
   }
   await tx.execute(
-    sql`update journal_entries set status = 'posted', posted_at = now() where id = ${eid} and org_id = ${p.orgId}`,
+    sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${p.actorId ?? null}, updated_by = ${p.actorId ?? null} where id = ${eid} and org_id = ${p.orgId}`,
   );
   return eid;
 }
@@ -1045,12 +1048,6 @@ export async function receiveInventory(
   const idempotencyKey = normalizeMovementIdempotencyKey(input.idempotencyKey);
   if (cmp(input.quantity, "0") <= 0)
     throw new InventoryError("receipt quantity must be positive");
-  const profile = await resolveProfile(orgId, input.itemId);
-  assertTracking(
-    profile,
-    { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },
-    "receipt",
-  );
   const period = await periodForDate(orgId, input.date);
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
@@ -1067,6 +1064,15 @@ export async function receiveInventory(
 
   const apply = async (tx: Runner): Promise<MovementResult> => {
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+    // Costing policy is locked and re-read after the position lock. The
+    // costing-policy writer takes the same profile lock before revaluing
+    // layers, so a receipt cannot carry a stale pre-transaction policy.
+    const profile = await resolveProfile(orgId, input.itemId, tx, true);
+    assertTracking(
+      profile,
+      { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },
+      "receipt",
+    );
     await assertStockLocationAdmitsSubsidiary(
       tx,
       orgId,
@@ -1250,6 +1256,7 @@ export async function receiveInventory(
           orgId,
           bookId,
           subsidiaryId: input.subsidiaryId,
+          actorId,
           currency,
           periodId: period,
           date: input.date,
@@ -1404,12 +1411,6 @@ export async function issueInventory(
   const idempotencyKey = normalizeMovementIdempotencyKey(input.idempotencyKey);
   if (cmp(input.quantity, "0") <= 0)
     throw new InventoryError("issue quantity must be positive");
-  const profile = await resolveProfile(orgId, input.itemId, runner);
-  assertTracking(
-    profile,
-    { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },
-    "issue",
-  );
   const period = await periodForDate(orgId, input.date, runner);
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
@@ -1417,7 +1418,6 @@ export async function issueInventory(
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId, runner);
   const ctx = await loadSubsidiaryContext(runner, orgId);
   assertMovementOwner(ctx, input.subsidiaryId);
-  const offset = input.offsetAccountId ?? profile.cogsAccountId;
   const dims = {
     departmentId: input.departmentId ?? null,
     projectId: input.projectId ?? null,
@@ -1426,6 +1426,16 @@ export async function issueInventory(
 
   const apply = async (tx: Runner): Promise<MovementResult> => {
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+    // Re-read the policy under the movement transaction's lock boundary so a
+    // concurrent costing-policy revision cannot price this issue from stale
+    // standard-cost or tracking settings.
+    const profile = await resolveProfile(orgId, input.itemId, tx, true);
+    assertTracking(
+      profile,
+      { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },
+      "issue",
+    );
+    const offset = input.offsetAccountId ?? profile.cogsAccountId;
     await assertStockLocationAdmitsSubsidiary(
       tx,
       orgId,
@@ -1517,6 +1527,7 @@ export async function issueInventory(
       orgId,
       bookId,
       subsidiaryId: input.subsidiaryId,
+      actorId,
       currency,
       periodId: period,
       date: input.date,
@@ -1775,44 +1786,51 @@ export async function adjustInventory(
   actorId: string | null,
   input: AdjustInput,
 ): Promise<MovementResult> {
-  const profile = await resolveProfile(orgId, input.itemId);
-  const offset = profile.adjustmentAccountId ?? profile.cogsAccountId;
   const sign = cmp(input.quantityDelta, "0");
   if (sign === 0)
     throw new InventoryError("adjustment quantity cannot be zero");
-
-  if (sign > 0) {
-    return receiveInventory(orgId, actorId, {
+  // Keep the adjustment-account lookup in the same lock boundary as the
+  // delegated movement. Lock the position first to preserve the canonical
+  // position → profile ordering used by receive/issue and avoid deadlocks.
+  return db.transaction(async (tx) => {
+    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+    const profile = await resolveProfile(orgId, input.itemId, tx, true);
+    const offset = profile.adjustmentAccountId ?? profile.cogsAccountId;
+    if (sign > 0) {
+      return receiveInventory(orgId, actorId, {
+        itemId: input.itemId,
+        stockLocationId: input.stockLocationId,
+        quantity: input.quantityDelta,
+        unitCost: input.unitCost,
+        subsidiaryId: input.subsidiaryId,
+        offsetAccountId: offset,
+        date: input.date,
+        serialId: input.serialId,
+        lotId: input.lotId,
+        memo: input.memo ?? "Inventory adjustment",
+        departmentId: input.departmentId,
+        projectId: input.projectId,
+        locationId: input.locationId,
+        tx,
+      });
+    }
+    // negative: issue the absolute quantity against the adjustment account.
+    const absQty = fromUnits(-toUnits(input.quantityDelta));
+    return issueInventory(orgId, actorId, {
       itemId: input.itemId,
       stockLocationId: input.stockLocationId,
-      quantity: input.quantityDelta,
-      unitCost: input.unitCost,
+      quantity: absQty,
       subsidiaryId: input.subsidiaryId,
       offsetAccountId: offset,
       date: input.date,
-      lotId: input.lotId,
       serialId: input.serialId,
+      lotId: input.lotId,
       memo: input.memo ?? "Inventory adjustment",
       departmentId: input.departmentId,
       projectId: input.projectId,
       locationId: input.locationId,
+      tx,
     });
-  }
-  // negative: issue the absolute quantity against the adjustment account.
-  const absQty = fromUnits(-toUnits(input.quantityDelta));
-  return issueInventory(orgId, actorId, {
-    itemId: input.itemId,
-    stockLocationId: input.stockLocationId,
-    quantity: absQty,
-    subsidiaryId: input.subsidiaryId,
-    offsetAccountId: offset,
-    date: input.date,
-    lotId: input.lotId,
-    serialId: input.serialId,
-    memo: input.memo ?? "Inventory adjustment",
-    departmentId: input.departmentId,
-    projectId: input.projectId,
-    locationId: input.locationId,
   });
 }
 
@@ -1911,12 +1929,6 @@ async function transferInventoryTx(
     throw new InventoryError("transfer quantity must be positive");
   if (input.fromStockLocationId === input.toStockLocationId)
     throw new InventoryError("transfer needs two different locations");
-  const profile = await resolveProfile(orgId, input.itemId, tx);
-  assertTracking(
-    profile,
-    { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },
-    "transfer",
-  );
   const period = await periodForDate(orgId, input.date, tx);
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
@@ -1940,6 +1952,15 @@ async function transferInventoryTx(
       input.subsidiaryId,
     );
   }
+  // Costing policy revisions lock this same profile before revaluing layers;
+  // take a share lock only after both positions are fenced, then use this
+  // transaction-local policy snapshot for the entire transfer.
+  const profile = await resolveProfile(orgId, input.itemId, tx, true);
+  assertTracking(
+    profile,
+    { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },
+    "transfer",
+  );
   await validateTrackingSelection(
     tx,
     orgId,
@@ -2007,6 +2028,7 @@ async function transferInventoryTx(
       orgId,
       bookId,
       subsidiaryId: input.subsidiaryId,
+      actorId,
       currency,
       periodId: period,
       date: input.date,
@@ -2887,6 +2909,7 @@ export async function buildAssembly(
       orgId,
       bookId,
       subsidiaryId: input.subsidiaryId,
+      actorId,
       currency,
       periodId: period,
       date: input.date,
@@ -3113,6 +3136,7 @@ export async function reverseAssemblyBuild(
 // ---------------------------------------------------------------------------
 type RevaluableLayer = {
   id: string;
+  subsidiary_id: string;
   source_movement_id: string;
   received_at: string;
   original_quantity: string;
@@ -3212,9 +3236,9 @@ async function revalueLayerExactly(
   `);
   await tx.execute(sql`
     insert into cost_layers
-      (id, org_id, item_id, stock_location_id, source_movement_id, received_at,
+      (id, org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at,
        original_quantity, remaining_quantity, unit_cost, created_by, updated_by)
-    select ${splitLayerId}, org_id, item_id, stock_location_id,
+    select ${splitLayerId}, org_id, subsidiary_id, item_id, stock_location_id,
            ${layer.source_movement_id}, ${layer.received_at},
            '1.0000', '1.0000', ${fromUnits(roundingRateUnits)},
            ${actorId}, ${actorId}
@@ -3870,7 +3894,7 @@ async function returnVendorCreditInventoryLine(
   date: string,
   line: VendorCreditInventoryReturnLine,
 ): Promise<MovementResult> {
-  const profile = await resolveProfile(orgId, line.itemId, runner);
+  const profile = await resolveProfile(orgId, line.itemId, runner, true);
   assertTracking(
     profile,
     {
@@ -4011,6 +4035,7 @@ async function returnVendorCreditInventoryLine(
     orgId,
     bookId,
     subsidiaryId,
+    actorId,
     currency,
     periodId,
     date,
@@ -4439,6 +4464,8 @@ export interface LotRecallFilter {
   itemId?: string;
   expiresOnOrBefore?: string;
   includeExpiryOnly?: boolean;
+  /** Null/omitted is unrestricted; an empty list is deliberately no access. */
+  subsidiaryIds?: readonly string[] | null;
 }
 
 export type LotRecallRow = {
@@ -4468,6 +4495,15 @@ export async function queryLotRecall(
   orgId: string,
   filter: LotRecallFilter,
 ): Promise<LotRecallRow[]> {
+  const subsidiaryScope =
+    filter.subsidiaryIds == null
+      ? sql``
+      : filter.subsidiaryIds.length === 0
+        ? sql`and false`
+        : sql`and im.subsidiary_id in (${sql.join(
+            filter.subsidiaryIds.map((id) => sql`${id}::uuid`),
+            sql`, `,
+          )})`;
   const r = (await db.execute<LotRecallRow>(sql`
     select im.id as "movementId", l.id as "lotId", l.lot_number as "lotNumber", l.expires_on::text as "expiresOn",
            i.id as "itemId", i.code as "itemCode", i.name as "itemName", im.kind, im.moved_at::text as "movedAt",
@@ -4486,6 +4522,7 @@ export async function queryLotRecall(
        and (${filter.lotNumber ?? null}::text is null or l.lot_number ilike '%' || ${filter.lotNumber ?? ""} || '%')
        and (${filter.expiresOnOrBefore ?? null}::date is null or l.expires_on <= ${filter.expiresOnOrBefore ?? null}::date)
        and (${filter.includeExpiryOnly !== true} or l.expires_on is not null)
+       ${subsidiaryScope}
      order by im.moved_at desc`));
   return r.rows;
 }
@@ -4613,6 +4650,7 @@ async function postInTransitReclass(
   p: {
     orgId: string;
     order: TransferOrderRow;
+    actorId: string | null;
     date: string;
     direction: "ship" | "receive";
     amounts: { assetAccountId: string; value: string; memo: string }[];
@@ -4657,6 +4695,7 @@ async function postInTransitReclass(
     orgId: p.orgId,
     bookId,
     subsidiaryId: p.order.subsidiary_id,
+    actorId: p.actorId,
     currency,
     periodId,
     date: p.date,
@@ -4698,7 +4737,7 @@ export async function shipTransferOrder(
     const amounts: { assetAccountId: string; value: string; memo: string }[] =
       [];
     for (const line of lines.rows) {
-      const profile = await resolveProfile(orgId, line.item_id, tx);
+      const profile = await resolveProfile(orgId, line.item_id, tx, true);
       const moved = await transferInventoryTx(tx, orgId, actorId, {
         itemId: line.item_id,
         fromStockLocationId: order.from_stock_location_id,
@@ -4723,6 +4762,7 @@ export async function shipTransferOrder(
     const entryId = await postInTransitReclass(tx, {
       orgId,
       order,
+      actorId,
       date: shipDate,
       direction: "ship",
       amounts,
@@ -4763,7 +4803,7 @@ export async function receiveTransferOrder(
       [];
     for (const line of lines.rows) {
       if (isZero(line.quantity_shipped)) continue;
-      const profile = await resolveProfile(orgId, line.item_id, tx);
+      const profile = await resolveProfile(orgId, line.item_id, tx, true);
       const moved = await transferInventoryTx(tx, orgId, actorId, {
         itemId: line.item_id,
         fromStockLocationId: transitId,
@@ -4788,6 +4828,7 @@ export async function receiveTransferOrder(
     const entryId = await postInTransitReclass(tx, {
       orgId,
       order,
+      actorId,
       date: receiveDate,
       direction: "receive",
       amounts,
@@ -4890,7 +4931,7 @@ export async function postLandedCostVoucher(
       manualAmount: string | null;
     }[] = [];
     for (const target of input.targets) {
-      const profile = await resolveProfile(orgId, target.itemId, tx);
+      const profile = await resolveProfile(orgId, target.itemId, tx, true);
       await assertStockLocationAdmitsSubsidiary(
         tx,
         orgId,
@@ -4902,7 +4943,7 @@ export async function postLandedCostVoucher(
       // another legal entity's stock is another form of taking its value.
       const layers = (
         (await tx.execute<OpenLayer>(sql`
-        select id, source_movement_id, received_at::text, original_quantity,
+        select id, subsidiary_id, source_movement_id, received_at::text, original_quantity,
                remaining_quantity, unit_cost
           from cost_layers
          where org_id = ${orgId} and item_id = ${target.itemId}
@@ -5097,6 +5138,7 @@ export async function postLandedCostVoucher(
       orgId,
       bookId,
       subsidiaryId: input.subsidiaryId,
+      actorId,
       currency,
       periodId,
       date: input.voucherDate,
@@ -5211,6 +5253,7 @@ export async function reverseLandedCostVoucher(
         basis: "value" | "quantity" | "weight" | "manual" | "standard_variance";
         amount: string;
         source_document_line_id: string | null;
+        subsidiary_id: string;
         source_movement_id: string;
         received_at: string;
         original_quantity: string;
@@ -5219,7 +5262,7 @@ export async function reverseLandedCostVoucher(
       }>(sql`
       select allocation.id, allocation.target_cost_layer_id, allocation.basis,
              allocation.amount::text, allocation.source_document_line_id,
-             layer.source_movement_id, layer.received_at::text,
+             layer.subsidiary_id, layer.source_movement_id, layer.received_at::text,
              layer.original_quantity::text, layer.remaining_quantity::text,
              layer.unit_cost::text
         from landed_cost_allocations allocation
@@ -5270,6 +5313,7 @@ export async function reverseLandedCostVoucher(
         orgId,
         {
           id: allocation.target_cost_layer_id,
+          subsidiary_id: allocation.subsidiary_id,
           source_movement_id: allocation.source_movement_id,
           received_at: allocation.received_at,
           original_quantity: allocation.original_quantity,
