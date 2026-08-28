@@ -44,7 +44,13 @@ export function RemittancesView({
       const res = await fetch('/api/payroll/remittances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create-bill', partyId, filingAccountId, from, to }),
+        body: JSON.stringify({
+          action: 'create-bill',
+          partyId,
+          filingAccountId,
+          from: range.from,
+          to: range.to,
+        }),
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error ?? 'failed')
