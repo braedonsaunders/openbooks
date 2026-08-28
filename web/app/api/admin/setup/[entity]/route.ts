@@ -44,6 +44,31 @@ const PERMISSION = 'admin.setup.manage'
 
 const FX_RATE_COLUMNS = new Set(['rate', 'current_rate', 'average_rate', 'historical_rate'])
 
+/** Compare values read from PostgreSQL with the normalized values produced by
+ * the setup coercer. Money columns come back at their storage scale (for
+ * example `70.0000`) while the decimal coercer deliberately emits the wider
+ * setup scale (`70.0000000000`); those representations are the same rule. */
+function comparableSetupValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try { return JSON.stringify(JSON.parse(trimmed)) } catch { /* text value */ }
+    }
+    if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+      const negative = trimmed.startsWith('-')
+      const unsigned = negative ? trimmed.slice(1) : trimmed
+      const [rawWhole, fraction = ''] = unsigned.split('.')
+      const whole = rawWhole ?? ''
+      const normalized = `${whole.replace(/^0+(?=\d)/, '')}${fraction ? `.${fraction.replace(/0+$/, '')}` : ''}`
+      return (negative && normalized !== '0') ? `-${normalized}` : normalized
+    }
+    return trimmed
+  }
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
 function persistFxRateCols<T extends { column: string; value: unknown }>(cols: T[]): T[] {
   return cols.map((column) =>
     FX_RATE_COLUMNS.has(column.column)
@@ -731,9 +756,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
     const col = toSnake(entity.naturalKey)
     const val = String(body[entity.naturalKey] ?? '')
     const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
+    // Derived rules are effective-dated versions: the same code is allowed
+    // again when it starts on a different date, while the storage unique key
+    // still rejects two definitions beginning on the same date.
+    const effectiveFilter = entity.key === 'pay-derived-rules'
+      ? sql` and effective_from = ${String(body.effectiveFrom ?? '')}`
+      : sql``
     const dup = ((await db.execute(sql`
       select 1 from ${sql.raw(entity.table)}
-       where ${sql.raw(col)} = ${val}${orgFilter} limit 1`)))
+       where ${sql.raw(col)} = ${val}${orgFilter}${effectiveFilter} limit 1`)))
     if (dup.rows.length > 0) return NextResponse.json({ error: 'duplicate', code: 'duplicate' }, { status: 409 })
   }
 
@@ -761,6 +792,61 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
     cols.map((c) => sql`${c.value}`),
     sql`, `,
   )
+
+  if (entity.key === 'pay-derived-rules') {
+    // A direct create of a later active version follows the same timeline rule
+    // as an edit: close the currently-effective active row before inserting the
+    // successor, and keep both operations plus their evidence atomic.
+    try {
+      const newId = await db.transaction(async (tx) => {
+        const effectiveFrom = String(body.effectiveFrom)
+        const prior = coerceBoolean(body.isActive)
+          ? ((await tx.execute(sql`
+              select id from pay_derived_rules
+               where org_id = ${orgId} and code = ${String(body.code)}
+                 and is_active
+                 and effective_from < ${effectiveFrom}::date
+                 and (effective_to is null or effective_to >= ${effectiveFrom}::date)
+               for update`)))
+          : { rows: [] as { id: string }[] }
+        for (const row of prior.rows) {
+          const closed = ((await tx.execute(sql`
+            update pay_derived_rules
+               set effective_to = (${effectiveFrom}::date - 1),
+                   updated_at = now(), updated_by = ${actorId}
+             where id = ${String(row.id)} and org_id = ${orgId}
+            returning effective_to`)))
+          await audit({
+            orgId,
+            table: entity.table,
+            rowId: String(row.id),
+            action: 'update',
+            changes: { effective_to: String(closed.rows[0]?.effective_to ?? '') },
+            actorId,
+          }, tx)
+        }
+        const inserted = ((await tx.execute(sql`
+          insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
+          returning ${sql.raw(idColumn(entity))} as id`)))
+        const id = String(inserted.rows[0]?.id)
+        await audit({
+          orgId: entity.orgScoped ? orgId : null,
+          table: entity.table,
+          rowId: id,
+          action: 'insert',
+          changes: Object.fromEntries(built.cols.map((column) => [column.column, column.value])),
+          actorId,
+        }, tx)
+        return id
+      })
+      return NextResponse.json({ id: newId })
+    } catch (e) {
+      if (pgErrorCode(e) === '23505' || pgErrorCode(e) === '23P01') {
+        return NextResponse.json({ error: 'duplicate', code: 'duplicate' }, { status: 409 })
+      }
+      return NextResponse.json({ error: describeDbError(e) }, { status: 400 })
+    }
+  }
 
   try {
     const newId = await db.transaction(async (tx) => {
@@ -924,6 +1010,141 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
     }
   }
 
+  if (entity.key === 'pay-derived-rules') {
+    // A rule is a policy snapshot. Once its effective window has been used by
+    // payroll, changing its pricing/filter columns would restate that period.
+    // Close the previous window and insert a successor instead. Activation and
+    // a deliberate window close remain in-place operations; they do not alter
+    // the policy that historical periods resolve.
+    const policyColumns = [
+      'name', 'component_id', 'trigger', 'time_type_id', 'project_id',
+      'department_id', 'equipment_unit_id', 'item_id', 'trade_id', 'job_title',
+      'billable_only', 'included_job_titles', 'excluded_job_titles',
+      'quantity_mode', 'rate_mode', 'rate_value', 'costing_mode',
+      'effective_from', 'sequence',
+    ]
+    const builtByColumn = new Map(built.cols.map((column) => [column.column, column.value]))
+    try {
+      const versionId = await db.transaction(async (tx) => {
+        const currentRes = ((await tx.execute(sql`
+          select * from pay_derived_rules
+           where id = ${id} and org_id = ${orgId}
+           for update`)))
+        const current = currentRes.rows[0] as Record<string, unknown> | undefined
+        if (!current) throw new Error('not found')
+
+        const valueFor = (column: string) => builtByColumn.has(column)
+          ? builtByColumn.get(column)
+          : current[column]
+        const changedPolicy = policyColumns.some((column) =>
+          comparableSetupValue(valueFor(column)) !== comparableSetupValue(current[column]))
+
+        if (!changedPolicy) {
+          const updated = ((await tx.execute(sql`
+            update pay_derived_rules set ${sql.join(setParts, sql`, `)}
+             where id = ${id} and org_id = ${orgId}
+            returning id`)))
+          if (!updated.rows.length) throw new Error('not found')
+          await audit({
+            orgId,
+            table: entity.table,
+            rowId: id,
+            action: 'update',
+            changes: Object.fromEntries(built.cols.map((column) => [column.column, column.value])),
+            actorId,
+          }, tx)
+          return id
+        }
+
+        const effectiveFrom = String(valueFor('effective_from') ?? '')
+        const priorEffectiveFrom = String(current.effective_from ?? '')
+        if (!effectiveFrom || effectiveFrom <= priorEffectiveFrom) {
+          throw new Error('effective-from-must-follow-current')
+        }
+        const effectiveTo = valueFor('effective_to')
+        if (effectiveTo != null && String(effectiveTo) < effectiveFrom) {
+          throw new Error('effective-to-before-effective-from')
+        }
+
+        // If the old row is open (or reaches into the successor's start), its
+        // inclusive range ends the day before the new version begins. A lapsed
+        // row is left untouched so its original historical window remains an
+        // exact record of what was configured.
+        const priorEffectiveTo = current.effective_to == null ? null : String(current.effective_to)
+        const closesPrior = priorEffectiveTo == null || priorEffectiveTo >= effectiveFrom
+        let closedEffectiveTo: string | null = null
+        if (closesPrior) {
+          const closed = ((await tx.execute(sql`
+            update pay_derived_rules
+               set effective_to = (${effectiveFrom}::date - 1),
+                   updated_at = now(), updated_by = ${actorId}
+             where id = ${id} and org_id = ${orgId}
+            returning effective_to`)))
+          closedEffectiveTo = closed.rows[0]?.effective_to == null
+            ? null
+            : String(closed.rows[0].effective_to)
+        }
+
+        const successorColumns = [
+          'org_id', 'code', ...policyColumns.slice(0, policyColumns.indexOf('effective_from')),
+          'effective_from', 'effective_to', 'sequence', 'is_active', 'created_by', 'updated_by',
+        ]
+        const successorValues = successorColumns.map((column) => {
+          if (column === 'org_id') return sql`${orgId}`
+          if (column === 'code') return sql`${String(current.code)}`
+          if (column === 'effective_to') return sql`${effectiveTo ?? null}`
+          if (column === 'created_by' || column === 'updated_by') return sql`${actorId}`
+          if (column === 'is_active') return sql`${valueFor('is_active')}`
+          return sql`${valueFor(column) ?? null}`
+        })
+        const inserted = ((await tx.execute(sql`
+          insert into pay_derived_rules (${sql.raw(successorColumns.join(', '))})
+          values (${sql.join(successorValues, sql`, `)})
+          returning id`)))
+        const successorId = String(inserted.rows[0]?.id)
+
+        if (closesPrior) {
+          await audit({
+            orgId,
+            table: entity.table,
+            rowId: id,
+            action: 'update',
+            changes: { effective_to: closedEffectiveTo },
+            actorId,
+          }, tx)
+        }
+        await audit({
+          orgId,
+          table: entity.table,
+          rowId: successorId,
+          action: 'insert',
+          changes: Object.fromEntries(
+            successorColumns
+              .filter((column) => !['org_id', 'created_by', 'updated_by'].includes(column))
+              .map((column) => [column, column === 'code' ? current.code : valueFor(column)]),
+          ),
+          actorId,
+        }, tx)
+        return successorId
+      })
+      return NextResponse.json({ id: versionId })
+    } catch (e) {
+      const code = pgErrorCode(e)
+      if (code === '23505' || code === '23P01') {
+        return NextResponse.json({ error: 'duplicate', code: 'duplicate' }, { status: 409 })
+      }
+      const message = (e as Error).message
+      if (message === 'not found') return NextResponse.json({ error: message }, { status: 404 })
+      if (message === 'effective-from-must-follow-current') {
+        return NextResponse.json({ error: 'A changed derived rule must start after its current effective date' }, { status: 400 })
+      }
+      if (message === 'effective-to-before-effective-from') {
+        return NextResponse.json({ error: 'effectiveTo cannot precede effectiveFrom' }, { status: 400 })
+      }
+      return NextResponse.json({ error: describeDbError(e) }, { status: 400 })
+    }
+  }
+
   let updateCols = entity.key === 'fx-rates'
     ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
     : built.cols
@@ -1018,19 +1239,26 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {
-    const deleted = ((await db.execute(sql`
-      delete from ${sql.raw(entity.table)}
-       where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
-      returning ${sql.raw(idColumn(entity))} as id`)))
-    if (deleted.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    await audit({
-      orgId: entity.orgScoped ? orgId : null,
-      table: entity.table,
-      rowId: id,
-      action: 'delete',
-      changes: {},
-      actorId,
+    const found = await db.transaction(async (tx) => {
+      const deleted = ((await tx.execute(sql`
+        delete from ${sql.raw(entity.table)}
+         where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
+        returning ${sql.raw(idColumn(entity))} as id`)))
+      if (deleted.rows.length === 0) return false
+      // The audit is part of the delete transaction. If audit_log rejects the
+      // event, the setup row must roll back with it rather than disappearing
+      // without evidence.
+      await audit({
+        orgId: entity.orgScoped ? orgId : null,
+        table: entity.table,
+        rowId: id,
+        action: 'delete',
+        changes: {},
+        actorId,
+      }, tx)
+      return true
     })
+    if (!found) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json({ ok: true })
   } catch (e) {
     // Foreign-key violation → the record is referenced elsewhere.

@@ -199,7 +199,7 @@ export const payDerivedRules = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("pay_derived_rules_org_code").on(t.orgId, t.code),
+    uniqueIndex("pay_derived_rules_org_code_effective").on(t.orgId, t.code, t.effectiveFrom),
     index("pay_derived_rules_org_active").on(t.orgId, t.isActive, t.sequence),
     index("pay_derived_rules_component").on(t.orgId, t.componentId),
     check(
