@@ -76,7 +76,7 @@ export async function accountRegister(
            l.line_number, l.amount, l.memo, p.display_name as party,
            d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where l.account_id in (select id from account_scope)
@@ -95,7 +95,7 @@ export async function accountRegister(
     )
     select count(*) as n, coalesce(sum(amount),0) as bal
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where l.account_id in (select id from account_scope)
@@ -228,12 +228,21 @@ export interface PartnerStatementResult {
 export async function partnerStatement(
   partyId: string,
   orgId: string,
-  opts: { from: string; to: string; side: AgingSide },
+  opts: { from: string; to: string; side: AgingSide; dims?: DimFilter },
 ): Promise<PartnerStatementResult> {
-  const reg = await partyRegister(opts.side, { from: opts.from, to: opts.to, partyId, orgId })
+  const reg = await partyRegister(opts.side, { from: opts.from, to: opts.to, partyId, orgId, dims: opts.dims })
   const p = reg.parties[0]
-  const nameRow = (await db.execute<{ display_name: string | null }>(sql`select display_name from parties where id = ${partyId} and org_id = ${orgId}`))
-  const aging = await agingDetail(opts.side, opts.to, undefined, orgId)
+  const partySubsidiaryFilter = opts.dims?.subsidiaryIds
+    ? opts.dims.subsidiaryIds.length > 0
+      ? sql` and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(",")}}`}::uuid[]))`
+      : sql` and false`
+    : sql``
+  const nameRow = (await db.execute<{ display_name: string | null }>(sql`
+    select p.display_name
+      from parties p
+     where p.id = ${partyId} and p.org_id = ${orgId}${partySubsidiaryFilter}
+  `))
+  const aging = await agingDetail(opts.side, opts.to, opts.dims, orgId)
   const agingTotals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal } = { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO }
   for (const row of aging.rows) {
     if (row.partyId !== partyId) continue
