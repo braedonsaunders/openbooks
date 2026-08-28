@@ -23,7 +23,8 @@ export async function deleteDocument(
     const [doc] = await tx
       .select()
       .from(schema.documents)
-      .where(and(eq(schema.documents.id, documentId), eq(schema.documents.orgId, orgId)));
+      .where(and(eq(schema.documents.id, documentId), eq(schema.documents.orgId, orgId)))
+      .for("update");
     if (!doc) throw new DeleteError("document not found");
     if (doc.status !== "draft") {
       throw new DeleteError(
