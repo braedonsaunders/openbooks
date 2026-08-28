@@ -380,7 +380,7 @@ test(
         insert into flows
           (id, org_id, name, subject_kind, enabled, graph, created_by, updated_by)
         values
-          (${correctionFlowId}, ${org.orgId}, 'OCC correction post-commit',
+          (${correctionFlowId}, ${org.orgId}, 'OCC correction transactional',
            'vendor_bill', true, ${JSON.stringify({
              schemaVersion: 1,
              nodes: [
@@ -409,14 +409,14 @@ test(
         create function public.${correctionFlowGuard}_fn() returns trigger
         language plpgsql as $guard$
         begin
-          if new.flow_id = '${correctionFlowId}'::uuid and exists (
+          if new.flow_id = '${correctionFlowId}'::uuid and not exists (
             select 1
               from document_links link
              where link.org_id = new.org_id
                and link.from_document_id = new.subject_id
                and link.xmin::text::bigint = txid_current()
           ) then
-            raise exception 'correction flow dispatched before correction commit';
+            raise exception 'correction flow dispatched after correction transaction committed';
           end if;
           return new;
         end
@@ -850,7 +850,7 @@ test(
         assert.equal(links[0]!.correctionOf, correctionSourceId)
       })
 
-      await t.test('application correction dispatches flows only after its idempotent transaction commits', async () => {
+      await t.test('application correction routes flows inside its idempotent transaction', async () => {
         const source = await loadStoredDocument(org.orgId, applicationCorrectionSourceId)
         assert.equal(source.status, 'posted')
         const user = {
@@ -865,32 +865,31 @@ test(
           homeUserId: actorId,
           homeOrgId: org.orgId,
         }
+        const correction = {
+          expectedUpdatedAt: source.updatedAt,
+          amendmentReason: 'Correct duplicated vendor charge',
+          partyId: org.vendorId,
+          documentDate: org.date,
+          memo: 'application correction committed',
+          lines: [{ accountId: org.accounts.cogs, amount: '125' }],
+        }
+        const correctionContext = {
+          authz: {
+            user,
+            permissions: new Set(['*']),
+            allowedSubsidiaryIds: null,
+          },
+          source: 'api' as const,
+          requestId: 'occ-application-correction',
+          apiKeyId: null,
+        }
         const result = await withSimClock(org.date, () => withOrgContext(
           org.orgId,
-          () => correctPostedDocument(
-            {
-              authz: {
-                user,
-                permissions: new Set(['*']),
-                allowedSubsidiaryIds: null,
-              },
-              source: 'api',
-              requestId: 'occ-application-correction',
-              apiKeyId: null,
-            },
-            {
-              documentId: applicationCorrectionSourceId,
-              correction: {
-                expectedUpdatedAt: source.updatedAt,
-                amendmentReason: 'Correct duplicated vendor charge',
-                partyId: org.vendorId,
-                documentDate: org.date,
-                memo: 'application correction committed',
-                lines: [{ accountId: org.accounts.cogs, amount: '125' }],
-              },
-              idempotencyKey: 'occ-correction-postcommit-api-0001',
-            },
-          ),
+          () => correctPostedDocument(correctionContext, {
+            documentId: applicationCorrectionSourceId,
+            correction,
+            idempotencyKey: 'occ-correction-postcommit-api-0001',
+          }),
         ))
         assert.equal(result.replayed, false)
         const outcome = result.result as { correctionId: string; voidStatus: string }
@@ -926,9 +925,49 @@ test(
           runs: 1,
           notifications: 1,
         })
+
+        // A completed key replays the committed response even though the
+        // source is now voided. The callback (and therefore flow dispatch)
+        // must not run a second time.
+        const replay = await withSimClock(org.date, () => withOrgContext(
+          org.orgId,
+          () => correctPostedDocument(correctionContext, {
+            documentId: applicationCorrectionSourceId,
+            correction,
+            idempotencyKey: 'occ-correction-postcommit-api-0001',
+          }),
+        ))
+        assert.equal(replay.replayed, true)
+        assert.deepEqual(replay.result, result.result)
+        const replayEffects = await withOrgContext(org.orgId, async () => (await db.execute<{
+          runs: number
+          notifications: number
+        }>(sql`
+          select
+            (select count(*)::int from flow_runs
+              where org_id = ${org.orgId} and flow_id = ${correctionFlowId}) as runs,
+            (select count(*)::int from notifications
+              where org_id = ${org.orgId} and kind = 'flow'
+                and title = 'Correction committed') as notifications
+        `)).rows[0])
+        assert.deepEqual(replayEffects, { runs: 1, notifications: 1 })
       })
 
-      await t.test('a failing void rolls the whole posted correction back atomically', async () => {
+      await t.test('flow routing failure rolls back correction, void, and idempotency claim', async () => {
+        // Force the correction flow's flow_runs insert to fail. Because the
+        // dispatcher now runs inside executeIdempotent's transaction, the
+        // aborted transaction must roll back every material write.
+        await withBypass(() => db.execute(sql.raw(`
+          create or replace function public.${correctionFlowGuard}_fn() returns trigger
+          language plpgsql as $guard$
+          begin
+            if new.flow_id = '${correctionFlowId}'::uuid then
+              raise exception 'forced correction flow routing failure';
+            end if;
+            return new;
+          end
+          $guard$;
+        `)))
         await withOrgContext(org.orgId, () => postDocument(
           voidRollbackSourceId,
           {
@@ -940,6 +979,108 @@ test(
           },
           { audit: { actorId, source: 'test' } },
         ))
+        const source = await loadStoredDocument(org.orgId, voidRollbackSourceId)
+        const user = {
+          id: actorId,
+          email: 'occ-correction-failure@scratch.test',
+          name: 'OCC Correction Failure Controller',
+          roles: [{ key: 'admin', name: 'Admin' }],
+          orgId: org.orgId,
+          envKind: 'production' as const,
+          productionOrgId: org.orgId,
+          isSuperAdmin: false,
+          homeUserId: actorId,
+          homeOrgId: org.orgId,
+        }
+        const attempt = await settle(withSimClock(org.date, () => withOrgContext(
+          org.orgId,
+          () => correctPostedDocument(
+            {
+              authz: {
+                user,
+                permissions: new Set(['*']),
+                allowedSubsidiaryIds: null,
+              },
+              source: 'api',
+              requestId: 'occ-application-correction-flow-failure',
+              apiKeyId: null,
+            },
+            {
+              documentId: voidRollbackSourceId,
+              correction: {
+                expectedUpdatedAt: source.updatedAt,
+                amendmentReason: 'Correct duplicated vendor charge after flow failure',
+                partyId: org.vendorId,
+                documentDate: org.date,
+                memo: 'flow failure must roll back',
+                lines: [{ accountId: org.accounts.cogs, amount: '125' }],
+              },
+              idempotencyKey: 'occ-correction-flow-failure-api-0001',
+            },
+          ),
+        )))
+        assert.equal(attempt.status, 'rejected')
+
+        const rolledBack = await withOrgContext(org.orgId, async () => (await db.execute<{
+          sourceStatus: string
+          links: number
+          replacements: number
+          claims: number
+        }>(sql`
+          select source.status as "sourceStatus",
+                 (select count(*)::int from document_links
+                   where org_id = ${org.orgId}
+                     and to_document_id = ${voidRollbackSourceId}
+                     and link_type = 'reverses') as links,
+                 (select count(*)::int from documents
+                   where org_id = ${org.orgId}
+                     and custom->>'correctionOf' = ${voidRollbackSourceId}) as replacements,
+                 (select count(*)::int from application_idempotency_keys
+                   where org_id = ${org.orgId}
+                     and actor_id = ${actorId}
+                     and source = 'api'
+                     and operation = 'documents.correct'
+                     and idempotency_key = 'occ-correction-flow-failure-api-0001') as claims
+            from documents source
+           where source.org_id = ${org.orgId}
+             and source.id = ${voidRollbackSourceId}
+        `)).rows[0])
+        assert.deepEqual(rolledBack, {
+          sourceStatus: 'posted',
+          links: 0,
+          replacements: 0,
+          claims: 0,
+        })
+
+        // Restore the transactional guard for the remaining correction tests.
+        await withBypass(() => db.execute(sql.raw(`
+          create or replace function public.${correctionFlowGuard}_fn() returns trigger
+          language plpgsql as $guard$
+          begin
+            if new.flow_id = '${correctionFlowId}'::uuid and not exists (
+              select 1
+                from document_links link
+               where link.org_id = new.org_id
+                 and link.from_document_id = new.subject_id
+                 and link.xmin::text::bigint = txid_current()
+            ) then
+              raise exception 'correction flow dispatched after correction transaction committed';
+            end if;
+            return new;
+          end
+          $guard$;
+        `)))
+      })
+
+      await t.test('a failing void rolls the whole posted correction back atomically', async () => {
+        // The UI route deliberately dispatches its deferred flow after the
+        // surrounding transaction commits (it has no idempotent command
+        // wrapper). The application correction assertions above own the
+        // transaction guard; remove it here so this independent route
+        // composition can continue to exercise its post-commit dispatch.
+        await withBypass(() => db.execute(sql.raw(`
+          drop trigger if exists ${correctionFlowGuard} on flow_runs
+        `)))
         // A void claim that lands between the replacement draft and the void
         // request is exactly the window the removed compensating-delete
         // fallback could not reliably clean up. With the claim in place the
