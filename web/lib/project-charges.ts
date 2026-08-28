@@ -71,7 +71,34 @@ export interface ChargeInput {
   lines: ChargeLineInput[]
 }
 
-export class ChargeError extends Error {}
+export class ChargeError extends Error {
+  override readonly name = 'ChargeError'
+}
+
+export type ChargeCommittedStage = 'approval-routing' | 'posting'
+
+/**
+ * The charge header committed before its approval/posting lifecycle failed.
+ *
+ * A project charge is intentionally retained as a draft/approved document when
+ * lifecycle work fails: callers must be able to identify and repair that exact
+ * charge instead of retrying creation and risking a duplicate posting. The
+ * original failure is kept as `cause` for service callers and rendered as a
+ * safe message by the API boundary.
+ */
+export class ChargeCommittedError extends Error {
+  override readonly name = 'ChargeCommittedError'
+
+  constructor(
+    readonly chargeId: string,
+    readonly documentNumber: string,
+    readonly stage: ChargeCommittedStage,
+    readonly cause: unknown,
+  ) {
+    const reason = cause instanceof Error ? cause.message : String(cause)
+    super(`project charge ${documentNumber} (${chargeId}) was committed but ${stage} failed: ${reason}`)
+  }
+}
 
 /** Quantity columns are numeric(28,8); do not force ledger money scale. */
 function exactQuantity(value: unknown, label: string): string {
@@ -281,18 +308,24 @@ export async function createProjectCharge(
   })
 
   let approvalPending = false
-  if (opts.post !== false) {
-    const submission = await submitAndReleaseIfUngated('project_charge', created.id, userId)
-    if (submission.flowError) {
-      throw new ChargeError(`approval could not be routed: ${submission.flowError}`)
+  let stage: ChargeCommittedStage = 'approval-routing'
+  try {
+    if (opts.post !== false) {
+      const submission = await submitAndReleaseIfUngated('project_charge', created.id, userId)
+      if (submission.flowError) {
+        throw new ChargeError(`approval could not be routed: ${submission.flowError}`)
+      }
+      approvalPending = submission.gated
     }
-    approvalPending = submission.gated
-  }
 
-  // Post outside the create transaction (postDocument runs on the shared pool).
-  if (opts.post !== false && !approvalPending && !isZero(created.totalCost)) {
-    const deps = await controlDeps(orgId)
-    await postDocument(created.id, deps)
+    // Post outside the create transaction (postDocument runs on the shared pool).
+    if (opts.post !== false && !approvalPending && !isZero(created.totalCost)) {
+      stage = 'posting'
+      const deps = await controlDeps(orgId)
+      await postDocument(created.id, deps)
+    }
+  } catch (cause) {
+    throw new ChargeCommittedError(created.id, created.documentNumber, stage, cause)
   }
   return { id: created.id, documentNumber: created.documentNumber, approvalPending }
 }

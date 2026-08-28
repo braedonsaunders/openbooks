@@ -6,7 +6,12 @@ import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { ControlAccountsIncompleteError } from '@openbooks/engine/src/control-accounts.ts'
 import { guardPermission } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
-import { createProjectCharge, ChargeError, type ChargeLineInput } from '../../../lib/project-charges'
+import {
+  createProjectCharge,
+  ChargeCommittedError,
+  ChargeError,
+  type ChargeLineInput,
+} from '../../../lib/project-charges'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 import { isFeatureEnabled } from '../../../lib/features'
 import { guardProjectsFeature } from '../../../lib/projects-gate'
@@ -125,6 +130,18 @@ export async function POST(req: Request) {
     })
     return NextResponse.json(created)
   } catch (e) {
+    // Creation commits before approval/posting so a lifecycle failure must
+    // identify the durable charge instead of inviting a duplicate retry.
+    if (e instanceof ChargeCommittedError) {
+      return NextResponse.json({
+        error: e.message,
+        committed: true,
+        chargeId: e.chargeId,
+        documentNumber: e.documentNumber,
+        stage: e.stage,
+        cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+      }, { status: 409 })
+    }
     // Posting refusals (kernel rules or unconfigured org control accounts) are
     // request-state failures, not server defects.
     const status =
