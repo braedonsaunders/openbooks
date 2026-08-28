@@ -32,6 +32,15 @@ test('explicit role assignments are unioned and deny overrides win', () => {
   assert.deepEqual([...permissions].sort(), ['ap.read', 'banking.read', 'reports.read'])
 })
 
+test('specific denies override a full wildcard grant while preserving other permissions', () => {
+  const permissions = resolveEffectivePermissions({
+    rolePermissionSets: [['*']],
+    overrides: [{ permission: 'gl.post', effect: 'deny' }],
+  })
+  assert.equal(permissionSetCovers(permissions, 'gl.post'), false)
+  assert.equal(permissionSetCovers(permissions, 'gl.read'), true)
+})
+
 /**
  * Representative SoD controls for inventory money movement
  * (fnd_mt9g743u_w8y6mv). The routes gate each verb through
