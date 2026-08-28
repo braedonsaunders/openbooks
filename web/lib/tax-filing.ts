@@ -13,7 +13,10 @@ export function taxReturnExportData(result: TaxReturnResult, t: Translator): Exp
     result.boxes.find((b) => b.lineCode === '113C') ??
     result.boxes.find((b) => b.lineCode === '109')
   const summary = [] as ExportData['summary']
-  if (netBox) summary.push({ label: netBox.label, value: Number(netBox.value) })
+  // Tax boxes are exact numeric(19,4) strings from the filing engine. Keep
+  // them as strings and mark them as money so every export renderer receives
+  // the statutory value without an IEEE-754 round-trip.
+  if (netBox) summary.push({ label: netBox.label, value: netBox.value, money: true })
   if (result.watermark) summary.push({ label: t('notice'), value: result.watermark })
 
   return {
@@ -25,7 +28,8 @@ export function taxReturnExportData(result: TaxReturnResult, t: Translator): Exp
         kind: 'results',
         title: result.formName,
         columns: [t('columns.line'), t('columns.description'), t('columns.amount')],
-        rows: result.boxes.map((b) => [b.lineCode, b.label, Number(b.value)] as (string | number)[]),
+        rows: result.boxes.map((b) => [b.lineCode, b.label, b.value] as (string | number)[]),
+        money: [false, false, true],
         align: ['left', 'left', 'right'],
       },
     ],
