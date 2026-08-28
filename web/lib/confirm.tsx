@@ -85,7 +85,10 @@ export function ConfirmRoot() {
     if (!req) return
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') settle(false)
-      if (e.key === 'Enter') settle(true)
+      // Let focused buttons handle Enter through their native click. This
+      // preserves an explicit Cancel activation instead of settling true from
+      // this document-level listener before the button click can run.
+      if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) settle(true)
     }
     document.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
