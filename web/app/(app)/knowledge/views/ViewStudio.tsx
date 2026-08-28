@@ -111,25 +111,59 @@ export function ViewStudio({
 
   // --- autosave (debounced PATCH) ---
   const firstSave = useRef(true)
+  const saveChainRef = useRef(Promise.resolve())
+  const saveRevisionRef = useRef(0)
+  const mountedRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   useEffect(() => {
     if (firstSave.current) {
       firstSave.current = false
       return
     }
+
+    const revision = ++saveRevisionRef.current
     setSaveState('dirty')
     const timer = setTimeout(async () => {
-      setSaveState('saving')
-      const res = await fetch(`/api/views/${view.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, query, scope }),
-      })
-      if (res.ok) {
-        setSaveState('saved')
-      } else {
-        setSaveState('error')
-        toast.error((await res.json()).error ?? tc('feedback.saveFailed'))
+      // PATCH requests must be serialized: aborting a fetch does not prevent a
+      // server that already received it from committing, so an older request
+      // can otherwise finish after a newer edit and overwrite it.
+      const save = async () => {
+        // A newer edit superseded this snapshot while it waited in the queue.
+        if (revision !== saveRevisionRef.current) return
+        if (mountedRef.current) setSaveState('saving')
+
+        try {
+          const res = await fetch(`/api/views/${view.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description, query, scope }),
+          })
+          if (res.ok) {
+            if (mountedRef.current && revision === saveRevisionRef.current) setSaveState('saved')
+            return
+          }
+
+          const data = await res.json().catch(() => ({}))
+          if (mountedRef.current && revision === saveRevisionRef.current) {
+            setSaveState('error')
+            toast.error(data.error ?? tc('feedback.saveFailed'))
+          }
+        } catch {
+          if (mountedRef.current && revision === saveRevisionRef.current) {
+            setSaveState('error')
+            toast.error(tc('feedback.saveFailed'))
+          }
+        }
       }
+
+      saveChainRef.current = saveChainRef.current.then(save, save)
     }, 700)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
