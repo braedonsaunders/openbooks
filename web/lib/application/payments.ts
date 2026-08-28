@@ -151,6 +151,17 @@ export async function postPayment(
     execute: async () => {
       try {
         if (header.status === "draft") {
+          // Persist the final-action allocation set before submission. The
+          // approval reviewer must approve the same workpaper that posting
+          // will consume; request-body values may not live only in memory.
+          if (input.allocations !== undefined) {
+            await updateDraftPayment(
+              input.documentId,
+              { allocations: input.allocations },
+              context.authz.user.id,
+              context.authz.user.orgId,
+            );
+          }
           const submission = await submitAndReleaseIfUngated(
             header.kind,
             input.documentId,
