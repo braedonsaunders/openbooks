@@ -54,6 +54,15 @@ const INVENTORY_KINDS = new Set(['inventory', 'assembly', 'kit'])
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'
 const field = 'space-y-1.5'
 
+/**
+ * Keep database decimal text intact while loading an item into the form.
+ * Numeric columns are returned as strings, and converting them through
+ * Number/toFixed would silently discard valid four-decimal rates.
+ */
+export function preserveItemDecimal(value: unknown): string {
+  return value == null ? '' : String(value)
+}
+
 export function ItemDrawer({
   payload,
   accounts,
@@ -110,10 +119,10 @@ export function ItemDrawer({
   const [category, setCategory] = useState<string>(it.category ?? '')
   const [unit, setUnit] = useState<string>(it.unit ?? '')
   const [defaultRate, setDefaultRate] = useState<string>(
-    it.default_rate != null ? Number(it.default_rate).toFixed(2) : '',
+    preserveItemDecimal(it.default_rate),
   )
   const [defaultCost, setDefaultCost] = useState<string>(
-    it.default_cost != null ? Number(it.default_cost).toFixed(2) : '',
+    preserveItemDecimal(it.default_cost),
   )
   const [incomeAccountId, setIncomeAccountId] = useState<string>(it.income_account_id ?? '')
   const [expenseAccountId, setExpenseAccountId] = useState<string>(it.expense_account_id ?? '')
@@ -125,7 +134,7 @@ export function ItemDrawer({
   const [createPlansOn, setCreatePlansOn] = useState<string>(it.create_plans_on ?? 'billing')
   const [revenueAllocation, setRevenueAllocation] = useState<string>(it.revenue_allocation ?? 'normal')
   const [standaloneSellingPrice, setStandaloneSellingPrice] = useState<string>(
-    it.standalone_selling_price != null ? Number(it.standalone_selling_price).toFixed(2) : '',
+    preserveItemDecimal(it.standalone_selling_price),
   )
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(it.custom ?? {})
   const [isActive, setIsActive] = useState<boolean>(it.is_active === true)
@@ -202,8 +211,8 @@ export function ItemDrawer({
     setCode(it.code ?? '')
     setCategory(it.category ?? '')
     setUnit(it.unit ?? '')
-    setDefaultRate(it.default_rate != null ? Number(it.default_rate).toFixed(2) : '')
-    setDefaultCost(it.default_cost != null ? Number(it.default_cost).toFixed(2) : '')
+    setDefaultRate(preserveItemDecimal(it.default_rate))
+    setDefaultCost(preserveItemDecimal(it.default_cost))
     setIncomeAccountId(it.income_account_id ?? '')
     setExpenseAccountId(it.expense_account_id ?? '')
     setCostRecoveryAccountId(it.cost_recovery_account_id ?? '')
@@ -213,7 +222,7 @@ export function ItemDrawer({
     setDeferredAccountId(it.deferred_account_id ?? '')
     setCreatePlansOn(it.create_plans_on ?? 'billing')
     setRevenueAllocation(it.revenue_allocation ?? 'normal')
-    setStandaloneSellingPrice(it.standalone_selling_price != null ? Number(it.standalone_selling_price).toFixed(2) : '')
+    setStandaloneSellingPrice(preserveItemDecimal(it.standalone_selling_price))
     setCustomValues(it.custom ?? {})
   }
 
