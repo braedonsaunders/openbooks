@@ -49,6 +49,47 @@ export interface SearchResponse {
   total: number
 }
 
+type SearchContactRow = {
+  id: string
+  display_name: string
+  email: string | null
+  legal_name: string | null
+  is_customer: boolean
+  is_vendor: boolean
+  is_employee: boolean
+}
+
+type SearchTransactionRow = {
+  id: string
+  kind: string
+  document_number: string
+  reference_number: string | null
+  memo: string | null
+  status: string | null
+  project_id: string | null
+  party_name: string | null
+  amount: unknown
+}
+
+type SearchAccountRow = {
+  id: string
+  number: string | null
+  name: string
+  type: string
+}
+
+type SearchItemRow = {
+  id: string
+  code: string | null
+  name: string
+}
+
+type SearchProjectRow = {
+  id: string
+  code: string | null
+  name: string
+}
+
 // Master data (parties, accounts) is usable org-wide when its subsidiary is
 // null — the canonical list predicate is `is null or = any(...)`, not the
 // fail-closed document rule. There is no shared export for this variant yet;
@@ -143,7 +184,7 @@ async function searchContacts(
   // Parties are org-wide when their primary subsidiary is null — the exact
   // predicate the party lists use (`is null or = any(...)`).
   const subsidiaryFilter = masterDataSubsidiaryFilter(sql`p.subsidiary_id`, scope)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<SearchContactRow>(sql`
     select p.id, p.display_name, p.email, p.legal_name,
            exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.org_id = p.org_id) as is_customer,
            exists (select 1 from vendor_roles vr where vr.party_id = p.id and vr.org_id = p.org_id) as is_vendor,
@@ -156,7 +197,7 @@ async function searchContacts(
             or p.legal_name % ${q} or p.email ilike ${like})
      order by sim desc, p.display_name
      limit ${PER_GROUP}`))
-  return r.rows.map((row: any): SearchHit => ({
+  return r.rows.map((row): SearchHit => ({
     id: row.id,
     type: 'contact',
     title: row.display_name,
@@ -230,7 +271,7 @@ async function searchTransactions(
       : sql``
   const amtExpr = sql`coalesce((select sum(dl.amount) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id and dl.amount > 0), d.total)`
   const numOrder = num != null ? sql`(${amtExpr} = ${num}) desc, ` : sql``
-  const r = (await db.execute(sql`
+  const r = (await db.execute<SearchTransactionRow>(sql`
     with cand as (
       (select d.id from documents d
         where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter}
@@ -258,7 +299,7 @@ async function searchTransactions(
      limit ${PER_GROUP + 2}`))
   // No generic journal fallback: a stored kind without an authorized native
   // module is dropped rather than linked into the wrong module's ledger view.
-  return r.rows.flatMap((row: any): SearchHit[] => {
+  return r.rows.flatMap((row): SearchHit[] => {
     const module = transactionModule(row.kind)
     const href = moduleDrawerHref(row.kind, row.id, { projectId: row.project_id })
     if (!module || !href) return []
@@ -282,14 +323,14 @@ async function searchAccounts(
   scope: ReadonlySet<string> | null,
 ): Promise<SearchHit[]> {
   const subsidiaryFilter = masterDataSubsidiaryFilter(sql`subsidiary_id`, scope)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<SearchAccountRow>(sql`
     select id, number, name, type from accounts
      where org_id = ${orgId} and not is_summary
        ${subsidiaryFilter}
        and (name % ${q} or name ilike ${like} or number ilike ${like})
      order by similarity(name, ${q}) desc, number nulls last
      limit ${PER_GROUP}`))
-  return r.rows.map((row: any): SearchHit => ({
+  return r.rows.map((row): SearchHit => ({
     id: row.id,
     type: 'account',
     title: `${row.number ? `${row.number} · ` : ''}${row.name}`,
@@ -300,12 +341,12 @@ async function searchAccounts(
 }
 
 async function searchItems(orgId: string, q: string, like: string): Promise<SearchHit[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<SearchItemRow>(sql`
     select id, code, name from items
      where org_id = ${orgId} and (name % ${q} or name ilike ${like} or code ilike ${like})
      order by similarity(name, ${q}) desc, name
      limit ${PER_GROUP}`))
-  return r.rows.map((row: any): SearchHit => ({
+  return r.rows.map((row): SearchHit => ({
     id: row.id,
     type: 'item',
     title: row.name,
@@ -324,13 +365,13 @@ async function searchProjects(
   // Project records behave like documents: restricted callers see only their
   // subsidiaries (no org-wide null escape hatch).
   const subsidiaryFilter = subsidiaryVisibleFilter(sql`subsidiary_id`, scope)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<SearchProjectRow>(sql`
     select id, code, name from projects
      where org_id = ${orgId} ${subsidiaryFilter}
        and (name % ${q} or name ilike ${like} or code ilike ${like})
      order by similarity(name, ${q}) desc, name
      limit ${PER_GROUP}`))
-  return r.rows.map((row: any): SearchHit => ({
+  return r.rows.map((row): SearchHit => ({
     id: row.id,
     type: 'project',
     title: row.name,
