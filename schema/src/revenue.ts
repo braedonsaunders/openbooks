@@ -249,7 +249,9 @@ export const recognitionEvents = pgTable(
     /** Human-readable description of the milestone or usage occurrence. */
     description: text("description"),
     /** Stable source identity (e.g. invoice number, meter reading id). */
-    sourceReference: text("source_reference").notNull(),
+    // Nullable for rows written before 0074; the storage check below rejects
+    // NULL/blank values on every new or updated row.
+    sourceReference: text("source_reference"),
     /** Optional unit rate for usage-based events. */
     unitRate: money("unit_rate"),
     /** Optional quantity for usage-based events. */
