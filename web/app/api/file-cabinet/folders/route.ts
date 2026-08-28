@@ -45,15 +45,7 @@ export async function POST(req: Request) {
     isPrivate: body.isPrivate === true,
     ownerId: body.isPrivate === true ? gate.user.id : undefined,
     createdBy: gate.user.id,
-  })
-  const { recordFileEvent } = await import('../../../../lib/file-audit')
-  await recordFileEvent({
-    orgId: gate.user.orgId,
-    actorId: gate.user.id,
-    table: 'folders',
-    rowId: id,
-    action: 'create',
-    changes: { name: body.name.trim(), parentId },
+    audit: { actorId: gate.user.id },
   })
   return NextResponse.json({ id }, { status: 201 })
 }

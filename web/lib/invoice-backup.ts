@@ -1,12 +1,13 @@
 import 'server-only'
 import { PDFDocument } from 'pdf-lib'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, inDbTransaction } from '@openbooks/engine/src/db.ts'
 import { allocateProportionally } from '@openbooks/engine/src/information-returns.ts'
 import { add, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { renderHtmlDocumentPdf } from '@openbooks/pdf'
-import { getS3Blob } from './file-storage'
+import { deleteS3Blobs, getS3Blob } from './file-storage'
 import { listAttachments, uploadAndAttach } from './file-cabinet'
+import { recordFileEvent } from './file-audit'
 import { resolvePdfTemplate } from './pdf-templates/store'
 import { loadPdfRecordValues } from './pdf-templates/values'
 import { mergeAndPrintPdf } from './pdf-templates/render'
@@ -204,8 +205,9 @@ async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumb
 
 /**
  * Assemble + persist the backup package for a posted/draft invoice document.
- * NOT wrapped in an outer db.transaction — uploadAndAttach/createFile run their
- * own tx on the shared pool. Returns the stored file id + manifest.
+ * The replacement unit serializes on the invoice row and keeps the new file,
+ * attachment, invoice_backups row, audit evidence, and old-file cleanup in a
+ * single transaction. A retry therefore leaves exactly one tracked backup.
  */
 export async function assembleInvoiceBackup(
   orgId: string,
@@ -293,47 +295,103 @@ export async function assembleInvoiceBackup(
   const pdfBytes = Buffer.from(await out.save())
   const pageCount = out.getPageCount()
 
-  // Replace any prior backup file for this invoice, then store + record.
-  const prior = (await db.execute<{ file_id: string }>(sql`
-    select file_id from invoice_backups where org_id = ${orgId} and document_id = ${documentId}
-  `))
-  const stored = await uploadAndAttach({
-    orgId,
-    targetTable: 'documents',
-    targetId: documentId,
-    filename: `${inv.document_number} Backup.pdf`,
-    contentType: 'application/pdf',
-    bytes: pdfBytes,
-    createdBy: userId,
-  })
-  await db.execute(sql`
-    insert into invoice_backups (org_id, document_id, backup_type, file_id, page_count, component_manifest, created_by, updated_by)
-    values (${orgId}, ${documentId}, ${backupType}, ${stored.id}, ${pageCount}, ${JSON.stringify(manifest)}::jsonb, ${userId}, ${userId})
-    on conflict (org_id, document_id) do update
-      set backup_type = excluded.backup_type, file_id = excluded.file_id, page_count = excluded.page_count,
-          component_manifest = excluded.component_manifest, generated_at = now(), updated_by = ${userId}
-    where invoice_backups.org_id = ${orgId}
-  `)
-  if (prior.rows[0]?.file_id && prior.rows[0].file_id !== stored.id) {
-    const priorFileId = prior.rows[0].file_id
-    await db.execute(sql`delete from file_attachments where org_id = ${orgId} and file_id = ${priorFileId}`)
-    await db.execute(sql`
-      delete from file_blobs where version_id in (
-        select fv.id from file_versions fv
-        join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
-        where fv.file_id = ${priorFileId}
-      )
-    `)
-    await db.execute(sql`update files set current_version_id = null where id = ${priorFileId} and org_id = ${orgId}`)
-    await db.execute(sql`
-      delete from file_versions fv
-      using files fi
-      where fv.file_id = fi.id and fi.org_id = ${orgId} and fv.file_id = ${priorFileId}
-    `)
-    await db.execute(sql`delete from files where id = ${priorFileId} and org_id = ${orgId}`)
-  }
+  const persisted = await inDbTransaction(async (tx) => {
+    // Lock the invoice row even when no invoice_backups row exists yet. This
+    // serializes concurrent generators without relying on a process-local lock.
+    const invoice = (await tx.execute<{ id: string }>(sql`
+      select id from documents
+       where id = ${documentId} and org_id = ${orgId} and kind = 'customer_invoice'
+       for update
+    `)).rows[0]
+    if (!invoice) throw new Error('Invoice not found')
 
-  return { fileId: stored.id, pageCount, manifest }
+    const prior = (await tx.execute<{
+      file_id: string
+      backup_type: string
+      page_count: number
+      component_manifest: unknown
+    }>(sql`
+      select file_id, backup_type, page_count, component_manifest from invoice_backups
+       where org_id = ${orgId} and document_id = ${documentId}
+       for update
+    `)).rows[0]
+    const next = await uploadAndAttach({
+      orgId,
+      targetTable: 'documents',
+      targetId: documentId,
+      filename: `${inv.document_number} Backup.pdf`,
+      contentType: 'application/pdf',
+      bytes: pdfBytes,
+      createdBy: userId,
+      executor: tx,
+    })
+    await tx.execute(sql`
+      insert into invoice_backups (org_id, document_id, backup_type, file_id, page_count, component_manifest, created_by, updated_by)
+      values (${orgId}, ${documentId}, ${backupType}, ${next.id}, ${pageCount}, ${JSON.stringify(manifest)}::jsonb, ${userId}, ${userId})
+      on conflict (org_id, document_id) do update
+        set backup_type = excluded.backup_type, file_id = excluded.file_id, page_count = excluded.page_count,
+            component_manifest = excluded.component_manifest, generated_at = now(), updated_by = ${userId}
+      where invoice_backups.org_id = ${orgId}
+    `)
+
+    const priorS3VersionIds: string[] = []
+    if (prior?.file_id && prior.file_id !== next.id) {
+      const priorFileId = prior.file_id
+      const priorVersions = await tx.execute<{ id: string }>(sql`
+        select fv.id
+          from file_versions fv
+          join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
+         where fv.file_id = ${priorFileId} and fv.storage_kind = 's3'
+      `)
+      priorS3VersionIds.push(...priorVersions.rows.map((row) => row.id))
+      await tx.execute(sql`delete from file_attachments where org_id = ${orgId} and file_id = ${priorFileId}`)
+      await tx.execute(sql`
+        delete from file_blobs where version_id in (
+          select fv.id from file_versions fv
+          join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
+          where fv.file_id = ${priorFileId}
+        )
+      `)
+      await tx.execute(sql`update files set current_version_id = null where id = ${priorFileId} and org_id = ${orgId}`)
+      await tx.execute(sql`
+        delete from file_versions fv
+        using files fi
+        where fv.file_id = fi.id and fi.org_id = ${orgId} and fv.file_id = ${priorFileId}
+      `)
+      await tx.execute(sql`delete from files where id = ${priorFileId} and org_id = ${orgId}`)
+    }
+
+    await recordFileEvent({
+      orgId,
+      actorId: userId,
+      table: 'files',
+      rowId: next.id,
+      action: 'replace',
+      changes: {
+        before: {
+          fileId: prior?.file_id ?? null,
+          backupType: prior?.backup_type ?? null,
+          pageCount: prior?.page_count ?? null,
+          manifest: prior?.component_manifest ?? null,
+        },
+        after: {
+          fileId: next.id,
+          documentId,
+          backupType,
+          pageCount,
+          manifest,
+        },
+      },
+      executor: tx,
+    })
+    return { next, priorS3VersionIds }
+  })
+
+  // External objects are removed only after the metadata transaction commits;
+  // a failed audit/attachment leaves the prior backup and its blobs retryable.
+  await deleteS3Blobs(persisted.priorS3VersionIds)
+
+  return { fileId: persisted.next.id, pageCount, manifest }
 }
 
 /** The stored backup (file id + bytes) for an invoice, if assembled. */
