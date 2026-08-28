@@ -23,13 +23,33 @@ export type GateHeader = {
   status: string
   assignee_user_id: string | null
   assignee_role: string | null
+  /** Legal entity owning the approval subject (null = unavailable/rootless). */
+  subsidiary_id: string | null
 };
 
 /** Load a gate header scoped to the caller's org (null = not found for them). */
 export async function loadGateHeader(gateId: string, orgId: string): Promise<GateHeader | null> {
   const r = (await db.execute<GateHeader>(sql`
-    select id, org_id, status, assignee_user_id, assignee_role
-      from flow_gates where id = ${gateId} and org_id = ${orgId}
+    select g.id, g.org_id, g.status, g.assignee_user_id, g.assignee_role,
+           case
+             when g.subject_kind = 'party_bank_account' then (
+               select p.subsidiary_id
+                 from party_bank_accounts ba
+                 join parties p on p.id = ba.party_id and p.org_id = ba.org_id
+                where ba.id = g.subject_id and ba.org_id = g.org_id
+             )
+             when g.subject_kind = 'timesheet_week' then (
+               select p.subsidiary_id
+                 from timesheet_weeks tw
+                 join parties p on p.id = tw.employee_party_id and p.org_id = tw.org_id
+                where tw.id = g.subject_id and tw.org_id = g.org_id
+             )
+             else d.subsidiary_id
+           end as subsidiary_id
+      from flow_gates g
+      left join documents d
+        on d.id = g.subject_id and d.org_id = g.org_id and d.kind = g.subject_kind
+     where g.id = ${gateId} and g.org_id = ${orgId}
   `))
   return r.rows[0] ?? null
 }

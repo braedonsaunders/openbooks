@@ -1,6 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { decideGate } from '@openbooks/engine/src/flows/index.ts'
+import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { gateErrorResponse, loadGateHeader, requireFlowsSession } from '../../_lib'
 
@@ -31,6 +32,11 @@ export async function POST(req: Request) {
 
   const gate = await loadGateHeader(body.gateId, authz.user.orgId)
   if (!gate) return NextResponse.json({ error: 'approval not found' }, { status: 404 })
+  // A gate assignment is not a grant to every legal entity. Keep the same
+  // direct-record subsidiary boundary as the rest of the API before allowing
+  // the engine to resume a consequential branch.
+  const subsidiaryDenied = guardSubsidiaryScope(authz, gate.subsidiary_id)
+  if (subsidiaryDenied) return subsidiaryDenied
   if (gate.status !== 'pending') {
     return NextResponse.json({ error: 'this approval was already resolved' }, { status: 409 })
   }
@@ -40,6 +46,7 @@ export async function POST(req: Request) {
       gateId: body.gateId,
       decision: body.decision!,
       userId: authz.user.id,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       comment: body.comment,
       signature: body.signature,
     })

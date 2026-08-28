@@ -32,6 +32,23 @@ import { emailActionUrls } from "./email-tokens.ts";
 
 type GateRow = typeof schema.flowGates.$inferSelect;
 
+/** A caller's legal-entity visibility. Null/undefined means unrestricted. */
+export type GateSubsidiaryScope = ReadonlySet<string> | null | undefined;
+
+/**
+ * In-memory twin of the API's subsidiary direct-record guard. A restricted
+ * caller must name the subject's subsidiary explicitly; an absent subsidiary
+ * fails closed because it cannot be proven to belong to the caller's scope.
+ */
+export function gateSubsidiaryScopeAllows(
+  allowedSubsidiaryIds: GateSubsidiaryScope,
+  subsidiaryId: string | null | undefined,
+): boolean {
+  if (allowedSubsidiaryIds == null) return true;
+  return subsidiaryId !== null && subsidiaryId !== undefined && subsidiaryId !== ""
+    && allowedSubsidiaryIds.has(subsidiaryId);
+}
+
 export class GateError extends Error {}
 
 /** Roles that may act on any gate in the org (matches web admin semantics). */
@@ -51,6 +68,52 @@ async function canActOnGate(gate: GateRow, userId: string): Promise<boolean> {
   const roles = await userRoleKeys(gate.orgId, userId);
   if (roles.has(GATE_ADMIN_ROLE)) return true;
   return !!gate.assigneeRole && roles.has(gate.assigneeRole);
+}
+
+/**
+ * Resolve the legal entity behind a gate subject. Flow gates are polymorphic:
+ * documents (including pay runs and field tickets) carry their own subsidiary,
+ * while bank-account and timesheet approvals inherit it from their party.
+ * Unknown/non-entity subjects intentionally return null so a restricted
+ * caller cannot decide a gate whose legal-entity ownership is not provable.
+ */
+async function gateSubjectSubsidiaryId(gate: Pick<GateRow, "subjectKind" | "subjectId" | "orgId">): Promise<string | null> {
+  const r = await db.execute<{ subsidiaryId: string | null }>(sql`
+    select case
+             when g.subject_kind = 'party_bank_account' then (
+               select p.subsidiary_id
+                 from party_bank_accounts ba
+                 join parties p on p.id = ba.party_id and p.org_id = ba.org_id
+                where ba.id = g.subject_id and ba.org_id = g.org_id
+             )
+             when g.subject_kind = 'timesheet_week' then (
+               select p.subsidiary_id
+                 from timesheet_weeks tw
+                 join parties p on p.id = tw.employee_party_id and p.org_id = tw.org_id
+                where tw.id = g.subject_id and tw.org_id = g.org_id
+             )
+             else d.subsidiary_id
+           end as "subsidiaryId"
+      from flow_gates g
+      left join documents d
+        on d.id = g.subject_id and d.org_id = g.org_id and d.kind = g.subject_kind
+     where g.subject_kind = ${gate.subjectKind}
+       and g.subject_id = ${gate.subjectId}
+       and g.org_id = ${gate.orgId}
+     limit 1
+  `);
+  return r.rows[0]?.subsidiaryId ?? null;
+}
+
+async function assertGateSubsidiaryScope(
+  gate: Pick<GateRow, "subjectKind" | "subjectId" | "orgId">,
+  allowedSubsidiaryIds: GateSubsidiaryScope,
+): Promise<void> {
+  if (allowedSubsidiaryIds == null) return;
+  const subsidiaryId = await gateSubjectSubsidiaryId(gate);
+  if (!gateSubsidiaryScopeAllows(allowedSubsidiaryIds, subsidiaryId)) {
+    throw new GateError("approval not found");
+  }
 }
 
 /** Viewer-aware decision capability for contextual record drawers. */
@@ -137,6 +200,8 @@ export async function decideGate(args: {
   gateId: string;
   decision: "approved" | "rejected";
   userId: string;
+  /** Subsidiaries visible to this caller; restricted sets are fail-closed. */
+  allowedSubsidiaryIds?: GateSubsidiaryScope;
   comment?: string | null;
   /** Typed attestation — required to approve a signature-required gate. */
   signature?: string | null;
@@ -148,6 +213,11 @@ export async function decideGate(args: {
   const pre = await loadGate(gateId);
   if (!pre) throw new GateError("approval not found");
   if (pre.status !== "pending") throw new GateError("this approval was already resolved");
+
+  // Re-check the legal-entity boundary at the engine write authority. The
+  // route performs an early 404 for UX/anti-enumeration, but this second check
+  // closes races and protects every caller that carries an Authz scope.
+  await assertGateSubsidiaryScope(pre, args.allowedSubsidiaryIds);
 
   // E-signature: a signature-required gate cannot be APPROVED without a typed
   // attestation. Enforced here (not just in the UI) so it holds for the bulk,
@@ -193,6 +263,9 @@ export async function decideGate(args: {
     if (!gate || gate.status !== "pending") {
       throw new GateError("this approval was already resolved");
     }
+    // The subject may have been edited after the pre-flight read. Re-resolve
+    // its legal entity while holding the same transaction that flips the gate.
+    await assertGateSubsidiaryScope(gate, args.allowedSubsidiaryIds);
 
     const comment = args.comment?.trim() || null;
     const decided = await db
