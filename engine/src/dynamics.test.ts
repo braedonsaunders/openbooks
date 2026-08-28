@@ -194,3 +194,114 @@ test("normal non-redirected Dynamics responses pass through end to end", async (
     await close(upstream);
   }
 });
+
+test("Dynamics OData pagination refuses absolute and protocol-relative foreign nextLinks before sending the bearer token", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const nextLink of ["https://attacker.example/capture", "//attacker.example/capture"]) {
+      const seen: Array<{ url: string; init?: RequestInit }> = [];
+      let attackerRequests = 0;
+      globalThis.fetch = ((input, init) => {
+        const url = String(input);
+        seen.push({ url, init });
+        if (url.endsWith("/items")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ value: [{ No: "10000" }], "@odata.nextLink": nextLink }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            ),
+          );
+        }
+        attackerRequests += 1;
+        return Promise.resolve(new Response(JSON.stringify({ value: [{ No: "stolen" }] }), { status: 200 }));
+      }) as typeof fetch;
+
+      const client = new DynamicsClient(app, "PROD", "company-id", tokens);
+      await assert.rejects(client.list<{ No: string }>("items"), /origin/i);
+      assert.equal(seen.length, 1, "pagination must be rejected before a second fetch");
+      assert.equal(attackerRequests, 0, "the foreign origin must never receive a request");
+      assert.equal(
+        (seen[0]?.init?.headers as Record<string, string> | undefined)?.Authorization,
+        "Bearer access-token",
+      );
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Dynamics OData pagination follows same-origin relative and absolute nextLinks", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    const baseItemsUrl =
+      "https://api.businesscentral.dynamics.com/v2.0/tenant-id/PROD/api/v2.0/companies(company-id)/items";
+    for (const [nextLink, expectedNextLink] of [
+      ["companies(company-id)/items?$skiptoken=relative", `${baseItemsUrl}?$skiptoken=relative`],
+      [`${baseItemsUrl}?$skiptoken=absolute`, `${baseItemsUrl}?$skiptoken=absolute`],
+    ] as const) {
+      const seen: string[] = [];
+      globalThis.fetch = ((input, _init) => {
+        const url = String(input);
+        seen.push(url);
+        const body = seen.length === 1 ? { value: [{ No: "10000" }], "@odata.nextLink": nextLink } : { value: [{ No: "10001" }] };
+        return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+      }) as typeof fetch;
+
+      const rows = await new DynamicsClient(app, "PROD", "company-id", tokens).list<{ No: string }>("items");
+      assert.deepEqual(rows, [{ No: "10000" }, { No: "10001" }]);
+      assert.deepEqual(seen, [baseItemsUrl, expectedNextLink]);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Dynamics OData pagination never forwards bearer tokens across a redirect hop", async () => {
+  let attackerRequests = 0;
+  const attacker = createServer((_req, res) => {
+    attackerRequests += 1;
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ value: [{ No: "stolen" }] }));
+  });
+  const attackerOrigin = await listen(attacker);
+  const redirectorRequests: Array<{ path: string; authorization?: string }> = [];
+  const redirector = createServer((req, res) => {
+    redirectorRequests.push({ path: req.url ?? "", authorization: req.headers.authorization });
+    if ((req.url ?? "").endsWith("/items")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          value: [{ No: "10000" }],
+          "@odata.nextLink":
+            "https://api.businesscentral.dynamics.com/v2.0/tenant-id/PROD/api/v2.0/companies(company-id)/items?page=2",
+        }),
+      );
+      return;
+    }
+    res.writeHead(302, { location: `${attackerOrigin}/credential-capture` });
+    res.end();
+  });
+  const redirectorOrigin = await listen(redirector);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => {
+    const rewritten = String(input).replace("https://api.businesscentral.dynamics.com", redirectorOrigin);
+    return originalFetch(rewritten, init);
+  };
+
+  try {
+    await assert.rejects(new DynamicsClient(app, "PROD", "company-id", tokens).list("items"), /redirect/i);
+    assert.deepEqual(redirectorRequests.map(({ path }) => path), [
+      "/v2.0/tenant-id/PROD/api/v2.0/companies(company-id)/items",
+      "/v2.0/tenant-id/PROD/api/v2.0/companies(company-id)/items?page=2",
+    ]);
+    assert.deepEqual(
+      redirectorRequests.map(({ authorization }) => authorization),
+      ["Bearer access-token", "Bearer access-token"],
+    );
+    assert.equal(attackerRequests, 0, "redirect Location must never receive the bearer token");
+  } finally {
+    globalThis.fetch = originalFetch;
+    await close(redirector);
+    await close(attacker);
+  }
+});
