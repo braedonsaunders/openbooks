@@ -39,7 +39,15 @@ export async function runInsightQuery(
   const compiled = compileInsightQuery(validatedQuery, orgId, labels, asOf)
   // Fetch one extra row to detect truncation at the cap.
   const capped = Math.min(compiled.limit, INSIGHT_MAX_ROWS)
-  const wrapped = `select * from (${compiled.sql}) __insight limit ${capped + 1}`
+  const sentinelLimit = capped + 1
+  // The compiler's SELECT already carries the requested cap. Raise that inner
+  // limit as well, otherwise it hides the sentinel row before the wrapper can
+  // observe it.
+  const innerLimit = `\nlimit ${compiled.limit}`
+  if (!compiled.sql.endsWith(innerLimit))
+    throw new Error('compiled insight query is missing its row limit')
+  const sqlWithSentinel = `${compiled.sql.slice(0, -innerLimit.length)}\nlimit ${sentinelLimit}`
+  const wrapped = `select * from (${sqlWithSentinel}) __insight limit ${sentinelLimit}`
 
   const client = await pool.connect()
   const started = Date.now()
