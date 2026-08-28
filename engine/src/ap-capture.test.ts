@@ -16,6 +16,7 @@ import { fromUnits, toUnits } from "./money.ts";
 import {
   billableRemainderUnits,
   CaptureMaterializationError,
+  lineRequiresReceipt,
   materializeCapture,
   matchPurchaseOrderLine,
   purchaseOrderBilledQuantityDelta,
@@ -379,3 +380,24 @@ test(
     }
   },
 );
+
+test("PO match requires a receipt when an item-backed line has no kind", () => {
+  assert.equal(lineRequiresReceipt(null), true);
+  assert.deepEqual(
+    matchPurchaseOrderLine({
+      ...stockPoLine,
+      itemKind: null,
+      fulfilledQuantity: "0.0000",
+      invoiceUnitPrice: "10.0000",
+    }).map((matchIssue) => matchIssue.code),
+    ["receipt_quantity_shortfall"],
+  );
+  assert.equal(billableRemainderUnits({
+    orderedQuantity: "10.0000",
+    billedQuantity: "0.0000",
+    fulfilledQuantity: "0.0000",
+    itemId: "item-1",
+    itemKind: null,
+  }), 0n);
+  assert.equal(lineRequiresReceipt("service"), false);
+});
