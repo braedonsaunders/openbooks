@@ -29,6 +29,13 @@ const PER_PAGE = 100
 const MAX_EXPORT_LINES = 200_000
 const EXPORT_FORMATS = new Set<AccountRegisterExportFormat>(['pdf', 'xlsx', 'csv'])
 
+/** Accept only real proleptic-Gregorian calendar days, not just date-shaped text. */
+function isIsoDate(value: string): boolean {
+  if (!DATE.test(value) || value.startsWith('0000-')) return false
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('gl.read')
   if (gate instanceof NextResponse) return gate
@@ -44,7 +51,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'search_too_long' }, { status: 400 })
   }
   const search = rawSearch || undefined
-  if ((from && !DATE.test(from)) || (to && !DATE.test(to))) {
+  if ((from && !isIsoDate(from)) || (to && !isIsoDate(to))) {
     return NextResponse.json({ error: 'invalid_period' }, { status: 400 })
   }
 
