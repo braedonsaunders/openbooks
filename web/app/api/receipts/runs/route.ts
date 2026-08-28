@@ -30,6 +30,7 @@ export async function POST(req: Request) {
       paymentBankProfileId: body.paymentBankProfileId,
       invoiceDocumentIds: body.invoiceDocumentIds,
       scheduledFor: body.scheduledFor ?? null,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     }))
   } catch (error) {
     return paymentErrorResponse(error)
