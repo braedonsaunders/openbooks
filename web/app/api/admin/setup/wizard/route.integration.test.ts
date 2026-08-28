@@ -352,3 +352,125 @@ test(
     }
   },
 );
+
+test(
+  "accounting-foundation probe re-runs after the wizard waits for the org lock",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "Foundation Admin", "admin");
+    const entryId = randomUUID();
+    const holder = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+    const evidence = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+    let holderOpen = false;
+    let evidenceOpen = false;
+    try {
+      await withBypassContext(() => db.execute(sql`
+        insert into currencies (code, name, minor_units)
+        values ('USD', 'US Dollar', 2)
+        on conflict (code) do nothing`));
+      await withBypassContext(() => db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, origin)
+        values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+                'WIZARD-RACE', ${org.date}, ${org.periodId},
+                'wizard race evidence', 'draft', 'manual')`));
+
+      routeState.authz = authorize({ orgId: org.orgId, actorId, periodId: org.periodId });
+      routeState.authzQueue = [];
+      await holder.connect();
+      holderOpen = true;
+      await holder.query("begin");
+      await holder.query(
+        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+        [org.orgId],
+      );
+      await holder.query("select id from orgs where id = $1 for update", [org.orgId]);
+
+      const wizard = withOrgContext(org.orgId, () =>
+        PUT(new Request("http://localhost/api/admin/setup/wizard", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: "Scratch Company",
+            country: "CA",
+            baseCurrency: "USD",
+            fiscalYearStartMonth: 1,
+            industry: "professional_services",
+            features: {},
+            workspaceProfile: {
+              teamSize: "solo",
+              complexity: "essentials",
+              bookStart: "fresh",
+              taxPosition: "unsure",
+              monthlyActivity: "light",
+              closeCadence: "monthly",
+            },
+          }),
+        })),
+      );
+      const deadline = Date.now() + 15_000;
+      let wizardWaiting = false;
+      while (Date.now() < deadline) {
+        const waiting = await db.execute<{ count: number }>(sql`
+          select count(*)::int as count
+            from pg_stat_activity
+           where datname = current_database()
+             and pid <> pg_backend_pid()
+             and wait_event_type = 'Lock'
+             and query ilike '%from orgs%'`);
+        if ((waiting.rows[0]?.count ?? 0) > 0) {
+          wizardWaiting = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      assert.equal(wizardWaiting, true, "setup wizard did not park on the organization row lock");
+
+      await evidence.connect();
+      evidenceOpen = true;
+      await evidence.query("begin");
+      await evidence.query(
+        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
+        [org.orgId],
+      );
+      await evidence.query(
+        `insert into journal_lines
+           (org_id, entry_id, line_number, account_id, subsidiary_id,
+            amount, currency, txn_amount, fx_rate)
+         values ($1, $2, 1, $3, $4, '1', 'CAD', '1', '1'),
+                ($1, $2, 2, $3, $4, '-1', 'CAD', '-1', '1')`,
+        [org.orgId, entryId, org.accounts.bank, org.subsidiaryId],
+      );
+      await evidence.query("commit");
+      await evidence.end();
+      evidenceOpen = false;
+      await holder.query("commit");
+      await holder.end();
+      holderOpen = false;
+
+      const response = await wizard;
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), {
+        error: "base-currency-locked",
+        message: "Cannot change base currency after postings exist.",
+      });
+      const after = await withBypassContext(() => db.execute<{ base_currency: string }>(sql`
+        select base_currency from orgs where id = ${org.orgId}`));
+      assert.equal(after.rows[0]?.base_currency, "CAD");
+    } finally {
+      routeState.authz = null;
+      routeState.authzQueue = [];
+      if (evidenceOpen) {
+        await evidence.query("rollback").catch(() => {});
+        await evidence.end().catch(() => {});
+      }
+      if (holderOpen) {
+        await holder.query("rollback").catch(() => {});
+        await holder.end().catch(() => {});
+      }
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

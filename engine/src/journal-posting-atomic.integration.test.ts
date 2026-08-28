@@ -7,6 +7,12 @@ import { toUnits } from "./money.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 import { postDocument } from "./posting.ts";
 import {
+  mergeBeforePostCustomMutation,
+  runBulkScript,
+  runScheduledScript,
+  runScript,
+} from "./scripting.ts";
+import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
@@ -49,6 +55,88 @@ function postingControlDeps(org: { accounts: { ar: string; ap: string; bank: str
     control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
   };
 }
+
+test("before_post custom mutations reject posting controls but preserve safe metadata", async () => {
+  const ctx = {
+    trigger: "before_post",
+    document: { custom: { controlAccountId: "approved-control", note: "original" } },
+    org: { id: "org", name: "Test org", baseCurrency: "CAD" },
+  };
+  const protectedResult = await runScript(
+    `function main(ctx) { return { set: { custom: { controlAccountId: "attacker-control" } } }; }`,
+    ctx,
+    2_000,
+  );
+  assert.equal(protectedResult.status, "error");
+  assert.match(protectedResult.abortReason ?? "", /protected posting custom field/);
+
+  const safeResult = await runScript(
+    `function main(ctx) { return { set: { custom: { note: "reviewed", source: "script" } } }; }`,
+    ctx,
+    2_000,
+  );
+  assert.equal(safeResult.status, "ok");
+  assert.deepEqual(safeResult.set?.custom, { note: "reviewed", source: "script" });
+  assert.deepEqual(
+    mergeBeforePostCustomMutation(ctx.document.custom, safeResult.set?.custom),
+    {
+      controlAccountId: "approved-control",
+      note: "reviewed",
+      source: "script",
+    },
+  );
+});
+
+test(
+  "queued scheduled and bulk jobs re-check active trigger state before execution",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const scheduledId = randomUUID();
+      const bulkId = randomUUID();
+      const source = "function main(ctx) { throw new Error('stale source executed'); }";
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
+          update orgs set settings = jsonb_set(settings, '{features,scripts}', 'true'::jsonb)
+           where id = ${org.orgId}
+        `);
+        await db.execute(sql`
+          insert into user_scripts
+            (id, org_id, name, trigger_point, cron, source, timeout_ms, is_active)
+          values
+            (${scheduledId}, ${org.orgId}, 'disabled scheduled', 'scheduled', '* * * * *', ${source}, 2000, false),
+            (${bulkId}, ${org.orgId}, 'disabled bulk', 'bulk', null, ${source}, 2000, false)
+        `);
+      });
+
+      await assert.rejects(
+        withOrgContext(org.orgId, () => runScheduledScript(scheduledId, org.orgId)),
+        /script not found/,
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () => runBulkScript(bulkId, org.orgId)),
+        /script not found/,
+      );
+
+      // A queued payload can also outlive an administrator changing its kind;
+      // the pickup query must not execute it under the stale dispatch kind.
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
+          update user_scripts
+             set is_active = true, trigger_point = 'bulk'
+           where id = ${scheduledId} and org_id = ${org.orgId}
+        `),
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () => runScheduledScript(scheduledId, org.orgId)),
+        /script not found/,
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test(
   "a failed draft journal post rolls its approval release back atomically",
@@ -240,6 +328,85 @@ test("before_post script effects are atomic with the posting transaction", { ski
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
+
+test(
+  "an approved document cannot have its posting control rewritten by before_post",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Control poster", "admin"),
+      );
+      const documentId = randomUUID();
+      const scriptId = randomUUID();
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
+          update orgs set settings = jsonb_set(settings, '{features,scripts}', 'true'::jsonb)
+           where id = ${org.orgId}
+        `);
+        await db.execute(sql`
+          insert into user_scripts
+            (id, org_id, name, trigger_point, document_kind, source, timeout_ms, sort_order, is_active)
+          values (
+            ${scriptId}, ${org.orgId}, 'rewrite control', 'before_post', 'customer_invoice',
+            ${'function main(ctx) { return { set: { custom: { controlAccountId: "' + org.accounts.bank + '" } } }; }'},
+            2000, 100, true
+          )
+        `);
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+             document_date, posting_date, currency, subtotal, tax_total, total,
+             custom, created_by)
+          values (
+            ${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-SCRIPT-CONTROL',
+            ${org.subsidiaryId}, ${org.customerId}, ${org.date}, ${org.date}, 'CAD',
+            '10', '0', '10',
+            ${JSON.stringify({ controlAccountId: org.accounts.ar, marker: "original" })}::jsonb,
+            ${actorId}
+          )
+        `);
+        await db.execute(sql`
+          insert into document_lines
+            (org_id, document_id, line_number, account_id, subsidiary_id,
+             amount, quantity, unit_price, tax_amount, tax_input_amount)
+          values
+            (${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, ${org.subsidiaryId},
+             '10', '1', '10', '0', '10')
+        `);
+        await db.execute(sql`
+          update documents
+             set status = 'approved'
+           where id = ${documentId} and org_id = ${org.orgId}
+        `);
+      });
+
+      await assert.rejects(
+        withOrgTransaction(org.orgId, () =>
+          postDocument(documentId, postingControlDeps(org), { deferEffects: true }),
+        ),
+        /protected posting custom field/,
+      );
+      const state = await withOrgContext(org.orgId, () =>
+        db.execute<{ status: string; custom: Record<string, unknown>; entryCount: number }>(sql`
+          select status, custom,
+                 (select count(*)::int from journal_entries
+                   where source_document_id = ${documentId}) as "entryCount"
+            from documents
+           where id = ${documentId} and org_id = ${org.orgId}
+        `),
+      );
+      assert.deepEqual(state.rows[0], {
+        status: "approved",
+        custom: { controlAccountId: org.accounts.ar, marker: "original" },
+        entryCount: 0,
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 /**
  * Regression: a multi-line foreign-currency document could never post.

@@ -89,6 +89,58 @@ const MUTABLE_FIELDS = new Set([
   "custom",
 ]);
 
+/**
+ * Document.custom keys that are part of the posting kernel or its immutable
+ * tax evidence. A before_post script may add operational metadata, but it
+ * must never be able to replace one of these values after approval.
+ */
+const BEFORE_POST_PROTECTED_CUSTOM_FIELDS = new Set([
+  "controlAccountId",
+  "discountAmount",
+  "discountAccountId",
+  "feeAmount",
+  "feeIncomeAccountId",
+  "taxProviderAddresses",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * Validate the only JSON shape that a before_post custom mutation may carry.
+ * Returning a message (rather than throwing) lets the sandbox record a normal
+ * failed script run, exactly like a non-whitelisted header field.
+ */
+export function beforePostCustomMutationError(value: unknown): string | null {
+  if (!isRecord(value)) {
+    return "before_post scripts may only set custom to an object";
+  }
+  const protectedKey = Object.keys(value).find((key) =>
+    BEFORE_POST_PROTECTED_CUSTOM_FIELDS.has(key),
+  );
+  return protectedKey
+    ? `script tried to set protected posting custom field "custom.${protectedKey}"`
+    : null;
+}
+
+/**
+ * Merge a validated before_post custom mutation without replacing existing
+ * posting controls. This remains a second, posting-layer guard in case a
+ * caller ever supplies a ScriptOutcome without going through runScript.
+ */
+export function mergeBeforePostCustomMutation(
+  existing: unknown,
+  mutation: unknown,
+): Record<string, unknown> {
+  const error = beforePostCustomMutationError(mutation);
+  if (error) throw new Error(error);
+  return {
+    ...(isRecord(existing) ? existing : {}),
+    ...(mutation as Record<string, unknown>),
+  };
+}
+
 /** Domain-boundary gate for every script execution path. */
 export async function scriptingFeatureEnabled(orgId: string): Promise<boolean> {
   const result = (await db.execute<{ enabled: string | null }>(sql`
@@ -297,6 +349,17 @@ export async function runScript(
             durationMs: Date.now() - started,
           };
         }
+        if (ctx.trigger === "before_post" && k === "custom") {
+          const customError = beforePostCustomMutationError(v);
+          if (customError) {
+            return {
+              status: "error",
+              abortReason: customError,
+              logs,
+              durationMs: Date.now() - started,
+            };
+          }
+        }
         set[k] = v;
       }
     }
@@ -380,6 +443,8 @@ export async function runScheduledScript(
       and(
         eq(schema.userScripts.id, scriptId),
         eq(schema.userScripts.orgId, orgId),
+        eq(schema.userScripts.triggerPoint, "scheduled"),
+        eq(schema.userScripts.isActive, true),
       ),
     );
   if (!s) throw new Error("script not found");
@@ -511,6 +576,8 @@ export async function runBulkScript(
       and(
         eq(schema.userScripts.id, scriptId),
         eq(schema.userScripts.orgId, orgId),
+        eq(schema.userScripts.triggerPoint, "bulk"),
+        eq(schema.userScripts.isActive, true),
       ),
     );
   if (!s) throw new Error("script not found");
