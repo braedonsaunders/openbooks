@@ -36,10 +36,15 @@ export const BANK_ACCOUNT_MATERIAL_FIELDS = [
 ] as const;
 
 const STATUS_TRANSITIONS: Record<string, readonly string[]> = {
-  approved: ["pending"],
   rejected: ["pending"],
   pending: ["approved", "rejected"], // material edit / resubmit re-enters approval
 };
+
+// Approval is an engine outcome (decideGate → releaseApproval), never an
+// authored status side effect. Keep this vocabulary next to the adapter so
+// author-time lint and the runtime write boundary cannot drift apart.
+export const BANK_ACCOUNT_ENGINE_MANAGED_RELEASE_STATUSES: ReadonlySet<string> =
+  new Set(["approved"]);
 
 export const bankAccountSubjectProfile: FlowSubjectProfile = {
   subjectKind: BANK_ACCOUNT_SUBJECT_KIND,
@@ -100,6 +105,9 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
   // Flows never write bank fields directly — the material columns are exactly
   // what approval guards, so all mutation goes through the API + re-approval.
   writableFields: new Set<string>(),
+  // Vendor bank details are fraud-sensitive: the submitter must never be able
+  // to approve their own details, even if a tenant opts out on the gate node.
+  selfApprovalPolicy: "forbidden",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const row = await loadRow(subjectId);
@@ -150,6 +158,11 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
   },
 
   async changeStatus(subjectId: string, to: string, ctx: FlowExecCtx): Promise<void> {
+    if (BANK_ACCOUNT_ENGINE_MANAGED_RELEASE_STATUSES.has(to)) {
+      throw new Error(
+        `bank-detail approval release is engine-enforced; approve through an approval gate`,
+      );
+    }
     const row = await loadRow(subjectId, ctx.orgId);
     if (!row) throw new Error(`bank account ${subjectId} not found`);
     const legalFrom = STATUS_TRANSITIONS[to];
@@ -158,28 +171,16 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
     if (!legalFrom.includes(row.approvalStatus)) {
       throw new Error(`illegal bank-detail transition ${row.approvalStatus} → ${to}`);
     }
-    const today = await businessToday(ctx.orgId);
     await db
       .update(schema.partyBankAccounts)
-      .set(
-        to === "approved"
-          ? {
-              approvalStatus: "approved",
-              approvedAt: today,
-              approvedBy: ctx.userId ?? null,
-              isActive: true,
-              updatedAt: new Date(),
-              updatedBy: ctx.userId ?? null,
-            }
-          : {
-              approvalStatus: to as BankRow["approvalStatus"],
-              approvedAt: null,
-              approvedBy: null,
-              isActive: false,
-              updatedAt: new Date(),
-              updatedBy: ctx.userId ?? null,
-            },
-      )
+      .set({
+        approvalStatus: to as BankRow["approvalStatus"],
+        approvedAt: null,
+        approvedBy: null,
+        isActive: false,
+        updatedAt: new Date(),
+        updatedBy: ctx.userId ?? null,
+      })
       .where(
         and(
           eq(schema.partyBankAccounts.id, subjectId),
