@@ -3,7 +3,13 @@ import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { amendLockedWeek, amendTimeEntry } from '../../../../lib/time-amendment'
-import { isIsoDate, loadWeek, pinTimesheetEmployee, weekStart } from '../_lib'
+import {
+  isIsoDate,
+  loadWeek,
+  pinTimesheetEmployee,
+  pinTimesheetEntryEmployee,
+  weekStart,
+} from '../_lib'
 
 export const runtime = 'nodejs'
 
@@ -23,6 +29,14 @@ export async function POST(req: Request) {
       if (!isUuid(body.entryId)) {
         return NextResponse.json({ error: 'Invalid entry' }, { status: 422 })
       }
+      const sourceEmployee = await pinTimesheetEntryEmployee(
+        gate.user.orgId,
+        body.entryId,
+        gate.allowedSubsidiaryIds,
+      )
+      if (!sourceEmployee) {
+        return NextResponse.json({ error: 'Entry not found' }, { status: 422 })
+      }
       const result = await amendTimeEntry(gate.user.orgId, gate.user.id, body.entryId)
       return NextResponse.json(result, { status: 201 })
     }
@@ -32,13 +46,22 @@ export async function POST(req: Request) {
     if (!body.week || !isIsoDate(body.week)) {
       return NextResponse.json({ error: 'Invalid week' }, { status: 422 })
     }
-    const ownedEmployee = await pinTimesheetEmployee(gate.user.orgId, body.employee)
+    const ownedEmployee = await pinTimesheetEmployee(
+      gate.user.orgId,
+      body.employee,
+      gate.allowedSubsidiaryIds,
+    )
     if (!ownedEmployee) {
       return NextResponse.json({ error: 'Employee not found' }, { status: 422 })
     }
     const week = weekStart(body.week)
     const result = await amendLockedWeek(gate.user.orgId, gate.user.id, ownedEmployee, week)
-    const payload = await loadWeek(gate.user.orgId, ownedEmployee, week)
+    const payload = await loadWeek(
+      gate.user.orgId,
+      ownedEmployee,
+      week,
+      gate.allowedSubsidiaryIds,
+    )
     return NextResponse.json({ ...payload, ...result }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'could not amend' }, { status: 422 })
