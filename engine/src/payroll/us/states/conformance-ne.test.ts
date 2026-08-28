@@ -101,6 +101,16 @@ test("Nebraska special withholding applies the 1.5% minimum unless lesser withho
   assert.equal(minimum.tax, money("15.00"));
   assert.equal(minimum.factors.NE_SPECIAL_MINIMUM, money("15.00"));
 
+  // The statutory base excludes tax-qualified deductions before applying the
+  // floor: $1,000 wages − $500 qualified = $500 × 1.5% = $7.50.
+  const deductible = NE_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1000.00",
+    employerEmployeeCount: 25, taxQualifiedDeductions: "500.00",
+    basis: "resident", certificate: cert({ exempt: "true" }),
+  });
+  assert.equal(deductible.tax, money("7.50"));
+  assert.equal(deductible.factors.NE_SPECIAL_MINIMUM_BASE, money("500.00"));
+
   // Employee evidence is the statutory exception: the same valid exemption
   // remains zero when the lesser-withholding documentation flag is recorded.
   const documented = NE_WITHHOLDING.compute({
