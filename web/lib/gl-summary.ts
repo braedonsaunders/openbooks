@@ -189,7 +189,8 @@ export function glAccountMovement(opts: {
 
 /** Optional subsidiary scope applied to the buckets relation. */
 export function bucketSubsidiaryFilter(subsidiaryIds?: string[]): SQL {
-  return subsidiaryIds?.length
+  if (subsidiaryIds === undefined) return sql``
+  return subsidiaryIds.length
     ? sql`and b.subsidiary_id = any(${`{${subsidiaryIds.join(',')}}`}::uuid[])`
-    : sql``
+    : sql`and false`
 }
