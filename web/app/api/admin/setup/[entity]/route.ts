@@ -611,6 +611,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   const entity = resolveEntity((await params).entity)
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
   if (!(await setupEntityEnabled(entity, orgId))) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
+  if (entity.readOnly) return NextResponse.json({ error: 'read-only' }, { status: 405 })
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -804,6 +805,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   const entity = resolveEntity((await params).entity)
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
   if (!(await setupEntityEnabled(entity, orgId))) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
+  if (entity.readOnly) return NextResponse.json({ error: 'read-only' }, { status: 405 })
 
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
@@ -1001,6 +1003,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
   const entity = resolveEntity((await params).entity)
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
   if (!(await setupEntityEnabled(entity, orgId))) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
+  if (entity.readOnly) return NextResponse.json({ error: 'read-only' }, { status: 405 })
   if (entity.key === 'accounting-books') {
     return NextResponse.json({ error: 'archive-only' }, { status: 405 })
   }
