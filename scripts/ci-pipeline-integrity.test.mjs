@@ -495,7 +495,7 @@ test('the campaign checker audits local main and accepts closingCommit attributi
   const env = {
     ...process.env,
     OPENBOOKS_REGISTER_JSON: JSON.stringify({
-      findings: [{ id: 'fnd_probe', status: 'fixed', closingCommit: 'aefa541a' }],
+      findings: [{ id: 'fnd_probe', status: 'fixed', closingCommit: '19267a4c' }],
     }),
   }
   delete env.OPENBOOKS_REGISTER_DB
@@ -514,7 +514,7 @@ test('the campaign checker honors an explicit commit ref and rejects a missing o
   const baseEnv = {
     ...process.env,
     OPENBOOKS_REGISTER_JSON: JSON.stringify({
-      findings: [{ id: 'fnd_probe', status: 'fixed', closingCommit: 'aefa541a' }],
+      findings: [{ id: 'fnd_probe', status: 'fixed', closingCommit: '19267a4c' }],
     }),
   }
   delete baseEnv.OPENBOOKS_REGISTER_DB
@@ -522,9 +522,9 @@ test('the campaign checker honors an explicit commit ref and rejects a missing o
 
   const explicit = execFileSync('npm', ['run', 'check:register-reachability', '--silent'], {
     encoding: 'utf8',
-    env: { ...baseEnv, OPENBOOKS_REGISTER_CHECK_REF: 'aefa541a' },
+    env: { ...baseEnv, OPENBOOKS_REGISTER_CHECK_REF: '19267a4c' },
   })
-  assert.match(explicit, /PASS: 1\/1 register entries verified reachable from aefa541a;/)
+  assert.match(explicit, /PASS: 1\/1 register entries verified reachable from 19267a4c;/)
 
   assert.throws(
     () =>
