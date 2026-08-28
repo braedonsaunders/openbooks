@@ -16,7 +16,10 @@ export const runtime = 'nodejs'
 
 function errorResponse(error: unknown) {
   if (error instanceof ProjectWorkBreakdownError) {
-    return NextResponse.json({ error: error.message }, { status: error.status })
+    return NextResponse.json(
+      { error: error.status === 404 ? 'not found' : error.message },
+      { status: error.status },
+    )
   }
   throw error
 }

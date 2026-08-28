@@ -6,6 +6,7 @@ import {
   ProjectWorkBreakdownError,
   type WorkBreakdownTaskInput,
 } from './project-work-breakdown-validation'
+import { pgTextArrayLiteral } from './pg-array'
 
 type TaskStatus = WorkBreakdownTaskInput['status']
 
@@ -32,9 +33,13 @@ function projectSubsidiaryFilter(
   column: SQL = sql`subsidiary_id`,
 ): SQL {
   if (allowedSubsidiaryIds === null) return sql``
+  // The public service signatures require this scope argument. Keep an
+  // omitted value fail-closed at runtime too, rather than accidentally
+  // treating an untrusted caller like an unrestricted one.
+  if (!allowedSubsidiaryIds) return sql`and false`
   const ids = [...allowedSubsidiaryIds]
   return ids.length
-    ? sql`and ${column} = any(${`{${ids.join(',')}}`}::uuid[])`
+    ? sql`and ${column} = any(${pgTextArrayLiteral(ids)}::uuid[])`
     : sql`and false`
 }
 
@@ -126,7 +131,7 @@ async function recordTaskAudit(args: {
 export async function loadWorkBreakdownTasks(
   orgId: string,
   projectId: string,
-  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<WorkBreakdownTaskClient[]> {
   await assertProject(db, orgId, projectId, allowedSubsidiaryIds)
   const result = (await db.execute<TaskRow>(sql`
@@ -144,14 +149,13 @@ export async function createWorkBreakdownTask(args: {
   orgId: string
   projectId: string
   actorId: string
-  /** Null means unrestricted; a non-null set is the caller's subsidiary scope. */
-  allowedSubsidiaryIds?: ReadonlySet<string> | null
+  allowedSubsidiaryIds: ReadonlySet<string> | null
   input: WorkBreakdownTaskInput
 }): Promise<WorkBreakdownTaskClient> {
   return db.transaction(async (tx) => {
     // The project row is the transaction-scoped sequencing lock for its WBS.
     // Concurrent creates cannot both observe the same max(schedule_order).
-    await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds ?? null, 'update')
+    await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds, 'update')
     const created = (await tx.execute<TaskRow>(sql`
       insert into project_tasks (
         org_id, project_id, code, name, status, estimated_hours, estimated_cost,
@@ -189,19 +193,18 @@ export async function updateWorkBreakdownTask(args: {
   projectId: string
   taskId: string
   actorId: string
-  /** Null means unrestricted; a non-null set is the caller's subsidiary scope. */
-  allowedSubsidiaryIds?: ReadonlySet<string> | null
+  allowedSubsidiaryIds: ReadonlySet<string> | null
   expectedUpdatedAt: string
   input: WorkBreakdownTaskInput
 }): Promise<WorkBreakdownTaskClient> {
   return db.transaction(async (tx) => {
-    await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds ?? null, 'share')
+    await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds, 'share')
     const before = await taskSnapshot(
       tx,
       args.orgId,
       args.projectId,
       args.taskId,
-      args.allowedSubsidiaryIds ?? null,
+      args.allowedSubsidiaryIds,
       true,
     )
     if (!before) throw new ProjectWorkBreakdownError('Task not found', 404)
@@ -231,7 +234,7 @@ export async function updateWorkBreakdownTask(args: {
          and exists (
            select 1 from projects p
             where p.id = project_tasks.project_id and p.org_id = project_tasks.org_id
-              ${projectSubsidiaryFilter(args.allowedSubsidiaryIds ?? null, sql`p.subsidiary_id`)}
+              ${projectSubsidiaryFilter(args.allowedSubsidiaryIds, sql`p.subsidiary_id`)}
          )
        returning id, project_id, code, name, status, estimated_hours, estimated_cost, updated_at
     `))

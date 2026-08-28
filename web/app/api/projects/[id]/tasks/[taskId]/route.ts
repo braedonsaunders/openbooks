@@ -41,13 +41,17 @@ export async function PATCH(
       projectId: id,
       taskId,
       actorId: gate.user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       expectedUpdatedAt: parseExpectedTaskVersion(expectedUpdatedAt),
       input: parseWorkBreakdownTaskInput(taskInput),
     })
     return NextResponse.json({ task })
   } catch (error) {
     if (error instanceof ProjectWorkBreakdownError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
+      return NextResponse.json(
+        { error: error.status === 404 ? 'not found' : error.message },
+        { status: error.status },
+      )
     }
     throw error
   }
