@@ -11,16 +11,17 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow,
+  TableRow
 } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import {
+  complianceSubsidiaryFilter,
   loadLienWaivers,
   requireLienWaiverFeature,
-  type LienWaiverRow,
+  type LienWaiverRow
 } from '../../../../lib/compliance'
 import { pickString } from '../../../../lib/list-params'
 import { getMoneyFormatter } from '@/lib/money-server'
@@ -41,7 +42,7 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'destructive' | 'secon
   requested: 'warning',
   draft: 'outline',
   rejected: 'destructive',
-  void: 'secondary',
+  void: 'secondary'
 }
 
 /**
@@ -52,7 +53,7 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'destructive' | 'secon
  * that reads "signed" here is a waiver that will release a blocked bill.
  */
 export default async function LienWaiversPage({
-  searchParams,
+  searchParams
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
@@ -70,38 +71,50 @@ export default async function LienWaiversPage({
   const [waivers, projects, vendors, tabs] = await Promise.all([
     loadLienWaivers({
       orgId,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       direction: direction === 'issued' ? 'issued' : direction === 'received' ? 'received' : null,
-      status,
+      status
     }),
     db.execute<{ id: string; label: string }>(sql`
       select id, coalesce(code || ' · ' || name, name) as label from projects
-       where org_id = ${orgId} and is_active order by code nulls last, name limit 500`),
+       where org_id = ${orgId} and is_active
+         ${complianceSubsidiaryFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
+       order by code nulls last, name limit 500`),
     db.execute<{ id: string; label: string; defaultType: string }>(sql`
       select p.id, p.display_name as label,
              coalesce(cls.default_lien_waiver_type, '') as "defaultType"
-        from parties p
-        join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id and vr.is_active
-        left join compliance_classes cls on cls.id = vr.compliance_class_id and cls.org_id = p.org_id
+       from parties p
+       join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id and vr.is_active
+       left join compliance_classes cls on cls.id = vr.compliance_class_id and cls.org_id = p.org_id
        where p.org_id = ${orgId} and p.is_active
+         ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
        order by p.display_name limit 2000`),
-    complianceTabs('/compliance/lien-waivers', { projectsEnabled: true }),
+    complianceTabs('/compliance/lien-waivers', { projectsEnabled: true })
   ])
 
   const open: LienWaiverRow | null = openId ? (waivers.find((w) => w.id === openId) ?? null) : null
   // Open bills the vendor could release, so a waiver's amount comes from the
   // money it is exchanged for rather than from retyping.
   const openBills = open
-    ? ((await db.execute<{ id: string; label: string; amount: string; currency: string }>(sql`
+    ? (
+        await db.execute<{
+          id: string
+          label: string
+          amount: string
+          currency: string
+        }>(sql`
         select id, document_number as label, coalesce(open_balance, total) as amount, currency
           from documents
          where org_id = ${orgId} and party_id = ${open.partyId} and project_id = ${open.projectId}
            and kind in ('vendor_bill', 'expense_report') and status = 'posted'
-         order by document_date desc limit 50`))).rows
+           ${complianceSubsidiaryFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
+         order by document_date desc limit 50`)
+      ).rows
     : []
 
   const query = new URLSearchParams({
     ...(direction ? { direction } : {}),
-    ...(status ? { status } : {}),
+    ...(status ? { status } : {})
   })
 
   return (
