@@ -175,6 +175,8 @@ export interface SetupEntity {
   orderBy?: string
   /** Whether the table has `is_active` (→ archive on delete instead of hard delete). */
   hasActive: boolean
+  /** Shared/reference entities remain readable but cannot be mutated by tenant setup admins. */
+  readOnly?: boolean
   /** Documentation-center article slug — renders a "Learn more" link on the tab. */
   docSlug?: string
   /** Parent setup entity that owns this configuration surface. Nested entities
@@ -2287,6 +2289,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     iconKey: 'coins',
     featureKey: 'multiCurrency',
     orgScoped: false,
+    readOnly: true,
     naturalKey: 'code',
     orderBy: 'code',
     hasActive: false,
