@@ -1,19 +1,19 @@
 {
-  "orgId": "41f8afcd-bf06-4c08-83af-3dac872d2a81",
+  "orgId": "e128af9c-e8c7-48b6-8984-f304495132b5",
   "orgName": "SIM · Summit Ridge Construction",
-  "at": "2026-08-28T00:03:17.191Z",
-  "gitSha": "b2c45c9",
+  "at": "2026-08-28T00:09:54.557Z",
+  "gitSha": "1a6c6f7",
   "cutoff": "2026-02-28",
   "cutoffSource": "last-closed-gl-period",
   "counts": {
-    "documents": 915,
-    "postedDocuments": 427,
-    "postedEntries": 430,
-    "postedLines": 1343
+    "documents": 927,
+    "postedDocuments": 425,
+    "postedEntries": 428,
+    "postedLines": 1314
   },
   "trialBalance": {
-    "debits": "8475962.1320",
-    "credits": "8475962.1320",
+    "debits": "8481622.7784",
+    "credits": "8481622.7784",
     "accounts": 41
   },
   "controlTieOut": [
@@ -21,8 +21,8 @@
       "account": "Contracts Receivable",
       "number": "1200",
       "kind": "asset_receivable",
-      "gl": "1122147.7720",
-      "subledger": "474647.7720",
+      "gl": "1125429.6984",
+      "subledger": "477929.6984",
       "direct": "647500.0000",
       "diff": "0.0000"
     },
@@ -30,17 +30,17 @@
       "account": "Retainage Receivable",
       "number": "1210",
       "kind": "asset_receivable",
-      "gl": "21152.0000",
+      "gl": "20758.0000",
       "subledger": "0",
-      "direct": "21152.0000",
+      "direct": "20758.0000",
       "diff": "0.0000"
     },
     {
       "account": "Accounts Payable — Trade",
       "number": "2010",
       "kind": "liability_payable",
-      "gl": "-458136.2500",
-      "subledger": "-115136.2500",
+      "gl": "-453754.1600",
+      "subledger": "-110754.1600",
       "direct": "-343000.0000",
       "diff": "0.0000"
     }
@@ -96,17 +96,17 @@
     },
     {
       "report": "balance_sheet",
-      "ms": 2,
+      "ms": 1,
       "rows": 13
     },
     {
       "report": "profit_and_loss",
-      "ms": 2,
+      "ms": 1,
       "rows": 16
     },
     {
       "report": "ar_aging",
-      "ms": 2,
+      "ms": 3,
       "rows": 5
     }
   ],
