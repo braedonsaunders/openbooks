@@ -97,12 +97,20 @@ export async function syncProjectRevenueContracts(
   actorId: string | null,
   asOfDate: string,
   projectId?: string,
+  allowedSubsidiaryIds?: readonly string[],
 ): Promise<ProjectRevenueSyncResult> {
   if (!(await revenueRecognitionFeatureEnabled(db, orgId))) {
     return { synced: [], problems: [] };
   }
   return db.transaction(async (tx) =>
-    syncProjectRevenueContractsInTransaction(tx, orgId, actorId, asOfDate, projectId),
+    syncProjectRevenueContractsInTransaction(
+      tx,
+      orgId,
+      actorId,
+      asOfDate,
+      projectId,
+      allowedSubsidiaryIds,
+    ),
   );
 }
 
@@ -112,7 +120,9 @@ export async function syncProjectRevenueContracts(
  * rebuild — runs inside one transaction (`tx`), so a percent-complete override
  * cannot leave a mixed state (new displayed override/contract price with an old
  * obligation or partial book schedules). Every book's schedule agrees on one
- * source percent/contract value or the entire sync rolls back.
+ * source percent/contract value or the entire sync rolls back. A supplied
+ * subsidiary list is the caller's authorization snapshot; project rows outside
+ * it are excluded before any contract, obligation, or schedule write.
  */
 export async function syncProjectRevenueContractsInTransaction(
   tx: Pick<typeof db, "execute" | "transaction">,
@@ -120,6 +130,7 @@ export async function syncProjectRevenueContractsInTransaction(
   actorId: string | null,
   asOfDate: string,
   projectId?: string,
+  allowedSubsidiaryIds?: readonly string[],
 ): Promise<ProjectRevenueSyncResult> {
   const result: ProjectRevenueSyncResult = { synced: [], problems: [] };
   if (!(await revenueRecognitionFeatureEnabled(tx, orgId))) return result;
@@ -129,6 +140,15 @@ export async function syncProjectRevenueContractsInTransaction(
     // Inert until mapped — same contract as the rest of project GL recognition.
     return result;
   }
+
+  // `undefined` is the unrestricted policy; a present (including empty) list
+  // is a restricted policy. Keep the empty case fail-closed rather than
+  // interpolating an invalid PostgreSQL array literal.
+  const subsidiaryScope = allowedSubsidiaryIds == null
+    ? sql``
+    : allowedSubsidiaryIds.length > 0
+      ? sql`and p.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])`
+      : sql`and false`;
 
   const projects = (await tx.execute<{
       id: string; code: string; name: string; customer_id: string | null; subsidiary_id: string | null;
@@ -149,6 +169,7 @@ export async function syncProjectRevenueContractsInTransaction(
      where p.org_id = ${orgId} and p.is_active
        and pt.invoicing_profile->>'recognition' = 'percent_complete_cost'
        ${projectId ? sql`and p.id = ${projectId}` : sql``}
+       ${subsidiaryScope}
      order by p.code`));
 
   let ruleId: string | null = null;
