@@ -443,32 +443,24 @@ test(
            set status = 'voided', voided_at = now(), voided_by = ${fx.actorId},
                void_reason = 'Opened against the wrong schedule'
          where id = ${first.documentId}`);
-      // A replacement covering the IDENTICAL period gets past this guard now,
-      // and is then refused by the DATABASE: `pay_runs_schedule_period` is
-      // unique on (org, schedule, period_end) where run_type = 'regular' and
-      // carries no void exemption. A partial index cannot see
-      // documents.status, so lifting that half needs a schema change — see
-      // .local/handoff-fixes.md. Pinned here so the remaining half of the
-      // defect is evidence rather than folklore.
-      await assert.rejects(
-        createPayRun({
-          orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-          periodStart: "2026-07-05", periodEnd: "2026-07-18",
-        }),
-        (error: unknown) => {
-          const cause = (error as { cause?: { constraint?: string } }).cause;
-          assert.equal(cause?.constraint, "pay_runs_schedule_period");
-          return true;
-        },
-      );
-
-      // The application guard itself is fixed: an overlapping replacement,
-      // which the voided run used to block outright, is now allowed.
+      // Voiding releases the storage key while retaining the original run and
+      // its reversal evidence. An exact-period replacement is therefore
+      // allowed, but it receives a new document identity.
       const replacement = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: "2026-07-12", periodEnd: "2026-07-25",
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
       assert.ok(replacement.documentId);
+      assert.notEqual(replacement.documentId, first.documentId);
+
+      const statuses = await db.execute<{ document_id: string; run_status: string }>(sql`
+        select document_id, run_status from pay_runs
+         where org_id = ${fx.orgId}
+           and document_id in (${first.documentId}, ${replacement.documentId})
+         order by document_id
+      `);
+      assert.equal(statuses.rows.find((row) => row.document_id === first.documentId)?.run_status, "voided");
+      assert.equal(statuses.rows.find((row) => row.document_id === replacement.documentId)?.run_status, "draft");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

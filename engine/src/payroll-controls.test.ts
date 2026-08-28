@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { sum } from "./money.ts";
+import { cmp, sum } from "./money.ts";
 import {
   assertPayRunApprovalReleased,
   payRunApprovalState,
@@ -19,6 +19,8 @@ import { payRunReadiness, payRunStaleness } from "./payroll-readiness.ts";
 import { remittanceDueDate } from "./payroll-remittance.ts";
 import { isCanadianSin, renderRoeXml, type RoeRecordToFile } from "./payroll-roexml.ts";
 import { roeCandidates, t4Slips, type RoeRecord } from "./payroll-yearend.ts";
+import { employeeYtd } from "./payroll/canada/compute-statutory.ts";
+import { usEmployeeYtd } from "./payroll/us/compute-statutory.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
 /**
@@ -328,6 +330,73 @@ async function seedCommittedStub(run: PayRunFixture, gross: string): Promise<str
             ${JSON.stringify({ C: "0", C2: "0", EI: "0" })}::jsonb, ${run.actorId}, ${run.actorId})`);
   return stubId;
 }
+
+test(
+  "statutory YTD counts committed payroll, not calculated drafts",
+  { skip: !DB },
+  async () => {
+    const current = await seedPayRun();
+    try {
+      const insertHistory = async (
+        runStatus: "calculated" | "committed",
+        periodStart: string,
+        periodEnd: string,
+        gross: string,
+      ) => {
+        const documentId = randomUUID();
+        await db.execute(sql`
+          insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
+                                 currency, status, created_by, updated_by)
+          values (${current.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
+                  ${current.subsidiaryId}, ${periodEnd}, 'CAD', 'approved',
+                  ${current.actorId}, ${current.actorId})`);
+        await db.execute(sql`
+          insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
+                                pay_date, tax_year, run_status, created_by, updated_by)
+          values (${documentId}, ${current.orgId}, ${current.scheduleId}, ${periodStart}, ${periodEnd},
+                  ${periodEnd}, 2026, ${runStatus}, ${current.actorId}, ${current.actorId})`);
+        await db.execute(sql`
+          insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+                                 periods_per_year, pay_date, tax_year, currency_code, gross,
+                                 pensionable_earnings, insurable_earnings, net_pay, factors,
+                                 created_by, updated_by)
+          values (${randomUUID()}, ${current.orgId}, ${documentId}, ${current.employeeId}, 'ON',
+                  26, ${periodEnd}, 2026, 'CAD', ${gross}, ${gross}, ${gross}, ${gross},
+                  ${JSON.stringify({
+                    C: gross, C2: gross, EI: gross, QPIP: gross,
+                    SS: gross, MED: gross, MED2: gross,
+                  })}::jsonb,
+                  ${current.actorId}, ${current.actorId})`);
+      };
+
+      // A committed $1,000 period is real YTD. The later calculated $9,000
+      // period is still a draft and may be abandoned, so it must not consume
+      // statutory room in either country engine.
+      await insertHistory("committed", "2026-06-07", "2026-06-20", "1000.0000");
+      await insertHistory("calculated", "2026-06-21", "2026-07-04", "9000.0000");
+
+      const context = {
+        tx: db,
+        orgId: current.orgId,
+        employeePartyId: current.employeeId,
+        taxYear: 2026,
+        documentId: current.documentId,
+      } as const;
+      const caYtd = await employeeYtd(context);
+      const usYtd = await usEmployeeYtd(context);
+      assert.equal(cmp(caYtd.pensionable, "1000"), 0,
+        "Canada YTD ignores an uncommitted calculated stub");
+      assert.equal(cmp(caYtd.cpp, "1000"), 0,
+        "Canada statutory factors ignore an uncommitted calculated stub");
+      assert.equal(cmp(usYtd.fica, "1000"), 0,
+        "US YTD ignores an uncommitted calculated stub");
+      assert.equal(cmp(usYtd.fica_tax, "3000"), 0,
+        "US FICA tax YTD ignores an uncommitted calculated stub");
+    } finally {
+      await dropScratchOrgReporting(current.orgId);
+    }
+  },
+);
 
 /* ------------------------------------------------------------------ */
 /* C3 — staleness must watch every input class                         */
