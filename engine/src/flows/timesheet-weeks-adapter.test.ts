@@ -129,7 +129,7 @@ test("mixed-department weeks do not route under an arbitrary department", async 
   const context = await timesheetWeeksFlowAdapter.loadContext(WEEK_ID);
   assert.equal(context?.values.departmentId, null);
   assert.deepEqual(
-    context?.rows.timeEntries.map((entry) => entry.departmentId),
+    context?.rows?.timeEntries?.map((entry) => entry.departmentId),
     [DEPARTMENT_A, DEPARTMENT_B],
   );
   assert.match(
