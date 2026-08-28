@@ -338,6 +338,13 @@ export async function deleteApp(orgId: string, userId: string, key: string): Pro
         from app_runs
        where org_id = ${orgId} and app_id = ${app.id}
        order by at, id`)
+    const storage = await tx.execute(sql`
+      select id, org_id as "orgId", app_id as "appId", namespace, key, value,
+             created_at as "createdAt", created_by as "createdBy",
+             updated_at as "updatedAt", updated_by as "updatedBy"
+        from app_storage
+       where org_id = ${orgId} and app_id = ${app.id}
+       order by namespace, key`)
 
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -351,6 +358,7 @@ export async function deleteApp(orgId: string, userId: string, key: string): Pro
             versions: versions.rows,
             files: files.rows,
             runs: runs.rows,
+            storage: storage.rows,
           },
           after: null,
         })}::jsonb,
