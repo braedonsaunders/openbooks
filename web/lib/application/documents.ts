@@ -239,9 +239,6 @@ export async function correctPostedDocument(
   }
   assertApplicationPermission(context, createPermission(header.kind));
   assertApplicationPermission(context, postPermission(header.kind));
-  if (header.status !== "posted") {
-    throw invalidInput("only a posted transaction can be corrected");
-  }
   const outcome = await executeIdempotent({
     context,
     operation: "documents.correct",
@@ -249,6 +246,12 @@ export async function correctPostedDocument(
     request: { documentId: input.documentId, correction: input.correction },
     execute: async () => {
       try {
+        // A completed idempotency key must replay even after the first attempt
+        // voided the source. Fresh executions still enforce the posted guard;
+        // executeIdempotent never invokes this callback for a replay.
+        if (header.status !== "posted") {
+          throw invalidInput("only a posted transaction can be corrected");
+        }
         const replacement = await createPostedCorrectionDraft(
           input.documentId,
           input.correction,
@@ -264,6 +267,14 @@ export async function correctPostedDocument(
           orgId: context.authz.user.orgId,
           actorId: context.authz.user.id,
           reason: input.correction.amendmentReason ?? "",
+          source: context.source,
+        });
+        // Approval routing is part of the idempotent command. Flow runs, gates,
+        // and deferred effects must commit with the correction and void so a
+        // failed dispatch rolls the command back and a replay cannot skip it.
+        await runPostedCorrectionDraftFlows(replacement.id, header.kind, {
+          orgId: context.authz.user.orgId,
+          userId: context.authz.user.id,
           source: context.source,
         });
         return {
@@ -283,13 +294,5 @@ export async function correctPostedDocument(
       }
     },
   });
-  if (!outcome.replayed) {
-    const result = outcome.value as { correctionId: string };
-    await runPostedCorrectionDraftFlows(result.correctionId, header.kind, {
-      orgId: context.authz.user.orgId,
-      userId: context.authz.user.id,
-      source: context.source,
-    });
-  }
   return { replayed: outcome.replayed, result: outcome.value };
 }
