@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer, cn } from '@openbooks/ui'
+import { abs as absoluteMoney, cmp as compareMoney, div as divideMoney, mulDecimal, sum as sumMoney } from '@openbooks/engine/src/money.ts'
 import {
   History,
   Gauge as GaugeIcon,
@@ -29,7 +30,8 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { Gauge } from './Gauge'
 import { EntityDrawer } from './EntityDrawer'
 import { exportCsv } from './exportCsv'
-import { useAnalyticsMoney } from './format'
+import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
+const ZERO_MONEY = '0.0000'
 const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 const PAGE_SIZE = 25
 
@@ -82,7 +84,7 @@ export function CashWeekFlyout({
   onClose: () => void
 }) {
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: string) => fmtMoney(n, { compact: true })
   const t = useTranslations('analytics.cashWeek')
   const router = useRouter()
   const [tab, setTab] = useState<TabKey>(initialSide)
@@ -124,22 +126,25 @@ export function CashWeekFlyout({
       cancelled = true
     }
   }, [week.weekStart, fetched])
-  const weekCats = categories.filter((c) => (c.weekly[weekIndex] ?? 0) > 0)
-  const otherIn = weekCats.filter((c) => c.direction === 'inflow').reduce((a, c) => a + (c.weekly[weekIndex] ?? 0), 0)
+  const weekCats = categories.filter((c) => compareMoney(c.weekly[weekIndex] ?? ZERO_MONEY, ZERO_MONEY) > 0)
+  const otherIn = sumMoney(weekCats.filter((c) => c.direction === 'inflow').map((c) => c.weekly[weekIndex] ?? ZERO_MONEY))
   const catOuts = weekCats.filter((c) => c.direction === 'outflow')
-  const coverage = week.outflow > 0 ? week.inflow / week.outflow : 1
+  const coverage = compareMoney(week.outflow, ZERO_MONEY) > 0 ? divideMoney(week.inflow, week.outflow) : '1.0000'
+  // The gauge is visualization-only; the exact ratio remains the source for
+  // text and all other decisions.
+  const coveragePercent = toChartNumber(mulDecimal(coverage, '100'))
 
   // Breakdown — the summary rows, straight off the shared WeekRow.
-  const breakdown: { label: string; value: number; icon: typeof Wallet; tone: string }[] = [
+  const breakdown: { label: string; value: string; icon: typeof Wallet; tone: string }[] = [
     { label: t('breakdown.startingCash'), value: week.startingCash, icon: Wallet, tone: 'neutral' },
     ...(week.apCapacity !== null ? [{ label: t('breakdown.safeApCapacity'), value: week.apCapacity, icon: ShieldCheck, tone: 'info' }] : []),
     { label: t('breakdown.inflowAr'), value: arTotal, icon: ArrowDown, tone: 'inflow' },
-    ...(otherIn > 0 ? [{ label: t('breakdown.inflowOther'), value: otherIn, icon: ArrowDown, tone: 'inflow' }] : []),
+    ...(compareMoney(otherIn, ZERO_MONEY) > 0 ? [{ label: t('breakdown.inflowOther'), value: otherIn, icon: ArrowDown, tone: 'inflow' }] : []),
     { label: t('breakdown.outflowAp'), value: apTotal, icon: ArrowUp, tone: 'outflow' },
-    ...catOuts.map((c) => ({ label: t('breakdown.outCategory', { name: c.name }), value: c.weekly[weekIndex] ?? 0, icon: ArrowUp, tone: 'outflow' })),
-    ...(week.deferredOut > 0 ? [{ label: t('breakdown.deferredBacklog'), value: week.deferredOut, icon: Clock, tone: 'warning' }] : []),
-    { label: t('breakdown.netChange'), value: week.net, icon: ArrowLeftRight, tone: week.net >= 0 ? 'positive' : 'negative' },
-    { label: t('breakdown.endingCash'), value: week.endingCash, icon: Landmark, tone: week.endingCash >= 0 ? 'neutral' : 'negative' },
+    ...catOuts.map((c) => ({ label: t('breakdown.outCategory', { name: c.name }), value: c.weekly[weekIndex] ?? ZERO_MONEY, icon: ArrowUp, tone: 'outflow' })),
+    ...(compareMoney(week.deferredOut, ZERO_MONEY) > 0 ? [{ label: t('breakdown.deferredBacklog'), value: week.deferredOut, icon: Clock, tone: 'warning' }] : []),
+    { label: t('breakdown.netChange'), value: week.net, icon: ArrowLeftRight, tone: compareMoney(week.net, ZERO_MONEY) >= 0 ? 'positive' : 'negative' },
+    { label: t('breakdown.endingCash'), value: week.endingCash, icon: Landmark, tone: compareMoney(week.endingCash, ZERO_MONEY) >= 0 ? 'neutral' : 'negative' },
   ]
 
   const side: 'ar' | 'ap' = tab === 'ar' ? 'ar' : 'ap'
@@ -156,6 +161,7 @@ export function CashWeekFlyout({
     return filtered.slice().sort((a, b) => {
       const av = sortCol === 'amount' ? a.amount : ((a[sortCol] ?? '') as string)
       const bv = sortCol === 'amount' ? b.amount : ((b[sortCol] ?? '') as string)
+      if (sortCol === 'amount') return compareMoney(absoluteMoney(av), absoluteMoney(bv)) * -dir
       return av < bv ? -dir : av > bv ? dir : 0
     })
   }, [filtered, sortCol, sortDir])
@@ -199,7 +205,7 @@ export function CashWeekFlyout({
       size="xl"
       title={week.label}
       description={t('drawerDescription', {
-        net: `${week.net >= 0 ? '+' : ''}${money(week.net)}`,
+        net: `${compareMoney(week.net, ZERO_MONEY) >= 0 ? '+' : ''}${money(week.net)}`,
         ending: money(week.endingCash),
       })}
       bodyClassName="overflow-hidden flex flex-col p-0"
@@ -208,21 +214,21 @@ export function CashWeekFlyout({
       <div className="shrink-0 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
         <div className="mb-3 flex items-stretch gap-3">
           <div className="flex flex-1 items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
-            <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', week.net >= 0 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400')}>
+            <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', compareMoney(week.net, ZERO_MONEY) >= 0 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400')}>
               <ArrowLeftRight size={16} />
             </span>
             <div>
               <p className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('netChange')}</p>
-              <p className={cn('text-lg font-bold tabular-nums', week.net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
-                {week.net >= 0 ? '+' : ''}{money(week.net)}
+              <p className={cn('text-lg font-bold tabular-nums', compareMoney(week.net, ZERO_MONEY) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
+                {compareMoney(week.net, ZERO_MONEY) >= 0 ? '+' : ''}{money(week.net)}
               </p>
             </div>
           </div>
           <div className="flex flex-1 items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
-            <Gauge value={Math.min(100, coverage * 100)} size={64} thickness={8} showTicks={false} showValue={false} className="shrink-0" />
+            <Gauge value={Math.max(0, Math.min(100, coveragePercent))} size={64} thickness={8} showTicks={false} showValue={false} className="shrink-0" />
             <div>
               <p className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500"><GaugeIcon size={10} /> {t('coverageRatio')}</p>
-              <p className="text-lg font-bold tabular-nums text-slate-800 dark:text-slate-100">{(coverage * 100).toFixed(0)}%</p>
+              <p className="text-lg font-bold tabular-nums text-slate-800 dark:text-slate-100">{formatExactPercent(coverage)}</p>
             </div>
           </div>
         </div>
@@ -269,13 +275,13 @@ export function CashWeekFlyout({
           >
             <Cog size={13} className={c.direction === 'inflow' ? 'text-teal-500' : 'text-amber-500'} />
             {c.name}
-            <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-semibold', c.direction === 'inflow' ? 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300')}>{money(c.weekly[weekIndex] ?? 0)}</span>
+            <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-semibold', c.direction === 'inflow' ? 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300')}>{money(c.weekly[weekIndex] ?? ZERO_MONEY)}</span>
           </button>
         ))}
       </div>
 
       {activeCat ? (
-        <CategoryPane key={activeCat.id} cat={activeCat} weekAmount={activeCat.weekly[weekIndex] ?? 0} />
+        <CategoryPane key={activeCat.id} cat={activeCat} weekAmount={activeCat.weekly[weekIndex] ?? ZERO_MONEY} />
       ) : (
         <>
           {/* search toolbar */}
@@ -377,10 +383,10 @@ export function CashWeekFlyout({
  * forecast-logic line, and the source-item table with search, sortable
  * columns and pagination.
  */
-function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: number }) {
+function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: string }) {
   const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: string) => fmtMoney(n, { compact: true })
   const t = useTranslations('analytics.cashWeek')
   const tMeta = useTranslations('analytics.cashWeek.meta')
   const [search, setSearch] = useState('')
@@ -401,8 +407,9 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1
     return filtered.slice().sort((a, b) => {
-      const av = sortCol === 'amount' ? Math.abs(a.amount) : ((a[sortCol] ?? '') as string).toLowerCase()
-      const bv = sortCol === 'amount' ? Math.abs(b.amount) : ((b[sortCol] ?? '') as string).toLowerCase()
+      const av = sortCol === 'amount' ? absoluteMoney(a.amount) : ((a[sortCol] ?? '') as string).toLowerCase()
+      const bv = sortCol === 'amount' ? absoluteMoney(b.amount) : ((b[sortCol] ?? '') as string).toLowerCase()
+      if (sortCol === 'amount') return compareMoney(av, bv) * -dir
       return av < bv ? -dir : av > bv ? dir : 0
     })
   }, [filtered, sortCol, sortDir])
@@ -464,7 +471,7 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
             .filter(([k]) => k !== 'method' && k !== 'formula')
             .map(([k, v]) => (
               <span key={k} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                {tMeta.has(k) ? tMeta(k) : k}: <span className="font-semibold tabular-nums">{typeof v === 'number' && MONEYISH.has(k) ? money(v) : String(v)}</span>
+                {tMeta.has(k) ? tMeta(k) : k}: <span className="font-semibold tabular-nums">{MONEYISH.has(k) ? money(String(v)) : String(v)}</span>
               </span>
             ))}
         </div>
@@ -555,10 +562,10 @@ function ActionBar({
   onBuild: (docIds: string[]) => void
 }) {
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: string) => fmtMoney(n, { compact: true })
   const t = useTranslations('analytics.cashWeek.actionBar')
   const runnable = entries.filter((e) => e.docId)
-  const total = runnable.reduce((a, e) => a + e.amount, 0)
+  const total = sumMoney(runnable.map((e) => e.amount))
   if (runnable.length === 0) return null
   return (
     <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/60 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-800/30">

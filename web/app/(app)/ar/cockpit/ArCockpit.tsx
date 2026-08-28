@@ -4,6 +4,7 @@ import { useMoney } from '@/components/money-provider'
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { cmp as compareMoney, div as divideMoney } from '@openbooks/engine/src/money.ts'
 import {
   Wallet,
   TriangleAlert,
@@ -32,6 +33,7 @@ import {
   ScheduleBars,
 } from "../../../../components/cockpit/ui";
 import { CashWeekFlyout } from "../../analytics/_ui/CashWeekFlyout";
+import { formatExactPercent } from '../../analytics/_ui/format'
 import { EntityDrawer } from "../../analytics/_ui/EntityDrawer";
 import { ArCollectionsInfoDrawer } from "./ArCollectionsInfoDrawer";
 import { CollectionsWorklist } from "./CollectionsWorklist";
@@ -66,9 +68,9 @@ export function ArCockpit({
   );
 
   const overduePct =
-    data.outstanding > 0
-      ? Math.round((data.overdue / data.outstanding) * 100)
-      : 0;
+    compareMoney(data.outstanding, '0.0000') > 0
+      ? formatExactPercent(divideMoney(data.overdue, data.outstanding))
+      : '0%';
   const customerQuery = (search.get("customerQ") ?? "")
     .trim()
     .toLocaleLowerCase();
@@ -83,7 +85,7 @@ export function ArCockpit({
       !customer.partyName.toLocaleLowerCase().includes(customerQuery)
     )
       return false;
-    if (customerStatus === "overdue" && customer.overdue <= 0) return false;
+    if (customerStatus === "overdue" && compareMoney(customer.overdue, '0.0000') <= 0) return false;
     return true;
   });
   const visibleCustomers = filteredCustomers.slice(
@@ -122,7 +124,7 @@ export function ArCockpit({
             count: data.overdueCount,
             pct: overduePct,
           })}
-          tone={data.overdue > 0 ? "negative" : "neutral"}
+          tone={compareMoney(data.overdue, '0.0000') > 0 ? "negative" : "neutral"}
         />
         <StatTile
           icon={CalendarClock}
@@ -167,7 +169,7 @@ export function ArCockpit({
           <CockpitPanel
             title={t("panels.aging")}
             icon={ListOrdered}
-            hint={`${moneyCompact(data.outstanding)} · ${data.summary.pctCurrent.toFixed(0)}% ${t("current")}`}
+          hint={`${moneyCompact(data.outstanding)} · ${formatExactPercent(data.summary.pctCurrent)} ${t("current")}`}
             className="shrink-0"
           >
             <AgingBars
@@ -252,7 +254,7 @@ export function ArCockpit({
                             {c.partyName}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            {c.overdue > 0 ? (
+                            {compareMoney(c.overdue, '0.0000') > 0 ? (
                               <span className="text-red-600 dark:text-red-400">
                                 {moneyCompact(c.overdue)}
                               </span>

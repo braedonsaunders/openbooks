@@ -4,15 +4,17 @@ import { useMoney } from '@/components/money-provider'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { cmp as compareMoney, div as divideMoney, sum as sumMoney } from '@openbooks/engine/src/money.ts'
 import { ArrowRight, ShieldCheck, Gauge, TriangleAlert } from 'lucide-react'
 import { Badge, Button, cn } from '@openbooks/ui'
+import { toChartNumber } from '../../analytics/_ui/format'
 
 export interface PlannerEntry {
   id: string
   docId: string | null
   docKind: string | null
   partyName: string
-  amount: number
+  amount: string
   dueDate: string | null
   daysOverdue: number
   method: string
@@ -20,10 +22,10 @@ export interface PlannerEntry {
 
 export interface PayRunPlannerProps {
   recommended: PlannerEntry[]
-  capacity: number | null
-  startingCash: number
+  capacity: string | null
+  startingCash: string
   restrictToSafe: boolean
-  deferredThisWeek: number
+  deferredThisWeek: string
 }
 
 const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
@@ -43,10 +45,12 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(payable.map((e) => e.id)))
 
   const selectedEntries = payable.filter((e) => selected.has(e.id))
-  const total = selectedEntries.reduce((a, e) => a + e.amount, 0)
+  const total = sumMoney(selectedEntries.map((e) => e.amount))
   const cap = props.capacity
-  const overCap = cap !== null && total > cap
-  const pct = cap && cap > 0 ? Math.min(100, (total / cap) * 100) : total > 0 ? 100 : 0
+  const overCap = cap !== null && compareMoney(total, cap) > 0
+  const pct = cap !== null && compareMoney(cap, '0.0000') > 0
+    ? Math.min(100, Math.max(0, toChartNumber(divideMoney(total, cap)) * 100))
+    : compareMoney(total, '0.0000') > 0 ? 100 : 0
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -82,7 +86,7 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
           <span className="text-slate-400 dark:text-slate-500">{t('startingCash', { amount: money(props.startingCash) })}</span>
           {overCap ? (
             <span className="flex items-center gap-1 font-medium text-red-600 dark:text-red-400"><TriangleAlert size={11} />{t('overCap')}</span>
-          ) : props.deferredThisWeek > 0 ? (
+          ) : compareMoney(props.deferredThisWeek, '0.0000') > 0 ? (
             <span className="text-amber-600 dark:text-amber-400">{t('deferred', { amount: moneyCompact(props.deferredThisWeek) })}</span>
           ) : null}
         </div>

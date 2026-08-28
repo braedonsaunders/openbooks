@@ -4,14 +4,44 @@
 
 import { useCallback } from 'react'
 import { useMoney } from '@/components/money-provider'
+import { formatMoney as formatExactMoney, mulDecimal } from '@openbooks/engine/src/money.ts'
+import type { MoneyValue } from '../../../../lib/money-format'
 
-export function useAnalyticsMoney(): (n: number, options?: { compact?: boolean }) => string {
+/** Format canonical ledger strings without coercing them through Number. */
+export function useAnalyticsMoney(): (n: MoneyValue, options?: { compact?: boolean }) => string {
   const { money, moneyCompact } = useMoney()
   return useCallback(
-    (n: number, { compact = false }: { compact?: boolean } = {}) =>
+    (n: MoneyValue, { compact = false }: { compact?: boolean } = {}) =>
       compact ? moneyCompact(n) : money(n, { maximumFractionDigits: 0 }),
     [money, moneyCompact],
   )
+}
+
+/**
+ * One-way projection for chart axes only. Ledger strings remain the source of
+ * truth for every total, comparison, and decision; charts receive a finite,
+ * bounded IEEE-754 value so a pathological numeric(19,4) cannot destabilize
+ * the plotting library or leak a rounded value back into the model.
+ */
+export function boundChartNumber(value: number): number {
+  const limit = Number.MAX_SAFE_INTEGER
+  if (!Number.isFinite(value)) return value < 0 ? -limit : limit
+  return Math.max(-limit, Math.min(limit, value))
+}
+
+export function toChartNumber(value: string): number {
+  return boundChartNumber(Number(value))
+}
+
+/** Presentation-only formatting for exact ratios. The ratio stays a string
+ * through all comparisons; this helper rounds only when rendering text. */
+export function formatExactRatio(value: string, decimals = 2): string {
+  return formatExactMoney(value, decimals)
+}
+
+/** Render an exact 0..1 ratio as percentage points without a Number hop. */
+export function formatExactPercent(value: string, decimals = 0): string {
+  return `${formatExactMoney(mulDecimal(value, '100'), decimals)}%`
 }
 
 export function fmtPct(n: number, decimals = 1): string {

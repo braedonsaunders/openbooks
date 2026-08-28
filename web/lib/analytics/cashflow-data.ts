@@ -6,13 +6,20 @@ import {
   bankBalances,
   buildWeekGrid,
   categoryWeekly,
+  addMoney,
+  compareMoney,
+  divideMoney,
   loadCategories,
+  normalizeMoneyValue,
   openItems,
   paymentStats,
   resolveAsOf,
   scheduleForecast,
   summariseSide,
+  subtractMoney,
+  sumMoney,
   toISO,
+  ZERO_MONEY,
 } from "../cash/core";
 import { buildTimeline } from "../cash/cash-position";
 
@@ -50,8 +57,8 @@ interface AccountOptionRow extends Record<string, unknown> {
 export interface CashflowData {
   asOf: string;
   horizonWeeks: number;
-  startingCash: number;
-  bankAccounts: { id: string; name: string; number: string | null; balance: number }[];
+  startingCash: string;
+  bankAccounts: { id: string; name: string; number: string | null; balance: string }[];
   weeks: import("../cash/core").WeekRow[];
   /**
    * Forecast totals per counterparty across the horizon, per side. Computed
@@ -59,28 +66,28 @@ export interface CashflowData {
    * flattening every week's transactions in the browser, which is the only
    * reason the page had to ship them.
    */
-  partyTotals: { ar: { name: string; amount: number; count: number }[]; ap: { name: string; amount: number; count: number }[] };
+  partyTotals: { ar: { name: string; amount: string; count: number }[]; ap: { name: string; amount: string; count: number }[] };
   summary: {
-    startingCash: number;
-    projectedEnd: number;
-    totalInflows: number;
-    totalOutflows: number;
-    netChange: number;
-    lowestCash: number;
+    startingCash: string;
+    projectedEnd: string;
+    totalInflows: string;
+    totalOutflows: string;
+    netChange: string;
+    lowestCash: string;
     lowestWeek: string;
-    burnRate: number; // avg weekly outflow
-    runwayWeeks: number | null;
+    burnRate: string; // avg weekly outflow
+    runwayWeeks: string | null;
     runwayStatus: "healthy" | "caution" | "critical";
-    arCoverage: number | null; // (cash + AR outstanding) / AP outstanding
+    arCoverage: string | null; // (cash + AR outstanding) / AP outstanding
     dso: number | null;
     dpo: number | null;
   };
   ar: SideSummary;
   ap: SideSummary;
   categories: import("../cash/core").CategoryWeekly[];
-  apSettings: { weeklyCap: number; restrictToSafe: boolean };
+  apSettings: { weeklyCap: string; restrictToSafe: boolean };
   /** AP predicted inside the horizon but unpayable under the cap — spills past the end. */
-  deferredBeyondHorizon: number;
+  deferredBeyondHorizon: string;
   /** Vendor options for the category editor (distinct parties on open AP). */
   vendorOptions: { id: string; name: string }[];
   accountOptions: { id: string; number: string | null; name: string }[];
@@ -104,16 +111,16 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
       order by number nulls last, name
     `)),
   ]);
-  const weeklyCap = apCfg.weeklyApCap ?? 0;
+  const weeklyCap = normalizeMoneyValue(String(apCfg.weeklyApCap ?? 0));
   const restrictToSafe = (apCfg.restrictToSafe ?? 0) >= 1;
 
-  const startingCash = banks.reduce((a, b) => a + b.balance, 0);
+  const startingCash = sumMoney(banks.map((b) => b.balance));
 
   // Predict each open item into a week bucket ().
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
-  const weekTotals = (byWeek: Map<string, { amount: number }[]>): Record<string, number> =>
-    Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, es.reduce((a, e) => a + e.amount, 0)]));
+  const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
+    Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
   const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash };
   const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
 
@@ -131,7 +138,7 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
   let lowestCash = startingCash;
   let lowestWeek = toISO(grid.start);
   for (const w of weeks) {
-    if (w.endingCash < lowestCash) {
+    if (compareMoney(w.endingCash, lowestCash) < 0) {
       lowestCash = w.endingCash;
       lowestWeek = w.weekStart;
     }
@@ -140,27 +147,27 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
   const totalIn = timeline.totalInflows;
   const totalOut = timeline.totalOutflows;
   const projectedEnd = weeks.length ? weeks[weeks.length - 1]!.endingCash : startingCash;
-  const burnRate = weeks.length ? totalOut / weeks.length : 0;
+  const burnRate = weeks.length ? divideMoney(totalOut, String(weeks.length)) : ZERO_MONEY;
   // Runway: weeks of cash at the current burn rate (net of inflows if positive).
-  const netBurn = burnRate - (weeks.length ? totalIn / weeks.length : 0);
-  const runwayWeeks = netBurn > 0 && startingCash > 0 ? startingCash / netBurn : startingCash > 0 ? null : 0;
+  const netBurn = subtractMoney(burnRate, weeks.length ? divideMoney(totalIn, String(weeks.length)) : ZERO_MONEY);
+  const runwayWeeks = compareMoney(netBurn, ZERO_MONEY) > 0 && compareMoney(startingCash, ZERO_MONEY) > 0 ? divideMoney(startingCash, netBurn) : compareMoney(startingCash, ZERO_MONEY) > 0 ? null : ZERO_MONEY;
   const runwayStatus: "healthy" | "caution" | "critical" =
-    lowestCash < 0 ? "critical" : runwayWeeks !== null && runwayWeeks < 8 ? "caution" : "healthy";
+    compareMoney(lowestCash, ZERO_MONEY) < 0 ? "critical" : runwayWeeks !== null && compareMoney(runwayWeeks, "8.0000") < 0 ? "caution" : "healthy";
 
   const arSummary = summariseSide(arItems, grid.asOf, ar.scheduled, arStats.globalAvg);
   const apSummary = summariseSide(apItems, grid.asOf, ap.scheduled, apStats.globalAvg);
 
   const partyTotalsFor = (side: "ar" | "ap") => {
-    const byParty = new Map<string, { name: string; amount: number; count: number }>();
+    const byParty = new Map<string, { name: string; amount: string; count: number }>();
     for (const w of weeks) {
       for (const e of side === "ar" ? w.arEntries : w.apEntries) {
-        const cur = byParty.get(e.partyName) ?? { name: e.partyName, amount: 0, count: 0 };
-        cur.amount += e.amount;
+        const cur = byParty.get(e.partyName) ?? { name: e.partyName, amount: ZERO_MONEY, count: 0 };
+        cur.amount = addMoney(cur.amount, e.amount);
         cur.count++;
         byParty.set(e.partyName, cur);
       }
     }
-    return [...byParty.values()].sort((a, b) => b.amount - a.amount);
+    return [...byParty.values()].sort((a, b) => compareMoney(b.amount, a.amount));
   };
 
   return {
@@ -175,14 +182,14 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
       projectedEnd,
       totalInflows: totalIn,
       totalOutflows: totalOut,
-      netChange: totalIn - totalOut,
+      netChange: subtractMoney(totalIn, totalOut),
       lowestCash,
       lowestWeek,
       burnRate,
       runwayWeeks,
       runwayStatus,
       // Coverage formula: (starting cash + AR outstanding) / AP outstanding.
-      arCoverage: apSummary.outstanding > 0 ? (startingCash + arSummary.outstanding) / apSummary.outstanding : null,
+      arCoverage: compareMoney(apSummary.outstanding, ZERO_MONEY) > 0 ? divideMoney(addMoney(startingCash, arSummary.outstanding), apSummary.outstanding) : null,
       dso: arStats.globalAvg,
       dpo: apStats.globalAvg,
     },

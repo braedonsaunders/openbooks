@@ -25,7 +25,7 @@ export function ApSelectionConfigDrawer({
   onClose: () => void
   title: string
   description: string
-  weeklyCap: number
+  weeklyCap: string
   restrictToSafe: boolean
   dpo: number
 }) {
@@ -47,7 +47,7 @@ export function ApSelectionConfigDrawer({
             { key: 'restrictToSafe', label: 'Restrict to safe capacity (0/1)', help: '1 = never recommend paying beyond the cash available that week (projected inflows − outflows). Overflow defers forward.', min: 0, max: 1, step: 1 },
           ]}
           values={{ weeklyApCap: weeklyCap, restrictToSafe: restrictToSafe ? 1 : 0 }}
-          defaults={{ weeklyApCap: 0, restrictToSafe: 0 }}
+          defaults={{ weeklyApCap: '0.0000', restrictToSafe: 0 }}
         />
 
         <Panel title="How bills are scheduled" icon={ListOrdered} bodyClassName="p-0">
