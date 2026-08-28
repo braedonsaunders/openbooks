@@ -2,6 +2,8 @@ import 'server-only'
 import { PDFDocument } from 'pdf-lib'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { allocateProportionally } from '@openbooks/engine/src/information-returns.ts'
+import { add, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { renderHtmlDocumentPdf } from '@openbooks/pdf'
 import { getS3Blob } from './file-storage'
 import { listAttachments, uploadAndAttach } from './file-cabinet'
@@ -98,27 +100,76 @@ async function addImagePage(out: PDFDocument, bytes: Buffer, contentType: string
 }
 
 /** Render the costed-timesheet page (billed time with cost + bill columns). */
+type MoneyInput = string | number | null | undefined
+
+export interface TimesheetBillAllocation {
+  /** The posted amount on the rolled-up document line. */
+  lineAmount: MoneyInput
+  /** Native hours × bill-rate amounts for every entry in the line's group. */
+  nativeBillAmounts: readonly MoneyInput[]
+}
+
+/**
+ * Allocate a rolled-up invoice line across all of the entries it bills.
+ *
+ * The native amount (hours × bill rate) is the weight for each entry. The
+ * exact largest-remainder primitive keeps every returned value at four ledger
+ * decimals while making the shares sum to the posted line amount. A group with
+ * no native value uses equal weights; ties are resolved by the stable input
+ * order, which is the query's date/employee/id order.
+ */
+export function allocateTimesheetBillAmounts(input: TimesheetBillAllocation): string[] {
+  const lineAmount = normalizeMoney(String(input.lineAmount ?? '0'))
+  const nativeBillAmounts = input.nativeBillAmounts.map((amount) => normalizeMoney(String(amount ?? '0')))
+  if (nativeBillAmounts.length === 0) return []
+  if (nativeBillAmounts.length === 1) return [lineAmount]
+
+  const hasNativeWeight = nativeBillAmounts.some((amount) => toUnits(amount) !== 0n)
+  const weights = hasNativeWeight ? nativeBillAmounts : nativeBillAmounts.map(() => '1.0000')
+  return allocateProportionally(lineAmount, weights)
+}
+
 async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumber: string, projectName: string, title: string, format: MoneyFormatter): Promise<Buffer | null> {
   const { money } = format
   const rows = (await db.execute<any>(sql`
-    select te.worked_on, coalesce(pty.display_name, '') as employee, te.hours,
+    select te.id as time_entry_id, dl.id as line_id,
+           te.worked_on, coalesce(pty.display_name, '') as employee, te.hours,
            te.cost_rate, te.bill_rate,
            te.hours * coalesce(te.cost_rate, 0) as cost_amount,
-           dl.amount as bill_amount, coalesce(i.name, '') as item
+           dl.amount as line_amount,
+           round(te.hours * coalesce(te.bill_rate, 0), 4) as native_bill_amount,
+           coalesce(i.name, '') as item
       from time_entries te
       join document_lines dl on dl.id = te.invoiced_by_line_id and dl.org_id = te.org_id
       left join parties pty on pty.id = te.employee_party_id and pty.org_id = te.org_id
       left join items i on i.id = te.item_id and i.org_id = te.org_id
      where dl.document_id = ${documentId} and te.org_id = ${orgId}
-     order by te.worked_on, employee
+     order by te.worked_on, employee, te.id
   `))
   if (rows.rows.length === 0) return null
 
-  const totals = rows.rows.reduce(
-    (a, r) => ({ hours: a.hours + Number(r.hours ?? 0), cost: a.cost + Number(r.cost_amount ?? 0), bill: a.bill + Number(r.bill_amount ?? 0) }),
-    { hours: 0, cost: 0, bill: 0 },
+  const entries = rows.rows.map((row: any) => ({ ...row, bill_amount: '0.0000' }))
+  const groups = new Map<string, { lineAmount: MoneyInput; indexes: number[]; nativeBillAmounts: MoneyInput[] }>()
+  entries.forEach((row: any, index: number) => {
+    const lineId = String(row.line_id)
+    const group = groups.get(lineId) ?? { lineAmount: row.line_amount, indexes: [], nativeBillAmounts: [] }
+    group.indexes.push(index)
+    group.nativeBillAmounts.push(row.native_bill_amount)
+    groups.set(lineId, group)
+  })
+  for (const group of groups.values()) {
+    const amounts = allocateTimesheetBillAmounts({
+      lineAmount: group.lineAmount,
+      nativeBillAmounts: group.nativeBillAmounts,
+    })
+    group.indexes.forEach((index, position) => { entries[index]!.bill_amount = amounts[position]! })
+  }
+
+  const totals = entries.reduce(
+    (a, r) => ({ hours: a.hours + Number(r.hours ?? 0), cost: a.cost + Number(r.cost_amount ?? 0), bill: add(a.bill, r.bill_amount) }),
+    { hours: 0, cost: 0, bill: '0.0000' },
   )
-  const body = rows.rows
+  const body = entries
     .map(
       (r) => `<tr>
       <td>${esc(r.worked_on)}</td><td>${esc(r.employee)}</td><td>${esc(r.item)}</td>
