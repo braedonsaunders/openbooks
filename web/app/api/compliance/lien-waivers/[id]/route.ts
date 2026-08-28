@@ -1,9 +1,9 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { guardPermission } from '@/lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardLienWaiverFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
@@ -20,7 +20,7 @@ const ALLOWED_FROM: Record<Action, string[]> = {
   sign: ['draft', 'requested', 'received'],
   reject: ['requested', 'received'],
   void: ['draft', 'requested', 'received', 'signed', 'rejected'],
-  update: ['draft', 'requested', 'received'],
+  update: ['draft', 'requested', 'received']
 }
 
 /**
@@ -42,9 +42,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
+  const parsedBody = await parseJsonBody(req, jsonObject)
+  if (!parsedBody.ok) return parsedBody.response
+  const body = parsedBody.data as {
     action?: Action
     signedByName?: string
     signedByTitle?: string | null
@@ -57,91 +57,109 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     notes?: string | null
   }
   const action: Action = body.action ?? 'update'
-
-  const before = (await db.execute<Record<string, unknown>>(sql`
-    select id, status, waiver_number, waiver_type, through_date, amount, currency, direction
-      from lien_waivers where org_id = ${orgId} and id = ${id}
-  `))
-  const waiver = before.rows[0]
-  if (!waiver) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (!ALLOWED_FROM[action].includes(String(waiver.status))) {
-    return NextResponse.json(
-      { error: `a ${waiver.status} waiver cannot be ${action === 'update' ? 'edited' : action + 'ed'}` },
-      { status: 422 },
-    )
+  if (!Object.hasOwn(ALLOWED_FROM, action)) {
+    return NextResponse.json({ error: 'unknown lien waiver action' }, { status: 400 })
   }
 
   try {
-    if (action === 'request') {
-      await db.execute(sql`
-        update lien_waivers
-           set status = 'requested', requested_at = now(), requested_by = ${actorId},
-               updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${id}`)
-    } else if (action === 'receive') {
-      await db.execute(sql`
-        update lien_waivers set status = 'received', updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${id}`)
-    } else if (action === 'sign') {
-      const name = (body.signedByName ?? '').trim()
-      if (!name) {
-        return NextResponse.json({ error: 'the name of the person who signed is required' }, { status: 400 })
+    const result = await withOrgTransaction(orgId, async () => {
+      // Lock the current row before validating its lifecycle. The lock makes
+      // the status snapshot, mutation, and audit one serializable unit: a
+      // racing request sees the committed state after the first request and
+      // cannot overwrite a signed/void waiver.
+      const before = await db.execute<Record<string, unknown>>(sql`
+        select lw.id, lw.status, lw.waiver_number, lw.waiver_type, lw.through_date,
+               lw.amount, lw.currency, lw.direction,
+               pj.subsidiary_id as "subsidiaryId"
+          from lien_waivers lw
+          join projects pj on pj.id = lw.project_id and pj.org_id = lw.org_id
+         where lw.org_id = ${orgId} and lw.id = ${id}
+         for update of lw
+      `)
+      const waiver = before.rows[0]
+      if (!waiver) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      const denied = guardSubsidiaryScope(gate, waiver.subsidiaryId as string | null | undefined)
+      if (denied) return denied
+      if (!ALLOWED_FROM[action].includes(String(waiver.status))) {
+        return NextResponse.json(
+          {
+            error: `a ${waiver.status} waiver cannot be ${action === 'update' ? 'edited' : action + 'ed'}`
+          },
+          { status: 422 }
+        )
       }
-      const signedAt = body.signedAt ?? (await businessToday(orgId))
-      // Evidence of the attestation, not a digital signature: who in this
-      // organisation recorded the executed document, and when.
-      const evidence = {
-        method: 'recorded_in_app',
-        attestedBy: actorId,
-        attestedAt: new Date().toISOString(),
-        signedByName: name,
-        signedByTitle: body.signedByTitle ?? null,
+
+      if (action === 'request') {
+        await db.execute(sql`
+          update lien_waivers
+             set status = 'requested', requested_at = now(), requested_by = ${actorId},
+                 updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and id = ${id}`)
+      } else if (action === 'receive') {
+        await db.execute(sql`
+          update lien_waivers set status = 'received', updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and id = ${id}`)
+      } else if (action === 'sign') {
+        const name = (body.signedByName ?? '').trim()
+        if (!name) {
+          return NextResponse.json({ error: 'the name of the person who signed is required' }, { status: 400 })
+        }
+        const signedAt = body.signedAt ?? (await businessToday(orgId))
+        // Evidence of the attestation, not a digital signature: who in this
+        // organisation recorded the executed document, and when.
+        const evidence = {
+          method: 'recorded_in_app',
+          attestedBy: actorId,
+          attestedAt: new Date().toISOString(),
+          signedByName: name,
+          signedByTitle: body.signedByTitle ?? null
+        }
+        await db.execute(sql`
+          update lien_waivers
+             set status = 'signed', signed_by_name = ${name},
+                 signed_by_title = ${body.signedByTitle ?? null},
+                 signed_at = ${`${signedAt}T00:00:00Z`}::timestamptz,
+                 notarized = coalesce(${body.notarized ?? null}, notarized),
+                 signature = ${JSON.stringify(evidence)}::jsonb,
+                 updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and id = ${id}`)
+      } else if (action === 'reject') {
+        const reason = (body.reason ?? '').trim()
+        if (!reason) return NextResponse.json({ error: 'a rejection needs a reason' }, { status: 400 })
+        await db.execute(sql`
+          update lien_waivers
+             set status = 'rejected', rejected_reason = ${reason},
+                 updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and id = ${id}`)
+      } else if (action === 'void') {
+        const reason = (body.reason ?? '').trim()
+        if (!reason) return NextResponse.json({ error: 'voiding needs a reason' }, { status: 400 })
+        await db.execute(sql`
+          update lien_waivers
+             set status = 'void', void_reason = ${reason}, updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and id = ${id}`)
+      } else {
+        const amountRaw = body.amount == null || body.amount === '' ? null : canonicalDecimal(body.amount, 4)
+        if (body.amount != null && body.amount !== '' && amountRaw === null) {
+          return NextResponse.json({ error: 'invalid amount' }, { status: 422 })
+        }
+        const amount = amountRaw === null ? null : normalizeMoney(amountRaw)
+        await db.execute(sql`
+          update lien_waivers
+             set through_date = coalesce(${body.throughDate ?? null}::date, through_date),
+                 amount = ${amount === null ? sql`amount` : sql`${amount}`},
+                 jurisdiction = coalesce(${body.jurisdiction ?? null}, jurisdiction),
+                 notes = coalesce(${body.notes ?? null}, notes),
+                 updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and id = ${id}`)
       }
       await db.execute(sql`
-        update lien_waivers
-           set status = 'signed', signed_by_name = ${name},
-               signed_by_title = ${body.signedByTitle ?? null},
-               signed_at = ${`${signedAt}T00:00:00Z`}::timestamptz,
-               notarized = coalesce(${body.notarized ?? null}, notarized),
-               signature = ${JSON.stringify(evidence)}::jsonb,
-               updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${id}`)
-    } else if (action === 'reject') {
-      const reason = (body.reason ?? '').trim()
-      if (!reason) return NextResponse.json({ error: 'a rejection needs a reason' }, { status: 400 })
-      await db.execute(sql`
-        update lien_waivers
-           set status = 'rejected', rejected_reason = ${reason},
-               updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${id}`)
-    } else if (action === 'void') {
-      const reason = (body.reason ?? '').trim()
-      if (!reason) return NextResponse.json({ error: 'voiding needs a reason' }, { status: 400 })
-      await db.execute(sql`
-        update lien_waivers
-           set status = 'void', void_reason = ${reason}, updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${id}`)
-    } else {
-      const amountRaw =
-        body.amount == null || body.amount === '' ? null : canonicalDecimal(body.amount, 4)
-      if (body.amount != null && body.amount !== '' && amountRaw === null) {
-        return NextResponse.json({ error: 'invalid amount' }, { status: 422 })
-      }
-      const amount = amountRaw === null ? null : normalizeMoney(amountRaw)
-      await db.execute(sql`
-        update lien_waivers
-           set through_date = coalesce(${body.throughDate ?? null}::date, through_date),
-               amount = ${amount === null ? sql`amount` : sql`${amount}`},
-               jurisdiction = coalesce(${body.jurisdiction ?? null}, jurisdiction),
-               notes = coalesce(${body.notes ?? null}, notes),
-               updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${id}`)
-    }
-    await db.execute(sql`
-      insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'lien_waivers', ${id}, ${action === 'update' ? 'update' : action},
-              ${JSON.stringify({ before: waiver, after: body })}::jsonb, ${actorId})`)
-    return NextResponse.json({ id })
+        insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'lien_waivers', ${id}, ${action === 'update' ? 'update' : action},
+                ${JSON.stringify({ before: waiver, after: body })}::jsonb, ${actorId})`)
+      return NextResponse.json({ id })
+    })
+    return result
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'save failed' }, { status: 400 })
   }
