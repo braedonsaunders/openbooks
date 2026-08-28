@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import type {
   ScheduleData,
@@ -314,19 +314,21 @@ export async function createScheduleTask(
   input: ScheduleTaskPatchInput & { name: string },
   userId: string | null,
 ) {
-  const next = (await db.execute<{ n: number }>(sql`
-    select coalesce(max(schedule_order), 0) + 1 as n from project_tasks
-     where org_id = ${orgId} and project_id = ${projectId}`))
-  const created = (await db.execute<{ id: string }>(sql`
-    insert into project_tasks (org_id, project_id, name, schedule_order, created_by, updated_by)
-    values (${orgId}, ${projectId}, ${input.name || 'New task'},
-            ${input.order ?? next.rows[0]?.n ?? 1}, ${userId}, ${userId})
-    returning id`))
-  const id = created.rows[0]?.id
-  if (!id) throw new ScheduleError('could not create task', 500)
-  const { name: _name, order: _order, ...rest } = input
-  await applyTaskPatch(orgId, projectId, id, rest, userId)
-  return id
+  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    const next = (await tx.execute<{ n: number }>(sql`
+      select coalesce(max(schedule_order), 0) + 1 as n from project_tasks
+       where org_id = ${orgId} and project_id = ${projectId}`))
+    const created = (await tx.execute<{ id: string }>(sql`
+      insert into project_tasks (org_id, project_id, name, schedule_order, created_by, updated_by)
+      values (${orgId}, ${projectId}, ${input.name || 'New task'},
+              ${input.order ?? next.rows[0]?.n ?? 1}, ${userId}, ${userId})
+      returning id`))
+    const id = created.rows[0]?.id
+    if (!id) throw new ScheduleError('could not create task', 500)
+    const { name: _name, order: _order, ...rest } = input
+    await applyTaskPatch(orgId, projectId, id, rest, userId, tx)
+    return id
+  }))
 }
 
 export async function deleteScheduleTask(orgId: string, projectId: string, taskId: string) {
@@ -448,47 +450,65 @@ export async function upsertScheduleCalendar(
   },
   userId: string | null,
 ) {
-  if (input.isDefault) {
-    await db.execute(sql`
-      update schedule_calendars set is_default = false, updated_at = now(), updated_by = ${userId}
-       where org_id = ${orgId} and (project_id = ${projectId} or project_id is null) and is_default`)
-  }
-  if (input.id) {
-    await db.execute(sql`
-      update schedule_calendars
-         set name = coalesce(${input.name ?? null}, name),
-             description = coalesce(${input.description ?? null}, description),
-             working_days = coalesce(${input.workingDays ? JSON.stringify(input.workingDays) : null}::jsonb, working_days),
-             holidays = coalesce(${input.holidays ? JSON.stringify(input.holidays) : null}::jsonb, holidays),
-             is_default = coalesce(${input.isDefault ?? null}, is_default),
-             updated_at = now(), updated_by = ${userId}
-       where id = ${input.id} and org_id = ${orgId}`)
-    return input.id
-  }
-  const created = (await db.execute<{ id: string }>(sql`
-    insert into schedule_calendars (org_id, project_id, name, description, working_days, holidays, is_default, created_by, updated_by)
-    values (${orgId}, ${projectId}, ${input.name ?? 'Calendar'}, ${input.description ?? null},
-            coalesce(${input.workingDays ? JSON.stringify(input.workingDays) : null}::jsonb,
-                     '{"0":false,"1":true,"2":true,"3":true,"4":true,"5":true,"6":false}'::jsonb),
-            coalesce(${input.holidays ? JSON.stringify(input.holidays) : null}::jsonb, '[]'::jsonb),
-            ${input.isDefault === true}, ${userId}, ${userId})
-    returning id`))
-  return created.rows[0]?.id ?? null
+  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    if (input.id) {
+      const existing = await tx.execute(sql`
+        select 1 from schedule_calendars
+         where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}`)
+      if (!existing.rows[0]) throw new ScheduleError('calendar not found', 404)
+    }
+    if (input.isDefault) {
+      await tx.execute(sql`
+        update schedule_calendars set is_default = false, updated_at = now(), updated_by = ${userId}
+         where org_id = ${orgId} and (project_id = ${projectId} or project_id is null) and is_default`)
+    }
+    if (input.id) {
+      const updated = await tx.execute<{ id: string }>(sql`
+        update schedule_calendars
+           set name = coalesce(${input.name ?? null}, name),
+               description = coalesce(${input.description ?? null}, description),
+               working_days = coalesce(${input.workingDays ? JSON.stringify(input.workingDays) : null}::jsonb, working_days),
+               holidays = coalesce(${input.holidays ? JSON.stringify(input.holidays) : null}::jsonb, holidays),
+               is_default = coalesce(${input.isDefault ?? null}, is_default),
+               updated_at = now(), updated_by = ${userId}
+         where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}
+         returning id`)
+      if (!updated.rows[0]) throw new ScheduleError('calendar not found', 404)
+      return updated.rows[0].id
+    }
+    const created = (await tx.execute<{ id: string }>(sql`
+      insert into schedule_calendars (org_id, project_id, name, description, working_days, holidays, is_default, created_by, updated_by)
+      values (${orgId}, ${projectId}, ${input.name ?? 'Calendar'}, ${input.description ?? null},
+              coalesce(${input.workingDays ? JSON.stringify(input.workingDays) : null}::jsonb,
+                       '{"0":false,"1":true,"2":true,"3":true,"4":true,"5":true,"6":false}'::jsonb),
+              coalesce(${input.holidays ? JSON.stringify(input.holidays) : null}::jsonb, '[]'::jsonb),
+              ${input.isDefault === true}, ${userId}, ${userId})
+      returning id`))
+    return created.rows[0]?.id ?? null
+  }))
 }
 
-export async function deleteScheduleCalendar(orgId: string, calendarId: string) {
-  await db.transaction(async (tx) => {
+export async function deleteScheduleCalendar(orgId: string, projectId: string, calendarId: string) {
+  await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    const existing = await tx.execute(sql`
+      select 1 from schedule_calendars
+       where id = ${calendarId} and org_id = ${orgId} and project_id = ${projectId}`)
+    if (!existing.rows[0]) throw new ScheduleError('calendar not found', 404)
+
     // Tasks and resources fall back to the default calendar rather than
     // pointing at a calendar that no longer exists.
     await tx.execute(sql`
       update project_tasks set schedule_calendar_id = null
-       where org_id = ${orgId} and schedule_calendar_id = ${calendarId}`)
+       where org_id = ${orgId} and project_id = ${projectId} and schedule_calendar_id = ${calendarId}`)
     await tx.execute(sql`
       update schedule_resources set calendar_id = null
-       where org_id = ${orgId} and calendar_id = ${calendarId}`)
-    await tx.execute(sql`
-      delete from schedule_calendars where id = ${calendarId} and org_id = ${orgId}`)
-  })
+       where org_id = ${orgId} and project_id = ${projectId} and calendar_id = ${calendarId}`)
+    const deleted = await tx.execute<{ id: string }>(sql`
+      delete from schedule_calendars
+       where id = ${calendarId} and org_id = ${orgId} and project_id = ${projectId}
+       returning id`)
+    if (!deleted.rows[0]) throw new ScheduleError('calendar not found', 404)
+  }))
 }
 
 function optionalCostRate(value: unknown): string | null | 'invalid' {
@@ -519,37 +539,59 @@ export async function upsertScheduleResource(
   if (costRate === 'invalid') {
     throw new ScheduleError('cost rate must be a number with no more than four decimal places', 422)
   }
-  if (input.id) {
-    await db.execute(sql`
-      update schedule_resources
-         set name = coalesce(${input.name ?? null}, name),
-             role = coalesce(${input.role ?? null}, role),
-             kind = coalesce(${input.kind ?? null}, kind),
-             calendar_id = ${input.calendarId === undefined ? sql`calendar_id` : input.calendarId},
-             default_units = coalesce(${input.defaultUnits ?? null}, default_units),
-             capacity_per_day = coalesce(${input.capacityPerDay ?? null}, capacity_per_day),
-             cost_rate = ${costRate === undefined ? sql`cost_rate` : sql`${costRate}`},
-             updated_at = now(), updated_by = ${userId}
-       where id = ${input.id} and org_id = ${orgId}`)
-    return input.id
-  }
-  const created = (await db.execute<{ id: string }>(sql`
-    insert into schedule_resources
-      (org_id, project_id, calendar_id, name, role, kind, default_units, capacity_per_day, cost_rate, created_by, updated_by)
-    values (${orgId}, ${projectId}, ${input.calendarId ?? null}, ${input.name ?? 'Resource'},
-            ${input.role ?? null}, ${input.kind ?? 'crew'},
-            ${Math.max(0.0001, Number(input.defaultUnits ?? 1) || 1)},
-            ${Math.max(0.0001, Number(input.capacityPerDay ?? 1) || 1)},
-            ${costRate ?? null}, ${userId}, ${userId})
-    returning id`))
-  return created.rows[0]?.id ?? null
+  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    if (input.id) {
+      const existing = await tx.execute(sql`
+        select 1 from schedule_resources
+         where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}`)
+      if (!existing.rows[0]) throw new ScheduleError('resource not found', 404)
+
+      const updated = await tx.execute<{ id: string }>(sql`
+        update schedule_resources
+           set name = coalesce(${input.name ?? null}, name),
+               role = coalesce(${input.role ?? null}, role),
+               kind = coalesce(${input.kind ?? null}, kind),
+               calendar_id = ${input.calendarId === undefined ? sql`calendar_id` : input.calendarId},
+               default_units = coalesce(${input.defaultUnits ?? null}, default_units),
+               capacity_per_day = coalesce(${input.capacityPerDay ?? null}, capacity_per_day),
+               cost_rate = ${costRate === undefined ? sql`cost_rate` : sql`${costRate}`},
+               updated_at = now(), updated_by = ${userId}
+         where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}
+         returning id`)
+      if (!updated.rows[0]) throw new ScheduleError('resource not found', 404)
+      return updated.rows[0].id
+    }
+    const created = (await tx.execute<{ id: string }>(sql`
+      insert into schedule_resources
+        (org_id, project_id, calendar_id, name, role, kind, default_units, capacity_per_day, cost_rate, created_by, updated_by)
+      values (${orgId}, ${projectId}, ${input.calendarId ?? null}, ${input.name ?? 'Resource'},
+              ${input.role ?? null}, ${input.kind ?? 'crew'},
+              ${Math.max(0.0001, Number(input.defaultUnits ?? 1) || 1)},
+              ${Math.max(0.0001, Number(input.capacityPerDay ?? 1) || 1)},
+              ${costRate ?? null}, ${userId}, ${userId})
+      returning id`))
+    return created.rows[0]?.id ?? null
+  }))
 }
 
-export async function deleteScheduleResource(orgId: string, resourceId: string) {
-  await db.transaction(async (tx) => {
+export async function deleteScheduleResource(orgId: string, projectId: string, resourceId: string) {
+  await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    const existing = await tx.execute(sql`
+      select 1 from schedule_resources
+       where id = ${resourceId} and org_id = ${orgId} and project_id = ${projectId}`)
+    if (!existing.rows[0]) throw new ScheduleError('resource not found', 404)
+
     await tx.execute(sql`
-      delete from schedule_task_assignments where org_id = ${orgId} and resource_id = ${resourceId}`)
-    await tx.execute(sql`
-      delete from schedule_resources where id = ${resourceId} and org_id = ${orgId}`)
-  })
+      delete from schedule_task_assignments
+       where org_id = ${orgId} and resource_id = ${resourceId}
+         and task_id in (
+           select id from project_tasks
+            where org_id = ${orgId} and project_id = ${projectId}
+         )`)
+    const deleted = await tx.execute<{ id: string }>(sql`
+      delete from schedule_resources
+       where id = ${resourceId} and org_id = ${orgId} and project_id = ${projectId}
+       returning id`)
+    if (!deleted.rows[0]) throw new ScheduleError('resource not found', 404)
+  }))
 }
