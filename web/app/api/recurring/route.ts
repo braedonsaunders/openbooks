@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { guardPermission } from "../../../lib/authz";
+import { can, guardPermission } from "../../../lib/authz";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents";
 
@@ -14,7 +14,9 @@ const CADENCES = ["weekly", "biweekly", "monthly", "quarterly", "annually", "cus
  * Recurring schedules — a template document + a cadence. The engine runner
  * (engine/src/recurring.ts, driven by the scheduler) clones the template into a
  * fresh document each time next_run_on comes due. Gated on documents.manage
- * because a schedule mints (and optionally posts) real documents.
+ * because a schedule mints (and optionally posts) real documents. Auto-posting
+ * additionally requires gl.post because the scheduler later posts due
+ * documents as a system actor.
  */
 export async function GET() {
   const authz = await guardPermission("documents.manage");
@@ -49,9 +51,21 @@ export async function POST(req: Request) {
     cron?: string | null;
     nextRunOn?: string;
     endsOn?: string | null;
-    autoPost?: boolean;
+    autoPost?: unknown;
     name?: string | null;
   };
+
+  // autoPost is a privileged capability, not just a storage flag: every due
+  // occurrence may reach the ledger after the caller's request has finished.
+  // Reject non-booleans rather than allowing truthy/falsy coercion to select a
+  // posting path the caller did not explicitly authorize.
+  if (body.autoPost !== undefined && typeof body.autoPost !== "boolean") {
+    return NextResponse.json({ error: "autoPost must be a boolean" }, { status: 400 });
+  }
+  const autoPost = body.autoPost ?? false;
+  if (autoPost && !can(authz, "gl.post")) {
+    return NextResponse.json({ error: "missing permission: gl.post" }, { status: 403 });
+  }
 
   if (!body.templateDocumentId && !body.templateDocumentNumber) {
     return NextResponse.json({ error: "a template document is required" }, { status: 400 });
@@ -83,7 +97,7 @@ export async function POST(req: Request) {
       insert into recurring_schedules (org_id, template_document_id, cadence, cron, next_run_on, ends_on,
                                        auto_post, name, created_by, updated_by)
       values (${authz.user.orgId}, ${templateDocumentId}, ${body.cadence}, ${body.cron ?? null},
-              ${nextRunOn}, ${body.endsOn ?? null}, ${body.autoPost ?? false}, ${body.name ?? null},
+              ${nextRunOn}, ${body.endsOn ?? null}, ${autoPost}, ${body.name ?? null},
               ${authz.user.id}, ${authz.user.id})
       returning *
     `));
