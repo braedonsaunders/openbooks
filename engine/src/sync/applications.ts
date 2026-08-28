@@ -226,8 +226,15 @@ export async function reconcileApplications(
       let remaining = want - have;
       if (remaining <= 0n) { alreadySettled++; continue; }
       const [paymentRef, appliedRef] = key.split("|");
-      const payLines = linesByRef.get(paymentRef!);
-      const appLines = linesByRef.get(appliedRef!);
+      // `key` is assembled from both source references above, but keep the
+      // parser total under `noUncheckedIndexedAccess` before using the refs as
+      // map keys (and before storing the payment ref on a pending row).
+      if (paymentRef === undefined || appliedRef === undefined) {
+        skippedNoLine++;
+        continue;
+      }
+      const payLines = linesByRef.get(paymentRef);
+      const appLines = linesByRef.get(appliedRef);
       if (!payLines || !appLines) { skippedNoLine++; continue; }
       // Journal line numbers are only meaningful inside their own entry. They
       // do not provide an ordering relation between the payment and applied
