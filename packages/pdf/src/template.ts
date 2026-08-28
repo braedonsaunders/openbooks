@@ -2,7 +2,7 @@
 // record values using this grammar and safety model:
 //
 //   {{ path }}            escaped value (path = key, this, this.key, a.b.c, @index…)
-//   {{{ path }}}          raw (unescaped) value — for fields that hold trusted HTML
+//   {{{ path }}}          raw (unescaped) value — only when explicitly enabled
 //   {{#each coll}}…{{/each}}       iterate an array
 //   {{#if path}}…{{else}}…{{/if}}  conditional (empty array / 0 / '' / null = false)
 //
@@ -367,8 +367,9 @@ function renderNodes(nodes: TplNode[], stack: Frame[], state: RenderState): void
 /**
  * Render an authored template that may contain {{#each}} / {{#if}} blocks and
  * dotted paths, against `values`. When `escapeHtml` is set, substituted values
- * are escaped ({{{raw}}} opts a field out). Untrusted boundaries set
- * `allowRawValues: false`, which treats triple-brace values as escaped data too.
+ * are escaped. Triple-brace values are treated as escaped data unless the
+ * caller explicitly opts into `allowRawValues: true` for a trusted value
+ * boundary.
  */
 export function renderTemplate(
   tpl: string,
@@ -384,7 +385,9 @@ export function renderTemplate(
     out: new BoundedStringBuilder(TEMPLATE_RENDER_LIMITS.renderOutputChars, 'Rendered output'),
     loopIterations: 0,
     escape: opts?.escapeHtml ?? false,
-    allowRawValues: opts?.allowRawValues ?? true,
+    // Fail closed: record values are untrusted by default. Callers that own a
+    // trusted HTML boundary must opt in explicitly with allowRawValues: true.
+    allowRawValues: opts?.allowRawValues ?? false,
   }
   renderNodes(nodes, [{ data: values, item: values }], renderState)
   return renderState.out.toString()
