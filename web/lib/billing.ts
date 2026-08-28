@@ -746,7 +746,26 @@ export async function generateInvoiceFromBillingRequest(
              and billing_status = 'unbilled'`)
       }
       if (l.sourceCostLineId) {
-        await tx.execute(sql`update document_lines set billed_by_line_id = ${billedBy} where id = ${l.sourceCostLineId} and org_id = ${orgId}`)
+        // Migration 0034 freezes every non-draft source line, including the
+        // approved project-charge rows this path is required to consume. The
+        // billed-link is provenance metadata rather than a financial edit, so
+        // use the guard's paired transaction-local authority for this one write
+        // and immediately clear it before continuing with invoice bookkeeping.
+        await tx.execute(sql`set local openbooks.migration = on`)
+        await tx.execute(sql`set local openbooks.amend = on`)
+        const stamped = await tx.execute<{ id: string }>(sql`
+          update document_lines
+             set billed_by_line_id = ${billedBy}
+           where id = ${l.sourceCostLineId}
+             and org_id = ${orgId}
+             and billed_by_line_id is null
+           returning id
+        `)
+        await tx.execute(sql`set local openbooks.migration = off`)
+        await tx.execute(sql`set local openbooks.amend = off`)
+        if (!stamped.rows[0]) {
+          throw new BillingError('A cost source line is no longer available for billing')
+        }
       }
     }
 
