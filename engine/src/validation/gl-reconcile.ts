@@ -70,7 +70,7 @@ const line = (label: string, ours: number, theirs: number) => {
            coalesce(sum(jl.amount) filter (where a.type = any(${`{${COST.join(",")}}`}::text[])), 0)::text cost
       from journal_lines jl
       join accounts a on a.id = jl.account_id
-      join journal_entries je on je.id = jl.entry_id
+      join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
      where jl.org_id = ${ORG} and je.posting_date >= ${SINCE}`))) as any).rows[0];
   const ourInv = ((await retry(() => db.execute(sql`
     select count(*)::int n, coalesce(sum(total), 0)::text total from documents
@@ -92,7 +92,7 @@ const line = (label: string, ours: number, theirs: number) => {
            count(distinct jl.project_id)::int projects
       from journal_lines jl
       join accounts a on a.id = jl.account_id
-      join journal_entries je on je.id = jl.entry_id
+      join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
      where jl.org_id = ${ORG} and jl.project_id is not null and je.posting_date >= ${SINCE}`))) as any).rows[0];
   const jobRevenue = Number(job.revenue), jobCost = Number(job.cost), overhead = Number(job.overhead);
   console.log(`\nJOB-TAGGED (${job.projects} projects, detail exists only after cutover)`);
