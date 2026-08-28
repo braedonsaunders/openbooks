@@ -266,6 +266,14 @@ export async function correctPostedDocument(
           reason: input.correction.amendmentReason ?? "",
           source: context.source,
         });
+        // Approval routing is part of the idempotent command. Flow runs, gates,
+        // and deferred effects must commit with the correction and void so a
+        // failed dispatch rolls the command back and a replay cannot skip it.
+        await runPostedCorrectionDraftFlows(replacement.id, header.kind, {
+          orgId: context.authz.user.orgId,
+          userId: context.authz.user.id,
+          source: context.source,
+        });
         return {
           correctionId: replacement.id,
           correctionNumber: replacement.documentNumber,
@@ -283,13 +291,5 @@ export async function correctPostedDocument(
       }
     },
   });
-  if (!outcome.replayed) {
-    const result = outcome.value as { correctionId: string };
-    await runPostedCorrectionDraftFlows(result.correctionId, header.kind, {
-      orgId: context.authz.user.orgId,
-      userId: context.authz.user.id,
-      source: context.source,
-    });
-  }
   return { replayed: outcome.replayed, result: outcome.value };
 }
