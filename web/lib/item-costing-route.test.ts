@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
@@ -448,3 +449,26 @@ for (const failing of ['upsert', 'audit'] as const) {
     assert.equal(routeState.committedAudits.length, 0, 'no orphan audit evidence')
   })
 }
+
+// The item-rate route is a neighboring API boundary but its live integration
+// suite needs a database. Keep a cheap source-level guard in this route-boundary
+// suite so a future edit cannot silently restore the two costly regressions.
+const ratesRouteSource = readFileSync(
+  new URL('../app/api/items/[id]/rates/route.ts', import.meta.url),
+  'utf8',
+)
+const itemRatesSource = readFileSync(new URL('./item-rates.ts', import.meta.url), 'utf8')
+
+test('item-rate version replacement copies unrelated item lines', () => {
+  assert.match(ratesRouteSource, /const previousVersion = \(\(await tx\.execute/)
+  assert.match(ratesRouteSource, /insert into item_rate_lines \([\s\S]*select org_id, \$\{version\.rows\[0\]\.id\}[\s\S]*item_id <> \$\{id\}/)
+})
+
+test('time bill snapshots rank matching dimensions and use the organization currency for defaults', () => {
+  assert.match(itemRatesSource, /a\.department_id is null or a\.department_id = \$\{te\.department_id \?\? null\}/)
+  assert.match(itemRatesSource, /a\.subsidiary_id is null or a\.subsidiary_id = \$\{te\.subsidiary_id \?\? null\}/)
+  assert.match(itemRatesSource, /a\.location_id is null and a\.class_id is null/)
+  assert.match(itemRatesSource, /order by c\.priority, c\.dimension_specificity desc/)
+  assert.match(itemRatesSource, /o\.base_currency as default_rate_currency/)
+  assert.match(itemRatesSource, /sourceCurrency = te\.default_rate_currency/)
+})

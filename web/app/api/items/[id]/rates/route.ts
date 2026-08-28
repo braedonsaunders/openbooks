@@ -157,6 +157,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
          where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId} and effective_from > ${body.effectiveFrom}
          order by effective_from limit 1
       `)))
+      // Versions are snapshots for the whole rate book, not just this item.
+      // Keep the latest earlier snapshot so changing one item does not erase
+      // every other item's rates from the replacement version.
+      const previousVersion = ((await tx.execute<{ id: string }>(sql`
+        select id from item_rate_versions
+         where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId}
+           and effective_from < ${body.effectiveFrom} and status = 'active'
+         order by effective_from desc limit 1
+      `)))
       await tx.execute(sql`
         insert into item_rate_profiles (org_id, item_id, base_unit, pricing_policy, invoice_presentation, created_by, updated_by)
         values (${gate.user.orgId}, ${id}, ${baseUnit}, ${body.pricingPolicy}, ${body.invoicePresentation ?? 'rate_components'}, ${gate.user.id}, ${gate.user.id})
@@ -175,6 +184,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                 ${nextVersion.rows[0]?.effective_from ? sql`(${nextVersion.rows[0].effective_from}::date - interval '1 day')::date` : null},
                 'draft', ${gate.user.id}, ${gate.user.id}) returning id
       `)) as any
+      if (previousVersion.rows[0]?.id) {
+        await tx.execute(sql`
+          insert into item_rate_lines (
+            org_id, version_id, item_id, unit_code, unit_name, base_quantity,
+            cost_rate, bill_rate, time_type_bill_rates, sort_order, created_by, updated_by
+          )
+          select org_id, ${version.rows[0].id}, item_id, unit_code, unit_name, base_quantity,
+                 cost_rate, bill_rate, time_type_bill_rates, sort_order, ${gate.user.id}, ${gate.user.id}
+            from item_rate_lines
+           where org_id = ${gate.user.orgId} and version_id = ${previousVersion.rows[0].id}
+             and item_id <> ${id}
+        `)
+      }
       let sort = 0
       for (const tier of tiers) {
         await tx.execute(sql`
