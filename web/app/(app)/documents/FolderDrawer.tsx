@@ -284,7 +284,7 @@ export function FolderDrawer({
               )}
             </div>
 
-            {mode === 'edit' && !isSystem ? (
+            {mode === 'create' || (mode === 'edit' && !isSystem) ? (
               <label className="flex items-start gap-2">
                 <input
                   type="checkbox"
