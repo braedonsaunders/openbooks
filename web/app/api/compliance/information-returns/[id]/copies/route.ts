@@ -3,6 +3,8 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
+  canFurnishRecipientCopies,
+  InformationReturnError,
   stampRecipientCopiesPrinted,
 } from '@openbooks/engine/src/information-returns.ts'
 import { guardPermission } from '@/lib/authz'
@@ -50,11 +52,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       status: string
       payer_snapshot: { taxIds?: Record<string, string> } | null
       payer_name: string
-      org_tax_ids: Record<string, string> | null
     }>(sql`
     select f.tax_year, f.form_type, f.currency, f.status, f.payer_snapshot,
-           coalesce(f.payer_snapshot->>'name', s.name, o.name) as payer_name,
-           o.settings->'taxIds' as org_tax_ids
+           coalesce(f.payer_snapshot->>'name', s.name, o.name) as payer_name
       from information_return_filings f
       join orgs o on o.id = f.org_id
       left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
@@ -62,6 +62,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   `))
   const filing = filings.rows[0]
   if (!filing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!canFurnishRecipientCopies(filing.status)) {
+    return NextResponse.json(
+      { error: `a ${filing.status} filing is not frozen — finalize it before furnishing recipient copies` },
+      { status: 422 },
+    )
+  }
 
   const recipients = (await db.execute<{
       id: string
@@ -90,7 +96,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   // The payer TIN comes from the frozen snapshot once finalized, so a reprint of
   // a filed return reproduces exactly what was furnished.
-  const taxIds = filing.payer_snapshot?.taxIds ?? filing.org_tax_ids ?? {}
+  // The filing is frozen above, so only its payer snapshot is authoritative.
+  // Never put a live org tax ID on a stamped copy: changing org settings after
+  // finalization must not alter the evidence furnished to the recipient.
+  const taxIds = filing.payer_snapshot?.taxIds ?? {}
   const payerTin = taxIds.ein ?? taxIds.federal ?? taxIds.bn ?? Object.values(taxIds)[0] ?? null
 
   const forms: RecipientFormData[] = recipients.rows.map((r) => ({
@@ -116,7 +125,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   // Furnishing is stamped through the engine's one owned write to recipients —
   // the only mutation a frozen filing still accepts, because handing over a
   // copy is not an edit of what was transmitted.
-  await stampRecipientCopiesPrinted({ orgId, filingId: id, recipientId, actorId })
+  try {
+    await stampRecipientCopiesPrinted({ orgId, filingId: id, recipientId, actorId })
+  } catch (error) {
+    if (error instanceof InformationReturnError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+    throw error
+  }
 
   const stamp = await businessToday(orgId)
   const filename =
