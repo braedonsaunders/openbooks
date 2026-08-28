@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db, inDbTransaction } from "@openbooks/engine/src/db.ts";
+import { inDbTransaction } from "@openbooks/engine/src/db.ts";
 
 /**
  * Every fixed asset needs a category (fixed_assets.category_id is NOT NULL and
