@@ -144,6 +144,18 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0061_cam_pool_source_account_overlap.sql",
     "0062_recognition_events.sql",
     "0063_email_delivery_idempotency.sql",
+    "0064_order_quantity_progress_precision.sql",
+    "0065_payroll_voided_run_replacement.sql",
+    "0066_change_set_review_approval_audit.sql",
+    "0067_insights_home_uniqueness.sql",
+    "0068_equipment_capitalization_concurrency.sql",
+    "0070_governed_query_private_projection.sql",
+    "0071_information_return_root_uniqueness.sql",
+    "0072_payroll_parallel_unattributed_uniqueness.sql",
+    "0073_pay_application_invoice_tenant_fk.sql",
+    "0074_recognition_event_idempotency.sql",
+    "0075_payroll_bank_file_release_status_evidence.sql",
+    "0076_work_schedule_group_expression_uniqueness.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
