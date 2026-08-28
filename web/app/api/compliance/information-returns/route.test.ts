@@ -25,4 +25,8 @@ describe('information-return authorization boundaries', () => {
     assert.match(route, /subsidiaryId must be a valid UUID/)
     assert.doesNotMatch(route, /body\.subsidiaryId && isUuid\(body\.subsidiaryId\) \? body\.subsidiaryId : null/)
   })
+
+  it('refuses incomplete current-year filings', () => {
+    assert.match(route, /if \(taxYear >= Number\(\(await businessToday\(orgId\)\)\.slice\(0, 4\)\)\)/)
+  })
 })

@@ -48,7 +48,7 @@ export async function POST(req: Request) {
   if (!Number.isInteger(taxYear) || taxYear < 1990 || taxYear > 2200) {
     return NextResponse.json({ error: 'a four-digit tax year is required' }, { status: 400 })
   }
-  if (taxYear > Number((await businessToday(orgId)).slice(0, 4))) {
+  if (taxYear >= Number((await businessToday(orgId)).slice(0, 4))) {
     return NextResponse.json({ error: 'that tax year has not started yet' }, { status: 422 })
   }
   if (!FORM_TYPES.includes(body.formType as FormType)) {
