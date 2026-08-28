@@ -1,14 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import nodeTest from 'node:test'
-
-// The repository's broad Node test command also discovers this file, while
-// the focused compliance gate uses Vitest. Load Vitest only in its runner so
-// the normal Node suite does not acquire a new runtime dependency.
-const vitest = process.env.VITEST ? await import('vitest') : null
-const describe = vitest?.describe ?? nodeTest
-const it = vitest?.it ?? nodeTest
 
 const collectionRoute = readFileSync(fileURLToPath(new URL('./route.ts', import.meta.url)), 'utf8')
 const lifecycleRoute = readFileSync(fileURLToPath(new URL('./[id]/route.ts', import.meta.url)), 'utf8')
