@@ -68,6 +68,7 @@ export async function PATCH(req: Request, { params }: Params) {
         select id, org_id, through_date, statement_balance
           from reconciliations
          where id = ${id} and org_id = ${user.orgId} and status <> 'signed_off'
+         for update
       `))
       const before = existing.rows[0]
       if (!before) return { missing: true as const }
