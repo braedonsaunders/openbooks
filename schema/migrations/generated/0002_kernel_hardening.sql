@@ -29,16 +29,37 @@ SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', false);
 -- 1. Query-console function hardening.
 --
 -- The governed query console switches to the read-only openbooks_read role
--- before user SQL executes, but these pg_catalog server-file readers are
--- granted to PUBLIC by cluster default, so role grants alone would still let
--- console SQL read server files and logs. Revoke EXECUTE from PUBLIC on every
--- signature of pg_read_file / pg_read_binary_file / pg_ls_dir /
--- pg_current_logfile that exists in this cluster, discovered from pg_proc so
--- the statement set adapts across PostgreSQL versions whose signatures differ.
+-- before user SQL executes, so any EXECUTE these pg_catalog server-file readers
+-- hold for PUBLIC would still let console SQL read server files and logs.
+-- Revoke it from every signature of pg_read_file / pg_read_binary_file /
+-- pg_ls_dir / pg_current_logfile that exists in this cluster, discovered from
+-- pg_proc so the statement set adapts across PostgreSQL versions whose
+-- signatures differ.
+--
+-- Two properties this block must have, which an unconditional REVOKE loop did
+-- not:
+--
+--   * Only revoke what is actually granted. These functions are NOT granted to
+--     PUBLIC by default on a stock PostgreSQL 16 cluster, so the loop spent
+--     every run issuing REVOKEs for privileges nobody held.
+--   * Survive an unprivileged migration role. bootstrap.ts supports a
+--     constrained schema-owner mode whose role deliberately owns every public
+--     table and is deliberately NOT a superuser
+--     (assertConstrainedSchemaOwnerMigrationRole rejects the role otherwise).
+--     Such a role does not own pg_catalog and cannot REVOKE on it, so an
+--     unconditional REVOKE aborted the whole migration chain at this file with
+--     "permission denied for function pg_current_logfile" — before a single
+--     later migration could run.
+--
+-- Skipping a privilege PUBLIC does not hold changes nothing. A privilege it
+-- DOES hold that this role cannot revoke is a real gap, so that case raises a
+-- WARNING naming the exact statement an operator must run as superuser rather
+-- than passing silently.
 --
 DO $query_console_file_access$
 DECLARE
   fn record;
+  revoke_statement text;
 BEGIN
   FOR fn IN
     SELECT p.oid AS oid, n.nspname AS nspname, p.proname AS proname
@@ -51,19 +72,30 @@ BEGIN
          'pg_ls_dir',
          'pg_current_logfile'
        )
+       AND pg_catalog.has_function_privilege('public', p.oid, 'EXECUTE')
   LOOP
-    EXECUTE format(
+    revoke_statement := format(
       'revoke execute on function %I.%I(%s) from public',
       fn.nspname,
       fn.proname,
       pg_catalog.pg_get_function_identity_arguments(fn.oid)
     );
+    BEGIN
+      EXECUTE revoke_statement;
+    EXCEPTION
+      WHEN undefined_function THEN
+        -- A discovered signature disappeared between catalog scan and revoke
+        -- (concurrent version change): nothing left to revoke for it.
+        NULL;
+      WHEN insufficient_privilege THEN
+        RAISE WARNING
+          'query console hardening incomplete: PUBLIC retains EXECUTE on %.%(%) and this role cannot revoke it. Run as a superuser: %',
+          fn.nspname,
+          fn.proname,
+          pg_catalog.pg_get_function_identity_arguments(fn.oid),
+          revoke_statement;
+    END;
   END LOOP;
-EXCEPTION
-  WHEN undefined_function THEN
-    -- A discovered signature disappeared between catalog scan and revoke
-    -- (concurrent version change): nothing left to revoke for it.
-    NULL;
 END
 $query_console_file_access$;
 
@@ -244,6 +276,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS tax_rates_code_effective
 -- collision-free against arbitrary pre-existing data. Foreign keys reference
 -- journal_entries(id), never entry_number, so renames break nothing. Logged
 -- via NOTICE for audit evidence.
+--
+-- je_guard() rejects any UPDATE to a posted or reversed entry. Only a database
+-- old enough to have accumulated duplicates has any, and by then they are
+-- posted — a fresh install has none, so this block never ran until it met real
+-- data and then aborted the entire migration chain with "journal entry % is
+-- posted and immutable".
+--
+-- This is a controlled schema repair: status is unchanged, and no line,
+-- amount, period or book is touched — only the header's entry_number moves,
+-- which no foreign key references. Lock out concurrent journal-entry writers,
+-- suspend the guard transactionally for this repair, and emit durable
+-- before/after audit evidence for every renamed entry. PostgreSQL restores the
+-- trigger automatically if the migration rolls back; the explicit ENABLE
+-- restores it before later sections run on success.
+LOCK TABLE public.journal_entries IN SHARE ROW EXCLUSIVE MODE;
+ALTER TABLE public.journal_entries DISABLE TRIGGER je_guard;
+
 DO $journal_entry_number_repair$
 DECLARE
   rec record;
@@ -252,17 +301,25 @@ DECLARE
   v_renamed integer := 0;
 BEGIN
   FOR rec IN
-    SELECT j.id, j.org_id, j.entry_number,
-           row_number() OVER (PARTITION BY j.org_id, j.entry_number ORDER BY j.id) AS rn
+    WITH duplicate_keys AS MATERIALIZED (
+      SELECT org_id, entry_number
+        FROM public.journal_entries
+       WHERE entry_number IS NOT NULL
+       GROUP BY org_id, entry_number
+      HAVING count(*) > 1
+    )
+    SELECT j.id,
+           j.org_id,
+           j.entry_number,
+           row_number() OVER (
+             PARTITION BY j.org_id, j.entry_number
+             ORDER BY j.id
+           ) AS rn
       FROM public.journal_entries j
-     WHERE j.entry_number IS NOT NULL
-       AND EXISTS (
-         SELECT 1
-           FROM public.journal_entries d
-          WHERE d.org_id = j.org_id
-            AND d.entry_number = j.entry_number
-          HAVING count(*) > 1
-       )
+      JOIN duplicate_keys d
+        ON d.org_id = j.org_id
+       AND d.entry_number = j.entry_number
+     ORDER BY j.org_id, j.entry_number, j.id
   LOOP
     IF rec.rn = 1 THEN CONTINUE; END IF;
     v_suffix := rec.rn - 1;
@@ -279,12 +336,43 @@ BEGIN
     UPDATE public.journal_entries
        SET entry_number = v_candidate
      WHERE id = rec.id;
+
+    INSERT INTO public.audit_log (
+      id,
+      org_id,
+      table_name,
+      row_id,
+      action,
+      changes,
+      actor_id,
+      request_id
+    ) VALUES (
+      public.uuid_generate_v7(),
+      rec.org_id,
+      'journal_entries',
+      rec.id,
+      'update',
+      jsonb_build_object(
+        'operation', 'journal_entry_number_duplicate_repair',
+        'entryNumber', jsonb_build_object(
+          'before', rec.entry_number,
+          'after', v_candidate
+        ),
+        'reason', 'Duplicate organization-scoped entry number predating uniqueness enforcement.',
+        'migration', '0002_kernel_hardening'
+      ),
+      NULL,
+      'migration:0002_kernel_hardening'
+    );
+
     v_renamed := v_renamed + 1;
   END LOOP;
 
   RAISE NOTICE 'journal_entries repair: % duplicate entry number(s) renamed with -R suffixes', v_renamed;
 END
 $journal_entry_number_repair$;
+
+ALTER TABLE public.journal_entries ENABLE TRIGGER je_guard;
 
 -- Naming follows documents_org_kind_number. entry_number is NOT NULL today
 -- (schema/src/ledger.ts); the partial predicate is kept deliberately — it
