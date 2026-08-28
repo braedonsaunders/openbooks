@@ -197,13 +197,18 @@ export async function snapshotTimeBillRates(
       project_id: string | null
       time_type_id: string | null
       worked_on: string
+      department_id: string | null
+      subsidiary_id: string | null
       bill_multiplier: string
       default_rate: string | null
+      default_rate_currency: string
       target_currency: string
     }>(sql`
     select te.id, te.item_id, te.project_id, te.time_type_id, te.worked_on,
+           te.department_id, p.subsidiary_id,
            coalesce(tt.bill_multiplier, '1') as bill_multiplier,
-           i.default_rate, coalesce(s.base_currency,o.base_currency) as target_currency
+           i.default_rate, o.base_currency as default_rate_currency,
+           coalesce(s.base_currency,o.base_currency) as target_currency
       from time_entries te
       left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
       left join items i on i.id = te.item_id and i.org_id = te.org_id
@@ -215,25 +220,52 @@ export async function snapshotTimeBillRates(
   for (const te of rows.rows) {
     const line = (await db.execute<{ rate_line_id:string; bill_rate: string | null; time_type_bill_rates: Record<string, string> | null; rate_version_id:string; rate_book_id:string; source_currency:string }>(sql`
       with candidates as (
-        select a.rate_book_id,a.rate_version_id, 1 as priority, a.effective_from
+        -- Time entries carry department and inherit subsidiary from the
+        -- project; they have no location/class dimensions, so those scoped
+        -- assignments must not match an entry whose context cannot prove it.
+        select a.rate_book_id,a.rate_version_id, 1 as priority,
+               (case when a.department_id is not null then 1 else 0 end
+                + case when a.subsidiary_id is not null then 1 else 0 end
+                + case when a.location_id is not null then 1 else 0 end
+                + case when a.class_id is not null then 1 else 0 end) as dimension_specificity,
+               a.effective_from
           from item_rate_book_assignments a
          where a.org_id = ${orgId} and a.is_active and a.project_id = ${te.project_id}
+           and (a.department_id is null or a.department_id = ${te.department_id ?? null})
+           and (a.subsidiary_id is null or a.subsidiary_id = ${te.subsidiary_id ?? null})
+           and a.location_id is null and a.class_id is null
            and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id} and org_id = ${orgId}), ${te.worked_on}::date) else ${te.worked_on}::date end)
            and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id} and org_id = ${orgId}), ${te.worked_on}::date) else ${te.worked_on}::date end)
         union all
-        select a.rate_book_id,a.rate_version_id, 2, a.effective_from
+        select a.rate_book_id,a.rate_version_id, 2,
+               (case when a.department_id is not null then 1 else 0 end
+                + case when a.subsidiary_id is not null then 1 else 0 end
+                + case when a.location_id is not null then 1 else 0 end
+                + case when a.class_id is not null then 1 else 0 end),
+               a.effective_from
           from item_rate_book_assignments a
          where a.org_id = ${orgId} and a.is_active
            and a.customer_id = (select customer_id from projects where id = ${te.project_id} and org_id = ${orgId})
+           and (a.department_id is null or a.department_id = ${te.department_id ?? null})
+           and (a.subsidiary_id is null or a.subsidiary_id = ${te.subsidiary_id ?? null})
+           and a.location_id is null and a.class_id is null
            and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id} and org_id = ${orgId}), ${te.worked_on}::date) else ${te.worked_on}::date end)
            and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id} and org_id = ${orgId}), ${te.worked_on}::date) else ${te.worked_on}::date end)
         union all
-        select a.rate_book_id,a.rate_version_id, 3, a.effective_from
+        select a.rate_book_id,a.rate_version_id, 4,
+               (case when a.department_id is not null then 1 else 0 end
+                + case when a.subsidiary_id is not null then 1 else 0 end
+                + case when a.location_id is not null then 1 else 0 end
+                + case when a.class_id is not null then 1 else 0 end),
+               a.effective_from
           from item_rate_book_assignments a
          where a.org_id = ${orgId} and a.is_active and a.project_id is null and a.customer_id is null
+           and (a.department_id is null or a.department_id = ${te.department_id ?? null})
+           and (a.subsidiary_id is null or a.subsidiary_id = ${te.subsidiary_id ?? null})
+           and a.location_id is null and a.class_id is null
            and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id} and org_id = ${orgId}), ${te.worked_on}::date) else ${te.worked_on}::date end)
            and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id} and org_id = ${orgId}), ${te.worked_on}::date) else ${te.worked_on}::date end)
-        union all select b.id,null::uuid, 4, null::date from item_rate_books b
+        union all select b.id,null::uuid, 5, 0, null::date from item_rate_books b
          where b.org_id = ${orgId} and b.is_default and b.is_active
       )
       select l.id as rate_line_id,l.bill_rate,l.time_type_bill_rates,
@@ -243,24 +275,37 @@ export async function snapshotTimeBillRates(
          and ((c.rate_version_id is not null and v.id=c.rate_version_id) or (c.rate_version_id is null and v.effective_from <= ${te.worked_on} and (v.effective_to is null or v.effective_to >= ${te.worked_on})))
         join item_rate_lines l on l.version_id = v.id and l.org_id = v.org_id and l.item_id = ${te.item_id}
         join item_rate_books b on b.id=c.rate_book_id and b.org_id = ${orgId} and b.is_active
-       order by c.priority, c.effective_from desc nulls last, v.effective_from desc,
+       order by c.priority, c.dimension_specificity desc, c.effective_from desc nulls last, v.effective_from desc,
                 case when l.unit_code = 'hour' then 0 else 1 end, l.base_quantity
        limit 1`))
     const hit = line.rows[0]
     const explicit = te.time_type_id ? hit?.time_type_bill_rates?.[te.time_type_id] : undefined
     let sourceRate: string | null = null
+    let sourceCurrency: string | null = null
     if (explicit != null) {
       try {
-        if (cmp(String(explicit), '0') >= 0) sourceRate = String(explicit)
+        if (cmp(String(explicit), '0') >= 0) {
+          sourceRate = String(explicit)
+          sourceCurrency = hit?.source_currency ?? null
+        }
       } catch {
         sourceRate = null
       }
     }
     // Bill rate x time-type multiplier: both numeric(19,4), not an FX rate.
-    else if (hit?.bill_rate != null) sourceRate = mul(String(hit.bill_rate), String(te.bill_multiplier))
-    const sourceCurrency = hit?.source_currency ?? te.target_currency
-    if (sourceRate == null && te.default_rate != null) sourceRate = mul(String(te.default_rate), String(te.bill_multiplier))
+    else if (hit?.bill_rate != null) {
+      sourceRate = mul(String(hit.bill_rate), String(te.bill_multiplier))
+      sourceCurrency = hit.source_currency
+    }
+    if (sourceRate == null && te.default_rate != null) {
+      sourceRate = mul(String(te.default_rate), String(te.bill_multiplier))
+      sourceCurrency = te.default_rate_currency
+    }
     if (sourceRate == null) continue
+    // item.default_rate is organization-wide and has no per-item currency;
+    // it is stored in the organization's base currency, then converted to the
+    // subsidiary/project currency just like any other source rate.
+    if (sourceCurrency == null) continue
     const fxRate = await billRateFx(orgId,sourceCurrency,te.target_currency,te.worked_on)
     if (!fxRate) throw new Error(`No spot rate for bill-out ${sourceCurrency}→${te.target_currency} on or before ${te.worked_on}`)
     const rate=convertBillRate(sourceRate,fxRate)
