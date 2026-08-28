@@ -34,6 +34,9 @@ export interface DynamicsApp {
  */
 class DynamicsRedirectRefused extends Error {}
 
+/** A credentialed Dynamics API request must stay on the configured API origin. */
+class DynamicsOriginRefused extends Error {}
+
 /**
  * Dynamics credentials must never cross an HTTP redirect boundary. Even a
  * trusted origin can otherwise redirect a request — carrying the POSTed
@@ -158,6 +161,7 @@ export async function listCompanies(
 export class DynamicsClient {
   private tokens: DynamicsTokens;
   private base: string;
+  private baseOrigin: string;
   constructor(
     private app: DynamicsApp,
     private environment: string,
@@ -167,6 +171,7 @@ export class DynamicsClient {
   ) {
     this.tokens = tokens;
     this.base = `${API_ROOT}/${app.aadTenantId}/${environment}/api/v2.0`;
+    this.baseOrigin = new URL(this.base).origin;
   }
 
   private async accessToken(): Promise<string> {
@@ -187,13 +192,14 @@ export class DynamicsClient {
    * network.
    */
   private async send(url: string): Promise<Response> {
+    const parsedUrl = this.validateApiUrl(url);
     const token = await this.accessToken();
     let lastErr: unknown;
     for (let attempt = 1; attempt <= 4; attempt++) {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 30_000);
       try {
-        const res = await dynamicsFetch(url, {
+        const res = await dynamicsFetch(parsedUrl, {
           headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
           signal: ctrl.signal,
         });
@@ -212,6 +218,26 @@ export class DynamicsClient {
       }
     }
     throw new Error(`Dynamics GET failed after 4 attempts: ${String(lastErr)}`);
+  }
+
+  /**
+   * OData controls pagination with @odata.nextLink, so never let a response
+   * redirect a bearer-token request to an origin outside the configured API.
+   * Relative links remain supported and resolve against this API base.
+   */
+  private validateApiUrl(url: string): string {
+    let parsed: URL;
+    try {
+      parsed = new URL(url, `${this.base}/`);
+    } catch {
+      throw new DynamicsOriginRefused("Dynamics request refused: invalid API URL");
+    }
+    if (parsed.origin !== this.baseOrigin) {
+      throw new DynamicsOriginRefused(
+        `Dynamics request refused: API URL origin ${parsed.origin} does not match configured origin ${this.baseOrigin}`,
+      );
+    }
+    return parsed.toString();
   }
 
   /** GET one company-scoped entity (raw OData, no auto-paging). */
