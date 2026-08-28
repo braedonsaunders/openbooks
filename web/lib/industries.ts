@@ -1,4 +1,5 @@
 import 'server-only'
+import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 
 /**
  * Industry registry — the single source of truth for the vertical presets the
@@ -778,13 +779,15 @@ export const INDUSTRY_CATEGORIES = [
  * same integrity-probe pattern as the multiSubsidiary disable check. Company
  * name, country, currency, and individual feature toggles remain editable.
  */
-export async function canSwitchIndustry(orgId: string): Promise<boolean> {
-  const { db } = await import('@openbooks/engine/src/db.ts')
+export async function canSwitchIndustry(
+  orgId: string,
+  executor: SqlExecutor = db,
+): Promise<boolean> {
   const { sql } = await import('drizzle-orm')
   // "Has this org posted anything yet?" — an existence probe that stops at the
   // first row. Counting every journal line to compare against zero cost ~300ms
   // on a multi-million-line tenant.
-  const r = (await db.execute<{ posted: boolean }>(sql`
+  const r = (await executor.execute<{ posted: boolean }>(sql`
     select exists (
       select 1 from journal_lines where org_id = ${orgId} limit 1
     ) as posted`))

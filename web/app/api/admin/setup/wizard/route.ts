@@ -26,6 +26,14 @@ class WizardReportingFrameworkBlocked extends Error {
   }
 }
 
+type FoundationLockKey = 'industry-locked' | 'base-currency-locked' | 'fiscal-calendar-locked'
+
+class WizardFoundationBlocked extends Error {
+  constructor(readonly key: FoundationLockKey, message: string) {
+    super(message)
+  }
+}
+
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
@@ -142,53 +150,6 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: 'unknown-industry', key: inputIndustry }, { status: 422 })
   }
 
-  // Accounting-foundation fields stop being mutable once postings exist.
-  // Re-running setup can still update identity and feature choices, but cannot
-  // reinterpret historical books through a new industry, currency, or fiscal
-  // calendar.
-  const accountingFoundationMutable = await canSwitchIndustry(orgId)
-  if (!accountingFoundationMutable) {
-    const existing = (await db.execute<{
-        base_currency: string
-        industry: string | null
-        fiscal_year_start_month: number
-      }>(sql`
-      select base_currency, settings->>'industry' as industry,
-             coalesce((settings->>'fiscalYearStartMonth')::int, 1) as fiscal_year_start_month
-        from orgs where id = ${orgId}`))
-    const current = existing.rows[0]
-    if (!current) {
-      return NextResponse.json({ error: 'org-not-found' }, { status: 404 })
-    }
-    if (industry && current.industry !== null && current.industry !== industry.key) {
-      return NextResponse.json(
-        { error: 'industry-locked', message: 'Cannot change industry after postings exist.' },
-        { status: 409 },
-      )
-    }
-    if (
-      typeof inputCurrency === 'string'
-      && /^[A-Z]{3}$/.test(inputCurrency)
-      && inputCurrency !== current.base_currency
-    ) {
-      return NextResponse.json(
-        { error: 'base-currency-locked', message: 'Cannot change base currency after postings exist.' },
-        { status: 409 },
-      )
-    }
-    if (
-      typeof inputFiscalMonth === 'number'
-      && inputFiscalMonth >= 1
-      && inputFiscalMonth <= 12
-      && inputFiscalMonth !== current.fiscal_year_start_month
-    ) {
-      return NextResponse.json(
-        { error: 'fiscal-calendar-locked', message: 'Cannot change the fiscal calendar after postings exist.' },
-        { status: 409 },
-      )
-    }
-  }
-
   const changes: Record<string, unknown> = {}
   const orgSets: SQL[] = []
   let nextSettings: Record<string, unknown> | null = null
@@ -238,6 +199,34 @@ export async function PUT(req: Request) {
       if (currentReportingFramework !== seededReportingFramework) {
         nextSettings.reportingFramework = seededReportingFramework
         settingsChanges.reportingFramework = [currentReportingFramework, seededReportingFramework]
+      }
+    }
+    // Accounting-foundation fields stop being mutable once postings exist.
+    // Probe through this transaction's executor while the org row lock is
+    // held. Posting acquires the same lock before inserting journal lines, so
+    // this decision cannot race the first accounting evidence.
+    const accountingFoundationMutable = await canSwitchIndustry(orgId, tx)
+    const currentFiscalMonth = typeof nextSettings.fiscalYearStartMonth === 'number'
+      ? nextSettings.fiscalYearStartMonth
+      : 1
+    if (!accountingFoundationMutable) {
+      if (industry && currentIndustry !== null && industryChanged) {
+        throw new WizardFoundationBlocked(
+          'industry-locked',
+          'Cannot change industry after postings exist.',
+        )
+      }
+      if (inputCurrency !== cur.base_currency) {
+        throw new WizardFoundationBlocked(
+          'base-currency-locked',
+          'Cannot change base currency after postings exist.',
+        )
+      }
+      if (inputFiscalMonth !== currentFiscalMonth) {
+        throw new WizardFoundationBlocked(
+          'fiscal-calendar-locked',
+          'Cannot change the fiscal calendar after postings exist.',
+        )
       }
     }
     let effectiveBaseCurrency = cur.base_currency
@@ -544,6 +533,12 @@ export async function PUT(req: Request) {
           error: 'reporting-framework-locked',
           message: 'Cannot change the reporting framework after lease or inventory NRV evidence exists.',
         },
+        { status: 409 },
+      )
+    }
+    if (error instanceof WizardFoundationBlocked) {
+      return NextResponse.json(
+        { error: error.key, message: error.message },
         { status: 409 },
       )
     }
