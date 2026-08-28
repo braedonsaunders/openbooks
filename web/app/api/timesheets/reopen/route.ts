@@ -41,14 +41,14 @@ export async function POST(req: Request) {
   const body = (parsedBody.data) as Body
   if (!body.employee || !isUuid(body.employee)) return bad('Invalid employee')
   if (!body.week || !isIsoDate(body.week)) return bad('Invalid week')
-  const employee = await pinTimesheetEmployee(orgId, body.employee)
+  const employee = await pinTimesheetEmployee(orgId, body.employee, gate.allowedSubsidiaryIds)
   if (!employee) return bad('Employee not found')
   const week = weekStart(body.week)
   const days = weekWindow(week)
   const weekFrom = days[0]!
   const weekTo = days[6]!
 
-  const before = await loadWeek(orgId, employee, week)
+  const before = await loadWeek(orgId, employee, week, gate.allowedSubsidiaryIds)
   if (before.status !== 'approved') return bad('Only an approved week can be reopened')
 
   return withOrgTransaction(orgId, async () => {
@@ -88,7 +88,15 @@ export async function POST(req: Request) {
 
     // Clear the approval stamp with the status: a row reading "draft" while it
     // still names an approver would misreport who signed off on what.
-    await setTimesheetWeekStatus(orgId, employee, week, 'draft', user.id, null)
+    await setTimesheetWeekStatus(
+      orgId,
+      employee,
+      week,
+      'draft',
+      user.id,
+      null,
+      gate.allowedSubsidiaryIds,
+    )
     await db.execute(sql`
       update time_entries
          set status = 'draft', approved_by = null, approved_at = null,
@@ -98,6 +106,6 @@ export async function POST(req: Request) {
          and worked_on >= ${weekFrom} and worked_on <= ${weekTo}
          and status = 'approved'`)
 
-    return NextResponse.json(await loadWeek(orgId, employee, week))
+    return NextResponse.json(await loadWeek(orgId, employee, week, gate.allowedSubsidiaryIds))
   })
 }
