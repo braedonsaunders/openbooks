@@ -51,6 +51,9 @@ export const projectOverheadAdjustments = pgTable(
       t.sourceSystem,
       t.sourceRef,
     ),
+    uniqueIndex("project_overhead_adjustments_one_reversal")
+      .on(t.orgId, t.reversesAdjustmentId)
+      .where(sql`${t.reversesAdjustmentId} is not null`),
     index("project_overhead_adjustments_project_date").on(
       t.orgId,
       t.projectId,
