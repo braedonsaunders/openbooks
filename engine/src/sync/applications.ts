@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, pool } from "../db.ts";
-import { divRate, fromUnits, toUnits } from "../money.ts";
+import { divRate, fromUnits, mulRate, toUnits } from "../money.ts";
 
 /**
  * Payment-application reconciler — the platform's settlement sync.
@@ -33,7 +33,56 @@ export interface ApplyStats {
   unallocated: string;
 }
 
-interface OpenLine { lineId: string; remaining: bigint; date: string; lineNo: number; accountId: string; partyId: string | null; subsidiaryId: string; currency: string; fxRate: string; sign: string }
+interface OpenLine {
+  lineId: string;
+  remaining: bigint;
+  remainingTransaction: bigint;
+  date: string;
+  lineNo: number;
+  accountId: string;
+  partyId: string | null;
+  subsidiaryId: string;
+  currency: string;
+  fxRate: string;
+  functionalCurrency: string;
+  bookId: string;
+  periodId: string;
+  documentId: string;
+  sign: string;
+}
+
+interface PendingApplication {
+  fromLineId: string;
+  toLineId: string;
+  amount: bigint;
+  sourceAmount: bigint;
+  sourceTransactionAmount: bigint;
+  targetTransactionAmount: bigint;
+  date: string;
+  currency: string;
+  fxGainLossEntryId: string | null;
+  fxAdjustment: bigint;
+  paymentRef: string;
+  sourceDocumentId: string;
+  bookId: string;
+  periodId: string;
+  subsidiaryId: string;
+  accountId: string;
+  partyId: string | null;
+  functionalCurrency: string;
+}
+
+/** Largest transaction-currency amount whose rounded carrying value fits a
+ * functional-currency capacity. Both the source link and open-item caps are
+ * functional amounts, while the application trigger independently caps each
+ * side's transaction amount. */
+function transactionCapacity(base: bigint, transaction: bigint, fxRate: string): bigint {
+  let capacity = transaction;
+  const byBase = toUnits(divRate(fromUnits(base), fxRate));
+  if (byBase < capacity) capacity = byBase;
+  while (capacity > 0n && toUnits(mulRate(fromUnits(capacity), fxRate)) > base) capacity--;
+  return capacity;
+}
 
 export async function reconcileApplications(
   orgId: string,
@@ -80,15 +129,17 @@ export async function reconcileApplications(
     // the document's original `document` entry with an append-only `migration`
     // or `intercompany` entry; that replacement is the only legal settlement
     // endpoint and must remain visible to a later source application.
-    const lineRows = await client.query<{ ref: string; line_id: string; pdate: string; line_no: number; amt: string; account_id: string; party_id: string | null; subsidiary_id: string; currency: string; fx_rate: string; amount_sign: string }>(`
+    const lineRows = await client.query<{ ref: string; line_id: string; pdate: string; line_no: number; amt: string; txn_amt: string; account_id: string; party_id: string | null; subsidiary_id: string; currency: string; fx_rate: string; functional_currency: string; book_id: string; period_id: string; document_id: string; amount_sign: string }>(`
       select d.custom->>$2 as ref, l.id as line_id, e.posting_date::text as pdate,
-             l.line_number as line_no, abs(l.amount) as amt,
+             l.line_number as line_no, abs(l.amount) as amt, abs(l.txn_amount) as txn_amt,
              l.account_id as account_id, l.party_id as party_id,
-             l.subsidiary_id, l.currency, l.fx_rate, sign(l.amount) as amount_sign
+             l.subsidiary_id, l.currency, l.fx_rate, s.base_currency as functional_currency,
+             e.book_id, e.period_id, d.id as document_id, sign(l.amount) as amount_sign
         from journal_entries e
         join documents d on d.id = e.source_document_id and d.posted_entry_id = e.id and d.org_id = e.org_id
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id and l.is_open_item
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
+        join subsidiaries s on s.id = l.subsidiary_id and s.org_id = l.org_id
        where e.status = 'posted' and d.org_id = $1
          and a.type in ('liability_payable', 'asset_receivable')
          and d.custom->>$2 is not null`, [orgId, refKey]);
@@ -96,35 +147,63 @@ export async function reconcileApplications(
     const linesByRef = new Map<string, OpenLine[]>();
     for (const r of lineRows.rows) {
       const arr = linesByRef.get(r.ref) ?? [];
-      arr.push({ lineId: r.line_id, remaining: toUnits(r.amt), date: r.pdate, lineNo: r.line_no, accountId: r.account_id, partyId: r.party_id, subsidiaryId: r.subsidiary_id, currency: r.currency, fxRate: r.fx_rate, sign: r.amount_sign });
+      arr.push({
+        lineId: r.line_id,
+        remaining: toUnits(r.amt),
+        remainingTransaction: toUnits(r.txn_amt),
+        date: r.pdate,
+        lineNo: r.line_no,
+        accountId: r.account_id,
+        partyId: r.party_id,
+        subsidiaryId: r.subsidiary_id,
+        currency: r.currency,
+        fxRate: r.fx_rate,
+        functionalCurrency: r.functional_currency,
+        bookId: r.book_id,
+        periodId: r.period_id,
+        documentId: r.document_id,
+        sign: r.amount_sign,
+      });
       linesByRef.set(r.ref, arr);
     }
     for (const arr of linesByRef.values()) arr.sort((a, b) => a.lineNo - b.lineNo);
 
     // -- hydrate what's already applied ------------------------------------------
-    // per line (both roles), to reduce remaining capacity:
-    const usedByLine = new Map<string, bigint>();
+    // per line (both roles), to reduce remaining capacity. The carrying and
+    // transaction amounts are independent caps on applications: the source
+    // role consumes source_amount/source_transaction_amount, while the target
+    // role consumes amount/target_transaction_amount.
+    const usedByLine = new Map<string, { base: bigint; transaction: bigint }>();
     for (const side of ["from_line_id", "to_line_id"] as const) {
-      const used = await client.query<{ line_id: string; amt: string }>(
-        `select ${side} as line_id, sum(amount) as amt
+      const baseColumn = side === "from_line_id" ? "source_amount" : "amount";
+      const transactionColumn = side === "from_line_id" ? "source_transaction_amount" : "target_transaction_amount";
+      const used = await client.query<{ line_id: string; base_amt: string; txn_amt: string }>(
+        `select ${side} as line_id, sum(${baseColumn}) as base_amt, sum(${transactionColumn}) as txn_amt
            from applications where org_id = $1 and unapplied_at is null group by 1`,
         [orgId],
       );
       for (const r of used.rows) {
-        usedByLine.set(r.line_id, (usedByLine.get(r.line_id) ?? 0n) + toUnits(r.amt));
+        const prior = usedByLine.get(r.line_id) ?? { base: 0n, transaction: 0n };
+        usedByLine.set(r.line_id, {
+          base: prior.base + toUnits(r.base_amt),
+          transaction: prior.transaction + toUnits(r.txn_amt),
+        });
       }
     }
     for (const arr of linesByRef.values()) {
       for (const ol of arr) {
-        const used = usedByLine.get(ol.lineId) ?? 0n;
-        ol.remaining = ol.remaining - used < 0n ? 0n : ol.remaining - used;
+        const used = usedByLine.get(ol.lineId) ?? { base: 0n, transaction: 0n };
+        ol.remaining = ol.remaining - used.base < 0n ? 0n : ol.remaining - used.base;
+        ol.remainingTransaction = ol.remainingTransaction - used.transaction < 0n
+          ? 0n
+          : ol.remainingTransaction - used.transaction;
       }
     }
 
     // per (payment, applied) pair, to compute the missing delta:
     const existingPair = new Map<string, bigint>();
     const pairRows = await client.query<{ pay_ref: string; app_ref: string; amt: string }>(`
-      select df.custom->>$2 as pay_ref, dt.custom->>$2 as app_ref, sum(ap.amount) as amt
+      select df.custom->>$2 as pay_ref, dt.custom->>$2 as app_ref, sum(ap.source_amount) as amt
         from applications ap
         join journal_lines lf on lf.id = ap.from_line_id and lf.org_id = ap.org_id
         join journal_entries ef on ef.id = lf.entry_id and ef.org_id = lf.org_id
@@ -140,66 +219,187 @@ export async function reconcileApplications(
     }
 
     // -- allocate the missing deltas ---------------------------------------------
-    const toInsert: [string, string, bigint, string, string, string][] = []; // from, to, base, date, txn, currency
+    const toInsert: PendingApplication[] = [];
 
     for (const [key, want] of target) {
       const have = existingPair.get(key) ?? 0n;
       let remaining = want - have;
       if (remaining <= 0n) { alreadySettled++; continue; }
       const [paymentRef, appliedRef] = key.split("|");
-      const payLines = linesByRef.get(paymentRef!);
-      const appLines = linesByRef.get(appliedRef!);
+      // `key` is assembled from both source references above, but keep the
+      // parser total under `noUncheckedIndexedAccess` before using the refs as
+      // map keys (and before storing the payment ref on a pending row).
+      if (paymentRef === undefined || appliedRef === undefined) {
+        skippedNoLine++;
+        continue;
+      }
+      const payLines = linesByRef.get(paymentRef);
+      const appLines = linesByRef.get(appliedRef);
       if (!payLines || !appLines) { skippedNoLine++; continue; }
-      let pi = 0, ai = 0;
-      while (remaining > 0n && pi < payLines.length && ai < appLines.length) {
-        // A line can never settle itself: when a source self-links a document
-        // (paymentRef === appliedRef, e.g. a journal referenced in its own payment
-        // link), payLines and appLines share rows — skip the diagonal so we never
-        // emit a from_line_id === to_line_id application (it breaks subledger↔GL
-        // tie-out and represents no real settlement).
-        if (payLines[pi]!.lineId === appLines[ai]!.lineId) { ai++; continue; }
-        // A settlement is always SAME control account AND SAME subledger party:
-        // a customer's AR credit settles that customer's AR debit — never AR↔AP,
-        // and never one party against another. Source "payment" links between
-        // multi-account journals and their reversals (month-end accruals, opening
-        // balances) span AR and AP lines for different entities; pairing across
-        // account or party would draw an open item down with an unrelated leg and
-        // corrupt aging. Skip such pairings (advance the lagging pointer); a leg
-        // with no same-account/same-party counterpart simply stays open (reported
-        // as unallocated), which is the faithful outcome.
-        if (
-          payLines[pi]!.accountId !== appLines[ai]!.accountId ||
-          payLines[pi]!.partyId !== appLines[ai]!.partyId ||
-          payLines[pi]!.subsidiaryId !== appLines[ai]!.subsidiaryId ||
-          payLines[pi]!.currency !== appLines[ai]!.currency ||
-          payLines[pi]!.sign === appLines[ai]!.sign
+      // Journal line numbers are only meaningful inside their own entry. They
+      // do not provide an ordering relation between the payment and applied
+      // documents, so a two-pointer merge can discard a valid match when the
+      // compatible parties appear in opposite orders. For each payment line,
+      // search the remaining applied lines for a compatible counterpart instead.
+      // The arrays remain line-number sorted for deterministic allocation among
+      // multiple compatible lines, but compatibility—not cross-entry position—
+      // decides which rows can settle one another.
+      for (const payLine of payLines) {
+        while (
+          remaining > 0n &&
+          payLine.remaining > 0n &&
+          payLine.remainingTransaction > 0n
         ) {
-          if (payLines[pi]!.lineNo <= appLines[ai]!.lineNo) pi++;
-          else ai++;
-          continue;
+          const appLine = appLines.find(
+            (candidate) =>
+              candidate.remaining > 0n &&
+              candidate.remainingTransaction > 0n &&
+              candidate.lineId !== payLine.lineId &&
+              candidate.accountId === payLine.accountId &&
+              candidate.partyId === payLine.partyId &&
+              candidate.subsidiaryId === payLine.subsidiaryId &&
+              candidate.currency === payLine.currency &&
+              candidate.sign !== payLine.sign,
+          );
+          if (!appLine) break;
+
+          const sourceCapacity = transactionCapacity(
+            remaining,
+            payLine.remainingTransaction,
+            payLine.fxRate,
+          );
+          const targetCapacity = transactionCapacity(
+            appLine.remaining,
+            appLine.remainingTransaction,
+            appLine.fxRate,
+          );
+          const transactionAlloc = sourceCapacity < targetCapacity
+            ? sourceCapacity
+            : targetCapacity;
+          if (transactionAlloc <= 0n) break;
+          const sourceAmount = toUnits(
+            mulRate(fromUnits(transactionAlloc), payLine.fxRate),
+          );
+          const targetAmount = toUnits(
+            mulRate(fromUnits(transactionAlloc), appLine.fxRate),
+          );
+          const sourceSigned = payLine.sign === "-1" ? -sourceAmount : sourceAmount;
+          const targetSigned = appLine.sign === "-1" ? -targetAmount : targetAmount;
+          toInsert.push({
+            fromLineId: payLine.lineId,
+            toLineId: appLine.lineId,
+            amount: targetAmount,
+            sourceAmount,
+            sourceTransactionAmount: transactionAlloc,
+            targetTransactionAmount: transactionAlloc,
+            date: payLine.date,
+            currency: payLine.currency,
+            fxGainLossEntryId: null,
+            fxAdjustment: -(sourceSigned + targetSigned),
+            paymentRef,
+            sourceDocumentId: payLine.documentId,
+            bookId: payLine.bookId,
+            periodId: payLine.periodId,
+            subsidiaryId: payLine.subsidiaryId,
+            accountId: payLine.accountId,
+            partyId: payLine.partyId,
+            functionalCurrency: payLine.functionalCurrency,
+          });
+          payLine.remaining -= sourceAmount;
+          payLine.remainingTransaction -= transactionAlloc;
+          appLine.remaining -= targetAmount;
+          appLine.remainingTransaction -= transactionAlloc;
+          remaining -= sourceAmount;
         }
-        const alloc = [remaining, payLines[pi]!.remaining, appLines[ai]!.remaining]
-          .reduce((a, b) => (b < a ? b : a));
-        if (alloc <= 0n) {
-          if (payLines[pi]!.remaining <= 0n) pi++;
-          else ai++;
-          continue;
-        }
-        toInsert.push([
-          payLines[pi]!.lineId,
-          appLines[ai]!.lineId,
-          alloc,
-          payLines[pi]!.date,
-          divRate(fromUnits(alloc), appLines[ai]!.fxRate),
-          appLines[ai]!.currency,
-        ]);
-        payLines[pi]!.remaining -= alloc;
-        appLines[ai]!.remaining -= alloc;
-        remaining -= alloc;
-        if (payLines[pi]!.remaining <= 0n) pi++;
-        if (appLines[ai]!.remaining <= 0n) ai++;
+        if (remaining <= 0n) break;
       }
       unallocated += remaining;
+    }
+
+    // A foreign-currency settlement may consume different functional carrying
+    // values on its two sides even though the transaction amounts match. Post
+    // one realized-FX journal per payment document and link every application
+    // in that payment to the immutable evidence entry.
+    const fxGroups = new Map<string, PendingApplication[]>();
+    for (const row of toInsert) {
+      // Keep independent control dimensions in separate entries. A source
+      // payment can carry several AR/AP parties or subsidiaries; combining
+      // their adjustments would book the aggregate to whichever account
+      // happened to be encountered first.
+      const groupKey = [
+        row.paymentRef,
+        row.subsidiaryId,
+        row.accountId,
+        row.partyId ?? "",
+        row.functionalCurrency,
+      ].join("|");
+      const group = fxGroups.get(groupKey) ?? [];
+      group.push(row);
+      fxGroups.set(groupKey, group);
+    }
+    const fxAccountByCurrency = new Map<string, string>();
+    for (const group of fxGroups.values()) {
+      const adjustment = group.reduce((total, row) => total + row.fxAdjustment, 0n);
+      if (adjustment === 0n) continue;
+      const first = group[0]!;
+      let fxAccountId = fxAccountByCurrency.get(first.functionalCurrency);
+      if (!fxAccountId) {
+        const fxAccount = await client.query<{ account_id: string | null }>(
+          `select settings->'controlAccounts'->>'fxRealizedGainLoss' as account_id
+             from orgs where id = $1`,
+          [orgId],
+        );
+        fxAccountId = fxAccount.rows[0]?.account_id ?? undefined;
+        if (!fxAccountId) {
+          throw new Error("realized FX gain/loss account is not configured");
+        }
+        fxAccountByCurrency.set(first.functionalCurrency, fxAccountId);
+      }
+      const fxEntry = await client.query<{ id: string }>(
+        `insert into journal_entries
+          (org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin)
+         values ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, 'fx_settlement')
+         returning id`,
+        [
+          orgId,
+          first.bookId,
+          first.subsidiaryId,
+          `${first.sourceDocumentId}-FX`,
+          first.date,
+          first.periodId,
+          `Realized FX settlement — ${first.sourceDocumentId}`,
+          first.sourceDocumentId,
+        ],
+      );
+      const fxEntryId = fxEntry.rows[0]!.id;
+      await client.query(
+        `insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, party_id, is_open_item, memo)
+         values
+          ($1, $2, 1, $3, $4, $5, $6, $5, 1, $7, false, $8),
+          ($1, $2, 2, $9, $4, $10, $6, $10, 1, null, false, $8)`,
+        [
+          orgId,
+          fxEntryId,
+          first.accountId,
+          first.subsidiaryId,
+          fromUnits(adjustment),
+          first.functionalCurrency,
+          first.partyId,
+          `Realized FX settlement — ${first.sourceDocumentId}`,
+          fxAccountId,
+          fromUnits(-adjustment),
+        ],
+      );
+      await client.query(
+        `update journal_entries
+            set status = 'posted', posted_at = now()
+          where id = $1 and org_id = $2`,
+        [fxEntryId, orgId],
+      );
+      for (const row of group) row.fxGainLossEntryId = fxEntryId;
     }
 
     // -- insert (same connection + transaction as the hydration reads) -----------
@@ -210,19 +410,30 @@ export async function reconcileApplications(
       for (const row of chunk) {
         const b = params.length;
         params.push(
-          row[0], row[1], fromUnits(row[2]), fromUnits(row[2]),
-          row[4], row[5], row[4], row[5], "1", "same_currency",
-          `source application ${refKey}`, row[3],
+          row.fromLineId,
+          row.toLineId,
+          fromUnits(row.amount),
+          fromUnits(row.sourceAmount),
+          fromUnits(row.sourceTransactionAmount),
+          row.currency,
+          fromUnits(row.targetTransactionAmount),
+          row.currency,
+          "1",
+          "same_currency",
+          `source application ${refKey}`,
+          row.date,
+          row.fxGainLossEntryId,
         );
-        values.push(`($1, $${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9}, $${b + 10}, $${b + 11}, $${b + 12})`);
-        insertedUnits += row[2];
+        values.push(`($1, $${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9}, $${b + 10}, $${b + 11}, $${b + 12}, $${b + 13})`);
+        insertedUnits += row.amount;
       }
       await client.query(
         `insert into applications
           (org_id, from_line_id, to_line_id, amount, source_amount,
            source_transaction_amount, source_transaction_currency,
            target_transaction_amount, target_transaction_currency,
-           settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on)
+           settlement_rate, settlement_rate_source, settlement_rate_reference,
+           applied_on, fx_gain_loss_entry_id)
          values ${values.join(",")}`,
         params,
       );
