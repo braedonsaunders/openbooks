@@ -28,6 +28,7 @@ const state = {
   updates: [] as Array<{ text: string; values: unknown[] }>,
   deliveries: [] as Array<{ to: string; subject: string }>,
   sendError: null as Error | null,
+  sendOutcome: null as { kind: 'uncertain'; reason: string } | null,
 }
 
 const harness = {
@@ -91,6 +92,7 @@ const mockSources = new Map<string, string>([
       export async function sendVia(transport, message, identity) {
         if (harness.state.sendError) throw harness.state.sendError
         harness.state.deliveries.push({ to: message.to, subject: message.subject })
+        if (harness.state.sendOutcome) return harness.state.sendOutcome
         return { kind: 'sent', providerMessageId: 'provider-message-1' }
       }
 
@@ -226,6 +228,7 @@ function reset(): void {
   state.updates.length = 0
   state.deliveries.length = 0
   state.sendError = null
+  state.sendOutcome = null
 }
 
 /** Map an INSERT's column list onto its bound parameter values. */
@@ -316,6 +319,26 @@ test('a failed provider send still carries attribution on the failed row', async
   const failure = state.updates.find((update) => update.text.includes("status = 'failed'"))
   assert.ok(failure, 'the failed send must be marked failed')
   assert.equal(failure.values[0], 'smtp down')
+})
+
+test('an uncertain provider outcome remains uncertain instead of being overwritten as failed', async () => {
+  reset()
+  state.sendOutcome = { kind: 'uncertain', reason: 'provider acceptance could not be confirmed' }
+
+  await assert.rejects(
+    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' }),
+    /provider acceptance could not be confirmed/,
+  )
+
+  assert.equal(state.deliveries.length, 1)
+  const uncertain = state.updates.filter((update) => update.text.includes("status = 'uncertain'"))
+  assert.equal(uncertain.length, 1, 'the unresolved send must be parked as uncertain')
+  assert.equal(
+    state.updates.some((update) => update.text.includes("status = 'failed'")),
+    false,
+    'an uncertainty error must not trigger a failed transition',
+  )
+  assert.equal(uncertain[0]!.values[0], 'provider acceptance could not be confirmed')
 })
 
 test('caller-supplied meta cannot forge or strip the attribution markers', async () => {
