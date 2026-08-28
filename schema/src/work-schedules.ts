@@ -116,13 +116,16 @@ export const workSchedules = pgTable(
     // One row per scope per start date: two contradictory patterns for the same
     // employee from the same day is ambiguous configuration, and ambiguous
     // configuration about a day's pay is a defect, not a preference.
+    // Nullable scope keys must be folded to one sentinel per scope so PostgreSQL
+    // cannot treat two NULLs as distinct. Job titles are case-insensitive in the
+    // resolver, so the indexed key applies the same lower-case normalization.
     uniqueIndex("work_schedules_scope_from").on(
       t.orgId,
-      t.employeePartyId,
-      t.jobTitle,
-      t.tradeId,
-      t.departmentId,
-      t.subsidiaryId,
+      sql`coalesce(employee_party_id, '00000000-0000-0000-0000-000000000000'::uuid)`,
+      sql`coalesce(lower(job_title), '')`,
+      sql`coalesce(trade_id, '00000000-0000-0000-0000-000000000000'::uuid)`,
+      sql`coalesce(department_id, '00000000-0000-0000-0000-000000000000'::uuid)`,
+      sql`coalesce(subsidiary_id, '00000000-0000-0000-0000-000000000000'::uuid)`,
       t.effectiveFrom,
     ),
     check(
