@@ -25,6 +25,10 @@ const BASELINE = readFileSync(
   join(import.meta.dirname, "migrations/generated/0001_baseline.sql"),
   "utf8",
 );
+const PRIVATE_PROJECTION_MIGRATION = readFileSync(
+  join(import.meta.dirname, "migrations/generated/0070_governed_query_private_projection.sql"),
+  "utf8",
+);
 
 /** Columns that must never be readable through the governed catalog. */
 const NEVER_QUERYABLE = [
@@ -287,5 +291,31 @@ test("the refresh call is the baseline's final statement", () => {
     statements.at(-1),
     "SELECT public.openbooks_refresh_query_catalog()",
     "the baseline must end by rebuilding the governed query catalog",
+  );
+});
+
+test("forward catalog migration redacts private CRM bodies and time memos", () => {
+  // These relations must leave the generic SELECT * allowlist. Otherwise any
+  // later catalog refresh would silently restore the private text projection.
+  const safeRelationsBody = PRIVATE_PROJECTION_MIGRATION.match(
+    /safe_relations constant text\[\] := array\[([\s\S]*?)\n  \];/,
+  )?.[1];
+  assert.ok(safeRelationsBody, "0070 safe_relations array not found");
+  assert.doesNotMatch(safeRelationsBody, /'crm_activities'/);
+  assert.doesNotMatch(safeRelationsBody, /'time_entries'/);
+
+  // The curated definitions retain the row, tenant key, privacy flag, and
+  // all public reporting columns while replacing only private text with NULL.
+  assert.match(
+    PRIVATE_PROJECTION_MIGRATION,
+    /create view openbooks_query\.crm_activities[\s\S]*?case when is_private then null else body end as body[\s\S]*?is_private[\s\S]*?where org_id = public\.openbooks_query_org_id\(\)/i,
+  );
+  assert.match(
+    PRIVATE_PROJECTION_MIGRATION,
+    /create view openbooks_query\.time_entries[\s\S]*?case when memo_is_private then null else memo end as memo[\s\S]*?memo_is_private[\s\S]*?where org_id = public\.openbooks_query_org_id\(\)/i,
+  );
+  assert.match(
+    PRIVATE_PROJECTION_MIGRATION,
+    /select public\.openbooks_refresh_query_catalog\(\);\s*$/i,
   );
 });
