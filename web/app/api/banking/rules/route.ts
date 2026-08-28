@@ -62,8 +62,13 @@ export async function PATCH(req: Request) {
   const built = build(body)
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
   const missing = await db.transaction(async (tx) => {
+    // Serialize rule edits from the row snapshot that supplies the audit
+    // before-image. A concurrent PATCH waits here, then PostgreSQL's
+    // READ COMMITTED snapshot is refreshed to the winner's committed row
+    // before this transaction updates and audits it.
     const before = (await tx.execute<Record<string, unknown>>(sql`
       select * from bank_match_rules where id = ${body.id} and org_id = ${user.orgId}
+       for update
     `))
     if (!before.rows[0]) return true
     const updated = (await tx.execute<Record<string, unknown>>(sql`
