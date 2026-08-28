@@ -298,6 +298,30 @@ test("Christmas on a Sunday pushes Boxing Day past the day it takes", () => {
   assert.equal(new Set(dates(federal2027)).size, dates(federal2027).length);
 });
 
+test("effective-dated elections use the observed date after weekend observance", () => {
+  // In 2027 Christmas is Saturday and is observed federally on Monday the
+  // 27th. An election starting on the observed day must apply; an election
+  // ending on the statutory Sunday must already be expired. Comparing against
+  // the recurrence date would produce the opposite answers.
+  const startsOnObserved = [override({
+    jurisdiction: "CA", packKey: "christmas", effectiveFrom: "2027-12-27", isPaid: false,
+  })];
+  const observed = resolveObservedHolidays({
+    jurisdiction: "CA", from: "2027-12-01", to: "2027-12-31", overrides: startsOnObserved,
+  });
+  assert.equal(observed.find((h) => h.key === "christmas")?.date, "2027-12-27");
+  assert.equal(observed.find((h) => h.key === "christmas")?.paid, false);
+
+  const endsOnStatutory = [override({
+    jurisdiction: "CA", packKey: "christmas", effectiveFrom: "2000-01-01", effectiveTo: "2027-12-25", isPaid: false,
+  })];
+  const stillPaid = resolveObservedHolidays({
+    jurisdiction: "CA", from: "2027-12-01", to: "2027-12-31", overrides: endsOnStatutory,
+  });
+  assert.equal(stillPaid.find((h) => h.key === "christmas")?.date, "2027-12-27");
+  assert.equal(stillPaid.find((h) => h.key === "christmas")?.paid, true);
+});
+
 test("US federal holidays observe on the nearest weekday, both directions", () => {
   // 5 U.S.C. 6103(b): Saturday to the preceding Friday, Sunday to the
   // following Monday.

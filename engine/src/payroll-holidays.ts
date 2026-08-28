@@ -342,14 +342,20 @@ export function resolveObservedHolidays(input: {
 
     const taken = new Set<string>();
     for (const { holiday, statutoryDate } of candidates) {
+      // Effective dating is against the date employees actually observe, not
+      // the recurrence date. A Sunday holiday observed Monday therefore uses
+      // Monday's election (and an election ending Sunday no longer applies).
+      // Compute the shift before selecting the election; it is independent of
+      // whether an optional day is ultimately elected, and `taken` still only
+      // records days that are actually observed below.
+      const date = applyObservance(statutoryDate, holiday.observance, taken);
       const election = overrides.find(
-        (o) => o.packKey === holiday.key && overrideCovers(o, statutoryDate),
+        (o) => o.packKey === holiday.key && overrideCovers(o, date),
       );
       // Optional days are OFF until elected; mandatory days are on unless an
       // election explicitly suppresses one (which the guard above forbids).
       const isObserved = election ? election.isObserved : !holiday.optional;
       if (!isObserved) continue;
-      const date = applyObservance(statutoryDate, holiday.observance, taken);
       taken.add(date);
       observed.push({
         jurisdiction, key: holiday.key, name: holiday.name, statutoryDate, date,
@@ -362,10 +368,11 @@ export function resolveObservedHolidays(input: {
     for (const override of overrides) {
       if (override.packKey !== null || !override.isObserved) continue;
       const statutoryDate = overrideRule(override, year);
-      if (!statutoryDate || !overrideCovers(override, statutoryDate)) continue;
+      if (!statutoryDate) continue;
       // A one-off date is generated once, in its own year, not every year.
       if (override.ruleKind === "date" && statutoryDate.slice(0, 4) !== String(year)) continue;
       const date = applyObservance(statutoryDate, override.observance, taken);
+      if (!overrideCovers(override, date)) continue;
       taken.add(date);
       observed.push({
         jurisdiction, key: override.id, name: override.name ?? "Company holiday",
@@ -919,6 +926,25 @@ export interface StatutoryHolidayPayInput {
   /** The pay run being calculated, excluded from its own lookback. */
   excludeDocumentId: string;
   hourlyRate: string;
+  /**
+   * Eligibility facts supplied by the payroll caller. These are deliberately
+   * explicit rather than inferred from a timesheet: commission pay changes the
+   * statutory lookback/divisor, while an unconsented absence is a legal fact
+   * that an attendance gap cannot establish.
+   */
+  paidOnCommission?: boolean;
+  absentWithoutConsent?: boolean;
+}
+
+/**
+ * Employee facts that affect a jurisdiction's statutory entitlement. An
+ * omitted property means the employer has not supplied the authoritative
+ * evidence; the database-backed resolver refuses the affected Ontario/Quebec
+ * calculation rather than guessing from a pay component or timesheet gap.
+ */
+export interface StatutoryHolidayEligibilityFacts {
+  paidOnCommission?: boolean;
+  absentWithoutConsent?: boolean;
 }
 
 /**
@@ -984,6 +1010,34 @@ export async function resolveStatutoryHolidayPay(
         }
       : window;
     const lookbackBasis = holidayPayLookbackBasis(rule.basis);
+    // Federal and Quebec law use a different divisor/window for commission
+    // earners. Ontario and Quebec also make the last-and-first scheduled-shift
+    // test an entitlement condition. Neither fact is inferable from earnings
+    // or a missing time entry, so a real pay run must provide an explicit
+    // assertion and stops when it cannot.
+    if (
+      (input.jurisdiction === "CA" || input.jurisdiction === "CA-QC")
+      && lookbackBasis.kind === "fixed_divisor"
+      && lookbackBasis.commission
+      && input.paidOnCommission === undefined
+    ) {
+      throw new PayrollHolidayError(
+        `${input.employeeName}: ${holiday.name} needs an explicit commission-pay status `
+        + "for the statutory holiday calculation — record whether the employee is paid "
+        + "in whole or in part on commission",
+      );
+    }
+    if (
+      (input.jurisdiction === "CA-ON" || input.jurisdiction === "CA-QC")
+      && rule.qualifying.lastAndFirstScheduledShift
+      && input.absentWithoutConsent === undefined
+    ) {
+      throw new PayrollHolidayError(
+        `${input.employeeName}: ${holiday.name} needs an explicit last-and-first-shift `
+        + "absence assertion for the statutory holiday calculation — record whether "
+        + "the employee was absent without the employer's consent",
+      );
+    }
     const commissionWindow = lookbackBasis.kind === "fixed_divisor" && lookbackBasis.commission
       ? commissionWindowOf(rule, holiday.date, lookbackBasis.commission.lookbackWeeks)
       : null;
@@ -1037,6 +1091,8 @@ export async function resolveStatutoryHolidayPay(
       commissionEarnings: commissionWindow
         ? await lookbackEarnings(tx, input, commissionWindow)
         : undefined,
+      paidOnCommission: input.paidOnCommission,
+      absentWithoutConsent: input.absentWithoutConsent,
       hoursWorked: await hoursOn(tx, input, holiday.date),
       hourlyRate: input.hourlyRate,
       schedule,
