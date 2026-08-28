@@ -215,8 +215,11 @@ export async function sendRecordPdfEmail(args: {
       await markEmailSent(args.orgId, logId, outcome.providerMessageId)
     } else {
       // Acceptance state unknown — record it, never claim success or failure.
-      await markEmailUncertain(args.orgId, logId, outcome.reason)
+      // Set this before the write: an uncertain provider outcome stays unknown
+      // even when the uncertainty update itself fails or has an ambiguous
+      // commit result. A failed transition would misclassify the delivery.
       uncertaintyRecorded = true
+      await markEmailUncertain(args.orgId, logId, outcome.reason)
       throw new Error(outcome.reason)
     }
   } catch (e) {

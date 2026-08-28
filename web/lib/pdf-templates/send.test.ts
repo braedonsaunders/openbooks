@@ -29,6 +29,8 @@ const state = {
   deliveries: [] as Array<{ to: string; subject: string }>,
   sendError: null as Error | null,
   sendOutcome: null as { kind: 'uncertain'; reason: string } | null,
+  uncertaintyWriteError: null as Error | null,
+  uncertaintyWriteAmbiguous: false,
 }
 
 const harness = {
@@ -45,6 +47,13 @@ const harness = {
     }
     if (text.includes('update email_log')) {
       state.updates.push({ text, values: query.values ?? [] })
+      if (text.includes("status = 'uncertain'")) {
+        if (state.uncertaintyWriteError) throw state.uncertaintyWriteError
+        // The SQL reached the database, but the caller cannot learn whether
+        // it committed. This models the same ambiguous result as a lost
+        // response after the uncertainty transition was applied.
+        if (state.uncertaintyWriteAmbiguous) throw new Error('uncertainty write commit status unknown')
+      }
       return { rows: [] }
     }
     // readOrgEmailConfig: no stored provider config; the mocked transport
@@ -229,6 +238,8 @@ function reset(): void {
   state.deliveries.length = 0
   state.sendError = null
   state.sendOutcome = null
+  state.uncertaintyWriteError = null
+  state.uncertaintyWriteAmbiguous = false
 }
 
 /** Map an INSERT's column list onto its bound parameter values. */
@@ -339,6 +350,45 @@ test('an uncertain provider outcome remains uncertain instead of being overwritt
     'an uncertainty error must not trigger a failed transition',
   )
   assert.equal(uncertain[0]!.values[0], 'provider acceptance could not be confirmed')
+})
+
+test('an uncertainty persistence error is not relabelled as a failed delivery', async () => {
+  reset()
+  state.sendOutcome = { kind: 'uncertain', reason: 'provider acceptance could not be confirmed' }
+  state.uncertaintyWriteError = new Error('uncertainty write failed')
+
+  await assert.rejects(
+    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' }),
+    /uncertainty write failed/,
+  )
+
+  assert.equal(
+    state.updates.some((update) => update.text.includes("status = 'failed'")),
+    false,
+    'an uncertainty persistence error must not trigger a failed transition',
+  )
+})
+
+test('an ambiguous uncertainty commit is not relabelled as a failed delivery', async () => {
+  reset()
+  state.sendOutcome = { kind: 'uncertain', reason: 'provider acceptance could not be confirmed' }
+  state.uncertaintyWriteAmbiguous = true
+
+  await assert.rejects(
+    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' }),
+    /uncertainty write commit status unknown/,
+  )
+
+  assert.equal(
+    state.updates.filter((update) => update.text.includes("status = 'uncertain'")).length,
+    1,
+    'the uncertainty transition was attempted once before its commit became ambiguous',
+  )
+  assert.equal(
+    state.updates.some((update) => update.text.includes("status = 'failed'")),
+    false,
+    'an ambiguous uncertainty commit must not trigger a failed transition',
+  )
 })
 
 test('caller-supplied meta cannot forge or strip the attribution markers', async () => {
