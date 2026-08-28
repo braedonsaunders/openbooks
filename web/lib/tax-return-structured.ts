@@ -1,4 +1,5 @@
 import type { TaxReturnResult } from '@openbooks/engine/src/tax-return.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { TAX_FORM_LAYOUTS, type TaxFormLayout } from './tax-form-facsimile-html'
 
 /**
@@ -18,8 +19,8 @@ import { TAX_FORM_LAYOUTS, type TaxFormLayout } from './tax-form-facsimile-html'
 export interface StructuredReturnBox {
   line: string
   label: string
-  /** Numeric value at ledger precision (not a formatted string). */
-  value: number
+  /** Canonical exact decimal value at ledger precision. */
+  value: string
   computed: boolean
   editable: boolean
 }
@@ -38,7 +39,7 @@ export interface StructuredReturn {
   period: { from: string; to: string }
   sections: StructuredReturnSection[]
   /** The headline net/payable line, surfaced for convenience. */
-  net: { line: string; label: string; value: number } | null
+  net: { line: string; label: string; value: string } | null
   /** Every box flat, in order — for consumers that don't care about sections. */
   boxes: StructuredReturnBox[]
   basis: 'working-copy'
@@ -49,7 +50,7 @@ export interface StructuredReturn {
 const NET_LINE_CODES = ['113C', '6.1', '109', '28', '46', '20', '14', '8', '9', '5', '15', '5g', '83', '21', 'TAX_DUE']
 
 function toBox(b: TaxReturnResult['boxes'][number]): StructuredReturnBox {
-  return { line: b.lineCode, label: b.label, value: Number(b.value), computed: b.computed, editable: b.editable }
+  return { line: b.lineCode, label: b.label, value: normalizeMoney(b.value), computed: b.computed, editable: b.editable }
 }
 
 /** Transform a computed return into the structured export shape, grouping boxes
@@ -75,7 +76,7 @@ export function taxReturnToStructured(result: TaxReturnResult, layout?: TaxFormL
     form: { code: result.formCode, name: result.formName, submissionChannel: result.submissionChannel },
     period: { from: result.from, to: result.to },
     sections,
-    net: netBox ? { line: netBox.lineCode, label: netBox.label, value: Number(netBox.value) } : null,
+    net: netBox ? { line: netBox.lineCode, label: netBox.label, value: normalizeMoney(netBox.value) } : null,
     boxes: result.boxes.map(toBox),
     basis: 'working-copy',
     notice: result.watermark,
