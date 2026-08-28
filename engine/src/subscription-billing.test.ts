@@ -79,6 +79,33 @@ test("prorate bills the remaining slice of a period exactly", () => {
   assert.equal(prorate("300", "2026-06-01", "2026-06-01", "2026-06-01"), "0.0000");
 });
 
+test("first-period proration includes all service days from a backdated start", () => {
+  // A first invoice is for the complete [startOn, firstBillOn] service period,
+  // even when the API is called after a backdated subscription has begun.
+  assert.equal(prorate("300", "2026-08-01", "2026-09-01", "2026-08-01"), "300.0000");
+
+  const source = readFileSync(new URL("./subscription-billing.ts", import.meta.url), "utf8");
+  const fn = source.indexOf("export async function prorateFirstInvoice");
+  const invoice = source.indexOf("createSubscriptionInvoice({", fn);
+  const body = source.slice(fn, invoice);
+  assert.match(body, /prorate\(full, row\.startOn, firstBillOn, row\.startOn\)/,
+    "the first-period charge is anchored to service start, not invocation date");
+  assert.doesNotMatch(body, /row\.startOn > today \? row\.startOn : today/,
+    "a later invocation date must not silently discard already-served days");
+});
+
+test("tenant-scoped subscription runs cannot scan unrelated production orgs", () => {
+  const source = readFileSync(new URL("./subscription-billing.ts", import.meta.url), "utf8");
+  const fn = source.indexOf("export async function runDueSubscriptions");
+  const due = source.indexOf("const due = await withBypass", fn);
+  const scope = source.indexOf("const scopedOrgId = orgContext.getStore()?.orgId", fn);
+  const predicate = source.indexOf("${orgScope}", due);
+  const predicateDefinition = source.indexOf("and s.org_id = ${scopedOrgId}", scope);
+  assert.ok(scope > fn && scope < due, "the ambient tenant is captured before the candidate scan");
+  assert.ok(predicateDefinition > scope && predicateDefinition < due, "the scoped predicate uses the ambient tenant id");
+  assert.ok(predicate > due, "the candidate scan includes the scoped predicate");
+});
+
 test("prorationDocument maps a signed adjustment to the native document it must become", () => {
   // Downgrade → credit memo carrying the ABSOLUTE amount: credit memos store
   // positive totals (posting.ts credits AR off the positive total; AR reports
