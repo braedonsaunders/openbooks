@@ -935,6 +935,7 @@ export async function retroRunFindings(
       source_pay_run_document_id: string; source_tax_year: number;
       previously_settled: string; delta: string; source_document_number: string;
       source_run_status: string; wage_moved: boolean; component_moved: boolean;
+      time_moved: boolean;
       other_committed: string; other_open: number; retired_components: number;
     }>(sql`
     select st.id, st.employee_party_id, p.display_name as employee_name,
@@ -957,6 +958,51 @@ export async function retroRunFindings(
               where a.org_id = st.org_id and a.employee_party_id = st.employee_party_id
                 and a.effective_from <= st.source_period_end
                 and greatest(a.created_at, a.updated_at) > st.quantified_at) as component_moved,
+           -- Time is part of the quantified source, too. Compare the exact
+           -- source snapshot so a row that was deleted, moved, or edited
+           -- without an updated_at bump cannot leave an already-quantified
+           -- retro cheque green. The timestamp arm also catches a newly
+           -- approved/created row that was not present in the source run.
+           (
+             exists (
+               select 1
+                 from jsonb_array_elements(
+                   case when jsonb_typeof(src.calculation_source_snapshot->'timeEntries') = 'array'
+                        then src.calculation_source_snapshot->'timeEntries'
+                        else '[]'::jsonb end
+                 ) as entry(value)
+                 left join time_entries t
+                   on t.org_id = st.org_id and t.id::text = entry.value->>'id'
+                where entry.value->>'employeePartyId' = st.employee_party_id::text
+                  and (
+                    t.id is null
+                    or t.employee_party_id::text is distinct from entry.value->>'employeePartyId'
+                    or t.worked_on::text is distinct from entry.value->>'workedOn'
+                    or t.hours::text is distinct from entry.value->>'hours'
+                    or t.time_type_id::text is distinct from entry.value->>'timeTypeId'
+                    or t.project_id::text is distinct from entry.value->>'projectId'
+                    or t.department_id::text is distinct from entry.value->>'departmentId'
+                    or t.is_billable is distinct from (entry.value->>'isBillable')::boolean
+                    or t.status <> 'approved'
+                    or (
+                      (entry.value->>'claimable')::boolean
+                      and t.payroll_batch_ref is distinct from st.source_pay_run_document_id::text
+                    )
+                    or (
+                      not (entry.value->>'claimable')::boolean
+                      and t.payroll_batch_ref is not null
+                    )
+                    or greatest(t.created_at, t.updated_at) > st.quantified_at
+                  )
+             )
+             or exists (
+               select 1 from time_entries t
+                where t.org_id = st.org_id
+                  and t.employee_party_id = st.employee_party_id
+                  and t.worked_on between st.source_period_start and st.source_period_end
+                  and greatest(t.created_at, t.updated_at) > st.quantified_at
+             )
+           ) as time_moved,
            -- Another retro run holding the same cell. If it is COMMITTED its
            -- delta must already be inside our previously_settled; if it is not,
            -- two open runs are about to settle the same money.
@@ -1020,7 +1066,7 @@ export async function retroRunFindings(
 
   collect("blocker", "retro.stale",
     rows.rows.filter((row) =>
-      row.wage_moved || row.component_moved
+      row.wage_moved || row.component_moved || row.time_moved
       || cmp(row.other_committed, row.previously_settled) !== 0));
 
   collect("blocker", "retro.doubleSettled",
