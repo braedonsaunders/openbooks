@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
@@ -62,10 +63,14 @@ test('WBS API boundaries enforce project gates, permissions, ownership, concurre
   assert.match(collection, /guardPermission\('projects\.read'\)/)
   assert.match(collection, /guardPermission\('projects\.manage'\)/)
   assert.match(collection, /guardProjectsFeature/)
+  assert.match(collection, /loadWorkBreakdownTasks\(gate\.user\.orgId, id, gate\.allowedSubsidiaryIds\)/)
+  assert.match(collection, /allowedSubsidiaryIds: gate\.allowedSubsidiaryIds/)
   assert.match(item, /guardPermission\('projects\.manage'\)/)
   assert.match(item, /guardProjectsFeature/)
   assert.match(service, /project_id = \$\{args\.projectId\}/)
   assert.match(service, /org_id = \$\{args\.orgId\}/)
+  assert.match(service, /= any/)
+  assert.match(service, /and false/)
   assert.match(service, /for update/)
   assert.match(service, /locked snapshot comparison/)
   assert.doesNotMatch(service, /and updated_at = \$\{args\.expectedUpdatedAt\}/)
@@ -91,4 +96,150 @@ test('WBS drawer supports direct create, edit, refresh, canonical saves, and con
   assert.match(tab, /stacked/)
   assert.match(tab, /router\.refresh\(\)/)
   assert.match(tab, /if \(!left\.code && right\.code\) return 1/)
+})
+
+/**
+ * The WBS helper is the direct-by-id boundary for both collection handlers.
+ * This scripted database deliberately returns a denied project when the
+ * subsidiary predicate is absent, making the regression fail against the old
+ * helper rather than merely checking a source string.
+ */
+const scopeStateKey = Symbol.for('openbooks.project-work-breakdown-scope-test')
+interface ScopeState {
+  allowedSubsidiaryIds: Set<string> | null
+  projectSubsidiary: string | null
+  calls: string[]
+}
+
+const scopeState: ScopeState = {
+  allowedSubsidiaryIds: null,
+  projectSubsidiary: null,
+  calls: [],
+}
+;(globalThis as typeof globalThis & Record<symbol, unknown>)[scopeStateKey] = scopeState
+
+const scopeMockSources = new Map<string, string>([
+  [
+    'mock:drizzle',
+    `
+      export function sql(strings, ...values) {
+        return { strings: Array.from(strings), values }
+      }
+    `,
+  ],
+  [
+    'mock:db',
+    `
+      const state = globalThis[Symbol.for('openbooks.project-work-breakdown-scope-test')]
+      function text(query) {
+        if (!query || !Array.isArray(query.strings)) return ''
+        return query.strings.map((part, index) => part + (query.values?.[index] && typeof query.values[index] === 'object'
+          ? text(query.values[index])
+          : '')).join('')
+      }
+      function projectRows(statement) {
+        if (state.allowedSubsidiaryIds === null) return [{ id: 'project-1' }]
+        // Before the fix, assertProject had no subsidiary predicate. Return
+        // the target project so the old helper reaches its leaking task query.
+        if (!statement.includes('subsidiary_id')) return [{ id: 'project-1' }]
+        if (!state.projectSubsidiary || !state.allowedSubsidiaryIds.has(state.projectSubsidiary)) return []
+        return [{ id: 'project-1' }]
+      }
+      function taskRows(statement) {
+        if (state.allowedSubsidiaryIds !== null && !statement.includes('subsidiary_id')) {
+          return [{ id: 'task-1', project_id: 'project-1', code: '01', name: 'Denied task', status: 'open', estimated_hours: '2.0000', estimated_cost: '100.0000', updated_at: '2026-08-01T00:00:00.000Z' }]
+        }
+        if (state.allowedSubsidiaryIds !== null && (!state.projectSubsidiary || !state.allowedSubsidiaryIds.has(state.projectSubsidiary))) return []
+        return [{ id: 'task-1', project_id: 'project-1', code: '01', name: 'Allowed task', status: 'open', estimated_hours: '2.0000', estimated_cost: '100.0000', updated_at: '2026-08-01T00:00:00.000Z' }]
+      }
+      async function execute(query) {
+        const statement = text(query)
+        state.calls.push(statement)
+        if (statement.includes('insert into project_tasks')) return { rows: [{ id: 'task-created', project_id: 'project-1', code: '02', name: 'Allowed create', status: 'open', estimated_hours: '1.0000', estimated_cost: '50.0000', updated_at: '2026-08-01T00:00:00.000Z' }] }
+        if (statement.includes('from project_tasks')) return { rows: taskRows(statement) }
+        if (statement.includes('from projects')) return { rows: projectRows(statement) }
+        return { rows: [] }
+      }
+      const db = {
+        execute,
+        async transaction(callback) {
+          return callback({ execute })
+        },
+      }
+      export { db }
+    `,
+  ],
+])
+
+const scopeHooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === 'server-only') return { url: 'mock:server-only', shortCircuit: true }
+    if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/db.ts') return { url: 'mock:db', shortCircuit: true }
+    return nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    if (url === 'mock:server-only') return { format: 'module', source: '', shortCircuit: true }
+    const source = scopeMockSources.get(url)
+    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
+    return nextLoad(url, context)
+  },
+})
+
+const scopeModuleSpecifier = './project-work-breakdown.ts?subsidiary-scope-regression' as string
+const workBreakdown = (await import(scopeModuleSpecifier)) as typeof import('./project-work-breakdown.ts')
+scopeHooks.deregister()
+
+const ALLOWED_SUBSIDIARY = '00000000-0000-4000-8000-00000000a001'
+const DENIED_SUBSIDIARY = '00000000-0000-4000-8000-00000000b001'
+
+function resetScope(projectSubsidiary: string | null, allowedSubsidiaryIds: Set<string> | null): void {
+  scopeState.calls.length = 0
+  scopeState.projectSubsidiary = projectSubsidiary
+  scopeState.allowedSubsidiaryIds = allowedSubsidiaryIds
+}
+
+test('WBS helper blocks reads and creates outside the caller subsidiary scope', async () => {
+  resetScope(DENIED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]))
+
+  await assert.rejects(
+    workBreakdown.loadWorkBreakdownTasks('org-1', 'project-1', scopeState.allowedSubsidiaryIds),
+    (error: unknown) => error instanceof ProjectWorkBreakdownError && error.status === 404,
+  )
+  await assert.rejects(
+    workBreakdown.createWorkBreakdownTask({
+      orgId: 'org-1',
+      projectId: 'project-1',
+      actorId: 'user-1',
+      allowedSubsidiaryIds: scopeState.allowedSubsidiaryIds,
+      input: {
+        code: '01',
+        name: 'Denied create',
+        status: 'open',
+        estimatedHours: '1.0000',
+        estimatedCost: '50.0000',
+      },
+    }),
+    (error: unknown) => error instanceof ProjectWorkBreakdownError && error.status === 404,
+  )
+  assert.equal(scopeState.calls.filter((statement) => statement.includes('insert into project_tasks')).length, 0)
+
+  resetScope(ALLOWED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]))
+  const tasks = await workBreakdown.loadWorkBreakdownTasks('org-1', 'project-1', scopeState.allowedSubsidiaryIds)
+  assert.equal(tasks[0]?.name, 'Allowed task')
+  const created = await workBreakdown.createWorkBreakdownTask({
+    orgId: 'org-1',
+    projectId: 'project-1',
+    actorId: 'user-1',
+    allowedSubsidiaryIds: scopeState.allowedSubsidiaryIds,
+    input: {
+      code: '02',
+      name: 'Allowed create',
+      status: 'open',
+      estimatedHours: '1.0000',
+      estimatedCost: '50.0000',
+    },
+  })
+  assert.equal(created.name, 'Allowed create')
+  assert.ok(scopeState.calls.some((statement) => statement.includes('subsidiary_id = any')))
 })
