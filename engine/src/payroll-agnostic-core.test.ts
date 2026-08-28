@@ -502,6 +502,13 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
       },
     })}::jsonb where id = ${orgId}`);
   await seedPayrollComponents(orgId, actorId, "CA");
+  // The production Quebec path emits the pack's separate Revenu Québec
+  // income-tax component. Point it at the same fixture payable account so
+  // this regression reaches holiday-line persistence rather than failing in
+  // unrelated GL setup.
+  await db.execute(sql`
+    update pay_components set liability_account_id = ${craPayable}
+     where org_id = ${orgId} and system_key = 'qc_income_tax' and kind = 'deduction'`);
 
   const scheduleId = randomUUID();
   await db.execute(sql`
@@ -516,6 +523,9 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
       insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${id}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`);
     await db.execute(sql`
+      insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
+      values (${orgId}, ${id}, '2020-01-01', true, ${actorId}, ${actorId})`);
+    await db.execute(sql`
       insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                     is_active, created_by, updated_by)
       values (${orgId}, ${id}, 'CAD', '30', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
@@ -528,6 +538,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
     return id;
   };
   const ontarioId = await employee("Olive Ontario", "ON");
+  const quebecId = await employee("Quinn Quebec", "QC");
   const manitobaId = await employee("Morley Manitoba", "MB");
   // Employed outside any province: withholding knows 'ZZ', no employment
   // standards act does, so this is the employee the undeclared gate is for.
@@ -546,6 +557,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   // Lookback fodder: one committed run whose period sits wholly inside the
   // four work weeks before Canada Day (2026-06-03 .. 2026-06-30).
   await hours(ontarioId, ["2026-06-08", "2026-06-10", "2026-06-12", "2026-06-16"]);
+  await hours(quebecId, ["2026-06-08", "2026-06-10", "2026-06-12", "2026-06-16"]);
   await hours(manitobaId, ["2026-06-09", "2026-06-11"]);
   await hours(outsideId, ["2026-06-09", "2026-06-11"]);
   const run1 = await createPayRun({
@@ -558,6 +570,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
 
   // The run under test: its period contains Canada Day (Wednesday 2026-07-01).
   await hours(ontarioId, ["2026-06-22", "2026-06-24", "2026-06-26", "2026-06-30"]);
+  await hours(quebecId, ["2026-06-22", "2026-06-24", "2026-06-26", "2026-06-30"]);
   await hours(manitobaId, ["2026-06-23", "2026-06-25"]);
   await hours(outsideId, ["2026-06-23", "2026-06-25"]);
   const run2 = await createPayRun({
@@ -580,7 +593,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
 
   // --- Feature OFF (the default): calculates exactly as before the feature.
   const offResult = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
-  assert.equal(offResult.employees, 3);
+  assert.equal(offResult.employees, 4);
   assert.deepEqual(offResult.errors, []);
   const offStubs = await snapshot();
   assert.ok(!offStubs.includes("stat"), "no stat holiday lines while the feature is off");
@@ -600,13 +613,33 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   assert.match(blocker.detail ?? "", /Canada Day/);
   assert.deepEqual(blocker.employees.map((e) => e.partyId), [outsideId]);
 
-  const onResult = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
+  // The production path must refuse Ontario/Quebec holiday pay when the
+  // employer has not supplied the two legal eligibility facts. A missing
+  // value is not permission to use the ordinary formula or to assume consent.
+  const missingFacts = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
+  assert.equal(missingFacts.employees, 0);
+  assert.equal(missingFacts.errors.length, 4);
+  const missingByName = new Map(missingFacts.errors.map((e) => [e.employee, e.message]));
+  assert.match(missingByName.get("Olive Ontario") ?? "", /absence assertion/);
+  assert.match(missingByName.get("Quinn Quebec") ?? "", /commission-pay status/);
+
+  // Supplying the authoritative facts reaches the same resolver used by a
+  // real run. Quebec's commission employee must take the 12-week ÷60 arm,
+  // while Ontario's explicit consent assertion allows its ordinary ÷20 rule.
+  const holidayEligibility = {
+    [ontarioId]: { paidOnCommission: false, absentWithoutConsent: false },
+    [quebecId]: { paidOnCommission: true, absentWithoutConsent: false },
+    [manitobaId]: { paidOnCommission: false, absentWithoutConsent: false },
+  };
+  const onResult = await calculatePayRun({
+    orgId, documentId: run2.documentId, actorId, holidayEligibility,
+  });
   // Ontario calculates with the declared ESA formula. Manitoba is DECLARED now
   // and its measure is a normal working day, so it refuses for a different and
   // better reason: nobody has said what hours this employee normally works, and
   // the run will not invent them. Zed is refused by the undeclared gate with
   // the readiness blocker's own message.
-  assert.equal(onResult.employees, 1);
+  assert.equal(onResult.employees, 2);
   assert.equal(onResult.errors.length, 2);
   const byName = new Map(onResult.errors.map((e) => [e.employee, e.message]));
   assert.match(byName.get("Morley Manitoba") ?? "", /no work schedule is in force/);
@@ -626,8 +659,10 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
       insert into work_schedule_days (org_id, schedule_id, day_index, hours, created_by, updated_by)
       values (${orgId}, ${mbSchedule}, ${dayIndex}, '8', ${actorId}, ${actorId})`);
   }
-  const withSchedule = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
-  assert.equal(withSchedule.employees, 2);
+  const withSchedule = await calculatePayRun({
+    orgId, documentId: run2.documentId, actorId, holidayEligibility,
+  });
+  assert.equal(withSchedule.employees, 3);
   assert.equal(withSchedule.errors.length, 1, "only the undeclared jurisdiction is left");
   assert.equal(withSchedule.errors[0]!.employee, "Zed Offshore");
 
@@ -635,21 +670,56 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   // the holiday's week = the committed June 7–20 stub, 80h × $30 = 2,400.00
   // (vacation pay: none). 2,400 ÷ 20 = 120.00 for the day; no hours worked on
   // July 1, so no premium line.
-  const statLines = (await db.execute<{ system_key: string; amount: string; gross: string; employee_party_id: string }>(sql`
-    select c.system_key, l.amount, s.gross, s.employee_party_id
+  const statLines = (await db.execute<{ system_key: string; amount: string; gross: string; employee_party_id: string; description: string }>(sql`
+    select c.system_key, l.amount, s.gross, s.employee_party_id, l.description
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id
       join pay_components c on c.id = l.component_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${run2.documentId}
        and c.system_key in ('stat_holiday', 'stat_holiday_premium')
   `));
-  assert.equal(statLines.rows.length, 2);
+  assert.equal(statLines.rows.length, 4);
   const ontarioStat = statLines.rows.find((r) => r.employee_party_id === ontarioId);
   assert.ok(ontarioStat);
   assert.equal(ontarioStat.system_key, "stat_holiday");
   assert.equal(cmp(ontarioStat.amount, "120.00"), 0);
   // The day's pay is IN gross, ahead of the statutory pass (phase 2).
   assert.equal(cmp(ontarioStat.gross, add("2400.00", "120.00")), 0);
+
+  const quebecStat = statLines.rows.find((r) =>
+    r.employee_party_id === quebecId && /Canada Day/.test(r.description));
+  assert.ok(quebecStat);
+  assert.equal(quebecStat.system_key, "stat_holiday");
+  // The production caller supplied paidOnCommission=true, so Quebec uses the
+  // twelve-week commission window and divides by 60: $2,400 ÷ 60 = $40,
+  // rather than silently applying the ordinary $2,400 ÷ 20 = $120 formula.
+  assert.equal(cmp(quebecStat.amount, "40.00"), 0);
+
+  // The same production entry point honours an asserted unconsented absence:
+  // Ontario's last-and-first scheduled-shift test disqualifies the holiday,
+  // while the other employees retain their supplied facts.
+  const denied = await calculatePayRun({
+    orgId,
+    documentId: run2.documentId,
+    actorId,
+    holidayEligibility: {
+      ...holidayEligibility,
+      [ontarioId]: { paidOnCommission: false, absentWithoutConsent: true },
+    },
+  });
+  assert.equal(denied.employees, 3);
+  assert.equal(denied.errors.length, 1);
+  const deniedByName = new Map(denied.errors.map((e) => [e.employee, e.message]));
+  assert.equal(deniedByName.get("Zed Offshore"), blocker.detail);
+  const deniedHoliday = await db.execute<{ count: number }>(sql`
+    select count(*)::int as count
+      from pay_stub_lines l
+      join pay_stubs s on s.id = l.stub_id and l.org_id = s.org_id
+      join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+     where s.org_id = ${orgId} and s.pay_run_document_id = ${run2.documentId}
+       and s.employee_party_id = ${ontarioId} and c.system_key = 'stat_holiday'
+  `);
+  assert.equal(Number(deniedHoliday.rows[0]?.count ?? 0), 0);
 
   // Hand-worked Manitoba s. 23(1): the wages for regular hours on a NORMAL
   // WORKDAY — 8 scheduled hours × $30.00 = $240.00. Note what it is not: the
@@ -674,7 +744,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   const clearReadiness = await payRunReadiness(orgId, run3.documentId);
   assert.ok(!clearReadiness.items.some((item) => item.code === "holiday.undeclaredJurisdiction"));
   const run3Result = await calculatePayRun({ orgId, documentId: run3.documentId, actorId });
-  assert.equal(run3Result.employees, 3);
+  assert.equal(run3Result.employees, 4);
   assert.deepEqual(run3Result.errors, []);
 
   // --- Feature back OFF: run 2 recalculates byte-identical to the first pass.
@@ -682,7 +752,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
     update orgs set settings = jsonb_set(settings, '{payroll,statutoryHolidayPay}', 'false'::jsonb)
      where id = ${orgId}`);
   const offAgain = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
-  assert.equal(offAgain.employees, 3);
+  assert.equal(offAgain.employees, 4);
   assert.deepEqual(offAgain.errors, []);
   assert.equal(await snapshot(), offStubs);
 });

@@ -32,6 +32,7 @@ import { EMPTY_EMPLOYER_LEVY_FACTORS } from "./payroll/statutory-context.ts";
 import {
   resolveStatutoryHolidayPay,
   undeclaredJurisdictionHolidayConflict,
+  type StatutoryHolidayEligibilityFacts,
   type StatutoryHolidayEarningLine,
 } from "./payroll-holidays.ts";
 import { effectivePayRateSql, payRateIsUsable } from "./payroll-rate.ts";
@@ -1606,6 +1607,13 @@ class DryRunRollback extends Error {
 export interface CalculatePayRunInput {
   orgId: string; documentId: string; actorId: string;
   /**
+   * Authoritative employee facts used by statutory holiday rules. A missing
+   * fact fails closed when the employee's jurisdiction reads it; callers must
+   * not let the resolver infer commission status or consent from payroll
+   * amounts/timesheet gaps.
+   */
+  holidayEligibility?: Readonly<Record<string, StatutoryHolidayEligibilityFacts>>;
+  /**
    * Compute and total the run without persisting anything — the operator sees
    * exactly what a real calculation would produce (including per-employee
    * errors) and the run stays in whatever state it was in.
@@ -1902,6 +1910,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           periodsPerYear: P, employerEmployeeCount: employerCount, need, components: components.rows,
           eftFallbackToCheque,
           statHolidayPay,
+          holidayEligibility: input.holidayEligibility,
           simulate: input.simulate === true,
           allowedSubsidiaryIds: input.allowedSubsidiaryIds,
         });
@@ -2059,12 +2068,15 @@ export async function statutoryHolidayLinesForStub(
     need: (systemKey: string, kind: string) => Record<string, unknown>;
     /** Caller role scope; null/undefined is unrestricted. */
     allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+    /** Authoritative statutory entitlement facts keyed by employee party id. */
+    holidayEligibility?: Readonly<Record<string, StatutoryHolidayEligibilityFacts>>;
   },
 ): Promise<StatutoryHolidayEarningLine[]> {
   const {
     orgId, documentId, employeePartyId, employeeName,
     emp, country, province, periodStart, periodEnd, payRate, need,
     allowedSubsidiaryIds,
+    holidayEligibility,
   } = args;
   if (allowedSubsidiaryIds != null) {
     const employee = (await tx.execute<{ subsidiary_id: string | null }>(sql`
@@ -2121,6 +2133,8 @@ export async function statutoryHolidayLinesForStub(
     premiumComponentId: need("stat_holiday_premium", "earning").id as string,
     excludeDocumentId: documentId,
     hourlyRate: holidayRate,
+    paidOnCommission: holidayEligibility?.[employeePartyId]?.paidOnCommission,
+    absentWithoutConsent: holidayEligibility?.[employeePartyId]?.absentWithoutConsent,
   });
 }
 
@@ -2499,11 +2513,13 @@ async function appendStatutoryHolidayEarningLines(
     lines: Line[];
     /** Caller role scope; null/undefined is unrestricted. */
     allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+    /** Authoritative statutory holiday eligibility facts by employee. */
+    holidayEligibility?: Readonly<Record<string, StatutoryHolidayEligibilityFacts>>;
   },
 ): Promise<void> {
   const {
     orgId, documentId, employeePartyId, emp, country, province, run, payRate,
-    statHolidayPay, oneOffRun, need, lines, allowedSubsidiaryIds,
+    statHolidayPay, oneOffRun, need, lines, allowedSubsidiaryIds, holidayEligibility,
   } = args;
   if (!oneOffRun && statHolidayPay) {
     const holidayLines = await statutoryHolidayLinesForStub(tx, {
@@ -2519,6 +2535,7 @@ async function appendStatutoryHolidayEarningLines(
       payRate,
       need,
       allowedSubsidiaryIds,
+      holidayEligibility,
     });
     for (const line of holidayLines) {
       lines.push({
@@ -3099,6 +3116,8 @@ async function calculateStub(
     eftFallbackToCheque: boolean;
     /** orgs.settings.payroll.statutoryHolidayPay, read once for the run. */
     statHolidayPay: boolean;
+    /** Authoritative statutory holiday eligibility facts by employee. */
+    holidayEligibility?: Readonly<Record<string, StatutoryHolidayEligibilityFacts>>;
     /** Rolled-back re-derivation of a COMMITTED run; writes no ledger rows. */
     simulate: boolean;
     allowedSubsidiaryIds?: PayrollSubsidiaryScope;
@@ -3256,6 +3275,7 @@ async function calculateStub(
     orgId, documentId, employeePartyId, emp, country, province, run, payRate,
     statHolidayPay: ctx.statHolidayPay, oneOffRun, need: ctx.need, lines,
     allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
+    holidayEligibility: ctx.holidayEligibility,
   });
 
   await applyAssignedComponentLines(tx, {
