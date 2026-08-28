@@ -8,7 +8,8 @@
  *
  * Usage:
  *   npx tsx scripts/verify-financial-release.ts \
- *     --reference=.local/schema-convergence/clean-0109.json
+ *     --reference=.local/schema-convergence/clean-0109.json \
+ *     --accounting-blockers=.local/erpnext-parity/accounting-blockers.json
  */
 import { createHash } from "node:crypto";
 import {
@@ -22,34 +23,163 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../engine/src/db.ts";
 
 const repoRoot = resolve(import.meta.dirname, "..");
-const args = new Map(
-  process.argv
-    .slice(2)
-    .filter((argument) => argument.startsWith("--"))
-    .map((argument) => {
-      const [key, ...value] = argument.slice(2).split("=");
-      return [key!, value.length > 0 ? value.join("=") : "true"];
-    }),
-);
-const requestedReference = args.get("reference") ?? "";
-if (!requestedReference) {
-  throw new Error("--reference=<clean-catalog.json> is required");
+
+export type AccountingBlockerStatus = "open" | "resolved";
+
+export interface AccountingBlocker {
+  id: string;
+  title: string;
+  status: AccountingBlockerStatus;
 }
-const referencePath = isAbsolute(requestedReference)
-  ? requestedReference
-  : resolve(repoRoot, requestedReference);
-if (!existsSync(referencePath)) {
-  throw new Error(`clean catalog reference does not exist: ${referencePath}`);
+
+export interface AccountingBlockerManifest {
+  reviewed: true;
+  reviewedAt: string;
+  reviewedBy: string;
+  blockers: AccountingBlocker[];
 }
-const requestedOutput =
-  args.get("output") ?? ".local/erpnext-parity/release-readiness.json";
-const outputPath = isAbsolute(requestedOutput)
-  ? requestedOutput
-  : resolve(repoRoot, requestedOutput);
+
+export function parseArgs(argv: readonly string[]): Map<string, string> {
+  return new Map(
+    argv
+      .filter((argument) => argument.startsWith("--"))
+      .map((argument) => {
+        const [key, ...value] = argument.slice(2).split("=");
+        return [key!, value.length > 0 ? value.join("=") : "true"];
+      }),
+  );
+}
+
+function nonEmptyString(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(
+      `accounting blocker manifest ${field} must be a non-empty string`,
+    );
+  }
+  return value.trim();
+}
+
+/**
+ * Parse the reviewed accounting register used by the release certificate.
+ *
+ * An explicit review attestation is required even when the list is empty. A
+ * missing or malformed manifest therefore cannot silently become the old
+ * hard-coded zero-blocker result. Only resolved entries are removed from the
+ * emitted unresolved list; every other entry remains a release blocker.
+ */
+export function parseAccountingBlockerManifest(
+  value: unknown,
+): AccountingBlockerManifest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("accounting blocker manifest must be a JSON object");
+  }
+  const record = value as Record<string, unknown>;
+  if (record.reviewed !== true) {
+    throw new Error("accounting blocker manifest must set reviewed=true");
+  }
+  const reviewedAt = nonEmptyString(record.reviewedAt, "reviewedAt");
+  if (Number.isNaN(Date.parse(reviewedAt))) {
+    throw new Error(
+      "accounting blocker manifest reviewedAt must be a valid date",
+    );
+  }
+  const reviewedBy = nonEmptyString(record.reviewedBy, "reviewedBy");
+  if (!Array.isArray(record.blockers)) {
+    throw new Error("accounting blocker manifest blockers must be an array");
+  }
+
+  const seen = new Set<string>();
+  const blockers = record.blockers.map((entry, index): AccountingBlocker => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(
+        `accounting blocker manifest blockers[${index}] must be an object`,
+      );
+    }
+    const blocker = entry as Record<string, unknown>;
+    const id = nonEmptyString(blocker.id, `blockers[${index}].id`);
+    if (seen.has(id)) {
+      throw new Error(
+        `accounting blocker manifest contains duplicate blocker ${id}`,
+      );
+    }
+    seen.add(id);
+    const title = nonEmptyString(
+      blocker.title ?? blocker.description ?? blocker.reason,
+      `blockers[${index}].title`,
+    );
+    const status = blocker.status ?? "open";
+    if (status !== "open" && status !== "resolved") {
+      throw new Error(
+        `accounting blocker manifest blockers[${index}].status must be open or resolved`,
+      );
+    }
+    return { id, title, status };
+  });
+
+  return { reviewed: true, reviewedAt, reviewedBy, blockers };
+}
+
+export function unresolvedAccountingBlockers(
+  manifest: AccountingBlockerManifest,
+): AccountingBlocker[] {
+  return manifest.blockers.filter((blocker) => blocker.status !== "resolved");
+}
+
+export function accountingReleaseStatus(
+  manifest: AccountingBlockerManifest,
+): "release-candidate-ready" | "release-blocked" {
+  return unresolvedAccountingBlockers(manifest).length === 0
+    ? "release-candidate-ready"
+    : "release-blocked";
+}
+
+export function loadAccountingBlockerManifest(sourcePath: string): {
+  manifest: AccountingBlockerManifest;
+  raw: string;
+} {
+  if (!sourcePath.trim()) {
+    throw new Error(
+      "--accounting-blockers=<reviewed-manifest.json> is required",
+    );
+  }
+  const path = isAbsolute(sourcePath)
+    ? sourcePath
+    : resolve(repoRoot, sourcePath);
+  if (!existsSync(path)) {
+    throw new Error(`accounting blocker manifest does not exist: ${path}`);
+  }
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch (error) {
+    throw new Error(`cannot read accounting blocker manifest: ${path}`, {
+      cause: error,
+    });
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`accounting blocker manifest is not valid JSON: ${path}`, {
+      cause: error,
+    });
+  }
+  try {
+    return { manifest: parseAccountingBlockerManifest(value), raw };
+  } catch (error) {
+    throw new Error(
+      `invalid accounting blocker manifest: ${path}: ${(error as Error).message}`,
+      {
+        cause: error,
+      },
+    );
+  }
+}
 
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
@@ -106,6 +236,31 @@ async function queryOne<T>(
 }
 
 async function main(): Promise<void> {
+  const args = parseArgs(process.argv.slice(2));
+  const requestedReference = args.get("reference") ?? "";
+  if (!requestedReference) {
+    throw new Error("--reference=<clean-catalog.json> is required");
+  }
+  const referencePath = isAbsolute(requestedReference)
+    ? requestedReference
+    : resolve(repoRoot, requestedReference);
+  if (!existsSync(referencePath)) {
+    throw new Error(`clean catalog reference does not exist: ${referencePath}`);
+  }
+  const requestedBlockerManifest =
+    args.get("accounting-blockers") ??
+    args.get("blocker-manifest") ??
+    process.env.OPENBOOKS_ACCOUNTING_BLOCKERS ??
+    "";
+  const blockerSource = loadAccountingBlockerManifest(requestedBlockerManifest);
+  const unresolvedBlockers = unresolvedAccountingBlockers(
+    blockerSource.manifest,
+  );
+  const requestedOutput =
+    args.get("output") ?? ".local/erpnext-parity/release-readiness.json";
+  const outputPath = isAbsolute(requestedOutput)
+    ? requestedOutput
+    : resolve(repoRoot, requestedOutput);
   const scratch = mkdtempSync(join(tmpdir(), "openbooks-release-proof-"));
   try {
     const releaseOutput = run("complete release gate", "npm", [
@@ -299,7 +454,7 @@ async function main(): Promise<void> {
 
     const certificate = {
       generatedAt: new Date().toISOString(),
-      status: "release-candidate-ready",
+      status: accountingReleaseStatus(blockerSource.manifest),
       scope:
         "Every declared OpenBooks GL mutation path is directly compared, semantically compared, or covered by a native invariant suite. ERPNext-only application modules are explicitly excluded rather than treated as implicit passes.",
       releaseGate: {
@@ -345,7 +500,13 @@ async function main(): Promise<void> {
         activeOrphanRows: Number(databaseControls.active_orphans),
         invalidVoidedDocuments: Number(databaseControls.invalid_voids),
       },
-      unresolvedAccountingBlockers: [],
+      accountingBlockerReview: {
+        reviewed: blockerSource.manifest.reviewed,
+        reviewedAt: blockerSource.manifest.reviewedAt,
+        reviewedBy: blockerSource.manifest.reviewedBy,
+        manifestSha256: sha256(blockerSource.raw),
+      },
+      unresolvedAccountingBlockers: unresolvedBlockers,
       qualifications: [
         "This is a repeatable technical release certificate, not a guarantee that defects are impossible.",
         "ERPNext manufacturing, payroll, loan, and subscription doctypes are recorded as product-scope differences because OpenBooks does not claim those application modules.",
@@ -361,7 +522,7 @@ async function main(): Promise<void> {
         {
           path: outputPath,
           status: certificate.status,
-          unresolvedAccountingBlockers: 0,
+          unresolvedAccountingBlockers: unresolvedBlockers.length,
           tests: testCount,
           exhaustiveGlCoverage: true,
         },
@@ -374,10 +535,17 @@ async function main(): Promise<void> {
   }
 }
 
-void (async () => {
-  try {
-    await main();
-  } finally {
-    await pool.end();
-  }
-})();
+const invokedPath = process.argv[1];
+const invokedDirectly =
+  invokedPath !== undefined &&
+  pathToFileURL(resolve(invokedPath)).href === import.meta.url;
+
+if (invokedDirectly) {
+  void (async () => {
+    try {
+      await main();
+    } finally {
+      await pool.end();
+    }
+  })();
+}
