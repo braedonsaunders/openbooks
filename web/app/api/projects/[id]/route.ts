@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { loadProject } from '../_lib'
@@ -82,6 +82,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const payload = await loadProject(id, gate.user.orgId)
   if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, payload.project.subsidiary_id as string | null | undefined)
+  if (denied) return denied
   return NextResponse.json(payload)
 }
 
@@ -108,10 +110,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const existing = (await db.execute<{ name: string; is_active: boolean; custom: Record<string, unknown> | null }>(sql`
-    select name, is_active, custom from projects where id = ${id} and org_id = ${user.orgId}
+  const existing = (await db.execute<{
+    name: string
+    is_active: boolean
+    custom: Record<string, unknown> | null
+    subsidiary_id: string | null
+  }>(sql`
+    select name, is_active, custom, subsidiary_id
+      from projects where id = ${id} and org_id = ${user.orgId}
   `))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const existingDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiary_id)
+  if (existingDenied) return existingDenied
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -162,6 +172,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.subsidiaryId !== undefined) {
     const value = uuidOrNull(body.subsidiaryId)
     if (value === 'invalid') return bad('Invalid subsidiary')
+    if (!subsidiariesInScope(gate, [value])) return bad('Subsidiary not found')
     if (value) {
       const subsidiary = ((await db.execute(sql`
         select 1 from subsidiaries
@@ -221,12 +232,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   let featureRefused = false
+  let scopeRefused = false
   await withOrgTransaction(user.orgId, async () => {
     // Serialize against feature toggles, then re-ask the gate the entry guard
     // already asked: its answer may be stale by the time this write lands.
     await acquireFeatureGateLock(user.orgId)
     if (!(await isFeatureEnabled(user.orgId, 'projects'))) {
       featureRefused = true
+      return
+    }
+    const locked = (await db.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id
+        from projects
+       where id = ${id} and org_id = ${user.orgId}
+       for update
+    `))
+    if (!locked.rows[0] || guardSubsidiaryScope(gate, locked.rows[0].subsidiary_id)) {
+      scopeRefused = true
       return
     }
     await db.execute(sql`
@@ -255,7 +277,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (featureRefused) {
     return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
   }
+  if (scopeRefused) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const payload = await loadProject(id, user.orgId)
+  if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const payloadDenied = guardSubsidiaryScope(gate, payload.project.subsidiary_id as string | null | undefined)
+  if (payloadDenied) return payloadDenied
   return NextResponse.json(payload)
 }
