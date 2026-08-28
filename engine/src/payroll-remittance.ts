@@ -4,7 +4,6 @@ import { add, cmp, sum } from "./money.ts";
 import {
   effectiveFilingAccountSql,
   filingAccountRef,
-  filingAccountsById,
   type FilingAccountRef,
   type PayrollFilingAccount,
 } from "./payroll-filing.ts";
@@ -21,6 +20,8 @@ import {
   type PayrollSubsidiaryScope,
 } from "./payroll-run.ts";
 import { legacyStatutoryLiabilityAccount, statutoryRemittanceDeclaration } from "./payroll/packs.ts";
+
+type RemittanceExecutor = Pick<typeof db, "execute">;
 
 /**
  * Payroll remittance execution — the PD7A-shaped bridge from accrued
@@ -70,11 +71,42 @@ export interface RemittanceGroup {
 
 /** The raw orgs.settings.payroll blob — indexed by whatever settings keys the
  *  pack declarations name, so this module needs no typed knowledge of them. */
-async function rawPayrollSettings(orgId: string): Promise<Record<string, unknown>> {
-  const r = (await db.execute<{ p: Record<string, unknown> | null }>(
+async function rawPayrollSettings(
+  orgId: string,
+  executor: RemittanceExecutor = db,
+): Promise<Record<string, unknown>> {
+  const r = (await executor.execute<{ p: Record<string, unknown> | null }>(
     sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
   ));
   return r.rows[0]?.p ?? {};
+}
+
+/** Load filing-account labels through the caller's transaction when one is
+ * active. A remittance bill must resolve its group and labels from the same
+ * snapshot that supplies the accrued rows, not from a second pooled session. */
+async function filingAccountsByIdIn(
+  orgId: string,
+  executor: RemittanceExecutor,
+): Promise<Map<string, PayrollFilingAccount>> {
+  const rows = await executor.execute<Record<string, unknown>>(sql`
+    select id, country, program_type, account_number, name, remitter_type,
+           subsidiary_id, state_code, is_default, is_active
+      from payroll_filing_accounts
+     where org_id = ${orgId} and is_active
+     order by is_default desc, account_number
+  `);
+  return new Map(rows.rows.map((row) => [String(row.id), {
+    id: String(row.id),
+    country: String(row.country),
+    programType: String(row.program_type),
+    accountNumber: String(row.account_number),
+    name: String(row.name),
+    remitterType: row.remitter_type as PayrollFilingAccount["remitterType"],
+    subsidiaryId: (row.subsidiary_id as string | null) ?? null,
+    stateCode: (row.state_code as string | null) ?? null,
+    isDefault: row.is_default === true,
+    isActive: row.is_active === true,
+  }]));
 }
 
 /**
@@ -92,9 +124,10 @@ export async function payrollRemittanceSummary(
   orgId: string,
   range: { from: string; to: string },
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+  executor: RemittanceExecutor = db,
 ): Promise<RemittanceGroup[]> {
   const declaration = statutoryRemittanceDeclaration();
-  const rawSettings = await rawPayrollSettings(orgId);
+  const rawSettings = await rawPayrollSettings(orgId, executor);
   const filingAccount = effectiveFilingAccountSql("prof");
   // '' can never be a declared key, so the coalesce keeps user components
   // (null system_key) in the summary whatever the exclusion list holds.
@@ -104,7 +137,7 @@ export async function payrollRemittanceSummary(
   // QPIP go to Revenu Québec for QC employment, to the CRA nowhere) splits by
   // destination, and rows that resolve to the same vendor are re-merged per
   // component in groupRemittanceRows.
-  const rows = (await db.execute<{
+  const rows = (await executor.execute<{
       component_id: string; code: string; name: string; kind: "deduction" | "employer_contribution";
       system_key: string | null; remittance_party_id: string | null;
       liability_account_id: string | null; filing_account_id: string | null;
@@ -130,7 +163,7 @@ export async function payrollRemittanceSummary(
   `));
   if (rows.rows.length === 0) return [];
 
-  const context = (await db.execute<{ filing_account_id: string | null; gross: string; employees: number }>(sql`
+  const context = (await executor.execute<{ filing_account_id: string | null; gross: string; employees: number }>(sql`
     select ${filingAccount} as filing_account_id,
            coalesce(sum(s.gross), 0) as gross,
            count(distinct s.employee_party_id)::int as employees
@@ -146,7 +179,7 @@ export async function payrollRemittanceSummary(
   const contextByAccount = new Map(
     context.rows.map((row) => [row.filing_account_id ?? "", row]),
   );
-  const filingAccounts = await filingAccountsById(orgId);
+  const filingAccounts = await filingAccountsByIdIn(orgId, executor);
 
   // Destination and account both resolve through the pack declarations. A
   // component with a REGION-scoped vendor declaration for the stub's province
@@ -182,32 +215,40 @@ export async function payrollRemittanceSummary(
     rows: rows.rows, contextByAccount, filingAccounts, resolveParty, resolveAccount,
   });
 
-  // Names + account labels + prior bills for the same destination/period.
+  // Names + account labels + prior bills for the same destination and any
+  // overlapping period. Loading the complete marker window lets callers show
+  // that an accrual is already covered even when their requested range is
+  // wider or narrower than the bill that consumed it.
   const partyIds = [...new Set([...groups.values()].map((g) => g.partyId).filter(Boolean))] as string[];
   const accountIds = [...new Set(
     [...groups.values()].flatMap((g) => g.components.map((c) => c.liabilityAccountId)).filter(Boolean),
   )] as string[];
-  const [parties, accounts, bills] = (await Promise.all([
-    partyIds.length
-      ? db.execute<{ id: string; display_name: string }>(sql`select id, display_name from parties
-                        where org_id = ${orgId} and id = any(${`{${partyIds.join(",")}}`}::uuid[])`)
-      : { rows: [] },
-    accountIds.length
-      ? db.execute<{ id: string; number: string | null; name: string }>(sql`select id, number, name from accounts
-                        where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`)
-      : { rows: [] },
-    db.execute<{
-        id: string; document_number: string; status: string; total: string;
-        party_id: string | null; filing_account_id: string | null;
-      }>(sql`
-      select id, document_number, status, total, party_id,
-             custom->'payrollRemittance'->>'filingAccountId' as filing_account_id
-        from documents
-       where org_id = ${orgId} and kind = 'vendor_bill'
-         and custom->'payrollRemittance'->>'from' = ${range.from}
-         and custom->'payrollRemittance'->>'to' = ${range.to}
-         and status <> 'voided'`),
-  ]));
+  // Run these reads sequentially when `executor` is a transaction. Drizzle's
+  // transaction client is one PostgreSQL connection; Promise.all would queue
+  // concurrent queries on that connection and can produce an overlapping
+  // client.query warning while providing no snapshot benefit.
+  const parties = partyIds.length
+    ? await executor.execute<{ id: string; display_name: string }>(sql`select id, display_name from parties
+                      where org_id = ${orgId} and id = any(${`{${partyIds.join(",")}}`}::uuid[])`)
+    : { rows: [] };
+  const accounts = accountIds.length
+    ? await executor.execute<{ id: string; number: string | null; name: string }>(sql`select id, number, name from accounts
+                      where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`)
+    : { rows: [] };
+  const bills = await executor.execute<{
+      id: string; document_number: string; status: string; total: string;
+      party_id: string | null; filing_account_id: string | null;
+      from: string | null; to: string | null;
+    }>(sql`
+    select id, document_number, status, total, party_id,
+           custom->'payrollRemittance'->>'filingAccountId' as filing_account_id,
+           custom->'payrollRemittance'->>'from' as from,
+           custom->'payrollRemittance'->>'to' as to
+      from documents
+     where org_id = ${orgId} and kind = 'vendor_bill'
+       and custom->'payrollRemittance'->>'from' <= ${range.to}
+       and custom->'payrollRemittance'->>'to' >= ${range.from}
+       and status <> 'voided'`);
   const partyName = new Map(parties.rows.map((p) => [p.id, p.display_name]));
   const accountLabel = new Map(accounts.rows.map((a) => [a.id, a.number ? `${a.number} · ${a.name}` : a.name]));
   for (const group of groups.values()) {
@@ -218,6 +259,9 @@ export async function payrollRemittanceSummary(
     }
     group.existingBills = bills.rows
       .filter((b) =>
+        b.from != null && b.to != null
+        && b.from <= range.to && b.to >= range.from
+        &&
         groupKey(b.party_id ?? null, b.filing_account_id) ===
           groupKey(group.partyId, group.filingAccount.id))
       .map((b) => ({ documentId: b.id, documentNumber: b.document_number, status: b.status, total: b.total }));
@@ -467,6 +511,18 @@ export function remittanceBillLockKey(orgId: string, key: RemittanceBillKey): st
 }
 
 /**
+ * The fence shared by every period for one remittance destination and filing
+ * account. Periods are deliberately not part of this key: two overlapping
+ * windows must serialize before the overlap check can decide which one wins.
+ */
+export function remittanceFenceLockKey(
+  orgId: string,
+  key: Pick<RemittanceBillKey, "partyId" | "filingAccountId">,
+): string {
+  return `payroll-remittance-fence:${orgId}:${key.partyId}:${key.filingAccountId ?? ""}`;
+}
+
+/**
  * The duplicate refusal, or null when the coast is clear.
  *
  * Pure, so the rule — one NON-voided remittance bill per key, and no second
@@ -481,6 +537,18 @@ export function duplicateRemittanceMessage(
   return `a remittance bill for this vendor, period and filing account already exists `
     + `(${existing.documentNumber ?? "unnumbered"}) — one bill per remittance; `
     + "post, edit or void that draft instead of raising a second";
+}
+
+/** Refusal for a new period that would consume liabilities already covered by
+ * another live remittance bill. The exact-window case keeps the established
+ * idempotency message; this names the two windows so a controller can choose
+ * a non-overlapping correction period without guessing. */
+export function overlappingRemittanceMessage(
+  existing: { documentNumber: string | null; from: string; to: string } | undefined,
+): string | null {
+  if (!existing) return null;
+  return `this remittance period overlaps ${existing.from} – ${existing.to}`
+    + ` for the same vendor and filing account (${existing.documentNumber ?? "unnumbered"})`;
 }
 
 /**
@@ -531,29 +599,23 @@ export async function createRemittanceBill(
   },
 ): Promise<{ documentId: string; documentNumber: string }> {
   const filingAccountId = input.filingAccountId ?? null;
-  const groups = await payrollRemittanceSummary(
-    orgId,
-    { from: input.from, to: input.to },
-    input.allowedSubsidiaryIds,
-  );
-  const group = groups.find(
-    (g) => g.partyId === input.partyId && g.filingAccount.id === filingAccountId,
-  );
-  if (!group) throw new PayrollError("nothing to remit to this vendor for the period");
-  const missing = group.components.filter((c) => !c.liabilityAccountId);
-  if (missing.length > 0) {
-    throw new PayrollError(
-      `no liability account for: ${missing.map((c) => c.name).join(", ")} — set it in Payroll setup → Accounts & posting`,
-    );
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(input.from)
+    || !/^\d{4}-\d{2}-\d{2}$/.test(input.to)
+    || input.from > input.to
+  ) {
+    throw new PayrollError("remittance period must be valid dates with from on or before to");
   }
 
   return await db.transaction(async (tx) => {
-    // Serialize creators for this key BEFORE anything is read or written:
-    // the duplicate check below is only a control if two transactions cannot
-    // pass it simultaneously.
+    // Serialize every period for this destination and filing account BEFORE
+    // reading the accruals. The explicit READ COMMITTED mode is intentional:
+    // PostgreSQL takes a fresh statement snapshot after a blocked advisory
+    // lock returns, so accruals committed while this creator waited are in the
+    // canonical summary below.
     await tx.execute(sql`
-      select pg_advisory_xact_lock(hashtextextended(${remittanceBillLockKey(orgId, {
-        partyId: input.partyId, from: input.from, to: input.to, filingAccountId,
+      select pg_advisory_xact_lock(hashtextextended(${remittanceFenceLockKey(orgId, {
+        partyId: input.partyId, filingAccountId,
       })}, 0))
     `);
 
@@ -599,22 +661,57 @@ export async function createRemittanceBill(
       }
     }
 
-    // The structured marker written below is the bill's identity — search it
-    // back and refuse the second bill inside the lock, naming the one found.
-    const duplicate = (await tx.execute<{ document_number: string | null }>(sql`
-      select document_number from documents
+    // Recompute from this transaction's snapshot only after the destination
+    // fence is held. A pay run committed after a caller's preflight summary is
+    // therefore included in this canonical bill, rather than stranded behind
+    // an exact-period duplicate marker.
+    const groups = await payrollRemittanceSummary(
+      orgId,
+      { from: input.from, to: input.to },
+      input.allowedSubsidiaryIds,
+      tx,
+    );
+    const group = groups.find(
+      (g) => g.partyId === input.partyId && g.filingAccount.id === filingAccountId,
+    );
+    if (!group) throw new PayrollError("nothing to remit to this vendor for the period");
+    const missing = group.components.filter((c) => !c.liabilityAccountId);
+    if (missing.length > 0) {
+      throw new PayrollError(
+        `no liability account for: ${missing.map((c) => c.name).join(", ")} — set it in Payroll setup → Accounts & posting`,
+      );
+    }
+
+    // The structured marker written below is the bill's identity. Search all
+    // live markers for this destination/account and reject any intersecting
+    // date window, not only exact from/to equality.
+    const overlap = (await tx.execute<{
+      document_number: string | null; from: string; to: string;
+    }>(sql`
+      select document_number,
+             custom->'payrollRemittance'->>'from' as from,
+             custom->'payrollRemittance'->>'to' as to
+        from documents
        where org_id = ${orgId} and kind = 'vendor_bill' and status <> 'voided'
          and custom->'payrollRemittance'->>'partyId' = ${input.partyId}
-         and custom->'payrollRemittance'->>'from' = ${input.from}
-         and custom->'payrollRemittance'->>'to' = ${input.to}
+         and custom->'payrollRemittance'->>'from' <= ${input.to}
+         and custom->'payrollRemittance'->>'to' >= ${input.from}
          and (custom->'payrollRemittance'->>'filingAccountId') is not distinct from ${filingAccountId}
-      order by created_at
+      order by custom->'payrollRemittance'->>'from', created_at
       limit 1
     `));
-    const refusal = duplicateRemittanceMessage(
-      duplicate.rows[0] && { documentNumber: duplicate.rows[0].document_number },
-    );
-    if (refusal) throw new PayrollError(refusal);
+    const existing = overlap.rows[0];
+    if (existing) {
+      const exact = existing.from === input.from && existing.to === input.to;
+      const refusal = exact
+        ? duplicateRemittanceMessage({ documentNumber: existing.document_number })
+        : overlappingRemittanceMessage({
+            documentNumber: existing.document_number,
+            from: existing.from,
+            to: existing.to,
+          });
+      if (refusal) throw new PayrollError(refusal);
+    }
 
     // Number off the org's EXISTING vendor_bill series — its prefix, padding
     // and current position — falling back to seeding the org-level 'BILL-'
@@ -670,5 +767,5 @@ export async function createRemittanceBill(
       `);
     }
     return { documentId, documentNumber: number };
-  });
+  }, { isolationLevel: "read committed" });
 }
