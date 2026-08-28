@@ -32,6 +32,24 @@ test('amounts format with separators, 2 decimals, and parentheses for negatives'
   assert.equal(fmtFacsimileAmount('-204.5000'), '(204.50)')
 })
 
+test('facsimile amounts preserve exact box decimals through generic and GST34 renderers', () => {
+  const exact = '9007199254740993.1234'
+  const exactResult = result({
+    boxes: [{ lineCode: '101', label: 'Sales and other revenue', value: exact, computed: false, editable: false, pdfField: null }],
+  })
+
+  // A floating-point coercion rounds to ...994 before formatting; the working return must
+  // print the exact mathematical value rounded only to the form's two places.
+  assert.equal(fmtFacsimileAmount(exact), '9,007,199,254,740,993.12')
+  assert.match(renderTaxFormFacsimileHtml(exactResult, null), /9,007,199,254,740,993\.12/)
+  assert.match(renderTaxFormFacsimileBody(exactResult), /9,007,199,254,740,993\.12/)
+
+  // Fractional box values use the same exact path (2.675 must round up).
+  assert.equal(fmtFacsimileAmount('2.675'), '2.68')
+  assert.equal(fmtFacsimileAmount('-2.675'), '(2.68)')
+  assert.equal(fmtFacsimileAmount('-0.0000'), '0.00')
+})
+
 test('facsimile renders every box with its line number, label and amount', () => {
   const html = renderTaxFormFacsimileHtml(result(), TAX_FORM_LAYOUTS.CA_GST34!, { orgName: 'Example Organization' })
   assert.match(html, /Canada Revenue Agency/)
