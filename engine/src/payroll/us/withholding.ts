@@ -92,6 +92,8 @@ export interface UsWithholdingInput {
   wages: string;
   /** Supplemental wages this period. */
   supplemental?: string;
+  /** Tax-qualified deductions from this period, used by Nebraska's floor. */
+  taxQualifiedDeductions?: string;
   /**
    * The employee's resolved answers on a pack-declared certificate, or null
    * when they have filed none of that certificate.
@@ -142,6 +144,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
       supplemental: input.supplemental,
+      taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
       basis: levy.reach,
       regionTax: input.regionTax,
@@ -169,6 +172,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
       supplemental: input.supplemental,
+      taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
       basis: levy.reach,
       regionTax: input.regionTax,

@@ -106,6 +106,12 @@ export interface UsStateWithholdingInput {
   /** Supplemental wages this period (bonus, commission, severance). */
   supplemental?: string;
   /**
+   * Tax-qualified deductions from this period's wages. Nebraska's special
+   * 1.5% floor is assessed on gross wages after these deductions, rather than
+   * on the ordinary allowance-reduced percentage-method base.
+   */
+  taxQualifiedDeductions?: string;
+  /**
    * The employee's answers on the state's withholding certificate, resolved
    * against the pack's declaration. Never a bag of loose fields: a state engine
    * reads through `certificateCount`/`certificateAmount`/`certificateChoice`,
