@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { canonicalJson } from '@openbooks/engine/src/canonical-json.ts'
 import { ACCOUNT_TYPES } from '@openbooks/schema'
 import { guardPermission } from '../../../lib/authz'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
@@ -174,6 +175,24 @@ export async function POST(request: Request) {
            where id = ${requestId} and org_id = ${gate.user.orgId}
         `))
         if (!prior.rows[0]) throw new Error('idempotency_key_conflict')
+        // The account itself is mutable after creation. Compare replays with
+        // the immutable create snapshot in the insert audit event, rather
+        // than today's account row, so an unchanged retry still succeeds even
+        // when a later PATCH has legitimately edited the account.
+        const original = (await tx.execute<{ after: unknown }>(sql`
+          select changes->'after' as after
+            from audit_log
+           where org_id = ${gate.user.orgId}
+             and table_name = 'accounts'
+             and row_id = ${requestId}
+             and action = 'insert'
+             and request_id = ${requestId}
+           order by at asc
+           limit 1
+        `)).rows[0]?.after
+        if (!original || canonicalJson(original) !== canonicalJson(snapshot)) {
+          throw new Error('idempotency_key_conflict')
+        }
         return false
       }
       await tx.execute(sql`
