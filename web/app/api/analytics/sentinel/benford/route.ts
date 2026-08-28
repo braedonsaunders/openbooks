@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { guardPermission } from "../../../../../lib/authz";
+import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,7 @@ export async function GET(req: Request) {
   if (!Number.isFinite(digit) || !from || !to) return NextResponse.json({ error: "digit, from, to required" }, { status: 400 });
 
   const kindsIn = sql.join(SPEND_KINDS.map((k) => sql`${k}`), sql`, `);
+  const subsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds);
   // Leading digit(s) via magnitude scaling: d = floor(|amt| / 10^floor(log10|amt|))
   // (1D → 1..9), or the leading two digits for 2D (10..99).
   const leadExpr = dim === "2d"
@@ -34,6 +36,7 @@ export async function GET(req: Request) {
   const base = sql`
     from documents d
     where d.org_id = ${user.orgId} and d.voided_at is null and d.kind in (${kindsIn})
+      ${subsidiaryFilter}
       and abs(d.total) >= 1
       and coalesce(d.document_date, d.posting_date) >= ${from}
       and coalesce(d.document_date, d.posting_date) <= ${to}
