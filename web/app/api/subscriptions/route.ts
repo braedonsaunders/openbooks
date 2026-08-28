@@ -13,13 +13,57 @@ import {
   type Interval,
 } from "@openbooks/engine/src/subscription-billing.ts";
 import { add } from "@openbooks/engine/src/money.ts";
-import { guardPermission } from "../../../lib/authz";
+import { guardPermission, guardSubsidiaryScope, type Authz } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 
 export const runtime = "nodejs";
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
+
+/**
+ * Customers are master data: an unassigned party is org-wide, while a
+ * subsidiary-restricted caller may only see parties assigned to one of their
+ * allowed subsidiaries. Keep this predicate aligned with the customer list
+ * and direct-party guards (which both treat a null primary subsidiary as
+ * org-wide).
+ */
+function customerSubsidiaryFilter(allowed: ReadonlySet<string> | null): SQL {
+  if (allowed === null) return sql``;
+  const ids = [...allowed];
+  return ids.length
+    ? sql`and (c.subsidiary_id is null or c.subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[]))`
+    : sql`and false`;
+}
+
+/** Load the customer boundary for one subscription before any mutation. */
+async function guardSubscriptionScope(
+  authz: Authz,
+  subscriptionId: unknown,
+): Promise<NextResponse | null> {
+  const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select c.subsidiary_id as "subsidiaryId"
+      from subscriptions s
+      join parties c on c.id = s.customer_id and c.org_id = s.org_id
+     where s.id = ${subscriptionId} and s.org_id = ${authz.user.orgId}
+  `));
+  if (!owned.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
+  return guardSubsidiaryScope(authz, owned.rows[0].subsidiaryId, { orgWideNull: true });
+}
+
+/** Load the customer boundary before creating a subscription for it. */
+async function guardCustomerScope(
+  authz: Authz,
+  customerId: unknown,
+): Promise<NextResponse | null> {
+  const customer = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select c.subsidiary_id as "subsidiaryId"
+      from parties c
+     where c.id = ${customerId} and c.org_id = ${authz.user.orgId}
+  `));
+  if (!customer.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
+  return guardSubsidiaryScope(authz, customer.rows[0].subsidiaryId, { orgWideNull: true });
+}
 
 function subscriptionDate(value: unknown, label: string): string {
   if (
@@ -98,7 +142,9 @@ export async function GET() {
         from subscriptions s
         join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
         left join parties c on c.id = s.customer_id and c.org_id = s.org_id
-       where s.org_id = ${orgId} order by s.created_at desc
+       where s.org_id = ${orgId}
+         ${customerSubsidiaryFilter(authz.allowedSubsidiaryIds)}
+       order by s.created_at desc
     `),
   ]);
 
@@ -235,6 +281,8 @@ export async function POST(req: Request) {
       }
       case "addSubscription": {
         if (!body.customerId || !body.planId) return NextResponse.json({ error: "customer and plan required" }, { status: 400 });
+        const customerScopeDenied = await guardCustomerScope(authz, body.customerId);
+        if (customerScopeDenied) return customerScopeDenied;
         const startOnInput = body.startOn === undefined || body.startOn === null || body.startOn === ""
           ? await businessToday(orgId)
           : body.startOn;
@@ -286,8 +334,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ id, proration }, { status: 201 });
       }
       case "changeSubscription": {
-        const owned = (await db.execute(sql`select 1 from subscriptions where id = ${body.id} and org_id = ${orgId}`));
-        if (!owned.rows.length) return NextResponse.json({ error: "not found" }, { status: 404 });
+        const scopeDenied = await guardSubscriptionScope(authz, body.id);
+        if (scopeDenied) return scopeDenied;
         let quantity: string | undefined;
         if (body.quantity != null) {
           quantity = normalizeSubscriptionMoney(body.quantity, "quantity", "positive");
@@ -307,6 +355,8 @@ export async function POST(req: Request) {
         return NextResponse.json(result);
       }
       case "updateSubscription": {
+        const scopeDenied = await guardSubscriptionScope(authz, body.id);
+        if (scopeDenied) return scopeDenied;
         const sets: SQL[] = [];
         if ("status" in body) {
           if (typeof body.status !== "string" || !["active", "paused", "canceled"].includes(body.status)) {
@@ -372,8 +422,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
       case "billNow": {
-        const owned = (await db.execute(sql`select 1 from subscriptions where id = ${body.id} and org_id = ${orgId}`));
-        if (!owned.rows.length) return NextResponse.json({ error: "not found" }, { status: 404 });
+        const scopeDenied = await guardSubscriptionScope(authz, body.id);
+        if (scopeDenied) return scopeDenied;
         // The authenticated caller authors the bill-now invoice — the
         // subscription's own id is never an actor.
         const gen = await billSubscriptionNow(body.id, undefined, { actorId: userId });

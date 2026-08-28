@@ -13,6 +13,12 @@ interface RouteState {
   normalizedMoney: string[];
   normalizedCadences: Array<{ interval: string; intervalCount: number }>;
   engineCalls: Array<{ fn: string; args: unknown[] }>;
+  authz: {
+    user: { orgId: string; id: string };
+    allowedSubsidiaryIds: Set<string> | null;
+  };
+  customerSubsidiaryId: string | null;
+  subscriptionSubsidiaryId: string | null;
 }
 
 const stateKey = Symbol.for("openbooks.subscription-route-test");
@@ -26,6 +32,12 @@ const routeState: RouteState & {
   normalizedMoney: [],
   normalizedCadences: [],
   engineCalls: [],
+  authz: {
+    user: { orgId: "org-1", id: "user-1" },
+    allowedSubsidiaryIds: null,
+  },
+  customerSubsidiaryId: "subsidiary-a",
+  subscriptionSubsidiaryId: "subsidiary-a",
   SubscriptionError,
   normalizeSubscriptionCadence: (interval, intervalCount) => {
     const cadence = normalizeSubscriptionCadence(interval, intervalCount);
@@ -66,6 +78,10 @@ const mockSources = new Map<string, string>([
         const text = sqlText(query)
         if (text.includes('insert into subscription_plans')) return { rows: [{ id: 'plan-1' }] }
         if (text.includes('insert into subscriptions')) return { rows: [{ id: 'subscription-1' }] }
+        if (text.includes('from parties c')) return { rows: [{ subsidiaryId: state.customerSubsidiaryId }] }
+        if (text.includes('from subscriptions s') && text.includes('join parties c')) {
+          return { rows: [{ subsidiaryId: state.subscriptionSubsidiaryId }] }
+        }
         if (text.includes('from subscriptions where id =')) return { rows: [{ owned: 1 }] }
         return { rows: [] }
       }
@@ -116,8 +132,14 @@ const mockSources = new Map<string, string>([
   ],
   [
     "mock:authz",
-    `export async function guardPermission() {
-       return { user: { orgId: 'org-1', id: 'user-1' } }
+    `const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
+     export async function guardPermission() { return state.authz }
+     export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {
+       const allowed = authz.allowedSubsidiaryIds
+       if (allowed === null || (subsidiaryId == null && opts.orgWideNull === true) || (subsidiaryId != null && allowed.has(subsidiaryId))) {
+         return null
+       }
+       return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
      }`,
   ],
   ["mock:features", "export async function isFeatureEnabled() { return true }"],
@@ -149,7 +171,7 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "./route.ts?subscription-configuration-test";
-const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
+const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 function reset(): void {
@@ -158,6 +180,12 @@ function reset(): void {
   routeState.normalizedMoney.length = 0;
   routeState.normalizedCadences.length = 0;
   routeState.engineCalls.length = 0;
+  routeState.authz = {
+    user: { orgId: "org-1", id: "user-1" },
+    allowedSubsidiaryIds: null,
+  };
+  routeState.customerSubsidiaryId = "subsidiary-a";
+  routeState.subscriptionSubsidiaryId = "subsidiary-a";
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
@@ -252,6 +280,50 @@ test("subscription API preserves valid exact-decimal plan and subscription value
   });
   assert.equal(subscriptionResponse.status, 201);
   assert.deepEqual(routeState.normalizedMoney, ["1.2345", "0.0001"]);
+});
+
+test("subsidiary-restricted callers cannot create, list, or bill another customer's subscriptions", async () => {
+  reset();
+  routeState.authz.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
+  routeState.customerSubsidiaryId = "subsidiary-b";
+
+  const createDenied = await post({
+    action: "addSubscription",
+    customerId: "customer-b",
+    planId: "plan-1",
+    startOn: "2026-08-26",
+  });
+  assert.equal(createDenied.status, 404);
+  assert.deepEqual(routeState.transactionQueries, [], "out-of-scope customers must be rejected before writes");
+
+  reset();
+  routeState.authz.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
+  routeState.customerSubsidiaryId = "subsidiary-a";
+  const createAllowed = await post({
+    action: "addSubscription",
+    customerId: "customer-a",
+    planId: "plan-1",
+    startOn: "2026-08-26",
+  });
+  assert.equal(createAllowed.status, 201, "in-scope customers remain manageable");
+
+  reset();
+  routeState.authz.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
+  routeState.subscriptionSubsidiaryId = "subsidiary-b";
+  const billDenied = await post({ action: "billNow", id: "subscription-b" });
+  assert.equal(billDenied.status, 404);
+  assert.deepEqual(routeState.engineCalls, [], "out-of-scope subscriptions must not reach billing engines");
+  assert.deepEqual(routeState.transactionQueries, [], "out-of-scope subscriptions must be rejected before writes");
+
+  reset();
+  routeState.authz.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
+  routeState.subscriptionSubsidiaryId = "subsidiary-b";
+  const listResponse = await GET();
+  assert.equal(listResponse.status, 200);
+  assert.ok(
+    routeState.queries.map(sqlText).some((text) => text.includes("c.subsidiary_id") && text.includes("any")),
+    "subscription lists must carry the caller's subsidiary predicate",
+  );
 });
 
 test("bill-now, change, and first proration attribute the engine call to the authenticated user", async () => {
