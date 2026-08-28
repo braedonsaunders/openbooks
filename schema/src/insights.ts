@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -79,8 +80,16 @@ export const insightDashboards = pgTable(
   (t) => [
     index("insight_dashboards_org_status").on(t.orgId, t.status),
     index("insight_dashboards_org_name").on(t.orgId, t.name),
-    index("insight_dashboards_org_home").on(t.orgId, t.isHome),
-    index("insight_dashboards_org_role_home").on(t.orgId, t.homeForRole),
+    // Only true is_home rows claim the org-wide default pointer; every
+    // dashboard remains free to carry the ordinary false value.
+    uniqueIndex("insight_dashboards_org_home")
+      .on(t.orgId)
+      .where(sql`${t.isHome}`),
+    // Null means that a dashboard is not a role default, so it must not
+    // collide with another unassigned dashboard.
+    uniqueIndex("insight_dashboards_org_role_home")
+      .on(t.orgId, t.homeForRole)
+      .where(sql`${t.homeForRole} IS NOT NULL`),
   ],
 );
 
