@@ -3,7 +3,7 @@
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import Link from 'next/link'
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -265,6 +265,11 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const pathname = usePathname() ?? '/field-tickets'
   const searchParams = useSearchParams()
   const [ticket, setTicket] = useState(props.ticket)
+  // State updates are deferred until React renders again. Keep the revision
+  // returned by each successful mutation synchronously available so a Save
+  // spanning multiple sections can fence its next request with the newest
+  // server token instead of the closure's stale ticket snapshot.
+  const latestRevisionRef = useRef(props.ticket.revision)
   const initialCanEdit = props.ticket.status === 'draft' && props.canManage
   // Existing records default to read-only; newly created drafts can explicitly
   // request edit mode. Permissions and lifecycle state remain authoritative.
@@ -396,6 +401,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     // Fail closed before adopting any server state: a revision-less payload
     // could never fence this editor's next mutation.
     persistedDocumentRevision(j.revision)
+    latestRevisionRef.current = j.revision
     setTicket(j)
     setCustomerName(j.customerName)
     setGrid(buildGrid(j.entries))
@@ -459,7 +465,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     try {
       const result = await sendFieldTicketMutation({
         ticketId: ticket.id,
-        revision: ticket.revision,
+        revision: latestRevisionRef.current,
         method,
         body: payload,
       })
@@ -472,6 +478,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
         // Some ticket operations persist immediately (header, grid, item
         // lines). Keep the other unsaved work area intact while refreshing
         // server-owned totals and snapshots.
+        latestRevisionRef.current = result.revision
         setTicket(result.saved)
         setCustomerName(result.saved.customerName)
       } else {
