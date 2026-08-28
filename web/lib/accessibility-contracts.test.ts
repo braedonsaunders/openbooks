@@ -86,6 +86,22 @@ test("the departments cards/table toggles announce their target and pressed stat
   assert.match(table.tag, /aria-pressed=\{view === 'table'\}/);
 });
 
+test("the utilization treemap escapes tenant names before rendering tooltip HTML", () => {
+  const source = utilizationView();
+
+  // ECharts renders tooltip formatter results as HTML by default. Keep every
+  // tenant-controlled character encoded before the name is interpolated.
+  assert.match(source, /function escapeTooltipHtml\(value: unknown\): string/);
+  assert.match(source, /\.replace\(\/&\/g, '&amp;'\)/);
+  assert.match(source, /\.replace\(\/<\/g, '&lt;'\)/);
+  assert.match(source, /\.replace\(\/>\/g, '&gt;'\)/);
+  assert.match(source, /\.replace\(\/\"\/g, '&quot;'\)/);
+  assert.match(source, /\.replace\(\/'\/g, '&#39;'\)/);
+  const tooltipFormatter = source.match(/tooltip:\s*\{\s*formatter: [^\n]+/)?.[0] ?? '';
+  assert.match(tooltipFormatter, /\$\{escapeTooltipHtml\(p\.name\)\}/);
+  assert.doesNotMatch(tooltipFormatter, /\$\{p\.name\}/);
+});
+
 /** Every .tsx source under web/ (build output excluded), with its path. */
 function tsxSources(dir = "web"): [path: string, source: string][] {
   const out: [path: string, source: string][] = [];
