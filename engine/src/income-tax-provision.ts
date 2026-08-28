@@ -789,9 +789,107 @@ export type ProvisionRunDetail = ProvisionRunRow & {
   }[];
 };
 
+/** The role-derived subsidiary visibility a caller carries into a provision
+ * read. A null/undefined scope is unrestricted; an empty set matches nothing.
+ * Provision runs are org-wide records, so restricted reads are projected to
+ * the entity workpapers the caller is allowed to see. */
+export type ProvisionSubsidiaryScope = ReadonlySet<string> | null | undefined;
+
+/** Project an org-wide run payload to the caller's visible legal entities.
+ * Every aggregate is recomputed from the projected entity workpapers so an
+ * entity-restricted caller cannot infer another subsidiary's tax detail from
+ * the consolidated totals or reconciliation steps. */
+function projectProvisionPayload(
+  payload: Record<string, unknown>,
+  allowedSubsidiaryIds: ReadonlySet<string>,
+): Record<string, unknown> | null {
+  if (!Array.isArray(payload.entities)) return null;
+  const entities = payload.entities.filter((entity): entity is EntityProvisionResult =>
+    typeof entity === "object" &&
+    entity !== null &&
+    typeof (entity as { subsidiaryId?: unknown }).subsidiaryId === "string" &&
+    allowedSubsidiaryIds.has((entity as { subsidiaryId: string }).subsidiaryId),
+  );
+  if (entities.length === 0) return null;
+
+  const consolidated = consolidateEntityResults(entities);
+  const projected: Record<string, unknown> = {
+    ...payload,
+    entities,
+    pretaxBookIncome: consolidated.pretaxBookIncome,
+    taxableIncome: consolidated.taxableIncome,
+    currentTax: consolidated.currentTax,
+    deferredExpense: consolidated.deferredExpense,
+    totalExpense: consolidated.totalExpense,
+    balances: consolidated.balances,
+    movement: consolidated.movement,
+    netTemporaryDifference: consolidated.netTemporaryDifference,
+    effectiveRatePercent: consolidated.effectiveRatePercent,
+    rateReconciliation: consolidated.rateReconciliation,
+  };
+
+  // These fields are root-entity echoes in the unrestricted payload. For a
+  // restricted projection they must describe a visible entity, never the
+  // hidden root or another subsidiary.
+  const echo = entities[0]!;
+  projected.enactedRatePercent = echo.enactedRatePercent;
+  projected.enactedRateJurisdictions = echo.enactedRateJurisdictions;
+
+  const lineage = payload.sourceLineage;
+  if (typeof lineage === "object" && lineage !== null) {
+    const source = lineage as {
+      pretaxBySubsidiaryId?: unknown;
+      fixedAssetDifferences?: unknown;
+      rateRows?: unknown;
+      priorBalancesBySubsidiaryId?: unknown;
+    };
+    const pretax = source.pretaxBySubsidiaryId;
+    const priorBalances = source.priorBalancesBySubsidiaryId;
+    projected.sourceLineage = {
+      ...source,
+      ...(typeof pretax === "object" && pretax !== null
+        ? {
+            pretaxBySubsidiaryId: Object.fromEntries(
+              Object.entries(pretax).filter(([id]) => allowedSubsidiaryIds.has(id)),
+            ),
+          }
+        : {}),
+      ...(Array.isArray(source.fixedAssetDifferences)
+        ? {
+            fixedAssetDifferences: source.fixedAssetDifferences.filter((difference) =>
+              typeof difference === "object" &&
+              difference !== null &&
+              typeof (difference as { subsidiaryId?: unknown }).subsidiaryId === "string" &&
+              allowedSubsidiaryIds.has((difference as { subsidiaryId: string }).subsidiaryId),
+            ),
+          }
+        : {}),
+      ...(Array.isArray(source.rateRows)
+        ? {
+            rateRows: source.rateRows.filter((row) =>
+              typeof row === "object" &&
+              row !== null &&
+              (typeof (row as { subsidiaryId?: unknown }).subsidiaryId !== "string" ||
+                allowedSubsidiaryIds.has((row as { subsidiaryId: string }).subsidiaryId)),
+            ),
+          }
+        : {}),
+      ...(typeof priorBalances === "object" && priorBalances !== null
+        ? {
+            priorBalancesBySubsidiaryId: Object.fromEntries(
+              Object.entries(priorBalances).filter(([id]) => allowedSubsidiaryIds.has(id)),
+            ),
+          }
+        : {}),
+    };
+  }
+  return projected;
+}
+
 export async function getProvisionRun(
   orgId: string,
   runId: string,
+  allowedSubsidiaryIds?: ProvisionSubsidiaryScope,
 ): Promise<ProvisionRunDetail | null> {
   const runs = (await db.execute<ProvisionRunDetail>(sql`
     select id, fiscal_year as "fiscalYear", period_from::text as "periodFrom", period_to::text as "periodTo",
@@ -803,10 +901,32 @@ export async function getProvisionRun(
   `));
   const run = runs.rows[0];
   if (!run) return null;
+  if (allowedSubsidiaryIds != null) {
+    const projected = projectProvisionPayload(run.payload, allowedSubsidiaryIds);
+    // A run has no single subsidiary column: no visible entity means the run
+    // is indistinguishable from a missing record to a restricted caller.
+    if (!projected) return null;
+    run.payload = projected;
+    run.totalExpense = String(projected.totalExpense);
+    run.effectiveRatePercent =
+      projected.effectiveRatePercent == null
+        ? null
+        : String(projected.effectiveRatePercent);
+  }
+  const differenceScope =
+    allowedSubsidiaryIds == null
+      ? sql``
+      : allowedSubsidiaryIds.size > 0
+        ? sql` and subsidiary_id in (${sql.join(
+            [...allowedSubsidiaryIds].map((id) => sql`${id}`),
+            sql`, `,
+          )})`
+        : sql` and false`;
   const diffs = (await db.execute<(ProvisionRunDetail["differences"])[number]>(sql`
     select id, category, description, book_basis as "bookBasis", tax_basis as "taxBasis",
            difference, rate_percent as "ratePercent", tax_effect as "taxEffect", source
       from temporary_differences where org_id = ${orgId} and run_id = ${runId}
+       ${differenceScope}
      order by category, description
   `));
   run.differences = diffs.rows;
