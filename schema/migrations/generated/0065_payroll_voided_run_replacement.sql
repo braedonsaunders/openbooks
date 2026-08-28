@@ -75,4 +75,3 @@ CREATE TRIGGER documents_pay_run_voided_sync
   FOR EACH ROW
   WHEN (NEW.kind = 'pay_run'::text AND NEW.status = 'voided'::text)
   EXECUTE FUNCTION public.pay_runs_sync_voided_document();
-
