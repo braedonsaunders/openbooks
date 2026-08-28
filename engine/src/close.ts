@@ -882,7 +882,7 @@ async function assertCloseScope(
     orgId: string;
     periodId: string;
     bookId: string;
-    subsidiaryIds?: string[];
+    subsidiaryIds?: string[] | null;
   },
 ): Promise<void> {
   const requestedSubsidiaries = args.subsidiaryIds ?? [];
@@ -923,7 +923,8 @@ export async function startCloseRun(args: {
   blueprintId?: string;
   reportingPackageId?: string;
   targetCloseDate?: string;
-  subsidiaryIds?: string[];
+  /** Concrete subsidiary IDs, or null as the explicit org-wide sentinel. */
+  subsidiaryIds?: string[] | null;
 }): Promise<string> {
   const defaults = await ensureCloseDefaults(args.orgId, args.actorId);
   const closeFeatures = await defaultCloseFeatureContext(db, args.orgId);
@@ -1640,22 +1641,29 @@ export async function addCloseEvidence(args: {
   const contentHash = createHash("sha256")
     .update(canonicalJson(snapshot), "utf8")
     .digest("hex");
-  const inserted = (await db.execute<{ id: string }>(sql`
-    insert into close_task_evidence
-      (org_id, run_id, task_id, file_id, evidence_type, reference_id, reference_url,
-       label, snapshot, content_hash, created_by, updated_by)
-    select ${args.orgId}, ${args.runId}, t.id, ${args.fileId ?? null}, ${args.evidenceType},
-           ${args.referenceId ?? null}, ${args.referenceUrl ?? null}, ${args.label.trim()},
-           ${JSON.stringify(snapshot)}::jsonb, ${contentHash}, ${args.actorId}, ${args.actorId}
-      from close_run_tasks t
-     where t.id = ${args.taskId} and t.run_id = ${args.runId} and t.org_id = ${args.orgId}
-    returning id`));
-  if (!inserted.rows[0]) throw new CloseError("close task not found");
-  await db.execute(sql`
-    insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
-    values (${args.orgId}, ${args.runId}, ${args.taskId}, 'task.evidence_added', ${args.actorId},
-            ${JSON.stringify({ evidenceId: inserted.rows[0].id, type: args.evidenceType, label: args.label.trim() })}::jsonb)`);
-  return inserted.rows[0].id;
+  return withOrg(args.orgId, async () =>
+    inDbTransaction(async (tx) => {
+      // Evidence and its append-only audit event are one atomic unit. A
+      // committed evidence row without its event cannot be reconciled during
+      // close, so any event failure must roll back the evidence insert too.
+      const inserted = (await tx.execute<{ id: string }>(sql`
+        insert into close_task_evidence
+          (org_id, run_id, task_id, file_id, evidence_type, reference_id, reference_url,
+           label, snapshot, content_hash, created_by, updated_by)
+        select ${args.orgId}, ${args.runId}, t.id, ${args.fileId ?? null}, ${args.evidenceType},
+               ${args.referenceId ?? null}, ${args.referenceUrl ?? null}, ${args.label.trim()},
+               ${JSON.stringify(snapshot)}::jsonb, ${contentHash}, ${args.actorId}, ${args.actorId}
+          from close_run_tasks t
+         where t.id = ${args.taskId} and t.run_id = ${args.runId} and t.org_id = ${args.orgId}
+        returning id`));
+      if (!inserted.rows[0]) throw new CloseError("close task not found");
+      await tx.execute(sql`
+        insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
+        values (${args.orgId}, ${args.runId}, ${args.taskId}, 'task.evidence_added', ${args.actorId},
+                ${JSON.stringify({ evidenceId: inserted.rows[0].id, type: args.evidenceType, label: args.label.trim() })}::jsonb)`);
+      return inserted.rows[0].id;
+    }),
+  );
 }
 
 async function assertCloseReadyForApproval(
