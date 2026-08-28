@@ -27,6 +27,9 @@ type TargetBillingState = {
   costing_basis: "actual" | "estimated";
   source_status: string | null;
   invoiced_by_line_id: string | null;
+  cost_journal_entry_id: string | null;
+  overhead_journal_entry_id: string | null;
+  payroll_batch_ref: string | null;
   employee_party_id: string;
   project_id: string | null;
   item_id: string | null;
@@ -106,6 +109,9 @@ export async function syncProjectFinancialInputs(
            time.billing_status, time.costing_basis,
            time.custom ->> 'sourceBillingStatus' as source_status,
            time.invoiced_by_line_id,
+           time.cost_journal_entry_id,
+           time.overhead_journal_entry_id,
+           time.payroll_batch_ref,
            time.employee_party_id, time.project_id, time.item_id,
            time.department_id, time.time_type_id,
            employee.custom ->> ${source.refKey} as employee_ref,
@@ -366,6 +372,20 @@ export async function syncProjectFinancialInputs(
         `source time entry ${state.sourceRef} is unbilled but OpenBooks carries invoice-line provenance`,
       );
     }
+    const immutableEvidence = [
+      target.invoiced_by_line_id ? "invoice-line" : null,
+      target.cost_journal_entry_id ? "cost journal" : null,
+      target.overhead_journal_entry_id ? "overhead journal" : null,
+      target.payroll_batch_ref ? "payroll batch" : null,
+    ].filter((value): value is string => value !== null);
+    const immutableFactChange = costingChanged || factsChanged;
+    if (immutableFactChange && immutableEvidence.length > 0) {
+      throw new Error(
+        `source time entry ${state.sourceRef} changes ${immutableEvidence.join(
+          ", ",
+        )} evidence; corrections must be new offsetting entries`,
+      );
+    }
     if (
       target.field_ticket_id &&
       state.projectRef !== undefined &&
@@ -383,6 +403,7 @@ export async function syncProjectFinancialInputs(
         billingStatus: state.billingStatus,
         beforeCostingBasis: target.costing_basis,
         costingBasis: state.costingBasis,
+        immutableFactChange,
         beforeSourceStatus: target.source_status,
         sourceStatus,
         beforeEmployeeRef: target.employee_ref,
@@ -484,7 +505,7 @@ export async function syncProjectFinancialInputs(
   await db.transaction(async (tx) => {
     for (let offset = 0; offset < changed.length; offset += BATCH) {
       const batch = changed.slice(offset, offset + BATCH);
-      await tx.execute(sql`
+      const write = await tx.execute(sql`
         with input as (
           select *
             from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
@@ -495,6 +516,7 @@ export async function syncProjectFinancialInputs(
                    "billingStatus" text,
                    "beforeCostingBasis" text,
                    "costingBasis" text,
+                   "immutableFactChange" boolean,
                    "beforeSourceStatus" text,
                    "sourceStatus" text,
                    "beforeEmployeeRef" text,
@@ -550,6 +572,15 @@ export async function syncProjectFinancialInputs(
            where te.id = input.id
              and te.org_id = ${options.orgId}
              and te.custom ->> ${source.refKey} = input."sourceRef"
+             and (
+               not input."immutableFactChange"
+               or (
+                 te.invoiced_by_line_id is null
+                 and te.cost_journal_entry_id is null
+                 and te.overhead_journal_entry_id is null
+                 and te.payroll_batch_ref is null
+               )
+             )
            returning te.id
         )
         insert into audit_log
@@ -596,7 +627,13 @@ export async function syncProjectFinancialInputs(
                ${actorId}, ${options.runId}
           from input
           join updated on updated.id = input.id
+          returning row_id
       `);
+      if (write.rows.length !== batch.length) {
+        throw new Error(
+          `project-financial input sync could not update every time entry; immutable downstream evidence appeared during the write`,
+        );
+      }
     }
     for (
       let offset = 0;
