@@ -10,11 +10,15 @@ interface RouteState {
   calls: DbCall[]
   respondExecute: (text: string) => { rows: unknown[] }
   respondTxExecute: (text: string) => { rows: unknown[] }
+  allowedSubsidiaryIds: Set<string> | null
+  ticketSubsidiaryId: string | null
 }
 const routeState: RouteState = {
   calls: [],
   respondExecute: () => ({ rows: [] }),
   respondTxExecute: () => ({ rows: [] }),
+  allowedSubsidiaryIds: null,
+  ticketSubsidiaryId: null,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
@@ -96,11 +100,17 @@ const mockSources = new Map<string, string>([
   [
     'mock:authz',
     `
+      const state = globalThis[Symbol.for('openbooks.fieldticket-route-test')]
       export async function guardPermission(permission) {
         if (permission === 'time.read' || permission === 'time.manage') {
-          return { user: { orgId: 'org-1', id: 'user-1' } }
+          return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
         }
         return new Response(null, { status: 403 })
+      }
+      export function guardSubsidiaryScope(authz, subsidiaryId) {
+        if (authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds === undefined) return null
+        if (subsidiaryId && authz.allowedSubsidiaryIds.has(subsidiaryId)) return null
+        return Response.json({ error: 'not found' }, { status: 404 })
       }
     `,
   ],
@@ -145,7 +155,7 @@ const hooks = registerHooks({
 })
 
 const routeUrl = './route.ts?fieldticket-occ-test'
-const { PATCH, POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const { GET, PATCH, POST } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
 const NEXT_REVISION = '2026-08-24T12:00:00.300002Z'
@@ -154,16 +164,26 @@ function reset(): void {
   routeState.calls.length = 0
   routeState.respondExecute = () => ({ rows: [] })
   routeState.respondTxExecute = () => ({ rows: [] })
+  routeState.allowedSubsidiaryIds = null
+  routeState.ticketSubsidiaryId = null
 }
 
 /** Serve the read-only queries the ticket service makes outside the fence. */
 function serveReads(currentRevision: () => string): void {
   routeState.respondExecute = (text) => {
     if (text.includes('ft.period_start')) return { rows: [headerRow(currentRevision())] }
+    if (text.includes('d.subsidiary_id as')) return { rows: [{ subsidiaryId: routeState.ticketSubsidiaryId }] }
     if (text.includes('count(*)::int')) return { rows: [{ n: 0 }] }
     if (text.includes('show_on_field_ticket')) return { rows: [{ id: TIME_TYPE_ID }] }
     return { rows: [] }
   }
+}
+
+function get(): Promise<Response> {
+  return GET(
+    new Request(`http://openbooks.test/api/field-tickets/${TICKET_ID}`),
+    { params: Promise.resolve({ id: TICKET_ID }) },
+  )
 }
 
 function patch(body: Record<string, unknown>): Promise<Response> {
@@ -188,8 +208,20 @@ function post(body: Record<string, unknown>): Promise<Response> {
   )
 }
 
+function postRaw(body: string): Promise<Response> {
+  return POST(
+    new Request(`http://openbooks.test/api/field-tickets/${TICKET_ID}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    }),
+    { params: Promise.resolve({ id: TICKET_ID }) },
+  )
+}
+
 test('PATCH rejects a missing revision token before any write', async () => {
   reset()
+  serveReads(() => STORED_REVISION)
 
   const response = await patch({ memo: 'no token' })
 
@@ -279,4 +311,75 @@ test('POST save-grid fences the grid replacement behind the same revision token'
   assert.equal(payload.revision, NEXT_REVISION)
   const inserted = routeState.calls.find((call) => call.kind === 'tx-execute' && call.text.includes('insert into time_entries'))
   assert.ok(inserted, 'the crew cell was written inside the fence')
+})
+
+test('GET and every POST/PATCH mutation fail closed for an out-of-scope ticket', async () => {
+  reset()
+  const subsidiaryA = '00000000-0000-4000-8000-00000000fa01'
+  const subsidiaryB = '00000000-0000-4000-8000-00000000fb01'
+  routeState.allowedSubsidiaryIds = new Set([subsidiaryA])
+  routeState.ticketSubsidiaryId = subsidiaryB
+  serveReads(() => STORED_REVISION)
+
+  const read = await get()
+  assert.equal(read.status, 404)
+  assert.deepEqual(await read.json(), { error: 'not found' })
+  assert.ok(!routeState.calls.some((call) => call.text.includes('field_ticket_labor_snapshots')))
+
+  routeState.calls.length = 0
+  const patchResponse = await patch({ memo: 'hidden', expectedRevision: STORED_REVISION })
+  assert.equal(patchResponse.status, 404)
+  assert.deepEqual(await patchResponse.json(), { error: 'not found' })
+  assert.ok(!routeState.calls.some((call) => call.kind === 'tx-execute'))
+
+  routeState.calls.length = 0
+  const postResponse = await post({ action: 'submit' })
+  assert.equal(postResponse.status, 404)
+  assert.deepEqual(await postResponse.json(), { error: 'not found' })
+  assert.ok(!routeState.calls.some((call) => call.kind === 'tx-execute'))
+
+  routeState.calls.length = 0
+  const malformed = await postRaw('{')
+  assert.equal(malformed.status, 404)
+  assert.deepEqual(await malformed.json(), { error: 'not found' })
+})
+
+test('add-line and remove-line require the exact revision before the locked mutation', async () => {
+  reset()
+  serveReads(() => STORED_REVISION)
+  routeState.respondTxExecute = (text) =>
+    text.includes('for update') ? { rows: [{ status: 'draft', updatedAt: NEXT_REVISION, subsidiaryId: null }] } : { rows: [] }
+
+  const add = await post({
+    action: 'add-line',
+    itemId: '00000000-0000-4000-8000-00000000f005',
+    quantity: '1',
+    expectedRevision: STORED_REVISION,
+  })
+  assert.equal(add.status, 409)
+  assert.ok(!routeState.calls.some((call) => call.text.includes('insert into document_lines')))
+
+  routeState.calls.length = 0
+  const remove = await post({
+    action: 'remove-line',
+    lineId: '00000000-0000-4000-8000-00000000f006',
+    expectedRevision: STORED_REVISION,
+  })
+  assert.equal(remove.status, 409)
+  assert.ok(!routeState.calls.some((call) => call.text.includes('delete from document_lines')))
+})
+
+test('a line mutation observes approval while holding the parent lock', async () => {
+  reset()
+  serveReads(() => STORED_REVISION)
+  routeState.respondTxExecute = (text) =>
+    text.includes('for update') ? { rows: [{ status: 'approved', updatedAt: STORED_REVISION, subsidiaryId: null }] } : { rows: [] }
+
+  const response = await post({
+    action: 'remove-line',
+    lineId: '00000000-0000-4000-8000-00000000f006',
+    expectedRevision: STORED_REVISION,
+  })
+  assert.equal(response.status, 422)
+  assert.ok(!routeState.calls.some((call) => call.text.includes('delete from document_lines')))
 })

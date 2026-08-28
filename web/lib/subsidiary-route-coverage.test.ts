@@ -319,6 +319,53 @@ test('party transaction sublists also narrow the documents themselves', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Field tickets: the signed labor/material evidence is a document boundary
+// ---------------------------------------------------------------------------
+
+test('field-ticket detail, drawer, and every mutation enforce subsidiary scope', () => {
+  const route = source('app/api/field-tickets/[id]/route.ts')
+  const drawer = source('lib/field-ticket-drawer-data.ts')
+  const service = source('lib/field-tickets.ts')
+
+  // GET/PATCH/POST all resolve the ticket's canonical document subsidiary and
+  // pass the shared fail-closed 404 gate before loading or mutating anything.
+  assert.match(route, /d\.subsidiary_id as "subsidiaryId"/)
+  assert.ok(count(route, 'guardSubsidiaryScope(') >= 2)
+  assert.match(route, /allowedSubsidiaryIds: gate\.allowedSubsidiaryIds/)
+  assert.match(drawer, /allowedSubsidiaryIds: authz\.allowedSubsidiaryIds/)
+
+  // A restricted ticket's detail and picker queries stay in its legal entity;
+  // this catches regressions that gate only the header but leak related rows.
+  assert.match(service, /p\.subsidiary_id/)
+  assert.match(service, /eu\.subsidiary_id/)
+  assert.match(drawer, /p\.subsidiary_id/)
+  assert.match(drawer, /subsidiary_id/)
+})
+
+test('field-ticket add/remove lines require exact revisions and lock the parent', () => {
+  const route = source('app/api/field-tickets/[id]/route.ts')
+  const service = source('lib/field-tickets.ts')
+  assert.match(route, /action === 'add-line'[\s\S]*preflightRevision/)
+  assert.match(route, /action === 'remove-line'[\s\S]*preflightRevision/)
+  assert.ok(count(service, 'for update of d, ft') >= 2)
+  assert.ok(count(service, 'expectedRevision,') >= 4)
+  assert.match(service, /updated_at = greatest\(clock_timestamp\(\), d\.updated_at \+ interval '1 microsecond'\)/)
+})
+
+test('Accounting home scopes close and ledger metrics by the authz allowlist', () => {
+  const home = source('lib/module-home/accounting.ts')
+  assert.match(home, /type AccountingSubsidiaryScope = ReadonlySet<string> \| null/)
+  assert.match(home, /allowedSubsidiaryIds\?: AccountingSubsidiaryScope/)
+  assert.match(home, /subsidiaryVisibleFilter\(sql`je\.subsidiary_id`, scope\)/)
+  assert.match(home, /subsidiaryVisibleFilter\(sql`f\.subsidiary_id`, scope\)/)
+  assert.match(home, /jsonb_array_elements_text\(coalesce\(r\.scope->'subsidiaryIds'/)
+  assert.match(home, /from budget_lines bl/)
+  assert.match(home, /from ai_work_items w/)
+  assert.match(home, /allowed === null\) return sql``/)
+  assert.match(home, /if \(ids\.length === 0\) return sql` and false`/)
+})
+
+// ---------------------------------------------------------------------------
 // PDFs: printing or emailing IS the disclosure
 // ---------------------------------------------------------------------------
 
