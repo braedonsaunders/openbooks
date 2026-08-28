@@ -46,7 +46,15 @@ export function DashboardBuilder({
   canCreate,
   canPublish,
 }: {
-  dashboard: { id: string; name: string; description: string | null; status: 'draft' | 'published'; layout: Widget[] }
+  dashboard: {
+    id: string
+    name: string
+    description: string | null
+    status: 'draft' | 'published'
+    layout: Widget[]
+    /** Optional for server-rendered callers; the API bootstrap fills it when absent. */
+    updated_at?: string
+  }
   cards: EmbedCard[]
   availableCards: AvailableCard[]
   pinned: boolean
@@ -75,6 +83,81 @@ export function DashboardBuilder({
     () => ({ name: name.trim() || UNTITLED_DASHBOARD, description: description.trim() || null, layout }),
     [name, description, layout],
   )
+
+  // Saves are serialized locally and fenced remotely. A request that has
+  // already reached the server cannot be cancelled reliably, so the latest
+  // payload waits for it to return and then uses the fresh revision token. This
+  // preserves rapid-edit/latest-wins semantics without allowing an old response
+  // to mark a newer draft as saved.
+  const revisionRef = useRef<string | null>(dashboard.updated_at ?? null)
+  const pendingSaveRef = useRef<{
+    payload: typeof payload
+    sequence: number
+  } | null>(null)
+  const saveSequenceRef = useRef(0)
+  const saveRunningRef = useRef(false)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flushSave = async () => {
+    if (saveRunningRef.current) return
+    const pending = pendingSaveRef.current
+    if (!pending) return
+    pendingSaveRef.current = null
+    saveRunningRef.current = true
+
+    try {
+      // The detail page does not need to carry a revision prop: bootstrap it
+      // from the exact-token GET before the first write when necessary.
+      if (!revisionRef.current) {
+        const current = await fetch(`/api/insights/dashboards/${dashboard.id}`)
+        const currentData = (await current.json().catch(() => ({}))) as {
+          updated_at?: unknown
+        }
+        if (!current.ok || typeof currentData.updated_at !== 'string') {
+          throw new Error(t('autosave.failed'))
+        }
+        revisionRef.current = currentData.updated_at
+      }
+
+      const res = await fetch(`/api/insights/dashboards/${dashboard.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...pending.payload,
+          expectedUpdatedAt: revisionRef.current,
+        }),
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: unknown
+        updated_at?: unknown
+      }
+      if (!res.ok) {
+        if (pending.sequence === saveSequenceRef.current && pendingSaveRef.current === null) {
+          setSaveState('error')
+          toast.error(typeof data.error === 'string' ? data.error : t('autosave.failed'))
+        }
+        return
+      }
+
+      if (typeof data.updated_at !== 'string') throw new Error(t('autosave.failed'))
+      revisionRef.current = data.updated_at
+      // An intermediate response must not overwrite the UI state of a newer
+      // edit. The queued latest payload will be flushed in finally below.
+      if (pending.sequence === saveSequenceRef.current && pendingSaveRef.current === null) {
+        setSaveState('saved')
+        router.refresh()
+      }
+    } catch (error) {
+      if (pending.sequence === saveSequenceRef.current && pendingSaveRef.current === null) {
+        setSaveState('error')
+        toast.error(error instanceof Error ? error.message : t('autosave.failed'))
+      }
+    } finally {
+      saveRunningRef.current = false
+      if (pendingSaveRef.current) void flushSave()
+    }
+  }
+
   const first = useRef(true)
   useEffect(() => {
     if (ro) return
@@ -83,22 +166,20 @@ export function DashboardBuilder({
       return
     }
     setSaveState('dirty')
-    const timer = setTimeout(async () => {
+    const sequence = ++saveSequenceRef.current
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null
+      pendingSaveRef.current = { payload, sequence }
       setSaveState('saving')
-      const res = await fetch(`/api/insights/dashboards/${dashboard.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (res.ok) {
-        setSaveState('saved')
-        router.refresh()
-      } else {
-        setSaveState('error')
-        toast.error((await res.json()).error ?? t('autosave.failed'))
-      }
+      void flushSave()
     }, 600)
-    return () => clearTimeout(timer)
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, ro])
 
