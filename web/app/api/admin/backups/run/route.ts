@@ -46,7 +46,27 @@ export async function POST() {
   }
   const runId = run.rows[0]!.id;
 
-  await enqueueBackupRun({ op: "run", runId, orgId }, { jobId: runId });
+  try {
+    await enqueueBackupRun({ op: "run", runId, orgId }, { jobId: runId });
+  } catch (error) {
+    const message = ((error as Error).message || String(error)).slice(0, 2000);
+    // Redis can fail after the ledger insert has committed. Mark the row
+    // terminal so it releases the partial unique in-flight guard. Keep the
+    // status predicate: an enqueue response may be ambiguous, and a worker
+    // could already have claimed the run while the producer observed an error.
+    try {
+      await db.execute(sql`
+        update backup_runs
+           set status = 'failed', error = ${message}, completed_at = now(), updated_at = now()
+         where id = ${runId} and org_id = ${orgId} and status = 'queued'`);
+    } catch (cleanupError) {
+      console.error(
+        `[backup] run ${runId}: enqueue failure cleanup failed:`,
+        (cleanupError as Error).message,
+      );
+    }
+    return NextResponse.json({ error: "could not queue backup" }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true, runId });
 }
