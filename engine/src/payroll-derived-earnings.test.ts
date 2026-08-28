@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { sql } from "drizzle-orm";
 import {
   applyDerivedRule,
   computeDerivedEarnings,
@@ -7,6 +8,7 @@ import {
   derivedEntryWindow,
   DerivedCoverageError,
   DerivedEarningsError,
+  loadActiveDerivedRules,
   settlementMonth,
   type DerivedComponent,
   type DerivedEarningsInput,
@@ -16,6 +18,10 @@ import {
   type DerivedTimeEntry,
 } from "./payroll-derived-earnings.ts";
 import { sum } from "./money.ts";
+import { db } from "./db.ts";
+import { createScratchOrg, dropScratchOrgReporting } from "./test-fixtures.ts";
+
+const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
  * Hand-worked cases for the five earnings a construction payroll derives from
@@ -962,4 +968,35 @@ test("rules emit in sequence order so later components compute on them", () => {
 
   assert.deepEqual(lines.map((line) => line.ruleCode), ["TRAVEL", "PERDIEM"]);
   assert.deepEqual(lines.map((line) => line.sequence), [41, 60]);
+});
+
+test("effective-dated rule versions resolve by the pay-period end", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const componentId = `66666666-6666-4666-8666-${String(Date.now()).slice(-12).padStart(12, "0")}`;
+  const ruleId = `77777777-7777-4777-8777-${String(Date.now()).slice(-12).padStart(12, "0")}`;
+  const successorId = `88888888-8888-4888-8888-${String(Date.now()).slice(-12).padStart(12, "0")}`;
+  try {
+    await db.execute(sql`
+      insert into pay_components (id, org_id, code, name, kind, value)
+      values (${componentId}, ${org.orgId}, 'EFFECTIVE-TEST', 'Effective test', 'earning', '1')`);
+    await db.execute(sql`
+      insert into pay_derived_rules (id, org_id, code, name, component_id, trigger,
+                                     quantity_mode, rate_mode, rate_value, costing_mode,
+                                     effective_from, effective_to, is_active)
+      values (${ruleId}, ${org.orgId}, 'VERSIONED', 'Original', ${componentId}, 'distinct_day',
+              'count', 'fixed_per_unit', '10', 'source', '2026-01-01', '2026-06-30', true)`);
+    await db.execute(sql`
+      insert into pay_derived_rules (id, org_id, code, name, component_id, trigger,
+                                     quantity_mode, rate_mode, rate_value, costing_mode,
+                                     effective_from, is_active)
+      values (${successorId}, ${org.orgId}, 'VERSIONED', 'Successor', ${componentId}, 'distinct_day',
+              'count', 'fixed_per_unit', '25', 'source', '2026-07-01', true)`);
+
+    const before = await loadActiveDerivedRules(db, org.orgId, "2026-06-30");
+    const after = await loadActiveDerivedRules(db, org.orgId, "2026-07-01");
+    assert.deepEqual(before.map((rule) => [rule.id, rule.name, rule.rateValue]), [[ruleId, "Original", "10.0000"]]);
+    assert.deepEqual(after.map((rule) => [rule.id, rule.name, rule.rateValue]), [[successorId, "Successor", "25.0000"]]);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
 });

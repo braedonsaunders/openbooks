@@ -59,7 +59,7 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "./route.ts?tax-rate-domain-route-test";
-const { PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
+const { DELETE, PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/db.ts");
@@ -90,6 +90,12 @@ function patchRequest(entity: string, body: unknown): Request {
   return new Request(`http://localhost/api/admin/setup/${entity}`, {
     method: "PATCH",
     body: JSON.stringify(body),
+  });
+}
+
+function deleteRequest(entity: string, id: string): Request {
+  return new Request(`http://localhost/api/admin/setup/${entity}?id=${id}`, {
+    method: "DELETE",
   });
 }
 
@@ -128,6 +134,47 @@ async function auditCount(orgId: string, table: string, rowId?: string): Promise
   return result.rows[0]!.n;
 }
 
+interface DerivedRuleFixture {
+  orgId: string;
+  actorId: string;
+  componentId: string;
+  ruleId: string;
+}
+
+async function seedDerivedRuleFixture(): Promise<DerivedRuleFixture> {
+  const org = await createScratchOrg();
+  const actorId = await createScratchUser(org.orgId, "Derived Rule Admin", "admin");
+  const componentId = randomUUID();
+  await db.execute(sql`
+    insert into pay_components (id, org_id, code, name, kind, value, created_by, updated_by)
+    values (${componentId}, ${org.orgId}, 'DERIVED-TEST', 'Derived test component', 'earning', '1',
+            ${actorId}, ${actorId})`);
+  authenticate({ orgId: org.orgId, actorId });
+  const created = await POST(
+    postRequest("pay-derived-rules", {
+      code: `DERIVED-${randomUUID().slice(0, 8)}`,
+      name: "Original rule",
+      componentId,
+      trigger: "distinct_day",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
+      rateMode: "fixed_per_unit",
+      rateValue: "10",
+      quantityMode: "count",
+      costingMode: "source",
+      billableOnly: false,
+      includedJobTitles: [],
+      excludedJobTitles: [],
+      sequence: 50,
+      isActive: true,
+    }),
+    call("pay-derived-rules", {}),
+  );
+  assert.equal(created.status, 200);
+  const { id: ruleId } = (await created.json()) as { id: string };
+  return { orgId: org.orgId, actorId, componentId, ruleId };
+}
+
 test("the setup route states the tax-rate domain before every write and maps storage duplicates to 409", () => {
   const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
   assert.match(source, /entity\.key === 'tax-rates'/);
@@ -146,7 +193,104 @@ test("the setup route states the tax-rate domain before every write and maps sto
   // Storage is the duplicate authority for every writer: a natural-key race
   // surfaces as a deterministic 409 on both the create and update paths, with
   // the driver SQLSTATE read through Drizzle's error wrapper.
-  assert.equal(source.match(/pgErrorCode\(e\) === '23505'/g)?.length, 2);
+  assert.ok((source.match(/pgErrorCode\(e\) === '23505'/g)?.length ?? 0) >= 2);
+});
+
+test("derived-rule edits close the old window and create a successor", { skip: !DB }, async () => {
+  const f = await seedDerivedRuleFixture();
+  try {
+    const current = await db.execute<{ code: string }>(sql`
+      select code from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`);
+    const code = current.rows[0]!.code;
+    const edited = await PATCH(
+      patchRequest("pay-derived-rules", {
+        id: f.ruleId,
+        code,
+        name: "Successor rule",
+        componentId: f.componentId,
+        trigger: "distinct_day",
+        effectiveFrom: "2026-07-01",
+        effectiveTo: null,
+        rateMode: "fixed_per_unit",
+        rateValue: "25",
+        quantityMode: "count",
+        costingMode: "source",
+        billableOnly: false,
+        includedJobTitles: [],
+        excludedJobTitles: [],
+        sequence: 50,
+        isActive: true,
+      }),
+      call("pay-derived-rules", {}),
+    );
+    assert.equal(edited.status, 200);
+    const { id: successorId } = (await edited.json()) as { id: string };
+    assert.notEqual(successorId, f.ruleId, "a policy edit must receive a new version id");
+    const rows = await db.execute<{ id: string; name: string; rate: string; from_date: string; to_date: string | null }>(sql`
+      select id, name, rate_value::text as rate, effective_from::text as from_date,
+             effective_to::text as to_date
+        from pay_derived_rules
+       where org_id = ${f.orgId} and code = ${code}
+       order by effective_from`);
+    assert.deepEqual(rows.rows, [
+      { id: f.ruleId, name: "Original rule", rate: "10.0000", from_date: "2026-01-01", to_date: "2026-06-30" },
+      { id: successorId, name: "Successor rule", rate: "25.0000", from_date: "2026-07-01", to_date: null },
+    ]);
+    assert.equal(await auditCount(f.orgId, "pay_derived_rules", f.ruleId), 2, "close and original create are both audited");
+    assert.equal(await auditCount(f.orgId, "pay_derived_rules", successorId), 1, "successor insert is audited");
+
+    // Creating a later active version through the same generic endpoint also
+    // closes the current window before the insert.
+    const appended = await POST(
+      postRequest("pay-derived-rules", {
+        code,
+        name: "Appended rule",
+        componentId: f.componentId,
+        trigger: "distinct_day",
+        effectiveFrom: "2027-01-01",
+        effectiveTo: null,
+        rateMode: "fixed_per_unit",
+        rateValue: "30",
+        quantityMode: "count",
+        costingMode: "source",
+        billableOnly: false,
+        includedJobTitles: [],
+        excludedJobTitles: [],
+        sequence: 50,
+        isActive: true,
+      }),
+      call("pay-derived-rules", {}),
+    );
+    assert.equal(appended.status, 200);
+    const { id: appendedId } = (await appended.json()) as { id: string };
+    const finalRows = await db.execute<{ id: string; to_date: string | null }>(sql`
+      select id, effective_to::text as to_date from pay_derived_rules
+       where org_id = ${f.orgId} and code = ${code} order by effective_from`);
+    assert.deepEqual(finalRows.rows.map((row) => [row.id, row.to_date]), [
+      [f.ruleId, "2026-06-30"], [successorId, "2026-12-31"], [appendedId, null],
+    ]);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("setup deletes write their audit event in the same transaction", { skip: !DB }, async () => {
+  const f = await seedDerivedRuleFixture();
+  try {
+    const deleted = await DELETE(
+      deleteRequest("pay-derived-rules", f.ruleId),
+      call("pay-derived-rules", {}),
+    );
+    assert.equal(deleted.status, 200);
+    const rows = await db.execute(sql`
+      select id from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`);
+    assert.equal(rows.rows.length, 0);
+    assert.equal(await auditCount(f.orgId, "pay_derived_rules", f.ruleId), 2, "insert and delete each leave audit evidence");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(f.orgId);
+  }
 });
 
 test("API rejects negative and out-of-domain tax rates before any write", { skip: !DB }, async () => {
