@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   interpolateTemplate,
   resolveDefaultValue,
@@ -20,6 +20,7 @@ import { emailActionUrls } from "./email-tokens.ts";
 import { lockRecord, unlockRecord } from "./locks.ts";
 import { renderFlowPdf } from "./pdf-hook.ts";
 import { enqueueFlowEmail } from "../scheduler-outbox.ts";
+import { loadRequiredControlAccounts } from "../control-accounts.ts";
 
 /**
  * The subject-agnostic flows executor. Runs a planned graph (actions + gates)
@@ -72,32 +73,6 @@ export interface ExecuteFlowPlanResult {
 async function orgName(orgId: string): Promise<string> {
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
   return org?.name ?? "OpenBooks";
-}
-
-/**
- * Org control accounts for post_document. Same source as web/lib/documents.ts
- * controlDeps + payments.ts paymentControlDeps: orgs.settings.controlAccounts.
- */
-async function postingDeps(orgId: string): Promise<{
-  control: { ar: string; ap: string; bank: string; taxCollected?: string; taxPaid?: string; employeePayable?: string };
-}> {
-  const r = (await db.execute<{ c: Record<string, string> | null }>(
-    sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`,
-  ));
-  const c = r.rows[0]?.c ?? {};
-  if (!c.ap || !c.ar || !c.bank) {
-    throw new Error("org control accounts are not configured (orgs.settings.controlAccounts)");
-  }
-  return {
-    control: {
-      ar: c.ar,
-      ap: c.ap,
-      bank: c.bank,
-      taxCollected: c.taxCollected,
-      taxPaid: c.taxPaid,
-      employeePayable: c.employeePayable,
-    },
-  };
 }
 
 export async function executeFlowPlan(
@@ -226,18 +201,11 @@ export async function executeFlowPlan(
             },
           });
         } catch (e) {
-          // The outbox is the durable transport; when even its insert fails
-          // we record the skip on the effect rather than failing the whole
-          // run — the rest of the flow (status changes, gates) matters more
-          // than one notification (same posture as scheduler.ts's inline
-          // fallback).
+          // The outbox is the durable transport. If its insert fails, keep the
+          // effect claim retryable: the action loop releases the claim and
+          // stops the chain, so a later run can persist and deliver the email.
           console.error(`[flows] send_email deferral failed (run ${runId}):`, e);
-          await markEffectComplete(`${flow.id}:action:${nodeId}`, {
-            action: "send_email",
-            skipped: "email outbox unavailable",
-            to: to.length,
-          });
-          return `send_email→${to.length} (outbox unavailable, skipped)`;
+          throw e;
         }
         return `send_email→${to.length}${pdfNote}`;
       }
@@ -304,7 +272,7 @@ export async function executeFlowPlan(
         } else {
           // Break the static import cycle (posting.ts dispatches flows).
           const { postDocument } = await import("../posting.ts");
-          const deps = await postingDeps(ctx.orgId);
+          const deps = { control: await loadRequiredControlAccounts(ctx.orgId) };
           entryId = await postDocument(subjectId, deps, {
             audit: { actorId: ctx.userId ?? null, source: "flows" },
           });
