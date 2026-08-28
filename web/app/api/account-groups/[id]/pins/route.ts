@@ -36,18 +36,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   `);
   if (!acct.rows.length) return NextResponse.json({ error: "account not found" }, { status: 404 });
 
-  // One pin per account per dimension: clear siblings, then pin here.
-  await db.execute(sql`
-    delete from account_group_members m using account_groups g
-    where m.group_id = g.id and g.org_id = ${gate.user.orgId}
-      and m.org_id = ${gate.user.orgId}
-      and g.dimension = ${group.dimension} and m.account_id = ${accountId}
-  `);
-  await db.execute(sql`
-    insert into account_group_members (org_id, group_id, account_id, created_by)
-    values (${gate.user.orgId}, ${id}, ${accountId}, ${gate.user.id})
-    on conflict do nothing
-  `);
+  // The delete and insert must share one transaction and one per-account /
+  // per-dimension fence.  Otherwise two replicas can both clear siblings
+  // before either insert becomes visible, leaving two legal pins behind.
+  const pinLockKey = `account-group-pin:${gate.user.orgId}:${group.dimension}:${accountId}`;
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${pinLockKey}, 0))
+    `);
+    await tx.execute(sql`
+      delete from account_group_members m using account_groups g
+      where m.group_id = g.id and g.org_id = ${gate.user.orgId}
+        and m.org_id = ${gate.user.orgId}
+        and g.dimension = ${group.dimension} and m.account_id = ${accountId}
+    `);
+    await tx.execute(sql`
+      insert into account_group_members (org_id, group_id, account_id, dimension, created_by)
+      values (${gate.user.orgId}, ${id}, ${accountId}, ${group.dimension}, ${gate.user.id})
+      on conflict (org_id, dimension, account_id) do update
+        set group_id = excluded.group_id,
+            updated_at = now(),
+            updated_by = excluded.created_by
+    `);
+  });
   return NextResponse.json({ ok: true });
 }
 
@@ -61,8 +72,17 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const group = await loadGroup(id, gate.user.orgId);
   if (!group) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  await db.execute(sql`
-    delete from account_group_members where group_id = ${id} and org_id = ${gate.user.orgId} and account_id = ${accountId}
-  `);
+  const pinLockKey = `account-group-pin:${gate.user.orgId}:${group.dimension}:${accountId}`;
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${pinLockKey}, 0))
+    `);
+    await tx.execute(sql`
+      delete from account_group_members
+       where group_id = ${id}
+         and org_id = ${gate.user.orgId}
+         and account_id = ${accountId}
+    `);
+  });
   return NextResponse.json({ ok: true });
 }

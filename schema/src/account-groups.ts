@@ -61,10 +61,12 @@ export const accountGroupMembers = pgTable(
     orgId: orgRef(),
     groupId: uuid("group_id").notNull(),
     accountId: uuid("account_id").notNull(),
+    /** Copied from the parent group so one account can be pinned once per dimension. */
+    dimension: text("dimension").notNull(),
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("account_group_members_group_account").on(t.groupId, t.accountId),
+    uniqueIndex("account_group_members_org_dimension_account").on(t.orgId, t.dimension, t.accountId),
     index("account_group_members_account").on(t.accountId),
   ],
 );
