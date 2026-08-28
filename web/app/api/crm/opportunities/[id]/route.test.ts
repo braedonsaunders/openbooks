@@ -322,6 +322,7 @@ test('PATCH rejects a contact that fails the account check on the locked opportu
   assert.ok(routeState.calls.some((call) => call.kind === 'tx-execute' && call.text.includes('for update of o')), 'the opportunity was locked before the refreshed check')
   assert.ok(routeState.calls.some((call) => call.kind === 'tx-execute' && call.text.includes('from contacts')), 'the contact was checked against the locked account')
   assert.equal(routeState.txWrites, 0, 'the invalid pairing never reached the opportunity update')
+  assert.equal(routeState.auditWrites, 0, 'the invalid pairing never reached the audit write')
 })
 
 test('PATCH persists when the contact belongs to the locked account', async () => {
@@ -331,6 +332,8 @@ test('PATCH persists when the contact belongs to the locked account', async () =
 
   assert.equal(response.status, 200)
   assert.equal(routeState.txWrites, 1)
+  assert.equal(routeState.auditWrites, 1)
+  assert.equal(routeState.auditBefores[0]?.title, staleOpportunity.title)
   const txContactIndex = routeState.calls.findIndex((call) => call.kind === 'tx-execute' && call.text.includes('from contacts'))
   const txUpdateIndex = routeState.calls.findIndex((call) => call.kind === 'tx-execute' && call.text.includes('update crm_opportunities'))
   assert.ok(txContactIndex >= 0 && txUpdateIndex > txContactIndex, 'the account check precedes the write')
@@ -408,7 +411,7 @@ test('disappearance after preflight returns 404 before any transaction write', a
   assert.equal(routeState.calls.some((call) => call.text.includes('update crm_opportunities')), false)
 })
 
-test('an explicitly submitted status is revalidated after locking', async () => {
+test('an explicitly submitted deactivated status fails closed after locking', async () => {
   reset([true])
   routeState.txStatusValid = false
 
@@ -416,11 +419,24 @@ test('an explicitly submitted status is revalidated after locking', async () => 
 
   assert.equal(response.status, 422)
   assert.deepEqual(await response.json(), { error: 'invalid status' })
+  assert.ok(routeState.calls.some((call) => call.kind === 'tx-execute' && call.text.includes('from crm_opportunity_statuses') && call.text.includes('is_active') && call.text.includes('for update')))
   assert.equal(routeState.txWrites, 0)
   assert.equal(routeState.auditWrites, 0)
 })
 
-test('account, team, and source references are revalidated on the locked connection', async () => {
+test('a deactivated derived status fails closed after locking', async () => {
+  reset([true])
+  routeState.txStatusValid = false
+
+  const response = await patch({ title: 'Invalidated derived status' })
+
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), { error: 'invalid status' })
+  assert.equal(routeState.txWrites, 0)
+  assert.equal(routeState.auditWrites, 0)
+})
+
+test('deactivated account, team, and source references fail closed on the locked connection', async () => {
   for (const [reference, error] of [
     ['parties', 'invalid account'],
     ['crm_sales_teams', 'invalid sales team'],
@@ -433,6 +449,9 @@ test('account, team, and source references are revalidated on the locked connect
 
     assert.equal(response.status, 422)
     assert.deepEqual(await response.json(), { error })
+    if (reference !== 'parties') {
+      assert.ok(routeState.calls.some((call) => call.kind === 'tx-execute' && call.text.includes(`from ${reference}`) && call.text.includes('is_active') && call.text.includes('for update')))
+    }
     assert.equal(routeState.txWrites, 0)
     assert.equal(routeState.auditWrites, 0)
   }
