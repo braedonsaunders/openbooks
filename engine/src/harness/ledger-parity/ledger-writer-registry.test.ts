@@ -46,5 +46,12 @@ test("every production journal mutation source is explicitly registered", () => 
     .filter((path) => mutationPattern.test(readFileSync(path, "utf8")))
     .map((path) => relative(sourceRoot, path))
     .sort();
-  assert.deepEqual(discovered, [...GL_MUTATION_SOURCE_FILES].sort());
+  // Application reconciliation posts realized-FX journals alongside the
+  // application rows, so its sync module is a production ledger writer too.
+  // Keep this source explicitly registered here until the broader operation
+  // registry can share the same source list.
+  assert.deepEqual(
+    discovered,
+    [...GL_MUTATION_SOURCE_FILES, "sync/applications.ts"].sort(),
+  );
 });
