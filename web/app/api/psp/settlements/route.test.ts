@@ -11,6 +11,9 @@ interface DomainCall {
 
 interface PspRouteState {
   permissions: Set<string>;
+  allowedSubsidiaryIds: Set<string> | null;
+  batchSubsidiaryId: string | null | undefined;
+  batchRows: Array<Record<string, unknown>>;
   permissionChecks: string[];
   domainCalls: DomainCall[];
 }
@@ -18,6 +21,9 @@ interface PspRouteState {
 const stateKey = Symbol.for("openbooks.psp-settlement-route-test");
 const routeState: PspRouteState = {
   permissions: new Set(),
+  allowedSubsidiaryIds: null,
+  batchSubsidiaryId: undefined,
+  batchRows: [],
   permissionChecks: [],
   domainCalls: [],
 };
@@ -37,8 +43,28 @@ const mockSources = new Map<string, string>([
   [
     "mock:db",
     `
+      const state = globalThis[Symbol.for('openbooks.psp-settlement-route-test')]
       export const db = {
-        execute() { throw new Error('unexpected database query') }
+        execute(query) {
+          const staticText = (chunk) => {
+            if (typeof chunk !== 'object' || chunk === null) return ''
+            if (Array.isArray(chunk.value)) return chunk.value.join('')
+            if (Array.isArray(chunk.queryChunks)) return chunk.queryChunks.map(staticText).join('')
+            return ''
+          }
+          const text = (query?.queryChunks ?? []).map(staticText).join('')
+          if (text.includes('select subsidiary_id as "subsidiaryId"')) {
+            return { rows: state.batchSubsidiaryId === undefined ? [] : [{ subsidiaryId: state.batchSubsidiaryId }] }
+          }
+          if (text.includes('from psp_settlement_batches')) {
+            if (state.allowedSubsidiaryIds && !text.includes('subsidiary_id = any')) return { rows: state.batchRows }
+            if (state.allowedSubsidiaryIds) {
+              return { rows: state.batchRows.filter((row) => state.allowedSubsidiaryIds.has(row.subsidiaryId)) }
+            }
+            return { rows: state.batchRows }
+          }
+          return { rows: state.batchSubsidiaryId === undefined ? [] : [{ subsidiaryId: state.batchSubsidiaryId }] }
+        }
       }
     `,
   ],
@@ -51,7 +77,7 @@ const mockSources = new Map<string, string>([
         return {
           user: { orgId: 'org-1', id: 'user-1' },
           permissions: new Set(state.permissions),
-          allowedSubsidiaryIds: null,
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
         }
       }
 
@@ -59,13 +85,19 @@ const mockSources = new Map<string, string>([
         state.permissionChecks.push(permission)
         return authz.permissions.has(permission)
       }
+
+      export function guardSubsidiaryScope(authz, subsidiaryId) {
+        if (authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(subsidiaryId)) return null
+        return Response.json({ error: 'not found' }, { status: 404 })
+      }
     `,
   ],
   [
     "mock:feature-gates",
     `
+      const state = globalThis[Symbol.for('openbooks.psp-settlement-route-test')]
       export async function guardFeaturePermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' } }
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
       }
     `,
   ],
@@ -161,11 +193,14 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "./route.ts?psp-permission-test";
-const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
+const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 function reset(permissions: string[]): void {
   routeState.permissions = new Set(permissions);
+  routeState.allowedSubsidiaryIds = null;
+  routeState.batchSubsidiaryId = undefined;
+  routeState.batchRows = [];
   routeState.permissionChecks.length = 0;
   routeState.domainCalls.length = 0;
 }
@@ -179,6 +214,21 @@ function post(body: Record<string, unknown>): Promise<Response> {
     }),
   );
 }
+
+test("GET hides batches and provider configs from other subsidiaries", async () => {
+  routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
+  routeState.batchRows = [
+    { id: "batch-a", subsidiaryId: "sub-a", netAmount: "10.0000" },
+    { id: "batch-b", subsidiaryId: "sub-b", netAmount: "20.0000" },
+  ];
+
+  const response = await GET();
+
+  assert.equal(response.status, 200);
+  const payload = await response.json() as { batches: Array<{ id: string }>; configs: unknown[] };
+  assert.deepEqual(payload.batches.map((batch) => batch.id), ["batch-a"]);
+  assert.deepEqual(payload.configs, []);
+});
 
 test("saveConfig rejects reconciliation authority without setup authority", async () => {
   reset(["banking.reconcile"]);
@@ -267,5 +317,61 @@ for (const scenario of reconciliationActions) {
       routeState.domainCalls.map((call) => call.action),
       [scenario.action],
     );
+  });
+}
+
+test("restricted import requires an in-scope subsidiary", async () => {
+  reset(["banking.reconcile"]);
+  routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
+
+  const response = await post({
+    action: "import",
+    provider: "stripe",
+    externalRef: "payout-other",
+    settlementDate: "2026-08-24",
+    transactions: [],
+    subsidiaryId: "sub-b",
+  });
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(routeState.domainCalls, []);
+});
+
+test("restricted import dispatches an in-scope subsidiary", async () => {
+  reset(["banking.reconcile"]);
+  routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
+
+  const response = await post({
+    action: "import",
+    provider: "stripe",
+    externalRef: "payout-own",
+    settlementDate: "2026-08-24",
+    transactions: [],
+    subsidiaryId: "sub-a",
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((routeState.domainCalls[0]?.input as { accounts: { subsidiaryId: string } }).accounts.subsidiaryId, "sub-a");
+});
+
+for (const action of ["post", "reverse"] as const) {
+  test(`restricted ${action} cannot reach another subsidiary's batch`, async () => {
+    reset(["banking.reconcile"]);
+    routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
+    routeState.batchSubsidiaryId = "sub-b";
+
+    const response = await post(
+      action === "post"
+        ? { action, batchId: "batch-other" }
+        : {
+            action,
+            batchId: "batch-other",
+            reversalDate: "2026-08-24",
+            reason: "Provider recalled the payout",
+          },
+    );
+
+    assert.equal(response.status, 404);
+    assert.deepEqual(routeState.domainCalls, []);
   });
 }
