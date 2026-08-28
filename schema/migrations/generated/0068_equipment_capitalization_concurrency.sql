@@ -136,7 +136,12 @@ BEGIN
   -- Initial capitalization is NULL -> asset and remains allowed.  Repeating
   -- the same value is a no-op.  Since no controlled reversal/de-capitalization
   -- path exists, every other change would disconnect audited asset history and
-  -- is rejected at the storage boundary for all writers.
+  -- is rejected at the storage boundary for all writers.  The repository's
+  -- explicit sandbox teardown is the one controlled exception: it removes the
+  -- whole tenant and its evidence under openbooks.sandbox_wipe.
+  IF public.openbooks_sandbox_wipe_allowed(OLD.org_id) THEN
+    RETURN NEW;
+  END IF;
   IF OLD.fixed_asset_id IS NOT NULL
      AND NEW.fixed_asset_id IS DISTINCT FROM OLD.fixed_asset_id THEN
     RAISE EXCEPTION USING
