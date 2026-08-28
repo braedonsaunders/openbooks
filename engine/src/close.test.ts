@@ -4,12 +4,14 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
+  addCloseEvidence,
   CloseError,
   closeModuleForDocument,
   decidePeriodReopen,
   requestPeriodReopen,
   setPeriodLockState,
   periodLockBlocksPosting,
+  startCloseRun,
 } from "./close.ts";
 import { db, withBypass, withOrgTransaction } from "./db.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
@@ -718,6 +720,108 @@ test(
         (error: unknown) => errorChainMatches(error, /BANKING is closed/),
       );
     } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "close evidence and its audit event commit or roll back together",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      const runId = await startCloseRun({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actors.adminId,
+      });
+      const task = (await db.execute<{ id: string }>(sql`
+        select id from close_run_tasks
+         where org_id = ${org.orgId} and run_id = ${runId}
+         order by sort_order, id
+         limit 1`)).rows[0];
+      assert.ok(task, "the close run must materialize at least one task");
+
+      // Fail only the audit half of the evidence operation. The evidence row
+      // must disappear with the transaction instead of surviving this error.
+      await db.execute(sql`
+        drop trigger if exists close_evidence_event_inject on close_events`);
+      await db.execute(sql`
+        drop function if exists close_evidence_event_inject()`);
+      await db.execute(sql`
+        create function close_evidence_event_inject() returns trigger
+        language plpgsql as $$
+        begin
+          if new.event_type = 'task.evidence_added'
+             and new.payload->>'label' = 'INJECT-EVENT' then
+            raise exception 'injected evidence event failure';
+          end if;
+          return new;
+        end $$`);
+      await db.execute(sql`
+        create trigger close_evidence_event_inject
+          before insert on close_events
+          for each row execute function close_evidence_event_inject()`);
+      try {
+        await assert.rejects(
+          addCloseEvidence({
+            orgId: org.orgId,
+            runId,
+            taskId: task.id,
+            actorId: actors.adminId,
+            evidenceType: "note",
+            label: "INJECT-EVENT",
+          }),
+          (error: unknown) => errorChainMatches(error, /injected evidence event failure/),
+        );
+        const rolledBack = await db.execute<{ evidence: number; events: number }>(sql`
+          select
+            (select count(*)::int from close_task_evidence
+              where org_id = ${org.orgId} and task_id = ${task.id}
+                and label = 'INJECT-EVENT') as evidence,
+            (select count(*)::int from close_events
+              where org_id = ${org.orgId} and run_id = ${runId}
+                and event_type = 'task.evidence_added'
+                and payload->>'label' = 'INJECT-EVENT') as events`);
+        assert.deepEqual(rolledBack.rows[0], { evidence: 0, events: 0 });
+      } finally {
+        await db.execute(sql`
+          drop trigger if exists close_evidence_event_inject on close_events`);
+        await db.execute(sql`
+          drop function if exists close_evidence_event_inject()`);
+      }
+
+      // Control: with the fault removed, both rows commit and point to the
+      // same evidence identity.
+      const evidenceId = await addCloseEvidence({
+        orgId: org.orgId,
+        runId,
+        taskId: task.id,
+        actorId: actors.adminId,
+        evidenceType: "note",
+        label: "committed evidence",
+        snapshot: { source: "close.test" },
+      });
+      const committed = await db.execute<{ evidence_id: string; events: number }>(sql`
+        select e.id as evidence_id,
+               (select count(*)::int from close_events ce
+                 where ce.org_id = ${org.orgId} and ce.run_id = ${runId}
+                   and ce.task_id = ${task.id}
+                   and ce.event_type = 'task.evidence_added'
+                   and ce.payload->>'evidenceId' = e.id::text) as events
+          from close_task_evidence e
+         where e.id = ${evidenceId} and e.org_id = ${org.orgId}`);
+      assert.deepEqual(committed.rows[0], { evidence_id: evidenceId, events: 1 });
+    } finally {
+      // The trigger is normally removed by the inner finally; this idempotent
+      // cleanup also covers a setup failure before that block is entered.
+      await db.execute(sql`
+        drop trigger if exists close_evidence_event_inject on close_events`).catch(() => {});
+      await db.execute(sql`
+        drop function if exists close_evidence_event_inject()`).catch(() => {});
       await dropScratchOrg(org.orgId);
     }
   },
