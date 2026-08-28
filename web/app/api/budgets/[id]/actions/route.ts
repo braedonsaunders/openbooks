@@ -1,4 +1,4 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { jsonObject, parseJsonBody } from "../../../../../lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
