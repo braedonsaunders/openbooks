@@ -78,7 +78,7 @@ interface UtScheduleValues {
 }
 
 export interface UtEdition {
-  /** Selected by PAY DATE. */
+  /** Selected by payroll PERIOD START. */
   effectiveFrom: string;
   /** Exclusive; null while current. */
   effectiveTo: string | null;
@@ -96,7 +96,7 @@ export interface UtEdition {
 
 /**
  * Publication 14 (Rev. 4/25), effective June 1, 2025 — still in force for
- * 2026 pay dates before June 1, 2026.
+ * 2026 payroll periods beginning before June 1, 2026.
  */
 export const UT_EDITION_2025: UtEdition = {
   effectiveFrom: "2026-01-01",
@@ -225,18 +225,31 @@ export function utMulRateDollars(units: bigint, rate: string): bigint {
   return roundDiv(units * rate6(rate), RATE6 * DOLLAR) * DOLLAR;
 }
 
-export function utEditionForPayDate(payDate: string): UtEdition {
-  const year = Number(payDate.slice(0, 4));
+export function utEditionForPeriodStart(periodStart: string): UtEdition {
+  const year = Number(periodStart.slice(0, 4));
   if (!UT_LOADED_YEARS.has(year)) refuseUntranscribedYear(UT_WITHHOLDING, year);
   const edition = UT_EDITIONS.find((candidate) =>
-    payDate >= candidate.effectiveFrom
-    && (candidate.effectiveTo == null || payDate < candidate.effectiveTo));
+    periodStart >= candidate.effectiveFrom
+    && (candidate.effectiveTo == null || periodStart < candidate.effectiveTo));
   if (!edition) {
     throw new Error(
-      `no Utah withholding edition is loaded for a pay date of ${payDate} — ${RATES_MODULE}`,
+      `no Utah withholding edition is loaded for a payroll period beginning ${periodStart} — `
+      + RATES_MODULE,
     );
   }
   return edition;
+}
+
+function requirePeriodStart(input: UsStateWithholdingInput): string {
+  if (!input.periodStart) {
+    throw new Error(
+      "Utah withholding tables are keyed to the PAYROLL PERIOD START DATE, not the pay date — "
+      + "Publication 14's June 1, 2026 revision applies to periods beginning on or after June 1. "
+      + "Supply the period start date; substituting the pay date would apply the wrong table set "
+      + "for a period that crosses the revision date.",
+    );
+  }
+  return input.periodStart;
 }
 
 function utPeriodFor(periodsPerYear: number): UtPeriod {
@@ -260,7 +273,8 @@ export function utScheduleFor(filingStatus: string | null): UtSchedule {
 }
 
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const edition = utEditionForPayDate(input.payDate);
+  const periodStart = requirePeriodStart(input);
+  const edition = utEditionForPeriodStart(periodStart);
   const period = utPeriodFor(input.periodsPerYear);
   const factors: Record<string, string> = {
     UT_EDITION: edition.effectiveFrom,
