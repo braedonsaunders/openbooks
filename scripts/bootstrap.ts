@@ -353,7 +353,7 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0002_kernel_hardening.sql",
     from: "964952e28517abe607b4c6490b7ce1644addfaf4c011c16c8592bb65fa60bb46",
-    to: "b814bccaa12d21d425aee0fc940c43317b554bbceab0cb12a813f41d1034d156",
+    to: "33947b5ff76c8d3b042e362ebaccfa056ab46690ee448d546aa9e088ea1c37b7",
     strategy: "reapply",
     reason:
       "corrective revision replaces the racy BEFORE-trigger SELECT EXISTS guard "
@@ -362,7 +362,38 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "overlapping active-rate inserts can no longer both commit. The revision "
       + "is deliberately idempotent against the old migration's successful state "
       + "(retire the single-duty trigger, repair lost-race rows, then add the "
-      + "constraint) and replays cleanly on an already-bootstrapped database.",
+      + "constraint) and replays cleanly on an already-bootstrapped database. "
+      + "Now also carries the query-console REVOKE fix described in the "
+      + "b814bcca transition below.",
+  },
+  {
+    filename: "generated/0002_kernel_hardening.sql",
+    from: "b814bccaa12d21d425aee0fc940c43317b554bbceab0cb12a813f41d1034d156",
+    to: "33947b5ff76c8d3b042e362ebaccfa056ab46690ee448d546aa9e088ea1c37b7",
+    strategy: "restamp",
+    reason:
+      "section 1 revoked EXECUTE on the pg_catalog file readers from PUBLIC "
+      + "unconditionally. Those functions are not granted to PUBLIC on a stock "
+      + "PostgreSQL 16 cluster, so the loop only ever revoked privileges nobody "
+      + "held — and because pg_catalog is owned by the superuser, it raised "
+      + "'permission denied for function pg_current_logfile' under the "
+      + "constrained schema-owner migration role that "
+      + "assertConstrainedSchemaOwnerMigrationRole requires, aborting the entire "
+      + "chain at 0002 before any later migration could run. The revision skips "
+      + "signatures PUBLIC does not hold and downgrades an unrevokable real "
+      + "grant to a WARNING naming the superuser statement. A database that "
+      + "already recorded b814bcca ran section 1 as a privileged role, so its "
+      + "schema is already the revision's outcome and only the digest moves. "
+      + "Section 4's duplicate entry_number repair carries a second fix in the "
+      + "same revision: it updated posted and reversed journal_entries headers "
+      + "without a sanctioned migration path, so it aborted the chain with "
+      + "'journal entry % is posted and immutable' on every database that "
+      + "actually had duplicates. It now locks journal_entries against "
+      + "concurrent writers, suspends je_guard transactionally for the narrowly "
+      + "scoped entry_number repair, restores it before later sections run, and "
+      + "writes durable per-entry before/after audit evidence. A database that "
+      + "recorded b814bcca completed section 4, so it had no duplicates left to "
+      + "rename and the revision is a no-op there too.",
   },
 ];
 
