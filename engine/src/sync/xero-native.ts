@@ -112,23 +112,31 @@ export function buildNativeFromXero(
     departmentId: null, projectId: null, description, lineNumber: ++n,
   });
 
-  /** Detail lines from LineItems; per-line tax grouped per TaxType. */
+  /** Detail lines from LineItems; tax is grouped per TaxType on its first line. */
   const detail = (): NativeDocLine[] | { skip: string } => {
     const out: NativeDocLine[] = [];
-    const taxByType = new Map<string, bigint>();
+    const taxByType = new Map<string, { amount: bigint; carrier: NativeDocLine }>();
     for (const l of t.LineItems ?? []) {
       const a = byCode(l.AccountCode);
       if (!a) return { skip: `unmapped account code ${l.AccountCode}` };
       out.push(mk(a, home(l.LineAmount), l.Description ?? null));
       const tax = home(l.TaxAmount);
       if (tax !== 0n && l.TaxType) {
-        taxByType.set(l.TaxType, (taxByType.get(l.TaxType) ?? 0n) + (tax < 0n ? -tax : tax));
+        const bucket = taxByType.get(l.TaxType);
+        if (bucket) {
+          bucket.amount += tax < 0n ? -tax : tax;
+        } else {
+          taxByType.set(l.TaxType, {
+            amount: tax < 0n ? -tax : tax,
+            carrier: out[out.length - 1]!,
+          });
+        }
       }
     }
     if (out.length === 0) return { skip: "no line items" };
-    for (const [taxType, amt] of taxByType) {
-      const carrier = out[0]!;
-      carrier.taxAmount = fromUnits(toUnits(carrier.taxAmount) + amt);
+    for (const [taxType, bucket] of taxByType) {
+      const carrier = bucket.carrier;
+      carrier.taxAmount = fromUnits(toUnits(carrier.taxAmount) + bucket.amount);
       carrier.taxOverridden = true;
       if (!carrier.taxCodeId) carrier.taxCodeId = ctx.taxCodeByRef.get(taxType) ?? null;
     }
