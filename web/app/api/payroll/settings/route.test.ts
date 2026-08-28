@@ -325,3 +325,78 @@ test(
     }
   },
 );
+
+test(
+  "concurrent payroll setting saves preserve disjoint fields",
+  { skip: !DB },
+  async () => {
+    const fixture = await withBypass(async () => {
+      const org = await createScratchOrg();
+      return {
+        ...org,
+        actorId: await createScratchUser(
+          org.orgId,
+          "Payroll Admin",
+          "payroll_admin",
+        ),
+      };
+    });
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+      const responses = await Promise.all([
+        PUT(request("PUT", { statutoryHolidayPay: true })),
+        PUT(request("PUT", { eftFallbackToCheque: false })),
+      ]);
+      assert.deepEqual(
+        responses.map((response) => response.status),
+        [200, 200],
+      );
+      assert.deepEqual((await payrollState(fixture.orgId)).settings, {
+        statutoryHolidayPay: true,
+        eftFallbackToCheque: false,
+      });
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "payroll account and remittance IDs must belong to active local records",
+  { skip: !DB },
+  async () => {
+    const fixture = await withBypass(async () => {
+      const org = await createScratchOrg();
+      return {
+        ...org,
+        actorId: await createScratchUser(
+          org.orgId,
+          "Payroll Admin",
+          "payroll_admin",
+        ),
+      };
+    });
+    const foreign = await withBypass(() => createScratchOrg());
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+      const before = await payrollState(fixture.orgId);
+
+      const foreignAccount = await PUT(
+        request("PUT", { netPayAccountId: foreign.accounts.ap }),
+      );
+      assert.equal(foreignAccount.status, 422);
+      assert.deepEqual(await payrollState(fixture.orgId), before);
+
+      const missingVendor = await PUT(
+        request("PUT", { craRemittancePartyId: randomUUID() }),
+      );
+      assert.equal(missingVendor.status, 422);
+      assert.deepEqual(await payrollState(fixture.orgId), before);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(foreign.orgId);
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
