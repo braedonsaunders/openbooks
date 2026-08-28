@@ -58,11 +58,32 @@ export function escFacsimile(s: string): string {
 
 /** Government forms print 2-decimal amounts with thousands separators; negatives
  *  in parentheses, and an exact zero as a plain 0.00. */
+const EXACT_DECIMAL_TEXT = /^[-+]?\d+(?:\.\d+)?$/
+const NEGATIVE_ZERO_TEXT = /^-0+(?:\.0+)?$/
+
+/**
+ * Intl accepts decimal strings as mathematical values, so handing it the
+ * return's exact text avoids an IEEE-754 round-trip before the display-only
+ * two-decimal rounding step. This is the same exact-decimal boundary used by
+ * the financial PDF renderers; malformed values remain escaped presentation
+ * text instead of silently becoming zero or NaN.
+ */
+function formatExactFacsimileValue(value: string): string | null {
+  const normalized = value.trim()
+  if (!EXACT_DECIMAL_TEXT.test(normalized)) return null
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(normalized as never)
+}
+
 export function fmtFacsimileAmount(value: string): string {
-  const n = Number(value)
-  if (!Number.isFinite(n)) return escFacsimile(value)
-  const abs = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return n < 0 ? `(${abs})` : abs
+  const normalized = value.trim()
+  const negative = normalized.startsWith('-') && !NEGATIVE_ZERO_TEXT.test(normalized)
+  const magnitude = negative || NEGATIVE_ZERO_TEXT.test(normalized) ? normalized.slice(1) : normalized
+  const formatted = formatExactFacsimileValue(magnitude)
+  if (formatted === null) return escFacsimile(value)
+  return negative ? `(${formatted})` : formatted
 }
 
 const GENERIC_FOOTER =
@@ -184,8 +205,10 @@ export type TaxFormRenderer = (
 
 /** Amount as the CRA/source platform worksheet prints it: thousands + forced 2 decimals,
  *  absolute value (the sign shows in a separate box on signed lines). */
-function fmtGrid(n: number): string {
-  return Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function fmtGrid(value: string): string {
+  const normalized = value.trim()
+  const formatted = formatExactFacsimileValue(normalized.replace(/^[+-]/, ''))
+  return formatted ?? escFacsimile(value)
 }
 
 /**
@@ -199,19 +222,22 @@ export function renderGst34Facsimile(
   result: TaxReturnResult,
   branding?: { orgName?: string; primaryColor?: string | null } | null,
 ): string {
-  const v = (code: string): number => {
+  const v = (code: string): string => {
     const b = result.boxes.find((x) => x.lineCode === code)
-    return b ? Number(b.value) : 0
+    return b?.value ?? '0'
   }
   const isEditable = (code: string): boolean =>
     result.boxes.find((x) => x.lineCode === code)?.editable ?? false
 
-  const box = (n: number, editable = false) =>
-    `<td style="width:150px;border:1px solid #000;border-left:none;padding:3px 6px;text-align:right;font-family:'Courier New',monospace;font-size:11px;background:${editable ? '#fffef5' : '#fff'};">${fmtGrid(n)}</td>`
+  const box = (value: string, editable = false) =>
+    `<td style="width:150px;border:1px solid #000;border-left:none;padding:3px 6px;text-align:right;font-family:'Courier New',monospace;font-size:11px;background:${editable ? '#fffef5' : '#fff'};">${fmtGrid(value)}</td>`
   const chip = (code: string, reversed: boolean) =>
     `<td style="width:30px;padding:0 3px;text-align:center;vertical-align:middle;"><div style="border:1px solid #000;background:${reversed ? '#000' : '#fff'};color:${reversed ? '#fff' : '#000'};font-weight:700;font-size:11px;padding:1px 0;">${code}</div></td>`
-  const signCell = (n: number) =>
-    `<td style="width:16px;text-align:center;font-weight:700;font-family:'Courier New',monospace;">${n < 0 ? '&minus;' : ''}</td>`
+  const signCell = (value: string) => {
+    const normalized = value.trim()
+    const negative = normalized.startsWith('-') && !NEGATIVE_ZERO_TEXT.test(normalized)
+    return `<td style="width:16px;text-align:center;font-weight:700;font-family:'Courier New',monospace;">${negative ? '&minus;' : ''}</td>`
+  }
 
   // A standard line: label box (left) · chip · amount box.
   const line = (label: string, code: string, opts?: { reversed?: boolean }) =>
