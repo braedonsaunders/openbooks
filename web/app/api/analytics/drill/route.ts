@@ -2,8 +2,26 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { guardPermission } from "../../../../lib/authz";
+import { canonicalDecimal } from "../../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
+
+/**
+ * PostgreSQL's numeric values are returned as strings by the pg driver. Keep
+ * that exact representation at the API boundary instead of coercing ledger
+ * amounts through an IEEE-754 number. Bigints are accepted for test doubles
+ * and alternate drivers, then converted directly to decimal text.
+ */
+export function serializeLedgerDecimal(value: unknown): string {
+  if (value === null || value === undefined) return "0";
+  if (typeof value === "number") {
+    throw new TypeError("analytics drill ledger decimals must not be JavaScript numbers");
+  }
+  const raw = typeof value === "bigint" ? value.toString() : String(value);
+  const canonical = canonicalDecimal(raw, 4);
+  if (canonical === null) throw new TypeError("analytics drill returned an invalid ledger decimal");
+  return canonical;
+}
 
 /**
  * Generic analytics drill-down, with one endpoint for every dashboard:
@@ -74,7 +92,7 @@ export async function GET(req: Request) {
     ]);
     return NextResponse.json({
       mode: "account",
-      total: Number(agg.rows[0]?.total ?? 0),
+      total: serializeLedgerDecimal(agg.rows[0]?.total),
       count: Number(agg.rows[0]?.n ?? 0),
       entries: ((detail.rows)).map((r) => ({
         date: r.date,
@@ -84,10 +102,10 @@ export async function GET(req: Request) {
         docNumber: r.doc_number ?? "",
         label: r.party_name || r.doc_number || "Journal",
         memo: r.memo,
-        amount: Number(r.amount),
+        amount: serializeLedgerDecimal(r.amount),
       })),
-      monthly: ((monthly.rows)).map((r) => ({ month: r.month, amount: Number(r.amount) })),
-      breakdown: ((byParty.rows)).map((r) => ({ name: r.name, amount: Number(r.amount), count: Number(r.n) })),
+      monthly: ((monthly.rows)).map((r) => ({ month: r.month, amount: serializeLedgerDecimal(r.amount) })),
+      breakdown: ((byParty.rows)).map((r) => ({ name: r.name, amount: serializeLedgerDecimal(r.amount), count: Number(r.n) })),
     });
   }
 
@@ -131,7 +149,7 @@ export async function GET(req: Request) {
   ]);
   return NextResponse.json({
     mode: "party",
-    total: Number(agg.rows[0]?.total ?? 0),
+    total: serializeLedgerDecimal(agg.rows[0]?.total),
     count: Number(agg.rows[0]?.n ?? 0),
     entries: ((detail.rows)).map((r) => ({
       date: r.date,
@@ -141,9 +159,9 @@ export async function GET(req: Request) {
       docNumber: r.doc_number ?? "",
       label: r.doc_number || r.doc_kind,
       memo: r.memo,
-      amount: Number(r.amount),
+      amount: serializeLedgerDecimal(r.amount),
     })),
-    monthly: ((monthly.rows)).map((r) => ({ month: r.month, amount: Number(r.amount) })),
-    breakdown: ((byKind.rows)).map((r) => ({ name: r.name, amount: Number(r.amount), count: Number(r.n) })),
+    monthly: ((monthly.rows)).map((r) => ({ month: r.month, amount: serializeLedgerDecimal(r.amount) })),
+    breakdown: ((byKind.rows)).map((r) => ({ name: r.name, amount: serializeLedgerDecimal(r.amount), count: Number(r.n) })),
   });
 }
