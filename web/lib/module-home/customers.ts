@@ -148,10 +148,12 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
        order by sum(oi.remaining) desc
        limit 10
     `),
-    // 13-week collections trend (posted customer payments by week).
+    // 13-week collections trend (posted customer payments by week). `total`
+    // is denominated in the document's transaction currency, so convert each
+    // receipt with its posting FX rate before adding unlike currencies.
     db.execute(sql`
       select (date_trunc('week', coalesce(d.document_date, d.posting_date)))::date as wk,
-             coalesce(sum(abs(d.total)), 0) as collected
+             coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as collected
         from documents d
        where d.org_id = ${orgId} and d.kind = 'customer_payment' and d.status = 'posted'
          and d.voided_at is null${docScope}
@@ -170,7 +172,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago7}) as receipts_7d,
-        (select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
+        (select coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago7}) as collected_7d,
         (select count(*) from parties p where p.org_id = ${orgId} and p.is_active
@@ -185,8 +187,10 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
   const ar = arRes.rows[0] ?? {}
   const dso = dsoRes.rows[0] ?? {}
   const badge = badgeRes.rows[0] ?? {}
-  // Multi-currency orgs: the vitals sum the per-currency figures (same
-  // simplification the banking home makes for balances).
+  // Forecast amounts are already expressed in the functional currency by the
+  // CRM rollup. Receipt trend/badge totals above likewise convert each
+  // transaction-currency document before summing, so every money value here
+  // is safe to format with the organization's base currency.
   const pipeline = forecast.reduce(
     (acc, r) => ({
       total: acc.total + Number(r.pipeline_amount ?? 0),
