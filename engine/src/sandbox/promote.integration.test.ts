@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../test-fixtures.ts";
-import { applyChangeSet, buildChangeSet } from "./promote.ts";
+import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
 
 // Live-Postgres regression: a change set must diff EVERY promotable table.
 // The catalog lookup filters `table_name = any(<promotable>)`; a plain JS
@@ -25,6 +25,9 @@ interface ChangeSetItemRow extends Record<string, unknown> {
 test("buildChangeSet diffs multiple promotable tables and applies the approved result", { skip: !DB }, async () => {
   const prod = await createScratchOrg();
   const actorId = await createScratchUser(prod.orgId, "Promote Admin", "admin");
+  const reviewerId = await createScratchUser(prod.orgId, "Promote Reviewer", "admin");
+  const approverId = await createScratchUser(prod.orgId, "Promote Approver", "admin");
+  const applierId = await createScratchUser(prod.orgId, "Promote Applier", "admin");
   const sbxOrgId = randomUUID();
   const seed = randomUUID();
   const sandboxId = randomUUID();
@@ -74,14 +77,24 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
              (${sbxOrgId}, ${sMatchedView}, 'ar-open', 'Open AR', 'Aging buckets',
               '{"kind":"list","entity":"invoices"}'::jsonb, null, 'global', ${actorId})`);
 
-    const { changeSetId, itemCount } = await buildChangeSet(sandboxId, "Promote Diff Regression");
-    const cs = (await db.execute<{ org_id: string; sandbox_org_id: string; status: string; name: string }>(sql`
-      select org_id, sandbox_org_id, status, name from change_sets where id = ${changeSetId}`));
+    const { changeSetId, itemCount } = await buildChangeSet(sandboxId, "Promote Diff Regression", actorId);
+    const cs = (await db.execute<{
+      org_id: string;
+      sandbox_org_id: string;
+      status: string;
+      name: string;
+      capture_complete: boolean;
+      item_count: number;
+    }>(sql`
+      select org_id, sandbox_org_id, status, name, capture_complete, item_count
+        from change_sets where id = ${changeSetId}`));
     assert.deepEqual(cs.rows[0], {
       org_id: prod.orgId,
       sandbox_org_id: sbxOrgId,
       status: "draft",
       name: "Promote Diff Regression",
+      capture_complete: true,
+      item_count: itemCount,
     });
 
     // The scratch org's built-in role lives only in production, so the diff
@@ -125,8 +138,30 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
     assert.ok(!byKey.has(`user_scripts:update:${pMatchedScript}`));
     assert.ok(![...items.rows].some((r) => r.target_id === sMatchedScript || r.target_id === sChangedScript));
 
-    // Apply: production converges to the sandbox customization layer.
-    await applyChangeSet(changeSetId);
+    // A captured draft is not executable. Review and approval are explicit,
+    // and each lifecycle step must be performed by a different actor.
+    await assert.rejects(() => applyChangeSet(changeSetId, actorId), /not approved/);
+    await db.execute(sql`update change_sets set capture_complete = false where id = ${changeSetId}`);
+    await assert.rejects(() => reviewChangeSet(changeSetId, reviewerId), /capture is incomplete/);
+    await db.execute(sql`update change_sets set capture_complete = true where id = ${changeSetId}`);
+    await reviewChangeSet(changeSetId, reviewerId);
+    await assert.rejects(() => approveChangeSet(changeSetId, reviewerId), /different users/);
+    await approveChangeSet(changeSetId, approverId);
+    await assert.rejects(
+      () =>
+        db
+          .execute(sql`update change_set_items set payload = '{}'::jsonb where change_set_id = ${changeSetId}`)
+          .catch((error: unknown) => {
+            assert.match(String((error as { cause?: { message?: string } }).cause?.message), /immutable after review/);
+            throw error;
+          }),
+      /Failed query/,
+    );
+    await assert.rejects(() => applyChangeSet(changeSetId, approverId), /different users/);
+
+    // Apply: production converges to the sandbox customization layer, with an
+    // attributable actor distinct from the creator, reviewer, and approver.
+    await applyChangeSet(changeSetId, applierId);
     const appliedScripts = (await db.execute<{ id: string; name: string }>(sql`
       select id::text as id, name from user_scripts where org_id = ${prod.orgId} order by name`));
     assert.deepEqual(appliedScripts.rows, [
@@ -138,9 +173,14 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
     const appliedViews = (await db.execute<{ id: string }>(sql`
       select id::text as id from saved_views where org_id = ${prod.orgId} order by id`));
     assert.deepEqual(appliedViews.rows.map((r) => r.id), [pMatchedView]);
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from change_sets where id = ${changeSetId}`));
-    assert.equal(status.rows[0]!.status, "applied");
+    const status = (await db.execute<{ status: string; applied_by: string; approved_by: string; reviewed_by: string }>(sql`
+      select status, applied_by, approved_by, reviewed_by from change_sets where id = ${changeSetId}`));
+    assert.deepEqual(status.rows[0], {
+      status: "applied",
+      applied_by: applierId,
+      approved_by: approverId,
+      reviewed_by: reviewerId,
+    });
   } finally {
     await dropScratchOrgReporting(sbxOrgId);
     await dropScratchOrgReporting(prod.orgId);

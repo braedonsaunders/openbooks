@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { enqueueSandboxOp } from "@openbooks/jobs";
-import { buildChangeSet, applyChangeSet } from "@openbooks/engine/src/sandbox/index.ts";
+import {
+  applyChangeSet,
+  approveChangeSet,
+  buildChangeSet,
+  reviewChangeSet,
+} from "@openbooks/engine/src/sandbox/promote.ts";
 import { getAuthz } from "../../../../lib/authz";
 import { can } from "../../../../lib/authz";
 
@@ -79,10 +84,28 @@ export async function promoteSandboxAction(sandboxId: string, name: string): Pro
   return await buildChangeSet(sandboxId, name.trim() || "Change set", authz.user.id);
 }
 
+export async function reviewChangeSetAction(changeSetId: string): Promise<void> {
+  const authz = await requireManager();
+  const r = await db.execute(sql`
+    select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`);
+  if (!r.rows.length) throw new Error("change set not found");
+  await reviewChangeSet(changeSetId, authz.user.id);
+  revalidatePath("/admin/sandboxes");
+}
+
+export async function approveChangeSetAction(changeSetId: string): Promise<void> {
+  const authz = await requireManager();
+  const r = await db.execute(sql`
+    select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`);
+  if (!r.rows.length) throw new Error("change set not found");
+  await approveChangeSet(changeSetId, authz.user.id);
+  revalidatePath("/admin/sandboxes");
+}
+
 export async function applyChangeSetAction(changeSetId: string): Promise<void> {
   const authz = await requireManager();
   const r = ((await db.execute(sql`select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`)));
   if (!r.rows.length) throw new Error("change set not found");
-  await applyChangeSet(changeSetId);
+  await applyChangeSet(changeSetId, authz.user.id);
   revalidatePath("/admin/sandboxes");
 }
