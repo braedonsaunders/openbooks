@@ -6,7 +6,10 @@ import { guardPermission } from '../../../../../lib/authz'
 import { FEATURE_BY_KEY, featureDisableBlocked, featureRequirements } from '../../../../../lib/features'
 import { INDUSTRY_BY_KEY, canSwitchIndustry } from '../../../../../lib/industries'
 import { normalizeCountryCode } from '../../../../../lib/countries'
-import { periodDerivationSql } from '../../../../../lib/fiscal-periods'
+import {
+  periodDerivationSql,
+  periodDerivationStagingSql,
+} from '../../../../../lib/fiscal-periods'
 import { ONBOARDING_SCHEMA_VERSION, onboardingRecord } from '../../../../../lib/onboarding'
 import { isBookStart, isCloseCadence, isComplexityLevel, isMonthlyActivityLevel, isTaxPosition, isTeamSize } from '../../../../../lib/workspace-profile'
 
@@ -507,15 +510,16 @@ export async function PUT(req: Request) {
       }
     }
     if (fiscalStartChanged) {
-      await tx.execute(sql`drop index if exists periods_org_year_num`)
+      // Move existing labels outside the canonical range first so a calendar
+      // rotation cannot collide with another period's old unique key. Keep
+      // the tenant-shared index in place while changing this organization's
+      // periods so unrelated tenants do not pay for global DDL locks.
+      await tx.execute(periodDerivationStagingSql(orgId))
       await tx.execute(periodDerivationSql(orgId, inputFiscalMonth!))
       await tx.execute(sql`
         update fiscal_calendars
            set year_start_month = ${inputFiscalMonth!}, updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and is_default`)
-      await tx.execute(sql`
-        create unique index periods_org_year_num
-          on accounting_periods (org_id, fiscal_year, period_number)`)
     }
 
     // Audit
