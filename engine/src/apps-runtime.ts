@@ -168,7 +168,8 @@ export async function runAppEndpoint(opts: {
     const obHandle = vm.newObject();
 
     const logFn = vm.newFunction("log", (...args) => {
-      units += COST.log;
+      const over = charge(COST.log);
+      if (over) return over;
       logs.push(args.map((a) => JSON.stringify(vm.dump(a))).join(" "));
     });
 
