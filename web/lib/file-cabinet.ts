@@ -721,15 +721,62 @@ export async function deleteFolder(orgId: string, id: string): Promise<{ ok: boo
 }
 
 /** Restore a trashed folder subtree (folder + descendants + their files). */
-export async function restoreFolder(orgId: string, id: string): Promise<boolean> {
-  const folder = await getFolder(orgId, id)
-  if (!folder) return false
-  await db.transaction(async (tx) => {
+export async function restoreFolder(
+  orgId: string,
+  id: string,
+  audit: FileMutationAudit,
+): Promise<boolean> {
+  return inDbTransaction(async (tx) => {
     const descendants = FOLDER_DESCENDANTS(orgId, id)
-    await tx.execute(sql`update folders set is_inactive = false, updated_at = now() where id in (${descendants}) and org_id = ${orgId}`)
-    await tx.execute(sql`update files set is_inactive = false, updated_at = now() where folder_id in (${descendants}) and org_id = ${orgId}`)
+
+    // Lock and retain the complete pre-restore state before changing either
+    // table. The audit row describes the whole subtree, not just the root
+    // folder, so a reviewer can verify exactly which rows were reactivated.
+    const beforeFolders = await tx.execute<{ id: string; isInactive: boolean }>(sql`
+      select f.id, f.is_inactive as "isInactive"
+        from folders f
+       where f.id in (${descendants}) and f.org_id = ${orgId}
+       order by f.id
+       for update
+    `)
+    if (beforeFolders.rows.length === 0) return false
+
+    const beforeFiles = await tx.execute<{ id: string; isInactive: boolean }>(sql`
+      select fi.id, fi.is_inactive as "isInactive"
+        from files fi
+       where fi.folder_id in (${descendants}) and fi.org_id = ${orgId}
+       order by fi.id
+       for update
+    `)
+
+    await tx.execute(sql`
+      update folders
+         set is_inactive = false, updated_at = now()
+       where id in (${descendants}) and org_id = ${orgId}
+    `)
+    await tx.execute(sql`
+      update files
+         set is_inactive = false, updated_at = now()
+       where folder_id in (${descendants}) and org_id = ${orgId}
+    `)
+
+    await recordFileEvent({
+      orgId,
+      actorId: audit.actorId,
+      table: 'folders',
+      rowId: id,
+      action: 'restore',
+      changes: {
+        before: { folders: beforeFolders.rows, files: beforeFiles.rows },
+        after: {
+          folders: beforeFolders.rows.map(({ id: folderId }) => ({ id: folderId, isInactive: false })),
+          files: beforeFiles.rows.map(({ id: fileId }) => ({ id: fileId, isInactive: false })),
+        },
+      },
+      executor: tx,
+    })
+    return true
   })
-  return true
 }
 
 /**
