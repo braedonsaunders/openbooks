@@ -62,8 +62,9 @@ export async function handleMcpPost(request: Request): Promise<Response> {
     },
   });
   // Required evidence for the boundary itself: awaited, and a failing write
-  // fails the request closed. Per-tool execution evidence rides the claim
-  // transaction inside executeIdempotent (see server.ts's audit hook).
+  // fails the request closed. The registrar also awaits each per-tool audit
+  // hook before exposing its result; fresh mutations write inside the claim
+  // transaction and reads, replays, and failures write through that hook.
   try {
     await insertApiKeyEvent(transportEvent(
       auth.audit,
