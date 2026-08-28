@@ -87,7 +87,7 @@ const patchGroup = (groupId: string, body: { name?: string; color?: string; matc
   apiCall(`/api/account-groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(body) })
 
 /** Read the full engine config, apply a mutation to the ACTIVE profile, PUT it back. */
-type TrueCostConfigResponse = { activeProfileId: string; profiles: TrueCostProfile[] }
+type TrueCostConfigResponse = { revision: number; activeProfileId: string; profiles: TrueCostProfile[] }
 
 async function mutateActiveProfile(mutate: (profile: TrueCostProfile) => void): Promise<boolean> {
   const res = await fetch('/api/analytics/true-cost/config')
@@ -96,7 +96,12 @@ async function mutateActiveProfile(mutate: (profile: TrueCostProfile) => void): 
   const profile = cfg.profiles.find((p) => p.id === cfg.activeProfileId) ?? cfg.profiles[0]
   if (!profile) return false
   mutate(profile)
-  return apiCall('/api/analytics/true-cost/config', { method: 'PUT', body: JSON.stringify(cfg) })
+  // The API fences this whole-object replacement on the exact revision read
+  // above, so a competing admin receives a conflict instead of losing edits.
+  return apiCall('/api/analytics/true-cost/config', {
+    method: 'PUT',
+    body: JSON.stringify({ activeProfileId: cfg.activeProfileId, profiles: cfg.profiles, expectedRevision: cfg.revision }),
+  })
 }
 /** Set the active profile, then PUT. */
 async function switchProfile(activeProfileId: string): Promise<boolean> {
@@ -104,7 +109,10 @@ async function switchProfile(activeProfileId: string): Promise<boolean> {
   if (!res.ok) return false
   const cfg = await res.json() as TrueCostConfigResponse
   cfg.activeProfileId = activeProfileId
-  return apiCall('/api/analytics/true-cost/config', { method: 'PUT', body: JSON.stringify(cfg) })
+  return apiCall('/api/analytics/true-cost/config', {
+    method: 'PUT',
+    body: JSON.stringify({ activeProfileId: cfg.activeProfileId, profiles: cfg.profiles, expectedRevision: cfg.revision }),
+  })
 }
 
 /* ------------------------------------------------------------------- shell */
@@ -1492,7 +1500,10 @@ function CompositePanel({ data }: { data: TrueCostData }) {
               const id = `profile_${Math.random().toString(36).slice(2, 10)}`
               cfg.profiles.push({ ...active, id, name })
               cfg.activeProfileId = id
-              return apiCall('/api/analytics/true-cost/config', { method: 'PUT', body: JSON.stringify(cfg) })
+              return apiCall('/api/analytics/true-cost/config', {
+                method: 'PUT',
+                body: JSON.stringify({ activeProfileId: cfg.activeProfileId, profiles: cfg.profiles, expectedRevision: cfg.revision }),
+              })
             }) }} className="rounded-md border border-teal-500/50 px-2 py-1 text-[11px] font-medium text-teal-600 hover:bg-teal-50 disabled:opacity-40 dark:text-teal-400 dark:hover:bg-teal-950/40">{t('config.duplicateActive')}</button>
           </div>
           <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('config.profileNote')}</p>
