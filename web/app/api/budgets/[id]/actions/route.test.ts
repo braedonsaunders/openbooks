@@ -209,7 +209,9 @@ test('copy_prior_actuals keeps each subsidiary as a distinct budget cell', async
   assert.equal(response.status, 200)
   const query = sourceCopyQuery()
   assert.match(query, /insert into budget_lines[\s\S]*subsidiary_id/)
+  assert.match(query, /sum\(l\.amount\)/)
   assert.match(query, /group by l\.account_id, destination\.id, l\.subsidiary_id/)
+  assert.doesNotMatch(query, /and false/)
 })
 
 test('copy_prior_actuals applies restricted subsidiary visibility to source actuals', async () => {
