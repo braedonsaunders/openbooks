@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { toUnits } from '../../engine/src/money.ts'
+import { readFileSync } from 'node:fs'
 
 // invoice-backup is a server-only module; mock that marker so its pure amount
 // allocator can be exercised directly without starting a Next.js server.
@@ -72,4 +73,13 @@ test('a line linked to one entry keeps its exact posted amount', () => {
     allocateTimesheetBillAmounts({ lineAmount: '12.34', nativeBillAmounts: ['125.0000'] }),
     ['12.3400'],
   )
+})
+
+test('invoice backup replacement serializes and audits the complete lifecycle unit', () => {
+  const source = readFileSync(new URL('./invoice-backup.ts', import.meta.url), 'utf8')
+  assert.match(source, /inDbTransaction\(async \(tx\)/)
+  assert.match(source, /from documents[\s\S]*?for update/)
+  assert.match(source, /uploadAndAttach\([\s\S]*?executor: tx/)
+  assert.match(source, /action: 'replace',[\s\S]*?before:[\s\S]*?after:/)
+  assert.match(source, /delete from files where id = \$\{priorFileId\}/)
 })
