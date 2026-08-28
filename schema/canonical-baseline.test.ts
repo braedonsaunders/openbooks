@@ -1318,6 +1318,8 @@ test("recognition_events table stores milestone and usage recognition evidence",
   // RLS scoped to the tenant.
   assert.match(migration, /ALTER TABLE public\.recognition_events ENABLE ROW LEVEL SECURITY/);
   assert.match(migration, /CREATE POLICY org_isolation ON public\.recognition_events/);
+  assert.match(migration, /CREATE POLICY org_isolation ON public\.recognition_events[\s\S]*?TO PUBLIC/);
+  assert.doesNotMatch(migration, /TO openbooks_app/);
   // No data rewrite.
   assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
 });
