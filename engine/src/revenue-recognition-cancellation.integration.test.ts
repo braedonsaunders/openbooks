@@ -136,6 +136,81 @@ test(
         reason: "Customer contract terminated before the remaining service term",
         reversalDate: "2026-07-31",
       };
+
+      // A downstream posted document blocks the invoice's controlled void.
+      // Recognition cancellation must therefore fail atomically: before this
+      // regression fix, the recognition reversal committed while the invoice
+      // stayed posted and the caller received the void-path error afterward.
+      const downstreamDocumentId = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, document_date, currency, status,
+           subtotal, tax_total, total, is_final_invoice, custom, extra_dims,
+           created_by, updated_by)
+        values
+          (${downstreamDocumentId}, ${org.orgId}, 'customer_invoice',
+           'REV-CANCEL-DOWNSTREAM', ${org.date}, 'CAD', 'approved',
+           0, 0, 0, false, '{}'::jsonb, '{}'::jsonb,
+           ${actors.adminId}, ${actors.adminId})
+      `);
+      await db.execute(sql`
+        insert into document_links
+          (org_id, from_document_id, to_document_id, link_type,
+           created_by, updated_by)
+        values
+          (${org.orgId}, ${documentId}, ${downstreamDocumentId}, 'created_from',
+           ${actors.adminId}, ${actors.adminId})
+      `);
+
+      await assert.rejects(
+        cancelRevenueRecognitionForInvoice(request),
+        (error) =>
+          errorChainMatches(
+            error,
+            /this transaction feeds REV-CANCEL-DOWNSTREAM/,
+          ),
+      );
+      const rolledBack = await db.execute(sql`
+        select document.status as document_status,
+               document.void_requested_at,
+               obligation.status as obligation_status,
+               schedule_line.reversal_journal_entry_id,
+               source.status as source_status
+          from documents document
+          join document_lines document_line
+            on document_line.document_id = document.id
+          join performance_obligations obligation
+            on obligation.document_line_id = document_line.id
+          join recognition_schedules schedule
+            on schedule.obligation_id = obligation.id
+          join recognition_schedule_lines schedule_line
+            on schedule_line.schedule_id = schedule.id
+           and schedule_line.journal_entry_id = ${sourceRecognitionId}
+          join journal_entries source
+            on source.id = schedule_line.journal_entry_id
+         where document.id = ${documentId}
+      `);
+      assert.deepEqual(rolledBack.rows, [
+        {
+          document_status: "posted",
+          void_requested_at: null,
+          obligation_status: "open",
+          reversal_journal_entry_id: null,
+          source_status: "posted",
+        },
+      ]);
+
+      await db.execute(sql`
+        delete from document_links
+         where org_id = ${org.orgId}
+           and from_document_id = ${documentId}
+           and to_document_id = ${downstreamDocumentId}
+      `);
+      await db.execute(sql`
+        delete from documents
+         where id = ${downstreamDocumentId} and org_id = ${org.orgId}
+      `);
+
       const concurrent = await Promise.all([
         cancelRevenueRecognitionForInvoice(request),
         cancelRevenueRecognitionForInvoice(request),
