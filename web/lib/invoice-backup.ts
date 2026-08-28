@@ -103,6 +103,20 @@ async function addImagePage(out: PDFDocument, bytes: Buffer, contentType: string
 /** Render the costed-timesheet page (billed time with cost + bill columns). */
 type MoneyInput = string | number | null | undefined
 
+interface CostedTimesheetRow extends Record<string, unknown> {
+  time_entry_id: string
+  line_id: string
+  worked_on: string | Date
+  employee: string
+  hours: MoneyInput
+  cost_rate: MoneyInput
+  bill_rate: MoneyInput
+  cost_amount: MoneyInput
+  line_amount: MoneyInput
+  native_bill_amount: MoneyInput
+  item: string
+}
+
 export interface TimesheetBillAllocation {
   /** The posted amount on the rolled-up document line. */
   lineAmount: MoneyInput
@@ -132,7 +146,7 @@ export function allocateTimesheetBillAmounts(input: TimesheetBillAllocation): st
 
 async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumber: string, projectName: string, title: string, format: MoneyFormatter): Promise<Buffer | null> {
   const { money } = format
-  const rows = (await db.execute<any>(sql`
+  const rows = (await db.execute<CostedTimesheetRow>(sql`
     select te.id as time_entry_id, dl.id as line_id,
            te.worked_on, coalesce(pty.display_name, '') as employee, te.hours,
            te.cost_rate, te.bill_rate,
@@ -149,10 +163,10 @@ async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumb
   `))
   if (rows.rows.length === 0) return null
 
-  const entries = rows.rows.map((row: any) => ({ ...row, bill_amount: '0.0000' }))
+  const entries = rows.rows.map((row) => ({ ...row, bill_amount: '0.0000' }))
   type TimesheetGroup = { lineAmount: MoneyInput; indexes: number[]; nativeBillAmounts: MoneyInput[] }
   const groups = new Map<string, TimesheetGroup>()
-  entries.forEach((row: any, index: number) => {
+  entries.forEach((row, index) => {
     const lineId = String(row.line_id)
     const group: TimesheetGroup = groups.get(lineId) ?? { lineAmount: row.line_amount, indexes: [], nativeBillAmounts: [] }
     group.indexes.push(index)

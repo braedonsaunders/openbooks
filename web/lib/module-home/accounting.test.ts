@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { sql } from 'drizzle-orm'
 
 const stateKey = Symbol.for('openbooks.accounting-home-scope-test')
 interface State {

@@ -417,7 +417,21 @@ const NUMERIC = /^-?\d+(\.\d+)?$/
  * the agency's review asks about, and it is also literally what the IRS's
  * correction forms print in two columns.
  */
-export function FilingCorrectionSection({
+export function FilingCorrectionSection(props: {
+  section: YearEndFilingSection
+  year: number
+  review: FilingRowReview
+  lifecycle: FilingLifecycle
+  onIssued: () => void
+}) {
+  const { review } = props
+  // A changed row or revision is a new evidence context. Remounting the
+  // stateful body clears its preview, reason, and error together before the
+  // next paint, without synchronously setting state from an effect.
+  return <FilingCorrectionSectionBody key={`${review.rowId}:${review.lastRevision ?? 'none'}`} {...props} />
+}
+
+function FilingCorrectionSectionBody({
   section,
   year,
   review,
@@ -446,15 +460,6 @@ export function FilingCorrectionSection({
   >({ status: 'idle' })
   const [cancellationReason, setCancellationReason] = useState('')
   const previewRequest = useRef(0)
-
-  // A preview is evidence for this exact row and revision. Never let a
-  // preview from a different row survive a drawer/navigation update.
-  useEffect(() => {
-    previewRequest.current += 1
-    setPreview({ status: 'idle' })
-    setCancellationReason('')
-    setError('')
-  }, [review.rowId, review.lastRevision])
 
   const amendment = lifecycle.amendment
   const show = (value: string | null) =>

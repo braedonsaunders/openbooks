@@ -290,7 +290,6 @@ export function cashBridgeOption(startCash: string, inflows: string, outflows: s
   // bounded numeric projection boundary.
   const startValue = toChartNumber(startCash)
   const inflowValue = toChartNumber(inflows)
-  const outflowValue = toChartNumber(outflows)
   const endValue = toChartNumber(end)
   const afterIn = boundChartNumber(startValue + inflowValue)
   const steps = [
