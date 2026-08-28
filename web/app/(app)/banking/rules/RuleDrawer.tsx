@@ -230,7 +230,7 @@ export function RuleDrawer({
 
   const draftBody = useMemo(
     () => ({
-      criteria: { version: 2, match: group, accountScope: scope.length ? scope : undefined },
+      criteria: { version: 2, match: group, accountScope: scopeOpen ? scope : undefined },
       outcome:
         action === 'exclude'
           ? { action: 'exclude' }
@@ -238,10 +238,20 @@ export function RuleDrawer({
       priority: Number(priority) || 100,
       id: rule?.id,
     }),
-    [group, scope, action, mode, lines, partyId, memo, priority, rule?.id],
+    [group, scope, scopeOpen, action, mode, lines, partyId, memo, priority, rule?.id],
   )
 
+  const canSave = canSaveBankRule({
+    name,
+    conditionCount: group.rules.length,
+    action,
+    lines,
+    scopeOpen,
+    scope,
+  })
+
   async function save() {
+    if (!canSave) return
     setBusy(true)
     const res = await fetch('/api/banking/rules', {
       method: creating ? 'POST' : 'PATCH',
@@ -274,8 +284,6 @@ export function RuleDrawer({
     router.push(closeHref)
     router.refresh()
   }
-
-  const canSave = name.trim() !== '' && group.rules.length > 0 && (action === 'exclude' || lines.some((l) => l.accountId))
 
   return (
     <UrlDrawer
@@ -551,19 +559,44 @@ function ActionTab({ active, onClick, icon, label }: { active: boolean; onClick:
 }
 
 /** Serialize editor allocation lines to the stored split shape. */
-function serializeLines(lines: AllocationLine[]) {
+export function serializeLines(lines: AllocationLine[]) {
   return lines
     .filter((l) => l.accountId)
     .map((l) => ({
       accountId: l.accountId,
       portion: l.portion,
       departmentId: l.departmentId ?? undefined,
+      projectId: l.projectId ?? undefined,
       locationId: l.locationId ?? undefined,
       classId: l.classId ?? undefined,
       taxCodeId: l.taxCodeId ?? undefined,
       partyId: l.partyId ?? undefined,
       description: l.description ?? undefined,
     }))
+}
+
+/** Keep the save action disabled while a limited scope has no accounts. */
+export function canSaveBankRule({
+  name,
+  conditionCount,
+  action,
+  lines,
+  scopeOpen,
+  scope,
+}: {
+  name: string
+  conditionCount: number
+  action: 'categorize' | 'exclude'
+  lines: AllocationLine[]
+  scopeOpen: boolean
+  scope: string[]
+}): boolean {
+  return (
+    name.trim() !== '' &&
+    conditionCount > 0 &&
+    (!scopeOpen || scope.length > 0) &&
+    (action === 'exclude' || lines.some((l) => l.accountId))
+  )
 }
 
 /** Read the canonical stored model, or create a blank unsaved rule. */
@@ -594,6 +627,7 @@ function initialRuleState(rule: BankRuleView | null, seed?: { description?: stri
         accountId: l.accountId ?? '',
         portion: l.portion,
         departmentId: l.departmentId ?? null,
+        projectId: l.projectId ?? null,
         locationId: l.locationId ?? null,
         classId: l.classId ?? null,
         taxCodeId: l.taxCodeId ?? null,
