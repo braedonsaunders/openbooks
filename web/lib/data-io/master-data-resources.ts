@@ -2,9 +2,9 @@
 
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import { toSnake } from '../setup/registry'
-import { coerceBoolean } from '../setup/coerce'
+import { coerceBoolean, UUID_RE } from '../setup/coerce'
 import { loadFieldDefs, validateCustomValues, type CustomFieldDef } from '../custom-fields'
 import {
   exportCell,
@@ -188,6 +188,82 @@ export function masterDescriptor(m: MasterEntity): ResourceDescriptor {
   }
 }
 
+/**
+ * RefResolver intentionally accepts a syntactically valid UUID without a
+ * lookup. That is useful for shared resources, but account references are
+ * tenant-owned and must never cross that boundary. Re-check direct UUIDs in
+ * the importing org before persisting them.
+ */
+async function resolveMasterRefId(
+  resolver: RefResolver,
+  target: ResourceRefTarget,
+  human: unknown,
+  orgId: string,
+): Promise<string | null> {
+  const id = await resolver.resolveId(target, human)
+  if (!id) return null
+
+  const value = String(human ?? '').trim()
+  if (target.resource !== 'accounts' || !UUID_RE.test(value)) return id
+
+  const owned = (await db.execute(sql`
+    select id from accounts
+     where id = ${id} and org_id = ${orgId}
+     limit 1`)) as { rows: { id: string }[] }
+  return owned.rows[0]?.id ?? null
+}
+
+/**
+ * Account labels are also tenant data. Avoid RefResolver's unscoped UUID label
+ * lookup when exporting legacy rows that may contain a foreign account id.
+ */
+async function exportMasterCell(
+  field: ResourceField,
+  value: unknown,
+  resolver: RefResolver,
+  orgId: string,
+): Promise<CellValue> {
+  if (field.kind === 'reference' && field.ref?.resource === 'accounts') {
+    const id = String(value ?? '').trim()
+    if (UUID_RE.test(id)) {
+      const owned = (await db.execute(sql`
+        select number as label from accounts
+         where id = ${id} and org_id = ${orgId}
+         limit 1`)) as { rows: { label: string | null }[] }
+      return owned.rows[0]?.label ?? id
+    }
+  }
+  return exportCell(field, value, resolver)
+}
+
+/**
+ * Keep a master-data mutation and its mandatory audit evidence in the same
+ * transaction. The savepoint makes this safe when the import route already
+ * owns an outer transaction: a failed audit row rolls back just this row,
+ * allowing the caller to report the row failure without leaving the outer
+ * transaction aborted.
+ */
+async function persistMasterMutation(
+  table: string,
+  action: 'insert' | 'update',
+  ctx: WriteCtx,
+  mutate: (tx: SqlExecutor) => Promise<string>,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`savepoint master_import_row`)
+    try {
+      const rowId = await mutate(tx)
+      if (!rowId) throw new Error('master-data mutation did not return an id')
+      await auditRaw(tx, table, rowId, action, ctx)
+      await tx.execute(sql`release savepoint master_import_row`)
+    } catch (error) {
+      await tx.execute(sql`rollback to savepoint master_import_row`)
+      await tx.execute(sql`release savepoint master_import_row`)
+      throw error
+    }
+  })
+}
+
 export function masterResource(m: MasterEntity, orgId: string): DataResource {
   return {
     descriptor: masterDescriptor(m),
@@ -212,10 +288,10 @@ export function masterResource(m: MasterEntity, orgId: string): DataResource {
         const row: Record<string, CellValue> = {}
         for (const c of exportCols) {
           const f = fields.find((x) => x.key === c.key)!
-          row[c.key] = await exportCell(f, raw[c.column], resolver)
+          row[c.key] = await exportMasterCell(f, raw[c.column], resolver, orgId)
         }
         const custom = (raw.custom ?? {}) as Record<string, unknown>
-        for (const f of customDefs) row[f.key] = await exportCell(f, custom[f.key], resolver)
+        for (const f of customDefs) row[f.key] = await exportMasterCell(f, custom[f.key], resolver, orgId)
         out.push(row)
       }
       return { fields, columns: fields.map((f) => ({ key: f.key, label: f.label })), rows: out }
@@ -275,7 +351,7 @@ async function writeMaster(
         }
         if (!present) continue
         if (c.kind === 'reference' && c.ref) {
-          const id = await resolver.resolveId(c.ref, raw)
+          const id = await resolveMasterRefId(resolver, c.ref, raw, ctx.orgId)
           if (!id) {
             err = `${c.key}: "${String(raw)}" not found`
             break
@@ -379,10 +455,12 @@ async function writeMaster(
           parts.push(sql`custom = ${JSON.stringify(mergedCustom)}::jsonb`)
           parts.push(sql`updated_by = ${ctx.actorId}`)
           parts.push(sql`updated_at = now()`)
-          await db.execute(sql`
-            update ${sql.raw(m.table)} set ${sql.join(parts, sql`, `)}
-             where id = ${existingId} and org_id = ${ctx.orgId}`)
-          await auditRaw(m.table, existingId, 'update', ctx)
+          await persistMasterMutation(m.table, 'update', ctx, async (tx) => {
+            await tx.execute(sql`
+              update ${sql.raw(m.table)} set ${sql.join(parts, sql`, `)}
+               where id = ${existingId} and org_id = ${ctx.orgId}`)
+            return existingId
+          })
         }
         outcome.updated++
       } else {
@@ -398,11 +476,13 @@ async function writeMaster(
             [...cols.map((c) => sql`${c.value}`), sql`${JSON.stringify(mergedCustom)}::jsonb`],
             sql`, `,
           )
-          const ins = (await db.execute(sql`
-            insert into ${sql.raw(m.table)} (${names}) values (${values}) returning id`)) as {
-            rows: { id: string }[]
-          }
-          await auditRaw(m.table, String(ins.rows[0]?.id ?? ''), 'insert', ctx)
+          await persistMasterMutation(m.table, 'insert', ctx, async (tx) => {
+            const ins = (await tx.execute(sql`
+              insert into ${sql.raw(m.table)} (${names}) values (${values}) returning id`)) as {
+              rows: { id: string }[]
+            }
+            return String(ins.rows[0]?.id ?? '')
+          })
         }
         outcome.created++
       }
@@ -414,8 +494,8 @@ async function writeMaster(
   return outcome
 }
 
-async function auditRaw(table: string, rowId: string, action: 'insert' | 'update', ctx: WriteCtx) {
-  await db.execute(sql`
+async function auditRaw(executor: SqlExecutor, table: string, rowId: string, action: 'insert' | 'update', ctx: WriteCtx) {
+  await executor.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${ctx.orgId}, ${table}, ${rowId}, ${action}, ${JSON.stringify({ source: 'import' })}, ${ctx.actorId})`)
 }
