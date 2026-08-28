@@ -27,7 +27,7 @@ export function LaborCostingWizard(props: {
   hoursPerDay: number
   annualHours: number
 }) {
-  const { money } = useMoney()
+  const { money, currency } = useMoney()
   const today = useBusinessToday()
   const t = useTranslations('admin.setup.laborCosting.wizard')
   const tc = useTranslations('admin.setup.laborCosting.components')
@@ -104,12 +104,13 @@ export function LaborCostingWizard(props: {
         })
         if (!res.ok) throw new Error((await res.json()).error ?? 'failed')
       }
-      if (hasFallbackRate) {
+      if (exactFallbackRate !== null && compareDecimal(exactFallbackRate, '0') > 0) {
         await call('POST', {
           action: 'save-rate',
           employeePartyId: null,
           tradeId: null,
-          rate: Number(fallbackRate),
+          currency,
+          rate: exactFallbackRate,
           basis: 'hour',
           effectiveFrom: today,
         })
