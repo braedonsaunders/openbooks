@@ -6,7 +6,8 @@ import nodeTest from 'node:test'
 // The repository's broad Node test command also discovers this file, while
 // the focused compliance gate uses Vitest. Load Vitest only in its runner so
 // the normal Node suite does not acquire a new runtime dependency.
-const vitest = process.env.VITEST ? await import('vitest') : null
+const vitestModule = 'vitest' as string
+const vitest = process.env.VITEST ? await import(vitestModule) : null
 const describe = vitest?.describe ?? nodeTest
 const it = vitest?.it ?? nodeTest
 
