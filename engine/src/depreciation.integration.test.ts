@@ -46,6 +46,20 @@ async function parkedBehind(blockerPid: number): Promise<number | null> {
   return parked.rows[0] ? Number(parked.rows[0].pid) : null;
 }
 
+async function waitForParkedCount(blockerPid: number, expected: number): Promise<void> {
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    const parked = await pool.query<{ count: number }>(
+      `select count(*)::int as count from pg_stat_activity
+        where wait_event_type = 'Lock'
+          and pid <> $1::int`,
+      [blockerPid],
+    );
+    if (Number(parked.rows[0]?.count ?? 0) >= expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timed out waiting for ${expected} sessions behind backend ${blockerPid}`);
+}
+
 /**
  * Observe a deterministic interleaving: the racing definition edit either
  * settles (the vulnerable unlocked read) or parks behind the build's
@@ -209,6 +223,85 @@ test("manual evidence replacement is append-preserved and concurrent runs post o
     `));
     assert.deepEqual(corrected.rows[0], { accumulated: "100.0000", postings: 2, journals: 2, entry_numbers: 2 });
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("depreciation reloads accounts and dimensions after a concurrent asset edit", { skip: !DB }, async () => {
+  const { org, assetId, actorId, evidenceFileId } = await seedAsset("manual");
+  const fence: PoolClient = await pool.connect();
+  const mutator: PoolClient = await pool.connect();
+  try {
+    await recordDepreciationInput({
+      orgId: org.orgId,
+      assetId,
+      effectiveDate: org.date,
+      kind: "manual",
+      value: "100.0000",
+      memo: "Configuration race test",
+      evidenceFileId,
+      actorId,
+    });
+    const alternateLocation = (await db.execute<{ id: string }>(sql`
+      select id from locations where org_id = ${org.orgId} and name = 'DC' limit 1`)).rows[0]!.id;
+    // Native asset overrides are the old posting configuration. The edit below
+    // changes both accounts used by the journal and its location dimension.
+    await db.execute(sql`
+      update fixed_assets
+         set asset_account_id = ${org.accounts.invAsset},
+             accumulated_depreciation_account_id = ${org.accounts.clearing},
+             depreciation_expense_account_id = ${org.accounts.adjustment},
+             location_id = ${org.locationId}
+       where id = ${assetId} and org_id = ${org.orgId}`);
+
+    await fence.query("begin");
+    await fence.query("select set_config('app.bypass_rls', 'on', true)");
+    const fenceLock = await fence.query("select id from fixed_assets where id = $1 for update", [assetId]);
+    assert.equal(fenceLock.rows.length, 1, "the fence must lock the seeded asset row");
+    const fencePid = (await fence.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+
+    await mutator.query("begin");
+    await mutator.query("select set_config('app.bypass_rls', 'on', true)");
+    const edit = (async () => {
+      await mutator.query(
+        `update fixed_assets
+            set asset_account_id = $1,
+                accumulated_depreciation_account_id = $2,
+                depreciation_expense_account_id = $3,
+                location_id = $4,
+                updated_at = now(), updated_by = $5
+          where id = $6 and org_id = $7`,
+        [org.accounts.ar, org.accounts.ap, org.accounts.cogs, alternateLocation, actorId, assetId, org.orgId],
+      );
+      await mutator.query("commit");
+    })();
+    // The due query can still read the old configuration while the edit waits
+    // on the fence. This is the interleaving that previously allowed a stale
+    // snapshot to reach the journal.
+    await waitForParkedCount(fencePid, 1);
+    const runPromise = runDepreciation(org.orgId, "2026-07-31", actorId, assetId);
+    await waitForParkedCount(fencePid, 2);
+
+    await fence.query("commit");
+    const [run] = await Promise.all([runPromise, edit]);
+    assert.equal(run.posted, 1);
+    assert.equal(run.problems.length, 0);
+
+    const lines = (await db.execute<{ account_id: string; location_id: string | null }>(sql`
+      select jl.account_id, jl.location_id
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+       where je.id = ${run.entries[0]!.entryId}
+       order by jl.line_number`));
+    assert.deepEqual(lines.rows, [
+      { account_id: org.accounts.cogs, location_id: alternateLocation },
+      { account_id: org.accounts.ap, location_id: alternateLocation },
+    ], "the journal must use the committed asset edit, not the due-query snapshot");
+  } finally {
+    await fence.query("rollback").catch(() => undefined);
+    await mutator.query("rollback").catch(() => undefined);
+    fence.release();
+    mutator.release();
     await dropScratchOrg(org.orgId);
   }
 });
