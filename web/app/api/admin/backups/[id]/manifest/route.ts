@@ -68,7 +68,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     status: 200,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Content-Disposition": contentDisposition("attachment", `${base}.json.gz`, "manifest.json"),
+      "Content-Disposition": contentDisposition("attachment", base, "manifest.json"),
       "Cache-Control": "no-store",
     },
   });
