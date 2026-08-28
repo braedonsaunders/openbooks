@@ -32,13 +32,18 @@ export async function POST(req: Request) {
     ? (body.format as ExportFormat)
     : 'csv'
 
-  const resource = await getResource(authz.user.orgId, resourceKey)
+  // Bind the role-derived subsidiary fence before any resource read. The
+  // generic registry otherwise defaults to an org-only adapter, which would
+  // let a restricted AP/AR/GL reader export another subsidiary's documents.
+  const resource = await getResource(authz.user.orgId, resourceKey, authz.allowedSubsidiaryIds)
   if (!resource) return NextResponse.json({ error: 'unknown resource' }, { status: 404 })
   if (!can(authz, resource.descriptor.readPermission)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  const { columns, rows } = await resource.read()
+  const { columns, rows } = await resource.read({
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+  })
   const selected =
     Array.isArray(body.columns) && body.columns.length > 0
       ? columns.filter((c) => body.columns!.includes(c.key))
