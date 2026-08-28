@@ -8,6 +8,7 @@ import { CA_PACK_RATES } from "./payroll/canada/rates.ts";
 import {
   buildResolution,
   canonicalStatutoryRateValues,
+  deleteStatutoryRate,
   listStatutoryRates,
   packRates,
   packsMissingRateDeclarations,
@@ -31,6 +32,17 @@ import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./tes
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+function errorChainMatches(error: unknown, pattern: RegExp): boolean {
+  let current: unknown = error;
+  const seen = new Set<unknown>();
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    if (pattern.test(String(current))) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
 
 /* ------------------------------------------------------------------ */
 /* Declarations                                                        */
@@ -352,6 +364,62 @@ test(
       const update = audit.rows.find((r) => r.action === "update")!;
       assert.equal((update.changes.before as Record<string, string>).rate, "0.0106");
       assert.equal((update.changes.after as Record<string, string>).rate, "0.0115");
+    } finally {
+      await dropScratchOrgReporting(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "rate writes roll back with an audit failure, and configured rows cannot be deleted",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedTwoAccountEmployer();
+    try {
+      let triggerInstalled = false;
+      try {
+        await db.execute(sql`
+          create or replace function statutory_rate_audit_failure() returns trigger language plpgsql as $$
+          begin raise exception 'injected statutory-rate audit failure'; end $$`);
+        // CREATE TRIGGER is a utility statement: its WHEN clause cannot use
+        // bind parameters, so the scratch org id is interpolated literally.
+        await db.execute(sql.raw(
+          `create trigger statutory_rate_audit_failure before insert on audit_log\n`
+          + `  for each row when (new.org_id = '${fixture.orgId}'::uuid\n`
+          + `    and new.table_name = 'payroll_statutory_rates')\n`
+          + "  execute function statutory_rate_audit_failure()",
+        ));
+        triggerInstalled = true;
+
+        await assert.rejects(
+          () => upsertStatutoryRate({
+            orgId: fixture.orgId, actorId: fixture.actorId, country: "US", rateKey: "us_futa",
+            region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
+          }),
+          (error: unknown) => errorChainMatches(error, /injected statutory-rate audit failure/),
+        );
+        // The audit insert is in the same transaction as the rate insert: an
+        // outage leaves neither half committed.
+        assert.deepEqual(await listStatutoryRates(fixture.orgId, { country: "US", taxYear: 2026 }), []);
+      } finally {
+        if (triggerInstalled) await db.execute(sql`drop trigger statutory_rate_audit_failure on audit_log`);
+        await db.execute(sql`drop function if exists statutory_rate_audit_failure()`);
+      }
+
+      const saved = await upsertStatutoryRate({
+        orgId: fixture.orgId, actorId: fixture.actorId, country: "US", rateKey: "us_futa",
+        region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
+      });
+      await assert.rejects(
+        () => deleteStatutoryRate(fixture.orgId, fixture.actorId, saved.id),
+        /cannot be deleted.*replacement rate/,
+      );
+      // A Remove request cannot erase the effective-dated input used to replay a
+      // prior payroll period; the row and its resolution remain available.
+      assert.equal(
+        (await resolveStatutoryRates(fixture.orgId, "US", 2026)).values("us_futa", { region: "MI" })?.rate,
+        "0.0090",
+      );
     } finally {
       await dropScratchOrgReporting(fixture.orgId);
     }
