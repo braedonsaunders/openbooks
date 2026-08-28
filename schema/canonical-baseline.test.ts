@@ -77,6 +77,8 @@ const camPoolSourceAccountOverlapMigrationPath =
   "schema/migrations/generated/0061_cam_pool_source_account_overlap.sql";
 const recognitionEventsMigrationPath =
   "schema/migrations/generated/0062_recognition_events.sql";
+const sandboxWipeGuardAuthorizationMigrationPath =
+  "schema/migrations/generated/0078_sandbox_wipe_guard_authorization.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -156,6 +158,8 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0074_recognition_event_idempotency.sql",
     "0075_payroll_bank_file_release_status_evidence.sql",
     "0076_work_schedule_group_expression_uniqueness.sql",
+    "0077_project_overhead_adjustment_reversal_uniqueness.sql",
+    "0078_sandbox_wipe_guard_authorization.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -756,14 +760,17 @@ test("every effective sandbox-wipe guard reads the GUC the wipe source sets", ()
   // Build the final function catalog in filename order. This checks guards
   // that were already correct as well as the five repaired above, and catches
   // a later forward migration that accidentally reintroduces another name.
-  const effectiveWipeBodies = new Map<string, string>();
+  const effectiveFunctions = new Map<string, string>();
   const functionDefinition =
     /CREATE(?: OR REPLACE)? FUNCTION public\.([a-z0-9_]+)\([^;]*?\)\s+RETURNS[\s\S]*?\s+AS (\$[a-z0-9_]*\$)([\s\S]*?)\2;/gi;
   for (const source of migrationSources.values()) {
     for (const match of source.matchAll(functionDefinition)) {
-      if (match[3]!.includes("sandbox_wipe")) effectiveWipeBodies.set(match[1]!, match[3]!);
+      effectiveFunctions.set(match[1]!, match[3]!);
     }
   }
+  const effectiveWipeBodies = new Map(
+    [...effectiveFunctions].filter(([, body]) => body.includes("sandbox_wipe")),
+  );
   assert.ok(effectiveWipeBodies.size > legacyGuardNames.size);
   for (const [functionName, body] of effectiveWipeBodies) {
     assert.match(
@@ -774,6 +781,93 @@ test("every effective sandbox-wipe guard reads the GUC the wipe source sets", ()
       `${functionName} must read the wipe source's GUC directly or through its canonical helper`,
     );
     assert.doesNotMatch(body, /app\.sandbox_wipe/, `${functionName} retains the drifted GUC`);
+  }
+});
+
+test("0078 authorizes sandbox wipe exemptions only for tenant deletes", () => {
+  const migration = readFileSync(sandboxWipeGuardAuthorizationMigrationPath, "utf8");
+  assert.doesNotMatch(
+    migration,
+    /current_setting\(['"](?:openbooks|app)\.sandbox_wipe['"]/i,
+    "0078 must not trust a raw wipe GUC in a guard body",
+  );
+  assert.doesNotMatch(migration, /0001_baseline/);
+
+  const expectedFunctions = [
+    "depreciation_evidence_attachment_guard",
+    "inventory_provisional_immutable",
+    "openbooks_guard_depreciation_evidence",
+    "je_guard",
+    "openbooks_gl_activity_entry",
+    "openbooks_gl_activity_line",
+    "openbooks_je_cascade_posting_date",
+    "openbooks_party_payment_stats",
+    "posted_document_financial_guard",
+    "protect_country_tax_pack_installation",
+    "subscription_amendment_immutable_guard",
+    "subscription_period_invoice_immutable_guard",
+    "subscription_plan_version_immutable_guard",
+    "subscription_version_component_immutable_guard",
+    "recurring_occurrence_document_immutable_guard",
+    "enforce_payment_instruction_posting_claim",
+    "assert_document_totals_match_lines",
+    "refresh_document_totals_from_lines",
+    "document_lines_total_line_refresh",
+    "documents_total_line_tieout",
+    "document_lines_total_line_tieout",
+  ];
+  for (const functionName of expectedFunctions) {
+    assert.match(
+      migration,
+      new RegExp(`CREATE OR REPLACE FUNCTION public\\.${functionName}\\(`),
+      `0078 must replace ${functionName}`,
+    );
+  }
+
+  const deleteOnlyFunctions = [
+    "depreciation_evidence_attachment_guard",
+    "inventory_provisional_immutable",
+    "openbooks_guard_depreciation_evidence",
+    "je_guard",
+    "openbooks_gl_activity_entry",
+    "openbooks_gl_activity_line",
+    "openbooks_party_payment_stats",
+    "posted_document_financial_guard",
+    "protect_country_tax_pack_installation",
+    "subscription_amendment_immutable_guard",
+    "subscription_period_invoice_immutable_guard",
+    "subscription_plan_version_immutable_guard",
+    "subscription_version_component_immutable_guard",
+    "recurring_occurrence_document_immutable_guard",
+    "enforce_payment_instruction_posting_claim",
+    "document_lines_total_line_refresh",
+    "document_lines_total_line_tieout",
+  ];
+  for (const functionName of deleteOnlyFunctions) {
+    const definition = migration.match(
+      new RegExp(
+        `CREATE OR REPLACE FUNCTION public\\.${functionName}\\([\\s\\S]*?\\$\\$;`,
+      ),
+    )?.[0];
+    assert.ok(definition, `0078 definition missing for ${functionName}`);
+    assert.match(
+      definition,
+      /TG_OP\s*=\s*'DELETE'\s+AND\s+(?:public\.)?openbooks_sandbox_wipe_allowed\(/i,
+      `${functionName} may bypass only an authorized DELETE`,
+    );
+    assert.doesNotMatch(definition, /current_setting\([^)]*sandbox_wipe/i);
+  }
+  const cascade = migration.match(
+    /CREATE OR REPLACE FUNCTION public\.openbooks_je_cascade_posting_date\([\s\S]*?\$\$;/,
+  )?.[0];
+  assert.ok(cascade);
+  assert.doesNotMatch(cascade, /sandbox_wipe|current_setting\(/i);
+  for (const functionName of ["assert_document_totals_match_lines", "refresh_document_totals_from_lines"]) {
+    const definition = migration.match(
+      new RegExp(`CREATE OR REPLACE FUNCTION public\\.${functionName}\\([\\s\\S]*?\\$\\$;`),
+    )?.[0];
+    assert.ok(definition);
+    assert.doesNotMatch(definition, /sandbox_wipe|current_setting\(/i);
   }
 });
 
