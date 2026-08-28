@@ -139,7 +139,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
+  ['../../../../../lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/db.ts', 'mock:db'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
@@ -148,23 +148,95 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/budget-mutations', 'mock:budget-mutations'],
 ])
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
-  },
-})
+function mockedQuery(query: unknown): { rows: Record<string, unknown>[] } {
+  const text = sqlText(query)
+  state.queries.push(text)
+  if (text.includes('select id, name, description, book_id')) {
+    return {
+      rows: [{
+        id: SCENARIO_ID,
+        name: 'FY2026 Budget',
+        description: null,
+        book_id: BOOK_ID,
+        fiscal_year: 2026,
+        kind: 'budget',
+        status: state.scenarioStatus,
+        revision: state.scenarioRevision,
+      }],
+    }
+  }
+  if (text.includes('select id from budget_scenarios')) return { rows: [{ id: SOURCE_SCENARIO_ID }] }
+  if (text.includes('select 1 from accounting_periods')) return { rows: [{ one: 1 }] }
+  if (text.includes('insert into budget_scenarios')) return { rows: [{ id: '00000000-0000-4000-8000-000000000007' }] }
+  return { rows: [] }
+}
 
-const routeUrl = new URL('./route.ts?budget-actions-route-test', import.meta.url).href
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+let POST: typeof import('./route.ts')['POST']
+if (process.env.VITEST) {
+  const { vi } = await import('vitest')
+  vi['mock']('../../../../../lib/api/json', () => ({
+    jsonObject: {},
+    parseJsonBody: async (request: Request) => ({ ok: true, data: await request.json() }),
+  }))
+  vi['mock']('@openbooks/engine/src/db.ts', () => ({
+    db: {
+      transaction: async (work: (tx: { execute: (query: unknown) => Promise<{ rows: Record<string, unknown>[] }> }) => unknown) =>
+        work({ execute: async (query) => mockedQuery(query) }),
+    },
+  }))
+  vi['mock']('../../../../../lib/authz', () => ({
+    can: () => true,
+    subsidiariesInScope: (gate: { allowedSubsidiaryIds: Scope }, ids: string[]) =>
+      gate.allowedSubsidiaryIds === null || ids.every((id) => gate.allowedSubsidiaryIds?.has(id)),
+  }))
+  vi['mock']('../../../../../lib/feature-gates', () => ({
+    guardFeaturePermission: async () => ({
+      user: { orgId: ORG_ID, id: USER_ID },
+      allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+    }),
+  }))
+  vi['mock']('../../../../../lib/list-params', () => ({
+    isUuid: (value: unknown) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value),
+  }))
+  vi['mock']('../../../../../lib/subsidiaries', () => ({
+    subsidiaryVisibleFilter: (column: unknown, allowed: Scope) => {
+      if (allowed === null) return sql.raw('')
+      const ids = [...(allowed ?? [])]
+      const columnText = sqlText(column)
+      const columnName = columnText.includes('bl.subsidiary_id')
+        ? 'bl.subsidiary_id'
+        : columnText.includes('l.subsidiary_id')
+          ? 'l.subsidiary_id'
+          : 'subsidiary_id'
+      return ids.length
+        ? sql.raw(` and ${columnName} = any('{${ids.join(',')}}'::uuid[])`)
+        : sql.raw(' and false')
+    },
+  }))
+  vi['mock']('../../../../../lib/budget-mutations', () => ({
+    BudgetMutationError: class BudgetMutationError extends Error {
+      constructor(message: string, readonly status = 422) { super(message) }
+    },
+  }));
+  ({ POST } = (await import('./route.ts')) as typeof import('./route.ts'))
+} else {
+  const hooks = registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
+      const mocked = mockUrls.get(specifier)
+      if (mocked) return { url: mocked, shortCircuit: true }
+      return nextResolve(specifier, context)
+    },
+    load(url, context, nextLoad) {
+      const source = mockSources.get(url)
+      if (source !== undefined) return { format: 'module', source, shortCircuit: true }
+      return nextLoad(url, context)
+    },
+  })
+  const routeUrl = new URL('./route.ts?budget-actions-route-test', import.meta.url).href;
+  ({ POST } = (await import(routeUrl)) as typeof import('./route.ts'))
+  hooks.deregister()
+}
 
 function reset(scope: Scope): void {
   state.allowedSubsidiaryIds = scope
@@ -188,13 +260,17 @@ function sourceCopyQuery(): string {
   return state.queries.find((query) => query.includes('from journal_lines')) ?? ''
 }
 
-test('rejects invalid actions and malformed scenario ids', async () => {
+const testCase: (name: string, run: () => Promise<void>) => unknown = process.env.VITEST
+  ? ((await import('vitest')).it as unknown as (name: string, run: () => Promise<void>) => unknown)
+  : test
+
+testCase('rejects invalid actions and malformed scenario ids', async () => {
   reset(null)
   assert.equal((await post({ action: 'nope', expectedRevision: 1 })).status, 422)
   assert.equal((await post({ action: 'archive', expectedRevision: 1 }, 'not-a-uuid')).status, 404)
 })
 
-test('rejects stale revisions and locked budget mutations', async () => {
+testCase('rejects stale revisions and locked budget mutations', async () => {
   reset(null)
   state.scenarioRevision = 4
   assert.equal((await post({ action: 'copy_prior_actuals', expectedRevision: 1 })).status, 409)
@@ -203,7 +279,7 @@ test('rejects stale revisions and locked budget mutations', async () => {
   assert.equal((await post({ action: 'copy_prior_actuals', expectedRevision: 1 })).status, 409)
 })
 
-test('copy_prior_actuals keeps each subsidiary as a distinct budget cell', async () => {
+testCase('copy_prior_actuals keeps each subsidiary as a distinct budget cell', async () => {
   reset(null)
   const response = await post({ action: 'copy_prior_actuals', expectedRevision: 1 })
   assert.equal(response.status, 200)
@@ -214,21 +290,21 @@ test('copy_prior_actuals keeps each subsidiary as a distinct budget cell', async
   assert.doesNotMatch(query, /and false/)
 })
 
-test('copy_prior_actuals applies restricted subsidiary visibility to source actuals', async () => {
+testCase('copy_prior_actuals applies restricted subsidiary visibility to source actuals', async () => {
   reset(new Set([SUBSIDIARY_A]))
   const response = await post({ action: 'copy_prior_actuals', expectedRevision: 1 })
   assert.equal(response.status, 200)
   assert.match(sourceCopyQuery(), new RegExp(`l\\.subsidiary_id = any\\(\\'{${SUBSIDIARY_A}\\}'::uuid\\[\\]\\)`))
 })
 
-test('copy_prior_actuals fails closed for an empty restricted subsidiary scope', async () => {
+testCase('copy_prior_actuals fails closed for an empty restricted subsidiary scope', async () => {
   reset(new Set())
   const response = await post({ action: 'copy_prior_actuals', expectedRevision: 1 })
   assert.equal(response.status, 200)
   assert.match(sourceCopyQuery(), /and false/)
 })
 
-test('copy_prior_actuals rejects an explicitly selected hidden subsidiary', async () => {
+testCase('copy_prior_actuals rejects an explicitly selected hidden subsidiary', async () => {
   reset(new Set([SUBSIDIARY_A]))
   const hidden = '00000000-0000-4000-8000-000000000008'
   const response = await post({ action: 'copy_prior_actuals', expectedRevision: 1, subsidiaryId: hidden })
@@ -236,7 +312,7 @@ test('copy_prior_actuals rejects an explicitly selected hidden subsidiary', asyn
   assert.equal(sourceCopyQuery(), '')
 })
 
-test('copy and apply_source preserve subsidiary identity while honoring scope', async () => {
+testCase('copy and apply_source preserve subsidiary identity while honoring scope', async () => {
   reset(new Set([SUBSIDIARY_A]))
   const copied = await post({ action: 'copy', expectedRevision: 1 })
   assert.equal(copied.status, 200)
