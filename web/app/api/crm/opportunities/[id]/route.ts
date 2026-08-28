@@ -18,24 +18,39 @@ const CATEGORIES = ['omitted', 'worst_case', 'most_likely', 'upside']
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 class OpportunityDisappeared extends Error {}
+class OpportunityContactMismatch extends Error {}
+class OpportunityValidationError extends Error {}
+class OpportunityNotFound extends Error {}
+class OpportunityPermissionDenied extends Error {
+  constructor(readonly response: NextResponse) {
+    super('permission denied')
+  }
+}
 
 function textOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-async function orgUuidExists(table: 'parties' | 'contacts' | 'users' | 'crm_sales_teams' | 'crm_lead_sources', id: string | null, orgId: string): Promise<boolean> {
+type QueryExecutor = Pick<typeof db, 'execute'>
+
+async function orgUuidExistsWith(executor: QueryExecutor, table: 'parties' | 'contacts' | 'users' | 'crm_sales_teams' | 'crm_lead_sources', id: string | null, orgId: string, lock = false): Promise<boolean> {
   if (!id) return true
   if (!isUuid(id)) return false
+  const lockClause = lock ? sql` for update` : sql``
   const result = table === 'parties'
-    ? await db.execute(sql`select 1 from parties where id = ${id} and org_id = ${orgId}`)
+    ? await executor.execute(sql`select 1 from parties where id = ${id} and org_id = ${orgId}${lockClause}`)
     : table === 'contacts'
-      ? await db.execute(sql`select 1 from contacts where id = ${id} and org_id = ${orgId}`)
+      ? await executor.execute(sql`select 1 from contacts where id = ${id} and org_id = ${orgId}${lockClause}`)
       : table === 'users'
-        ? await db.execute(sql`select 1 from users where id = ${id} and org_id = ${orgId}`)
+        ? await executor.execute(sql`select 1 from users where id = ${id} and org_id = ${orgId}${lockClause}`)
         : table === 'crm_sales_teams'
-          ? await db.execute(sql`select 1 from crm_sales_teams where id = ${id} and org_id = ${orgId} and is_active`)
-          : await db.execute(sql`select 1 from crm_lead_sources where id = ${id} and org_id = ${orgId} and is_active`)
+          ? await executor.execute(sql`select 1 from crm_sales_teams where id = ${id} and org_id = ${orgId} and is_active${lockClause}`)
+          : await executor.execute(sql`select 1 from crm_lead_sources where id = ${id} and org_id = ${orgId} and is_active${lockClause}`)
   return (result as unknown as { rows: unknown[] }).rows.length === 1
+}
+
+async function orgUuidExists(table: 'parties' | 'contacts' | 'users' | 'crm_sales_teams' | 'crm_lead_sources', id: string | null, orgId: string): Promise<boolean> {
+  return orgUuidExistsWith(db, table, id, orgId)
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -200,17 +215,48 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     salesTeamId = body.salesTeamId === undefined ? current.sales_team_id : textOrNull(body.salesTeamId)
     leadSourceId = body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId)
     statusId = body.statusId === undefined ? current.status_id : textOrNull(body.statusId)
-    if (body.statusId === undefined) {
-      // The status join is part of the locked read, so defaults and lifecycle
-      // flags are refreshed together with the opportunity itself.
-      nextStatus = {
-        ...nextStatus,
-        is_closed: current.is_closed,
-        is_won: current.is_won,
-        probability: current.status_probability ?? nextStatus.probability,
-        default_forecast_category: current.status_default_forecast_category ?? nextStatus.default_forecast_category,
-      }
+    // Every reference is checked again on the transaction connection after
+    // the opportunity lock.  The preflight checks intentionally remain for a
+    // fast response, but their unlocked snapshot may be stale by this point.
+    const lockedDb = tx as unknown as QueryExecutor
+    if (!await orgUuidExistsWith(lockedDb, 'parties', partyId, user.orgId, true)) {
+      throw new OpportunityValidationError('invalid account')
     }
+    if (!await orgUuidExistsWith(lockedDb, 'contacts', contactId, user.orgId, true)) {
+      throw new OpportunityValidationError('invalid contact')
+    }
+    if (contactId && !((await tx.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId} for update`))).rows[0]) {
+      // The preflight contact check ran against an unlocked snapshot.  This
+      // check is against the account from the row we actually locked, so a
+      // concurrent party change fails closed before any write.
+      throw new OpportunityContactMismatch()
+    }
+    if (!await orgUuidExistsWith(lockedDb, 'users', ownerUserId, user.orgId, true)) {
+      throw new OpportunityValidationError('invalid owner')
+    }
+    if (!await orgUuidExistsWith(lockedDb, 'crm_sales_teams', salesTeamId, user.orgId, true)) {
+      throw new OpportunityValidationError('invalid sales team')
+    }
+    if (!await orgUuidExistsWith(lockedDb, 'crm_lead_sources', leadSourceId, user.orgId, true)) {
+      throw new OpportunityValidationError('invalid lead source')
+    }
+
+    // Re-read the selected status after the lock.  In particular, an
+    // explicitly submitted status may have been deactivated or moved to a
+    // different tenant since preflight; never use that stale row's lifecycle
+    // flags for a write.
+    const lockedStatusResult = await tx.execute(sql`
+      select * from crm_opportunity_statuses
+       where id = ${statusId} and org_id = ${user.orgId} and is_active
+       for update`)
+    const lockedStatus = lockedStatusResult.rows[0]
+    if (!lockedStatus) throw new OpportunityValidationError('invalid status')
+    nextStatus = lockedStatus
+    if (nextStatus.is_closed) {
+      const closeGate = await guardPermission('crm.opportunities.close')
+      if (closeGate instanceof NextResponse) throw new OpportunityPermissionDenied(closeGate)
+    }
+
     probability = body.probability === undefined
       ? statusId !== current.status_id ? Number(nextStatus.probability) : Number(current.probability)
       : Number(body.probability)
@@ -218,6 +264,61 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     title = body.title === undefined ? current.title : textOrNull(body.title)
     currency = body.currency === undefined ? current.currency : String(body.currency).toUpperCase()
     winLossReason = body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason)
+    if (!Number.isInteger(probability) || probability < 0 || probability > 100) {
+      throw new OpportunityValidationError('probability must be from 0 to 100')
+    }
+    if (!CATEGORIES.includes(category)) throw new OpportunityValidationError('invalid forecast category')
+    if (!title) throw new OpportunityValidationError('title is required')
+    if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, 'multiCurrency'))) {
+      throw new OpportunityNotFound()
+    }
+    if (!((await tx.execute(sql`select 1 from currencies where code = ${currency}`))).rows[0]) {
+      throw new OpportunityValidationError('invalid currency')
+    }
+    if (nextStatus.is_closed && !nextStatus.is_won && !winLossReason) {
+      throw new OpportunityValidationError('a loss reason is required')
+    }
+
+    // Item and team-member references are mutable too.  Validate them after
+    // locking and before the corresponding delete/insert pairs below.
+    if (lines) {
+      for (const line of lines) {
+        if (!line.itemId || !isUuid(line.itemId) || !((await tx.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active for update`))).rows[0]) {
+          throw new OpportunityValidationError('a valid item is required for every line')
+        }
+      }
+      if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
+        const stored = await tx.execute<{ item_id: string }>(sql`
+          select item_id from crm_opportunity_lines
+           where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`)
+        const storedIds = new Set(stored.rows.map((row) => row.item_id))
+        for (const line of lines) {
+          if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue
+          const item = await tx.execute<{ kind: string }>(sql`
+            select kind from items where id = ${line.itemId} and org_id = ${user.orgId} for update`)
+          if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) throw new OpportunityNotFound()
+        }
+      }
+      if (!(await isFeatureEnabled(user.orgId, 'equipment'))) {
+        const stored = await tx.execute<{ item_id: string }>(sql`
+          select item_id from crm_opportunity_lines
+           where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`)
+        const storedIds = new Set(stored.rows.map((row) => row.item_id))
+        for (const line of lines) {
+          if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue
+          const item = await tx.execute<{ kind: string }>(sql`
+            select kind from items where id = ${line.itemId} and org_id = ${user.orgId} for update`)
+          if (item.rows[0]?.kind === 'equipment_charge') throw new OpportunityNotFound()
+        }
+      }
+    }
+    if (team) {
+      for (const member of teamRows) {
+        if (!await orgUuidExistsWith(lockedDb, 'users', member.userId, user.orgId, true)) {
+          throw new OpportunityValidationError('invalid sales team member')
+        }
+      }
+    }
     if (lineMathInputs) calculated = computeOpportunityTotals(lineMathInputs, probability)
 
     if (lines && calculated) {
@@ -278,6 +379,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   } catch (error) {
     if (error instanceof OpportunityDisappeared) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof OpportunityNotFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof OpportunityContactMismatch) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
+    if (error instanceof OpportunityValidationError) return NextResponse.json({ error: error.message }, { status: 422 })
+    if (error instanceof OpportunityPermissionDenied) return error.response
     throw error
   }
   return NextResponse.json(await loadOpportunity(id, user.orgId))
