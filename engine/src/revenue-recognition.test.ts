@@ -526,11 +526,11 @@ test("milestone events produce a non-zero recognition schedule and post through 
     // Record two milestone events.
     const evt1 = await recordRecognitionEvent({
       obligationId, orgId: org.orgId, actorId, periodMonth: "2026-01-01", amount: "2000",
-      description: "Design complete",
+      description: "Design complete", sourceReference: "milestone:design-complete",
     });
     const evt2 = await recordRecognitionEvent({
       obligationId, orgId: org.orgId, actorId, periodMonth: "2026-02-01", amount: "3000",
-      description: "Build complete",
+      description: "Build complete", sourceReference: "milestone:build-complete",
     });
     assert.ok(evt1.eventId);
     assert.ok(evt2.eventId);
@@ -589,7 +589,7 @@ test("usage events produce a non-zero recognition schedule with correct amounts"
     await recordRecognitionEvent({
       obligationId, orgId: org.orgId, actorId,
       periodMonth: "2026-01-01", amount: "1200",
-      description: "January API calls", unitRate: "0.12", quantity: "10000",
+      description: "January API calls", sourceReference: "usage:2026-01", unitRate: "0.12", quantity: "10000",
     });
 
     const build = await buildRecognitionSchedule(obligationId, org.orgId, actorId);
@@ -627,7 +627,7 @@ test("recordRecognitionEvent rejects a straight_line method obligation", { skip:
 
     await assert.rejects(
       () => recordRecognitionEvent({
-        obligationId, orgId: org.orgId, actorId, periodMonth: "2026-07-01", amount: "100",
+        obligationId, orgId: org.orgId, actorId, periodMonth: "2026-07-01", amount: "100", sourceReference: "straight-line:1",
       }),
       /does not accept events/,
     );
@@ -677,7 +677,7 @@ test("milestone schedule rebuilds on new event and preserves posted history", { 
 
     // Record first milestone.
     await recordRecognitionEvent({
-      obligationId, orgId: org.orgId, actorId, periodMonth: "2026-01-01", amount: "2000",
+      obligationId, orgId: org.orgId, actorId, periodMonth: "2026-01-01", amount: "2000", sourceReference: "milestone:jan",
     });
 
     // Run recognition — Jan posts.
@@ -686,7 +686,7 @@ test("milestone schedule rebuilds on new event and preserves posted history", { 
 
     // Add a second event for Feb.
     await recordRecognitionEvent({
-      obligationId, orgId: org.orgId, actorId, periodMonth: "2026-02-01", amount: "3000",
+      obligationId, orgId: org.orgId, actorId, periodMonth: "2026-02-01", amount: "3000", sourceReference: "milestone:feb",
     });
 
     // Build should now plan both periods, but the Jan line is already posted.
@@ -699,6 +699,168 @@ test("milestone schedule rebuilds on new event and preserves posted history", { 
     assert.equal(run2.totalAmount, "3000.0000");
   } finally {
     await dropScratchOrg(org.orgId);
+  }
+});
+
+/** Minimal milestone fixture for source-idempotency tests. */
+async function createRecognitionEventFixture(code: string): Promise<{
+  org: ScratchOrg;
+  actorId: string;
+  obligationId: string;
+  periodMonth: string;
+}> {
+  const org = await createScratchOrg();
+  const actorId = randomUUID();
+  const periodMonth = `${org.date.slice(0, 7)}-01`;
+  const ruleId = randomUUID();
+  await db.execute(sql`
+    insert into recognition_rules
+      (id, org_id, code, name, method, is_forecast, recognition_periods, start_date_source, end_date_source,
+       period_offset, start_offset_days, initial_amount_percent, deferred_account_id, recognized_account_id, is_active)
+    values (${ruleId}, ${org.orgId}, ${code}, 'Milestone events', 'milestone', false, 1,
+            'obligation', 'term', 0, 0, '0', ${org.accounts.deferred}, ${org.accounts.recognized}, true)`);
+  const contractId = randomUUID();
+  await db.execute(sql`
+    insert into revenue_contracts
+      (id, org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
+    values (${contractId}, ${org.orgId}, ${org.customerId}, ${`REV-${code}`}, 'active', ${org.date},
+            'CAD', '1000', ${actorId}, ${actorId})`);
+  const obligationId = randomUUID();
+  await db.execute(sql`
+    insert into performance_obligations
+      (id, org_id, contract_id, description, recognition_rule_id,
+       booked_amount, allocated_price, recognition_starts_on, status, created_by, updated_by)
+    values (${obligationId}, ${org.orgId}, ${contractId}, 'Milestone deliverable', ${ruleId},
+            '1000', '1000', ${org.date}, 'open', ${actorId}, ${actorId})`);
+  return { org, actorId, obligationId, periodMonth };
+}
+
+test("recognition event retries replay one event and reject payload changes", { skip: !DB }, async () => {
+  const fixture = await createRecognitionEventFixture("RETRY1");
+  try {
+    await assert.rejects(
+      () => recordRecognitionEvent({
+        obligationId: fixture.obligationId,
+        orgId: fixture.org.orgId,
+        actorId: fixture.actorId,
+        periodMonth: fixture.periodMonth,
+        amount: "100",
+        sourceReference: "   ",
+      }),
+      /non-blank sourceReference/,
+    );
+    const first = await recordRecognitionEvent({
+      obligationId: fixture.obligationId,
+      orgId: fixture.org.orgId,
+      actorId: fixture.actorId,
+      periodMonth: fixture.periodMonth,
+      amount: "100",
+      description: "One milestone",
+      sourceReference: " milestone:retry ",
+    });
+    const replay = await recordRecognitionEvent({
+      obligationId: fixture.obligationId,
+      orgId: fixture.org.orgId,
+      actorId: fixture.actorId,
+      periodMonth: fixture.periodMonth,
+      amount: "100.0000",
+      description: "One milestone",
+      sourceReference: "milestone:retry",
+    });
+    assert.equal(replay.eventId, first.eventId, "a semantically identical retry replays the original event");
+
+    await assert.rejects(
+      () => recordRecognitionEvent({
+        obligationId: fixture.obligationId,
+        orgId: fixture.org.orgId,
+        actorId: fixture.actorId,
+        periodMonth: fixture.periodMonth,
+        amount: "101",
+        description: "One milestone",
+        sourceReference: "milestone:retry",
+      }),
+      /sourceReference was already used with a different payload/,
+    );
+
+    const counts = (await db.execute<{ events: string; lines: string }>(sql`
+      select
+        (select count(*)::text from recognition_events
+          where org_id = ${fixture.org.orgId} and obligation_id = ${fixture.obligationId}) as events,
+        (select count(*)::text from recognition_schedule_lines line
+          join recognition_schedules schedule on schedule.id = line.schedule_id
+         where schedule.org_id = ${fixture.org.orgId} and schedule.obligation_id = ${fixture.obligationId}) as lines`)).rows[0]!;
+    assert.equal(counts.events, "1");
+    assert.equal(counts.lines, "1", "the retry does not rebuild a duplicate schedule line");
+  } finally {
+    await dropScratchOrg(fixture.org.orgId);
+  }
+});
+
+test("concurrent recognition event retries converge on one event and schedule", { skip: !DB }, async () => {
+  const fixture = await createRecognitionEventFixture("RETRY2");
+  try {
+    const input = {
+      obligationId: fixture.obligationId,
+      orgId: fixture.org.orgId,
+      actorId: fixture.actorId,
+      periodMonth: fixture.periodMonth,
+      amount: "100",
+      description: "Concurrent milestone",
+      sourceReference: "milestone:concurrent",
+    };
+    const results = await Promise.all([
+      recordRecognitionEvent(input),
+      recordRecognitionEvent(input),
+    ]);
+    assert.equal(new Set(results.map((result) => result.eventId)).size, 1);
+    const counts = (await db.execute<{ events: string; lines: string }>(sql`
+      select
+        (select count(*)::text from recognition_events
+          where org_id = ${fixture.org.orgId} and obligation_id = ${fixture.obligationId}) as events,
+        (select count(*)::text from recognition_schedule_lines line
+          join recognition_schedules schedule on schedule.id = line.schedule_id
+         where schedule.org_id = ${fixture.org.orgId} and schedule.obligation_id = ${fixture.obligationId}) as lines`)).rows[0]!;
+    assert.equal(counts.events, "1");
+    assert.equal(counts.lines, "1");
+  } finally {
+    await dropScratchOrg(fixture.org.orgId);
+  }
+});
+
+test("recognition event and schedule rebuild roll back together on failure", { skip: !DB }, async () => {
+  const fixture = await createRecognitionEventFixture("RETRY3");
+  try {
+    await assert.rejects(
+      () => recordRecognitionEvent({
+        obligationId: fixture.obligationId,
+        orgId: fixture.org.orgId,
+        actorId: fixture.actorId,
+        periodMonth: "2026-08-01",
+        amount: "100",
+        sourceReference: "milestone:rollback",
+      }),
+      /no accounting period covers 2026-08-01/,
+    );
+    const rolledBack = (await db.execute<{ events: string; schedules: string }>(sql`
+      select
+        (select count(*)::text from recognition_events
+          where org_id = ${fixture.org.orgId} and obligation_id = ${fixture.obligationId}) as events,
+        (select count(*)::text from recognition_schedules
+          where org_id = ${fixture.org.orgId} and obligation_id = ${fixture.obligationId}) as schedules`)).rows[0]!;
+    assert.equal(rolledBack.events, "0");
+    assert.equal(rolledBack.schedules, "0", "a failed all-book rebuild leaves no partial schedule");
+
+    const recovered = await recordRecognitionEvent({
+      obligationId: fixture.obligationId,
+      orgId: fixture.org.orgId,
+      actorId: fixture.actorId,
+      periodMonth: fixture.periodMonth,
+      amount: "100",
+      sourceReference: "milestone:rollback",
+    });
+    assert.ok(recovered.eventId, "the rolled-back source key can be retried successfully");
+  } finally {
+    await dropScratchOrg(fixture.org.orgId);
   }
 });
 
