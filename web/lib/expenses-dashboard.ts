@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { addCalendarMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
+import { fromUnits, roundDiv, toUnits } from '@openbooks/engine/src/money.ts'
 
 /**
  * Expense-reports dashboard — the /expenses cockpit's data. This is the
@@ -18,8 +19,8 @@ import { db } from '@openbooks/engine/src/db.ts'
 export interface ExpenseSpender {
   employeeId: string
   employeeName: string
-  totalSpend: number
-  priorSpend: number
+  totalSpend: string
+  priorSpend: string
   reportCount: number
   changePct: number
 }
@@ -27,8 +28,8 @@ export interface ExpenseSpender {
 export interface ExpenseCategory {
   categoryId: string
   categoryName: string
-  currentAmount: number
-  priorAmount: number
+  currentAmount: string
+  priorAmount: string
   changePct: number
 }
 
@@ -37,7 +38,7 @@ export interface ExpenseQueueItem {
   documentNumber: string
   employee: string | null
   date: string
-  total: number
+  total: string
   status: string
 }
 
@@ -45,27 +46,72 @@ export interface ExpensesDashboardData {
   period: { from: string; to: string; priorFrom: string }
   pipeline: {
     draftCount: number
-    draftTotal: number
+    draftTotal: string
     pendingCount: number
-    pendingTotal: number
+    pendingTotal: string
     approvedCount: number
-    approvedTotal: number
-    postedMonthTotal: number
+    approvedTotal: string
+    postedMonthTotal: string
     postedMonthCount: number
   }
   summary: {
-    expenseReportTotal: number
-    vendorBillTotal: number
+    expenseReportTotal: string
+    vendorBillTotal: string
     highSpenderCount: number
-    categoryIncreaseTotal: number
+    categoryIncreaseTotal: string
   }
   topSpenders: ExpenseSpender[]
   categories: ExpenseCategory[]
-  monthlyTrends: { month: string; expenseAmount: number; billAmount: number }[]
+  monthlyTrends: { month: string; expenseAmount: string; billAmount: string }[]
   queue: ExpenseQueueItem[]
 }
 
-const r1 = (n: number) => Math.round(n * 10) / 10
+type MoneyInput = string | number
+
+const moneyUnits = (value: unknown): bigint => {
+  if (value === null || value === undefined) return 0n
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new Error('money values must be decimal strings or numbers')
+  }
+  return toUnits(value)
+}
+
+const canonicalMoney = (value: unknown): string => fromUnits(moneyUnits(value))
+
+const sumMoney = (values: readonly MoneyInput[]): string =>
+  fromUnits(values.reduce((total, value) => total + toUnits(value), 0n))
+
+/** Round an exact percentage change to one decimal place without floats. */
+const percentageChange = (current: bigint, prior: bigint): number => {
+  if (prior <= 0n) return 0
+  // (current - prior) / prior * 100, rounded to tenths of a percent.
+  return Number(roundDiv((current - prior) * 1000n, prior)) / 10
+}
+
+export interface ExpenseSummaryInputs {
+  topSpenderTotals: readonly MoneyInput[]
+  vendorBillTotals: readonly MoneyInput[]
+  categoryIncreaseTotal: MoneyInput
+  highSpenderCount: number
+}
+
+/**
+ * Aggregate dashboard totals in ledger units. The returned canonical strings
+ * remain exact until the currency-aware formatter renders them in the UI.
+ */
+export function aggregateExpenseSummary({
+  topSpenderTotals,
+  vendorBillTotals,
+  categoryIncreaseTotal,
+  highSpenderCount,
+}: ExpenseSummaryInputs): ExpensesDashboardData['summary'] {
+  return {
+    expenseReportTotal: sumMoney(topSpenderTotals),
+    vendorBillTotal: sumMoney(vendorBillTotals),
+    highSpenderCount,
+    categoryIncreaseTotal: canonicalMoney(categoryIncreaseTotal),
+  }
+}
 
 export async function expensesDashboard(orgId: string): Promise<ExpensesDashboardData> {
   const to = await businessToday(orgId)
@@ -154,54 +200,60 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
   const pipe = pipeRes.rows[0] ?? {}
   const topSpenders: ExpenseSpender[] = (spenderRes.rows as any[])
     .map((r) => {
-      const current = Number(r.current_spend ?? 0)
-      const prior = Number(r.prior_spend ?? 0)
+      const current = toUnits(r.current_spend ?? 0)
+      const prior = toUnits(r.prior_spend ?? 0)
       return {
         employeeId: r.employee_id,
         employeeName: r.employee_name,
-        totalSpend: current,
-        priorSpend: prior,
+        totalSpend: fromUnits(current),
+        priorSpend: fromUnits(prior),
         reportCount: Number(r.report_count ?? 0),
-        changePct: prior > 0 ? r1(((current - prior) / prior) * 100) : 0,
+        changePct: percentageChange(current, prior),
       }
     })
-    .filter((s) => s.totalSpend > 0 || s.priorSpend > 0)
+    .filter((s) => toUnits(s.totalSpend) > 0n || toUnits(s.priorSpend) > 0n)
 
-  let categoryIncreaseTotal = 0
+  let categoryIncreaseTotal = 0n
   const categories: ExpenseCategory[] = (catRes.rows as any[])
     .map((r) => {
-      const current = Number(r.current_amount ?? 0)
-      const prior = Number(r.prior_amount ?? 0)
-      const changePct = prior > 0 ? r1(((current - prior) / prior) * 100) : 0
+      const current = toUnits(r.current_amount ?? 0)
+      const prior = toUnits(r.prior_amount ?? 0)
+      const changePct = percentageChange(current, prior)
       if (changePct > 10) categoryIncreaseTotal += current - prior
-      return { categoryId: r.category_id, categoryName: r.category_name ?? '', currentAmount: current, priorAmount: prior, changePct }
+      return {
+        categoryId: r.category_id,
+        categoryName: r.category_name ?? '',
+        currentAmount: fromUnits(current),
+        priorAmount: fromUnits(prior),
+        changePct,
+      }
     })
-    .filter((c) => c.currentAmount > 0 || c.priorAmount > 0)
+    .filter((c) => toUnits(c.currentAmount) > 0n || toUnits(c.priorAmount) > 0n)
 
-  const monthlyTrends = (trendRes.rows).map((r) => ({
+  const monthlyTrends = (trendRes.rows as any[]).map((r) => ({
     month: String(r.month),
-    expenseAmount: Number(r.expense_amount ?? 0),
-    billAmount: Number(r.bill_amount ?? 0),
+    expenseAmount: canonicalMoney(r.expense_amount),
+    billAmount: canonicalMoney(r.bill_amount),
   }))
 
   return {
     period: { from, to, priorFrom },
     pipeline: {
       draftCount: Number(pipe.draft_count ?? 0),
-      draftTotal: Number(pipe.draft_total ?? 0),
+      draftTotal: canonicalMoney(pipe.draft_total),
       pendingCount: Number(pipe.pending_count ?? 0),
-      pendingTotal: Number(pipe.pending_total ?? 0),
+      pendingTotal: canonicalMoney(pipe.pending_total),
       approvedCount: Number(pipe.approved_count ?? 0),
-      approvedTotal: Number(pipe.approved_total ?? 0),
-      postedMonthTotal: Number(pipe.posted_month_total ?? 0),
+      approvedTotal: canonicalMoney(pipe.approved_total),
+      postedMonthTotal: canonicalMoney(pipe.posted_month_total),
       postedMonthCount: Number(pipe.posted_month_count ?? 0),
     },
-    summary: {
-      expenseReportTotal: Math.round(topSpenders.reduce((s, x) => s + x.totalSpend, 0)),
-      vendorBillTotal: Math.round(monthlyTrends.reduce((s, m) => s + m.billAmount, 0)),
+    summary: aggregateExpenseSummary({
+      topSpenderTotals: topSpenders.map((spender) => spender.totalSpend),
+      vendorBillTotals: monthlyTrends.map((trend) => trend.billAmount),
+      categoryIncreaseTotal: fromUnits(categoryIncreaseTotal),
       highSpenderCount: topSpenders.filter((s) => s.changePct > 20).length,
-      categoryIncreaseTotal: Math.round(categoryIncreaseTotal),
-    },
+    }),
     topSpenders,
     categories,
     monthlyTrends,
@@ -210,7 +262,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       documentNumber: r.document_number ?? '',
       employee: r.employee ?? null,
       date: String(r.date ?? ''),
-      total: Number(r.total ?? 0),
+      total: canonicalMoney(r.total),
       status: String(r.status),
     })),
   }
