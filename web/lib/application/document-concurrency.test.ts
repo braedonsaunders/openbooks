@@ -147,16 +147,21 @@ test("REST writers and curated document tools reuse the exact SQL revision proje
   assert.match(toolsSource, /updatedAt: d\.documentRevision/);
 });
 
-test("application corrections defer flow effects until idempotent commit", () => {
+test("application corrections route flows inside the idempotent transaction", () => {
   const source = readFileSync(new URL("./documents.ts", import.meta.url), "utf8");
   const commandStart = source.indexOf("export async function correctPostedDocument")
   const command = source.slice(commandStart)
-  const create = command.indexOf("createPostedCorrectionDraft(")
-  const defer = command.indexOf("{ deferFlows: true }", create)
-  const commandCommit = command.indexOf("if (!outcome.replayed)", defer)
-  const dispatch = command.indexOf("runPostedCorrectionDraftFlows(", commandCommit)
-  assert.ok(create >= 0 && defer > create)
-  assert.ok(commandCommit > defer && dispatch > commandCommit)
+  const callbackStart = command.indexOf("execute: async () => {")
+  const callbackEnd = command.indexOf("\n      }\n    },", callbackStart)
+  const voidCall = command.indexOf("requestDocumentVoid(", callbackStart)
+  const dispatch = command.indexOf("runPostedCorrectionDraftFlows(", callbackStart)
+  assert.ok(callbackStart >= 0 && callbackEnd > callbackStart)
+  assert.ok(voidCall > callbackStart && dispatch > voidCall && dispatch < callbackEnd)
+  assert.equal(
+    command.indexOf("if (!outcome.replayed)", callbackEnd),
+    -1,
+    "a completed idempotency replay must not bypass correction routing",
+  )
 });
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
