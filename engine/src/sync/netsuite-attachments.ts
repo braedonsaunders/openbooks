@@ -34,6 +34,8 @@ interface SourceFile {
 export interface ImportOptions {
   org: string;
   connectionId?: string;
+  /** Authenticated user who authorized this import; omitted for connector/system runs. */
+  actorId?: string | null;
   execute: boolean;
   concurrency: number;
   limit?: number;
@@ -41,6 +43,22 @@ export interface ImportOptions {
    * Indexed source joins resolve only these files and their transaction links;
    * no unrelated transaction inventory or file bytes are read. */
   sourceFileIds?: string[];
+}
+
+const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Normalize the optional audit actor without inventing an identity. A missing
+ * actor is an intentional system import and is persisted as NULL; a supplied
+ * value must be a UUID so resolveContext can re-authorize it in this tenant.
+ */
+export function normalizeImportActorId(actorId: string | null | undefined): string | null {
+  if (actorId == null) return null;
+  if (typeof actorId !== "string") throw new Error("attachment import actorId must be a valid user id");
+  const normalized = actorId.trim();
+  if (!normalized) return null;
+  if (!USER_ID.test(normalized)) throw new Error("attachment import actorId must be a valid user id");
+  return normalized;
 }
 
 export interface AttachmentImportFailure {
@@ -173,7 +191,7 @@ export function expenseReportFileIds(record: unknown): string[] {
 
 async function resolveContext(options: ImportOptions): Promise<{
   orgId: string;
-  actorId: string;
+  actorId: string | null;
   creds: NetSuiteCreds;
   bridge: { script: string; deploy: string };
   soapEndpointVersion: string;
@@ -202,13 +220,18 @@ async function resolveContext(options: ImportOptions): Promise<{
   const host = String(connection.config.host ?? "");
   if (!account || !host) throw new Error("tenant NetSuite connection is missing account or host configuration");
 
-  const actorResult = (await db.execute<{ id: string }>(sql`
-    select id from users where org_id = ${orgId} and role = 'admin' and is_active order by created_at limit 1
-  `));
-  if (!actorResult.rows[0]) throw new Error("tenant needs an active admin user to own imported file audit rows");
+  const actorId = normalizeImportActorId(options.actorId);
+  if (actorId) {
+    const actorResult = (await db.execute<{ id: string }>(sql`
+      select id from users where id = ${actorId} and org_id = ${orgId} and is_active
+    `));
+    if (!actorResult.rows[0]) {
+      throw new Error("attachment import actor must be an active user in the tenant");
+    }
+  }
   return {
     orgId,
-    actorId: actorResult.rows[0].id,
+    actorId,
     creds: {
       account,
       host,
@@ -473,7 +496,7 @@ function derivedFileType(contentType: string): "pdf" | "image" {
 
 async function persistFile(input: {
   orgId: string;
-  actorId: string;
+  actorId: string | null;
   source: SourceFile;
   targetDocumentIds: string[];
   bytes: Buffer;
@@ -806,19 +829,23 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
   // Skipped files bypass persistFile, but the source's link graph may have
   // grown (an already-held file attached to another transaction) — ensure
   // every inventoried link exists.
-  const linkTuples: string[] = [];
+  const linkTuples: { sourceId: string; documentId: string }[] = [];
   for (const [fileId, documentIds] of fileToDocuments) {
     if (downloadSet.has(fileId) || !importedById.has(fileId)) continue;
-    for (const documentId of documentIds) linkTuples.push(`('${fileId}', '${documentId}'::uuid)`);
+    for (const documentId of documentIds) linkTuples.push({ sourceId: fileId, documentId });
   }
   for (const batch of chunks(linkTuples, 1000)) {
-    const res = (await db.execute(sql.raw(`
+    const values = sql.join(
+      batch.map(({ sourceId, documentId }) => sql`(${sourceId}, ${documentId}::uuid)`),
+      sql`, `,
+    );
+    const res = (await db.execute(sql`
       insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
-      select '${orgId}', f.id, 'documents', v.did, '${actorId}', now()
-        from (values ${batch.join(",")}) as v(sid, did)
-        join files f on f.org_id = '${orgId}' and f.source_system = '${SOURCE_SYSTEM}' and f.source_id = v.sid
+      select ${orgId}, f.id, 'documents', v.did, ${actorId}, now()
+        from (values ${values}) as v(sid, did)
+        join files f on f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM} and f.source_id = v.sid
       on conflict (org_id, file_id, target_table, target_id) do nothing
-    `)));
+    `));
     summary.createdLinks += res.rowCount ?? 0;
   }
 

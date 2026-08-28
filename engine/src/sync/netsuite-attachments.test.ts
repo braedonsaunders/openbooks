@@ -5,6 +5,7 @@ import {
   detectContentType,
   expenseReportFileIds,
   normalizeAttachmentBytes,
+  normalizeImportActorId,
   normalizeSourceFileIds,
   safeFilename,
   selectRequestedAttachmentFiles,
@@ -39,6 +40,17 @@ test("safeFilename strips paths and control characters", () => {
   assert.equal(safeFilename("../receipts/invoice\u0000.pdf", "42"), "invoice.pdf");
   assert.equal(safeFilename("..\\receipts\\invoice.pdf", "42"), "invoice.pdf");
   assert.equal(safeFilename("\u0000", "42"), "attachment-42");
+});
+
+test("attachment imports preserve only an explicit actor and never invent an administrator", () => {
+  const actorId = "123e4567-e89b-12d3-a456-426614174000";
+  assert.equal(normalizeImportActorId(actorId), actorId);
+  assert.equal(normalizeImportActorId(undefined), null);
+  assert.equal(normalizeImportActorId(""), null);
+  assert.throws(
+    () => normalizeImportActorId("worker"),
+    /actorId must be a valid user id/,
+  );
 });
 
 test("targeted attachment retries normalize ids and retain only requested links", () => {
