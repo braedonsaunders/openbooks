@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { glActivityBuckets, glSummaryEligibleDims } from "../gl-summary";
+import { bucketSubsidiaryFilter, glActivityBuckets, glSummaryEligibleDims } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalIsMaterial, decimalSum, type ExactDecimal } from "../statement-format";
 import { ZERO, compareAbsoluteDescending, decimalSubtract } from "./decimals";
@@ -149,7 +149,7 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
             from ${cashBuckets} b
             join accounts a on a.id = b.account_id and a.org_id = ${resolvedOrgId}
            where a.type = 'asset_bank'
-             ${dims?.subsidiaryIds?.length ? sql`and b.subsidiary_id = any(${`{${dims.subsidiaryIds.join(',')}}`}::uuid[])` : sql``}`
+             ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}`
       : sql`
           select coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
                  coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
