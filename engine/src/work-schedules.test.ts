@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { sql } from "drizzle-orm";
+import { db } from "./db.ts";
 import {
   adjacentScheduledDay,
   cyclePositionOn,
@@ -17,6 +20,9 @@ import {
   type ResolvedWorkSchedule,
   type WorkScheduleRow,
 } from "./work-schedules.ts";
+import { createScratchOrg, dropScratchOrgReporting } from "./test-fixtures.ts";
+
+const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
  * Scheduled hours — the generic employment attribute.
@@ -265,4 +271,49 @@ test("the description an operator reads in a refusal", () => {
     describeWorkSchedule(resolve({ cycleDays: 8, days: [{ dayIndex: 0, hours: "12" }] })),
     "12 hours over 1 day per 8-day cycle",
   );
+});
+
+/**
+ * Scope uniqueness is a storage invariant, not just a resolver convention.
+ * The expression index folds NULL scope keys to sentinels and lower-cases job
+ * titles, so direct writers cannot create two contradictory rows that the
+ * resolver would have to choose between.
+ */
+test("work-schedule scope uniqueness folds nullable keys and title case", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const insert = async (name: string, scope: { jobTitle?: string | null } = {}, effectiveFrom = "2026-01-01") => {
+      await db.execute(sql`
+        insert into work_schedules
+          (id, org_id, name, job_title, pattern, cycle_days, cycle_anchor, effective_from, is_active)
+        values
+          (${randomUUID()}, ${org.orgId}, ${name}, ${scope.jobTitle ?? null}, 'cycle', 7,
+           '2026-01-04', ${effectiveFrom}, true)`);
+    };
+    const rejectDuplicate = async (work: () => Promise<unknown>) => {
+      await assert.rejects(work, (error: unknown) => {
+        let current: unknown = error;
+        for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+          const candidate = current as { code?: string; constraint?: string; cause?: unknown };
+          if (candidate.code === "23505" && candidate.constraint === "work_schedules_scope_from") return true;
+          current = candidate.cause;
+        }
+        return false;
+      });
+    };
+
+    // Organization defaults have every nullable scope key set to NULL. A
+    // plain unique index admits both rows; the normalized expression index
+    // rejects the second one at the storage boundary.
+    await insert("Default A");
+    await rejectDuplicate(() => insert("Default B"));
+
+    // The same normalization applies to the case-insensitive job-title scope;
+    // a different title remains a valid independent scope on that date.
+    await insert("Carpenter A", { jobTitle: "Carpenter" });
+    await rejectDuplicate(() => insert("Carpenter B", { jobTitle: "carpenter" }));
+    await insert("Electrician", { jobTitle: "Electrician" });
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
 });
