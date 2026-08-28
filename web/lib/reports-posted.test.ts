@@ -223,3 +223,67 @@ test("financial statements exclude draft and other unposted journals", { skip: !
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
+
+test("journal report truncation keeps entries complete", { skip: !env.OPENBOOKS_DB_URL }, () => {
+  const source = `
+    import assert from "node:assert/strict";
+    import { randomUUID } from "node:crypto";
+    import { sql } from "drizzle-orm";
+    import { db, withBypass, withOrg } from "./engine/src/db.ts";
+    import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+    import { journalReport } from "./web/lib/reports.ts";
+
+    const scratch = await withBypass(() => createScratchOrg());
+    const newestEntryId = randomUUID();
+    const olderEntryId = randomUUID();
+    try {
+      await withBypass(async () => {
+        await db.execute(sql\`
+          insert into journal_entries
+            (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+             period_id, memo, status, origin, posted_at)
+          values
+            (\${newestEntryId}, \${scratch.orgId}, \${scratch.bookId}, \${scratch.subsidiaryId},
+             'TRUNC-2', '2026-07-16', \${scratch.periodId}, 'Newest entry', 'draft', 'manual', null),
+            (\${olderEntryId}, \${scratch.orgId}, \${scratch.bookId}, \${scratch.subsidiaryId},
+             'TRUNC-1', '2026-07-15', \${scratch.periodId}, 'Older entry', 'draft', 'manual', null)
+        \`);
+        await db.execute(sql\`
+          insert into journal_lines
+            (org_id, entry_id, line_number, account_id, subsidiary_id,
+             amount, currency, txn_amount, fx_rate)
+          values
+            (\${scratch.orgId}, \${newestEntryId}, 1, \${scratch.accounts.bank}, \${scratch.subsidiaryId}, '100.0000', 'CAD', '100.0000', '1'),
+            (\${scratch.orgId}, \${newestEntryId}, 2, \${scratch.accounts.revenue}, \${scratch.subsidiaryId}, '-100.0000', 'CAD', '-100.0000', '1'),
+            (\${scratch.orgId}, \${olderEntryId}, 1, \${scratch.accounts.bank}, \${scratch.subsidiaryId}, '200.0000', 'CAD', '200.0000', '1'),
+            (\${scratch.orgId}, \${olderEntryId}, 2, \${scratch.accounts.revenue}, \${scratch.subsidiaryId}, '-200.0000', 'CAD', '-200.0000', '1')
+        \`);
+        await db.execute(sql\`
+          update journal_entries
+             set status = 'posted', posted_at = now()
+           where id in (\${newestEntryId}, \${olderEntryId})
+        \`);
+      });
+
+      await withOrg(scratch.orgId, async () => {
+        const capped = await journalReport('2026-07-01', '2026-07-31', { maxLines: 3 });
+        assert.equal(capped.truncated, true);
+        assert.deepEqual(capped.entries.map((entry) => entry.id), [newestEntryId]);
+        assert.equal(capped.entries[0].lines.length, 2, 'the included entry retains all lines');
+        assert.equal(capped.entries[0].totalDebit, '100.0000');
+
+        const complete = await journalReport('2026-07-01', '2026-07-31', { maxLines: 4 });
+        assert.equal(complete.truncated, false);
+        assert.deepEqual(complete.entries.map((entry) => entry.id), [newestEntryId, olderEntryId]);
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(scratch.orgId));
+    }
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
