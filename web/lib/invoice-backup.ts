@@ -2,7 +2,8 @@ import 'server-only'
 import { PDFDocument } from 'pdf-lib'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { div, mulRatio, neg, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
+import { allocateProportionally } from '@openbooks/engine/src/information-returns.ts'
+import { add, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { renderHtmlDocumentPdf } from '@openbooks/pdf'
 import { getS3Blob } from './file-storage'
 import { listAttachments, uploadAndAttach } from './file-cabinet'
@@ -99,81 +100,74 @@ async function addImagePage(out: PDFDocument, bytes: Buffer, contentType: string
 }
 
 /** Render the costed-timesheet page (billed time with cost + bill columns). */
+type MoneyInput = string | number | null | undefined
+
 export interface TimesheetBillAllocation {
-  lineAmount: string | number | null | undefined
-  nativeBillAmount: string | number | null | undefined
-  nativeBillTotal: string | number | null | undefined
-  entryCount: number
+  /** The posted amount on the rolled-up document line. */
+  lineAmount: MoneyInput
+  /** Native hours × bill-rate amounts for every entry in the line's group. */
+  nativeBillAmounts: readonly MoneyInput[]
 }
 
 /**
- * Allocate a posted invoice-line amount across the time entries it bills.
+ * Allocate a rolled-up invoice line across all of the entries it bills.
  *
- * Invoice presentation may roll several entries into one line, while the
- * backup still renders each entry. Weighting by each entry's native bill value
- * preserves the line total and keeps the per-entry amounts proportional to the
- * rates shown in the backup. A zero-rate group falls back to an equal split.
+ * The native amount (hours × bill rate) is the weight for each entry. The
+ * exact largest-remainder primitive keeps every returned value at four ledger
+ * decimals while making the shares sum to the posted line amount. A group with
+ * no native value uses equal weights; ties are resolved by the stable input
+ * order, which is the query's date/employee/id order.
  */
-export function allocateTimesheetBillAmount(input: TimesheetBillAllocation): string {
+export function allocateTimesheetBillAmounts(input: TimesheetBillAllocation): string[] {
   const lineAmount = normalizeMoney(String(input.lineAmount ?? '0'))
-  const nativeBillAmount = normalizeMoney(String(input.nativeBillAmount ?? '0'))
-  const nativeBillTotal = normalizeMoney(String(input.nativeBillTotal ?? '0'))
-  if (!Number.isSafeInteger(input.entryCount) || input.entryCount < 1) {
-    throw new Error('A timesheet bill allocation needs at least one entry')
-  }
-  if (input.entryCount === 1) return lineAmount
+  const nativeBillAmounts = input.nativeBillAmounts.map((amount) => normalizeMoney(String(amount ?? '0')))
+  if (nativeBillAmounts.length === 0) return []
+  if (nativeBillAmounts.length === 1) return [lineAmount]
 
-  const nativeTotalUnits = toUnits(nativeBillTotal)
-  if (nativeTotalUnits === 0n) return div(lineAmount, String(input.entryCount))
-
-  const nativeAmountUnits = toUnits(nativeBillAmount)
-  const amount = mulRatio(
-    lineAmount,
-    nativeAmountUnits < 0n ? -nativeAmountUnits : nativeAmountUnits,
-    nativeTotalUnits < 0n ? -nativeTotalUnits : nativeTotalUnits,
-  )
-  return nativeAmountUnits < 0n !== nativeTotalUnits < 0n ? neg(amount) : amount
+  const hasNativeWeight = nativeBillAmounts.some((amount) => toUnits(amount) !== 0n)
+  const weights = hasNativeWeight ? nativeBillAmounts : nativeBillAmounts.map(() => '1.0000')
+  return allocateProportionally(lineAmount, weights)
 }
 
 async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumber: string, projectName: string, title: string, format: MoneyFormatter): Promise<Buffer | null> {
   const { money } = format
   const rows = (await db.execute<any>(sql`
-    with linked_entries as (
-      select te.worked_on, coalesce(pty.display_name, '') as employee, te.hours,
-             te.cost_rate, te.bill_rate,
-             te.hours * coalesce(te.cost_rate, 0) as cost_amount,
-             round(te.hours * coalesce(te.bill_rate, 0), 4) as native_bill_amount,
-             dl.amount as line_amount,
-             sum(round(te.hours * coalesce(te.bill_rate, 0), 4)) over (partition by dl.org_id, dl.id) as line_native_bill_amount,
-             count(*) over (partition by dl.org_id, dl.id) as line_entry_count,
-             coalesce(i.name, '') as item
-        from time_entries te
-        join document_lines dl on dl.id = te.invoiced_by_line_id and dl.org_id = te.org_id
-        left join parties pty on pty.id = te.employee_party_id and pty.org_id = te.org_id
-        left join items i on i.id = te.item_id and i.org_id = te.org_id
-       where dl.document_id = ${documentId} and te.org_id = ${orgId}
-    )
-    select worked_on, employee, hours, cost_rate, bill_rate, cost_amount,
-           line_amount, native_bill_amount, line_native_bill_amount,
-           line_entry_count, item
-      from linked_entries
-     order by worked_on, employee
+    select te.id as time_entry_id, dl.id as line_id,
+           te.worked_on, coalesce(pty.display_name, '') as employee, te.hours,
+           te.cost_rate, te.bill_rate,
+           te.hours * coalesce(te.cost_rate, 0) as cost_amount,
+           dl.amount as line_amount,
+           round(te.hours * coalesce(te.bill_rate, 0), 4) as native_bill_amount,
+           coalesce(i.name, '') as item
+      from time_entries te
+      join document_lines dl on dl.id = te.invoiced_by_line_id and dl.org_id = te.org_id
+      left join parties pty on pty.id = te.employee_party_id and pty.org_id = te.org_id
+      left join items i on i.id = te.item_id and i.org_id = te.org_id
+     where dl.document_id = ${documentId} and te.org_id = ${orgId}
+     order by te.worked_on, employee, te.id
   `))
   if (rows.rows.length === 0) return null
 
-  const entries = rows.rows.map((row: any) => ({
-    ...row,
-    bill_amount: allocateTimesheetBillAmount({
-      lineAmount: row.line_amount,
-      nativeBillAmount: row.native_bill_amount,
-      nativeBillTotal: row.line_native_bill_amount,
-      entryCount: Number(row.line_entry_count),
-    }),
-  }))
+  const entries = rows.rows.map((row: any) => ({ ...row, bill_amount: '0.0000' }))
+  const groups = new Map<string, { lineAmount: MoneyInput; indexes: number[]; nativeBillAmounts: MoneyInput[] }>()
+  entries.forEach((row: any, index: number) => {
+    const lineId = String(row.line_id)
+    const group = groups.get(lineId) ?? { lineAmount: row.line_amount, indexes: [], nativeBillAmounts: [] }
+    group.indexes.push(index)
+    group.nativeBillAmounts.push(row.native_bill_amount)
+    groups.set(lineId, group)
+  })
+  for (const group of groups.values()) {
+    const amounts = allocateTimesheetBillAmounts({
+      lineAmount: group.lineAmount,
+      nativeBillAmounts: group.nativeBillAmounts,
+    })
+    group.indexes.forEach((index, position) => { entries[index]!.bill_amount = amounts[position]! })
+  }
 
   const totals = entries.reduce(
-    (a, r) => ({ hours: a.hours + Number(r.hours ?? 0), cost: a.cost + Number(r.cost_amount ?? 0), bill: a.bill + Number(r.bill_amount ?? 0) }),
-    { hours: 0, cost: 0, bill: 0 },
+    (a, r) => ({ hours: a.hours + Number(r.hours ?? 0), cost: a.cost + Number(r.cost_amount ?? 0), bill: add(a.bill, r.bill_amount) }),
+    { hours: 0, cost: 0, bill: '0.0000' },
   )
   const body = entries
     .map(

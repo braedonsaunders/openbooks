@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { toUnits } from '../../engine/src/money.ts'
 
 // invoice-backup is a server-only module; mock that marker so its pure amount
 // allocator can be exercised directly without starting a Next.js server.
@@ -20,36 +21,55 @@ const hooks = registerHooks({
     return nextResolve(specifier, context)
   },
 })
-const { allocateTimesheetBillAmount } = await import('./invoice-backup.ts')
+const { allocateTimesheetBillAmounts } = await import('./invoice-backup.ts')
 hooks.deregister()
 
-test('rolled-up timesheet amounts are allocated once across linked entries', () => {
-  const first = allocateTimesheetBillAmount({
-    lineAmount: '1000.00', nativeBillAmount: '400.00', nativeBillTotal: '1000.00', entryCount: 2,
-  })
-  const second = allocateTimesheetBillAmount({
-    lineAmount: '1000.00', nativeBillAmount: '600.00', nativeBillTotal: '1000.00', entryCount: 2,
+const unitsTotal = (amounts: readonly string[]) => amounts.reduce((total, amount) => total + toUnits(amount), 0n)
+
+test('a rolled-up line allocates its full posted amount by native bill value', () => {
+  const shares = allocateTimesheetBillAmounts({
+    lineAmount: '100.0000',
+    // These are the exact hours × bill-rate values for the three entries.
+    nativeBillAmounts: ['1.0000', '2.0000', '3.0000'],
   })
 
-  assert.equal(first, '400.0000')
-  assert.equal(second, '600.0000')
-  assert.equal(Number(first) + Number(second), 1000)
+  assert.deepEqual(shares, ['16.6667', '33.3333', '50.0000'])
+  assert.equal(unitsTotal(shares), toUnits('100.0000'))
 })
 
-test('a line linked to one entry keeps its posted amount', () => {
-  assert.equal(
-    allocateTimesheetBillAmount({
-      lineAmount: '1000.00', nativeBillAmount: '125.00', nativeBillTotal: '125.00', entryCount: 1,
-    }),
-    '1000.0000',
+test('negative and fractional posted totals cross-foot exactly in bigint units', () => {
+  const negative = allocateTimesheetBillAmounts({
+    lineAmount: '-100.0000',
+    nativeBillAmounts: ['1.0000', '2.0000', '3.0000'],
+  })
+  assert.deepEqual(negative, ['-16.6667', '-33.3333', '-50.0000'])
+  assert.equal(unitsTotal(negative), toUnits('-100.0000'))
+
+  const fractional = allocateTimesheetBillAmounts({
+    lineAmount: '0.0005',
+    nativeBillAmounts: ['1.0000', '1.0000'],
+  })
+  assert.deepEqual(fractional, ['0.0003', '0.0002'])
+  assert.equal(unitsTotal(fractional), toUnits('0.0005'))
+})
+
+test('a zero native total uses equal weights and largest-remainder tie order', () => {
+  const shares = allocateTimesheetBillAmounts({
+    lineAmount: '100.0000',
+    nativeBillAmounts: ['0.0000', '0.0000', '0.0000'],
+  })
+
+  assert.deepEqual(shares, ['33.3334', '33.3333', '33.3333'])
+  assert.equal(unitsTotal(shares), toUnits('100.0000'))
+  assert.deepEqual(
+    shares,
+    allocateTimesheetBillAmounts({ lineAmount: '100.0000', nativeBillAmounts: ['0.0000', '0.0000', '0.0000'] }),
   )
 })
 
-test('fractional allocations use exact four-decimal rounding', () => {
-  assert.equal(
-    allocateTimesheetBillAmount({
-      lineAmount: '100.00', nativeBillAmount: '1.00', nativeBillTotal: '3.00', entryCount: 3,
-    }),
-    '33.3333',
+test('a line linked to one entry keeps its exact posted amount', () => {
+  assert.deepEqual(
+    allocateTimesheetBillAmounts({ lineAmount: '12.34', nativeBillAmounts: ['125.0000'] }),
+    ['12.3400'],
   )
 })
