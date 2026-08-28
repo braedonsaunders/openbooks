@@ -128,7 +128,11 @@ interface SubscriptionComponentRow extends Record<string, unknown> {
   incomeAccountId: string | null; itemId: string | null; taxCodeId: string | null;
   effectiveFrom: string; effectiveTo: string | null;
 }
-interface AmendmentReplayRow extends Record<string, unknown> { id: string; subscriptionId: string }
+interface AmendmentReplayRow extends Record<string, unknown> {
+  id: string;
+  subscriptionId: string;
+  request: Record<string, unknown>;
+}
 interface BillingPreparationRow extends Record<string, unknown> {
   billingTiming: BillingTiming | null; termEndsOn: string | null; renewalPolicy: RenewalPolicy | null;
   renewalTermMonths: number | null;
@@ -198,9 +202,26 @@ export function assertPlanVersionMutable(status: string): void {
   if (status !== "draft") throw new AdvancedSubscriptionError("published plan versions are immutable; create a new version");
 }
 
-export function assertIdempotentReplay(existingSubscriptionId: string, requestedSubscriptionId: string): void {
+function canonicalRequest(value: unknown): string {
+  return JSON.stringify(value, (_key, nested) => {
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      return Object.fromEntries(Object.entries(nested).sort(([left], [right]) => left.localeCompare(right)));
+    }
+    return nested;
+  });
+}
+
+export function assertIdempotentReplay(
+  existingSubscriptionId: string,
+  requestedSubscriptionId: string,
+  existingRequest?: unknown,
+  requestedRequest?: unknown,
+): void {
   if (existingSubscriptionId !== requestedSubscriptionId) {
     throw new AdvancedSubscriptionError("idempotency key already belongs to another subscription");
+  }
+  if (existingRequest !== undefined && requestedRequest !== undefined && canonicalRequest(existingRequest) !== canonicalRequest(requestedRequest)) {
+    throw new AdvancedSubscriptionError("idempotency key already belongs to a different amendment request");
   }
 }
 
@@ -296,6 +317,7 @@ async function subscriptionContext(orgId: string, subscriptionId: string) {
 
 export async function createPlanVersion(orgId: string, actorId: string, input: CreatePlanVersionInput): Promise<string> {
   return withOrg(orgId, async () => {
+    await assertEnabled(orgId);
     const plan = await ownedPlan(orgId, input.planId);
     const effectiveFrom = validDate(input.effectiveFrom, "effective date")!;
     if (!input.components.length) throw new AdvancedSubscriptionError("at least one component is required");
@@ -341,6 +363,7 @@ export async function createPlanVersion(orgId: string, actorId: string, input: C
 
 export async function publishPlanVersion(orgId: string, actorId: string, versionId: string): Promise<void> {
   await withOrg(orgId, async () => {
+    await assertEnabled(orgId);
     const found = (await db.execute<Pick<PlanVersionRow, "id" | "planId" | "effectiveFrom" | "status"> & Record<string, unknown>>(sql`
       select id, plan_id as "planId", effective_from as "effectiveFrom", status
         from subscription_plan_versions where id = ${versionId} and org_id = ${orgId} for update
@@ -369,6 +392,7 @@ export async function publishPlanVersion(orgId: string, actorId: string, version
 
 export async function activateLifecycle(orgId: string, actorId: string, input: ActivateLifecycleInput): Promise<void> {
   await withOrg(orgId, async () => {
+    await assertEnabled(orgId);
     await db.execute(sql`select id from subscriptions where id = ${input.subscriptionId} and org_id = ${orgId} for update`);
     const sub = await subscriptionContext(orgId, input.subscriptionId);
     if (sub.status === "canceled") throw new AdvancedSubscriptionError("a canceled subscription cannot be activated");
@@ -472,11 +496,11 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
     const lock = (await db.execute(sql`select id from subscriptions where id = ${request.subscriptionId} and org_id = ${orgId} for update`));
     if (!lock.rows.length) throw new AdvancedSubscriptionError("subscription not found");
     const replay = (await db.execute<AmendmentReplayRow>(sql`
-      select id, subscription_id as "subscriptionId" from subscription_amendments
+      select id, subscription_id as "subscriptionId", request from subscription_amendments
        where org_id = ${orgId} and idempotency_key = ${request.idempotencyKey}
     `));
     if (replay.rows[0]) {
-      assertIdempotentReplay(replay.rows[0].subscriptionId, request.subscriptionId);
+      assertIdempotentReplay(replay.rows[0].subscriptionId, request.subscriptionId, replay.rows[0].request, requestSnapshot);
       return { id: replay.rows[0].id, replayed: true };
     }
     const effectiveOn = validDate(request.effectiveOn, "effective date")!;
