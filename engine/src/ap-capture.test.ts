@@ -323,24 +323,24 @@ test(
       const billId = await insertCapture("vendor_bill", "BILL-CAPTURE-REG", "2.1250");
       const bill = await materializeCapture({ orgId: org.orgId, captureItemId: billId, actorId });
       assert.ok(bill.documentId);
-      let billed = (await db.execute<{ quantity_billed: string }>(sql`
+      let billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `)).rows[0]!.quantity_billed;
+      `)).rows[0]!.quantity_billed);
       assert.equal(billed, "6.1250", "a positive vendor bill increases PO billed quantity");
 
       const replay = await materializeCapture({ orgId: org.orgId, captureItemId: billId, actorId });
       assert.equal(replay.documentId, bill.documentId, "replaying a materialized capture is idempotent");
-      billed = (await db.execute<{ quantity_billed: string }>(sql`
+      billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `)).rows[0]!.quantity_billed;
+      `)).rows[0]!.quantity_billed);
       assert.equal(billed, "6.1250");
 
       const creditId = await insertCapture("vendor_credit", "CREDIT-CAPTURE-REG", "2.1250");
       const credit = await materializeCapture({ orgId: org.orgId, captureItemId: creditId, actorId });
       assert.ok(credit.documentId);
-      billed = (await db.execute<{ quantity_billed: string }>(sql`
+      billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `)).rows[0]!.quantity_billed;
+      `)).rows[0]!.quantity_billed);
       assert.equal(billed, "4.0000", "a positive vendor credit decreases PO billed quantity");
 
       const overCreditId = await insertCapture("vendor_credit", "CREDIT-CAPTURE-OVER", "4.0001");
@@ -348,9 +348,9 @@ test(
         materializeCapture({ orgId: org.orgId, captureItemId: overCreditId, actorId }),
         (error: unknown) => error instanceof CaptureMaterializationError && /insufficient billed quantity/.test(error.message),
       );
-      billed = (await db.execute<{ quantity_billed: string }>(sql`
+      billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `)).rows[0]!.quantity_billed;
+      `)).rows[0]!.quantity_billed);
       assert.equal(billed, "4.0000", "an over-credit cannot underflow the PO billed balance");
 
       const racingBillA = await insertCapture("vendor_bill", "BILL-CAPTURE-RACE-A", "4.0000");
@@ -361,9 +361,9 @@ test(
       ]);
       assert.equal(raced.filter((result) => result.status === "fulfilled").length, 1);
       assert.equal(raced.filter((result) => result.status === "rejected").length, 1);
-      billed = (await db.execute<{ quantity_billed: string }>(sql`
+      billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `)).rows[0]!.quantity_billed;
+      `)).rows[0]!.quantity_billed);
       assert.equal(billed, "8.0000", "the locked PO line admits only one concurrent bill");
     } finally {
       // Capture evidence is intentionally append-only in production. Remove
