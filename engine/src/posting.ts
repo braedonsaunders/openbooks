@@ -11,7 +11,11 @@ import {
   sum,
   toUnits,
 } from "./money.ts";
-import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
+import {
+  mergeBeforePostCustomMutation,
+  runTriggerScripts,
+  type ScriptContext,
+} from "./scripting.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import {
   absorbFxRoundingResidual,
@@ -1752,7 +1756,23 @@ export async function postDocument(
     );
   }
   let effectiveDoc = doc;
-  const mutations = Object.assign({}, ...outcomes.map((o) => o.set ?? {}));
+  const mutations = outcomes.reduce<Record<string, unknown>>((merged, outcome) => {
+    for (const [key, value] of Object.entries(outcome.set ?? {})) {
+      if (key === "custom") {
+        // custom is a JSON blob, so Object.assign would replace the complete
+        // document and could erase or replace posting controls between
+        // approval and the kernel. Merge only non-financial keys and preserve
+        // every existing protected value from the approved document.
+        merged.custom = mergeBeforePostCustomMutation(
+          merged.custom ?? doc.custom,
+          value,
+        );
+      } else {
+        merged[key] = value;
+      }
+    }
+    return merged;
+  }, {});
   if (Object.keys(mutations).length > 0) {
     const [updated] = await db
       .update(schema.documents)
@@ -1916,6 +1936,12 @@ export async function postDocument(
 
   // -- write entry + lines + flip document, atomically ---------------------
   const entryId = await inDbTransaction(async (tx) => {
+    // Setup wizard mutations and posting both serialize on the organization
+    // aggregate root. This makes the wizard's accounting-foundation probe and
+    // its subsequent COA/currency/calendar writes one decision against the
+    // same lock: whichever operation acquires the row first wins, and the
+    // other re-checks after it commits.
+    await tx.execute(sql`select id from orgs where id = ${doc.orgId} for update`);
     if (deps.migration)
       await tx.execute(sql`set local openbooks.migration = on`);
     const auditBefore = options.audit
