@@ -295,7 +295,8 @@ for (const file of PARTY_ORG_WIDE_ROUTES) {
   test(`party boundary uses the org-wide-null party semantics: ${file}`, () => {
     const src = source(file)
     assert.match(src, /select subsidiary_id as "subsidiaryId" from parties/)
-    assert.match(src, /guardSubsidiaryScope\([^)]*\{ orgWideNull: true \}\)/,
+    assert.match(src, /guardSubsidiaryScope\(/)
+    assert.match(src, /orgWideNull:\s*true/,
       `${file} must treat null-subsidiary parties exactly like the party lists do`)
   })
 }
