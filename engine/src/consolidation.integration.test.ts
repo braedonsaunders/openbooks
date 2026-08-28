@@ -444,6 +444,60 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
   }
 });
 
+test("auto-elimination translates intercompany P&L activity at the average FX rate", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const foreignSubsidiaryId = randomUUID();
+    const eliminationSubsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values
+        (${foreignSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb),
+        (${eliminationSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Eliminations', 'CAD', 'CA', '{}'::jsonb, true, true, '{}'::jsonb)`);
+    await db.execute(sql`
+      update accounts set eliminate = true
+       where id in (${org.accounts.revenue}, ${org.accounts.cogs})`);
+    await db.execute(sql`
+      insert into consolidated_fx_rates
+        (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source)
+      values (${org.orgId}, ${org.periodId}, 'USD', 'CAD', '1.2000000000', '1.1000000000', '1.1000000000', 'manual')`);
+
+    const usdEntry = randomUUID();
+    const cadEntry = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+      values
+        (${usdEntry}, ${org.orgId}, ${org.bookId}, ${foreignSubsidiaryId}, 'IC-USD-PNL', ${org.date}, ${org.periodId}, 'USD intercompany P&L', 'draft', 'manual'),
+        (${cadEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'IC-CAD-PNL', ${org.date}, ${org.periodId}, 'CAD intercompany P&L', 'draft', 'manual')`);
+    await db.execute(sql`
+      insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+      values
+        (${org.orgId}, ${usdEntry}, 1, ${org.accounts.revenue}, ${foreignSubsidiaryId}, '-100.0000', 'USD', '-100.0000', '1'),
+        (${org.orgId}, ${usdEntry}, 2, ${org.accounts.bank}, ${foreignSubsidiaryId}, '100.0000', 'USD', '100.0000', '1'),
+        (${org.orgId}, ${cadEntry}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, '110.0000', 'CAD', '110.0000', '1'),
+        (${org.orgId}, ${cadEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, '-110.0000', 'CAD', '-110.0000', '1')`);
+    await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id in (${usdEntry}, ${cadEntry})`);
+
+    const result = await runAutoElimination(org.orgId, org.periodId, actorId);
+    assert.equal(result.lineCount, 2);
+    const lines = (await db.execute<{ number: string; amount: string }>(sql`
+      select a.number, l.amount::text as amount
+        from journal_lines l join accounts a on a.id = l.account_id
+       where l.entry_id = ${result.entryId}
+       order by a.number`));
+    assert.deepEqual(lines.rows, [
+      { number: "4000", amount: "110.0000" },
+      { number: "5000", amount: "-110.0000" },
+    ], "P&L activity uses the average rate so translated intercompany activity nets");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("ownership consolidation uses exact period identity and reverses reruns", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
@@ -842,6 +896,48 @@ test("ownership consolidation reads activity and acquisition equity from the pri
       { number: "3100", amount: "-220.0000" },
       { number: "6100", amount: "20.0000" },
     ]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("ownership consolidation excludes activity outside an interest's effective window", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const { childId, interestId, accounts } = await seedOwnershipConsolidationFixture(org);
+    await db.execute(sql`
+      update subsidiary_ownership_interests
+         set effective_from = '2026-07-16', effective_to = '2026-07-20'
+       where id = ${interestId}`);
+
+    const inWindow = randomUUID();
+    const afterWindow = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+      values
+        (${inWindow}, ${org.orgId}, ${org.bookId}, ${childId}, 'OWN-IN-WINDOW', '2026-07-20', ${org.periodId}, 'In-window profit', 'draft', 'manual'),
+        (${afterWindow}, ${org.orgId}, ${org.bookId}, ${childId}, 'OWN-AFTER-WINDOW', '2026-07-25', ${org.periodId}, 'After-window profit', 'draft', 'manual')`);
+    await db.execute(sql`
+      insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+      values
+        (${org.orgId}, ${inWindow}, 1, ${org.accounts.bank}, ${childId}, '50.0000', 'CAD', '50.0000', '1'),
+        (${org.orgId}, ${inWindow}, 2, ${org.accounts.revenue}, ${childId}, '-50.0000', 'CAD', '-50.0000', '1'),
+        (${org.orgId}, ${afterWindow}, 1, ${org.accounts.bank}, ${childId}, '30.0000', 'CAD', '30.0000', '1'),
+        (${org.orgId}, ${afterWindow}, 2, ${org.accounts.revenue}, ${childId}, '-30.0000', 'CAD', '-30.0000', '1')`);
+    await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id in (${inWindow}, ${afterWindow})`);
+
+    const run = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
+    assert.equal(run.entryIds.length, 2);
+    assert.deepEqual(await ownershipEntryBalances(run.entryIds), [
+      { number: "1400", amount: "-900.0000" },
+      { number: "1500", amount: "100.0000" },
+      { number: "3000", amount: "1000.0000" },
+      { number: "3100", amount: "-210.0000" },
+      { number: "6100", amount: "10.0000" },
+    ], "only profit posted inside the inclusive ownership window is allocated to NCI");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1294,4 +1390,3 @@ test("a policy edit committing before the run's snapshot fails the run closed an
     await dropScratchOrg(org.orgId);
   }
 });
-
