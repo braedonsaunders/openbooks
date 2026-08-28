@@ -248,7 +248,9 @@ export const recognitionEvents = pgTable(
     amount: money("amount").notNull(),
     /** Human-readable description of the milestone or usage occurrence. */
     description: text("description"),
-    /** Freeform source reference (e.g. invoice number, meter reading id). */
+    /** Stable source identity (e.g. invoice number, meter reading id). */
+    // Nullable for rows written before 0074; the storage check below rejects
+    // NULL/blank values on every new or updated row.
     sourceReference: text("source_reference"),
     /** Optional unit rate for usage-based events. */
     unitRate: money("unit_rate"),
@@ -259,6 +261,13 @@ export const recognitionEvents = pgTable(
   (t) => [
     index("rec_events_obligation").on(t.obligationId),
     index("rec_events_period").on(t.periodMonth),
+    uniqueIndex("recognition_events_org_obligation_source")
+      .on(t.orgId, t.obligationId, t.sourceReference)
+      .where(sql`${t.sourceReference} is not null`),
+    check(
+      "recognition_events_source_reference_nonblank",
+      sql`${t.sourceReference} is not null and length(btrim(${t.sourceReference})) between 1 and 500`,
+    ),
   ],
 );
 
