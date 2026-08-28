@@ -207,6 +207,36 @@ function velocityAndAcceleration(amounts: number[], C: typeof CFG = CFG): { velo
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
+export interface SpendVelocityComparisonWindows {
+  periodDays: number;
+  priorFrom: string;
+  priorTo: string;
+  twoBackFrom: string;
+  twoBackTo: string;
+}
+
+/**
+ * Build the back-to-back comparison windows for an inclusive current period.
+ * Current queries use `>= from`/`<= to`, while prior queries use
+ * `>= priorFrom`/`< from`; shifting by the inclusive day count keeps those
+ * windows equal in length.
+ */
+export function getSpendVelocityComparisonWindows(from: string, to: string): SpendVelocityComparisonWindows {
+  const start = new Date(from + "T00:00:00Z");
+  const end = new Date(to + "T00:00:00Z");
+  const periodDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  const priorStart = new Date(start.getTime() - periodDays * 86_400_000);
+  const twoBackStart = new Date(priorStart.getTime() - periodDays * 86_400_000);
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+  return {
+    periodDays,
+    priorFrom: ymd(priorStart),
+    priorTo: ymd(new Date(start.getTime() - 86_400_000)),
+    twoBackFrom: ymd(twoBackStart),
+    twoBackTo: ymd(new Date(priorStart.getTime() - 86_400_000)),
+  };
+}
+
 type SqlNumber = string | number | null;
 interface AccountSpendRow extends Record<string, unknown> {
   account_id: string; account_name: string | null; month: string; month_num: number;
@@ -236,15 +266,10 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   const { from, to } = period;
   const C = { ...CFG, ...(await analyticsConfig(orgId, "spendVelocity")) };
 
-  // Period windows for comparison (verbatim: same day-length back-to-back).
+  // Period windows for comparison (inclusive current and back-to-back prior).
   const start = new Date(from + "T00:00:00Z");
   const end = new Date(to + "T00:00:00Z");
-  const periodDays = Math.round((end.getTime() - start.getTime()) / 86_400_000);
-  const priorStart = new Date(start.getTime() - periodDays * 86_400_000);
-  const twoBackStart = new Date(priorStart.getTime() - periodDays * 86_400_000);
-  const ymd = (d: Date) => d.toISOString().slice(0, 10);
-  const priorFrom = ymd(priorStart);
-  const twoBackFrom = ymd(twoBackStart);
+  const { priorFrom, priorTo, twoBackFrom, twoBackTo } = getSpendVelocityComparisonWindows(from, to);
   // Prior YEAR window for YoY trends.
   const pyFrom = `${start.getUTCFullYear() - 1}${from.slice(4)}`;
   const pyTo = `${end.getUTCFullYear() - 1}${to.slice(4)}`;
@@ -720,8 +745,8 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       twoBackTotal: Math.round(twoBackTotal),
       projectedTotal: Math.round(currentTotal * (1 + Math.min(Math.max(overallChange / 100, -0.3), 0.3))),
       changePct: r1(overallChange),
-      priorLabel: `${priorFrom} → ${ymd(new Date(start.getTime() - 86_400_000))}`,
-      twoBackLabel: `${twoBackFrom} → ${ymd(new Date(priorStart.getTime() - 86_400_000))}`,
+      priorLabel: `${priorFrom} → ${priorTo}`,
+      twoBackLabel: `${twoBackFrom} → ${twoBackTo}`,
     },
     accounts: cmpAccounts,
   };
