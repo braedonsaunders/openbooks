@@ -48,7 +48,7 @@ test(
         values
           (${sourceDocumentId}, ${org.orgId}, 'vendor_bill', 'BILL-CORR-001',
            ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 1, 'approved', 100, 0, 100, false, '{}'::jsonb, '{}'::jsonb)
+           'CAD', 1, 'draft', 100, 0, 100, false, '{}'::jsonb, '{}'::jsonb)
       `);
       await db.execute(sql`
         insert into document_lines
@@ -59,6 +59,11 @@ test(
           (${sourceLineId}, ${org.orgId}, ${sourceDocumentId}, 1,
            ${org.accounts.cogs}, 1, 100, 100, 0, false, 0, 0, '{}'::jsonb,
            false, '{}'::jsonb)
+      `);
+      await db.execute(sql`
+        update documents
+           set status = 'approved', updated_at = now()
+         where id = ${sourceDocumentId} and org_id = ${org.orgId}
       `);
       const sourceEntryId = await postDocument(sourceDocumentId, deps, {
         audit: { actorId, source: "test" },

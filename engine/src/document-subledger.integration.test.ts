@@ -17,6 +17,40 @@ async function glBalance(orgId: string, accountId: string): Promise<string> {
   return r.rows[0]!.bal;
 }
 
+/** Provision the remaining months of the service item's 12-month term. */
+async function seedRecognitionTermPeriods(org: ScratchOrg): Promise<void> {
+  const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
+    select fiscal_calendar_id
+      from accounting_periods
+     where id = ${org.periodId} and org_id = ${org.orgId}
+  `);
+  const fiscalCalendarId = calendar.rows[0]?.fiscal_calendar_id;
+  assert.ok(fiscalCalendarId);
+  const periods = [
+    [2026, 8, "2026-08-01", "2026-08-31"],
+    [2026, 9, "2026-09-01", "2026-09-30"],
+    [2026, 10, "2026-10-01", "2026-10-31"],
+    [2026, 11, "2026-11-01", "2026-11-30"],
+    [2026, 12, "2026-12-01", "2026-12-31"],
+    [2027, 1, "2027-01-01", "2027-01-31"],
+    [2027, 2, "2027-02-01", "2027-02-28"],
+    [2027, 3, "2027-03-01", "2027-03-31"],
+    [2027, 4, "2027-04-01", "2027-04-30"],
+    [2027, 5, "2027-05-01", "2027-05-31"],
+    [2027, 6, "2027-06-01", "2027-06-30"],
+  ] as const;
+  for (const [fiscalYear, periodNumber, startsOn, endsOn] of periods) {
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+         starts_on, ends_on, is_adjustment, custom)
+      values (${randomUUID()}, ${org.orgId}, ${fiscalCalendarId}, ${fiscalYear},
+              ${periodNumber}, ${startsOn.slice(0, 7)}, ${startsOn}, ${endsOn},
+              false, '{}'::jsonb)
+    `);
+  }
+}
+
 /** Insert a draft document + one item line; return the document id. */
 async function draftDoc(
   org: ScratchOrg,
@@ -42,7 +76,7 @@ async function draftDoc(
                            status, subtotal, tax_total, total, project_id, location_id,
                            is_final_invoice, custom, extra_dims)
     values (${docId}, ${org.orgId}, ${kind}, ${number}, ${line.partyId ?? null}, ${org.subsidiaryId}, ${org.date}, ${org.date}, 'CAD', 1,
-            'approved', ${line.amount}, '0', ${line.amount}, ${line.documentProjectId ?? null},
+            'draft', ${line.amount}, '0', ${line.amount}, ${line.documentProjectId ?? null},
             ${line.documentLocationId ?? null}, false, '{}'::jsonb, '{}'::jsonb)`);
   await db.execute(sql`
     insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount, tax_amount,
@@ -51,6 +85,11 @@ async function draftDoc(
     values (${randomUUID()}, ${org.orgId}, ${docId}, 1, ${line.itemId}, ${line.accountId ?? null}, ${line.quantity}, ${line.unitPrice}, ${line.amount}, '0',
             ${line.lineProjectId ?? null}, ${line.lineLocationId ?? null}, false, '0', '0',
             ${line.stockLocationId ?? null}, '{}'::jsonb, false, '{}'::jsonb)`);
+  await db.execute(sql`
+    update documents
+       set status = 'approved', updated_at = now()
+     where id = ${docId} and org_id = ${org.orgId}
+  `);
   return docId;
 }
 
@@ -64,6 +103,7 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
     },
   };
   try {
+    await seedRecognitionTermPeriods(org);
     // -- Vendor bill → inventory receipt (via clearing) ----------------------
     const billId = await draftDoc(org, "vendor_bill", "BILL-1", {
       itemId: org.items.fifo,

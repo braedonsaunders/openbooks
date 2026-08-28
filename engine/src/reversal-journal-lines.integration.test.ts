@@ -92,7 +92,7 @@ test(
         values (
           ${documentId}, ${org.orgId}, 'vendor_bill', 'BILL-REV-FIELDS',
           ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-          'CAD', '1', 'approved', '125', '0', '125', ${actorId}
+          'CAD', '1', 'draft', '125', '0', '125', ${actorId}
         )
       `);
       await db.execute(sql`
@@ -103,6 +103,11 @@ test(
           ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, '1',
           '125', '125', '0', ${actorId}
         )
+      `);
+      await db.execute(sql`
+        update documents
+           set status = 'approved', updated_at = now()
+         where id = ${documentId} and org_id = ${org.orgId}
       `);
       const sourceEntryId = await seedPostedEntryWithDimensions(org, actorId, [
         {
@@ -165,7 +170,7 @@ test(
           (id, org_id, kind, status, document_number, subsidiary_id, party_id,
            document_date, currency, fx_rate, subtotal, tax_total, total, custom)
         values (
-          ${documentId}, ${org.orgId}, 'customer_invoice', 'approved', 'INV-REV-FIELDS',
+          ${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-REV-FIELDS',
           ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
           '100', '0', '100', ${JSON.stringify({ nsId: sourceRef })}::jsonb
         )`);
@@ -177,6 +182,11 @@ test(
           ${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, '1', '100',
           '100', '0', '0'
         )`);
+      await db.execute(sql`
+        update documents
+           set status = 'approved', updated_at = now()
+         where id = ${documentId} and org_id = ${org.orgId}
+      `);
       const sourceEntryId = await seedPostedEntryWithDimensions(org, actorId, [
         {
           accountId: org.accounts.ar,
