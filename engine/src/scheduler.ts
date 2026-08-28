@@ -311,12 +311,12 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
            and occ.at < ${staleBefore}
            and not exists (
              select 1
-               from script_runs newer
-              where newer.script_id = occ.script_id
-                and newer.org_id = occ.org_id
-                and newer.target_kind = 'scheduled_occurrence'
-                and newer.at > occ.at
-                and newer.status in ('queued', 'dispatch_retry'))
+               from script_runs older
+              where older.script_id = occ.script_id
+                and older.org_id = occ.org_id
+                and older.target_kind = 'scheduled_occurrence'
+                and older.at < occ.at
+                and older.status in ('queued', 'dispatch_retry'))
       )
       update script_runs occ
          set status = evidence.status,
