@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -32,6 +33,19 @@ interface RouteState {
 }
 const routeState: RouteState = { authz: null, fault: null, onExecute: null };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+
+const laborCostingWizardSource = readFileSync(
+  "web/app/(app)/admin/setup/labor-costing/LaborCostingWizard.tsx",
+  "utf8",
+);
+
+test("the labor-costing wizard saves fallback wages with configured currency and exact decimals", () => {
+  assert.match(
+    laborCostingWizardSource,
+    /action:\s*'save-rate',[\s\S]{0,200}currency,[\s\S]{0,100}rate:\s*exactFallbackRate/,
+  );
+  assert.doesNotMatch(laborCostingWizardSource, /rate:\s*Number\(fallbackRate\)/);
+});
 
 // Pure mirrors of web/lib/authz.ts's in-memory gates (the real module pulls in
 // the session/cookie stack the plain runner cannot load). guardPermission is
