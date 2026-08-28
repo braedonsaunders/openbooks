@@ -35,23 +35,45 @@ export function SharePanel({
 }) {
   const t = useTranslations('documents.share')
   const tt = useTranslations('documents.toasts')
+  const tc = useTranslations('common')
   const [grants, setGrants] = useState<Grant[] | null>(null)
   const [users, setUsers] = useState<Principal[]>([])
   const [roles, setRoles] = useState<Principal[]>([])
   const [selected, setSelected] = useState('')
   const [tier, setTier] = useState<Tier>('viewer')
   const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState(false)
 
   const base = `/api/file-cabinet/${resourceType === 'folder' ? 'folders' : 'files'}/${resourceId}/grants`
 
   async function load() {
-    const [g, p] = await Promise.all([
-      fetch(base).then((r) => (r.ok ? r.json() : { grants: [] })),
-      fetch('/api/file-cabinet/principals').then((r) => (r.ok ? r.json() : { users: [], roles: [] })),
-    ])
-    setGrants((g.grants as Grant[]) ?? [])
-    setUsers((p.users as Principal[]) ?? [])
-    setRoles((p.roles as Principal[]) ?? [])
+    setLoadError(false)
+    setGrants(null)
+    setUsers([])
+    setRoles([])
+    try {
+      const [g, p] = await Promise.all([fetch(base), fetch('/api/file-cabinet/principals')])
+      if (!g.ok || !p.ok) throw new Error('SHARING_LOAD_FAILED')
+
+      const [grantsPayload, principalsPayload] = await Promise.all([g.json(), p.json()])
+      if (
+        !grantsPayload ||
+        !Array.isArray(grantsPayload.grants) ||
+        !principalsPayload ||
+        !Array.isArray(principalsPayload.users) ||
+        !Array.isArray(principalsPayload.roles)
+      ) {
+        throw new Error('SHARING_LOAD_FAILED')
+      }
+
+      setGrants(grantsPayload.grants as Grant[])
+      setUsers(principalsPayload.users as Principal[])
+      setRoles(principalsPayload.roles as Principal[])
+    } catch {
+      // An unavailable grants endpoint must never look like an empty grants list.
+      setGrants(null)
+      setLoadError(true)
+    }
   }
 
   useEffect(() => {
@@ -120,7 +142,7 @@ export function SharePanel({
       <div className="flex flex-wrap items-center gap-2">
         <Select
           value={selected}
-          disabled={busy}
+          disabled={busy || loadError || grants == null}
           searchable
           sheetTitle={t('addPrincipal')}
           placeholder={t('selectPrincipal')}
@@ -149,7 +171,7 @@ export function SharePanel({
         </Select>
         <Select
           value={tier}
-          disabled={busy || !selected}
+          disabled={busy || loadError || grants == null || !selected}
           className="h-9 w-28"
           onChange={(e) => setTier(e.target.value as Tier)}
         >
@@ -159,7 +181,7 @@ export function SharePanel({
             </option>
           ))}
         </Select>
-        <Button size="sm" disabled={busy || !selected} onClick={addGrant}>
+        <Button size="sm" disabled={busy || loadError || grants == null || !selected} onClick={addGrant}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           {t('add')}
         </Button>
@@ -168,7 +190,14 @@ export function SharePanel({
         <p className="text-xs text-slate-400 dark:text-slate-500">{t('inheritedHint')}</p>
       ) : null}
 
-      {grants == null ? (
+      {loadError ? (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+          <span>{tc('feedback.loadFailed')}</span>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>
+            {tc('actions.retry')}
+          </Button>
+        </div>
+      ) : grants == null ? (
         <div className="flex items-center gap-2 py-3 text-sm text-slate-500">
           <Loader2 className="h-4 w-4 animate-spin" />
         </div>
@@ -193,7 +222,7 @@ export function SharePanel({
               ) : null}
               <Select
                 value={g.access}
-                disabled={busy}
+                disabled={busy || loadError}
                 className="h-8 w-28 shrink-0"
                 onChange={(e) => void post(g.principalType, g.principalId, e.target.value as Tier)}
               >
@@ -207,7 +236,7 @@ export function SharePanel({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 shrink-0"
-                disabled={busy}
+                disabled={busy || loadError}
                 aria-label={t('remove')}
                 onClick={() => void remove(g)}
               >
