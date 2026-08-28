@@ -12,6 +12,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // A tax filing snapshot is an organization-wide statutory position: the
+  // engine recomputes every subsidiary's ledger before certifying it. A
+  // subsidiary-restricted caller therefore cannot safely reach this
+  // irreversible transition, even when they hold compliance.file. Keep the
+  // denial indistinguishable from a missing filing and settle it before any
+  // body parsing or engine call.
+  if (gate.allowedSubsidiaryIds !== null) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { filingReference?: unknown }
