@@ -374,6 +374,101 @@ test("stale suppression cannot rewrite a sent report delivery; a live suppressio
   }
 });
 
+test("stale failure cannot rewrite a sent report delivery; a live failure still lands", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const definitionId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions
+        (id, org_id, kind, report_type, slug, name, query, created_by, updated_by)
+      values (${definitionId}, ${org.orgId}, 'custom', 'query', 'failure-guard',
+              'Failure guard', '{}'::jsonb, null, null)
+    `);
+    const runId = randomUUID();
+    await db.execute(sql`
+      insert into report_runs
+        (id, org_id, schedule_id, definition_id, trigger, status, scheduled_for,
+         recipient_emails, next_attempt_at)
+      values (${runId}, ${org.orgId}, null, ${definitionId}, 'scheduled', 'queued',
+              ${new Date(Date.now() - 60_000)}, '[]'::jsonb, now())
+    `);
+    const sentLogId = (await db.execute<{ id: string }>(sql`
+      insert into email_log (org_id, recipients, recipient_primary, subject, status, category_key)
+      values (${org.orgId}, '["audit@example.com"]'::jsonb, 'audit@example.com', 'Failure guard', 'sent', 'report')
+      returning id
+    `)).rows[0]!.id;
+    const staleFailureLogId = (await db.execute<{ id: string }>(sql`
+      insert into email_log (org_id, recipients, recipient_primary, subject, status, category_key)
+      values (${org.orgId}, '["audit@example.com"]'::jsonb, 'audit@example.com', 'Failure guard', 'failed', 'report')
+      returning id
+    `)).rows[0]!.id;
+
+    // A sent row carries immutable delivery evidence; a delayed failure
+    // callback must not replace it with retry or terminal-failure state.
+    const sentDeliveryId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, email_log_id, provider_message_id,
+         sent_at, attempt_count, next_attempt_at)
+      values (${sentDeliveryId}, ${org.orgId}, ${runId}, 'audit@example.com', 'sent',
+              ${sentLogId}, 'provider-accepted', now(), 1, now())
+    `);
+    await markReportDeliveryFailed(org.orgId, sentDeliveryId, staleFailureLogId, "stale provider failure", true);
+    const afterStale = (await db.execute<{
+      status: string;
+      email_log_id: string;
+      provider_message_id: string;
+      sent_at: Date | null;
+      error: string | null;
+      terminal_failed_at: Date | null;
+      terminal_failed_by: string | null;
+    }>(sql`
+      select status, email_log_id, provider_message_id, sent_at, error,
+             terminal_failed_at, terminal_failed_by
+        from report_delivery_outbox where id=${sentDeliveryId}
+    `)).rows[0]!;
+    assert.deepEqual(
+      {
+        status: afterStale.status,
+        log: afterStale.email_log_id,
+        provider: afterStale.provider_message_id,
+        sent: afterStale.sent_at !== null,
+        error: afterStale.error,
+        terminal: afterStale.terminal_failed_at,
+        terminalBy: afterStale.terminal_failed_by,
+      },
+      {
+        status: "sent",
+        log: sentLogId,
+        provider: "provider-accepted",
+        sent: true,
+        error: null,
+        terminal: null,
+        terminalBy: null,
+      },
+    );
+
+    // A live callback from the sending state still records a retryable failure.
+    const liveDeliveryId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, attempt_count, next_attempt_at)
+      values (${liveDeliveryId}, ${org.orgId}, ${runId}, 'sandbox@example.com', 'sending', 1, now())
+    `);
+    await markReportDeliveryFailed(org.orgId, liveDeliveryId, staleFailureLogId, "provider unavailable", false);
+    const afterLive = (await db.execute<{ status: string; email_log_id: string; error: string | null; sent_at: Date | null }>(sql`
+      select status, email_log_id, error, sent_at
+        from report_delivery_outbox where id=${liveDeliveryId}
+    `)).rows[0]!;
+    assert.deepEqual(
+      { status: afterLive.status, log: afterLive.email_log_id, error: afterLive.error, sent: afterLive.sent_at !== null },
+      { status: "enqueued", log: staleFailureLogId, error: "provider unavailable", sent: false },
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("provider-accepted uncertain outcome blocks blind re-send and resists markEmailFailed overwrite", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
