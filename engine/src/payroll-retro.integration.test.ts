@@ -209,6 +209,33 @@ test(
 
       assert.deepEqual(await retroRunFindings(org.orgId, retro.documentId), []);
 
+      // The settlement is quantified before the retro run exists. Editing a
+      // source hour after that point must block the run: paying the stored
+      // allocation would otherwise settle a number the source no longer
+      // supports. Restore the exact source value/timestamp so the later
+      // correction below can exercise the normal exactly-once path.
+      await db.execute(sql`
+        update time_entries
+           set hours = hours + 1, updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and worked_on = '2026-01-06' and project_id = ${jobA}
+           and payroll_batch_ref = ${sourceRuns[0]}`);
+      const staleAfterTimeEdit = await retroRunFindings(org.orgId, retro.documentId);
+      const staleTimeFinding = staleAfterTimeEdit.find((finding) => finding.code === "retro.stale");
+      assert.ok(staleTimeFinding, "editing source time after quantification blocks the retro run");
+      assert.equal(staleTimeFinding!.severity, "blocker");
+      await db.execute(sql`
+        update time_entries t
+           set hours = '30', updated_at = st.quantified_at
+          from payroll_retro_settlements st
+         where st.org_id = ${org.orgId}
+           and st.retro_pay_run_document_id = ${retro.documentId}
+           and st.source_pay_run_document_id = ${sourceRuns[0]}
+           and t.org_id = st.org_id and t.employee_party_id = st.employee_party_id
+           and t.worked_on = '2026-01-06' and t.project_id = ${jobA}
+           and t.payroll_batch_ref = st.source_pay_run_document_id::text`);
+      assert.deepEqual(await retroRunFindings(org.orgId, retro.documentId), []);
+
       // Vacation accrual follows the COMPONENT's own vacationable flag, not a
       // retro-specific rule. Turned off, the retro accrues nothing.
       await db.execute(sql`
