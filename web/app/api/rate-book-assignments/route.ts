@@ -102,14 +102,26 @@ export async function GET(req: Request) {
   })
 }
 
-async function normalizedInput(body: AssignmentInput, orgId: string, rowId?: string) {
+type SqlExecutor = Pick<typeof db, 'execute'>
+
+function postgresErrorCode(error: unknown): string | undefined {
+  let current: unknown = error
+  for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth += 1) {
+    const code = (current as { code?: unknown }).code
+    if (typeof code === 'string') return code
+    current = (current as { cause?: unknown }).cause
+  }
+  return undefined
+}
+
+async function normalizedInput(body: AssignmentInput, orgId: string, rowId: string | undefined, tx: SqlExecutor) {
   let values = body
   if (rowId) {
-    const current = ((await db.execute(sql`
+    const current = ((await tx.execute(sql`
       select rate_book_id as "rateBookId", customer_id as "customerId", project_id as "projectId",
              effective_from as "effectiveFrom", effective_to as "effectiveTo", date_basis as "dateBasis",
              is_active as "isActive"
-        from item_rate_book_assignments where id = ${rowId} and org_id = ${orgId}`)))
+        from item_rate_book_assignments where id = ${rowId} and org_id = ${orgId} for update`)))
     if (!current.rows[0]) return { errorCode: 'save' } as const
     values = { ...current.rows[0], ...body }
   }
@@ -125,7 +137,7 @@ async function normalizedInput(body: AssignmentInput, orgId: string, rowId?: str
   if (effectiveFrom === undefined || effectiveTo === undefined) return { errorCode: 'dates' } as const
   if (effectiveFrom && effectiveTo && effectiveTo < effectiveFrom) return { errorCode: 'dateOrder' } as const
   if (dateBasis !== 'usage_date' && dateBasis !== 'project_start') return { errorCode: 'dateBasis' } as const
-  const refs = ((await db.execute(sql`
+  const refs = ((await tx.execute(sql`
     select
       exists(select 1 from item_rate_books b where b.id = ${rateBookId} and b.org_id = ${orgId}
         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)) as book_ok,
@@ -133,10 +145,11 @@ async function normalizedInput(body: AssignmentInput, orgId: string, rowId?: str
       ${projectId ? sql`exists(select 1 from projects where id = ${projectId} and org_id = ${orgId})` : sql`true`} as project_ok`)))
   if (!refs.rows[0]?.book_ok || !refs.rows[0]?.customer_ok || !refs.rows[0]?.project_ok) return { errorCode: 'references' } as const
   const scope = projectId ? sql`project_id = ${projectId}` : sql`customer_id = ${customerId}`
-  const overlap = ((await db.execute(sql`
+  const overlap = ((await tx.execute(sql`
     select 1 from item_rate_book_assignments
      where org_id = ${orgId} and id is distinct from ${rowId ?? null} and is_active and ${scope}
-       and daterange(effective_from, effective_to, '[]') && daterange(${effectiveFrom}::date, ${effectiveTo}::date, '[]')
+       and daterange(coalesce(effective_from, '-infinity'::date), effective_to, '[]') &&
+           daterange(coalesce(${effectiveFrom}::date, '-infinity'::date), ${effectiveTo}::date, '[]')
      limit 1`)))
   if (isActive && overlap.rows.length) return { errorCode: 'overlap' } as const
   return { values: { rateBookId, customerId, projectId, effectiveFrom, effectiveTo, dateBasis, isActive } } as const
@@ -148,18 +161,31 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as AssignmentInput
-  const parsed = await normalizedInput(body, gate.user.orgId)
-  if ('errorCode' in parsed) return NextResponse.json({ errorCode: parsed.errorCode }, { status: 400 })
-  const v = parsed.values
-  const inserted = (await db.execute(sql`
-    insert into item_rate_book_assignments
-      (org_id, rate_book_id, customer_id, project_id, effective_from, effective_to, date_basis, is_active, created_by, updated_by)
-    values (${gate.user.orgId}, ${v.rateBookId}, ${v.customerId}, ${v.projectId}, ${v.effectiveFrom}, ${v.effectiveTo}, ${v.dateBasis}, ${v.isActive}, ${gate.user.id}, ${gate.user.id})
-    returning id`)) as any
-  const id = String(inserted.rows[0].id)
-  await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${gate.user.orgId}, 'item_rate_book_assignments', ${id}, 'insert', ${JSON.stringify(v)}, ${gate.user.id})`)
-  return NextResponse.json({ id })
+  try {
+    const outcome = await db.transaction(async (tx) => {
+      const parsed = await normalizedInput(body, gate.user.orgId, undefined, tx)
+      if ('errorCode' in parsed) return parsed
+      const v = parsed.values
+      const inserted = await tx.execute(sql`
+        insert into item_rate_book_assignments
+          (org_id, rate_book_id, customer_id, project_id, effective_from, effective_to, date_basis, is_active, created_by, updated_by)
+        values (${gate.user.orgId}, ${v.rateBookId}, ${v.customerId}, ${v.projectId}, ${v.effectiveFrom}, ${v.effectiveTo}, ${v.dateBasis}, ${v.isActive}, ${gate.user.id}, ${gate.user.id})
+        returning *`)
+      const after = inserted.rows[0]
+      if (!after) throw new Error('rate-book assignment insert returned no row')
+      const id = String(after.id)
+      await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${gate.user.orgId}, 'item_rate_book_assignments', ${id}, 'insert', ${JSON.stringify({ before: null, after })}::jsonb, ${gate.user.id})`)
+      return { id } as const
+    })
+    if (!('id' in outcome)) return NextResponse.json({ errorCode: outcome.errorCode }, { status: 400 })
+    return NextResponse.json({ id: outcome.id })
+  } catch (error) {
+    if (postgresErrorCode(error) === '23P01') {
+      return NextResponse.json({ errorCode: 'overlap' }, { status: 400 })
+    }
+    throw error
+  }
 }
 
 export async function PATCH(req: Request) {
@@ -170,15 +196,33 @@ export async function PATCH(req: Request) {
   const body = (parsedBody2.data) as AssignmentInput
   const id = String(body.id ?? '')
   if (!isUuid(id)) return NextResponse.json({ errorCode: 'save' }, { status: 404 })
-  const parsed = await normalizedInput(body, gate.user.orgId, id)
-  if ('errorCode' in parsed) return NextResponse.json({ errorCode: parsed.errorCode }, { status: parsed.errorCode === 'save' ? 404 : 400 })
-  const v = parsed.values
-  await db.execute(sql`update item_rate_book_assignments set rate_book_id = ${v.rateBookId}, customer_id = ${v.customerId},
-    project_id = ${v.projectId}, effective_from = ${v.effectiveFrom}, effective_to = ${v.effectiveTo}, date_basis = ${v.dateBasis},
-    is_active = ${v.isActive}, updated_at = now(), updated_by = ${gate.user.id} where id = ${id} and org_id = ${gate.user.orgId}`)
-  await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${gate.user.orgId}, 'item_rate_book_assignments', ${id}, 'update', ${JSON.stringify(v)}, ${gate.user.id})`)
-  return NextResponse.json({ id })
+  try {
+    const outcome = await db.transaction(async (tx) => {
+      const parsed = await normalizedInput(body, gate.user.orgId, id, tx)
+      if ('errorCode' in parsed) return parsed
+      const v = parsed.values
+      const before = (await tx.execute(sql`
+        select * from item_rate_book_assignments where id = ${id} and org_id = ${gate.user.orgId} for update`)).rows[0]
+      if (!before) return { errorCode: 'save' } as const
+      const updated = (await tx.execute(sql`update item_rate_book_assignments set rate_book_id = ${v.rateBookId}, customer_id = ${v.customerId},
+        project_id = ${v.projectId}, effective_from = ${v.effectiveFrom}, effective_to = ${v.effectiveTo}, date_basis = ${v.dateBasis},
+        is_active = ${v.isActive}, updated_at = now(), updated_by = ${gate.user.id} where id = ${id} and org_id = ${gate.user.orgId}
+        returning *`)).rows[0]
+      if (!updated) throw new Error('rate-book assignment update returned no row')
+      await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${gate.user.orgId}, 'item_rate_book_assignments', ${id}, 'update', ${JSON.stringify({ before, after: updated })}::jsonb, ${gate.user.id})`)
+      return { id } as const
+    })
+    if (!('id' in outcome)) {
+      return NextResponse.json({ errorCode: outcome.errorCode }, { status: outcome.errorCode === 'save' ? 404 : 400 })
+    }
+    return NextResponse.json({ id: outcome.id })
+  } catch (error) {
+    if (postgresErrorCode(error) === '23P01') {
+      return NextResponse.json({ errorCode: 'overlap' }, { status: 400 })
+    }
+    throw error
+  }
 }
 
 export async function DELETE(req: Request) {
@@ -186,9 +230,16 @@ export async function DELETE(req: Request) {
   if (gate instanceof NextResponse) return gate
   const id = new URL(req.url).searchParams.get('id') ?? ''
   if (!isUuid(id)) return NextResponse.json({ errorCode: 'save' }, { status: 404 })
-  const removed = ((await db.execute(sql`delete from item_rate_book_assignments where id = ${id} and org_id = ${gate.user.orgId} returning id`)))
-  if (!removed.rows.length) return NextResponse.json({ errorCode: 'save' }, { status: 404 })
-  await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${gate.user.orgId}, 'item_rate_book_assignments', ${id}, 'delete', ${JSON.stringify({ deleted: true })}, ${gate.user.id})`)
+  const outcome = await db.transaction(async (tx) => {
+    const before = (await tx.execute(sql`
+      select * from item_rate_book_assignments where id = ${id} and org_id = ${gate.user.orgId} for update`)).rows[0]
+    if (!before) return { errorCode: 'save' } as const
+    const removed = (await tx.execute(sql`delete from item_rate_book_assignments where id = ${id} and org_id = ${gate.user.orgId} returning id`)).rows[0]
+    if (!removed) throw new Error('rate-book assignment delete returned no row')
+    await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${gate.user.orgId}, 'item_rate_book_assignments', ${id}, 'delete', ${JSON.stringify({ before, after: null })}::jsonb, ${gate.user.id})`)
+    return { ok: true } as const
+  })
+  if ('errorCode' in outcome) return NextResponse.json({ errorCode: outcome.errorCode }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
