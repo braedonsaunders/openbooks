@@ -60,10 +60,19 @@ export function esc(value: string): string {
   )
 }
 
+// Amounts come from exact decimal database columns. Keep the source text all
+// the way through Intl so high-magnitude values never cross an IEEE-754
+// number boundary before they reach the printed legal document.
+const EXACT_AMOUNT_TEXT = /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/
+
 export function formatWaiverAmount(amount: string, currency: string): string {
-  const n = Number(amount)
-  if (!Number.isFinite(n)) return `${esc(currency)} ${esc(amount)}`
-  return `${esc(currency)} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const exact = amount.trim()
+  if (!EXACT_AMOUNT_TEXT.test(exact)) return `${esc(currency)} ${esc(amount)}`
+  const formatted = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(exact as never)
+  return `${esc(currency)} ${formatted}`
 }
 
 export interface WaiverTypeCopy {
