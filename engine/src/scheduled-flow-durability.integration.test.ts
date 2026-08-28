@@ -198,6 +198,40 @@ async function failFlowRunInserts(orgId: string): Promise<() => Promise<void>> {
   };
 }
 
+/**
+ * Hold the first recovery take long enough for a second worker to read the
+ * same stale row. The second UPDATE then proves it must lose the observed
+ * attempt/timestamp fence after the first worker commits its take.
+ */
+async function pauseRecoveryTake(orgId: string): Promise<() => Promise<void>> {
+  const suffix = orgId.replaceAll("-", "").slice(0, 12);
+  const fn = `openbooks_test_pause_scheduled_take_${suffix}`;
+  const trigger = `openbooks_test_pause_scheduled_take_${suffix}`;
+  await db.execute(sql.raw(`
+    create function public.${fn}() returns trigger
+    language plpgsql as $$
+    begin
+      perform pg_sleep(0.25);
+      return new;
+    end
+    $$
+  `));
+  await db.execute(sql.raw(`
+    create trigger ${trigger}
+    before update on public.flow_scheduled_occurrences
+    for each row when (
+      new.org_id = '${orgId}'::uuid
+      and new.status = 'firing'
+      and new.attempt_count = 2
+    )
+    execute function public.${fn}()
+  `));
+  return async () => {
+    await db.execute(sql.raw(`drop trigger if exists ${trigger} on public.flow_scheduled_occurrences`));
+    await db.execute(sql.raw(`drop function if exists public.${fn}()`));
+  };
+}
+
 /** A recovery pass whose stale window treats every existing claim as stale. */
 function staleRecoveryNow(): Date {
   return new Date(Date.now() + FLOW_OCCURRENCE_STALE_MS + 60_000);
@@ -387,6 +421,45 @@ test(
       assert.equal(await outboxCount(org.orgId), 1);
       assert.equal(await notificationCount(org.orgId), 1);
     } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "concurrent recovery workers take a stale occurrence only once",
+  { skip: !DB },
+  async () => {
+    const probe = await seedScheduledProbe(new Date());
+    const { org, fixture } = probe;
+    let dropFailureTrigger: () => Promise<void> = () => Promise.resolve();
+    let dropPauseTrigger: () => Promise<void> = () => Promise.resolve();
+    try {
+      // Leave one stale claim behind after its initial firing fails. Both
+      // recovery workers will select this same row before either can finish
+      // its deliberately paused take UPDATE.
+      dropFailureTrigger = await failFlowRunInserts(org.orgId);
+      assert.equal((await runDueScheduledFlows(probe.now)).errors, 1);
+      await dropFailureTrigger();
+      dropFailureTrigger = () => Promise.resolve();
+
+      dropPauseTrigger = await pauseRecoveryTake(org.orgId);
+      const recoveries = await Promise.allSettled([
+        recoverLostScheduledFlows(staleRecoveryNow()),
+        recoverLostScheduledFlows(staleRecoveryNow()),
+      ]);
+      for (const recovery of recoveries) assert.equal(recovery.status, "fulfilled");
+
+      const occ = await occurrences(fixture.flowId);
+      assert.equal(occ.length, 1);
+      assert.equal(occ[0]!.status, "fired");
+      assert.equal(occ[0]!.attempt_count, 2, "one initial take plus one recovery take");
+      assert.equal(await runCount(org.orgId), 1, "one recovery firing");
+      assert.equal(await outboxCount(org.orgId), 1, "one deferred email");
+      assert.equal(await notificationCount(org.orgId), 1, "one notification");
+    } finally {
+      await dropPauseTrigger();
+      await dropFailureTrigger();
       await withBypass(() => dropScratchOrg(org.orgId));
     }
   },
