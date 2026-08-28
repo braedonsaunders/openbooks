@@ -271,7 +271,8 @@ export type StatementSheetRow = {
   /** Account-tree depth (real Excel indentation is applied from this). */
   indent?: number
   /** Column-aligned values; null renders blank. Exact decimal strings preserve
-   *  financial precision through aggregation; they are written as numeric cells. */
+   *  financial precision through aggregation; values that do not fit Excel's
+   *  IEEE-754 precision remain text cells in the workbook. */
   values?: (number | string | null)[]
 }
 export type StatementSheet = {
@@ -287,6 +288,44 @@ export type StatementSheet = {
 const AMOUNT_FMT = '#,##0.00;(#,##0.00)'
 const PCT_FMT = '0.0"%";(0.0"%")'
 const RULE = 'ffb0b6be'
+const STATEMENT_SCALE = 10_000n
+const MAX_SAFE_STATEMENT_UNITS = BigInt(Number.MAX_SAFE_INTEGER)
+
+/**
+ * Keep ordinary statement amounts as numeric cells for spreadsheet formulas,
+ * but never coerce an exact decimal beyond JavaScript's safe integer range.
+ * Excel stores numeric cells as IEEE-754 doubles, so a scaled numeric(19,4)
+ * value outside that range would be rounded on export. Such values stay as
+ * their original text and therefore remain exact when the workbook is read
+ * back or displayed.
+ */
+function statementCellValue(value: number | string | null | undefined): number | string | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+
+  const text = value.trim()
+  if (text === '') return null
+
+  // Statement values are canonical numeric(19,4) strings. Preserve any
+  // non-canonical text rather than attempting a lossy coercion.
+  const match = text.match(/^([+-]?)(\d+)(?:\.(\d+))?$/)
+  if (!match) return value
+
+  const fraction = match[3] ?? ''
+  // More than four non-zero fractional places cannot be represented by the
+  // ledger domain; retaining the text is the only lossless export.
+  if (fraction.length > 4 && /[1-9]/.test(fraction.slice(4))) return value
+
+  const units =
+    BigInt(match[2]!) * STATEMENT_SCALE + BigInt(fraction.slice(0, 4).padEnd(4, '0') || '0')
+  const signedUnits = match[1] === '-' ? -units : units
+  if (signedUnits < -MAX_SAFE_STATEMENT_UNITS || signedUnits > MAX_SAFE_STATEMENT_UNITS) return value
+
+  // The scaled integer is safe, so this conversion cannot round the ledger
+  // value at its four-decimal precision. Keep the numeric cell behaviour for
+  // values that fit within that bound.
+  return Number(signedUnits) / Number(STATEMENT_SCALE)
+}
 
 /**
  * A financial statement as a properly-formatted .xlsx: a centred 3-line title
@@ -351,8 +390,15 @@ export async function statementSheetToXlsx(
       for (let i = 0; i < nCols; i++) {
         const cell = ws.getCell(r, i + 2)
         const v = row.values[i]
-        const numeric = v === null || v === undefined ? null : typeof v === 'number' ? (Number.isFinite(v) ? v : null) : (v.trim() === '' || Number.isNaN(Number(v)) ? null : Number(v))
-        cell.value = numeric
+        // Values produced by the statement engine are exact decimal strings
+        // (numeric(19,4)). Keep values whose scaled integer exceeds the exact
+        // IEEE-754 range as text; converting those through JavaScript Number
+        // can silently round ledger values before Excel sees them. Values that
+        // fit in a safe scaled integer retain numeric cells and their existing
+        // accounting formatting. Callers that already have a number retain
+        // the existing numeric cell behaviour, provided it is finite.
+        const value = statementCellValue(v)
+        cell.value = value
         cell.numFmt = sheet.columns[i]!.kind === 'variance_pct' ? PCT_FMT : AMOUNT_FMT
         cell.alignment = { horizontal: 'right' }
         cell.font = { bold }
