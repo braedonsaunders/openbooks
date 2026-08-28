@@ -74,7 +74,12 @@ const mockSources = new Map<string, string>([
     'mock:schedule',
     `
       const state = globalThis[Symbol.for('openbooks.project-schedule-route-test')]
-      export class ScheduleError extends Error {}
+      export class ScheduleError extends Error {
+        constructor(message, status = 400) {
+          super(message)
+          this.status = status
+        }
+      }
       export async function batchUpdateScheduleTasks() {}
       export async function createScheduleBaseline() {}
       export async function createScheduleDependency() {}
@@ -86,8 +91,14 @@ const mockSources = new Map<string, string>([
       export async function updateScheduleTask() {}
       export async function upsertScheduleCalendar() {}
       export async function upsertScheduleResource() {}
-      export async function deleteScheduleCalendar(...args) { state.calendarArgs = args }
-      export async function deleteScheduleResource(...args) { state.resourceArgs = args }
+      export async function deleteScheduleCalendar(...args) {
+        state.calendarArgs = args
+        if (args[2] === '00000000-0000-0000-0000-000000000002') throw new ScheduleError('calendar not found', 404)
+      }
+      export async function deleteScheduleResource(...args) {
+        state.resourceArgs = args
+        if (args[2] === '00000000-0000-0000-0000-000000000002') throw new ScheduleError('resource not found', 404)
+      }
     `,
   ],
 ])
@@ -118,7 +129,7 @@ const ORG_ID = '00000000-0000-0000-0000-000000000010'
 const PROJECT_A = '00000000-0000-0000-0000-000000000001'
 const FOREIGN_ID = '00000000-0000-0000-0000-000000000002'
 
-test('delete actions forward the authorized project boundary to schedule helpers', async () => {
+test('cross-project delete attempts fail closed with the authorized project boundary', async () => {
   state.authz = {
     user: { orgId: ORG_ID, id: '00000000-0000-0000-0000-000000000011' },
     permissions: new Set(['projects.manage']),
@@ -130,7 +141,8 @@ test('delete actions forward the authorized project boundary to schedule helpers
     method: 'POST',
     body: JSON.stringify({ projectId: PROJECT_A, action: 'deleteCalendar', id: FOREIGN_ID }),
   }))
-  assert.equal(calendarResponse.status, 200)
+  assert.ok(calendarResponse)
+  assert.equal(calendarResponse.status, 404)
   assert.deepEqual(state.calendarArgs, [ORG_ID, PROJECT_A, FOREIGN_ID])
 
   state.resourceArgs = null
@@ -138,6 +150,7 @@ test('delete actions forward the authorized project boundary to schedule helpers
     method: 'POST',
     body: JSON.stringify({ projectId: PROJECT_A, action: 'deleteResource', id: FOREIGN_ID }),
   }))
-  assert.equal(resourceResponse.status, 200)
+  assert.ok(resourceResponse)
+  assert.equal(resourceResponse.status, 404)
   assert.deepEqual(state.resourceArgs, [ORG_ID, PROJECT_A, FOREIGN_ID])
 })

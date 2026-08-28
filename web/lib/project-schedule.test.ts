@@ -8,6 +8,7 @@ interface Query {
 }
 
 interface TestState {
+  orgTransactionCalls: number
   rootExecuteCalls: number
   transactionCalls: number
   commits: number
@@ -20,6 +21,7 @@ interface TestState {
 
 const stateKey = Symbol.for('openbooks.project-schedule-test')
 const state: TestState = {
+  orgTransactionCalls: 0,
   rootExecuteCalls: 0,
   transactionCalls: 0,
   commits: 0,
@@ -59,11 +61,17 @@ const mockSources = new Map<string, string>([
         const statement = text(query)
         if (/select coalesce\\(max\\(schedule_order\\)/i.test(statement)) return { rows: [{ n: 7 }] }
         if (/insert into project_tasks/i.test(statement)) return { rows: [{ id: 'task-created' }] }
+        if (/select 1 from schedule_calendars/i.test(statement)) {
+          return { rows: state.calendarTargetExists ? [{ id: 'calendar-target' }] : [] }
+        }
         if (/update schedule_calendars[\\s\\S]*returning id/i.test(statement)) {
           return { rows: state.calendarTargetExists ? [{ id: 'calendar-target' }] : [] }
         }
         if (/delete from schedule_calendars[\\s\\S]*returning id/i.test(statement)) {
           return { rows: state.calendarTargetExists ? [{ id: 'calendar-target' }] : [] }
+        }
+        if (/select 1 from schedule_resources/i.test(statement)) {
+          return { rows: state.resourceTargetExists ? [{ id: 'resource-target' }] : [] }
         }
         if (/update schedule_resources[\\s\\S]*returning id/i.test(statement)) {
           return { rows: state.resourceTargetExists ? [{ id: 'resource-target' }] : [] }
@@ -99,7 +107,12 @@ const mockSources = new Map<string, string>([
           }
         },
       }
+      async function withOrgTransaction(orgId, callback) {
+        state.orgTransactionCalls++
+        return callback()
+      }
       export const db = root
+      export { withOrgTransaction }
     `,
   ],
 ])
@@ -129,6 +142,7 @@ const ORG_ID = 'org-1'
 const PROJECT_A = 'project-a'
 
 function reset() {
+  state.orgTransactionCalls = 0
   state.rootExecuteCalls = 0
   state.transactionCalls = 0
   state.commits = 0
@@ -137,12 +151,6 @@ function reset() {
   state.txQueries = []
   state.calendarTargetExists = false
   state.resourceTargetExists = false
-}
-
-function queryValues(query: Query) {
-  return query.values.flatMap((value) => (value && typeof value === 'object' && 'values' in value
-    ? (value as Query).values
-    : [value]))
 }
 
 test('creating a task rolls back its insert when the patch fails', async () => {
@@ -159,6 +167,7 @@ test('creating a task rolls back its insert when the patch fails', async () => {
   )
 
   assert.equal(state.transactionCalls, 1)
+  assert.equal(state.orgTransactionCalls, 1)
   assert.equal(state.commits, 0)
   assert.equal(state.rollbacks, 1)
   assert.equal(state.committedTaskInserts, 0)
@@ -173,22 +182,22 @@ test('calendar updates and deletes require the authorized project', async () => 
     schedule.upsertScheduleCalendar(ORG_ID, PROJECT_A, { id: 'calendar-from-b', name: 'Nope' }, 'user-1'),
     (error: unknown) => (error as { status?: number }).status === 404,
   )
+  assert.equal(state.orgTransactionCalls, 1)
   assert.equal(state.commits, 0)
   assert.equal(state.rollbacks, 1)
-  const update = state.txQueries.find((query) => /update schedule_calendars/i.test(query.strings.join(' ')))
-  assert.ok(update)
-  assert.ok(queryValues(update!).includes(PROJECT_A))
+  assert.ok(state.txQueries.some((query) => /select 1 from schedule_calendars/i.test(query.strings.join(' '))))
+  assert.ok(!state.txQueries.some((query) => /update schedule_calendars/i.test(query.strings.join(' '))))
 
   reset()
   await assert.rejects(
     schedule.deleteScheduleCalendar(ORG_ID, PROJECT_A, 'calendar-from-b'),
     (error: unknown) => (error as { status?: number }).status === 404,
   )
+  assert.equal(state.orgTransactionCalls, 1)
   assert.equal(state.commits, 0)
   assert.equal(state.rollbacks, 1)
-  const deletion = state.txQueries.find((query) => /delete from schedule_calendars/i.test(query.strings.join(' ')))
-  assert.ok(deletion)
-  assert.ok(queryValues(deletion!).includes(PROJECT_A))
+  assert.ok(state.txQueries.some((query) => /select 1 from schedule_calendars/i.test(query.strings.join(' '))))
+  assert.ok(!state.txQueries.some((query) => /update project_tasks|update schedule_resources|delete from schedule_calendars/i.test(query.strings.join(' '))))
 
   reset()
   state.calendarTargetExists = true
@@ -196,6 +205,7 @@ test('calendar updates and deletes require the authorized project', async () => 
     await schedule.upsertScheduleCalendar(ORG_ID, PROJECT_A, { id: 'calendar-a', name: 'Updated' }, 'user-1'),
     'calendar-target',
   )
+  assert.equal(state.orgTransactionCalls, 1)
   assert.equal(state.commits, 1)
 })
 
@@ -206,22 +216,22 @@ test('resource updates and deletes require the authorized project', async () => 
     schedule.upsertScheduleResource(ORG_ID, PROJECT_A, { id: 'resource-from-b', name: 'Nope' }, 'user-1'),
     (error: unknown) => (error as { status?: number }).status === 404,
   )
+  assert.equal(state.orgTransactionCalls, 1)
   assert.equal(state.commits, 0)
   assert.equal(state.rollbacks, 1)
-  const update = state.txQueries.find((query) => /update schedule_resources/i.test(query.strings.join(' ')))
-  assert.ok(update)
-  assert.ok(queryValues(update!).includes(PROJECT_A))
+  assert.ok(state.txQueries.some((query) => /select 1 from schedule_resources/i.test(query.strings.join(' '))))
+  assert.ok(!state.txQueries.some((query) => /update schedule_resources/i.test(query.strings.join(' '))))
 
   reset()
   await assert.rejects(
     schedule.deleteScheduleResource(ORG_ID, PROJECT_A, 'resource-from-b'),
     (error: unknown) => (error as { status?: number }).status === 404,
   )
+  assert.equal(state.orgTransactionCalls, 1)
   assert.equal(state.commits, 0)
   assert.equal(state.rollbacks, 1)
-  const deletion = state.txQueries.find((query) => /delete from schedule_resources/i.test(query.strings.join(' ')))
-  assert.ok(deletion)
-  assert.ok(queryValues(deletion!).includes(PROJECT_A))
+  assert.ok(state.txQueries.some((query) => /select 1 from schedule_resources/i.test(query.strings.join(' '))))
+  assert.ok(!state.txQueries.some((query) => /delete from schedule_task_assignments|delete from schedule_resources/i.test(query.strings.join(' '))))
 
   reset()
   state.resourceTargetExists = true
@@ -229,5 +239,6 @@ test('resource updates and deletes require the authorized project', async () => 
     await schedule.upsertScheduleResource(ORG_ID, PROJECT_A, { id: 'resource-a', name: 'Updated' }, 'user-1'),
     'resource-target',
   )
+  assert.equal(state.orgTransactionCalls, 1)
   assert.equal(state.commits, 1)
 })
