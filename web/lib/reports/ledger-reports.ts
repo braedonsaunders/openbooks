@@ -220,7 +220,14 @@ export async function journalReport(
      limit ${maxLines + 1}
   `))
   const truncated = r.rows.length > maxLines
-  const rows = truncated ? r.rows.slice(0, maxLines) : r.rows
+  let rows = truncated ? r.rows.slice(0, maxLines) : r.rows
+  // The line cap must never split a journal entry: the sentinel row tells us
+  // whether the first excluded line belongs to the final included entry. Drop
+  // that whole entry so a capped report cannot expose an unbalanced partial.
+  if (truncated && rows.length > 0 && r.rows[maxLines]?.id === rows[rows.length - 1]?.id) {
+    const partialEntryId = rows[rows.length - 1]!.id
+    rows = rows.filter((row) => row.id !== partialEntryId)
+  }
 
   const entries: JournalReportEntry[] = []
   const entriesById = new Map<string, JournalReportEntry>()
