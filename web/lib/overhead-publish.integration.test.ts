@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { registerHooks } from "node:module";
 import test from "node:test";
 import { env } from "@openbooks/engine/src/db.ts";
 
@@ -20,6 +21,116 @@ function runIntegrationSource(source: string): void {
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
+
+const routeStateKey = Symbol.for("openbooks.overhead-publish-route-test");
+const routeState: {
+  authz: { user: { orgId: string; id: string } } | null;
+  calls: Array<{
+    orgId: string;
+    actorId: string;
+    effectiveFrom: string;
+    rates: Array<{ departmentId: string; ratePerHour: string }> | undefined;
+  }>;
+} = { authz: null, calls: [] };
+;(globalThis as typeof globalThis & Record<symbol, unknown>)[routeStateKey] = routeState;
+
+const routeHooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    if (specifier.startsWith("@/") && context.parentURL) {
+      return nextResolve(
+        new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href,
+        context,
+      );
+    }
+    if (
+      specifier === "../../../../../lib/authz" &&
+      context.parentURL?.includes("setup/overhead/route.ts")
+    ) {
+      return { url: "mock:overhead-authz", shortCircuit: true };
+    }
+    if (
+      specifier === "../../../../../lib/projects-gate" &&
+      context.parentURL?.includes("setup/overhead/route.ts")
+    ) {
+      return { url: "mock:overhead-projects-gate", shortCircuit: true };
+    }
+    if (
+      specifier === "../../../../../lib/overhead-publish" &&
+      context.parentURL?.includes("setup/overhead/route.ts")
+    ) {
+      return { url: "mock:overhead-publisher", shortCircuit: true };
+    }
+    return nextResolve(specifier, context);
+  },
+  load(url, context, nextLoad) {
+    if (url === "mock:overhead-authz") {
+      return {
+        format: "module",
+        source: `
+          const state = globalThis[Symbol.for('openbooks.overhead-publish-route-test')]
+          export async function guardPermission() {
+            if (!state.authz) return new Response(null, { status: 403 })
+            return state.authz
+          }
+        `,
+        shortCircuit: true,
+      };
+    }
+    if (url === "mock:overhead-projects-gate") {
+      return {
+        format: "module",
+        source: "export async function guardProjectsFeature() { return null }",
+        shortCircuit: true,
+      };
+    }
+    if (url === "mock:overhead-publisher") {
+      return {
+        format: "module",
+        source: `
+          const state = globalThis[Symbol.for('openbooks.overhead-publish-route-test')]
+          export async function publishOverheadRates(orgId, actorId, effectiveFrom, rates) {
+            state.calls.push({ orgId, actorId, effectiveFrom, rates })
+            return { published: rates?.length ?? 0 }
+          }
+        `,
+        shortCircuit: true,
+      };
+    }
+    return nextLoad(url, context);
+  },
+});
+
+const { POST: overheadRoutePost } = (await import(
+  "../app/api/admin/setup/overhead/route.ts?overhead-publish-route-test"
+)) as typeof import("../app/api/admin/setup/overhead/route.ts");
+routeHooks.deregister();
+
+test("manual overhead publishing preserves all four validated decimal places", async () => {
+  routeState.authz = { user: { orgId: "org-test", id: "actor-test" } };
+  routeState.calls.length = 0;
+
+  const response = await overheadRoutePost(new Request("http://localhost/api/admin/setup/overhead", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "publish",
+      effectiveFrom: "2026-09-01",
+      rates: [{ departmentId: "department-test", ratePerHour: "1.2345" }],
+    }),
+  }));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.calls, [{
+    orgId: "org-test",
+    actorId: "actor-test",
+    effectiveFrom: "2026-09-01",
+    rates: [{ departmentId: "department-test", ratePerHour: "1.2345" }],
+  }]);
+  assert.deepEqual(await response.json(), { ok: true, published: 1 });
+  routeState.authz = null;
+});
 
 test(
   "a failed mid-department overhead publish commits nothing, not a mixed-generation rate card",
