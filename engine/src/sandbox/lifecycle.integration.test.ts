@@ -118,3 +118,91 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a failed refresh rolls back the wipe instead of leaving a partial sandbox", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const sandboxName = `Refresh rollback ${randomUUID()}`;
+  let sandboxId: string | null = null;
+  let sandboxOrgId: string | null = null;
+  const fault = `openbooks_sandbox_refresh_${randomUUID().replaceAll("-", "")}`;
+  try {
+    const created = await createSandbox({
+      productionOrgId: org.orgId,
+      name: sandboxName,
+      tier: "full",
+      masked: false,
+    });
+    sandboxId = created.sandboxId;
+    sandboxOrgId = created.sandboxOrgId;
+
+    const before = (await db.execute<{ accounts: number; journal_entries: number }>(sql`
+      select
+        (select count(*)::int from accounts where org_id = ${sandboxOrgId}) as accounts,
+        (select count(*)::int from journal_entries where org_id = ${sandboxOrgId}) as journal_entries`)).rows;
+    assert.ok(Number(before[0]?.accounts) > 0);
+
+    // Fail on the first clone INSERT, after refresh has already entered the
+    // destructive wipe path. The trigger is sandbox-specific, so production
+    // rows and fixture cleanup remain unaffected.
+    await db.execute(sql.raw(`
+      create function "${fault}"() returns trigger language plpgsql as $fn$
+      begin
+        if new.org_id = '${sandboxOrgId}'::uuid then
+          raise exception 'forced sandbox refresh clone failure';
+        end if;
+        return new;
+      end
+      $fn$`));
+    await db.execute(sql.raw(`
+      create trigger "${fault}_trg"
+        before insert on accounts
+        for each row
+        execute function "${fault}"()`));
+
+    await assert.rejects(
+      refreshSandbox(sandboxId, { keepCustomizations: false }),
+      (error: unknown) => {
+        let current: unknown = error;
+        while (current) {
+          if (
+            current instanceof Error &&
+            /forced sandbox refresh clone failure/.test(current.message)
+          ) {
+            return true;
+          }
+          current =
+            typeof current === "object" && current !== null
+              ? (current as { cause?: unknown }).cause
+              : undefined;
+        }
+        return false;
+      },
+    );
+
+    const after = (await db.execute<{ accounts: number; journal_entries: number }>(sql`
+      select
+        (select count(*)::int from accounts where org_id = ${sandboxOrgId}) as accounts,
+        (select count(*)::int from journal_entries where org_id = ${sandboxOrgId}) as journal_entries`)).rows;
+    assert.deepEqual(after, before, "a failed refresh must preserve every pre-refresh tenant row");
+
+    const status = (await db.execute<{ status: string; last_error: string | null }>(sql`
+      select status, last_error from sandboxes where id = ${sandboxId}`)).rows[0];
+    assert.equal(status?.status, "failed");
+    assert.match(status?.last_error ?? "", /Failed query: insert into "accounts"/);
+  } finally {
+    await db.execute(sql.raw(`drop trigger if exists "${fault}_trg" on accounts`)).catch(() => undefined);
+    await db.execute(sql.raw(`drop function if exists "${fault}"()`)).catch(() => undefined);
+    if (sandboxId) {
+      await deleteSandbox(sandboxId).catch(() => undefined);
+    } else {
+      const failed = (await db.execute<{ id: string }>(sql`
+        select id from sandboxes
+         where production_org_id = ${org.orgId}
+           and name = ${sandboxName}`));
+      for (const row of failed.rows) {
+        await deleteSandbox(row.id).catch(() => undefined);
+      }
+    }
+    await dropScratchOrg(org.orgId);
+  }
+});
