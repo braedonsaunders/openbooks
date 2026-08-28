@@ -104,7 +104,10 @@ export const maskingPolicies = pgTable(
  * Change set — a promotion artifact. Config flows UP (sandbox → production);
  * business/ledger data never does. A change set is a captured diff of the
  * sandbox's customization layer (scripts, custom fields, forms, roles, reports…)
- * against production, reviewed, then applied to production in one transaction.
+ * against production, reviewed and approved by independent actors, then
+ * applied to production in one transaction. Capture completeness and every
+ * lifecycle actor are stored on the artifact so an applied configuration
+ * change is attributable.
  * This is openbooks' native, versioned config-promotion artifact.
  */
 export const changeSets = pgTable(
@@ -115,10 +118,19 @@ export const changeSets = pgTable(
     sandboxOrgId: uuid("sandbox_org_id").notNull(),
     name: text("name").notNull(),
     description: text("description"),
-    status: text("status", { enum: ["draft", "applied", "discarded"] })
+    status: text("status", { enum: ["draft", "reviewed", "approved", "applied", "discarded"] })
       .notNull()
       .default("draft"),
+    /** True only after the complete sandbox diff and item count commit. */
+    captureComplete: boolean("capture_complete").notNull().default(false),
+    /** Number of immutable items captured; apply verifies this count. */
+    itemCount: integer("item_count").notNull().default(0),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedBy: uuid("reviewed_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedBy: uuid("approved_by"),
     appliedAt: timestamp("applied_at", { withTimezone: true }),
+    appliedBy: uuid("applied_by"),
     ...auditColumns,
   },
   (t) => [index("change_sets_org").on(t.orgId)],
