@@ -735,6 +735,67 @@ async function createRecognitionEventFixture(code: string): Promise<{
   return { org, actorId, obligationId, periodMonth };
 }
 
+test("recognition event storage keeps legacy NULL rows readable but rejects new missing keys", { skip: !DB }, async () => {
+  const fixture = await createRecognitionEventFixture("RETRY0");
+  try {
+    const column = (await db.execute<{ is_nullable: string }>(sql`
+      select is_nullable
+        from information_schema.columns
+       where table_schema = 'public'
+         and table_name = 'recognition_events'
+         and column_name = 'source_reference'`)).rows[0]!;
+    assert.equal(column.is_nullable, "YES", "legacy source references remain physically nullable");
+    const constraint = (await db.execute<{ convalidated: boolean }>(sql`
+      select convalidated
+        from pg_constraint
+       where conrelid = 'public.recognition_events'::regclass
+         and conname = 'recognition_events_source_reference_nonblank'`)).rows[0]!;
+    assert.equal(constraint.convalidated, false, "the strict source-key check remains NOT VALID for legacy rows");
+
+    const legacyId = randomUUID();
+    // Simulate a row that predates 0074.  The migration's NOT VALID check
+    // leaves it readable, while the same check is enforced for later writes.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        alter table recognition_events
+          drop constraint recognition_events_source_reference_nonblank`);
+      await tx.execute(sql`
+        insert into recognition_events
+          (id, org_id, obligation_id, period_month, amount, source_reference, created_by, updated_by)
+        values (${legacyId}, ${fixture.org.orgId}, ${fixture.obligationId}, ${fixture.periodMonth}, '100', null, ${fixture.actorId}, ${fixture.actorId})`);
+      await tx.execute(sql`
+        alter table recognition_events
+          add constraint recognition_events_source_reference_nonblank
+          check (
+            source_reference is not null
+            and length(btrim(source_reference)) between 1 and 500
+          ) not valid`);
+      const legacy = (await tx.execute<{ source_reference: string | null }>(sql`
+        select source_reference from recognition_events where id = ${legacyId}`)).rows[0]!;
+      assert.equal(legacy.source_reference, null, "a pre-0074 NULL event remains readable");
+    });
+
+    const insertWithSource = (sourceReference: string | null) => db.execute(sql`
+      insert into recognition_events
+        (id, org_id, obligation_id, period_month, amount, source_reference, created_by, updated_by)
+      values (${randomUUID()}, ${fixture.org.orgId}, ${fixture.obligationId}, ${fixture.periodMonth}, '100', ${sourceReference}, ${fixture.actorId}, ${fixture.actorId})`);
+    const assertMissingSourceRejected = async (sourceReference: string | null): Promise<void> => {
+      await assert.rejects(
+        () => insertWithSource(sourceReference),
+        (error: unknown) => {
+          const constraint = (error as { cause?: { constraint?: string } }).cause?.constraint;
+          assert.equal(constraint, "recognition_events_source_reference_nonblank");
+          return true;
+        },
+      );
+    };
+    await assertMissingSourceRejected(null);
+    await assertMissingSourceRejected("   ");
+  } finally {
+    await dropScratchOrg(fixture.org.orgId);
+  }
+});
+
 test("recognition event retries replay one event and reject payload changes", { skip: !DB }, async () => {
   const fixture = await createRecognitionEventFixture("RETRY1");
   try {
