@@ -5,6 +5,7 @@ import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { fiscalYearOf, fiscalYearRangeFor } from "@openbooks/reports";
 import { fiscalStartMonth } from "./fiscal";
 import { resolveOrgId } from "./org-scope";
+import { subsidiaryVisibleFilter } from "./subsidiaries";
 
 export const runtime = "nodejs";
 
@@ -109,12 +110,24 @@ export async function journalPage(orgId: string, offset: number, limit = 50) {
   return { entries: r.rows, total: Number(c.rows[0].n) };
 }
 
-export async function entryDetail(orgId: string, id: string) {
+export async function entryDetail(
+  orgId: string,
+  id: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+) {
+  const entrySubsidiaryFilter = subsidiaryVisibleFilter(
+    sql`e.subsidiary_id`,
+    allowedSubsidiaryIds,
+  );
+  const lineSubsidiaryFilter = subsidiaryVisibleFilter(
+    sql`l.subsidiary_id`,
+    allowedSubsidiaryIds,
+  );
   const e = (await db.execute(sql`
     select e.*, re.entry_number as reverses_number
       from journal_entries e
       left join journal_entries re on re.id = e.reverses_entry_id and re.org_id = e.org_id
-     where e.id = ${id} and e.org_id = ${orgId}
+     where e.id = ${id} and e.org_id = ${orgId}${entrySubsidiaryFilter}
   `));
   const lines = (await db.execute(sql`
     select l.line_number, l.amount, l.memo, l.is_open_item,
@@ -124,7 +137,7 @@ export async function entryDetail(orgId: string, id: string) {
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join departments d on d.id = l.department_id and d.org_id = l.org_id
-     where l.entry_id = ${id} and l.org_id = ${orgId}
+     where l.entry_id = ${id} and l.org_id = ${orgId}${lineSubsidiaryFilter}
      order by l.line_number
   `));
   return { entry: e.rows[0] ?? null, lines: lines.rows };

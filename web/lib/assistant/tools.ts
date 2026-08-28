@@ -5,6 +5,7 @@ import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { can, type Authz } from "../authz";
 import { accountsWithBalances, entryDetail } from "../data";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
   accountRegister,
   agingByParty,
@@ -15,6 +16,7 @@ import {
   trialBalance,
 } from "../reports";
 import { openItems } from "../cash/open-items";
+import { normalizeMoneyValue } from "../cash/core";
 import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
 import { orgToday, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
 import { readableContinuousCloseAgents } from "../continuous-close";
@@ -39,6 +41,11 @@ const uuidInput = z.string().regex(UUID_RE, "uuid");
 function num(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+}
+
+/** Preserve ledger money as its canonical numeric(19,4) string at the tool boundary. */
+function money(v: unknown): string {
+  return normalizeMoneyValue(String(v ?? "0"));
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +126,7 @@ const findAccounts: AssistantToolDef = {
           type: r.type,
           isSummary: r.is_summary,
           isActive: r.is_active,
-          balance: num(r.balance),
+          balance: money(r.balance),
         })),
       },
     };
@@ -148,14 +155,14 @@ const accountRegisterTool: AssistantToolDef = {
         totalLines: r.total,
         returned: r.lines.length,
         truncated: r.total > r.lines.length,
-        balanceDebitSigned: num(r.balance),
+        balanceDebitSigned: money(r.balance),
         lines: r.lines.map((l: any) => ({
           entryId: l.entry_id,
           entryNumber: l.entry_number,
           postingDate: l.posting_date,
           memo: truncateText(l.memo ?? l.entry_memo, 200),
           party: l.party,
-          amount: num(l.amount),
+          amount: money(l.amount),
         })),
       },
     };
@@ -190,7 +197,15 @@ const findJournalEntries: AssistantToolDef = {
       limit?: number;
     };
     const limit = Math.min(a.limit ?? 20, 50);
-    let where = sql`e.org_id = ${authz.user.orgId}`;
+    const entrySubsidiaryFilter = subsidiaryVisibleFilter(
+      sql`e.subsidiary_id`,
+      authz.allowedSubsidiaryIds,
+    );
+    const lineSubsidiaryFilter = subsidiaryVisibleFilter(
+      sql`l.subsidiary_id`,
+      authz.allowedSubsidiaryIds,
+    );
+    let where = sql`e.org_id = ${authz.user.orgId}${entrySubsidiaryFilter}`;
     if (a.query) {
       const like = `%${a.query}%`;
       where = sql`${where} and (e.entry_number ilike ${like} or e.memo ilike ${like})`;
@@ -205,7 +220,7 @@ const findJournalEntries: AssistantToolDef = {
              count(l.id) as line_count,
              sum(case when l.amount > 0 then l.amount else 0 end) as total_debits
         from journal_entries e
-        join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
+        join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id${lineSubsidiaryFilter}
        where ${where}
        group by e.id
        order by e.posting_date desc, e.entry_number desc
@@ -230,7 +245,7 @@ const findJournalEntries: AssistantToolDef = {
           origin: r.origin,
           sourceDocumentId: r.source_document_id,
           lineCount: Number(r.line_count),
-          totalDebits: num(r.total_debits),
+          totalDebits: money(r.total_debits),
         })),
       },
     };
@@ -246,7 +261,7 @@ const getJournalEntry: AssistantToolDef = {
   inputSchema: z.object({ entryId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { entryId: string };
-    const r = await entryDetail(authz.user.orgId, a.entryId);
+    const r = await entryDetail(authz.user.orgId, a.entryId, authz.allowedSubsidiaryIds);
     if (!r.entry) return { ok: false, error: "entry_not_found" };
     const e = r.entry as any;
     return {
@@ -263,7 +278,7 @@ const getJournalEntry: AssistantToolDef = {
         lines: r.lines.map((l: any) => ({
           lineNumber: l.line_number,
           account: `${l.account_number ?? ""} ${l.account_name}`.trim(),
-          amount: num(l.amount),
+          amount: money(l.amount),
           memo: truncateText(l.memo, 200),
           party: l.party,
           department: l.department,
@@ -387,7 +402,7 @@ const findDocuments: AssistantToolDef = {
           dueDate: r.due_date,
           status: r.status,
           currency: r.currency,
-          total: num(r.total),
+          total: money(r.total),
           party: r.party,
           partyId: r.party_id,
           postedEntryId: r.posted_entry_id,
@@ -447,9 +462,9 @@ const getDocument: AssistantToolDef = {
         dueDate: d.due_date,
         status: d.status,
         currency: d.currency,
-        subtotal: num(d.subtotal),
-        taxTotal: num(d.tax_total),
-        total: num(d.total),
+        subtotal: money(d.subtotal),
+        taxTotal: money(d.tax_total),
+        total: money(d.total),
         memo: truncateText(d.memo, 500),
         postedEntryId: d.posted_entry_id,
         updatedAt: d.documentRevision,
@@ -460,9 +475,9 @@ const getDocument: AssistantToolDef = {
           description: truncateText(l.description, 200),
           quantity: l.quantity === null ? null : num(l.quantity),
           unit: l.unit,
-          unitPrice: l.unit_price === null ? null : num(l.unit_price),
-          amount: num(l.amount),
-          taxAmount: l.tax_amount === null ? null : num(l.tax_amount),
+          unitPrice: l.unit_price === null ? null : money(l.unit_price),
+          amount: money(l.amount),
+          taxAmount: l.tax_amount === null ? null : money(l.tax_amount),
         })),
       },
     };
@@ -561,7 +576,7 @@ const profitAndLossTool: AssistantToolDef = {
         type: i.type,
         depth: i.depth,
         isSummary: i.isSummary,
-        balance: num(i.balance),
+        balance: money(i.balance),
       })),
     );
     return {
@@ -570,11 +585,11 @@ const profitAndLossTool: AssistantToolDef = {
         periodLabel: range.label,
         fromDate: range.from,
         toDate: range.to,
-        revenue: num(r.revenue),
-        cogs: num(r.cogs),
-        grossProfit: num(r.grossProfit),
-        expenses: num(r.expenses),
-        netIncome: num(r.netIncome),
+        revenue: money(r.revenue),
+        cogs: money(r.cogs),
+        grossProfit: money(r.grossProfit),
+        expenses: money(r.expenses),
+        netIncome: money(r.netIncome),
         href: `/reports/pnl?from=${range.from}&to=${range.to}`,
         truncated,
         items,
@@ -600,16 +615,16 @@ const balanceSheetTool: AssistantToolDef = {
           name: i.name,
           depth: i.depth,
           isSummary: i.isSummary,
-          balance: num(i.balance),
+          balance: money(i.balance),
         })),
       );
     return {
       ok: true,
       data: {
         asOf: a.asOf,
-        totalAssets: num(r.totalAssets),
-        totalLiabilities: num(r.totalLiabilities),
-        totalEquity: num(r.totalEquity),
+        totalAssets: money(r.totalAssets),
+        totalLiabilities: money(r.totalLiabilities),
+        totalEquity: money(r.totalEquity),
         href: `/reports/balance-sheet?asOf=${a.asOf}`,
         assets: section(r.assets),
         liabilities: section(r.liabilities),
@@ -634,9 +649,9 @@ const trialBalanceTool: AssistantToolDef = {
         number: r.number,
         name: r.name,
         type: r.type,
-        debits: num(r.debits),
-        credits: num(r.credits),
-        balance: num(r.balance),
+        debits: money(r.debits),
+        credits: money(r.credits),
+        balance: money(r.balance),
       })),
     );
     return { ok: true, data: { asOf: a.asOf, accounts: rows.length, truncated, items } };
@@ -705,13 +720,13 @@ const cashFlowTool: AssistantToolDef = {
         toDate: range.to,
         sections: r.sections.map((s) => ({
           section: s.section,
-          subtotal: num(s.subtotal),
-          lines: s.lines.map((l) => ({ label: l.label, amount: num(l.amount) })),
+          subtotal: money(s.subtotal),
+          lines: s.lines.map((l) => ({ label: l.label, amount: money(l.amount) })),
         })),
-        netChange: num(r.netChange),
-        openingCash: num(r.openingCash),
-        closingCash: num(r.closingCash),
-        reconciliationGap: num(r.reconciliationGap),
+        netChange: money(r.netChange),
+        openingCash: money(r.openingCash),
+        closingCash: money(r.closingCash),
+        reconciliationGap: money(r.reconciliationGap),
         href: `/reports/cash-flow?from=${range.from}&to=${range.to}`,
       },
     };
@@ -1064,7 +1079,7 @@ const listOpenItems: AssistantToolDef = {
       party: item.partyName,
       tranDate: item.tranDate.toISOString().slice(0, 10),
       dueDate: item.dueDate ? item.dueDate.toISOString().slice(0, 10) : null,
-      remaining: num(item.remaining),
+      remaining: money(item.remaining),
     }));
     return {
       ok: true,

@@ -1,17 +1,22 @@
 import "server-only";
 import {
   addDays,
+  addMoney,
   bankBalances,
   buildWeekGrid,
   categoryWeekly,
+  compareMoney,
   daysBetween,
   loadCategories,
   openItems,
+  sumMoney,
   paymentStats,
   resolveAsOf,
   scheduleForecast,
   summariseSide,
+  subtractMoney,
   toISO,
+  ZERO_MONEY,
   type CategoryWeekly,
   type ForecastEntry,
   type OpenItem,
@@ -24,7 +29,7 @@ export interface ArWeek {
   weekStart: string;
   weekEnd: string;
   label: string;
-  amount: number;
+  amount: string;
   count: number;
   entries: ForecastEntry[];
 }
@@ -32,22 +37,22 @@ export interface ArWeek {
 export interface CustomerReceivable {
   partyId: string | null;
   partyName: string;
-  amount: number;
+  amount: string;
   count: number;
-  overdue: number;
+  overdue: string;
   oldestDue: string | null;
 }
 
 export interface ArPosition {
   asOf: string;
   horizonWeeks: number;
-  outstanding: number;
-  overdue: number;
+  outstanding: string;
+  overdue: string;
   overdueCount: number;
   /** Predicted to be collected in the first horizon week. */
-  expectedThisWeek: number;
+  expectedThisWeek: string;
   /** Predicted to be collected within 30 days. */
-  expectedNext30: number;
+  expectedNext30: string;
   dso: number;
   summary: SideSummary;
   weeks: ArWeek[];
@@ -69,17 +74,17 @@ function groupByCustomer(items: OpenItem[], asOf: Date): CustomerReceivable[] {
     const key = it.partyId ?? "__none__";
     const cur =
       map.get(key) ??
-      { partyId: it.partyId, partyName: it.partyName, amount: 0, count: 0, overdue: 0, oldestDue: null as string | null };
-    cur.amount += it.remaining;
+      { partyId: it.partyId, partyName: it.partyName, amount: ZERO_MONEY, count: 0, overdue: ZERO_MONEY, oldestDue: null as string | null };
+    cur.amount = addMoney(cur.amount, it.remaining);
     cur.count += 1;
-    if (it.dueDate && daysBetween(it.dueDate, asOf) > 0) cur.overdue += it.remaining;
+    if (it.dueDate && daysBetween(it.dueDate, asOf) > 0) cur.overdue = addMoney(cur.overdue, it.remaining);
     if (it.dueDate) {
       const iso = toISO(it.dueDate);
       if (!cur.oldestDue || iso < cur.oldestDue) cur.oldestDue = iso;
     }
     map.set(key, cur);
   }
-  return [...map.values()].sort((a, b) => b.amount - a.amount);
+  return [...map.values()].sort((a, b) => compareMoney(b.amount, a.amount));
 }
 
 /**
@@ -107,11 +112,11 @@ export async function arPosition(
     loadCategories(orgId),
   ]);
 
-  const startingCash = banks.reduce((a, b) => a + b.balance, 0);
+  const startingCash = sumMoney(banks.map((b) => b.balance));
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
-  const weekTotals = (byWeek: Map<string, { amount: number }[]>): Record<string, number> =>
-    Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, es.reduce((a, e) => a + e.amount, 0)]));
+  const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
+    Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
   const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash };
   const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
   const timeline = buildTimeline({
@@ -124,33 +129,33 @@ export async function arPosition(
   });
 
   const summary = summariseSide(arItems, grid.asOf, ar.scheduled, arStats.globalAvg);
-  const current = summary.buckets.find((b) => b.label === "Current")?.amount ?? 0;
-  const overdue = Math.max(0, summary.outstanding - current);
+  const current = summary.buckets.find((b) => b.label === "Current")?.amount ?? ZERO_MONEY;
+  const overdue = compareMoney(summary.outstanding, current) > 0 ? subtractMoney(summary.outstanding, current) : ZERO_MONEY;
   const overdueCount = arItems.filter((it) => it.dueDate && daysBetween(it.dueDate, grid.asOf) > 0).length;
 
   const weeks: ArWeek[] = grid.weekStarts.map((k, i) => {
-    const entries = (ar.byWeek.get(k) ?? []).slice().sort((a, b) => b.amount - a.amount);
+    const entries = (ar.byWeek.get(k) ?? []).slice().sort((a, b) => compareMoney(b.amount, a.amount));
     const w = timeline.weeks[i]!;
     return {
       weekStart: k,
       weekEnd: w.weekEnd,
       label: w.label,
-      amount: entries.reduce((a, e) => a + e.amount, 0),
+      amount: sumMoney(entries.map((e) => e.amount)),
       count: entries.length,
       entries,
     };
   });
 
-  const expectedThisWeek = weeks[0]?.amount ?? 0;
+  const expectedThisWeek = weeks[0]?.amount ?? ZERO_MONEY;
   const cutoff30 = toISO(addDays(grid.asOf, 30));
-  const expectedNext30 = ar.entries.filter((e) => e.predictedDate <= cutoff30).reduce((a, e) => a + e.amount, 0);
+  const expectedNext30 = sumMoney(ar.entries.filter((e) => e.predictedDate <= cutoff30).map((e) => e.amount));
 
   // Collections worklist: most overdue first, then largest.
   const worklist = ar.entries
     .slice()
     .sort((a, b) => {
       if (b.daysOverdue !== a.daysOverdue) return b.daysOverdue - a.daysOverdue;
-      return b.amount - a.amount;
+      return compareMoney(b.amount, a.amount);
     });
 
   return {

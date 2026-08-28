@@ -4,6 +4,7 @@ import { useMoney } from '@/components/money-provider'
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
+import { cmp as compareMoney, sum as sumMoney } from '@openbooks/engine/src/money.ts'
 import { ArrowRight, TriangleAlert, CalendarClock } from "lucide-react";
 import { Badge, Button, cn } from "@openbooks/ui";
 
@@ -18,7 +19,7 @@ export interface WorklistEntry {
   docId: string | null;
   docKind: string | null;
   partyName: string;
-  amount: number;
+  amount: string;
   dueDate: string | null;
   predictedDate: string;
   daysOverdue: number;
@@ -39,8 +40,8 @@ export function CollectionsWorklist({
   canCollect,
 }: {
   entries: WorklistEntry[];
-  overdueTotal: number;
-  expectedThisWeek: number;
+  overdueTotal: string;
+  expectedThisWeek: string;
   /** ar.pay — gates the collection-run handoff. */
   canCollect: boolean;
 }) {
@@ -77,7 +78,7 @@ export function CollectionsWorklist({
   );
 
   const selectedEntries = collectible.filter((e) => selected.has(e.id));
-  const total = selectedEntries.reduce((a, e) => a + e.amount, 0);
+  const total = sumMoney(selectedEntries.map((e) => e.amount));
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -112,7 +113,7 @@ export function CollectionsWorklist({
           <p
             className={cn(
               "text-lg font-bold tabular-nums",
-              overdueTotal > 0
+              compareMoney(overdueTotal, '0.0000') > 0
                 ? "text-red-600 dark:text-red-400"
                 : "text-slate-900 dark:text-slate-100",
             )}

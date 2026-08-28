@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { cashPosition } from "../../../../lib/cash/cash-position";
+import { normalizeMoneyValue } from "../../../../lib/cash/core";
 import { analyticsConfig } from "../../../../lib/analytics/config";
 
 export const runtime = "nodejs";
@@ -34,7 +35,7 @@ export async function GET(req: Request) {
   try {
     const cfg = await analyticsConfig(user.orgId, "cashflow");
     const apSettings = {
-      weeklyCap: cfg.weeklyApCap ?? 0,
+      weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
       restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
     };
     const position = await cashPosition(user.orgId, horizonWeeks, apSettings, asOf, subIds);

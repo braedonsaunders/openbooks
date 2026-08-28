@@ -3,6 +3,7 @@ import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { can } from "../authz";
 import { analyticsConfig } from "../analytics/config";
 import { cashPosition } from "../cash/cash-position";
+import { normalizeMoneyValue } from "../cash/core";
 import { agingByParty } from "../reports";
 import { listApprovalWorklist } from "./approvals";
 import { listCloseRuns } from "./close";
@@ -31,7 +32,7 @@ async function cashSection(context: ApplicationContext) {
   if (!can(context.authz, "banking.read")) return unavailable("banking.read");
   const cfg = await analyticsConfig(context.authz.user.orgId, "cashflow");
   const position = await cashPosition(context.authz.user.orgId, CASH_HORIZON_WEEKS, {
-    weeklyCap: cfg.weeklyApCap ?? 0,
+    weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
     restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
   });
   return {
