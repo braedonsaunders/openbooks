@@ -235,6 +235,41 @@ function validateAllocationInputs(allocations: AllocationInput[]): void {
   }
 }
 
+/**
+ * Compare the allocation workpaper as an approved snapshot, not as a raw JSON
+ * string. Decimal spellings and row order are presentation details; the open
+ * item, amounts, settlement evidence, and rate are the approval scope.
+ */
+function allocationSnapshot(allocations: AllocationInput[]): string[] {
+  return allocations
+    .map((allocation) => JSON.stringify({
+      openLineId: allocation.openLineId,
+      sourceTransactionAmount: fromUnits(toUnits(allocation.sourceTransactionAmount)),
+      targetTransactionAmount: fromUnits(toUnits(allocation.targetTransactionAmount)),
+      targetBaseAmount:
+        allocation.targetBaseAmount === undefined
+          ? null
+          : fromUnits(toUnits(allocation.targetBaseAmount)),
+      settlementRate: canonicalSettlementRate(allocation.settlementRate),
+      settlementRateSource: allocation.settlementRateSource,
+      settlementRateReference: allocation.settlementRateReference.trim(),
+      settlementFxRateId: allocation.settlementFxRateId ?? null,
+    }))
+    .sort();
+}
+
+function allocationsMatchApprovedSnapshot(
+  submitted: AllocationInput[],
+  approved: AllocationInput[],
+): boolean {
+  const submittedSnapshot = allocationSnapshot(submitted);
+  const approvedSnapshot = allocationSnapshot(approved);
+  return (
+    submittedSnapshot.length === approvedSnapshot.length &&
+    submittedSnapshot.every((value, index) => value === approvedSnapshot[index])
+  );
+}
+
 function canonicalSettlementRate(rate: string): string {
   const raw = String(rate).trim();
   const match = raw.match(/^\+?(\d+)(?:\.(\d*))?$/);
@@ -764,10 +799,19 @@ export async function postPaymentWithApplications(
       discountAmount?: string;
       controlAccountId?: string;
     };
-    const allocs = allocations ?? custom.allocations ?? [];
+    const storedAllocations = custom.allocations ?? [];
+    const allocs = allocations ?? storedAllocations;
     const creditAllocs = custom.creditAllocations ?? [];
     if (allocs.length === 0) throw new PaymentError("select at least one open item to apply");
     validateAllocationInputs(allocs);
+    if (
+      allocations !== undefined &&
+      !allocationsMatchApprovedSnapshot(allocations, storedAllocations)
+    ) {
+      throw new PaymentError(
+        "payment allocations differ from the approved document; save the payment and complete approval before posting",
+      );
+    }
 
     const endpointIds = [...new Set([
       ...allocs.map((a) => a.openLineId),
@@ -1484,6 +1528,7 @@ async function createPaymentRunWithinTransaction(
         from documents d
         join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount > 0
+        join subsidiaries credit_sub on credit_sub.id = jl.subsidiary_id and credit_sub.org_id = jl.org_id
         left join lateral (
           select sum(a.amount) as applied from applications a
            where a.from_line_id = jl.id and a.org_id = ${opts.orgId} and a.unapplied_at is null
@@ -1491,6 +1536,7 @@ async function createPaymentRunWithinTransaction(
        where d.org_id = ${opts.orgId} and d.party_id = ${partyId}
          and d.kind = 'vendor_credit' and d.status = 'posted'
          and d.currency = ${profile.currency} and jl.account_id = ${first.control_account_id}
+         and jl.currency = credit_sub.base_currency
          and d.subsidiary_id is not distinct from ${first.subsidiary_id}::uuid
          and abs(jl.amount) - coalesce(ap.applied, 0) > 0
          and not exists (
@@ -1941,7 +1987,10 @@ function resolveRailBankDetail(
   const accountNumber = decryptAccountNumber(row.account_number_encrypted);
   const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
   const iban = (routing.iban ?? accountNumber).replace(/\s/g, "");
-  if (method === "ach" && !/^\d{9}$/.test(aba)) {
+  if (
+    method === "ach" &&
+    (!/^\d{9}$/.test(aba) || nachaCheckDigit(aba.slice(0, 8)) !== aba[8])
+  ) {
     return { ok: false, reason: "missing/invalid 9-digit routing number" };
   }
   if (method === "sepa" && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)) {
@@ -3117,8 +3166,15 @@ export function buildNachaFile(opts: {
   let totalCredit = 0n;
   opts.entries.forEach((e, i) => {
     if (e.amountCents <= 0n) throw new PaymentError("payment amounts must be positive");
+    if (!/^\d{8,9}$/.test(e.routingNumber)) {
+      throw new PaymentError("payment routing number must contain eight or nine digits");
+    }
     const rt8 = e.routingNumber.slice(0, 8);
-    const checkDigit = e.routingNumber.length >= 9 ? e.routingNumber[8] : nachaCheckDigit(rt8);
+    const expectedCheckDigit = nachaCheckDigit(rt8);
+    if (e.routingNumber.length === 9 && e.routingNumber[8] !== expectedCheckDigit) {
+      throw new PaymentError("payment routing number has an invalid ABA check digit");
+    }
+    const checkDigit = e.routingNumber.length === 9 ? e.routingNumber[8] : expectedCheckDigit;
     entryHash += BigInt(rt8);
     totalCredit += e.amountCents;
     const trace = odfi8 + String(i + 1).padStart(7, "0");
@@ -3197,13 +3253,46 @@ export interface SepaSettings {
   originatorBic: string;
 }
 
+/** ISO 13616 IBAN validation, including the mandatory mod-97 check. */
+function isValidIban(value: string): boolean {
+  const iban = value.replace(/\s/g, "").toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)) return false;
+  const rearranged = `${iban.slice(4)}${iban.slice(0, 4)}`;
+  let remainder = 0;
+  for (const character of rearranged) {
+    const digits = /[A-Z]/.test(character)
+      ? String(character.charCodeAt(0) - 55)
+      : character;
+    for (const digit of digits) remainder = (remainder * 10 + Number(digit)) % 97;
+  }
+  return remainder === 1;
+}
+
+/** ISO 9362 BIC: 8 characters, optionally followed by a 3-character branch. */
+function isValidBic(value: string): boolean {
+  return /^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/.test(value.trim().toUpperCase());
+}
+
 export function validateSepaSettings(raw: Partial<SepaSettings> | null): { ok: true; settings: SepaSettings } | { ok: false; missing: string[] } {
   const s = raw ?? {};
   const missing = (["originatorName", "originatorIban", "originatorBic"] as (keyof SepaSettings)[]).filter(
     (k) => typeof s[k] !== "string" || (s[k] as string).trim() === "" || (s[k] as string).includes("FILL-ME"),
   );
-  if (missing.length) return { ok: false, missing };
-  return { ok: true, settings: s as SepaSettings };
+  if (typeof s.originatorIban === "string" && !isValidIban(s.originatorIban)) {
+    missing.push("originatorIban");
+  }
+  if (typeof s.originatorBic === "string" && !isValidBic(s.originatorBic)) {
+    missing.push("originatorBic");
+  }
+  if (missing.length) return { ok: false, missing: [...new Set(missing)] };
+  return {
+    ok: true,
+    settings: {
+      originatorName: s.originatorName!.trim(),
+      originatorIban: s.originatorIban!.replace(/\s/g, "").toUpperCase(),
+      originatorBic: s.originatorBic!.trim().toUpperCase(),
+    },
+  };
 }
 
 export async function loadSepaSettings(orgId: string, runId?: string) {
@@ -3230,7 +3319,11 @@ export function buildSepaFile(opts: {
   executionDate: string; // YYYY-MM-DD
   payments: { endToEndId: string; amount: string; creditorName: string; creditorIban: string; creditorBic?: string | null; remittance: string | null }[];
 }): string {
-  const s = opts.settings;
+  const settings = validateSepaSettings(opts.settings);
+  if (!settings.ok) {
+    throw new PaymentError(`SEPA originator settings are invalid: ${settings.missing.join(", ")}`);
+  }
+  const s = settings.settings;
   if (opts.payments.length === 0) throw new PaymentError("run has no payments to export");
   const ctrlSum = formatMoney(sum(opts.payments.map((payment) => payment.amount)), 2);
   const nb = opts.payments.length;
