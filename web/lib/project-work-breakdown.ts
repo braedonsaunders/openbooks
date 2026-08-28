@@ -1,11 +1,12 @@
 import 'server-only'
 
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
   ProjectWorkBreakdownError,
   type WorkBreakdownTaskInput,
 } from './project-work-breakdown-validation'
+import { pgTextArrayLiteral } from './pg-array'
 
 type TaskStatus = WorkBreakdownTaskInput['status']
 
@@ -20,6 +21,27 @@ type TaskRow = {
   estimated_cost: string | null
   updated_at: string | Date
 };
+
+/**
+ * Projects are subsidiary-scoped records: restricted callers may only open
+ * projects explicitly assigned to one of their allowed subsidiaries. An
+ * empty set therefore denies every project, while null keeps unrestricted
+ * callers (super-admins and unrestricted roles) on the existing path.
+ */
+function projectSubsidiaryFilter(
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  column: SQL = sql`subsidiary_id`,
+): SQL {
+  if (allowedSubsidiaryIds === null) return sql``
+  // The public service signatures require this scope argument. Keep an
+  // omitted value fail-closed at runtime too, rather than accidentally
+  // treating an untrusted caller like an unrestricted one.
+  if (!allowedSubsidiaryIds) return sql`and false`
+  const ids = [...allowedSubsidiaryIds]
+  return ids.length
+    ? sql`and ${column} = any(${pgTextArrayLiteral(ids)}::uuid[])`
+    : sql`and false`
+}
 
 export interface WorkBreakdownTaskClient {
   id: string
@@ -47,11 +69,13 @@ async function assertProject(
   exec: Executor,
   orgId: string,
   projectId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
   lock: 'none' | 'share' | 'update' = 'none',
 ): Promise<void> {
   const project = (await exec.execute<{ id: string }>(sql`
     select id from projects
      where id = ${projectId} and org_id = ${orgId}
+       ${projectSubsidiaryFilter(allowedSubsidiaryIds)}
      ${lock === 'update' ? sql`for update` : lock === 'share' ? sql`for share` : sql``}
   `))
   if (!project.rows[0]) throw new ProjectWorkBreakdownError('Project not found', 404)
@@ -62,12 +86,15 @@ async function taskSnapshot(
   orgId: string,
   projectId: string,
   taskId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
   lock = false,
 ): Promise<TaskRow | null> {
   const result = (await exec.execute<TaskRow>(sql`
-    select id, project_id, code, name, status, estimated_hours, estimated_cost, updated_at
-      from project_tasks
-     where id = ${taskId} and project_id = ${projectId} and org_id = ${orgId}
+    select t.id, t.project_id, t.code, t.name, t.status, t.estimated_hours, t.estimated_cost, t.updated_at
+      from project_tasks t
+      join projects p on p.id = t.project_id and p.org_id = t.org_id
+     where t.id = ${taskId} and t.project_id = ${projectId} and t.org_id = ${orgId}
+       ${projectSubsidiaryFilter(allowedSubsidiaryIds, sql`p.subsidiary_id`)}
      ${lock ? sql`for update` : sql``}
   `))
   return result.rows[0] ?? null
@@ -104,13 +131,16 @@ async function recordTaskAudit(args: {
 export async function loadWorkBreakdownTasks(
   orgId: string,
   projectId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<WorkBreakdownTaskClient[]> {
-  await assertProject(db, orgId, projectId)
+  await assertProject(db, orgId, projectId, allowedSubsidiaryIds)
   const result = (await db.execute<TaskRow>(sql`
-    select id, project_id, code, name, status, estimated_hours, estimated_cost, updated_at
-      from project_tasks
-     where project_id = ${projectId} and org_id = ${orgId}
-     order by code nulls last, name, id
+    select t.id, t.project_id, t.code, t.name, t.status, t.estimated_hours, t.estimated_cost, t.updated_at
+      from project_tasks t
+      join projects p on p.id = t.project_id and p.org_id = t.org_id
+     where t.project_id = ${projectId} and t.org_id = ${orgId}
+       ${projectSubsidiaryFilter(allowedSubsidiaryIds, sql`p.subsidiary_id`)}
+     order by t.code nulls last, t.name, t.id
   `))
   return result.rows.map(clientTask)
 }
@@ -119,12 +149,13 @@ export async function createWorkBreakdownTask(args: {
   orgId: string
   projectId: string
   actorId: string
+  allowedSubsidiaryIds: ReadonlySet<string> | null
   input: WorkBreakdownTaskInput
 }): Promise<WorkBreakdownTaskClient> {
   return db.transaction(async (tx) => {
     // The project row is the transaction-scoped sequencing lock for its WBS.
     // Concurrent creates cannot both observe the same max(schedule_order).
-    await assertProject(tx, args.orgId, args.projectId, 'update')
+    await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds, 'update')
     const created = (await tx.execute<TaskRow>(sql`
       insert into project_tasks (
         org_id, project_id, code, name, status, estimated_hours, estimated_cost,
@@ -162,12 +193,20 @@ export async function updateWorkBreakdownTask(args: {
   projectId: string
   taskId: string
   actorId: string
+  allowedSubsidiaryIds: ReadonlySet<string> | null
   expectedUpdatedAt: string
   input: WorkBreakdownTaskInput
 }): Promise<WorkBreakdownTaskClient> {
   return db.transaction(async (tx) => {
-    await assertProject(tx, args.orgId, args.projectId, 'share')
-    const before = await taskSnapshot(tx, args.orgId, args.projectId, args.taskId, true)
+    await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds, 'share')
+    const before = await taskSnapshot(
+      tx,
+      args.orgId,
+      args.projectId,
+      args.taskId,
+      args.allowedSubsidiaryIds,
+      true,
+    )
     if (!before) throw new ProjectWorkBreakdownError('Task not found', 404)
     if (new Date(before.updated_at).toISOString() !== args.expectedUpdatedAt) {
       throw new ProjectWorkBreakdownError(
@@ -192,6 +231,11 @@ export async function updateWorkBreakdownTask(args: {
        where id = ${args.taskId}
          and project_id = ${args.projectId}
          and org_id = ${args.orgId}
+         and exists (
+           select 1 from projects p
+            where p.id = project_tasks.project_id and p.org_id = project_tasks.org_id
+              ${projectSubsidiaryFilter(args.allowedSubsidiaryIds, sql`p.subsidiary_id`)}
+         )
        returning id, project_id, code, name, status, estimated_hours, estimated_cost, updated_at
     `))
     const after = updated.rows[0]
