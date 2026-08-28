@@ -4,7 +4,7 @@ import { addDays, dayOfMonth, isMonthEnd } from "./manifest.ts";
 import { createScriptJournal } from "../journal-writes.ts";
 import { runDueSubscriptions, changeSubscription } from "../subscription-billing.ts";
 import { createObligationsFromInvoice, runRevenueRecognition } from "../revenue-recognition.ts";
-import { runDunning } from "../dunning.ts";
+import { runDunningForOrg } from "../dunning.ts";
 import type { SimOrg } from "./world.ts";
 import type { Profile } from "./profiles/index.ts";
 
@@ -99,7 +99,11 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
   // 4. Dunning on overdue subscribers (mid-month).
   if (dayOfMonth(today) === 12) {
     try {
-      const d = await runDunning(today);
+      // The simulator may share a database with real tenants. Dunning's
+      // scheduler entry point scans every production org, so use the explicit
+      // tenant runner here to keep this simulation's collections work inside
+      // its own org.
+      const d = await runDunningForOrg(world.orgId, today);
       res.dunned = d.scanned; // subscribers evaluated by the dunning policy this cycle
     } catch (e) { console.error(`[saas ${today}] dunning skipped: ${(e as Error).message}`); }
   }
