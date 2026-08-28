@@ -88,19 +88,44 @@ export interface DunningRunResult {
   notices: { documentId: string; stageId: string; toEmail: string | null; status: string }[];
 }
 
+/**
+ * Run dunning for every production organization. This is the scheduler entry
+ * point and intentionally performs an org-spanning discovery under bypass.
+ * Callers that already know their tenant (for example the SaaS simulator)
+ * must use `runDunningForOrg` so a shared database can never turn one tenant's
+ * simulation tick into a production-wide collections run.
+ */
 export async function runDunning(asOf?: string): Promise<DunningRunResult> {
+  const orgRows = (
+    await withBypass(async () => {
+      return (await db.execute<{ orgId: string }>(sql`
+        select distinct policy.org_id as "orgId"
+          from dunning_policies policy
+          join orgs organization on organization.id = policy.org_id
+         where policy.is_active and organization.env_kind = 'production'
+      `));
+    })
+  ).rows;
+  return runDunningInternal(asOf, orgRows);
+}
+
+/**
+ * Run dunning for exactly one organization. The work is still pinned inside
+ * `withOrg`, so all reads, outbox deferrals, and sent claims share one tenant
+ * transaction. No cross-organization discovery or bypass is performed.
+ */
+export async function runDunningForOrg(orgId: string, asOf?: string): Promise<DunningRunResult> {
+  if (!orgId.trim()) throw new Error("orgId is required for an org-scoped dunning run");
+  return runDunningInternal(asOf, [{ orgId }]);
+}
+
+async function runDunningInternal(
+  asOf: string | undefined,
+  orgRows: ReadonlyArray<{ orgId: string }>,
+): Promise<DunningRunResult> {
   const result: DunningRunResult = { scanned: 0, sent: 0, failed: 0, notices: [] };
 
-  const orgs = await withBypass(async () => {
-    return (await db.execute<{ orgId: string }>(sql`
-      select distinct policy.org_id as "orgId"
-        from dunning_policies policy
-        join orgs organization on organization.id = policy.org_id
-       where policy.is_active and organization.env_kind = 'production'
-    `));
-  });
-
-  for (const { orgId } of orgs.rows) {
+  for (const { orgId } of orgRows) {
     await withOrg(orgId, async () => {
       // Overdue math compares calendar days, so "today" is the org's business
       // day — the scheduler itself runs on the server's UTC day.

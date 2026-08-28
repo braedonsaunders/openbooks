@@ -30,9 +30,11 @@ function databaseName(url: string): string {
 
 /**
  * True only when the DB is a DEDICATED sim database (name carries a marker).
- * Some engine runners are org-less — they scan EVERY org (e.g. runDunning,
- * runDueRecurringSchedules). Those must never run on a shared cluster, or they
- * would touch real tenants. Gate such ops on this.
+ * Some engine runners are org-less — they scan EVERY org (e.g. the global
+ * runDunning and runDueRecurringSchedules entry points). Those must never run
+ * on a shared cluster, or they would touch real tenants. Tenant-scoped runners
+ * such as dunning's runDunningForOrg are safe for the simulator's tagged org.
+ * Gate org-less ops on this.
  */
 export function isDedicatedSimDatabase(): boolean {
   const name = databaseName(env.OPENBOOKS_DB_URL ?? "");
