@@ -47,31 +47,62 @@ const FIELD_TYPES = ['text', 'long_text', 'number', 'currency', 'date', 'boolean
 
 const REFERENCE_TABLES = ['parties', 'projects', 'accounts', 'items']
 
-function validateDef(body: Record<string, unknown>): string | null {
-  const target = FIELD_TARGETS.find((t) => t.table === body.targetTable)
+type ExistingFieldDef = {
+  target_table: string
+  target_kind: string | null
+  key: string
+  label: string
+  field_type: string
+  config: unknown
+  is_required: boolean
+  sort_order: number
+  is_active: boolean
+}
+
+function validateDef(body: Record<string, unknown>, existing?: ExistingFieldDef): string | null {
+  const targetTable = body.targetTable === undefined ? existing?.target_table : body.targetTable
+  const targetKind = body.targetKind === undefined ? existing?.target_kind : body.targetKind
+  const key = body.key === undefined ? existing?.key : body.key
+  const label = body.label === undefined ? existing?.label : body.label
+  const fieldType = body.fieldType === undefined ? existing?.field_type : body.fieldType
+  const config = body.config === undefined ? existing?.config : body.config
+
+  if (existing) {
+    if (body.targetTable !== undefined && body.targetTable !== existing.target_table) {
+      return 'target table cannot be changed'
+    }
+    if (body.targetKind !== undefined && (body.targetKind ?? null) !== existing.target_kind) {
+      return 'target kind cannot be changed'
+    }
+    if (body.key !== undefined && body.key !== existing.key) {
+      return 'key cannot be changed'
+    }
+  }
+
+  const target = FIELD_TARGETS.find((t) => t.table === targetTable)
   if (!target) return 'invalid target table'
-  if (body.targetKind && !(target.kinds as readonly string[]).includes(String(body.targetKind))) {
+  if (targetKind && !(target.kinds as readonly string[]).includes(String(targetKind))) {
     return 'invalid target kind for that table'
   }
-  if (!/^[a-z][a-z0-9_]{1,60}$/.test(String(body.key ?? ''))) {
+  if (!/^[a-z][a-z0-9_]{1,60}$/.test(String(key ?? ''))) {
     return 'key must be snake_case (a-z, 0-9, _)'
   }
   // A documents key that collides with a real header field would shadow it in
   // flow condition evaluation and {{token}} interpolation (e.g. a custom
   // `total` feeding an approval threshold). Fail closed at registration.
-  if (body.targetTable === 'documents' && RESERVED_DOCUMENT_FIELD_KEYS.has(String(body.key))) {
+  if (targetTable === 'documents' && RESERVED_DOCUMENT_FIELD_KEYS.has(String(key))) {
     return 'key conflicts with a built-in document field'
   }
-  if (!body.label || String(body.label).length > 120) return 'label required'
-  if (!FIELD_TYPES.includes(String(body.fieldType))) return 'invalid field type'
-  if (['select', 'multi_select'].includes(String(body.fieldType))) {
-    const opts = (body.config as { options?: unknown })?.options
+  if (!label || String(label).length > 120) return 'label required'
+  if (!FIELD_TYPES.includes(String(fieldType))) return 'invalid field type'
+  if (['select', 'multi_select'].includes(String(fieldType))) {
+    const opts = (config as { options?: unknown })?.options
     if (!Array.isArray(opts) || opts.length === 0 || opts.some((o) => typeof o !== 'string' || !o)) {
       return 'select fields need at least one option'
     }
   }
-  if (String(body.fieldType) === 'reference') {
-    const cfg = body.config as { referenceTable?: unknown } | undefined
+  if (String(fieldType) === 'reference') {
+    const cfg = config as { referenceTable?: unknown } | undefined
     if (!cfg?.referenceTable || !REFERENCE_TABLES.includes(String(cfg.referenceTable))) {
       return 'reference fields need a valid referenceTable (parties, projects, accounts, items)'
     }
@@ -118,31 +149,33 @@ export async function PATCH(req: Request) {
   const body = (parsedBody2.data) as Record<string, unknown>
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-  const existing = (await db.execute<{ target_table: string; target_kind: string | null }>(sql`
-    select target_table, target_kind from custom_field_defs
+  const existing = (await db.execute<ExistingFieldDef>(sql`
+    select target_table, target_kind, key, label, field_type, config,
+           is_required, sort_order, is_active
+      from custom_field_defs
      where id = ${body.id} and org_id = ${user.orgId}`)).rows[0]
   if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (!(await isCustomFieldTargetEnabled(user.orgId, existing.target_table, existing.target_kind))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
-  if (!body.label || !FIELD_TYPES.includes(String(body.fieldType))) {
-    return NextResponse.json({ error: 'label and valid field type required' }, { status: 400 })
-  }
-  if (String(body.fieldType) === 'reference') {
-    const cfg = body.config as { referenceTable?: unknown } | undefined
-    if (!cfg?.referenceTable || !REFERENCE_TABLES.includes(String(cfg.referenceTable))) {
-      return NextResponse.json({ error: 'reference fields need a valid referenceTable' }, { status: 400 })
-    }
-  }
+  const err = validateDef(body, existing)
+  if (err) return NextResponse.json({ error: err }, { status: 400 })
+
+  const label = body.label === undefined ? existing.label : body.label
+  const fieldType = body.fieldType === undefined ? existing.field_type : body.fieldType
+  const config = body.config === undefined ? existing.config : (body.config ?? {})
+  const isRequired = body.isRequired === undefined ? existing.is_required : body.isRequired === true
+  const sortOrder = body.sortOrder === undefined ? existing.sort_order : Number(body.sortOrder ?? 0)
+  const isActive = body.isActive === undefined ? existing.is_active : body.isActive !== false
   await db.execute(sql`
     update custom_field_defs set
-      label = ${body.label},
-      field_type = ${body.fieldType},
-      config = ${JSON.stringify(body.config ?? {})},
-      is_required = ${body.isRequired === true},
-      sort_order = ${Number(body.sortOrder ?? 0)},
-      is_active = ${body.isActive !== false},
+      label = ${label},
+      field_type = ${fieldType},
+      config = ${JSON.stringify(config)},
+      is_required = ${isRequired},
+      sort_order = ${sortOrder},
+      is_active = ${isActive},
       updated_at = now()
     where id = ${body.id} and org_id = ${user.orgId}
   `)
