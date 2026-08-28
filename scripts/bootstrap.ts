@@ -395,6 +395,19 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "recorded b814bcca completed section 4, so it had no duplicates left to "
       + "rename and the revision is a no-op there too.",
   },
+  {
+    filename: "generated/0062_recognition_events.sql",
+    from: "8a21bbb92ccc5ae295ed23572888e396e9099eb96f49403aecc6167b203bebc2",
+    to: "3d9146e6152005ced41915a7ad45c3f16c7524a7ba13703126c0a4a4626d9a7b",
+    strategy: "restamp",
+    reason:
+      "corrective RLS policy revision changes TO openbooks_app to TO PUBLIC "
+      + "while preserving the tenant predicate; environments.sql already "
+      + "replaces org_isolation with the PUBLIC form on every run where the "
+      + "policy comment is not openbooks:org_isolation:v1, so databases that "
+      + "applied the prior migration already have an equivalent schema before "
+      + "and after the restamp.",
+  },
 ];
 
 async function executeTrackedMigration(
