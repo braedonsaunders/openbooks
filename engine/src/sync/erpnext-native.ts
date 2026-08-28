@@ -106,13 +106,27 @@ export function buildErpInvoice(ctx: NativeContext, inv: ErpInvoice): NativeDocu
     const b = num(t.base_tax_amount);
     taxByHead.set(t.account_head, (taxByHead.get(t.account_head) ?? 0n) + (b < 0n ? -b : b));
   }
+  // A native line has one tax-code slot, while ERPNext stores taxes at the
+  // voucher level and can post several account heads on the same invoice.
+  // Keep the first component on the existing detail carrier for backwards
+  // compatibility, then add zero-value carriers for the remaining heads.
+  // Their zero taxable amount is intentional: importedTaxEvidence uses the
+  // source tax amount as an aggregate override, so each carrier still gets an
+  // immutable component snapshot and its own control-account routing without
+  // duplicating the invoice's income/expense amount.
+  let taxCarrierAssigned = false;
   for (const [head, amt] of taxByHead) {
     if (amt === 0n) continue;
-    const codeId = ctx.taxCodeByRef.get(head) ?? null;
-    const carrier = lines[0]!;
-    carrier.taxAmount = fromUnits(toUnits(carrier.taxAmount) + amt);
+    const codeId = ctx.taxCodeByRef.get(head);
+    if (!codeId) return { skip: `unmapped tax code ${head}` };
+    const carrier = taxCarrierAssigned
+      ? line(lines[0]!.accountId!, 0n, ++n)
+      : lines[0]!;
+    carrier.taxAmount = fromUnits(amt);
     carrier.taxOverridden = true;
-    if (!carrier.taxCodeId) carrier.taxCodeId = codeId;
+    carrier.taxCodeId = codeId;
+    if (taxCarrierAssigned) lines.push(carrier);
+    taxCarrierAssigned = true;
   }
 
   return {
