@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -196,6 +197,7 @@ export const performanceObligations = pgTable(
   (t) => [
     index("obligations_contract").on(t.contractId),
     index("obligations_doc_line").on(t.documentLineId),
+    uniqueIndex("performance_obligations_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("performance_obligations_org_idempotency")
       .on(t.orgId, t.idempotencyKey)
       .where(sql`${t.idempotencyKey} is not null`),
@@ -261,6 +263,11 @@ export const recognitionEvents = pgTable(
   (t) => [
     index("rec_events_obligation").on(t.obligationId),
     index("rec_events_period").on(t.periodMonth),
+    foreignKey({
+      columns: [t.orgId, t.obligationId],
+      foreignColumns: [performanceObligations.orgId, performanceObligations.id],
+      name: "recognition_events_obligation_id_fkey",
+    }),
     uniqueIndex("recognition_events_org_obligation_source")
       .on(t.orgId, t.obligationId, t.sourceReference)
       .where(sql`${t.sourceReference} is not null`),
