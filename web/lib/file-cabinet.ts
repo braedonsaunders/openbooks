@@ -380,7 +380,7 @@ export async function removeGrant(
   resourceId: string,
   audit?: FileMutationAudit,
 ): Promise<boolean> {
-  return inDbTransaction(async (tx) => {
+  return runMutation(audit?.executor, async (tx) => {
     const existing = (await tx.execute<{ id: string; resourceType: ResourceType; resourceId: string }>(sql`
       select id, resource_type as "resourceType", resource_id as "resourceId"
         from resource_grants
@@ -437,18 +437,22 @@ function deriveFileType(contentType: string): string {
  * Ensure the org has its system "Attachments" root folder. Auto-created on
  * first use. Returns the folder id.
  */
-export async function ensureAttachmentsRoot(orgId: string): Promise<string> {
-  const existing = (await db.execute<{ id: string }>(sql`
-    select id from folders
-     where org_id = ${orgId} and system_kind = 'attachments'
-  `))
-  if (existing.rows.length > 0) return existing.rows[0]!.id
-  const ins = (await db.execute<{ id: string }>(sql`
-    insert into folders (org_id, name, is_system, system_kind, created_at, updated_at)
-    values (${orgId}, 'Attachments', true, 'attachments', now(), now())
-    returning id
-  `))
-  return ins.rows[0]!.id
+export async function ensureAttachmentsRoot(orgId: string, executor?: SqlExecutor): Promise<string> {
+  const work = async (tx: SqlExecutor): Promise<string> => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attachments-root:${orgId}`}))`)
+    const existing = (await tx.execute<{ id: string }>(sql`
+      select id from folders
+       where org_id = ${orgId} and system_kind = 'attachments'
+    `))
+    if (existing.rows.length > 0) return existing.rows[0]!.id
+    const ins = (await tx.execute<{ id: string }>(sql`
+      insert into folders (org_id, name, is_system, system_kind, created_at, updated_at)
+      values (${orgId}, 'Attachments', true, 'attachments', now(), now())
+      returning id
+    `))
+    return ins.rows[0]!.id
+  }
+  return executor ? work(executor) : inDbTransaction(work)
 }
 
 /** System intake folder for AP capture source packets. */
@@ -484,8 +488,9 @@ async function ensureGroupFolder(
   rootId: string,
   recordTable: string,
   label: string,
+  executor?: SqlExecutor,
 ): Promise<string> {
-  return db.transaction(async (tx) => {
+  const work = async (tx: SqlExecutor): Promise<string> => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attach-group:${orgId}:${label}`}))`)
     const existing = (await tx.execute<{ id: string }>(sql`
       select id from folders
@@ -499,14 +504,15 @@ async function ensureGroupFolder(
       returning id
     `))
     return ins.rows[0]!.id
-  })
+  }
+  return executor ? work(executor) : inDbTransaction(work)
 }
 
 /** Resolve the kind group label for a record: document kind for `documents`,
  *  else the titleized table name. Falls back to "Documents" for orphaned rows. */
-async function groupLabelFor(orgId: string, recordTable: string, recordId: string): Promise<string> {
+async function groupLabelFor(orgId: string, recordTable: string, recordId: string, executor?: SqlExecutor): Promise<string> {
   if (recordTable !== 'documents') return titleizeKind(recordTable)
-  const r = (await db.execute<{ kind: string | null }>(sql`
+  const r = (await (executor ?? db).execute<{ kind: string | null }>(sql`
     select kind from documents where id = ${recordId} and org_id = ${orgId}
   `))
   const kind = r.rows[0]?.kind
@@ -522,23 +528,32 @@ export async function ensureRecordFolder(
   orgId: string,
   recordTable: string,
   recordId: string,
+  executor?: SqlExecutor,
 ): Promise<string> {
-  const existing = (await db.execute<{ id: string }>(sql`
-    select id from folders
-     where org_id = ${orgId} and record_table = ${recordTable} and record_id = ${recordId}
-       and record_id is not null
-  `))
-  if (existing.rows.length > 0) return existing.rows[0]!.id
-  const rootId = await ensureAttachmentsRoot(orgId)
-  const label = await groupLabelFor(orgId, recordTable, recordId)
-  const groupId = await ensureGroupFolder(orgId, rootId, recordTable, label)
-  const name = `${recordTable} / ${recordId.slice(0, 8)}`
-  const ins = (await db.execute<{ id: string }>(sql`
-    insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
-    values (${orgId}, ${groupId}, ${name}, true, ${recordTable}, ${recordId}, now(), now())
-    returning id
-  `))
-  return ins.rows[0]!.id
+  const work = async (tx: SqlExecutor): Promise<string> => {
+    // There is deliberately no unique constraint on the nullable record key;
+    // serialize this lookup/insert pair so concurrent attachment uploads share
+    // one per-record folder instead of creating duplicate system folders.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attach-record:${orgId}:${recordTable}:${recordId}`}))`)
+    const existing = (await tx.execute<{ id: string }>(sql`
+      select id from folders
+       where org_id = ${orgId} and record_table = ${recordTable} and record_id = ${recordId}
+         and record_id is not null
+       for share
+    `))
+    if (existing.rows.length > 0) return existing.rows[0]!.id
+    const rootId = await ensureAttachmentsRoot(orgId, tx)
+    const label = await groupLabelFor(orgId, recordTable, recordId, tx)
+    const groupId = await ensureGroupFolder(orgId, rootId, recordTable, label, tx)
+    const name = `${recordTable} / ${recordId.slice(0, 8)}`
+    const ins = (await tx.execute<{ id: string }>(sql`
+      insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
+      values (${orgId}, ${groupId}, ${name}, true, ${recordTable}, ${recordId}, now(), now())
+      returning id
+    `))
+    return ins.rows[0]!.id
+  }
+  return executor ? work(executor) : inDbTransaction(work)
 }
 
 // --- folder CRUD ------------------------------------------------------------
@@ -666,16 +681,41 @@ export async function createFolder(input: {
   isPrivate?: boolean
   ownerId?: string
   createdBy: string
+  audit?: FileMutationAudit
 }): Promise<string> {
-  const ins = (await db.execute<{ id: string }>(sql`
-    insert into folders (org_id, parent_folder_id, name, is_private, owner_id,
-                         created_by, updated_by, created_at, updated_at)
-    values (${input.orgId}, ${input.parentId}, ${input.name},
-            ${input.isPrivate ?? false}, ${input.ownerId ?? null},
-            ${input.createdBy}, ${input.createdBy}, now(), now())
-    returning id
-  `))
-  return ins.rows[0]!.id
+  const work = async (tx: SqlExecutor): Promise<string> => {
+    const ins = (await tx.execute<{ id: string }>(sql`
+      insert into folders (org_id, parent_folder_id, name, is_private, owner_id,
+                           created_by, updated_by, created_at, updated_at)
+      values (${input.orgId}, ${input.parentId}, ${input.name},
+              ${input.isPrivate ?? false}, ${input.ownerId ?? null},
+              ${input.createdBy}, ${input.createdBy}, now(), now())
+      returning id
+    `))
+    const id = ins.rows[0]!.id
+    if (input.audit) {
+      await recordFileEvent({
+        orgId: input.orgId,
+        actorId: input.audit.actorId,
+        table: 'folders',
+        rowId: id,
+        action: 'create',
+        changes: {
+          before: null,
+          after: {
+            id,
+            parentId: input.parentId,
+            name: input.name,
+            isPrivate: input.isPrivate ?? false,
+            ownerId: input.ownerId ?? null,
+          },
+        },
+        executor: tx,
+      })
+    }
+    return id
+  }
+  return input.audit?.executor ? work(input.audit.executor) : inDbTransaction(work)
 }
 
 export async function renameFolder(
@@ -697,33 +737,49 @@ export async function moveFolder(
   id: string,
   parentId: string | null,
   updatedBy: string,
+  audit?: FileMutationAudit,
 ): Promise<boolean> {
-  // Prevent moving into self or descendant
-  if (parentId === id) return false
-  if (parentId) {
-    // The new parent must exist inside this org (blocks cross-org reparenting).
-    const parent = (await db.execute(sql`
-      select 1 from folders where id = ${parentId} and org_id = ${orgId}
-    `))
-    if (parent.rows.length === 0) return false
-    const cycle = (await db.execute(sql`
-      with recursive ancestors as (
-        select parent_folder_id from folders where id = ${parentId} and org_id = ${orgId}
-        union
-        select f.parent_folder_id from folders f
-        join ancestors a on f.id = a.parent_folder_id and f.org_id = ${orgId}
-        where f.parent_folder_id is not null
-      )
-      select 1 from ancestors where parent_folder_id = ${id} limit 1
-    `))
-    if (cycle.rows.length > 0) return false
+  const work = async (tx: SqlExecutor): Promise<boolean> => {
+    const before = (await tx.execute<{ id: string; parentId: string | null; isSystem: boolean }>(sql`
+      select id, parent_folder_id as "parentId", is_system as "isSystem"
+        from folders where id = ${id} and org_id = ${orgId} for update
+    `)).rows[0]
+    if (!before || before.isSystem || parentId === id) return false
+    if (parentId) {
+      const parent = (await tx.execute(sql`
+        select 1 from folders where id = ${parentId} and org_id = ${orgId}
+      `))
+      if (parent.rows.length === 0) return false
+      const cycle = (await tx.execute(sql`
+        with recursive ancestors as (
+          select parent_folder_id from folders where id = ${parentId} and org_id = ${orgId}
+          union
+          select f.parent_folder_id from folders f
+          join ancestors a on f.id = a.parent_folder_id and f.org_id = ${orgId}
+          where f.parent_folder_id is not null
+        )
+        select 1 from ancestors where parent_folder_id = ${id} limit 1
+      `))
+      if (cycle.rows.length > 0) return false
+    }
+    await tx.execute(sql`
+      update folders set parent_folder_id = ${parentId}, updated_by = ${updatedBy}, updated_at = now()
+       where id = ${id} and org_id = ${orgId} and not is_system
+    `)
+    if (audit) {
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: 'folders',
+        rowId: id,
+        action: 'move',
+        changes: { before: { parentId: before.parentId }, after: { parentId } },
+        executor: tx,
+      })
+    }
+    return true
   }
-  const r = (await db.execute<{ id: string }>(sql`
-    update folders set parent_folder_id = ${parentId}, updated_by = ${updatedBy}, updated_at = now()
-     where id = ${id} and org_id = ${orgId} and not is_system
-    returning id
-  `))
-  return r.rows.length > 0
+  return audit ? runMutation(audit.executor, work) : inDbTransaction(work)
 }
 
 export async function updateFolder(
@@ -777,7 +833,7 @@ export async function patchFolder(
   const hasParent = Object.prototype.hasOwnProperty.call(patch, 'parentId')
   const hasName = patch.name !== undefined
   const hasFlags = patch.isPrivate !== undefined || patch.isInactive !== undefined
-  return inDbTransaction(async (tx) => {
+  return runMutation(audit.executor, async (tx) => {
     const before = (await tx.execute<{
       id: string
       name: string
@@ -899,7 +955,7 @@ export async function deleteFolder(
   id: string,
   audit?: FileMutationAudit,
 ): Promise<{ ok: boolean; reason?: string }> {
-  const result = await inDbTransaction(async (tx) => {
+  const result = await runMutation(audit?.executor, async (tx) => {
     const descendants = FOLDER_DESCENDANTS(orgId, id)
     const folder = (await tx.execute<{ id: string; isSystem: boolean }>(sql`
       select id, is_system as "isSystem"
@@ -909,6 +965,21 @@ export async function deleteFolder(
     `)).rows[0]
     if (!folder) return { ok: false, reason: 'not found' as const }
     if (folder.isSystem) return { ok: false, reason: 'system' as const }
+    const beforeFolders = await tx.execute<{ id: string; isInactive: boolean }>(sql`
+      select f.id, f.is_inactive as "isInactive"
+        from folders f
+       where f.id in (${descendants}) and f.org_id = ${orgId}
+       order by f.id
+       for update
+    `)
+    const beforeFiles = await tx.execute<{ id: string; isInactive: boolean; isProtected: boolean }>(sql`
+      select fi.id, fi.is_inactive as "isInactive",
+             exists (select 1 from ap_capture_items ci where ci.file_id = fi.id and ci.org_id = ${orgId}) as "isProtected"
+        from files fi
+       where fi.folder_id in (${descendants}) and fi.org_id = ${orgId}
+       order by fi.id
+       for update
+    `)
     await tx.execute(sql`update folders set is_inactive = true, updated_at = now() where id in (${descendants}) and org_id = ${orgId}`)
     await tx.execute(sql`
       update files set is_inactive = true, updated_at = now()
@@ -922,7 +993,17 @@ export async function deleteFolder(
         table: 'folders',
         rowId: id,
         action: 'delete',
-        changes: { permanent: false },
+        changes: {
+          permanent: false,
+          before: { folders: beforeFolders.rows, files: beforeFiles.rows },
+          after: {
+            folders: beforeFolders.rows.map(({ id: folderId }) => ({ id: folderId, isInactive: true })),
+            files: beforeFiles.rows.map(({ id: fileId, isInactive, isProtected }) => ({
+              id: fileId,
+              isInactive: isProtected ? isInactive : true,
+            })),
+          },
+        },
         executor: tx,
       })
     }
@@ -937,7 +1018,7 @@ export async function restoreFolder(
   id: string,
   audit: FileMutationAudit,
 ): Promise<boolean> {
-  return inDbTransaction(async (tx) => {
+  return runMutation(audit.executor, async (tx) => {
     const descendants = FOLDER_DESCENDANTS(orgId, id)
 
     // Lock and retain the complete pre-restore state before changing either
@@ -1380,7 +1461,7 @@ export async function createFile(input: {
   const fileType = deriveFileType(input.contentType)
   const contentHash = createHash('sha256').update(input.bytes).digest('hex')
   const kind = activeStorageKind()
-  return inDbTransaction(async (tx) => {
+  return runMutation(input.audit?.executor, async (tx) => {
     const fileIns = (await tx.execute<{ id: string }>(sql`
       insert into files (org_id, folder_id, name, extension, file_type, content_type,
                          size_bytes, storage_kind, content_hash, created_by, updated_by,
@@ -1419,7 +1500,17 @@ export async function createFile(input: {
         table: 'files',
         rowId: fileId,
         action: 'upload',
-        changes: { name: input.filename, folderId: input.folderId },
+        changes: {
+          before: null,
+          after: {
+            id: fileId,
+            name: input.filename,
+            folderId: input.folderId,
+            contentType: input.contentType,
+            sizeBytes: input.bytes.length,
+            currentVersionId: versionId,
+          },
+        },
         executor: tx,
       })
     }
@@ -1449,17 +1540,24 @@ export async function replaceFile(input: {
   contentType: string
   bytes: Buffer
   updatedBy: string
+  audit?: FileMutationAudit
 }): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  return runMutation(input.audit?.executor, async (tx) => {
     const contentHash = createHash('sha256').update(input.bytes).digest('hex')
-    const current = (await tx.execute<{ vid: string | null; max_ver: number | null }>(sql`
-      select current_version_id as vid, (
+    const current = (await tx.execute<{
+      vid: string | null
+      max_ver: number | null
+      name: string
+      contentType: string
+      sizeBytes: number
+    }>(sql`
+      select current_version_id as vid, fi.name, fi.content_type as "contentType", fi.size_bytes as "sizeBytes", (
         select max(fv.version_number) from file_versions fv
         join files fi on fi.id = fv.file_id and fi.org_id = ${input.orgId}
         where fv.file_id = ${input.fileId}
       ) as max_ver
-        from files where id = ${input.fileId} and org_id = ${input.orgId}
-          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${input.orgId})
+        from files fi where fi.id = ${input.fileId} and fi.org_id = ${input.orgId}
+          and not exists (select 1 from ap_capture_items ci where ci.file_id = fi.id and ci.org_id = ${input.orgId})
         for update
     `))
     if (current.rows.length === 0) return false
@@ -1491,6 +1589,32 @@ export async function replaceFile(input: {
                        updated_by = ${input.updatedBy}, updated_at = now()
        where id = ${input.fileId} and org_id = ${input.orgId}
     `)
+    if (input.audit) {
+      await recordFileEvent({
+        orgId: input.orgId,
+        actorId: input.audit.actorId,
+        table: 'files',
+        rowId: input.fileId,
+        action: 'replace',
+        changes: {
+          before: {
+            name: current.rows[0]!.name,
+            contentType: current.rows[0]!.contentType,
+            sizeBytes: current.rows[0]!.sizeBytes,
+            currentVersionId: current.rows[0]!.vid,
+            versionNumber: current.rows[0]!.max_ver,
+          },
+          after: {
+            name: input.filename,
+            contentType: input.contentType,
+            sizeBytes: input.bytes.length,
+            currentVersionId: versionId,
+            versionNumber: nextVer,
+          },
+        },
+        executor: tx,
+      })
+    }
     return true
   })
 }
@@ -1504,6 +1628,16 @@ export async function replaceFile(input: {
  */
 export interface FileMutationAudit {
   actorId: string | null
+  /** Participate in a caller-owned transaction (bulk units and replacements). */
+  executor?: SqlExecutor
+}
+
+async function runMutation<T>(
+  executor: SqlExecutor | undefined,
+  work: (tx: SqlExecutor) => Promise<T>,
+): Promise<T> {
+  if (executor) return work(executor)
+  return inDbTransaction(async (tx) => work(tx))
 }
 
 export async function renameFile(
@@ -1523,7 +1657,7 @@ export async function renameFile(
     `))
     return r.rows.length > 0
   }
-  return inDbTransaction(async (tx) => {
+  return runMutation(audit.executor, async (tx) => {
     const prev = (await tx.execute<{ id: string; name: string }>(sql`
       select id, name from files where id = ${id} and org_id = ${orgId}
         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
@@ -1566,7 +1700,7 @@ export async function moveFile(
     `))
     return r.rows.length > 0
   }
-  return inDbTransaction(async (tx) => {
+  return runMutation(audit.executor, async (tx) => {
     const prev = (await tx.execute<{ id: string; folderId: string }>(sql`
       select id, folder_id as "folderId" from files where id = ${id} and org_id = ${orgId}
         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
@@ -1584,7 +1718,12 @@ export async function moveFile(
       table: 'files',
       rowId: id,
       action: 'move',
-      changes: { fromFolderId: prev.rows[0]!.folderId, toFolderId: folderId },
+      changes: {
+        before: { folderId: prev.rows[0]!.folderId },
+        after: { folderId },
+        fromFolderId: prev.rows[0]!.folderId,
+        toFolderId: folderId,
+      },
       executor: tx,
     })
     return true
@@ -1610,29 +1749,66 @@ export async function deleteFile(
     return r.rows.length > 0
   }
   if (!audit) return trash(db)
-  return inDbTransaction(async (tx) => {
-    if (!(await trash(tx))) return false
+  return runMutation(audit.executor, async (tx) => {
+    const before = (await tx.execute<{ id: string; isInactive: boolean }>(sql`
+      select id, is_inactive as "isInactive"
+        from files
+       where id = ${id} and org_id = ${orgId} and not is_inactive
+         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
+       for update
+    `)).rows[0]
+    if (!before || !(await trash(tx))) return false
     await recordFileEvent({
       orgId,
       actorId: audit.actorId,
       table: 'files',
       rowId: id,
       action: 'delete',
-      changes: { permanent: false },
+      changes: {
+        permanent: false,
+        before: { id, isInactive: before.isInactive },
+        after: { id, isInactive: true },
+      },
       executor: tx,
     })
     return true
   })
 }
 
-/** Restore a trashed file. */
-export async function restoreFile(orgId: string, id: string): Promise<boolean> {
-  const r = (await db.execute<{ id: string }>(sql`
-    update files set is_inactive = false, updated_at = now()
-     where id = ${id} and org_id = ${orgId} and is_inactive
-    returning id
-  `))
-  return r.rows.length > 0
+/** Restore a trashed file and its attributable before/after evidence atomically. */
+export async function restoreFile(
+  orgId: string,
+  id: string,
+  audit?: FileMutationAudit,
+): Promise<boolean> {
+  return runMutation(audit?.executor, async (tx) => {
+    const before = (await tx.execute<{ id: string; isInactive: boolean }>(sql`
+      select id, is_inactive as "isInactive"
+        from files
+       where id = ${id} and org_id = ${orgId} and is_inactive
+       for update
+    `)).rows[0]
+    if (!before) return false
+    await tx.execute(sql`
+      update files set is_inactive = false, updated_at = now()
+       where id = ${id} and org_id = ${orgId}
+    `)
+    if (audit) {
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: 'files',
+        rowId: id,
+        action: 'restore',
+        changes: {
+          before: { id, isInactive: before.isInactive },
+          after: { id, isInactive: false },
+        },
+        executor: tx,
+      })
+    }
+    return true
+  })
 }
 
 /**
@@ -1836,35 +2012,37 @@ export async function uploadAndAttach(input: {
   contentType: string
   bytes: Buffer
   createdBy: string | null
+  /** Optional caller-owned transaction (invoice-backup replacement). */
+  executor?: SqlExecutor
 }): Promise<AttachedFile> {
-  const folderId = await ensureRecordFolder(input.orgId, input.targetTable, input.targetId)
-  // NOTE: createFile runs its own transaction on the shared pool, so it must
-  // not be nested inside another db.transaction here (a nested transaction
-  // would check out a second connection and can exhaust the pool).
-  const file = await createFile({
-    orgId: input.orgId,
-    folderId,
-    filename: input.filename,
-    contentType: input.contentType,
-    bytes: input.bytes,
-    createdBy: input.createdBy,
+  return runMutation(input.executor, async (tx) => {
+    const folderId = await ensureRecordFolder(input.orgId, input.targetTable, input.targetId, tx)
+    const file = await createFile({
+      orgId: input.orgId,
+      folderId,
+      filename: input.filename,
+      contentType: input.contentType,
+      bytes: input.bytes,
+      createdBy: input.createdBy,
+      audit: { actorId: input.createdBy, executor: tx },
+    })
+    const attIns = (await tx.execute<{ id: string }>(sql`
+      insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
+      values (${input.orgId}, ${file.id}, ${input.targetTable}, ${input.targetId},
+              ${input.createdBy}, now())
+      returning id
+    `))
+    return {
+      id: file.id,
+      name: file.name,
+      fileType: file.fileType,
+      contentType: file.contentType,
+      sizeBytes: file.sizeBytes,
+      createdAt: file.createdAt,
+      createdBy: input.createdBy,
+      attachmentId: attIns.rows[0]!.id,
+    }
   })
-  const attIns = (await db.execute<{ id: string }>(sql`
-    insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
-    values (${input.orgId}, ${file.id}, ${input.targetTable}, ${input.targetId},
-            ${input.createdBy}, now())
-    returning id
-  `))
-  return {
-    id: file.id,
-    name: file.name,
-    fileType: file.fileType,
-    contentType: file.contentType,
-    sizeBytes: file.sizeBytes,
-    createdAt: file.createdAt,
-    createdBy: input.createdBy,
-    attachmentId: attIns.rows[0]!.id,
-  }
 }
 
 /** Attach an existing file to a record (no upload). Idempotent. */

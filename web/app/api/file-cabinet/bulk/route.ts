@@ -9,7 +9,7 @@ import {
   moveFile,
   moveFolder,
 } from '../../../../lib/file-cabinet'
-import { recordFileEvent } from '../../../../lib/file-audit'
+import { inDbTransaction } from '@openbooks/engine/src/db.ts'
 import { isUuid } from '../../../../lib/list-params'
 import { fileViewer, requireSession } from '../lib'
 
@@ -44,50 +44,52 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'nothing selected' }, { status: 400 })
   }
 
-  let done = 0
-  let skipped = 0
-
+  let targetFolderId: string | null = null
   if (action === 'move') {
-    const targetFolderId = body?.targetFolderId
-    if (typeof targetFolderId !== 'string' || !isUuid(targetFolderId)) {
+    const candidate = body?.targetFolderId
+    if (typeof candidate !== 'string' || !isUuid(candidate)) {
       return NextResponse.json({ error: 'valid targetFolderId is required' }, { status: 400 })
     }
+    targetFolderId = candidate
     // Destination needs Editor+.
     if (!accessAtLeast(await folderAccessLevel(orgId, viewer, targetFolderId), 'editor')) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     }
-    for (const id of fileIds) {
-      if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), 'editor')) { skipped++; continue }
-      if (await moveFile(orgId, id, targetFolderId, gate.user.id)) {
-        done++
-        await recordFileEvent({ orgId, actorId: gate.user.id, table: 'files', rowId: id, action: 'move', changes: { folderId: targetFolderId } })
-      } else skipped++
-    }
-    for (const id of folderIds) {
-      if (!accessAtLeast(await folderAccessLevel(orgId, viewer, id), 'manager')) { skipped++; continue }
-      if (await moveFolder(orgId, id, targetFolderId, gate.user.id)) {
-        done++
-        await recordFileEvent({ orgId, actorId: gate.user.id, table: 'folders', rowId: id, action: 'move', changes: { parentId: targetFolderId } })
-      } else skipped++
-    }
-  } else {
-    // delete → trash
-    for (const id of fileIds) {
-      if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), 'manager')) { skipped++; continue }
-      if (await deleteFile(orgId, id)) {
-        done++
-        await recordFileEvent({ orgId, actorId: gate.user.id, table: 'files', rowId: id, action: 'delete', changes: { permanent: false } })
-      } else skipped++
-    }
-    for (const id of folderIds) {
-      if (!accessAtLeast(await folderAccessLevel(orgId, viewer, id), 'manager')) { skipped++; continue }
-      const res = await deleteFolder(orgId, id)
-      if (res.ok) {
-        done++
-        await recordFileEvent({ orgId, actorId: gate.user.id, table: 'folders', rowId: id, action: 'delete', changes: { permanent: false } })
-      } else skipped++
-    }
   }
 
-  return NextResponse.json({ ok: true, done, skipped })
+  const result = await inDbTransaction(async (tx) => {
+    let done = 0
+    let skipped = 0
+    const audit = { actorId: gate.user.id, executor: tx }
+
+    if (action === 'move') {
+      for (const id of fileIds) {
+        if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), 'editor')) { skipped++; continue }
+        if (await moveFile(orgId, id, targetFolderId!, gate.user.id, audit)) done++
+        else skipped++
+      }
+      for (const id of folderIds) {
+        if (!accessAtLeast(await folderAccessLevel(orgId, viewer, id), 'manager')) { skipped++; continue }
+        if (await moveFolder(orgId, id, targetFolderId!, gate.user.id, audit)) done++
+        else skipped++
+      }
+    } else {
+      // delete → trash
+      for (const id of fileIds) {
+        if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), 'manager')) { skipped++; continue }
+        if (await deleteFile(orgId, id, audit)) done++
+        else skipped++
+      }
+      for (const id of folderIds) {
+        if (!accessAtLeast(await folderAccessLevel(orgId, viewer, id), 'manager')) { skipped++; continue }
+        const res = await deleteFolder(orgId, id, audit)
+        if (res.ok) done++
+        else skipped++
+      }
+    }
+
+    return { done, skipped }
+  })
+
+  return NextResponse.json({ ok: true, ...result })
 }
