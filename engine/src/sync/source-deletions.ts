@@ -215,8 +215,8 @@ export async function resolveSourceDeletion(input: {
   action: SourceDeletionAction;
   reversalEntryId: string | null;
 }> {
-  return withOrg(input.orgId, async () => {
-    const connection = (await db.execute<{ source: string; actor_valid: boolean }>(sql`
+  return withOrg(input.orgId, async () => db.transaction(async (tx) => {
+    const connection = (await tx.execute<{ source: string; actor_valid: boolean }>(sql`
       select c.source,
              exists (
                select 1 from users u
@@ -240,7 +240,7 @@ export async function resolveSourceDeletion(input: {
         `source deletion resolution is unsupported for ${source}`,
       );
 
-    const documentResult = (await db.execute<{
+    const documentResult = (await tx.execute<{
         id: string;
         kind: string;
         status: string;
@@ -262,7 +262,7 @@ export async function resolveSourceDeletion(input: {
         const voidReason = boundedVoidReason(
           `${source}:${input.sourceRef} deleted at source${input.note ? ` — ${input.note}` : ""}`,
         );
-        const applications = (await db.execute(sql`
+        const applications = (await tx.execute(sql`
           select 1
             from applications a
            where a.org_id = ${input.orgId} and a.unapplied_at is null and (
@@ -275,7 +275,7 @@ export async function resolveSourceDeletion(input: {
           );
         }
 
-        const [entry] = await db
+        const [entry] = await tx
           .select()
           .from(schema.journalEntries)
           .where(and(eq(schema.journalEntries.id, document.posted_entry_id), eq(schema.journalEntries.orgId, input.orgId)));
@@ -284,7 +284,7 @@ export async function resolveSourceDeletion(input: {
             "the document's posted journal is missing or already reversed",
           );
         }
-        const lines = await db
+        const lines = await tx
           .select()
           .from(schema.journalLines)
           .where(and(eq(schema.journalLines.entryId, entry.id), eq(schema.journalLines.orgId, input.orgId)));
@@ -293,7 +293,7 @@ export async function resolveSourceDeletion(input: {
         // controlled reopen or explicit adjusting-entry decision; silently
         // moving it into today's period would make historical parity false.
         const postingDate = entry.postingDate;
-        await assertPeriodModulesOpen(db, {
+        await assertPeriodModulesOpen(tx, {
           orgId: input.orgId,
           periodId: entry.periodId,
           bookId: entry.bookId,
@@ -301,12 +301,12 @@ export async function resolveSourceDeletion(input: {
           modules: [closeModuleForDocument(document.kind)],
         });
 
-        const before = await captureTransactionAuditSnapshot(db, document.id, input.orgId);
+        const before = await captureTransactionAuditSnapshot(tx, document.id, input.orgId);
         if (!before)
           throw new SourceDeletionResolutionError(
             "document disappeared while resolving deletion",
           );
-        const reversal = (await db
+        const reversal = (await tx
           .insert(schema.journalEntries)
           .values({
             orgId: input.orgId,
@@ -324,33 +324,33 @@ export async function resolveSourceDeletion(input: {
             updatedBy: input.actorId,
           })
           .returning({ id: schema.journalEntries.id }))[0]!;
-        await db.insert(schema.journalLines).values(
+        await tx.insert(schema.journalLines).values(
           reversalJournalLines(lines, { entryId: reversal.id, orgId: input.orgId }),
         );
-        await db
+        await tx
           .update(schema.journalEntries)
           .set({ status: "posted", postedAt: new Date() })
           .where(and(eq(schema.journalEntries.id, reversal.id), eq(schema.journalEntries.orgId, input.orgId)));
-        await db
+        await tx
           .update(schema.journalEntries)
           .set({ status: "reversed" })
           .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, input.orgId)));
-        await db.execute(sql`
+        await tx.execute(sql`
           update documents
              set status = 'voided', voided_at = now(),
                  voided_by = ${input.actorId}, void_reason = ${voidReason},
                  reversal_entry_id = ${reversal.id},
                  updated_at = now(), updated_by = ${input.actorId}
            where id = ${document.id} and org_id = ${input.orgId}`);
-        await db.execute(
+        await tx.execute(
           sql`select recompute_document_open_balance(${document.id})`,
         );
-        const after = await captureTransactionAuditSnapshot(db, document.id, input.orgId);
+        const after = await captureTransactionAuditSnapshot(tx, document.id, input.orgId);
         if (!after)
           throw new SourceDeletionResolutionError(
             "document disappeared after resolving deletion",
           );
-        await recordTransactionAudit(db, {
+        await recordTransactionAudit(tx, {
           orgId: input.orgId,
           documentId: document.id,
           action: "update",
@@ -365,23 +365,23 @@ export async function resolveSourceDeletion(input: {
         const voidReason = boundedVoidReason(
           `${source}:${input.sourceRef} deleted at source${input.note ? ` — ${input.note}` : ""}`,
         );
-        const before = await captureTransactionAuditSnapshot(db, document.id, input.orgId);
+        const before = await captureTransactionAuditSnapshot(tx, document.id, input.orgId);
         if (!before)
           throw new SourceDeletionResolutionError(
             "document disappeared while resolving deletion",
           );
-        await db.execute(sql`
+        await tx.execute(sql`
           update documents
              set status = 'voided', voided_at = now(), open_balance = null,
                  voided_by = ${input.actorId}, void_reason = ${voidReason},
                  updated_at = now(), updated_by = ${input.actorId}
            where id = ${document.id} and org_id = ${input.orgId}`);
-        const after = await captureTransactionAuditSnapshot(db, document.id, input.orgId);
+        const after = await captureTransactionAuditSnapshot(tx, document.id, input.orgId);
         if (!after)
           throw new SourceDeletionResolutionError(
             "document disappeared after resolving deletion",
           );
-        await recordTransactionAudit(db, {
+        await recordTransactionAudit(tx, {
           orgId: input.orgId,
           documentId: document.id,
           action: "update",
@@ -394,7 +394,7 @@ export async function resolveSourceDeletion(input: {
       }
     }
 
-    const previousResolution = (await db.execute<{ row: Record<string, unknown> }>(sql`
+    const previousResolution = (await tx.execute<{ row: Record<string, unknown> }>(sql`
       select to_jsonb(r) as row
         from source_deletion_resolutions r
        where r.org_id = ${input.orgId}
@@ -402,7 +402,7 @@ export async function resolveSourceDeletion(input: {
          and r.source_ref = ${input.sourceRef}
        for update
     `));
-    const resolution = (await db.execute<{ id: string }>(sql`
+    const resolution = (await tx.execute<{ id: string }>(sql`
       insert into source_deletion_resolutions
         (org_id, connection_id, source_ref, document_id, action, note, resolved_by,
          created_by, updated_by, resolved_at)
@@ -420,12 +420,12 @@ export async function resolveSourceDeletion(input: {
         "source-deletion resolution was not persisted",
       );
     }
-    const currentResolution = (await db.execute<{ row: Record<string, unknown> }>(sql`
+    const currentResolution = (await tx.execute<{ row: Record<string, unknown> }>(sql`
       select to_jsonb(r) as row
         from source_deletion_resolutions r
        where r.id = ${resolutionId} and r.org_id = ${input.orgId}
     `));
-    await db.execute(sql`
+    await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id, request_id)
       values (
@@ -447,5 +447,5 @@ export async function resolveSourceDeletion(input: {
       action: input.action,
       reversalEntryId,
     };
-  });
+  }));
 }
