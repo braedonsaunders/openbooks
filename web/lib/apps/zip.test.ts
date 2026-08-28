@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { zipSync, strToU8 } from 'fflate'
+import { zipSync, strToU8, Zip, ZipDeflate } from 'fflate'
 import { parseZipBundle, ZipBundleError } from './zip.ts'
 import { parseObjectSpecs } from './objects.ts'
 
@@ -14,6 +14,42 @@ const MANIFEST = JSON.stringify({
   version: '1.0.0',
   frontend: { entry: 'frontend/index.html' },
 })
+
+const MB = 1024 * 1024
+
+function compressibleBytes(length: number, randomLength = 3 * MB): Uint8Array {
+  const seed = new Uint8Array(Math.min(length, randomLength))
+  let value = 0x12345678
+  for (let i = 0; i < seed.length; i += 1) {
+    value = (value * 1664525 + 1013904223) >>> 0
+    seed[i] = value >>> 24
+  }
+  const data = new Uint8Array(length)
+  data.set(seed)
+  return data
+}
+
+function streamingZip(files: Record<string, Uint8Array>): Uint8Array {
+  const chunks: Uint8Array[] = []
+  const zip = new Zip((error, data) => {
+    if (error) throw error
+    if (data) chunks.push(data)
+  })
+  for (const [path, data] of Object.entries(files)) {
+    const entry = new ZipDeflate(path)
+    zip.add(entry)
+    entry.push(data, true)
+  }
+  zip.end()
+  const length = chunks.reduce((total, chunk) => total + chunk.length, 0)
+  const bytes = new Uint8Array(length)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.length
+  }
+  return bytes
+}
 
 test('parses a root-level bundle: text utf8, binaries base64, junk skipped', () => {
   const zip = zipSync({
@@ -56,6 +92,71 @@ test('invalid manifest JSON is a clean error', () => {
 
 test('garbage bytes are a clean error, not a crash', () => {
   assert.throws(() => parseZipBundle(new Uint8Array([1, 2, 3, 4])), ZipBundleError)
+})
+
+test('rejects compressed input over the archive boundary before parsing', () => {
+  const zip = zipSync({
+    'manifest.json': [strToU8(MANIFEST), { level: 0 }],
+    'payload.bin': [new Uint8Array(10 * MB), { level: 0 }],
+  })
+  assert.ok(zip.length > 10 * MB)
+  assert.throws(() => parseZipBundle(zip), /zip too large \(max 10 MB\)/)
+})
+
+test('rejects a high-ratio entry before inflating it', () => {
+  const zip = zipSync({
+    'manifest.json': strToU8(MANIFEST),
+    'payload.txt': strToU8('a'.repeat(1024 * 1024)),
+  })
+  assert.throws(() => parseZipBundle(zip), /compression ratio limit/)
+})
+
+test('rejects a high-ratio streamed entry without size metadata', () => {
+  const zip = streamingZip({
+    'manifest.json': strToU8(MANIFEST),
+    'payload.txt': strToU8('a'.repeat(1024 * 1024)),
+  })
+  assert.throws(() => parseZipBundle(zip), /compression ratio limit/)
+})
+
+test('rejects cumulative uncompressed overflow across entries', () => {
+  const zip = zipSync({
+    'manifest.json': strToU8(MANIFEST),
+    'first.bin': compressibleBytes(11 * MB),
+    'second.bin': compressibleBytes(10 * MB),
+  })
+  assert.ok(zip.length < 10 * MB)
+  assert.throws(() => parseZipBundle(zip), /exceeds 20 MB decompressed/)
+})
+
+test('rejects excess entries before reading their contents', () => {
+  const files: Record<string, Uint8Array> = { 'manifest.json': strToU8(MANIFEST) }
+  for (let i = 0; i < 500; i += 1) files[`file-${i}.txt`] = new Uint8Array(0)
+  assert.throws(() => parseZipBundle(zipSync(files)), /too many files \(max 500\)/)
+})
+
+test('does not allocate or process data after a declared limit breach', () => {
+  const zip = zipSync({
+    'manifest.json': strToU8(MANIFEST),
+    'allowed.bin': compressibleBytes(19 * MB),
+    'unread.bin': compressibleBytes(2 * MB),
+  })
+  assert.ok(zip.length < 10 * MB)
+
+  // The second entry must be rejected from its declared size before its
+  // decompressor starts allocating output.
+  assert.throws(() => parseZipBundle(zip), /exceeds 20 MB decompressed/)
+})
+
+test('allows an archive within compressed, ratio, and decompressed limits', () => {
+  const zip = zipSync({
+    'manifest.json': strToU8(MANIFEST),
+    'frontend/index.html': strToU8('<html>allowed</html>'),
+    'logo.png': new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+  })
+  const bundle = parseZipBundle(zip)
+  assert.equal((bundle.manifest as { key: string }).key, 'demo')
+  assert.equal(bundle.files.length, 2)
 })
 
 // ---------------------------------------------------------------------------
