@@ -129,9 +129,20 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "missing permission: admin.customization.manage" }, { status: 403 });
   if (existing.scope === "user" && existing.ownerId !== user.id)
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  await db.execute(sql`delete from list_views where id = ${id} and org_id = ${user.orgId}`);
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${user.orgId}, 'list_views', ${id}, 'delete', ${JSON.stringify({ name: existing.name, scope: existing.scope })}, ${user.id})`);
+  // Delete + audit in one transaction so a failed audit insert rolls back the
+  // deletion instead of leaving an untraceable configuration change behind.
+  const deleted = await db.transaction(async (tx) => {
+    const result = (await tx.execute(sql`
+      delete from list_views
+       where id = ${id} and org_id = ${user.orgId}
+       returning name, scope`)) as { rows: Array<{ name: string; scope: string }> };
+    const row = result.rows[0];
+    if (!row) return null;
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${user.orgId}, 'list_views', ${id}, 'delete', ${JSON.stringify({ name: row.name, scope: row.scope })}, ${user.id})`);
+    return row;
+  });
+  if (!deleted) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
