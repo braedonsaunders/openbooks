@@ -404,6 +404,20 @@ interface FxRunClaim {
   leaseToken: string;
 }
 
+/** The scheduler occurrence that must be claimed with the durable run row. */
+interface FxScheduledOccurrence {
+  claimedNextSyncAt: Date;
+  nextSyncAt: Date;
+}
+
+/** A racing scheduler tick already claimed this occurrence. */
+class FxScheduleClaimLostError extends Error {
+  constructor() {
+    super("this FX synchronization occurrence was claimed by another scheduler tick");
+    this.name = "FxScheduleClaimLostError";
+  }
+}
+
 /** The storage-enforced single-running-provider conflict, anywhere in a cause chain. */
 function isFxRunInProgressConflict(error: unknown): boolean {
   let current: unknown = error;
@@ -417,30 +431,46 @@ function isFxRunInProgressConflict(error: unknown): boolean {
   return false;
 }
 
-async function createRun(config: FxProviderConfigRow, trigger: FxRunTrigger, from: string, to: string, actorId?: string): Promise<FxRunClaim> {
-  // Take over a crashed run's lease before claiming it: without this the
-  // partial unique index turns one crash into a permanent synchronization
-  // outage. Rows younger than the TTL — genuinely running elsewhere — stay
-  // put, so concurrent runs remain mutually exclusive. Clearing the old
-  // token is what fences a still-alive former holder out of completing.
-  await db.execute(sql`
-    update fx_provider_runs set status = 'failed',
-      error_message = ${FX_RUN_ABANDONED_MESSAGE}, finished_at = now(),
-      lease_token = null
-     where org_id = ${config.orgId} and provider_config_id = ${config.id}
-       and status = 'running' and started_at <= now() - ${FX_RUN_LEASE_TTL}
-  `);
-  try {
-    const r = (await db.execute<{ id: string; leaseToken: string }>(sql`
-      insert into fx_provider_runs (org_id, provider_config_id, trigger, requested_from, requested_to, created_by, lease_token)
-      values (${config.orgId}, ${config.id}, ${trigger}, ${from}, ${to}, ${actorId ?? null}, gen_random_uuid())
-      returning id, lease_token as "leaseToken"
-    `));
-    return { runId: r.rows[0]!.id, leaseToken: r.rows[0]!.leaseToken };
-  } catch (error) {
-    if (isFxRunInProgressConflict(error)) throw new FxProviderError("an FX provider run is already in progress");
-    throw error;
-  }
+async function createRun(
+  config: FxProviderConfigRow,
+  trigger: FxRunTrigger,
+  from: string,
+  to: string,
+  actorId?: string,
+  scheduledOccurrence?: FxScheduledOccurrence,
+): Promise<FxRunClaim | null> {
+  // Take over a crashed run's lease and, for scheduler work, claim the
+  // occurrence in the SAME transaction that creates the durable run row.
+  // This ordering means a process death cannot commit the cursor advance
+  // without leaving reclaimable run evidence behind.
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`
+      update fx_provider_runs set status = 'failed',
+        error_message = ${FX_RUN_ABANDONED_MESSAGE}, finished_at = now(),
+        lease_token = null
+       where org_id = ${config.orgId} and provider_config_id = ${config.id}
+         and status = 'running' and started_at <= now() - ${FX_RUN_LEASE_TTL}
+    `);
+    if (scheduledOccurrence) {
+      const occurrence = await tx.execute(sql`
+        update fx_provider_configs set next_sync_at = ${scheduledOccurrence.nextSyncAt}, updated_at = now()
+         where id = ${config.id} and org_id = ${config.orgId}
+           and next_sync_at = ${scheduledOccurrence.claimedNextSyncAt}
+      `);
+      if (!occurrence.rowCount) return null;
+    }
+    try {
+      const r = (await tx.execute<{ id: string; leaseToken: string }>(sql`
+        insert into fx_provider_runs (org_id, provider_config_id, trigger, requested_from, requested_to, created_by, lease_token)
+        values (${config.orgId}, ${config.id}, ${trigger}, ${from}, ${to}, ${actorId ?? null}, gen_random_uuid())
+        returning id, lease_token as "leaseToken"
+      `));
+      return { runId: r.rows[0]!.id, leaseToken: r.rows[0]!.leaseToken };
+    } catch (error) {
+      if (isFxRunInProgressConflict(error)) throw new FxProviderError("an FX provider run is already in progress");
+      throw error;
+    }
+  });
 }
 
 /**
@@ -464,6 +494,7 @@ export async function runFxProvider(
   trigger: FxRunTrigger,
   actorId?: string,
   now = new Date(),
+  scheduledOccurrence?: FxScheduledOccurrence,
 ): Promise<FxSyncResult> {
   const config = await readFxProviderConfig(orgId);
   if (!config) throw new FxProviderError("configure an FX provider first");
@@ -480,7 +511,8 @@ export async function runFxProvider(
   const range = trigger === "test"
     ? { from: addDays(today, -6), to: today }
     : syncRange(config, today);
-  const claim = await createRun(config, trigger, range.from, range.to, actorId);
+  const claim = await createRun(config, trigger, range.from, range.to, actorId, scheduledOccurrence);
+  if (!claim) throw new FxScheduleClaimLostError();
   await db.execute(sql`update fx_provider_configs set last_attempt_at = now() where id = ${config.id} and org_id = ${orgId}`);
   try {
     const snapshots = await fetchProviderSnapshots(config, range.from, range.to);
@@ -608,15 +640,23 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
   let claimedCount = 0;
   for (const config of due.rows) {
     const next = computeNextSyncAt(config.schedule, config.syncHourUtc, now);
-    const claim = await withBypassContext(() =>
-      db.execute(sql`
-      update fx_provider_configs set next_sync_at = ${next}
-       where id = ${config.id} and org_id = ${config.orgId} and next_sync_at = ${config.nextSyncAt}
-    `));
-    if (!claim.rowCount) continue;
-    claimedCount++;
-    try { await withOrgContext(config.orgId, () => runFxProvider(config.orgId, "scheduler", undefined, now)); }
-    catch (error) { console.error(`[fx-provider] ${config.id} sync failed:`, error); }
+    try {
+      // The occurrence claim is performed inside runFxProvider's transaction,
+      // together with creation of its durable run row. A crash before dispatch
+      // therefore leaves a reclaimable running row instead of a skipped cursor.
+      await withOrgContext(config.orgId, () => runFxProvider(
+        config.orgId,
+        "scheduler",
+        undefined,
+        now,
+        { claimedNextSyncAt: config.nextSyncAt!, nextSyncAt: next! },
+      ));
+      claimedCount++;
+    } catch (error) {
+      if (!(error instanceof FxScheduleClaimLostError)) {
+        console.error(`[fx-provider] ${config.id} sync failed:`, error);
+      }
+    }
   }
   return claimedCount;
 }
