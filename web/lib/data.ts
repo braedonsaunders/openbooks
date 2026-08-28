@@ -45,10 +45,25 @@ export async function dashboardData(orgId?: string) {
  * current-fiscal-year-to-date activity (a lifetime P&L balance is meaningless
  * on a COA). Fiscal-year start is the org's configured month, default January.
  */
-export async function accountsWithBalances(orgId: string, asOf?: string) {
+export async function accountsWithBalances(
+  orgId: string,
+  asOf?: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+) {
   const asOfDate = asOf ?? await businessToday(orgId);
   const startMonth = await fiscalStartMonth(orgId);
   const fyStart = fiscalYearRangeFor(fiscalYearOf(asOfDate, startMonth), startMonth).from;
+
+  // `undefined`/`null` are the explicit unrestricted sentinels. A present,
+  // empty set must deny all subsidiary-owned activity rather than silently
+  // widening the query to the whole organization.
+  const accountSubsidiaryScope = allowedSubsidiaryIds == null
+    ? sql``
+    : allowedSubsidiaryIds.size === 0
+      ? sql`and false`
+      : sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${[...allowedSubsidiaryIds].join(',')}}`}::uuid[]))`;
+  const glSubsidiaryScope = subsidiaryVisibleFilter(sql`g.subsidiary_id`, allowedSubsidiaryIds ?? null);
+  const lineSubsidiaryScope = subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds ?? null);
 
   const CREDIT_NORMAL = [
     'income', 'income_other',
@@ -73,7 +88,8 @@ export async function accountsWithBalances(orgId: string, asOf?: string) {
           from (
             select g.account_id, (g.debit_total - g.credit_total) as amt, g.month as d
               from gl_month_activity g
-             where g.org_id = ${orgId} and g.month < date_trunc('month', ${asOfDate}::date)::date
+             where g.org_id = ${orgId} ${glSubsidiaryScope}
+               and g.month < date_trunc('month', ${asOfDate}::date)::date
             union all
             select l.account_id, l.amount, e.posting_date
               from journal_lines l
@@ -81,11 +97,11 @@ export async function accountsWithBalances(orgId: string, asOf?: string) {
                and e.status in ('posted', 'reversed')
                and e.posting_date >= date_trunc('month', ${asOfDate}::date)::date
                and e.posting_date <= ${asOfDate}
-             where l.org_id = ${orgId}
+             where l.org_id = ${orgId} ${lineSubsidiaryScope}
           ) x
          group by x.account_id
       ) s on s.account_id = a.id
-     where a.org_id = ${orgId}
+     where a.org_id = ${orgId} ${accountSubsidiaryScope}
      order by a.number nulls last, a.name
   `));
   return r.rows as {
