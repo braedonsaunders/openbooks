@@ -13,7 +13,13 @@ export async function mergeAndPrintPdf(
 ): Promise<Buffer> {
   const counters = { ...values, page: '{{page}}', pages: '{{pages}}' }
   return renderHtmlDocumentPdf({
-    bodyHtml: renderTemplate(tpl.compiledHtml, values, { escapeHtml: true }),
+    bodyHtml: renderTemplate(tpl.compiledHtml, values, {
+      escapeHtml: true,
+      // Record data is never trusted HTML. Triple-brace body tokens must not
+      // bypass render-time escaping, even if an authored template contains
+      // them.
+      allowRawValues: false,
+    }),
     paperSize: tpl.paperSize,
     orientation: tpl.orientation,
     marginMm: tpl.marginMm,
