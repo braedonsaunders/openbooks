@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db, inDbTransaction } from "../db.ts";
 import { cmp, mulDecimal, normalizeDecimal } from "../money.ts";
 import { PAYROLL_COUNTRY_PACKS, PayrollPackError, payrollPack } from "./packs.ts";
 import { CA_PACK_RATES } from "./canada/rates.ts";
@@ -438,60 +438,81 @@ export async function upsertStatutoryRate(input: {
   const values = canonicalStatutoryRateValues(slot, input.values);
   const region = input.region === "" ? null : input.region;
   const subRegion = input.subRegion == null || input.subRegion === "" ? null : input.subRegion;
-  const existing = (await db.execute<{ id: string; rate_values: Record<string, string> }>(sql`
-    select id, rate_values from payroll_statutory_rates
-     where org_id = ${input.orgId} and country = ${input.country}
-       and rate_key = ${input.rateKey} and tax_year = ${input.taxYear}
-       and region is not distinct from ${region}
-       and sub_region is not distinct from ${subRegion}
-       and filing_account_id is not distinct from ${input.filingAccountId}
-  `));
-  const before = existing.rows[0];
-  const id = before?.id ?? randomUUID();
-  if (before) {
-    await db.execute(sql`
-      update payroll_statutory_rates
-         set rate_values = ${JSON.stringify(values)}::jsonb,
-             updated_by = ${input.actorId}, updated_at = now()
-       where org_id = ${input.orgId} and id = ${id}`);
-  } else {
-    await db.execute(sql`
-      insert into payroll_statutory_rates
-        (id, org_id, country, rate_key, region, sub_region, filing_account_id, tax_year,
-         rate_values, created_by, updated_by)
-      values (${id}, ${input.orgId}, ${input.country}, ${input.rateKey}, ${region}, ${subRegion},
-              ${input.filingAccountId}, ${input.taxYear}, ${JSON.stringify(values)}::jsonb,
-              ${input.actorId}, ${input.actorId})`);
-  }
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${input.orgId}, 'payroll_statutory_rates', ${id}, ${before ? "update" : "insert"},
-            ${JSON.stringify({
-              country: input.country, rateKey: input.rateKey, region, subRegion,
-              filingAccountId: input.filingAccountId, taxYear: input.taxYear,
-              before: before?.rate_values ?? null, after: values,
-            })}::jsonb, ${input.actorId})`);
-  return { id, values };
+  // The unique index protects the final write, but it cannot serialize two
+  // transactions that both observe a missing scope point before either inserts
+  // it. An advisory lock keyed by the complete point closes that gap, including
+  // the otherwise-unlockable missing-row case. The row lock below then protects
+  // the before-image for updates.
+  const lockKey = [
+    input.orgId, input.country, input.rateKey, input.taxYear,
+    region ?? "", subRegion ?? "", input.filingAccountId ?? "",
+  ].join("\u001f");
+  return await inDbTransaction(async (tx) => {
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+    const existing = (await tx.execute<{ id: string; rate_values: Record<string, string> }>(sql`
+      select id, rate_values from payroll_statutory_rates
+       where org_id = ${input.orgId} and country = ${input.country}
+         and rate_key = ${input.rateKey} and tax_year = ${input.taxYear}
+         and region is not distinct from ${region}
+         and sub_region is not distinct from ${subRegion}
+         and filing_account_id is not distinct from ${input.filingAccountId}
+       for update
+    `));
+    const before = existing.rows[0];
+    const id = before?.id ?? randomUUID();
+    if (before) {
+      await tx.execute(sql`
+        update payroll_statutory_rates
+           set rate_values = ${JSON.stringify(values)}::jsonb,
+               updated_by = ${input.actorId}, updated_at = now()
+         where org_id = ${input.orgId} and id = ${id}`);
+    } else {
+      await tx.execute(sql`
+        insert into payroll_statutory_rates
+          (id, org_id, country, rate_key, region, sub_region, filing_account_id, tax_year,
+           rate_values, created_by, updated_by)
+        values (${id}, ${input.orgId}, ${input.country}, ${input.rateKey}, ${region}, ${subRegion},
+                ${input.filingAccountId}, ${input.taxYear}, ${JSON.stringify(values)}::jsonb,
+                ${input.actorId}, ${input.actorId})`);
+    }
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${input.orgId}, 'payroll_statutory_rates', ${id}, ${before ? "update" : "insert"},
+              ${JSON.stringify({
+                country: input.country, rateKey: input.rateKey, region, subRegion,
+                filingAccountId: input.filingAccountId, taxYear: input.taxYear,
+                before: before?.rate_values ?? null, after: values,
+              })}::jsonb, ${input.actorId})`);
+    return { id, values };
+  });
 }
 
-/** Remove one rate row. Returns false when the row is not the org's. */
+/**
+ * Statutory rows are effective-dated inputs for payroll reproduction. They
+ * cannot be deleted: supersede a value with a corrected row for the applicable
+ * tax year instead, leaving the original row available to prior-period reads.
+ */
 export async function deleteStatutoryRate(
   orgId: string,
   actorId: string,
   id: string,
 ): Promise<boolean> {
-  const gone = (await db.execute<Record<string, unknown>>(sql`
-    delete from payroll_statutory_rates
-     where org_id = ${orgId} and id = ${id}
-    returning country, rate_key, region, sub_region, filing_account_id, tax_year, rate_values
-  `));
-  const row = gone.rows[0];
-  if (!row) return false;
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'payroll_statutory_rates', ${id}, 'delete',
-            ${JSON.stringify({ before: row, after: null })}::jsonb, ${actorId})`);
-  return true;
+  // Keep the actor parameter in the public contract for callers that already
+  // pass it; deletion is refused before any write, so it cannot leave either a
+  // missing payroll input or an unaudited mutation behind.
+  void actorId;
+  return await inDbTransaction(async (tx) => {
+    const row = (await tx.execute<{ id: string }>(sql`
+      select id from payroll_statutory_rates
+       where org_id = ${orgId} and id = ${id}
+       for update
+    `)).rows[0];
+    if (!row) return false;
+    throw new PayrollPackError(
+      "statutory rate rows cannot be deleted; save a replacement rate for the tax year instead",
+    );
+  });
 }
 
 // ---------------------------------------------------------------------------
