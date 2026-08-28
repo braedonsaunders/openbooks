@@ -249,8 +249,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       select * from crm_opportunity_statuses
        where id = ${statusId} and org_id = ${user.orgId} and is_active
        for update`)
-    nextStatus = lockedStatusResult.rows[0]
-    if (!nextStatus) throw new OpportunityValidationError('invalid status')
+    const lockedStatus = lockedStatusResult.rows[0]
+    if (!lockedStatus) throw new OpportunityValidationError('invalid status')
+    nextStatus = lockedStatus
     if (nextStatus.is_closed) {
       const closeGate = await guardPermission('crm.opportunities.close')
       if (closeGate instanceof NextResponse) throw new OpportunityPermissionDenied(closeGate)
@@ -313,7 +314,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     if (team) {
       for (const member of teamRows) {
-        if (!await orgUuidExistsWith(lockedDb, 'users', member.userId, user.orgId)) {
+        if (!await orgUuidExistsWith(lockedDb, 'users', member.userId, user.orgId, true)) {
           throw new OpportunityValidationError('invalid sales team member')
         }
       }
