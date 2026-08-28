@@ -103,9 +103,13 @@ const routeHooks = registerHooks({
   },
 });
 
-const { POST: overheadRoutePost } = (await import(
-  "../app/api/admin/setup/overhead/route.ts?overhead-publish-route-test"
-)) as typeof import("../app/api/admin/setup/overhead/route.ts");
+const overheadRouteUrl = new URL(
+  "../app/api/admin/setup/overhead/route.ts?overhead-publish-route-test",
+  import.meta.url,
+).href;
+const { POST: overheadRoutePost } = (await import(overheadRouteUrl)) as typeof import(
+  "../app/api/admin/setup/overhead/route.ts"
+);
 routeHooks.deregister();
 
 test("manual overhead publishing preserves all four validated decimal places", async () => {
