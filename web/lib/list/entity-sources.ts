@@ -2,6 +2,7 @@ import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { ListViewConfig } from '@openbooks/customization'
+import { subsidiaryVisibleFilter } from '../subsidiaries'
 import {
   CUSTOMER_BASE_JOINS,
   CUSTOMER_BUILT_IN_EXPR,
@@ -155,6 +156,26 @@ export interface EntityListSource {
   /** Full row href for read-only aggregate rows that do not own a drawer. */
   rowHref?: (row: Record<string, unknown>) => string
 }
+
+/**
+ * Inventory's shared predicates predate subsidiary ownership and therefore
+ * only apply the tenant and list filters. Keep the source-specific extension
+ * here so the universal list's row, count, and status queries all use the
+ * caller's visibility policy without changing the shared customization API.
+ */
+const inventoryOnhandScopedWhere: EntityListSource['where'] = (
+  view,
+  adhoc,
+  orgId,
+  allowedSubsidiaryIds,
+) => sql`${inventoryOnhandWhere(view, adhoc, orgId)}${subsidiaryVisibleFilter(sql`oh.subsidiary_id`, allowedSubsidiaryIds ?? null)}`
+
+const inventoryMovementScopedWhere: EntityListSource['where'] = (
+  view,
+  adhoc,
+  orgId,
+  allowedSubsidiaryIds,
+) => sql`${inventoryMovementWhere(view, adhoc, orgId)}${subsidiaryVisibleFilter(sql`m.subsidiary_id`, allowedSubsidiaryIds ?? null)}`
 
 export interface EntityQuickFilterOption {
   value: string
@@ -400,14 +421,14 @@ const SOURCES: Record<string, EntityListSource> = {
   },
   inventory_onhand: {
     recordType: 'inventory_onhand',
-    table: `(select org_id, item_id, stock_location_id,
+    table: `(select org_id, subsidiary_id, item_id, stock_location_id,
                     sum(remaining_quantity) as quantity,
                     sum(round(remaining_quantity * unit_cost, 4)) as value
                from cost_layers
               where remaining_quantity > 0
-              group by org_id, item_id, stock_location_id)`,
+              group by org_id, subsidiary_id, item_id, stock_location_id)`,
     alias: 'oh',
-    idExpr: sql`oh.item_id::text || ':' || oh.stock_location_id::text`,
+    idExpr: sql`oh.subsidiary_id::text || ':' || oh.item_id::text || ':' || oh.stock_location_id::text`,
     customFieldTable: 'items',
     customFieldAlias: 'it',
     baseJoins: sql`join items it on it.id=oh.item_id and it.org_id=oh.org_id join stock_locations sl on sl.id=oh.stock_location_id and sl.org_id=oh.org_id`,
@@ -416,7 +437,7 @@ const SOURCES: Record<string, EntityListSource> = {
     defaultSort: sql`it.name`,
     statusCounts: false,
     quickFilters: [],
-    where: inventoryOnhandWhere,
+    where: inventoryOnhandScopedWhere,
     drawerParam: 'item',
     basePath: '/inventory',
     extraSelect: sql`oh.item_id`,
@@ -434,7 +455,7 @@ const SOURCES: Record<string, EntityListSource> = {
     defaultSort: sql`m.moved_at`,
     statusCounts: false,
     quickFilters: [{ paramKey: 'kind', filterKey: 'kind' }],
-    where: inventoryMovementWhere,
+    where: inventoryMovementScopedWhere,
     drawerParam: 'movement',
     basePath: '/inventory',
     extraSelect: sql`m.item_id`,
