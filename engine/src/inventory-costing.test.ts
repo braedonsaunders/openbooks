@@ -26,6 +26,7 @@ import {
 import { db } from "./db.ts";
 import {
   createScratchOrg,
+  createScratchUser,
   dropScratchOrgReporting,
   type ScratchOrg,
 } from "./test-fixtures.ts";
@@ -316,6 +317,125 @@ test("control: FIFO receipts and issues keep the same GL-to-layer equality", { s
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
+});
+
+test("inventory journals retain the posting actor and exact landed-cost splits retain stock ownership", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Inventory Poster", "admin");
+    const receipt = await receiveInventory(org.orgId, actorId, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "3",
+      unitCost: "1",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
+    });
+    const journal = (await db.execute<{
+      created_by: string | null;
+      updated_by: string | null;
+      posted_by: string | null;
+    }>(sql`
+      select created_by, updated_by, posted_by
+        from journal_entries
+       where id = ${receipt.entryId} and org_id = ${org.orgId}
+    `)).rows[0]!;
+    assert.equal(journal.created_by, actorId);
+    assert.equal(journal.updated_by, actorId);
+    assert.equal(journal.posted_by, actorId);
+
+    // $0.01 over three units is not representable by one four-decimal rate;
+    // the deterministic one-unit rounding fragment must still carry the
+    // legal entity that owns the source layer.
+    await postLandedCostVoucher(org.orgId, actorId, {
+      amount: "0.01",
+      basis: "value",
+      freightAccountId: org.accounts.freight,
+      subsidiaryId: org.subsidiaryId,
+      voucherDate: org.date,
+      targets: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
+    });
+    const splitLayers = (await db.execute<{ subsidiary_id: string; remaining_quantity: string }>(sql`
+      select subsidiary_id, remaining_quantity
+        from cost_layers
+       where org_id = ${org.orgId}
+         and item_id = ${org.items.fifo}
+         and stock_location_id = ${org.stockLocationId}
+       order by remaining_quantity
+    `)).rows;
+    assert.equal(splitLayers.length, 2);
+    assert.deepEqual(new Set(splitLayers.map((layer) => layer.subsidiary_id)), new Set([org.subsidiaryId]));
+    assert.deepEqual(new Set(splitLayers.map((layer) => layer.remaining_quantity)), new Set(["1.0000", "2.0000"]));
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("a receipt re-reads a costing policy after a concurrent revision commits", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    let signalPolicyReady!: () => void;
+    const policyReady = new Promise<void>((resolve) => {
+      signalPolicyReady = resolve;
+    });
+    let releasePolicy!: () => void;
+    const policyReleased = new Promise<void>((resolve) => {
+      releasePolicy = resolve;
+    });
+    const policyTransaction = db.transaction(async (tx) => {
+      await tx.execute(sql`
+        select 1 from item_inventory_profiles
+         where org_id = ${org.orgId} and item_id = ${org.items.standard}
+         for update
+      `);
+      await tx.execute(sql`
+        update item_inventory_profiles
+           set standard_cost = '3.50'
+         where org_id = ${org.orgId} and item_id = ${org.items.standard}
+      `);
+      // Keep the uncommitted revision held while the receipt starts. A plain
+      // pre-transaction SELECT sees the old committed 2.00, whereas the
+      // movement's FOR SHARE waits and then observes the committed 3.50.
+      signalPolicyReady();
+      await policyReleased;
+    });
+    await policyReady;
+
+    // The receipt starts while the policy row is exclusively locked. It must
+    // wait, then price itself at the committed 3.50 standard rather than the
+    // stale 2.00 snapshot a pre-transaction read would capture.
+    const receiptPromise = receiveInventory(org.orgId, null, {
+      itemId: org.items.standard,
+      stockLocationId: org.stockLocationId,
+      quantity: "1",
+      unitCost: "3.50",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    releasePolicy();
+    await policyTransaction;
+    const receipt = await receiptPromise;
+    const movement = (await db.execute<{ unit_cost: string }>(sql`
+      select unit_cost
+        from inventory_movements
+       where id = ${receipt.movementId} and org_id = ${org.orgId}
+    `)).rows[0]!;
+    assert.equal(movement.unit_cost, "3.5000");
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("movement costing snapshots are locked inside their transaction", () => {
+  const source = readFileSync(new URL("./inventory.ts", import.meta.url), "utf8");
+  // Each direct movement path must re-read the profile with FOR SHARE after
+  // locking its position; a pre-transaction profile read can race a policy PUT.
+  assert.match(source, /const profile = await resolveProfile\(orgId, input\.itemId, tx, true\)/g);
+  assert.match(source, /const profile = await resolveProfile\(orgId, target\.itemId, tx, true\)/);
+  assert.match(source, /subsidiaryIds\?: readonly string\[\] \| null/);
 });
 
 test("the costing profile PUT revalues open layers when a standard cost is revised", () => {
