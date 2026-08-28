@@ -204,6 +204,58 @@ test("NRV reversal: IFRS capped at the write-down, US GAAP refused, over-reversa
   }
 });
 
+test("NRV reversal only restores the written-down quantity that remains after issues", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await setFramework(org.orgId, "ifrs");
+    await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "10",
+      unitCost: "10",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.ap,
+      date: org.date,
+    });
+    await writeDownInventoryToNrv(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      nrvPerUnit: "5",
+    });
+
+    // The issue consumes nine units at their written-down cost. The evidence
+    // row still has a 50.00 open balance, but only 1/10 of that loss belongs to
+    // the one unit that remains in inventory.
+    await issueInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "9",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.cogs,
+      date: org.date,
+    });
+    const reversal = await reverseInventoryWritedown(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      nrvPerUnit: "100",
+    });
+
+    assert.equal(reversal.amount, "5.0000");
+    assert.equal(reversal.previousValue, "5.0000");
+    assert.equal(reversal.newValue, "10.0000");
+    const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+    assert.equal(toUnits(onHand.quantity), toUnits("1"));
+    assert.equal(toUnits(onHand.value), toUnits("10"));
+    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("10"));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("NRV write-down distributes exactly across uneven layers — no lost cent", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

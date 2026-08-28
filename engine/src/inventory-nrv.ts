@@ -39,6 +39,8 @@ type RemainingLayer = {
   received_at: string;
   remaining_quantity: string;
   unit_cost: string;
+  source_kind: string;
+  source_unit_cost: string | null;
 };
 
 /**
@@ -146,15 +148,21 @@ async function remainingLayers(
   stockLocationId: string,
   subsidiaryId?: string,
 ): Promise<RemainingLayer[]> {
-  const ownerScope = subsidiaryId ? sql`and subsidiary_id = ${subsidiaryId}` : sql``;
+  const ownerScope = subsidiaryId ? sql`and layer.subsidiary_id = ${subsidiaryId}` : sql``;
   const r = (await tx.execute<RemainingLayer>(sql`
-    select id, subsidiary_id, source_movement_id, received_at::text as received_at,
-           remaining_quantity::text as remaining_quantity, unit_cost::text as unit_cost
-      from cost_layers
-     where org_id = ${orgId} and item_id = ${itemId} and stock_location_id = ${stockLocationId}
+    select layer.id, layer.subsidiary_id, layer.source_movement_id,
+           layer.received_at::text as received_at,
+           layer.remaining_quantity::text as remaining_quantity,
+           layer.unit_cost::text as unit_cost,
+           source.kind as source_kind, source.unit_cost::text as source_unit_cost
+      from cost_layers layer
+      join inventory_movements source
+        on source.id = layer.source_movement_id and source.org_id = layer.org_id
+     where layer.org_id = ${orgId} and layer.item_id = ${itemId}
+       and layer.stock_location_id = ${stockLocationId}
        ${ownerScope}
-       and remaining_quantity > 0
-     order by received_at, id
+       and layer.remaining_quantity > 0
+     order by layer.received_at, layer.id
      for update`));
   return r.rows;
 }
@@ -382,9 +390,10 @@ export interface NrvReversalInput {
  *
  * The IAS 2.33 cap: the increase is limited BOTH by the revised NRV target and
  * by the unreversed remainder of THIS entity's prior write-downs for the
- * item/location, so cumulative reversals can never exceed cumulative
- * write-downs and the carrying amount can never exceed what cost would have
- * been. Layers, open write-downs, and the journal are all scoped to the
+ * quantity that is still on hand. Issues consume the written-down layers but
+ * do not mutate the evidence row, so applying the whole historical remainder
+ * after an issue could restore value belonging to units that have already
+ * been sold. Layers, open write-downs, and the journal are all scoped to the
  * requesting entity, so one owner's recovery never releases another's.
  */
 export async function reverseInventoryWritedown(
@@ -411,8 +420,8 @@ export async function reverseInventoryWritedown(
     );
     if (layers.length === 0) throw new InventoryNrvError("nothing on hand to remeasure");
 
-    const open = (await tx.execute<{ id: string; remaining: string }>(sql`
-      select id, (amount - reversed_amount)::text as remaining
+    const open = (await tx.execute<{ id: string; quantity: string; remaining: string }>(sql`
+      select id, quantity::text as quantity, (amount - reversed_amount)::text as remaining
         from inventory_writedowns
        where org_id = ${orgId} and item_id = ${input.itemId}
          and stock_location_id = ${input.stockLocationId}
@@ -420,8 +429,8 @@ export async function reverseInventoryWritedown(
          and kind = 'writedown' and amount > reversed_amount
        order by date, created_at
        for update`));
-    const reversible = open.rows.reduce((a, r) => a + toUnits(r.remaining), 0n);
-    if (reversible <= 0n) {
+    const totalReversible = open.rows.reduce((a, r) => a + toUnits(r.remaining), 0n);
+    if (totalReversible <= 0n) {
       throw new InventoryNrvError(
         "no unreversed write-down exists for this item, location, and legal entity",
       );
@@ -440,8 +449,54 @@ export async function reverseInventoryWritedown(
     if (requested <= 0n) {
       throw new InventoryNrvError("revised net realisable value is not above the carrying amount — nothing to reverse");
     }
-    // IAS 2.33 cap: never release more than remains of the write-down.
-    const increase = requested < reversible ? requested : reversible;
+    // IAS 2.33 cap: an issue consumes the written-down cost layer, but the
+    // historical evidence row remains open. Allocate each row's unreversed
+    // amount only to the quantity that survives on hand; otherwise a write-down
+    // on 10 units followed by an issue of 9 could release the full 10-unit loss
+    // onto the one unit left in inventory.
+    const onHandQuantityUnits = toUnits(onHand.quantity);
+    const reversibleForOnHand = open.rows.reduce((total, row) => {
+      const rowQuantityUnits = toUnits(row.quantity);
+      if (rowQuantityUnits <= 0n) return total;
+      const survivingQuantityUnits =
+        onHandQuantityUnits < rowQuantityUnits ? onHandQuantityUnits : rowQuantityUnits;
+      return total + (toUnits(row.remaining) * survivingQuantityUnits) / rowQuantityUnits;
+    }, 0n);
+    // For ordinary receipt layers, the source movement's immutable unit cost
+    // gives a second, layer-specific ceiling. This catches FIFO cases where an
+    // issue removes a high-cost layer while a low-cost layer remains: a
+    // position-wide quantity ratio would otherwise assign the sold layer's
+    // write-down to the cheap inventory still on hand. Transfers, assemblies,
+    // and blended layers do not retain an independent historical unit cost, so
+    // the quantity-aware evidence cap above remains the authoritative fallback.
+    const sourceCostsTrusted = layers.every(
+      (layer) =>
+        layer.source_kind === "receipt" &&
+        layer.source_unit_cost != null &&
+        toUnits(layer.source_unit_cost) >= toUnits(layer.unit_cost),
+    );
+    const sourceCostRoom = sourceCostsTrusted
+      ? (() => {
+          const sourceCost = layers.reduce(
+            (total, layer) =>
+              total + valueAt(toUnits(layer.remaining_quantity), toUnits(layer.source_unit_cost!)),
+            0n,
+          );
+          const room = sourceCost - previousUnits;
+          return room > 0n ? room : 0n;
+        })()
+      : null;
+    const increaseCap = [
+      totalReversible,
+      reversibleForOnHand,
+      ...(sourceCostRoom == null ? [] : [sourceCostRoom]),
+    ].reduce((cap, candidate) => (candidate < cap ? candidate : cap));
+    const increase = requested < increaseCap ? requested : increaseCap;
+    if (increase <= 0n) {
+      throw new InventoryNrvError(
+        "no unreversed write-down remains on inventory still on hand",
+      );
+    }
     const targetUnits = previousUnits + increase;
 
     const enriched = layers.map((layer) => ({
