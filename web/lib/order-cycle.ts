@@ -10,9 +10,14 @@ import {
   CONVERSION_TARGETS,
 } from './order-kinds'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
-import { add, fromUnits, mulRatio, neg, sum, toUnits } from '@openbooks/engine/src/money.ts'
-import { billableRemainderUnits, lineRequiresReceipt } from '@openbooks/engine/src/ap-capture-service.ts'
-import { remainingOrderLine } from './order-cycle-math'
+import { add, mulRatio, neg, sum } from '@openbooks/engine/src/money.ts'
+import { lineRequiresReceipt } from '@openbooks/engine/src/ap-capture-service.ts'
+import {
+  billableRemainderQuantityUnits,
+  fromQuantityUnits,
+  remainingOrderLine,
+  toQuantityUnits,
+} from './order-cycle-math'
 import { isFeatureEnabled } from './features'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { applySalesFulfillmentInventoryIssues } from '@openbooks/engine/src/inventory.ts'
@@ -175,9 +180,9 @@ function canonicalFulfillmentLines(lines: SalesFulfillmentLineInput[]): Canonica
     seen.add(sourceLineId)
     let quantity: string
     try {
-      const units = toUnits(line.quantity)
+      const units = toQuantityUnits(line.quantity)
       if (units <= 0n) throw new Error('non-positive')
-      quantity = fromUnits(units)
+      quantity = fromQuantityUnits(units)
     } catch {
       throw new ConversionError(`Fulfillment quantity for line ${sourceLineId} must be positive`)
     }
@@ -276,12 +281,12 @@ export async function fulfillSalesOrder(
     const selected = requested.map((request) => {
       const line = sourceById.get(request.sourceLineId)
       if (!line) throw new ConversionError(`Sales-order line ${request.sourceLineId} was not found`)
-      const remaining = toUnits(String(line.quantity)) - toUnits(String(line.quantity_fulfilled))
-      const shipping = toUnits(request.quantity)
+      const remaining = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_fulfilled))
+      const shipping = toQuantityUnits(request.quantity)
       if (remaining <= 0n) throw new ConversionError(`Sales-order line ${line.line_number} is already fully fulfilled`)
       if (shipping > remaining) {
         throw new ConversionError(
-          `Sales-order line ${line.line_number} has only ${fromUnits(remaining)} remaining to fulfill`,
+          `Sales-order line ${line.line_number} has only ${fromQuantityUnits(remaining)} remaining to fulfill`,
         )
       }
       return { request, line }
@@ -435,9 +440,9 @@ async function fulfillSalesOrderRemainder(
      order by line.id
   `)).rows
   const lines = rows.flatMap((line) => {
-    const remaining = toUnits(line.quantity) - toUnits(line.quantity_fulfilled)
+    const remaining = toQuantityUnits(line.quantity) - toQuantityUnits(line.quantity_fulfilled)
     return remaining > 0n
-      ? [{ sourceLineId: line.id, quantity: fromUnits(remaining) }]
+      ? [{ sourceLineId: line.id, quantity: fromQuantityUnits(remaining) }]
       : []
   })
   if (lines.length === 0) {
@@ -534,16 +539,15 @@ export async function convertOrder(
     const covered = (
       fulfillmentGovernedBilling
         ? remaining.flatMap((row) => {
-            const units = billableRemainderUnits({
+            const units = billableRemainderQuantityUnits({
               orderedQuantity: String(row.line.quantity),
               billedQuantity: String(row.line.quantity_billed),
               fulfilledQuantity: String(row.line.quantity_fulfilled),
-              itemId: row.line.item_id ?? null,
-              itemKind: row.line.item_kind ?? null,
+              requiresReceipt: row.line.item_id != null && lineRequiresReceipt(row.line.item_kind ?? null),
             })
             return units > 0n ? [{ ...row, units }] : []
           })
-        : remaining.map((row) => ({ ...row, units: toUnits(row.remainder.quantity) }))
+        : remaining.map((row) => ({ ...row, units: toQuantityUnits(row.remainder.quantity) }))
     )
     if (covered.length === 0) throw new ConversionError('Fulfilled quantities do not cover any line yet')
     // Source lines stay. Turning Inventory off must refuse a conversion that
@@ -622,7 +626,7 @@ export async function convertOrder(
     let lineNo = 1
     for (const r of covered) {
       const l = r.line
-      const remainderUnits = toUnits(r.remainder.quantity)
+      const remainderUnits = toQuantityUnits(r.remainder.quantity)
       const amount = mulRatio(r.remainder.amount, r.units, remainderUnits)
       const taxAmount = mulRatio(r.remainder.taxAmount, r.units, remainderUnits)
       convertedAmounts.push(amount)
@@ -632,13 +636,13 @@ export async function convertOrder(
               quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id,
               location_id, class_id, extra_dims, stock_location_id, is_billable, created_by)
         values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${l.account_id}, ${l.description},
-              ${fromUnits(r.units)}, ${l.unit}, ${l.unit_price}, ${amount},
+              ${fromQuantityUnits(r.units)}, ${l.unit}, ${l.unit_price}, ${amount},
               ${l.tax_code_id}, ${l.tax_group_id}, ${taxAmount}, ${l.department_id}, ${l.project_id},
               ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.stock_location_id}, ${l.is_billable}, ${userId})
         returning id
       `))
       const newLineId = inserted.rows[0]!.id
-      const originalQty = toUnits(String(l.quantity))
+      const originalQty = toQuantityUnits(String(l.quantity))
       if (originalQty !== 0n && (l.tax_code_id || l.tax_group_id)) {
         const components = (await tx.execute<{
           tax_code_id: string
@@ -703,7 +707,7 @@ export async function convertOrder(
       // same ceiling the remainder was computed from, so a concurrent channel
       // that consumed the cover makes THIS conversion fail whole (the row
       // lock already serializes; the predicate documents and enforces it).
-      const coveredQty = fromUnits(r.units)
+      const coveredQty = fromQuantityUnits(r.units)
       const receiptRequired = l.item_id != null && lineRequiresReceipt(l.item_kind ?? null)
       const advanced = (await tx.execute<{ id: string }>(sql`
         update document_lines set quantity_billed = quantity_billed + ${coveredQty}, updated_by = ${userId}
