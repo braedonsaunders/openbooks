@@ -287,3 +287,83 @@ test("journal report truncation keeps entries complete", { skip: !env.OPENBOOKS_
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
+
+test("layout statements include posted and reversed entries but exclude draft and voided activity", { skip: !env.OPENBOOKS_DB_URL }, () => {
+  const source = `
+    import assert from "node:assert/strict";
+    import { randomUUID } from "node:crypto";
+    import { sql } from "drizzle-orm";
+    import { db, withBypass, withOrg } from "./engine/src/db.ts";
+    import { toUnits } from "./engine/src/money.ts";
+    import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+    import { renderLayout } from "./web/lib/layouts.ts";
+
+    const scratch = await withBypass(() => createScratchOrg());
+    const layoutId = randomUUID();
+    const sourceEntryId = randomUUID();
+    const reversalEntryId = randomUUID();
+    const postedEntryId = randomUUID();
+    const draftEntryId = randomUUID();
+    try {
+      await withBypass(async () => {
+        await db.execute(sql\`
+          insert into statement_layouts (id, org_id, name, statement, rows)
+          values (\${layoutId}, \${scratch.orgId}, 'Posted P&L', 'pnl', \${JSON.stringify([
+            { kind: "group", label: "Revenue", match: { types: ["income"] } },
+          ])}::jsonb)
+        \`);
+        await db.execute(sql\`
+          insert into journal_entries
+            (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+             period_id, memo, status, origin, posted_at, reverses_entry_id)
+          values
+            (\${sourceEntryId}, \${scratch.orgId}, \${scratch.bookId}, \${scratch.subsidiaryId},
+             'LAYOUT-SOURCE', \${scratch.date}, \${scratch.periodId}, 'Voided source', 'draft', 'manual', null, null),
+            (\${reversalEntryId}, \${scratch.orgId}, \${scratch.bookId}, \${scratch.subsidiaryId},
+             'LAYOUT-REVERSAL', \${scratch.date}, \${scratch.periodId}, 'Voided reversal', 'draft', 'manual', null, \${sourceEntryId}),
+            (\${postedEntryId}, \${scratch.orgId}, \${scratch.bookId}, \${scratch.subsidiaryId},
+             'LAYOUT-POSTED', \${scratch.date}, \${scratch.periodId}, 'Posted revenue', 'draft', 'manual', null, null),
+            (\${draftEntryId}, \${scratch.orgId}, \${scratch.bookId}, \${scratch.subsidiaryId},
+             'LAYOUT-DRAFT', \${scratch.date}, \${scratch.periodId}, 'Unposted draft', 'draft', 'manual', null, null)
+        \`);
+        await db.execute(sql\`
+          insert into journal_lines
+            (org_id, entry_id, line_number, account_id, subsidiary_id,
+             amount, currency, txn_amount, fx_rate)
+          values
+            (\${scratch.orgId}, \${sourceEntryId}, 1, \${scratch.accounts.bank}, \${scratch.subsidiaryId}, '100.0000', 'CAD', '100.0000', '1'),
+            (\${scratch.orgId}, \${sourceEntryId}, 2, \${scratch.accounts.revenue}, \${scratch.subsidiaryId}, '-100.0000', 'CAD', '-100.0000', '1'),
+            (\${scratch.orgId}, \${reversalEntryId}, 1, \${scratch.accounts.bank}, \${scratch.subsidiaryId}, '-100.0000', 'CAD', '-100.0000', '1'),
+            (\${scratch.orgId}, \${reversalEntryId}, 2, \${scratch.accounts.revenue}, \${scratch.subsidiaryId}, '100.0000', 'CAD', '100.0000', '1'),
+            (\${scratch.orgId}, \${postedEntryId}, 1, \${scratch.accounts.bank}, \${scratch.subsidiaryId}, '50.0000', 'CAD', '50.0000', '1'),
+            (\${scratch.orgId}, \${postedEntryId}, 2, \${scratch.accounts.revenue}, \${scratch.subsidiaryId}, '-50.0000', 'CAD', '-50.0000', '1'),
+            (\${scratch.orgId}, \${draftEntryId}, 1, \${scratch.accounts.bank}, \${scratch.subsidiaryId}, '900.0000', 'CAD', '900.0000', '1'),
+            (\${scratch.orgId}, \${draftEntryId}, 2, \${scratch.accounts.revenue}, \${scratch.subsidiaryId}, '-900.0000', 'CAD', '-900.0000', '1')
+        \`);
+        await db.execute(sql\`
+          update journal_entries
+             set status = 'posted', posted_at = now()
+           where id in (\${sourceEntryId}, \${reversalEntryId}, \${postedEntryId})
+        \`);
+        await db.execute(sql\`
+          update journal_entries set status = 'reversed' where id = \${sourceEntryId}
+        \`);
+      });
+
+      await withOrg(scratch.orgId, async () => {
+        const rendered = await renderLayout(layoutId, scratch.date, scratch.date);
+        const revenue = rendered?.lines.find((line) => line.kind === "total" && line.label === "Total Revenue");
+        assert.ok(revenue, "the layout emits the configured Revenue total");
+        assert.equal(toUnits(String(revenue.amount)), 50n * 10_000n, "draft and voided activity cannot affect the layout balance");
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(scratch.orgId));
+    }
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
