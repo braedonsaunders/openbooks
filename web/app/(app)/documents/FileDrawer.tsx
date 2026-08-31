@@ -226,7 +226,7 @@ export function FileDrawer({
                 sizeBytes: file.sizeBytes,
                 currentVersionId: file.currentVersionId,
               }}
-              canManage={canEdit}
+              canManage={canManage}
             />
 
             {/* Replace action */}
