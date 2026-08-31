@@ -112,8 +112,8 @@ export function computeRemeasurement(args: {
   return { delta, lines };
 }
 
-async function primaryBookId(orgId: string): Promise<string> {
-  const r = (await db.execute<{ id: string }>(sql`
+async function primaryBookId(orgId: string, exec: SqlExecutor = db): Promise<string> {
+  const r = (await exec.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`));
   if (!r.rows[0]) throw new AssetLifecycleError("no primary accounting book");
   return r.rows[0].id;
@@ -225,53 +225,57 @@ export async function disposeAsset(
   assetId: string,
   opts: { proceeds?: string; proceedsAccountId?: string | null; date: string; actorId: string | null; writeOff?: boolean },
 ): Promise<DisposeResult> {
-  const bookId = await primaryBookId(orgId);
   const proceeds = opts.writeOff ? "0" : opts.proceeds ?? "0";
+  return db.transaction(async (tx) => {
+    // Serialize disposal against remeasurement on the authoritative asset row.
+    // This must precede every carrying-value read so a contender waits for the
+    // prior mutation and then sees its committed schedule/event state.
+    await lockAssetRow(tx, orgId, assetId);
+    const bookId = await primaryBookId(orgId, tx);
 
-  const assetRes = (await db.execute<{
-      id: string; asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string;
-      custom: Record<string, unknown> | null; department_id: string | null; project_id: string | null;
-      location_id: string | null; base_currency: string; asset_account_id: string;
-      accumulated_depreciation_account_id: string; gain_loss_account_id: string | null; accumulated: string;
-    }>(sql`
-    select a.id, a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost, a.custom,
-           a.department_id, a.project_id, a.location_id, sub.base_currency,
-           c.asset_account_id, c.accumulated_depreciation_account_id, c.gain_loss_account_id,
-           coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
-                       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
-                      where l.org_id = a.org_id and s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
-      from fixed_assets a
-      join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
-      join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
-     where a.org_id = ${orgId} and a.id = ${assetId}`));
-  const asset = assetRes.rows[0];
-  if (!asset) throw new AssetLifecycleError("asset not found");
-  if (asset.status === "disposed" || asset.status === "written_off") {
-    throw new AssetLifecycleError(`asset ${asset.asset_number} is already ${asset.status}`);
-  }
-  if (!asset.gain_loss_account_id) {
-    throw new AssetLifecycleError("configure a gain/loss on disposal account on the asset category first");
-  }
+    const assetRes = (await tx.execute<{
+        id: string; asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string;
+        custom: Record<string, unknown> | null; department_id: string | null; project_id: string | null;
+        location_id: string | null; base_currency: string; asset_account_id: string;
+        accumulated_depreciation_account_id: string; gain_loss_account_id: string | null; accumulated: string;
+      }>(sql`
+      select a.id, a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost, a.custom,
+             a.department_id, a.project_id, a.location_id, sub.base_currency,
+             c.asset_account_id, c.accumulated_depreciation_account_id, c.gain_loss_account_id,
+             coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
+                         join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
+                        where l.org_id = a.org_id and s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
+        from fixed_assets a
+        join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
+        join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
+       where a.org_id = ${orgId} and a.id = ${assetId}`));
+    const asset = assetRes.rows[0];
+    if (!asset) throw new AssetLifecycleError("asset not found");
+    if (asset.status === "disposed" || asset.status === "written_off") {
+      throw new AssetLifecycleError(`asset ${asset.asset_number} is already ${asset.status}`);
+    }
+    if (!asset.gain_loss_account_id) {
+      throw new AssetLifecycleError("configure a gain/loss on disposal account on the asset category first");
+    }
 
-  const custom = (asset.custom?.accounts ?? {}) as Record<string, string | undefined>;
-  const accounts: DisposalAccounts = {
-    assetAccountId: custom.asset || asset.asset_account_id,
-    accumulatedDepreciationAccountId: custom.accumulated || asset.accumulated_depreciation_account_id,
-    gainLossAccountId: custom.gainLoss || asset.gain_loss_account_id,
-    proceedsAccountId: opts.proceedsAccountId,
-  };
-  // Impairments and revaluations sit on the accumulated-depreciation account
-  // without schedule lines; fold them in so derecognition clears the account
-  // exactly (an impaired asset must not strand its impairment credit).
-  const remeasureDelta = await netRemeasurementDelta(orgId, assetId);
-  const effectiveAccumulated = sub(asset.accumulated, remeasureDelta);
-  const { nbv, gainLoss, lines } = computeDisposal({
-    cost: asset.acquisition_cost, accumulated: effectiveAccumulated, proceeds, accounts,
-  });
+    const custom = (asset.custom?.accounts ?? {}) as Record<string, string | undefined>;
+    const accounts: DisposalAccounts = {
+      assetAccountId: custom.asset || asset.asset_account_id,
+      accumulatedDepreciationAccountId: custom.accumulated || asset.accumulated_depreciation_account_id,
+      gainLossAccountId: custom.gainLoss || asset.gain_loss_account_id,
+      proceedsAccountId: opts.proceedsAccountId,
+    };
+    // Impairments and revaluations sit on the accumulated-depreciation account
+    // without schedule lines; fold them in so derecognition clears the account
+    // exactly (an impaired asset must not strand its impairment credit).
+    const remeasureDelta = await netRemeasurementDelta(orgId, assetId, tx);
+    const effectiveAccumulated = sub(asset.accumulated, remeasureDelta);
+    const { nbv, gainLoss, lines } = computeDisposal({
+      cost: asset.acquisition_cost, accumulated: effectiveAccumulated, proceeds, accounts,
+    });
 
-  const status: "disposed" | "written_off" = opts.writeOff || isZero(proceeds) ? "written_off" : "disposed";
+    const status: "disposed" | "written_off" = opts.writeOff || isZero(proceeds) ? "written_off" : "disposed";
 
-  const entryId = await db.transaction(async (tx) => {
     const entryRes = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
@@ -297,10 +301,8 @@ export async function disposeAsset(
     await tx.execute(sql`
       insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by)
       values (${orgId}, ${assetId}, ${status === "written_off" ? "written_off" : "disposed"}, ${opts.date}, ${proceeds}, ${eid}, ${opts.actorId})`);
-    return eid;
+    return { assetId, entryId: eid, nbv, gainLoss, status };
   });
-
-  return { assetId, entryId, nbv, gainLoss, status };
 }
 
 export interface RemeasureResult {
