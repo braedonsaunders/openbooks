@@ -180,7 +180,7 @@ export async function PATCH(req: Request) {
           financialVersion = await publishProjectFinancialProfileInTransaction(tx, {
             orgId,
             projectTypeId: b.id,
-            effectiveFrom: String(b.financialEffectiveFrom ?? ''),
+            effectiveFrom: String(b.financialEffectiveFrom ?? today),
             financialProfile: b.financialProfile,
             reason: String(b.financialChangeReason ?? ''),
             actorId: gate.user.id,
