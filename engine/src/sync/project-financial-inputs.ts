@@ -51,6 +51,7 @@ type TargetBillingState = {
 type TargetProjectState = {
   id: string;
   source_ref: string;
+  project_type_id: string | null;
   project_type_key: string | null;
   contract_value: string | null;
 };
@@ -222,7 +223,7 @@ export async function syncProjectFinancialInputs(
   }
   const targetProjectsResult = (await db.execute<TargetProjectState>(sql`
     select p.id, p.custom ->> ${source.refKey} as source_ref,
-           pt.key as project_type_key, p.contract_value
+           p.project_type_id, pt.key as project_type_key, p.contract_value
       from projects p
       left join project_types pt
         on pt.id = p.project_type_id and pt.org_id = p.org_id
@@ -292,11 +293,13 @@ export async function syncProjectFinancialInputs(
       {
         id: target.id,
         sourceRef: project.sourceRef,
+        beforeProjectTypeId: target.project_type_id,
         beforeProjectType: target.project_type_key,
         afterProjectType:
           project.billingMethod ?? target.project_type_key,
         afterProjectTypeId: projectTypeId ?? null,
         beforeContractValue: targetContract,
+        beforeContractValueRaw: target.contract_value,
         afterContractValue: sourceContract ?? targetContract,
       },
     ];
@@ -406,26 +409,32 @@ export async function syncProjectFinancialInputs(
         immutableFactChange,
         beforeSourceStatus: target.source_status,
         sourceStatus,
+        beforeInvoicedByLineId: target.invoiced_by_line_id,
         beforeEmployeeRef: target.employee_ref,
+        beforeEmployeeId: target.employee_party_id,
         employeeId: afterEmployeeId,
         employeeRef:
           state.employeeRef === undefined
             ? target.employee_ref
             : state.employeeRef,
         beforeProjectRef: target.project_ref,
+        beforeProjectId: target.project_id,
         projectId: afterProjectId,
         projectRef:
           state.projectRef === undefined ? target.project_ref : state.projectRef,
         beforeItemRef: target.item_ref,
+        beforeItemId: target.item_id,
         itemId: afterItemId,
         itemRef: state.itemRef === undefined ? target.item_ref : state.itemRef,
         beforeDepartmentRef: target.department_ref,
+        beforeDepartmentId: target.department_id,
         departmentId: afterDepartmentId,
         departmentRef:
           state.departmentRef === undefined
             ? target.department_ref
             : state.departmentRef,
         beforeTimeTypeRef: target.time_type_ref,
+        beforeTimeTypeId: target.time_type_id,
         timeTypeId: afterTimeTypeId,
         timeTypeRef:
           state.timeTypeRef === undefined
@@ -519,19 +528,25 @@ export async function syncProjectFinancialInputs(
                    "immutableFactChange" boolean,
                    "beforeSourceStatus" text,
                    "sourceStatus" text,
+                   "beforeInvoicedByLineId" uuid,
                    "beforeEmployeeRef" text,
+                   "beforeEmployeeId" uuid,
                    "employeeId" uuid,
                    "employeeRef" text,
                    "beforeProjectRef" text,
+                   "beforeProjectId" uuid,
                    "projectId" uuid,
                    "projectRef" text,
                    "beforeItemRef" text,
+                   "beforeItemId" uuid,
                    "itemId" uuid,
                    "itemRef" text,
                    "beforeDepartmentRef" text,
+                   "beforeDepartmentId" uuid,
                    "departmentId" uuid,
                    "departmentRef" text,
                    "beforeTimeTypeRef" text,
+                   "beforeTimeTypeId" uuid,
                    "timeTypeId" uuid,
                    "timeTypeRef" text,
                    "beforeWorkedOn" date,
@@ -581,6 +596,20 @@ export async function syncProjectFinancialInputs(
                  and te.payroll_batch_ref is null
                )
              )
+             and te.invoiced_by_line_id is not distinct from input."beforeInvoicedByLineId"
+             and te.employee_party_id is not distinct from input."beforeEmployeeId"
+             and te.project_id is not distinct from input."beforeProjectId"
+             and te.item_id is not distinct from input."beforeItemId"
+             and te.department_id is not distinct from input."beforeDepartmentId"
+             and te.time_type_id is not distinct from input."beforeTimeTypeId"
+             and te.billing_status is not distinct from input."beforeBillingStatus"
+             and te.costing_basis is not distinct from input."beforeCostingBasis"
+             and te.custom ->> 'sourceBillingStatus' is not distinct from input."beforeSourceStatus"
+             and te.worked_on is not distinct from input."beforeWorkedOn"
+             and te.hours is not distinct from input."beforeHours"
+             and te.cost_rate is not distinct from input."beforeCostRate"
+             and te.bill_rate is not distinct from input."beforeBillRate"
+             and te.is_billable is not distinct from input."beforeIsBillable"
            returning te.id
         )
         insert into audit_log
@@ -631,7 +660,7 @@ export async function syncProjectFinancialInputs(
       `);
       if (write.rows.length !== batch.length) {
         throw new Error(
-          `project-financial input sync could not update every time entry; immutable downstream evidence appeared during the write`,
+          `project-financial input sync detected concurrent time-entry edits; retry (expected ${batch.length} updates, applied ${write.rows.length})`,
         );
       }
     }
@@ -641,17 +670,19 @@ export async function syncProjectFinancialInputs(
       offset += BATCH
     ) {
       const batch = changedProjects.slice(offset, offset + BATCH);
-      await tx.execute(sql`
+      const updated = await tx.execute(sql`
         with input as (
           select *
             from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
                  as x(
                    id uuid,
                    "sourceRef" text,
+                   "beforeProjectTypeId" uuid,
                    "beforeProjectType" text,
                    "afterProjectType" text,
                    "afterProjectTypeId" uuid,
                    "beforeContractValue" numeric,
+                   "beforeContractValueRaw" numeric,
                    "afterContractValue" numeric
                  )
         ),
@@ -662,7 +693,11 @@ export async function syncProjectFinancialInputs(
                  updated_at = now(),
                  updated_by = ${actorId}
             from input
-           where p.id = input.id and p.org_id = ${options.orgId}
+           where p.id = input.id
+             and p.org_id = ${options.orgId}
+             and p.custom ->> ${source.refKey} = input."sourceRef"
+             and p.project_type_id is not distinct from input."beforeProjectTypeId"
+             and p.contract_value is not distinct from input."beforeContractValueRaw"
            returning p.id
         )
         insert into audit_log
@@ -688,6 +723,11 @@ export async function syncProjectFinancialInputs(
           from input
           join updated on updated.id = input.id
       `);
+      if ((updated.rowCount ?? 0) !== batch.length) {
+        throw new Error(
+          `project-financial input sync detected concurrent project edits; retry (expected ${batch.length} updates, applied ${updated.rowCount ?? 0})`,
+        );
+      }
     }
   });
   return { ...result, applied: true };
