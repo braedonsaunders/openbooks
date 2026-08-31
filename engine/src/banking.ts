@@ -709,7 +709,9 @@ export function parseBai2(source: StatementSourceContent): ParsedStatement {
     } else if (f[0] === "16") {
       const typeCode = Number(f[1]);
       const cents = f[2];
-      if (!cents) continue;
+      if (cents === undefined || cents === "") {
+        throw new BankingError(`BAI2: unparseable amount "${cents ?? ""}"`);
+      }
       const magnitude = baiAmount(cents);
       const signed = typeCode >= 400 ? "-" + magnitude.replace(/^-/, "") : magnitude;
       const bankRef = f[4] || null;
@@ -734,10 +736,10 @@ export function parseBai2(source: StatementSourceContent): ParsedStatement {
 
 /** BAI2 amounts are integer cents with no decimal point (e.g. "150000" = 1500.00). */
 function baiAmount(cents: string): string {
-  const neg = cents.startsWith("-");
-  const digits = cents.replace(/[^0-9]/g, "");
-  if (!digits) throw new BankingError(`BAI2: unparseable amount "${cents}"`);
-  return fromUnits((neg ? -1n : 1n) * BigInt(digits) * 100n);
+  const match = cents.match(/^([+-]?)(\d+)$/);
+  if (!match) throw new BankingError(`BAI2: unparseable amount "${cents}"`);
+  const sign = match[1] === "-" ? -1n : 1n;
+  return fromUnits(sign * BigInt(match[2]!) * 100n);
 }
 
 /**
@@ -1276,7 +1278,7 @@ async function reconciliationTotalsUsing(
       coalesce((
         select sum(jl.txn_amount)
           from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
          where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
            and jl.currency = ${recon.currency}
            and je.posting_date <= ${recon.through_date}
@@ -1377,7 +1379,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
     const glRes = (await tx.execute<{ id: string; posting_date: string; amount: string }>(sql`
       select jl.id, je.posting_date, jl.txn_amount as amount
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
        where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
          and jl.currency = ${recon.currency}
          and je.posting_date <= ${recon.through_date}
@@ -1504,7 +1506,7 @@ async function createMatchInTransaction(
   const gl = (await tx.execute<{ id: string; amount: string }>(sql`
     select jl.id, jl.txn_amount as amount
       from journal_lines jl
-      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
      where jl.id = any(${sql.param(journalLineIds)}::uuid[])
        and jl.org_id = ${ctx.orgId}
        and jl.account_id = ${recon.account_id}
@@ -1666,7 +1668,7 @@ export async function excludeStatementLine(
 /** Restore an excluded statement line back to the unmatched queue. */
 export async function restoreStatementLine(statementLineId: string, ctx: BankingContext): Promise<void> {
   await db.transaction(async (tx) => {
-    const lineResult = (await tx.execute<{
+    const candidateResult = (await tx.execute<{
         id: string;
         account_id: string;
         posted_on: string;
@@ -1677,24 +1679,41 @@ export async function restoreStatementLine(statementLineId: string, ctx: Banking
        where l.id = ${statementLineId}
          and l.org_id = ${ctx.orgId}
          and l.match_status = 'excluded'
-       for update
     `));
-    const line = lineResult.rows[0];
-    if (!line) throw new BankingError("Only excluded lines can be restored");
-    const signed = (await tx.execute<{ id: string }>(sql`
-      select id
+    const candidate = candidateResult.rows[0];
+    if (!candidate) throw new BankingError("Only excluded lines can be restored");
+    // Reconciliation sessions lock their header before touching statement
+    // lines. Acquire the same locks first so restore cannot deadlock with a
+    // concurrent match/unmatch/sign-off transaction.
+    const overlapping = (await tx.execute<{ id: string; status: string }>(sql`
+      select id, status
         from reconciliations
        where org_id = ${ctx.orgId}
-         and account_id = ${line.account_id}
-         and status = 'signed_off'
-         and through_date >= ${line.posted_on}
-       limit 1
+         and account_id = ${candidate.account_id}
+         and through_date >= ${candidate.posted_on}
+       order by id
+       for update
     `));
-    if (signed.rows[0]) {
+    if (overlapping.rows.some((reconciliation) => reconciliation.status === "signed_off")) {
       throw new BankingError(
         "This exclusion is covered by a signed-off reconciliation and cannot be restored",
       );
     }
+    const lineResult = (await tx.execute<{
+      id: string;
+      account_id: string;
+      posted_on: string;
+      exclusion_reason: string;
+    }>(sql`
+      select l.id, l.account_id, l.posted_on, l.exclusion_reason
+        from bank_statement_lines l
+       where l.id = ${statementLineId}
+         and l.org_id = ${ctx.orgId}
+         and l.match_status = 'excluded'
+       for update
+    `));
+    const line = lineResult.rows[0];
+    if (!line) throw new BankingError("Only excluded lines can be restored");
     await tx.execute(sql`
       update bank_statement_lines
          set match_status = 'unmatched',
@@ -1831,7 +1850,6 @@ export async function markReconciled(
         join journal_entries je
           on je.id = jl.entry_id
          and je.org_id = jl.org_id
-         and je.status in ('posted', 'reversed')
        where m.reconciliation_id = ${recon.id}
          and m.org_id = ${ctx.orgId}
        group by m.statement_line_id, l.amount, l.account_id, l.currency,
@@ -1842,6 +1860,7 @@ export async function markReconciled(
           or l.match_status <> 'matched'
           or bool_or(jl.account_id <> ${recon.account_id})
           or bool_or(jl.currency <> ${recon.currency})
+          or bool_or(je.status <> 'posted')
           or bool_or(je.posting_date > ${recon.through_date})
           or bool_or(jl.reconciled_at is not null)
           or sum(jl.txn_amount) <> l.amount
@@ -1856,7 +1875,7 @@ export async function markReconciled(
     const bal = (await tx.execute<{ cleared: string }>(sql`
       select coalesce(sum(jl.txn_amount), 0) as cleared
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
        where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
          and jl.currency = ${recon.currency}
          and je.posting_date <= ${recon.through_date}

@@ -366,3 +366,180 @@ test(
     }
   },
 );
+
+test(
+  "reversed journal entries are unavailable to automatic and manual bank matching",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const ctx = { orgId: org.orgId, userId: actor };
+      await db.execute(sql`
+        update accounts
+           set reconcilable = true, currency_restriction = 'CAD'
+         where id = ${org.accounts.bank} and org_id = ${org.orgId}
+      `);
+      const [reversedLineId] = await postBankJournal(org, actor, ["100.0000"], "reversed");
+      await db.execute(sql`
+        update journal_entries
+           set status = 'reversed'
+         where id = (select entry_id from journal_lines where id = ${reversedLineId} and org_id = ${org.orgId})
+           and org_id = ${org.orgId}
+      `);
+      await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual",
+          statementDate: org.date,
+          openingBalance: "0",
+          closingBalance: "100",
+          currency: "CAD",
+          lines: [
+            {
+              postedOn: org.date,
+              amount: "100",
+              description: "Voided deposit",
+              bankTransactionId: "reversed-deposit",
+            },
+          ],
+        },
+        ctx,
+      );
+      const reconciliation = await startReconciliation(
+        {
+          accountId: org.accounts.bank,
+          throughDate: org.date,
+          statementBalance: "100",
+        },
+        ctx,
+      );
+      const statementLineId = (
+        await db.execute<{ id: string }>(sql`
+          select id
+            from bank_statement_lines
+           where org_id = ${org.orgId} and bank_transaction_id = 'reversed-deposit'
+        `)
+      ).rows[0]!.id;
+
+      const automatic = await autoMatch(reconciliation.id, ctx);
+      assert.equal(automatic.matched, 0);
+      await assert.rejects(
+        createMatch(
+          {
+            reconciliationId: reconciliation.id,
+            statementLineId,
+            journalLineIds: [reversedLineId!],
+          },
+          ctx,
+        ),
+        /unavailable/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "restoring an exclusion waits for overlapping reconciliation locks",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const ctx = { orgId: org.orgId, userId: actor };
+      await db.execute(sql`
+        update accounts
+           set reconcilable = true, currency_restriction = 'CAD'
+         where id = ${org.accounts.bank} and org_id = ${org.orgId}
+      `);
+      await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual",
+          statementDate: org.date,
+          openingBalance: "0",
+          closingBalance: "5",
+          currency: "CAD",
+          lines: [
+            {
+              postedOn: org.date,
+              amount: "5",
+              description: "Pending exclusion",
+              bankTransactionId: "restore-lock",
+            },
+          ],
+        },
+        ctx,
+      );
+      const reconciliation = await startReconciliation(
+        {
+          accountId: org.accounts.bank,
+          throughDate: org.date,
+          statementBalance: "0",
+        },
+        ctx,
+      );
+      const statementLineId = (
+        await db.execute<{ id: string }>(sql`
+          select id
+            from bank_statement_lines
+           where org_id = ${org.orgId} and bank_transaction_id = 'restore-lock'
+        `)
+      ).rows[0]!.id;
+      await excludeStatementLine(statementLineId, "Pending reconciliation lock", ctx);
+
+      let lockReady!: () => void;
+      const reconciliationLocked = new Promise<void>((resolve) => {
+        lockReady = resolve;
+      });
+      let releaseLock!: () => void;
+      const release = new Promise<void>((resolve) => {
+        releaseLock = resolve;
+      });
+      const locker = db.transaction(async (tx) => {
+        await tx.execute(sql`
+          select id
+            from reconciliations
+           where id = ${reconciliation.id} and org_id = ${org.orgId}
+           for update
+        `);
+        lockReady();
+        await release;
+      });
+
+      await reconciliationLocked;
+      let restored = false;
+      let restoreError: unknown;
+      const restore = restoreStatementLine(statementLineId, ctx).then(
+        () => {
+          restored = true;
+        },
+        (error: unknown) => {
+          restoreError = error;
+        },
+      );
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        assert.equal(restored, false, "restore must wait for the reconciliation row lock");
+      } finally {
+        releaseLock();
+      }
+      await locker;
+      await restore;
+      if (restoreError) throw restoreError;
+      assert.equal(restored, true);
+      const status = (
+        await db.execute<{ match_status: string }>(sql`
+          select match_status
+            from bank_statement_lines
+           where id = ${statementLineId} and org_id = ${org.orgId}
+        `)
+      ).rows[0]!.match_status;
+      assert.equal(status, "unmatched");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
