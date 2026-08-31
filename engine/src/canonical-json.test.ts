@@ -41,4 +41,7 @@ test("canonical JSON preserves arrays and normalizes dates and bigint", () => {
 test("canonical JSON rejects unsafe values", () => {
   assert.throws(() => canonicalJson({ amount: Number.NaN }), NonJsonValueError);
   assert.throws(() => canonicalJson({ handler: () => undefined }), NonJsonValueError);
+  assert.throws(() => canonicalJson(new Map([["amount", "100.00"]])), NonJsonValueError);
+  assert.throws(() => canonicalJson(new Set(["approval"])), NonJsonValueError);
+  assert.throws(() => canonicalJson(/approval/), NonJsonValueError);
 });
