@@ -841,7 +841,7 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
       // A full statutory holiday in the Northwest Territories since 2001 — one
       // of only two jurisdictions where June 21 binds private employers.
       { key: "national_indigenous_peoples_day", name: "National Indigenous Peoples Day",
-        rule: { kind: "fixed", month: 6, day: 21 }, observance: "none" },
+        rule: { kind: "fixed", month: 6, day: 21 }, observance: "none", from: 2001 },
       CANADA_DAY,
       // s. 22(1)(f) names no day, only "the first Monday in August".
       { key: "august_civic_holiday", name: "August Civic Holiday", rule: FIRST_MONDAY_AUGUST, observance: "none" },
