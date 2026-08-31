@@ -2,6 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { statementBookExpr } from "../../gl-summary";
 
 /* ------------------------------------------------------------------ */
 /* Fixed assets                                                        */
@@ -11,9 +12,11 @@ export const FIXED_ASSET_BASE_JOINS = sql`
   left join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
   left join lateral (
     select coalesce(sum(l.posted_amount), 0) as accumulated
-      from depreciation_schedules s
+     from depreciation_schedules s
       join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
-     where s.asset_id = a.id and s.org_id = a.org_id and l.posted_amount is not null
+     where s.asset_id = a.id and s.org_id = a.org_id
+       and s.book_id = ${statementBookExpr(sql`a.org_id`)}
+       and l.posted_amount is not null
   ) depr on true`
 
 const FIXED_ASSET_NBV_EXPR = sql`a.acquisition_cost - depr.accumulated`

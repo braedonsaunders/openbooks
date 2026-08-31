@@ -2,6 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { statementBookExpr } from "../../gl-summary";
 
 /* ------------------------------------------------------------------ */
 /* Accounts                                                            */
@@ -38,20 +39,30 @@ export function accountBaseJoins(today: string): SQL {
     ),
     fy as (
       select make_date(
-        case when extract(month from ${today}::date) >= 4 then extract(year from ${today}::date)::int else extract(year from ${today}::date)::int - 1 end,
-        4, 1) as starts_on
+        case when extract(month from ${today}::date)::int >= cfg.start_month
+             then extract(year from ${today}::date)::int
+             else extract(year from ${today}::date)::int - 1 end,
+        cfg.start_month, 1) as starts_on
+        from (
+          select greatest(1, least(12, coalesce((o.settings->>'fiscalYearStartMonth')::int, 1))) as start_month
+            from orgs o
+           where o.id = a.org_id
+        ) cfg
     ),
     movement as (
       select (g.debit_total - g.credit_total) as amt, g.month as d
         from gl_month_activity g
         join descendants tree on tree.id = g.account_id
-       where g.org_id = a.org_id and g.month < date_trunc('month', ${today}::date)::date
+       where g.org_id = a.org_id
+         and g.book_id = ${statementBookExpr(sql`a.org_id`)}
+         and g.month < date_trunc('month', ${today}::date)::date
       union all
       select l.amount, e.posting_date
         from journal_lines l
         join descendants tree on tree.id = l.account_id
         join journal_entries e on e.id = l.entry_id and e.org_id = a.org_id
          and e.status in ('posted', 'reversed')
+         and e.book_id = ${statementBookExpr(sql`a.org_id`)}
          and e.posting_date >= date_trunc('month', ${today}::date)::date
          and e.posting_date <= ${today}::date
        where l.org_id = a.org_id
