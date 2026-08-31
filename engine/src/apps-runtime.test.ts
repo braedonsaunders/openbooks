@@ -128,6 +128,25 @@ test("storage set/get/list/delete round-trips via the KV adapter", async () => {
   assert.equal(del.response!.body, null);
 });
 
+test("a pending host adapter is bounded by the endpoint deadline", async () => {
+  const adapters = fakeAdapters();
+  adapters.storage.get = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return "too late";
+  };
+  const started = Date.now();
+  const r = await runAppEndpoint({
+    source: `function handler() { return ob.storage.get("slow") }`,
+    request: req(),
+    adapters,
+    timeoutMs: 20,
+  });
+
+  assert.equal(r.status, "timeout");
+  assert.equal(r.error, "execution timed out");
+  assert.ok(Date.now() - started < 200, `endpoint exceeded bound: ${Date.now() - started}ms`);
+});
+
 test("records access is forbidden without the records adapter", async () => {
   const r = await runAppEndpoint({
     source: `function handler() { return ob.records.list("equipment") }`,
