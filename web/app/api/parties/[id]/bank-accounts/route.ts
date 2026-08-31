@@ -307,7 +307,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       { status: 409 },
     )
   }
-  if (new Date(body.expectedUpdatedAt).getTime() !== new Date(existing.rows[0].updatedAt).getTime()) {
+  const expectedUpdatedAt = existing.rows[0].updatedAt
+  if (new Date(body.expectedUpdatedAt).getTime() !== new Date(expectedUpdatedAt).getTime()) {
     return NextResponse.json(
       { error: 'these bank details changed or were already retired; reload and review the latest revision' },
       { status: 409 },
@@ -349,7 +350,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
              updated_by = ${user.id}
        where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
          and retired_at is null
-         and updated_at = ${existing.rows[0].updatedAt}
+         and updated_at = ${expectedUpdatedAt}
        returning id
     `))
     if (!updated.rows[0]) {
