@@ -279,15 +279,21 @@ export async function createPayApplication(
       select 1 from projects where org_id = ${orgId} and id = ${projectId} for update
     `));
     if (!owned.rows.length) throw new ConstructionBillingError("Project not found");
-    const lifecycle = (await tx.execute<{ has_open: boolean; last_period: string | null }>(sql`
+    const lifecycle = (await tx.execute<{ has_open: boolean; last_period: string | Date | null }>(sql`
       select
         exists(select 1 from pay_applications where org_id = ${orgId} and project_id = ${projectId}
                and status in ('draft', 'submitted', 'approved')) as has_open,
-        max(period_end) filter (where status in ('invoiced', 'posted')) as last_period
+        -- Keep the calendar-day comparison in ISO form; node-postgres may otherwise
+        -- deserialize a PostgreSQL DATE as a JavaScript Date object.
+        (max(period_end) filter (where status in ('invoiced', 'posted')))::text as last_period
         from pay_applications where org_id = ${orgId} and project_id = ${projectId}
     `));
     if (lifecycle.rows[0]?.has_open) throw new ConstructionBillingError("Complete or void the current application before starting another");
-    if (lifecycle.rows[0]?.last_period && periodEnd <= lifecycle.rows[0].last_period) {
+    const lastPeriod = lifecycle.rows[0]?.last_period;
+    const lastPeriodDay = lastPeriod instanceof Date
+      ? lastPeriod.toISOString().slice(0, 10)
+      : lastPeriod;
+    if (lastPeriodDay && periodEnd <= lastPeriodDay) {
       throw new ConstructionBillingError("The period ending must be after the previous invoiced application");
     }
     const sov = (await tx.execute<{ id: string; scheduled_value: string }>(sql`

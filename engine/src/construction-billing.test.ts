@@ -3,9 +3,11 @@ import test from "node:test";
 import {
   ConstructionBillingError,
   computeApplication,
+  createPayApplication,
   revisedScheduleValue,
   type AppLineInput,
 } from "./construction-billing.ts";
+import { db } from "./db.ts";
 
 const line = (over: Partial<AppLineInput>): AppLineInput => ({
   sovLineId: "l",
@@ -139,4 +141,43 @@ test("deductive change orders cannot reduce below already-billed work", () => {
     ConstructionBillingError,
   );
   assert.equal(revisedScheduleValue("100000.0000", "-60000.0000", "40000.0000"), "40000.0000");
+});
+
+test("createPayApplication rejects a period before the previous invoiced Date", async (t) => {
+  const projectId = "project-1";
+  const responses = [
+    { rows: [{ enabled: true }] },
+    { rows: [{ supported: true }] },
+    { rows: [{ id: projectId }] },
+    { rows: [{ has_open: false, last_period: new Date("2026-07-31T00:00:00.000Z") }] },
+    { rows: [{ id: "sov-1", scheduled_value: "1000" }] },
+    { rows: [{ n: 1 }] },
+    { rows: [{ id: "app-1" }] },
+    { rows: [{ prev: "0", prev_stored: "0" }] },
+    { rows: [] },
+    { rows: [] },
+  ];
+  let responseIndex = 0;
+  const tx = {
+    execute: async () => responses[responseIndex++] ?? { rows: [] },
+  };
+  const transactionDb = db as unknown as {
+    transaction(callback: (transaction: typeof tx) => Promise<unknown>): Promise<unknown>;
+  };
+  t.mock.method(
+    transactionDb,
+    "transaction",
+    async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
+  );
+
+  await assert.rejects(
+    createPayApplication("org-1", "user-1", projectId, "2026-07-30"),
+    /period ending must be after the previous invoiced application/,
+  );
+
+  responseIndex = 0;
+  assert.deepEqual(
+    await createPayApplication("org-1", "user-1", projectId, "2026-08-01"),
+    { id: "app-1", applicationNumber: 1 },
+  );
 });
