@@ -270,14 +270,14 @@ jobs:
           # `tee` exits 0, so without pipefail a failing suite greens the step.
           set -o pipefail
           # Membership must match the canonical `npm test` command exactly.
-          # It did not: web/app and web/components suites and both script tests
-          # never ran here, while the job advertised itself as the full suite
-          # and published an lcov artifact that had not executed them.
+          # Keep the repository-artifacts contract test first, just as it is in
+          # the canonical command, so coverage cannot omit a script test.
           node --import tsx --import ./engine/src/test-database-bypass.ts \
             --test --test-force-exit --experimental-test-coverage \
             --test-reporter=spec --test-reporter-destination=stdout \
             --test-reporter=lcov --test-reporter-destination=lcov.info \
-            'scripts/check-repository-artifacts.test.mjs' 'scripts/deploy-edge-workflow.test.mjs' 'scripts/ci-pipeline-integrity.test.mjs' \
+            'scripts/check-repository-artifacts.test.mjs' \
+            'scripts/deploy-edge-workflow.test.mjs' 'scripts/ci-pipeline-integrity.test.mjs' \
             'engine/src/**/*.test.ts' 'packages/**/*.test.ts' \
             'web/**/*.test.ts' 'schema/**/*.test.ts' 2>&1 | tee coverage.txt
 
