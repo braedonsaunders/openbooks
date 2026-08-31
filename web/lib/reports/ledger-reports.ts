@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { glSummaryEligibleDims } from "../gl-summary";
+import { glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
 import { ZERO } from "./decimals";
@@ -67,15 +67,18 @@ export async function generalLedger(
         select x.account_id, coalesce(sum(x.amt), 0) as bal from (
           select g.account_id, (g.debit_total - g.credit_total) as amt
             from gl_month_activity g
-           where g.org_id = ${orgId} and g.month < date_trunc('month', ${from}::date)::date
+           where g.org_id = ${orgId}
+             and g.book_id = ${statementBookExpr(orgId)}
+             and g.month < date_trunc('month', ${from}::date)::date
              ${opts.dims?.subsidiaryIds?.length ? sql`and g.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(',')}}`}::uuid[])` : sql``}
              ${opts.accountId ? sql`and g.account_id = ${opts.accountId}` : sql``}
           union all
           select l.account_id, l.amount
             from journal_lines l
-            join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
-             and e.status in ('posted', 'reversed')
-             and e.posting_date >= date_trunc('month', ${from}::date)::date
+             join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
+              and e.status in ('posted', 'reversed')
+              and e.book_id = ${statementBookExpr(orgId)}
+              and e.posting_date >= date_trunc('month', ${from}::date)::date
              and e.posting_date < ${from}
            where l.org_id = ${orgId} and ${dimWhere(opts.dims)}${acctFilter}
         ) x group by x.account_id`
@@ -83,6 +86,7 @@ export async function generalLedger(
         select l.account_id, coalesce(sum(l.amount), 0) as bal
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+          and e.book_id = ${statementBookExpr(orgId)}
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.posting_date < ${from} and ${dimWhere(opts.dims)}${acctFilter}
          group by l.account_id`
@@ -101,6 +105,7 @@ export async function generalLedger(
            d.kind as doc_kind, d.id as doc_id
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+       and e.book_id = ${statementBookExpr(orgId)}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
@@ -189,6 +194,7 @@ export async function journalReport(
         select id, entry_number, posting_date, memo, origin, source_document_id, org_id
           from journal_entries
          where org_id = ${orgId} and status in ('posted', 'reversed')
+           and book_id = ${statementBookExpr(orgId)}
            and posting_date >= ${from} and posting_date <= ${to}
          -- Same key as the outer sort, id tie-break included, so the window is
          -- exactly the first entries the full ordering would have reached.
@@ -199,6 +205,7 @@ export async function journalReport(
         select id, entry_number, posting_date, memo, origin, source_document_id, org_id
           from journal_entries
          where org_id = ${orgId} and status in ('posted', 'reversed')
+           and book_id = ${statementBookExpr(orgId)}
            and posting_date >= ${from} and posting_date <= ${to}
       )`
   const r = (await db.execute<{
