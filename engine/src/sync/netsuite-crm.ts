@@ -4,6 +4,7 @@ import { db } from '../db.ts'
 import { unsealJson } from '../secrets.ts'
 import { netsuiteRecord, netsuiteRecords, suiteql, type NetSuiteCreds } from '../netsuite.ts'
 import { ensureCrmDefaults } from '../crm.ts'
+import { weightAmount } from '../crm-math.ts'
 import { canonicalDecimal } from '../exact-decimal.ts'
 import { normalizeMoney } from '../money.ts'
 
@@ -121,6 +122,13 @@ export function resolveNetSuiteCrmCurrency(
   const sourceId = sourceText(sourceValue)
   const code = sourceId ? sourceCurrencyById.get(sourceId) ?? sourceId.toUpperCase() : baseCurrency.toUpperCase()
   return /^[A-Z]{3}$/.test(code) && configuredCurrencies.has(code) ? code : null
+}
+
+/** Resolve an opportunity's close probability, falling back to its CRM status. */
+export function resolveNetSuiteCrmOpportunityProbability(sourceValue: unknown, fallback: number): number {
+  const probabilityText = sourceText(sourceValue)
+  const probabilityValue = probabilityText == null ? fallback : Number(probabilityText)
+  return Number.isFinite(probabilityValue) ? Math.max(0, Math.min(100, Math.round(probabilityValue))) : fallback
 }
 
 async function credentials(orgId: string, connectionId?: string): Promise<NetSuiteCreds & { probabilityField?: string }> {
@@ -339,9 +347,9 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
   const noteLinks = await suiteql<{ id:string; entity:string }>('select id,entity from note', creds)
   report.sourceNoteLinks = noteLinks.length
 
-  const opportunities = await suiteql<{ id:string; tranid:string; entity?:string; trandate?:string; duedate?:string; status?:string; currency?:string; foreigntotal?:string; memo?:string }>(`select id,tranid,entity,trandate,duedate,status,currency,foreigntotal,memo from transaction where type='Opprtnty'`, creds)
+  const opportunities = await suiteql<{ id:string; tranid:string; entity?:string; trandate?:string; duedate?:string; status?:string; probability?:string; currency?:string; foreigntotal?:string; memo?:string }>(`select id,tranid,entity,trandate,duedate,status,probability,currency,foreigntotal,memo from transaction where type='Opprtnty'`, creds)
   const [defaultStatusResult, orgResult, configuredCurrencyResult] = await Promise.all([
-    db.execute<{ id: string }>(sql`select id from crm_opportunity_statuses where org_id=${orgId} and is_default order by sequence limit 1`),
+    db.execute<{ id: string; probability: number }>(sql`select id,probability from crm_opportunity_statuses where org_id=${orgId} and is_default order by sequence limit 1`),
     db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id=${orgId}`),
     db.execute<{ code: string }>(sql`select code from currencies`),
   ])
@@ -368,7 +376,10 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
       report.warnings.push(`Opportunity ${opportunity.tranid || opportunity.id} was skipped because source currency ${opportunity.currency ?? '(blank)'} does not resolve to a configured ISO currency.`)
       continue
     }
-    await db.execute(sql`insert into crm_opportunities(org_id,opportunity_number,title,party_id,status_id,expected_close_date,currency,projected_amount,weighted_amount,description,is_active,custom,created_by,updated_by) values(${orgId},${opportunity.tranid || `NS-${opportunity.id}`},${opportunity.memo || opportunity.tranid || `NS-${opportunity.id}`},${party.id},${defaultStatus.id},${date(opportunity.duedate)},${currency},${persistSyncLineMoney(opportunity.foreigntotal || '0', 'projected_amount')},${persistSyncLineMoney(0, 'weighted_amount')},${opportunity.memo ?? null},true,${JSON.stringify({ netsuite: { id: opportunity.id } })}::jsonb,${actorId},${actorId}) on conflict(org_id,opportunity_number) do update set title=excluded.title,party_id=excluded.party_id,expected_close_date=excluded.expected_close_date,currency=excluded.currency,projected_amount=excluded.projected_amount,description=excluded.description,custom=crm_opportunities.custom||excluded.custom,updated_at=now(),updated_by=${actorId} where crm_opportunities.org_id=${orgId}`)
+    const probability = resolveNetSuiteCrmOpportunityProbability(opportunity.probability, defaultStatus.probability)
+    const projectedAmount = persistSyncLineMoney(opportunity.foreigntotal || '0', 'projected_amount')
+    const weightedAmount = persistSyncLineMoney(weightAmount(projectedAmount, probability), 'weighted_amount')
+    await db.execute(sql`insert into crm_opportunities(org_id,opportunity_number,title,party_id,status_id,probability,expected_close_date,currency,projected_amount,weighted_amount,description,is_active,custom,created_by,updated_by) values(${orgId},${opportunity.tranid || `NS-${opportunity.id}`},${opportunity.memo || opportunity.tranid || `NS-${opportunity.id}`},${party.id},${defaultStatus.id},${probability},${date(opportunity.duedate)},${currency},${projectedAmount},${weightedAmount},${opportunity.memo ?? null},true,${JSON.stringify({ netsuite: { id: opportunity.id } })}::jsonb,${actorId},${actorId}) on conflict(org_id,opportunity_number) do update set probability=excluded.probability,title=excluded.title,party_id=excluded.party_id,expected_close_date=excluded.expected_close_date,currency=excluded.currency,projected_amount=excluded.projected_amount,weighted_amount=excluded.weighted_amount,description=excluded.description,custom=crm_opportunities.custom||excluded.custom,updated_at=now(),updated_by=${actorId} where crm_opportunities.org_id=${orgId}`)
     report.opportunities++
   }
   await importRecentActivityNotes(orgId, actorId, creds, report)
