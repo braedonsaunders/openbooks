@@ -179,7 +179,12 @@ export function gaEditionForPayDate(payDate: string): GaEdition {
 
 function gaPeriodFor(periodsPerYear: number): GaPeriod {
   const period = payPeriodFor(periodsPerYear);
-  if (period == null) refuseUnprintedPeriod(GA_WITHHOLDING, periodsPerYear);
+  // Georgia's printed daily figures are annual amounts divided by 365. The
+  // shared period mapping also calls a 260-period payroll "daily", but using
+  // that alias would apply 365-day deductions to a 260-day filer.
+  if (period == null || (period === "daily" && periodsPerYear !== 365)) {
+    refuseUnprintedPeriod(GA_WITHHOLDING, periodsPerYear);
+  }
   return period as GaPeriod;
 }
 
