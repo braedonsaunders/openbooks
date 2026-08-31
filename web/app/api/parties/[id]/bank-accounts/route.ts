@@ -42,6 +42,10 @@ type Body = {
 function validateBody(body: Body, creating: boolean): string | null {
   if (body.bankName !== undefined && !body.bankName?.trim()) return 'bankName required'
   if (creating && !body.bankName?.trim()) return 'bankName required'
+  if (body.accountNumber !== undefined || creating) {
+    const accountNumber = typeof body.accountNumber === 'string' ? body.accountNumber.trim() : ''
+    if (accountNumber.length < 4) return 'accountNumber required'
+  }
   if (body.country && !normalizeCountryCode(body.country)) return 'country must be a valid ISO country code'
   if (body.currency && !/^[A-Za-z]{3}$/.test(body.currency.trim())) return 'currency must be a 3-letter code'
   if (body.routing !== undefined) {
@@ -87,10 +91,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   const validationError = validateBody(body, true)
   if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
-  const accountNumber = (body.accountNumber ?? '').trim()
-  if (!accountNumber || accountNumber.length < 4) {
-    return NextResponse.json({ error: 'accountNumber required' }, { status: 400 })
-  }
+  const accountNumber = body.accountNumber!.trim()
   const country = normalizeCountryCode(body.country) ?? null
 
   const inserted = (await db.execute<{ id: string }>(sql`
@@ -295,6 +296,23 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!body.expectedUpdatedAt) {
     return NextResponse.json({ error: 'the bank-detail revision is required; reload and try again' }, { status: 409 })
   }
+  const existing = (await db.execute<{ updatedAt: Date }>(sql`
+    select updated_at as "updatedAt"
+      from party_bank_accounts
+     where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
+  `))
+  if (!existing.rows[0]) {
+    return NextResponse.json(
+      { error: 'these bank details changed or were already retired; reload and review the latest revision' },
+      { status: 409 },
+    )
+  }
+  if (new Date(body.expectedUpdatedAt).getTime() !== new Date(existing.rows[0].updatedAt).getTime()) {
+    return NextResponse.json(
+      { error: 'these bank details changed or were already retired; reload and review the latest revision' },
+      { status: 409 },
+    )
+  }
   const dependencies = (await db.execute<{ in_flight_payment: boolean; live_mandate: boolean }>(sql`
     select
       exists (
@@ -331,7 +349,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
              updated_by = ${user.id}
        where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
          and retired_at is null
-         and updated_at = ${body.expectedUpdatedAt}::timestamptz
+         and updated_at = ${existing.rows[0].updatedAt}
        returning id
     `))
     if (!updated.rows[0]) {
