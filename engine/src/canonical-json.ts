@@ -28,6 +28,9 @@ export function toCanonicalJsonValue(value: unknown): CanonicalJsonValue {
   if (typeof value === "bigint") return value.toString();
   if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) return value.map(toCanonicalJsonValue);
+  if (value instanceof Map || value instanceof Set) {
+    throw new NonJsonValueError("unsupported JSON value");
+  }
   if (typeof value === "object") {
     const out: Record<string, CanonicalJsonValue> = {};
     for (const key of Object.keys(value as object).sort()) {
