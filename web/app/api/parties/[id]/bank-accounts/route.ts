@@ -9,6 +9,7 @@ import { guardPermission, guardSubsidiaryScope, type Authz } from '../../../../.
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
+import { documentRevisionSql } from '../../../../../lib/documents'
 
 export const runtime = 'nodejs'
 
@@ -127,8 +128,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const partyDenied = await denyOutsidePartyScope(gate, partyId)
   if (partyDenied) return partyDenied
-  const existing = (await db.execute<{ approvalStatus: string; updatedAt: Date }>(sql`
-    select approval_status as "approvalStatus", updated_at as "updatedAt"
+  // Keep the OCC token in PostgreSQL's six-digit wire form. Mapping
+  // timestamptz to Date first would discard microseconds before the CAS.
+  const existing = (await db.execute<{ approvalStatus: string; updatedAt: string }>(sql`
+    select approval_status as "approvalStatus",
+           ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
       from party_bank_accounts
      where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
   `))
@@ -156,7 +160,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (reason.length < 5 || reason.length > 500) {
     return NextResponse.json({ error: 'a change reason between 5 and 500 characters is required' }, { status: 422 })
   }
-  if (!body.expectedUpdatedAt || new Date(body.expectedUpdatedAt).getTime() !== new Date(existing.rows[0]!.updatedAt).getTime()) {
+  if (!body.expectedUpdatedAt || body.expectedUpdatedAt !== existing.rows[0]!.updatedAt) {
     return NextResponse.json(
       { error: 'these bank details changed after you opened them; reload and review the latest revision' },
       { status: 409 },
@@ -206,7 +210,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       where id = ${accountId}
         and party_id = ${partyId}
         and org_id = ${user.orgId}
-        and updated_at = ${existing.rows[0]!.updatedAt}
+        and updated_at = ${existing.rows[0]!.updatedAt}::timestamptz
         and retired_at is null
       returning id
     `))
@@ -327,7 +331,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
              updated_by = ${user.id}
        where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
          and retired_at is null
-         and updated_at = ${body.expectedUpdatedAt}
+         and updated_at = ${body.expectedUpdatedAt}::timestamptz
        returning id
     `))
     if (!updated.rows[0]) {
