@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CANADA_RETURN_PACKS } from "./country-tax-packs/ca-returns.ts";
 import { assembleReturn, evalFormula, planReturn, TaxReturnError, type TaxReturnBoxDef, type TaxReportLineRow } from "./tax-return.ts";
 
 const codes = (...c: string[]) => new Set(c);
@@ -24,6 +25,9 @@ test("evalFormula handles parentheses, unary minus, and true numeric literals", 
   // 200 is not a box code → a literal
   assert.equal(evalFormula("108 + 200", values, codes("105", "108")), "4200.0000");
   assert.equal(evalFormula("abs(108 - 105)", values, codes("105", "108")), "5000.0000");
+  assert.equal(evalFormula("max(105, 108)", values, codes("105", "108")), "9000.0000");
+  assert.equal(evalFormula("max(-105, 108)", values, codes("105", "108")), "4000.0000");
+  assert.equal(evalFormula("max(0, 0)", values, codes("105", "108")), "0.0000");
 });
 
 test("evalFormula rejects unsupported operators and unknown boxes", () => {
@@ -31,6 +35,7 @@ test("evalFormula rejects unsupported operators and unknown boxes", () => {
   assert.throws(() => evalFormula("105 - 108", new Map([["105", "1.0000"]]), codes("105", "108")), /not-yet-computed box "108"/);
   assert.throws(() => evalFormula("105 +", new Map([["105", "1.0000"]]), codes("105")), TaxReturnError);
   assert.throws(() => evalFormula("abs 105", new Map([["105", "1.0000"]]), codes("105")), TaxReturnError);
+  assert.throws(() => evalFormula("max(105)", new Map([["105", "1.0000"]]), codes("105")), TaxReturnError);
 });
 
 // A realistic GST34: 101 sales, 103 GST/HST collected (a credit in the ledger,
@@ -59,6 +64,42 @@ test("assembleReturn computes a GST34 with sign flips and derived totals", () =>
   assert.equal(v("105"), "13000.0000"); // = 103
   assert.equal(v("108"), "4000.0000"); // = 106
   assert.equal(v("109"), "9000.0000"); // net tax owed = 13000 - 4000
+});
+
+test("GST34 puts a positive balance in payment or refund, never both", () => {
+  const pack = CANADA_RETURN_PACKS.find((candidate) => candidate.code === "CA_GST34");
+  assert.ok(pack);
+  const defs: TaxReturnBoxDef[] = pack.boxes.map((box) => ({
+    lineCode: box.lineCode,
+    label: box.label,
+    sign: box.sign,
+    sequence: box.sequence,
+    formula: box.formula ?? null,
+    editable: !box.formula && !box.glMap,
+    pdfField: null,
+  }));
+  const values = (raw: Map<string, string>) => {
+    const result = assembleReturn(defs, raw);
+    return (code: string) => result.find((box) => box.lineCode === code)!.value;
+  };
+
+  // Collected tax exceeds ITCs: the balance is payable in line 115 only.
+  const payable = values(new Map([["103", "-13000.0000"], ["106", "4000.0000"]]));
+  assert.equal(payable("113C"), "9000.0000");
+  assert.equal(payable("114"), "0.0000");
+  assert.equal(payable("115"), "9000.0000");
+
+  // ITCs exceed collected tax: the balance is refundable in line 114 only.
+  const refund = values(new Map([["103", "-4000.0000"], ["106", "13000.0000"]]));
+  assert.equal(refund("113C"), "-9000.0000");
+  assert.equal(refund("114"), "9000.0000");
+  assert.equal(refund("115"), "0.0000");
+
+  // A balanced return leaves both terminal boxes empty.
+  const balanced = values(new Map([["103", "-4000.0000"], ["106", "4000.0000"]]));
+  assert.equal(balanced("113C"), "0.0000");
+  assert.equal(balanced("114"), "0.0000");
+  assert.equal(balanced("115"), "0.0000");
 });
 
 test("assembleReturn marks computed vs GL-mapped boxes and preserves order", () => {

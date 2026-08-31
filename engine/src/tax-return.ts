@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { pool, type SqlExecutor } from "./db.ts";
-import { abs, add, fromUnits, neg, toUnits } from "./money.ts";
+import { abs, add, cmp, fromUnits, neg, toUnits } from "./money.ts";
 import { uuidArray } from "./subsidiaries.ts";
 import { buildFilingCalendar, type FilingFrequency } from "./tax-nexus.ts";
 
@@ -60,11 +60,13 @@ export class TaxReturnError extends Error {
 }
 
 /**
- * Evaluate a box `formula` — `+`/`-` and `abs(...)` over line-code references,
- * numeric literals and parentheses — against already-computed box values, in
- * exact money math. `abs` is required by returns such as UK VAT100 box 5 and
- * New Zealand GST101A box 15, which report the unsigned difference between tax
- * collected and credits. Anything else is a configuration error, not silent 0.
+ * Evaluate a box `formula` — `+`/`-`, `abs(...)`, and `max(...)` over line-code
+ * references, numeric literals and parentheses — against already-computed box
+ * values, in exact money math. `abs` is required by returns such as UK VAT100
+ * box 5 and New Zealand GST101A box 15, which report the unsigned difference
+ * between tax collected and credits. `max` supports one-sided boxes such as
+ * GST34's refund/payment split. Anything else is a configuration error, not
+ * silent 0.
  */
 export function evalFormula(
   expr: string,
@@ -103,7 +105,7 @@ export function evalFormula(
     }
     return acc;
   };
-  // term := '(' expr ')' | '-' term | 'abs' '(' expr ')' | boxCode | numberLiteral
+  // term := '(' expr ')' | '-' term | 'abs' '(' expr ')' | 'max' '(' expr ',' expr ')' | boxCode | numberLiteral
   const parseTerm = (): string => {
     const tok = next();
     if (tok === undefined) throw new TaxReturnError(`unexpected end of formula "${expr}"`);
@@ -119,6 +121,14 @@ export function evalFormula(
       const inner = parseExpr();
       if (next() !== ")") throw new TaxReturnError(`unbalanced abs parentheses in "${expr}"`);
       return abs(inner);
+    }
+    if (tok === "max") {
+      if (next() !== "(") throw new TaxReturnError(`max must be followed by parentheses in "${expr}"`);
+      const left = parseExpr();
+      if (next() !== ",") throw new TaxReturnError(`max requires two comma-separated arguments in "${expr}"`);
+      const right = parseExpr();
+      if (next() !== ")") throw new TaxReturnError(`unbalanced max parentheses in "${expr}"`);
+      return cmp(left, right) >= 0 ? left : right;
     }
     // Box code wins over numeric-literal reading, so "105 - 108" references
     // boxes 105 and 108 rather than the numbers.
