@@ -25,9 +25,9 @@ function subsidiaryScopeFilter(allowedSubsidiaryIds: UsNexusSubsidiaryScope) {
  * Destination is taken from the customer's default US shipping address (the
  * ship-to state drives sales-tax nexus). Sales = posted customer invoices net of
  * credit memos over the window, converted to USD; the transaction count is
- * invoices only. Sales to customers with no US shipping address on file cannot
- * be placed and are returned separately so the number is honest rather than
- * silently dropped.
+ * invoices only. Sales to customers with no (or an unknown) shipping country
+ * cannot be placed and are returned separately, while known non-US destinations
+ * are outside this US ledger.
  */
 export interface UsNexusResult {
   from: string
@@ -52,7 +52,7 @@ export async function computeUsNexusStatus(
     is_invoice: number
     as_of: string
   }>(sql`
-    select coalesce(a.region, '') as state,
+    select case when upper(trim(coalesce(a.country, ''))) = 'US' then coalesce(a.region, '') else '' end as state,
            d.currency,
            d.fx_rate::text as fx_rate,
            o.base_currency,
@@ -61,14 +61,32 @@ export async function computeUsNexusStatus(
            coalesce(d.posting_date, d.document_date)::text as as_of
       from documents d
       join orgs o on o.id = d.org_id
-      left join addresses a
-        on a.org_id = d.org_id and a.org_id = ${orgId}
-       and a.party_id = d.party_id and a.is_default_shipping and a.country = 'US'
+      left join lateral (
+        select a.id, a.region, a.country
+          from addresses a
+         where a.org_id = d.org_id
+           and a.party_id = d.party_id
+           and a.is_default_shipping
+         order by
+           case when upper(trim(coalesce(a.country, ''))) = 'US' then 0
+                when nullif(trim(a.country), '') is null then 1
+                else 2 end,
+           a.id
+         limit 1
+      ) a on true
      where d.org_id = ${orgId}
        and d.kind in ('customer_invoice', 'customer_credit')
        and d.status = 'posted'
        and coalesce(d.posting_date, d.document_date) between ${from} and ${to}
        ${subsidiaryScopeFilter(allowedSubsidiaryIds)}
+       -- Foreign destinations are outside US nexus. Keep missing/unknown
+       -- country rows unattributed, but never treat a known non-US address as
+       -- an unplaceable US sale.
+       and (
+         a.id is null
+         or nullif(trim(a.country), '') is null
+         or upper(trim(a.country)) = 'US'
+       )
   `))
 
   const usdByState = new Map<string, { sales: string; txnCount: number }>()
