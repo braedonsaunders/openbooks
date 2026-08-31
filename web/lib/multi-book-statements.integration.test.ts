@@ -96,7 +96,7 @@ test(
 
         await withOrg(scratch.orgId, async () => {
           const { statementMatrix, PNL_TYPES } = await import("./web/lib/statement-matrix.ts");
-          const { trialBalance } = await import("./web/lib/reports/statements.ts");
+          const { partnerBalances, trialBalance } = await import("./web/lib/reports/statements.ts");
           const period = { from: scratch.date, to: scratch.date };
           const readerRevenue = (matrix) => {
             const row = matrix.rows.find((r) => r.id === scratch.accounts.revenue);
@@ -156,6 +156,56 @@ test(
           }
           const defaultTb = await trialBalance(scratch.date, undefined, scratch.orgId);
           assert.equal(defaultTb.find((r) => r.id === scratch.accounts.revenue)?.credits, "100.0000");
+
+          // Partner control totals must follow the same one-book statement
+          // scope as account/trial-balance readers. Seed different AR/AP
+          // balances in each book so an unscoped query cannot pass by
+          // returning an indistinguishable value.
+          const postPartnerBalance = async (bookId, accountId, partyId, controlAmount, tag) => {
+            const entryId = randomUUID();
+            const offsetAmount = controlAmount.startsWith("-")
+              ? controlAmount.slice(1)
+              : "-" + controlAmount;
+            await db.execute(sql\`
+              insert into journal_entries
+                (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+                 period_id, memo, status, origin)
+              values
+                (\${entryId}, \${scratch.orgId}, \${bookId}, \${scratch.subsidiaryId},
+                 \${"MULTIBOOK-PARTNER-" + tag}, \${scratch.date}, \${scratch.periodId},
+                 \${tag}, 'draft', 'manual')\`);
+            await db.execute(sql\`
+              insert into journal_lines
+                (org_id, entry_id, line_number, account_id, subsidiary_id,
+                 amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+              values
+                (\${scratch.orgId}, \${entryId}, 1, \${accountId}, \${scratch.subsidiaryId},
+                 \${controlAmount}, 'CAD', \${controlAmount}, '1', \${partyId}, true),
+                (\${scratch.orgId}, \${entryId}, 2, \${scratch.accounts.bank}, \${scratch.subsidiaryId},
+                 \${offsetAmount}, 'CAD', \${offsetAmount}, '1', null, false)\`);
+            await db.execute(sql\`
+              update journal_entries set status = 'posted', posted_at = now()
+               where id = \${entryId}\`);
+          };
+          await postPartnerBalance(scratch.bookId, scratch.accounts.ar, scratch.customerId, "125.0000", "AR-PRI");
+          await postPartnerBalance(taxBookId, scratch.accounts.ar, scratch.customerId, "275.0000", "AR-TAX");
+          await postPartnerBalance(scratch.bookId, scratch.accounts.ap, scratch.vendorId, "-80.0000", "AP-PRI");
+          await postPartnerBalance(taxBookId, scratch.accounts.ap, scratch.vendorId, "-190.0000", "AP-TAX");
+
+          const partnerBalance = async (kind, bookId, partyId, expected) => {
+            const rows = await partnerBalances(kind, scratch.orgId, scratch.date, bookId);
+            const row = rows.find((r) => r.id === partyId);
+            assert.ok(row, kind + " row exists for selected book");
+            assert.equal(row.balance, expected, kind + " balance is scoped to selected book");
+          };
+          await partnerBalance("receivable", scratch.bookId, scratch.customerId, "125.0000");
+          await partnerBalance("receivable", taxBookId, scratch.customerId, "275.0000");
+          await partnerBalance("payable", scratch.bookId, scratch.vendorId, "-80.0000");
+          await partnerBalance("payable", taxBookId, scratch.vendorId, "-190.0000");
+          const defaultReceivables = await partnerBalances("receivable", scratch.orgId, scratch.date);
+          const defaultPayables = await partnerBalances("payable", scratch.orgId, scratch.date);
+          assert.equal(defaultReceivables.find((r) => r.id === scratch.customerId)?.balance, "125.0000");
+          assert.equal(defaultPayables.find((r) => r.id === scratch.vendorId)?.balance, "-80.0000");
 
           // Cash basis recognizes an accrual invoice through its settlement.
           // The matrix rewrites line VALUES on cash basis: bank-backed entries
