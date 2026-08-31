@@ -243,7 +243,7 @@ async function orderData(target: Extract<ReportDrillTarget, { kind: 'orders' }>,
     : scope === 'converted'
       ? linkedOrderPredicate
       : scope === 'conversion'
-        ? sql`d.status <> 'voided' and (${openOrderPredicate} or ${linkedOrderPredicate})`
+        ? linkedOrderPredicate
         : openOrderPredicate
   const offset = (page - 1) * REPORT_DRILL_PAGE_SIZE
   const [count, result] = await Promise.all([
