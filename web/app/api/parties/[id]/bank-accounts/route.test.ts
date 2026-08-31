@@ -105,7 +105,7 @@ const mockSources = new Map<string, string>([
     'flows',
     `
       const state = globalThis[Symbol.for('openbooks.bank-accounts-route-test')]
-      export async function runRecordFlows() { state.flowCalls += 1 }
+      export async function runRecordFlows() { state.flowCalls += 1; return { failed: false } }
     `,
   ],
   [
@@ -135,6 +135,7 @@ const mockSources = new Map<string, string>([
           return !('value' in chunk || 'queryChunks' in chunk)
         })
       }
+      export async function withOrgTransaction(_orgId, work) { return work() }
       export const db = {
         async execute(query) {
           const text = queryText(query)
