@@ -19,8 +19,10 @@
  *    pre-scaled bracket table. Only Method III — the top-rates method above
  *    $1,077,550 single / $2,155,350 married of annualized net wages —
  *    annualizes, and it applies a FLAT rate to the WHOLE annualized wage rather
- *    than to an excess. Deriving the weekly table by dividing the annual one
- *    reproduces neither.
+ *    than to an excess. The printed per-period tables' rounded "and over"
+ *    handoff is authoritative where it falls fractionally below that annualized
+ *    threshold. Deriving the weekly table by dividing the annual one reproduces
+ *    neither.
  *
  * 2. THE RECAPTURE IS INSIDE THE SCHEDULE. New York's marginal rates are NOT
  *    monotonic: the single schedule runs 6.40% then 11.44% then back to 7.35%,
@@ -674,11 +676,28 @@ export function nysWithholding(input: {
   const net = max0(U(input.wages) - allowance);
   factors.NYS_NET = D(net);
 
-  // Method III trigger: annualized net wages at or above the threshold.
+  // Method III trigger: annualized net wages at or above the threshold, or at
+  // the selected period table's printed rounded terminal handoff.
   const annualizedNet = net * BigInt(input.periodsPerYear);
   factors.NYS_ANNUALIZED_NET = D(annualizedNet);
   const threshold = U(rates.nys.methodIIIThreshold[input.marital]);
-  if (annualizedNet >= threshold) {
+  const table = rates.nys.tables[period][input.marital];
+  const terminalMethodII = table[table.length - 1]!;
+  const printedMethodIIIBoundary = terminalMethodII.butLessThan == null
+    ? null
+    : U(terminalMethodII.butLessThan);
+
+  // The publications' per-period tables hand off at a rounded whole-dollar
+  // boundary (for example, "$20,722 & over" on the weekly single table),
+  // while the Method III note states the equivalent exact annualized threshold.
+  // When those representations differ by a fraction of a dollar, the printed
+  // terminal handoff is authoritative: routing at it prevents a gap between
+  // the last Method II line and Method III. The annualized comparison remains
+  // necessary for tables whose rounded boundary is above the exact threshold.
+  if (
+    annualizedNet >= threshold
+    || (printedMethodIIIBoundary != null && net >= printedMethodIIIBoundary)
+  ) {
     // Method III applies the flat rate to the WHOLE annualized wage, not to an
     // excess over the band floor. NYS-50-T-NYS (1/26) p. 22.
     const bands = rates.nys.methodIII[input.marital];
@@ -693,7 +712,7 @@ export function nysWithholding(input: {
   }
 
   factors.NYS_METHOD = "2";
-  const row = rowFor(rates.nys.tables[period][input.marital], net);
+  const row = rowFor(table, net);
   if (!row) {
     // Unreachable while the tables cover [0, methodIIIThreshold/P) with no
     // holes, which the conformance test proves. Refusing rather than defaulting
