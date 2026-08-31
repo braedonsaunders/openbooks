@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { db } from "./db.ts";
-import { add, fromUnits, isZero, mulRate, neg, toUnits } from "./money.ts";
+import { add, fromUnits, isZero, mulRate, neg, normalizeDecimal, roundDiv, toUnits } from "./money.ts";
 
 /**
  * Subsidiary context for the posting engine (a multi-entity model inside
@@ -208,6 +208,47 @@ export interface IntercompanyLeg {
   memo: string;
 }
 
+const FX_RATE_SCALE = 10_000_000_000n;
+
+/**
+ * Derive the one FX rate that represents a subsidiary's complete balancing
+ * leg. The source lines may have different rates, so taking any one line's
+ * rate would make the leg's functional amount disagree with its transaction
+ * amount. Ratio the already-posted totals instead: this preserves both the
+ * subsidiary balance and the transaction-currency evidence at the ledger's
+ * ten-decimal FX precision.
+ */
+function aggregateFxRate(functionalTotal: string, transactionTotal: string): string {
+  const functionalUnits = toUnits(functionalTotal);
+  const transactionUnits = toUnits(transactionTotal);
+  const transactionMagnitude = transactionUnits < 0n ? -transactionUnits : transactionUnits;
+  if (transactionMagnitude === 0n) {
+    throw new SubsidiaryError(
+      "cannot derive an intercompany FX rate from a zero transaction-currency total",
+    );
+  }
+  const functionalMagnitude = functionalUnits < 0n ? -functionalUnits : functionalUnits;
+  if ((functionalUnits < 0n) !== (transactionUnits < 0n)) {
+    throw new SubsidiaryError(
+      "intercompany functional and transaction totals have opposite signs and cannot share a positive FX rate",
+    );
+  }
+  const rateUnits = roundDiv(functionalMagnitude * FX_RATE_SCALE, transactionMagnitude);
+  if (rateUnits <= 0n) {
+    throw new SubsidiaryError(
+      "intercompany functional total is too small to represent with a positive FX rate",
+    );
+  }
+  const whole = rateUnits / FX_RATE_SCALE;
+  if (whole.toString().length > 9) {
+    throw new SubsidiaryError(
+      "intercompany aggregate FX rate exceeds the ledger's numeric(19,10) range",
+    );
+  }
+  const fraction = (rateUnits % FX_RATE_SCALE).toString().padStart(10, "0");
+  return `${whole}.${fraction}`;
+}
+
 /**
  * Per-line FX translation rounds each line independently (mulRate), so a
  * document whose transaction-currency amounts balance exactly can post
@@ -346,11 +387,24 @@ export async function intercompanyBalancingLegs(
     const subAccount = pair.fromId === subId ? pair.dueFrom : pair.dueTo;
     const originAccount = pair.fromId === originSubId ? pair.dueFrom : pair.dueTo;
     const transactionTotal = txnBySub.get(subId) ?? total;
-    const transactionCurrency = lines.find((line) => line.subsidiaryId === subId)?.currency;
-    const subFxRate = lines.find((line) => line.subsidiaryId === subId)?.fxRate ?? "1";
+    const subLines = lines.filter((line) => line.subsidiaryId === subId);
+    const transactionCurrency = subLines[0]?.currency;
     if (!transactionCurrency) {
       throw new SubsidiaryError(`transaction currency is missing for "${subName}"`);
     }
+    // Keep the source representation when every line agrees on its rate (the
+    // common path), but blend differing rates from the posted totals. The
+    // relation check also routes same-rate groups through the aggregate when
+    // line rounding made the source rate unable to represent the net leg.
+    const firstFxRate = subLines[0]?.fxRate ?? "1";
+    const normalizedFirstFxRate = normalizeDecimal(firstFxRate, 10);
+    const oneFxRate = subLines.every(
+      (line) => normalizeDecimal(line.fxRate ?? "1", 10) === normalizedFirstFxRate,
+    );
+    const subFxRate =
+      oneFxRate && mulRate(transactionTotal, firstFxRate) === total
+        ? firstFxRate
+        : aggregateFxRate(total, transactionTotal);
     const originAmount = mulRate(transactionTotal, opts.originFxRate);
     legs.push({
       accountId: subAccount,
