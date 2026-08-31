@@ -158,7 +158,8 @@ function compileFilter(ctx: Ctx, filter: QueryFilter): string {
     case 'not_in': {
       const list = Array.isArray(v) ? v : v == null ? [] : [v]
       if (list.length === 0) return op === 'in' ? 'false' : 'true'
-      return `${ref} ${op === 'in' ? '' : 'not '}= any(${bind(ctx, list)})`
+      if (op === 'in') return `${ref} = any(${bind(ctx, list)})`
+      return `${ref} <> all(${bind(ctx, list)})`
     }
     case 'is_null':
       return `${ref} is null`
