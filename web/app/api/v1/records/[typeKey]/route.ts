@@ -95,7 +95,11 @@ export async function POST(
   let body: Record<string, unknown>;
   try {
     const parsedBody = await parseJsonBody(request, jsonObject);
-    if (!parsedBody.ok) return parsedBody.response;
+    if (!parsedBody.ok) {
+      const tail = await emitExecutionEvent(parsedBody.response.status, auth, "invalid_input");
+      if (tail) return tail;
+      return parsedBody.response;
+    }
     const parsed = parsedBody.data;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
     body = parsed as Record<string, unknown>;
