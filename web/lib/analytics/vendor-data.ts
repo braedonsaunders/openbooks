@@ -150,7 +150,8 @@ export async function vendorData(
     db.execute<VendorBillRow>(sql`
       select party_id as id, count(*)::int as bills, max(posting_date) as last_bill
       from documents
-      where org_id = ${orgId} and kind = 'vendor_bill' and party_id is not null and status = 'posted' and posting_date <= ${ref}
+      where org_id = ${orgId} and kind = 'vendor_bill' and party_id is not null and status = 'posted'
+        and posting_date >= ${from} and posting_date <= ${ref}
       group by party_id
     `),
     db.execute<MonthSpendRow>(sql`
