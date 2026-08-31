@@ -196,6 +196,18 @@ test("ob.log obeys the governance budget", async () => {
   assert.equal(r.logs.length, 1);
 });
 
+test("ob.log is stopped when it exceeds the governance budget", async () => {
+  const r = await runAppEndpoint({
+    source: `function handler() { for (var i = 0; i < 100; i++) ob.log("tick", i); return "done" }`,
+    request: req(),
+    adapters: fakeAdapters(),
+    unitBudget: 2,
+  });
+  assert.equal(r.status, "error");
+  assert.match(r.error!, /governance budget exceeded/);
+  assert.ok(r.units > 2);
+});
+
 test("journal.create is forbidden without the journal adapter", async () => {
   const r = await runAppEndpoint({
     source: `function handler() { return ob.journal.create({ lines: [] }) }`,
