@@ -92,20 +92,25 @@ export async function PUT(req: Request) {
   if (typeof inputCountry !== 'string' || !normalizeCountryCode(inputCountry)) {
     return NextResponse.json({ error: 'invalid-country' }, { status: 422 })
   }
-  if (typeof inputCurrency !== 'string' || !/^[A-Z]{3}$/.test(inputCurrency)) {
+  if (
+    inputCurrency !== undefined
+    && (typeof inputCurrency !== 'string' || !/^[A-Z]{3}$/.test(inputCurrency))
+  ) {
     return NextResponse.json({ error: 'invalid-base-currency' }, { status: 422 })
   }
-  const knownCurrency = (await db.execute(
-    sql`select 1 from currencies where code = ${inputCurrency} limit 1`,
-  ))
-  if (!knownCurrency.rows[0]) {
-    return NextResponse.json(
-      {
-        error: 'unsupported-base-currency',
-        message: `${inputCurrency} is not available in this installation. Run deployment bootstrap or choose a supported currency.`,
-      },
-      { status: 422 },
-    )
+  if (inputCurrency !== undefined) {
+    const knownCurrency = (await db.execute(
+      sql`select 1 from currencies where code = ${inputCurrency} limit 1`,
+    ))
+    if (!knownCurrency.rows[0]) {
+      return NextResponse.json(
+        {
+          error: 'unsupported-base-currency',
+          message: `${inputCurrency} is not available in this installation. Run deployment bootstrap or choose a supported currency.`,
+        },
+        { status: 422 },
+      )
+    }
   }
   if (
     typeof inputFiscalMonth !== 'number'
@@ -475,18 +480,23 @@ export async function PUT(req: Request) {
     const root = singleRoot.rows[0]
     if (root && root.entity_count === 1) {
       const nextName = inputName.trim()
-      const nextLegalName = inputLegalName?.trim() || null
+      const nextLegalName = inputLegalName === undefined ? root.legal_name : inputLegalName.trim() || null
+      const nextBaseCurrency = inputCurrency ?? root.base_currency
       const nextCountry = normalizeCountryCode(inputCountry)!
       const rootChanges: Record<string, unknown> = {}
       if (root.name !== nextName) rootChanges.name = [root.name, nextName]
-      if (root.legal_name !== nextLegalName) rootChanges.legalName = [root.legal_name, nextLegalName]
-      if (root.base_currency !== inputCurrency) rootChanges.baseCurrency = [root.base_currency, inputCurrency]
+      if (inputLegalName !== undefined && root.legal_name !== nextLegalName) {
+        rootChanges.legalName = [root.legal_name, nextLegalName]
+      }
+      if (inputCurrency !== undefined && root.base_currency !== nextBaseCurrency) {
+        rootChanges.baseCurrency = [root.base_currency, nextBaseCurrency]
+      }
       if (root.country !== nextCountry) rootChanges.country = [root.country, nextCountry]
       if (Object.keys(rootChanges).length > 0) {
         await tx.execute(sql`
           update subsidiaries
              set name = ${nextName}, legal_name = ${nextLegalName},
-                 base_currency = ${inputCurrency}, country = ${nextCountry},
+                 base_currency = ${nextBaseCurrency}, country = ${nextCountry},
                  updated_at = now(), updated_by = ${actorId}
            where id = ${root.id} and org_id = ${orgId}
         `)
