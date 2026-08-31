@@ -4,6 +4,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { fiscalYearOf, fiscalYearRangeFor } from "@openbooks/reports";
 import { fiscalStartMonth } from "./fiscal";
+import { statementBookExpr } from "./gl-summary";
 import { resolveOrgId } from "./org-scope";
 import { subsidiaryVisibleFilter } from "./subsidiaries";
 
@@ -89,12 +90,14 @@ export async function accountsWithBalances(
             select g.account_id, (g.debit_total - g.credit_total) as amt, g.month as d
               from gl_month_activity g
              where g.org_id = ${orgId} ${glSubsidiaryScope}
+               and g.book_id = ${statementBookExpr(orgId)}
                and g.month < date_trunc('month', ${asOfDate}::date)::date
             union all
             select l.account_id, l.amount, e.posting_date
               from journal_lines l
               join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
                and e.status in ('posted', 'reversed')
+               and e.book_id = ${statementBookExpr(orgId)}
                and e.posting_date >= date_trunc('month', ${asOfDate}::date)::date
                and e.posting_date <= ${asOfDate}
              where l.org_id = ${orgId} ${lineSubsidiaryScope}
