@@ -24,8 +24,8 @@ export const CANADA_RETURN_PACKS: readonly TaxReturnPack[] = [
       { lineCode: "405", label: "Other GST/HST to be self-assessed", sign: 1, sequence: 140 },
       { lineCode: "113B", label: "Total other debits (add lines 205 and 405)", sign: 1, sequence: 150, formula: "205 + 405" },
       { lineCode: "113C", label: "Balance (add lines 113A and 113B)", sign: 1, sequence: 160, formula: "113A + 113B" },
-      { lineCode: "114", label: "Refund claimed", sign: 1, sequence: 170, formula: "113C" },
-      { lineCode: "115", label: "Payment enclosed", sign: 1, sequence: 180, formula: "113C" },
+      { lineCode: "114", label: "Refund claimed", sign: 1, sequence: 170, formula: "max(-113C, 0)" },
+      { lineCode: "115", label: "Payment enclosed", sign: 1, sequence: 180, formula: "max(113C, 0)" },
     ],
   },
   {
