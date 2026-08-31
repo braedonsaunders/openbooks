@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   defaultListView,
   defaultFormLayout,
+  lintListView,
   lintFormLayout,
   mergeRegisteredFieldsIntoLayout,
   resolveFormTabs,
@@ -357,4 +358,19 @@ test('customer list-filter options drop prospect when CRM is off', () => {
   const shown = recordTypeForFeatureState(customer, { inventory: true, crm: true })
     .listFilters.find((filter) => filter.key === 'status')?.options?.map((option) => option.value) ?? []
   assert.deepEqual(shown, ['customer', 'prospect'])
+})
+
+test('between list filters require both bounds', () => {
+  const view = defaultListView('vendor_bill')
+  view.filters = [{ key: 'document_date', operator: 'between', to: '2026-12-31' }]
+
+  assert.deepEqual(lintListView(view), [
+    {
+      path: 'filters[0]',
+      message: 'filter "document_date" needs a value',
+    },
+  ])
+
+  view.filters[0]!.value = '2026-01-01'
+  assert.deepEqual(lintListView(view), [])
 })
