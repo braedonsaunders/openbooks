@@ -104,7 +104,7 @@ const hooks = registerHooks({
   },
 });
 
-const { vendorData } = await import("./vendor-data.ts?period-test") as typeof import("./vendor-data.ts");
+const { vendorData } = await import("./vendor-data.ts") as typeof import("./vendor-data.ts");
 hooks.deregister();
 
 test("vendor performance counts only bills inside the selected period", async () => {
