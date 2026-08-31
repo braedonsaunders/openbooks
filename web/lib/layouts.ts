@@ -76,6 +76,7 @@ export async function renderLayout(
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+       and e.status in ('posted', 'reversed')
      where l.org_id = ${resolvedOrgId}
        and a.org_id = ${resolvedOrgId}
        and a.type in ${PNL_TYPES}
