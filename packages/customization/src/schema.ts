@@ -295,8 +295,7 @@ export function lintListView(config: ListViewConfig): LintIssue[] {
     const needsValue = !["is_set", "is_not_set"].includes(f.operator)
     if (needsValue) {
       const hasValue =
-        (Array.isArray(f.value) ? f.value.length > 0 : f.value != null && f.value !== "") ||
-        (f.operator === "between" && f.to != null && f.to !== "")
+        Array.isArray(f.value) ? f.value.length > 0 : f.value != null && f.value !== ""
       if (!hasValue) issues.push({ path, message: `filter "${f.key}" needs a value` })
     }
     if (f.operator === "between" && (f.to == null || f.to === ""))
