@@ -240,7 +240,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
  * Interactive callers default to the org's business day; exports and other
  * reproducible reads can pin that same boundary explicitly.
  */
-export async function partnerBalances(kind: "receivable" | "payable", orgId?: string, asOf?: string) {
+export async function partnerBalances(kind: "receivable" | "payable", orgId?: string, asOf?: string, bookId?: string | null) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
   const resolvedAsOf = asOf ?? (await businessToday(resolvedOrgId));
   const type = kind === "receivable" ? "asset_receivable" : "liability_payable";
@@ -249,6 +249,7 @@ export async function partnerBalances(kind: "receivable" | "payable", orgId?: st
       select id from journal_entries
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
          and posting_date <= ${resolvedAsOf}
+         and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
     )
     select p.id, p.display_name, sum(l.amount) as balance, count(*) as line_count,
            max(l.due_date) as latest_due
