@@ -9,7 +9,8 @@
   <scriptfile>[/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js]</scriptfile>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_openbooks_bridge_rl">
-      <allroles>T</allroles>
+      <!-- Access is granted explicitly to the account's dedicated integration role. -->
+      <allroles>F</allroles>
       <isdeployed>T</isdeployed>
       <loglevel>ERROR</loglevel>
       <status>RELEASED</status>
