@@ -986,12 +986,13 @@ async function setProgress(
 
 /** Denormalize a posted document's header totals from its journal entry. */
 async function setDocumentTotalsFromEntry(docId: string, orgId: string): Promise<void> {
-  // The document total is the amount on its OPEN-ITEM (AR/AP control) leg — the
-  // receivable/payable — not the sum of every positive journal line. A retainage /
-  // holdback line debits an income account (a positive amount that is NOT the
-  // total); summing all positives double-counts it and overstates the invoice by
-  // the holdback. Fall back to the positive-side sum for docs with no open item
-  // (cash sales etc.). subtotal = total − tax.
+  // The document total is the signed amount on its OPEN-ITEM (AR/AP control) leg
+  // — the receivable/payable — not the sum of every positive journal line. A
+  // retainage / holdback line debits an income account (a positive amount that is
+  // NOT the total); summing all positives double-counts it and overstates the
+  // invoice by the holdback. Fall back to the positive-side sum for docs with no
+  // open item (cash sales etc.). Credit memos retain their negative control-leg
+  // sign. subtotal = total − tax.
   //
   // Runs under the governed amend flag: the target is a POSTED document, whose
   // header financials are otherwise immutable at the database layer
@@ -1001,9 +1002,9 @@ async function setDocumentTotalsFromEntry(docId: string, orgId: string): Promise
     await tx.execute(sql`set local openbooks.amend = on`);
     await tx.execute(sql`
     update documents d set
-      total = coalesce(nullif(abs(j.oi), 0), j.pos, 0),
+      total = coalesce(nullif(j.oi, 0), j.pos, 0),
       tax_total = coalesce(abs(lt.tax), 0),
-      subtotal = coalesce(nullif(abs(j.oi), 0), j.pos, 0) - coalesce(abs(lt.tax), 0)
+      subtotal = coalesce(nullif(j.oi, 0), j.pos, 0) - coalesce(abs(lt.tax), 0)
     from documents d2
     left join lateral (
       select sum(jl.amount) filter (where jl.amount > 0) as pos,
