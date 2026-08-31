@@ -7,7 +7,7 @@ import { guardPermission } from "../../../lib/authz";
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const gate = await guardPermission("reports.read");
+  const gate = await guardPermission("reports.create");
   if (gate instanceof NextResponse) return gate;
   const user = gate.user;
   const parsedBody = await parseJsonBody(req, jsonObject);
@@ -23,13 +23,21 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const gate = await guardPermission("reports.read");
+  const gate = await guardPermission("reports.create");
   if (gate instanceof NextResponse) return gate;
-  const user = gate.user;
+  const { user, permissions } = gate;
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
   const { id } = (parsedBody2.data) as { id?: string };
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-  await db.execute(sql`delete from saved_reports where id = ${id} and org_id = ${user.orgId}`);
+  const deleted = await db.execute<{ id: string }>(sql`
+    delete from saved_reports
+     where id = ${id}
+       and org_id = ${user.orgId}
+       and (${permissions.has("*")} or created_by_user_id = ${user.id})
+     returning id`);
+  if (!deleted.rows[0]) {
+    return NextResponse.json({ error: "You can only delete your own saved reports." }, { status: 403 });
+  }
   return NextResponse.json({ ok: true });
 }
