@@ -433,6 +433,18 @@ export interface EntityBaseline extends DeferredBalances {
   netTemporaryDifference: string;
 }
 
+/** Whether an opening deferred-tax baseline gives an entity something to unwind. */
+export function hasPriorDeferredTaxMeasurement(
+  baseline: EntityBaseline | null | undefined,
+): boolean {
+  return (
+    !isZero(baseline?.dtaGross ?? "0") ||
+    !isZero(baseline?.dtlGross ?? "0") ||
+    !isZero(baseline?.valuationAllowance ?? "0") ||
+    !isZero(baseline?.netTemporaryDifference ?? "0")
+  );
+}
+
 /**
  * Everything outside the preparer's own inputs that a provision measurement
  * depends on. Captured at compute time, stored in the draft payload, and
@@ -1230,24 +1242,29 @@ export async function computeProvisionRun(
       autoByEntity.set(d.subsidiaryId, list);
     }
 
-    // Entity set: every legal entity with anything to measure. An entity with
-    // no activity at all contributes nothing and demands no rate coverage.
+    // Entity set: every legal entity with anything to measure. Prior deferred
+    // balances are a measurement source too: even when an entity has no
+    // current-year activity, its opening DTA/DTL (or cumulative basis
+    // difference) must be carried into this run so the balance can unwind.
     const entityIds = [...new Set([
       ...Object.keys(sources.pretaxBySubsidiaryId),
       ...autoByEntity.keys(),
       ...manualByEntity.keys(),
       ...permanentByEntity.keys(),
+      ...Object.keys(sources.priorBalancesBySubsidiaryId),
       ...(opts.entities ? Object.keys(opts.entities) : []),
     ])]
       .filter((id) => known.has(id))
       .sort();
     const measuredEntities = entityIds.filter((id) => {
       const override = opts.entities?.[id];
+      const prior = sources.priorBalancesBySubsidiaryId[id];
       return (
         !isZero(sources.pretaxBySubsidiaryId[id] ?? "0") ||
         (autoByEntity.get(id)?.length ?? 0) > 0 ||
         (manualByEntity.get(id)?.length ?? 0) > 0 ||
         (permanentByEntity.get(id)?.length ?? 0) > 0 ||
+        hasPriorDeferredTaxMeasurement(prior) ||
         !isZero(override?.lossCarryforwardUsed ?? (id === root?.id ? opts.lossCarryforwardUsed ?? "0" : "0")) ||
         !isZero(override?.valuationAllowance ?? (id === root?.id ? opts.valuationAllowance ?? "0" : "0"))
       );
