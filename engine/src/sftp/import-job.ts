@@ -140,7 +140,7 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
       outcome.duplicates = res.duplicates;
       if (res.statementId) outcome.statementIds.push(res.statementId);
       // archive the processed file so it isn't re-imported
-      await backend.rename(filePath, `${s.folder}/processed/${e.name}`).catch(() => {});
+      await backend.rename(filePath, `${s.folder}/processed/${e.name}`);
     } catch (err) {
       const message = (err as Error).message;
       result.errors.push(`${e.name}: ${message}`);
