@@ -32,8 +32,14 @@ function groupChildren(r: LogicRule): LogicRule[] {
   return []
 }
 
-function makeGroup(op: GroupOp, children: LogicRule[], fallbackField: string): LogicRule {
-  if (op === 'not') return { op: 'not', rule: children[0] ?? defaultLeaf(fallbackField) }
+function makeGroup(op: GroupOp, children: LogicRule[], fallbackField: string, previousOp?: 'and' | 'or'): LogicRule {
+  if (op === 'not') {
+    if (children.length === 0 && previousOp === undefined) {
+      return { op: 'not', rule: defaultLeaf(fallbackField) }
+    }
+    const rule = children.length === 1 ? children[0] : { op: previousOp ?? 'and', rules: children }
+    return { op: 'not', rule: rule ?? defaultLeaf(fallbackField) }
+  }
   return { op, rules: children }
 }
 
@@ -232,7 +238,10 @@ function GroupEditor({
       <Select
         value={op}
         className="w-36"
-        onChange={(e) => onChange(makeGroup(e.target.value as GroupOp, children, fallbackField))}
+        onChange={(e) => {
+          const nextOp = e.target.value as GroupOp
+          onChange(makeGroup(nextOp, children, fallbackField, op === 'and' || op === 'or' ? op : undefined))
+        }}
       >
         <option value="and">{t('groupAnd')}</option>
         <option value="or">{t('groupOr')}</option>
