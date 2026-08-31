@@ -32,6 +32,10 @@ export function toCanonicalJsonValue(value: unknown): CanonicalJsonValue {
     throw new NonJsonValueError("unsupported JSON value");
   }
   if (typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new NonJsonValueError("unsupported JSON value");
+    }
     const out: Record<string, CanonicalJsonValue> = {};
     for (const key of Object.keys(value as object).sort()) {
       const child = (value as Record<string, unknown>)[key];
