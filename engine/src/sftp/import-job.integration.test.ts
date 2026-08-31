@@ -171,6 +171,39 @@ async function loadSchedule(id: string): Promise<LastResultRow> {
 }
 
 test(
+  "scheduled SFTP imports surface processed-file archival failures",
+  { skip: !DB },
+  async () => {
+    const f = await seedSftpFixture();
+    try {
+      // A destination directory with the source filename makes the local
+      // backend's rename fail after the statement transaction has committed.
+      // The source must remain visible for a later retry, while the run and
+      // its per-file outcome must make the archival failure operator-visible.
+      mkdirSync(join(localServerDir(f.rootPrefix), "inbound", "processed", "acct.ofx"), { recursive: true });
+
+      const runs = await runDueSftpImports(f.org.orgId);
+      const authored = runs.find((run) => run.scheduleId === f.authoredScheduleId)!;
+      assert.equal(authored.imported, 2, "the statement import commits before archival is attempted");
+      assert.equal(authored.errors.length, 1);
+      assert.match(authored.errors[0]!, /^acct\.ofx: /);
+      const fileOutcome = authored.files.find((entry) => entry.file === "acct.ofx")!;
+      assert.ok(fileOutcome.error, "the file outcome records the archival failure");
+      assert.equal(fileOutcome.imported, 2);
+      assert.deepEqual(listFolder(f.rootPrefix, "inbound"), ["acct.ofx", "processed"]);
+      assert.deepEqual(listFolder(f.rootPrefix, join("inbound", "processed")), ["acct.ofx"]);
+      assert.deepEqual(listFolder(f.rootPrefix, join("inbound", "processed", "acct.ofx")), []);
+
+      const schedule = await loadSchedule(f.authoredScheduleId);
+      assert.deepEqual(schedule.lastResult?.errors, authored.errors, "the persisted run retains the archival error");
+    } finally {
+      await dropScratchOrgReporting(f.org.orgId);
+      rmSync(scratchDataDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
   "scheduled SFTP imports carry system provenance, never the schedule author or an org uuid",
   { skip: !DB },
   async () => {
