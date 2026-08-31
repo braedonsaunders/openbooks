@@ -333,8 +333,12 @@ export function calculateT4127(input: T4127Input): T4127Result {
   // ---- Annual tax passes ---------------------------------------------------
   const K3 = opt(input.authorizedFederalCredits);
   const K3P = opt(input.authorizedProvincialCredits);
-  const LCF = bmin(opt(input.labourFundsCreditFederal), U(rates.federal.lcf.cap));
-  const LCP = prov?.lcp ? bmin(opt(input.labourFundsCreditProvincial), U(prov.lcp.cap)) : ZERO;
+  // LCF/LCP inputs are per-period credit amounts. Annualize before applying
+  // the statutory annual caps; the tax formulas below consume annual credits.
+  const LCF = bmin(mulInt(opt(input.labourFundsCreditFederal), P), U(rates.federal.lcf.cap));
+  const LCP = prov?.lcp
+    ? bmin(mulInt(opt(input.labourFundsCreditProvincial), P), U(prov.lcp.cap))
+    : ZERO;
   const Y = prov?.ontarioReduction
     ? mulInt(U(prov.ontarioReduction.perDependant),
         (input.disabledDependants ?? 0) + (input.dependantsUnder19 ?? 0))
@@ -353,9 +357,9 @@ export function calculateT4127(input: T4127Input): T4127Result {
     let T3 = max0(mulRateCents(A, fed.rate) - U(fed.k) - K1 - K2 - K3 - K4);
     if (input.taxExempt) T3 = ZERO;
     let T1: bigint;
-    if (isQuebec) T1 = max0(T3 - mulInt(LCF, P) - mulRateCents(T3, rates.federal.abatementQc));
-    else if (isOutside) T1 = max0(T3 + mulRateCents(T3, rates.federal.outsideCanadaSurtax) - mulInt(LCF, P));
-    else T1 = max0(T3 - mulInt(LCF, P));
+    if (isQuebec) T1 = max0(T3 - LCF - mulRateCents(T3, rates.federal.abatementQc));
+    else if (isOutside) T1 = max0(T3 + mulRateCents(T3, rates.federal.outsideCanadaSurtax) - LCF);
+    else T1 = max0(T3 - LCF);
     parts.K1 = K1; parts.K2 = K2; parts.K4 = K4; parts.T3 = T3; parts.T1 = T1;
 
     // Provincial / territorial
@@ -402,7 +406,7 @@ export function calculateT4127(input: T4127Input): T4127Result {
         }
       }
 
-      T2 = max0(T4 + V1 + V2 - S - mulInt(LCP, P));
+      T2 = max0(T4 + V1 + V2 - S - LCP);
       parts.K1P = K1P; parts.K2P = K2P; parts.K4P = K4P; parts.K5P = K5P;
       parts.T4 = T4; parts.V1 = V1; parts.V2 = V2; parts.S = S; parts.T2 = T2;
     }
