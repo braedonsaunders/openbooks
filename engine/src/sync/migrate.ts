@@ -26,6 +26,10 @@ export interface ResourceLoadStats {
   created: number;
   updated: number;
   skipped: number;
+  /** Rows whose upsert failed after validation; these are not intentional skips. */
+  failed: number;
+  /** Source identity and error for each failed row upsert. */
+  errors: { sourceRef: string; message: string }[];
 }
 export type EntityLoadStats = Record<string, ResourceLoadStats>;
 
@@ -67,6 +71,14 @@ const ref = (m: Map<string, string>, v: unknown): string | null =>
 const str = (v: unknown): string | null => {
   const t = v == null ? "" : String(v);
   return t.trim() === "" ? null : t;
+};
+const migrationErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message) return message;
+  }
+  return "write failed";
 };
 const moneyOrNull = (v: unknown): string | null => {
   if (v == null || v === "") return null;
@@ -279,7 +291,13 @@ export async function loadEntities(
       streams.length,
     );
     if (!KNOWN.has(stream.resource)) {
-      stats[stream.resource] = { created: 0, updated: 0, skipped: stream.records.length };
+      stats[stream.resource] = {
+        created: 0,
+        updated: 0,
+        skipped: stream.records.length,
+        failed: 0,
+        errors: [],
+      };
       continue;
     }
     const sourceRefs = new Set<string>();
@@ -294,7 +312,13 @@ export async function loadEntities(
       }
       sourceRefs.add(record.sourceRef);
     }
-    const s: ResourceLoadStats = { created: 0, updated: 0, skipped: 0 };
+    const s: ResourceLoadStats = {
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+      errors: [],
+    };
 
     if (stream.resource === "accounting_periods") {
       await loadAccountingPeriods(stream.records, ctx.orgId, ctx.refKey, s);
@@ -326,8 +350,11 @@ export async function loadEntities(
           if (map) map.set(rec.sourceRef, id);
         }
       } catch (e) {
-        s.skipped++;
-        void e;
+        s.failed++;
+        s.errors.push({
+          sourceRef: rec.sourceRef,
+          message: migrationErrorMessage(e),
+        });
       }
     }
 
@@ -470,7 +497,13 @@ export async function syncSourceAccountingPeriods(
   orgId: string,
 ): Promise<ResourceLoadStats> {
   const records = await source.accountingPeriods();
-  const stats: ResourceLoadStats = { created: 0, updated: 0, skipped: 0 };
+  const stats: ResourceLoadStats = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+    errors: [],
+  };
   // Period identities and their per-book/module locks are one configuration
   // unit. Commit them atomically so a failed refresh cannot leave only part of
   // the source calendar mapped; the single commit also avoids one synchronous
@@ -513,8 +546,12 @@ async function loadSubsidiaries(records: SourceEntity[], ctx: Ctx, s: ResourceLo
       try {
         const id = await upsert("subsidiaries", ctx, rec, s);
         if (id) ctx.maps.subsidiaries.set(rec.sourceRef, id);
-      } catch {
-        s.skipped++;
+      } catch (e) {
+        s.failed++;
+        s.errors.push({
+          sourceRef: rec.sourceRef,
+          message: migrationErrorMessage(e),
+        });
       }
       pending.splice(i, 1);
       progressed = true;
