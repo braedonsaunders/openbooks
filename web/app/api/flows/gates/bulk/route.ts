@@ -14,9 +14,12 @@ export const runtime = 'nodejs'
  *
  * Each item is decided independently (per-item try/catch); decideGate is the
  * single authority for who may decide (assignee / admin / delegate, submitter
- * refused). One failure never aborts the rest, and there is deliberately no
- * batch cap (source platform's 50-row bulk-approve limit is a gap this hub closes).
+ * refused). One failure never aborts the rest. The cap keeps the number of
+ * per-item database and engine operations bounded for every request.
  */
+
+/** Maximum number of gates that may be decided in one request. */
+export const MAX_BULK_ITEMS = 50
 
 type BulkItem = { gateId?: string }
 
@@ -37,6 +40,9 @@ export async function POST(req: Request) {
     !['approved', 'rejected'].includes(body.decision ?? '')
   ) {
     return NextResponse.json({ error: 'items and decision required' }, { status: 400 })
+  }
+  if (body.items.length > MAX_BULK_ITEMS) {
+    return NextResponse.json({ error: `too many items (max ${MAX_BULK_ITEMS})` }, { status: 400 })
   }
   const decision = body.decision as 'approved' | 'rejected'
   const comment = body.comment?.trim() || undefined
