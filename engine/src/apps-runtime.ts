@@ -117,6 +117,8 @@ const DEFAULT_TIMEOUT_MS = 3000;
 
 const FORBIDDEN = "__OB_FORBIDDEN__";
 const GOVERNANCE = "__OB_GOV__";
+const TIMEOUT = "__OB_TIMEOUT__";
+const HOST_TIMEOUT = Symbol("host-timeout");
 
 export async function runAppEndpoint(opts: {
   source: string;
@@ -136,6 +138,33 @@ export async function runAppEndpoint(opts: {
   const deadline = Date.now() + timeoutMs;
   runtime.setInterruptHandler(() => Date.now() > deadline);
 
+  /**
+   * Asyncify suspends the VM while an adapter promise is pending, so the
+   * interrupt handler cannot observe the endpoint deadline during that wait.
+   * Race every host operation against the same wall-clock deadline instead.
+   * The adapter promise remains handled after the race settles; if it resolves
+   * later, it cannot resume QuickJS or start another host operation.
+   */
+  const withHostDeadline = async <T>(operation: () => Promise<T>): Promise<T | typeof HOST_TIMEOUT> => {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) return HOST_TIMEOUT;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(operation),
+        new Promise<typeof HOST_TIMEOUT>((resolve) => {
+          timer = setTimeout(() => resolve(HOST_TIMEOUT), remainingMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
+
+  const timeoutError = (): { error: ReturnType<typeof vm.newError> } => ({
+    error: vm.newError(`${TIMEOUT}execution timed out`),
+  });
+
   const logs: string[] = [];
   let units = 0;
   const started = Date.now();
@@ -149,6 +178,15 @@ export async function runAppEndpoint(opts: {
   let sealed = false;
   const refuseIfSealed = (): { error: ReturnType<typeof vm.newError> } | null =>
     sealed ? { error: vm.newError("host API closed: the endpoint outcome was already determined") } : null;
+
+  let vmDisposed = false;
+  let cleanupDeferred = false;
+  const disposeVm = (): void => {
+    if (vmDisposed) return;
+    vmDisposed = true;
+    vm.dispose();
+    runtime.dispose();
+  };
 
   /** Charge units; throw a governance error handle when over budget. */
   const charge = (
@@ -180,10 +218,13 @@ export async function runAppEndpoint(opts: {
         if (closed) return closed;
         const over = charge(COST.storageGet);
         if (over) return over;
-        const value = await adapters.storage.get(
-          String(vm.dump(keyH)),
-          String(vm.dump(nsH) ?? "default"),
+        const value = await withHostDeadline(() =>
+          adapters.storage.get(
+            String(vm.dump(keyH)),
+            String(vm.dump(nsH) ?? "default"),
+          ),
         );
+        if (value === HOST_TIMEOUT) return timeoutError();
         return vm.newString(JSON.stringify(value ?? null));
       },
     );
@@ -195,11 +236,14 @@ export async function runAppEndpoint(opts: {
         const over = charge(COST.storageSet);
         if (over) return over;
         const raw = vm.dump(valH);
-        await adapters.storage.set(
-          String(vm.dump(keyH)),
-          raw === undefined ? null : JSON.parse(String(raw)),
-          String(vm.dump(nsH) ?? "default"),
+        const result = await withHostDeadline(() =>
+          adapters.storage.set(
+            String(vm.dump(keyH)),
+            raw === undefined ? null : JSON.parse(String(raw)),
+            String(vm.dump(nsH) ?? "default"),
+          ),
         );
+        if (result === HOST_TIMEOUT) return timeoutError();
         return vm.undefined;
       },
     );
@@ -210,10 +254,13 @@ export async function runAppEndpoint(opts: {
         if (closed) return closed;
         const over = charge(COST.storageList);
         if (over) return over;
-        const rows = await adapters.storage.list(
-          String(vm.dump(prefixH) ?? ""),
-          String(vm.dump(nsH) ?? "default"),
+        const rows = await withHostDeadline(() =>
+          adapters.storage.list(
+            String(vm.dump(prefixH) ?? ""),
+            String(vm.dump(nsH) ?? "default"),
+          ),
         );
+        if (rows === HOST_TIMEOUT) return timeoutError();
         return vm.newString(JSON.stringify(rows));
       },
     );
@@ -224,10 +271,13 @@ export async function runAppEndpoint(opts: {
         if (closed) return closed;
         const over = charge(COST.storageDelete);
         if (over) return over;
-        await adapters.storage.delete(
-          String(vm.dump(keyH)),
-          String(vm.dump(nsH) ?? "default"),
+        const result = await withHostDeadline(() =>
+          adapters.storage.delete(
+            String(vm.dump(keyH)),
+            String(vm.dump(nsH) ?? "default"),
+          ),
         );
+        if (result === HOST_TIMEOUT) return timeoutError();
         return vm.undefined;
       },
     );
@@ -247,10 +297,10 @@ export async function runAppEndpoint(opts: {
         if (over) return over;
         const filtersRaw = vm.dump(filtersH);
         const filters = filtersRaw ? JSON.parse(String(filtersRaw)) : {};
-        const rows = await adapters.records.list(
-          String(vm.dump(typeH)),
-          filters,
+        const rows = await withHostDeadline(() =>
+          adapters.records!.list(String(vm.dump(typeH)), filters),
         );
+        if (rows === HOST_TIMEOUT) return timeoutError();
         return vm.newString(JSON.stringify(rows));
       },
     );
@@ -267,10 +317,10 @@ export async function runAppEndpoint(opts: {
           };
         const over = charge(COST.recordsGet);
         if (over) return over;
-        const row = await adapters.records.get(
-          String(vm.dump(typeH)),
-          String(vm.dump(idH)),
+        const row = await withHostDeadline(() =>
+          adapters.records!.get(String(vm.dump(typeH)), String(vm.dump(idH))),
         );
+        if (row === HOST_TIMEOUT) return timeoutError();
         return vm.newString(JSON.stringify(row ?? null));
       },
     );
@@ -289,7 +339,10 @@ export async function runAppEndpoint(opts: {
         if (over) return over;
         try {
           const input = JSON.parse(String(vm.dump(inputH)));
-          const result = await adapters.journal.create(input, post);
+          const result = await withHostDeadline(() =>
+            adapters.journal!.create(input, post),
+          );
+          if (result === HOST_TIMEOUT) return timeoutError();
           return vm.newString(JSON.stringify(result));
         } catch (e) {
           return {
@@ -315,7 +368,10 @@ export async function runAppEndpoint(opts: {
         const over = charge(cost);
         if (over) return over;
         try {
-          const result = await call(...handles.map((handle) => vm.dump(handle)));
+          const result = await withHostDeadline(() =>
+            call(...handles.map((handle) => vm.dump(handle))),
+          );
+          if (result === HOST_TIMEOUT) return timeoutError();
           return vm.newString(JSON.stringify(result ?? null));
         } catch (e) {
           const message = (e as Error).message;
@@ -419,7 +475,45 @@ export async function runAppEndpoint(opts: {
 
     let result: Awaited<ReturnType<typeof vm.evalCodeAsync>>;
     try {
-      result = await vm.evalCodeAsync(program);
+      const evalPromise = vm.evalCodeAsync(program);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const winner = await Promise.race([
+        evalPromise.then(
+          (value) => ({ kind: "result" as const, value }),
+          (error) => ({ kind: "error" as const, error }),
+        ),
+        new Promise<{ kind: "timeout" }>((resolve) => {
+          const remainingMs = Math.max(0, deadline - Date.now());
+          timer = setTimeout(() => resolve({ kind: "timeout" }), remainingMs);
+        }),
+      ]);
+      if (timer) clearTimeout(timer);
+
+      if (winner.kind === "timeout") {
+        // Seal before returning the timeout so a host callback that resolves
+        // after the wall-clock boundary cannot stage more governed work. Keep
+        // the context alive until asyncify has observed that callback's
+        // completion; disposing a suspended WASM stack would be unsafe.
+        sealed = true;
+        cleanupDeferred = true;
+        void evalPromise.then(
+          (lateResult) => {
+            if (lateResult.error) lateResult.error.dispose();
+            else lateResult.value.dispose();
+            disposeVm();
+          },
+          disposeVm,
+        );
+        return {
+          status: "timeout",
+          error: "execution timed out",
+          logs,
+          units,
+          durationMs: Date.now() - started,
+        };
+      }
+      if (winner.kind === "error") throw winner.error;
+      result = winner.value;
     } finally {
       // From here on no new host work belongs to this attempt: the outcome is
       // being adjudicated. Applies on both the resolved and rejected paths.
@@ -436,6 +530,15 @@ export async function runAppEndpoint(opts: {
         return {
           status: "forbidden",
           error: msg.slice(FORBIDDEN.length),
+          logs,
+          units,
+          durationMs: Date.now() - started,
+        };
+      }
+      if (msg.startsWith(TIMEOUT)) {
+        return {
+          status: "timeout",
+          error: msg.slice(TIMEOUT.length),
           logs,
           units,
           durationMs: Date.now() - started,
@@ -480,8 +583,7 @@ export async function runAppEndpoint(opts: {
       durationMs: Date.now() - started,
     };
   } finally {
-    vm.dispose();
-    runtime.dispose();
+    if (!cleanupDeferred) disposeVm();
   }
 }
 
