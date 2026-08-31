@@ -123,6 +123,7 @@ export async function POST(req: Request) {
       payDate: body.payDate ?? undefined,
       runType,
       employeePartyIds,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
