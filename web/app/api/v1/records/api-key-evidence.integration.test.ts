@@ -160,6 +160,24 @@ function recordsRequest(
   });
 }
 
+function malformedRecordsRequest(
+  pathname: string,
+  plaintextKey: string,
+  idempotencyKey: string,
+): Request {
+  return new Request(`http://openbooks.evidence.test${pathname}`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${plaintextKey}`,
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+      "user-agent": "evidence-suite/1",
+      "x-forwarded-for": "203.0.113.9, 198.51.100.7",
+    },
+    body: "{not-json",
+  });
+}
+
 const COLLECTION_PATH = "/api/v1/records/parties";
 
 const partyCount = async (orgId: string): Promise<number> => {
@@ -177,6 +195,37 @@ const claimCount = async (orgId: string): Promise<number> => {
     sql`select count(*)::int as n from application_idempotency_keys where org_id = ${orgId}`);
   return row!.n;
 };
+
+test("malformed authenticated commands retain execution audit evidence", { skip: !DB }, async () => {
+  const org = await seedEvidenceOrg();
+  try {
+    const response = await withOrgContext(org.orgId, () =>
+      createRoute.POST(
+        malformedRecordsRequest(COLLECTION_PATH, org.adminKey, "evidence-malformed-01"),
+        { params: Promise.resolve({ typeKey: "parties" }) },
+      ));
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "invalid request body" });
+
+    const events = await query<{
+      key_id: string; method: string; path: string; status_code: number; error: string | null;
+    }>(sql`
+      select key_id, method, path, status_code, error
+        from api_key_events where org_id = ${org.orgId} order by id asc`);
+    assert.equal(events.length, 1, "the malformed request is durably evidenced");
+    assert.deepEqual(events[0], {
+      key_id: org.adminKeyId,
+      method: "POST",
+      path: COLLECTION_PATH,
+      status_code: 400,
+      error: "invalid_input",
+    });
+    assert.equal(await partyCount(org.orgId), 0, "malformed input never reaches the application writer");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 async function seedParty(orgId: string, displayName: string): Promise<string> {
   const [party] = await withBypassContext(async () =>
