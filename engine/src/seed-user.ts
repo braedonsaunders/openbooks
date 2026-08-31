@@ -4,16 +4,15 @@ import { db } from "./db.ts";
 
 /**
  * Create (or reset) an app user:
- *   npx tsx engine/src/seed-user.ts <email> <name> <role> [password]
- * Prints a generated password when none is supplied.
+ *   npx tsx engine/src/seed-user.ts <email> <name> <role> <password>
+ * A password must be supplied explicitly; credentials are never emitted.
  */
 
-const [email, name, role = "admin", supplied] = process.argv.slice(2);
-if (!email || !name) {
-  console.error("usage: seed-user.ts <email> <name> [role] [password]");
+const [email, name, role = "admin", password] = process.argv.slice(2);
+if (!email || !name || !password) {
+  console.error("usage: seed-user.ts <email> <name> [role] <password>");
   process.exit(1);
 }
-const password = supplied ?? randomBytes(9).toString("base64url");
 const salt = randomBytes(16);
 const hash = `${salt.toString("hex")}:${scryptSync(password, salt, 64).toString("hex")}`;
 
@@ -45,5 +44,5 @@ await db.transaction(async (tx) => {
     on conflict (org_id, user_id, role_id) do nothing
   `);
 });
-console.log(`user ${email} (${role}) ready${supplied ? "" : ` — password: ${password}`}`);
+console.log(`user ${email} (${role}) ready`);
 process.exit(0);
