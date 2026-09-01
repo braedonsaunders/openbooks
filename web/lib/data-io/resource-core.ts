@@ -114,7 +114,7 @@ export class RefResolver {
     if (UUID_RE.test(value)) return value
     const spec = this.spec(target)
     if (!spec) return null
-    const cacheKey = `${target.resource}\0${value}`
+    const cacheKey = `${target.resource}\u0000${value}`
     if (this.toId.has(cacheKey)) return this.toId.get(cacheKey)!
     const orgFilter = spec.orgScoped ? sql` and org_id = ${this.orgId}` : sql``
     let r = (await db.execute(sql`
@@ -137,7 +137,7 @@ export class RefResolver {
     if (!uuid) return ''
     const spec = this.spec(target)
     if (!spec) return uuid
-    const cacheKey = `${target.resource}\0${uuid}`
+    const cacheKey = `${target.resource}\u0000${uuid}`
     if (this.toLabel.has(cacheKey)) return this.toLabel.get(cacheKey) ?? uuid
     const r = (await db.execute(sql`
       select ${sql.raw(spec.labelExpr)} as label from ${sql.raw(spec.table)}
