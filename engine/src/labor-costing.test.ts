@@ -105,9 +105,9 @@ test("labor clearing project drill keeps the positive job-tagged debit sign", ()
   assert.ok(queryStart >= 0);
   const query = laborSource.slice(queryStart, laborSource.indexOf("const subsidiary =", queryStart));
 
-  // postProjectLaborCost writes the project WIP debit with a positive amount;
-  // its balancing clearing credit has no project_id. Reversed entries retain
-  // those signs and cancel when summed, so this drill must not negate them.
+  // postProjectLaborCost writes the project WIP debit with a positive amount,
+  // and this drill reads that job-tagged leg directly. Reversed entries retain
+  // those signs and cancel when summed, so the drill must not negate them.
   assert.match(query, /select l\.project_id, p\.name, sum\(l\.amount\) as standard/);
   assert.match(query, /l\.project_id is not null/);
   assert.match(query, /having sum\(l\.amount\) <> 0/);
