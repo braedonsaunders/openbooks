@@ -81,6 +81,7 @@ import {
   dropScratchOrg,
   seedFlowActors,
 } from "../../test-fixtures.ts";
+import { assertLoopbackDisposableDatabase } from "../../sim/db-guard.ts";
 import { canonicalizeLines, compareSnapshots } from "./canonical-ledger.ts";
 import { ErpNextParityClient } from "./erpnext-client.ts";
 import { GL_COVERAGE_MATRIX } from "./matrix.ts";
@@ -971,6 +972,9 @@ async function ensureErpMaster<T extends { name: string }>(
 }
 
 async function provision(): Promise<void> {
+  // Fail closed before reading ERPNext or OpenBooks.  Provisioning creates
+  // tenant rows, so a production/shared database URL must never reach a query.
+  assertLoopbackDisposableDatabase("ledger parity provisioning");
   mkdirSync(runtimeDir, { recursive: true });
   if (existsSync(manifestPath)) {
     const current = readManifest();
