@@ -27,8 +27,6 @@
   "costSource": "Fonte do custo real",
   "costDimension": "Grupo de contas de custo",
   "laborSource": "Fonte do custo de mão de obra",
-  "burdenSource": "Fonte dos encargos",
-  "burdenDimension": "Grupo de contas de encargos",
   "budgetSource": "Fonte do orçamento de custo",
   "committedKinds": "Custo comprometido de",
   "committedStatuses": "Estados do ciclo de vida do custo comprometido",

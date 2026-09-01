@@ -1631,10 +1631,6 @@
         "title": "労災保険グループ",
         "description": "労務原価計算用の労災補償料率グループ。"
       },
-      "labor-burden-rates": {
-        "title": "労務間接費率",
-        "description": "労務コストに適用される発効日付きの間接費率。"
-      },
       "asset-categories": {
         "title": "資産カテゴリ",
         "description": "固定資産の既定の減価償却方法および勘定。"
@@ -1946,10 +1942,6 @@
       "endOfLife": {
         "fullyDepreciate": "全額償却",
         "retainBalance": "残高を保持"
-      },
-      "burdenMethod": {
-        "live": "ライブ",
-        "standard": "標準"
       },
       "fxRateType": {
         "spot": "スポット",
