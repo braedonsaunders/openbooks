@@ -267,10 +267,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (materialControlChange && (changeReason.length < 5 || changeReason.length > 500)) {
     return bad('a reason between 5 and 500 characters is required for status and hold changes')
   }
-  if (body.roles?.customer?.isOnHold === true && (strOrNull(body.roles.customer.holdReason)?.length ?? 0) < 5) {
+  // Role PATCH payloads are partial. Keep the authoritative hold controls
+  // unless the caller explicitly changes them; otherwise a routine role
+  // autosave would silently lift a credit/payment hold and erase its reason.
+  const customerOnHold = body.roles?.customer?.isOnHold ?? existingParty.customer_hold
+  const customerHoldReason = body.roles?.customer?.holdReason !== undefined
+    ? strOrNull(body.roles.customer.holdReason)
+    : existingParty.customer_hold_reason
+  const vendorOnHold = body.roles?.vendor?.isOnHold ?? existingParty.vendor_hold
+  const vendorHoldReason = body.roles?.vendor?.holdReason !== undefined
+    ? strOrNull(body.roles.vendor.holdReason)
+    : existingParty.vendor_hold_reason
+  if (body.roles?.customer !== undefined && customerOnHold && (customerHoldReason?.length ?? 0) < 5) {
     return bad('Customer credit hold requires a reason of at least 5 characters')
   }
-  if (body.roles?.vendor?.isOnHold === true && (strOrNull(body.roles.vendor.holdReason)?.length ?? 0) < 5) {
+  if (body.roles?.vendor !== undefined && vendorOnHold && (vendorHoldReason?.length ?? 0) < 5) {
     return bad('Vendor payment hold requires a reason of at least 5 characters')
   }
   if (body.isActive === false && existingParty.is_active) {
@@ -393,7 +404,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             update customer_roles set is_active = false, updated_at = now(), updated_by = ${user.id}
             where party_id = ${id} and org_id = ${user.orgId}`)
         } else if (c.enabled === true) {
-          if (c.isOnHold && (strOrNull(c.holdReason)?.length ?? 0) < 5) {
+          if (customerOnHold && (customerHoldReason?.length ?? 0) < 5) {
             throwBad('Customer credit hold requires a reason of at least 5 characters')
           }
           const paymentTermsId = uuidOrNull(c.paymentTermsId)
@@ -423,8 +434,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                                         created_by, updated_by)
             values (${user.orgId}, ${id}, ${paymentTermsId}, ${creditLimit}, ${currency !== undefined ? currency : null},
                     ${arAccountId}, ${salesRepId}, ${taxCodeId},
-                    ${c.isOnHold === true}, ${c.isOnHold ? strOrNull(c.holdReason) : null},
-                    ${c.isOnHold ? sql`now()` : null}, ${c.isOnHold ? user.id : null},
+                    ${customerOnHold}, ${customerOnHold ? customerHoldReason : null},
+                    ${customerOnHold ? sql`now()` : null}, ${customerOnHold ? user.id : null},
                     ${user.id}, ${user.id})
             on conflict (party_id) do update set
               payment_terms_id = excluded.payment_terms_id,
@@ -461,7 +472,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             update vendor_roles set is_active = false, updated_at = now(), updated_by = ${user.id}
             where party_id = ${id} and org_id = ${user.orgId}`)
         } else if (v.enabled === true) {
-          if (v.isOnHold && (strOrNull(v.holdReason)?.length ?? 0) < 5) {
+          if (vendorOnHold && (vendorHoldReason?.length ?? 0) < 5) {
             throwBad('Vendor payment hold requires a reason of at least 5 characters')
           }
           const paymentMethod = strOrNull(v.paymentMethod)
@@ -491,8 +502,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             values (${user.orgId}, ${id}, ${paymentMethod}, ${strOrNull(v.eftNotificationEmail)},
                     ${paymentTermsId}, ${currency !== undefined ? currency : null}, ${v.is1099OrT4a === true}, ${apAccountId},
                     ${defaultExpenseAccountId}, ${taxCodeId},
-                    ${v.isOnHold === true}, ${v.isOnHold ? strOrNull(v.holdReason) : null},
-                    ${v.isOnHold ? sql`now()` : null}, ${v.isOnHold ? user.id : null},
+                    ${vendorOnHold}, ${vendorOnHold ? vendorHoldReason : null},
+                    ${vendorOnHold ? sql`now()` : null}, ${vendorOnHold ? user.id : null},
                     ${user.id}, ${user.id})
             on conflict (party_id) do update set
               payment_method = excluded.payment_method,
