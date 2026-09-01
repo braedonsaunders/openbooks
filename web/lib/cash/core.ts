@@ -320,6 +320,44 @@ export async function loadCategories(orgId: string): Promise<ForecastCategory[]>
   return raw.filter((c) => c && typeof c === "object" && c.id && c.name && c.method);
 }
 
+/**
+ * Resolve the formula engine's tax fraction from the tenant's effective
+ * manual tax-rate configuration. A missing or malformed setting is an error;
+ * silently applying a jurisdiction-specific fallback would corrupt forecasts.
+ */
+export async function resolveFormulaTaxRate(
+  orgId: string,
+  asOfIso: string,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<number> {
+  const r = await runner.execute<{ defaultRatePercent: string | number | null }>(sql`
+    select settings ->> 'defaultRatePercent' as "defaultRatePercent"
+      from tax_rate_provider_configs
+     where org_id = ${orgId}
+       and provider = 'manual'
+       and is_enabled
+       and updated_at < (${asOfIso}::date + interval '1 day')
+     limit 1
+  `);
+  const configured = r.rows[0]?.defaultRatePercent;
+  if (
+    configured === null ||
+    configured === undefined ||
+    (typeof configured === "string" && configured.trim() === "")
+  ) {
+    throw new Error(
+      `formula {TAX_RATE} requires an enabled manual tax-rate provider with settings.defaultRatePercent for organization ${orgId} on ${asOfIso}`,
+    );
+  }
+  const ratePercent = Number(configured);
+  if (!Number.isFinite(ratePercent) || ratePercent < 0) {
+    throw new Error(
+      `formula {TAX_RATE} has an invalid settings.defaultRatePercent for organization ${orgId} on ${asOfIso}`,
+    );
+  }
+  return ratePercent / 100;
+}
+
 /* ------------------- category engine helpers ------------------------------- */
 
 const addMonthsUTC = (d: Date, n: number): Date => {
@@ -710,6 +748,7 @@ export async function categoryWeekly(
       .replace(/MAX\(/g, "max(").replace(/MIN\(/g, "min(").replace(/ABS\(/g, "abs(")
       .replace(/CEIL\(/g, "ceil(").replace(/FLOOR\(/g, "floor(").replace(/ROUND\(/g, "round(")
       .replace(/SQRT\(/g, "sqrt(").replace(/POW\(/g, "pow(").replace(/AVG\(/g, "avg(");
+    const taxRate = expression.includes("{TAX_RATE}") ? await resolveFormulaTaxRate(orgId, asOfIso) : 0;
     weekStarts.forEach((k, i) => {
       const cur = parseISO(k);
       const weekIndex = i + 1;
@@ -733,7 +772,7 @@ export async function categoryWeekly(
         .replace(/{IS_Q_START}/g, monthNum % 3 === 1 && isMonthStart ? "1" : "0")
         .replace(/{IS_Q_END}/g, monthNum % 3 === 0 && isMonthEnd ? "1" : "0")
         .replace(/{IS_YEAR_END}/g, monthNum === 12 && isMonthEnd ? "1" : "0")
-        .replace(/{TAX_RATE}/g, "0.13").replace(/{TRUE}/g, "1").replace(/{FALSE}/g, "0");
+        .replace(/{TAX_RATE}/g, String(taxRate)).replace(/{TRUE}/g, "1").replace(/{FALSE}/g, "0");
       let result = 0;
       try {
         result = evaluateFormula(evalStr);

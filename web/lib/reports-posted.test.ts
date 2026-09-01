@@ -1,7 +1,84 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { env } from "@openbooks/engine/src/db.ts";
+
+test("transaction detail scopes both reads to the statement accounting book", () => {
+  const source = readFileSync(new URL("./reports/transaction-detail.ts", import.meta.url), "utf8");
+  assert.match(source, /bookId\?: string \| null/);
+  assert.match(source, /statementBookExpr/);
+  assert.match(source, /const bookFilter = sql`e\.book_id = \$\{statementBookExpr\(orgId, opts\.bookId\)\}`/);
+  assert.match(source, /and \$\{bookFilter\}/);
+});
+
+test("formula TAX_RATE resolves configured rates and fails closed", () => {
+  const source = `
+    import assert from "node:assert/strict";
+    import { resolveFormulaTaxRate } from "./web/lib/cash/core.ts";
+
+    const fixtures = new Map([
+      ["org-gst", { defaultRatePercent: "5", updatedAt: "2026-08-01" }],
+      ["org-bc", { defaultRatePercent: "12", updatedAt: "2026-08-01" }],
+      ["org-revision", { defaultRatePercent: "9", updatedAt: "2026-08-01" }],
+      ["org-malformed", { defaultRatePercent: "not-a-rate", updatedAt: "2026-08-01" }],
+      ["org-negative", { defaultRatePercent: "-1", updatedAt: "2026-08-01" }],
+      ["org-empty", { defaultRatePercent: "", updatedAt: "2026-08-01" }],
+    ]);
+    const queries = [];
+    const runner = {
+      async execute(query) {
+        const chunks = Array.isArray(query.queryChunks) ? query.queryChunks : [];
+        const params = chunks.filter((chunk) => typeof chunk === "string");
+        const [orgId, asOfIso] = params;
+        const queryText = chunks.map((chunk) => {
+          if (typeof chunk === "string") return chunk;
+          return Array.isArray(chunk?.value) ? chunk.value.join("") : "";
+        }).join("");
+        assert.match(queryText, /from tax_rate_provider_configs/);
+        assert.match(queryText, /provider = 'manual'/);
+        assert.match(queryText, /is_enabled/);
+        assert.match(queryText, /updated_at </);
+        queries.push(queryText);
+        const fixture = fixtures.get(orgId);
+        if (!fixture || asOfIso < fixture.updatedAt) return { rows: [] };
+        return { rows: [{ defaultRatePercent: fixture.defaultRatePercent }] };
+      },
+    };
+    assert.equal(await resolveFormulaTaxRate("org-gst", "2026-08-31", runner), 0.05);
+    assert.equal(await resolveFormulaTaxRate("org-bc", "2026-08-31", runner), 0.12);
+    assert.match(queries[0], /org_id =/);
+
+    await assert.rejects(
+      resolveFormulaTaxRate("org-missing", "2026-08-31", runner),
+      /requires an enabled manual tax-rate provider with settings\\.defaultRatePercent/,
+    );
+    await assert.rejects(
+      resolveFormulaTaxRate("org-malformed", "2026-08-31", runner),
+      /has an invalid settings\\.defaultRatePercent/,
+    );
+    await assert.rejects(
+      resolveFormulaTaxRate("org-negative", "2026-08-31", runner),
+      /has an invalid settings\\.defaultRatePercent/,
+    );
+    await assert.rejects(
+      resolveFormulaTaxRate("org-empty", "2026-08-31", runner),
+      /requires an enabled manual tax-rate provider with settings\\.defaultRatePercent/,
+    );
+    assert.equal(await resolveFormulaTaxRate("org-revision", "2026-08-01", runner), 0.09);
+    await assert.rejects(
+      resolveFormulaTaxRate("org-revision", "2026-07-31", runner),
+      /requires an enabled manual tax-rate provider with settings\\.defaultRatePercent/,
+    );
+    console.log("cash TAX_RATE configured, absent, invalid, and negative cases passed");
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
 
 test("financial statements exclude draft and other unposted journals", { skip: !env.OPENBOOKS_DB_URL }, () => {
   // Web report modules intentionally import `server-only`. Run this DB-backed
@@ -211,6 +288,77 @@ test("financial statements exclude draft and other unposted journals", { skip: !
         assert.ok(regularPeriod, "regular completed period appears in trends");
         assert.equal(regularPeriod.revenue, "100.0000");
         assert.equal(regularPeriod.net_income, "100.0000");
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(scratch.orgId));
+    }
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+test("transaction detail excludes parallel-book lines", { skip: !env.OPENBOOKS_DB_URL }, () => {
+  const source = `
+    import assert from "node:assert/strict";
+    import { randomUUID } from "node:crypto";
+    import { sql } from "drizzle-orm";
+    import { db, withBypass, withOrg } from "./engine/src/db.ts";
+    import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+    import { transactionDetail } from "./web/lib/reports.ts";
+
+    const scratch = await withBypass(() => createScratchOrg());
+    const taxBookId = randomUUID();
+    try {
+      await withBypass(async () => {
+        await db.execute(sql\`
+          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)\`);
+        const postRevenue = async (bookId, amount, tag) => {
+          const entryId = randomUUID();
+          await db.execute(sql\`
+            insert into journal_entries
+              (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+               period_id, memo, status, origin, posted_at)
+            values
+              (\${entryId}, \${scratch.orgId}, \${bookId}, \${scratch.subsidiaryId},
+               \${"DRILL-" + tag}, \${scratch.date}, \${scratch.periodId},
+               \${tag}, 'draft', 'manual', null)\`);
+          await db.execute(sql\`
+            insert into journal_lines
+              (org_id, entry_id, line_number, account_id, subsidiary_id,
+               amount, currency, txn_amount, fx_rate)
+            values
+              (\${scratch.orgId}, \${entryId}, 1, \${scratch.accounts.bank},
+               \${scratch.subsidiaryId}, \${amount}, 'CAD', \${amount}, '1'),
+              (\${scratch.orgId}, \${entryId}, 2, \${scratch.accounts.revenue},
+               \${scratch.subsidiaryId}, \${"-" + amount}, 'CAD', \${"-" + amount}, '1')\`);
+          await db.execute(sql\`
+            update journal_entries set status = 'posted', posted_at = now()
+             where id = \${entryId}\`);
+        };
+        await postRevenue(scratch.bookId, "100.0000", "PRIMARY");
+        await postRevenue(taxBookId, "250.0000", "TAX");
+      });
+
+      await withOrg(scratch.orgId, async () => {
+        const detail = (bookId) => transactionDetail({
+          accountTypes: ["income"],
+          from: scratch.date,
+          to: scratch.date,
+          mode: "flow",
+          orgId: scratch.orgId,
+          bookId,
+        });
+        const primary = await detail(undefined);
+        assert.equal(primary.net, "100.0000");
+        assert.equal(primary.count, 1);
+        const tax = await detail(taxBookId);
+        assert.equal(tax.net, "250.0000");
+        assert.equal(tax.count, 1);
       });
     } finally {
       await withBypass(() => dropScratchOrg(scratch.orgId));
