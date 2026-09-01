@@ -100,7 +100,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       } else {
         const reason = textOrNull(body.stageReason)
         await tx.execute(sql`
-          update crm_account_profiles set lifecycle_stage = ${stage}, status_id = ${statusId ?? null},
+          update crm_account_profiles set lifecycle_stage = ${stage},
+                 status_id = ${statusId !== undefined ? statusId : sql`status_id`},
                  updated_at = now(), updated_by = ${user.id} where id = ${row.id} and org_id = ${user.orgId}`)
         await tx.execute(sql`
           insert into crm_account_stage_events
