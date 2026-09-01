@@ -152,6 +152,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0066_change_set_review_approval_audit.sql",
     "0067_insights_home_uniqueness.sql",
     "0068_equipment_capitalization_concurrency.sql",
+    "0069_lease_cancelled_lines_accumulation.sql",
     "0070_governed_query_private_projection.sql",
     "0071_information_return_root_uniqueness.sql",
     "0072_payroll_parallel_unattributed_uniqueness.sql",
@@ -164,6 +165,8 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0079_budget_subsidiary.sql",
     // 0080 is intentionally unused; no migration was shipped for this ordinal.
     "0081_account_group_member_dimension_uniqueness.sql",
+    "0082_asset_draft_number_uniqueness.sql",
+    "0083_pay_derived_rules_effective_versioning.sql",
   ]);
   for (const ordinal of intentionallySkippedMigrationOrdinals) {
     const prefix = ordinal.toString().padStart(4, "0");
