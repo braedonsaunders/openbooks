@@ -243,6 +243,28 @@ test('create returns the plaintext once and commits the key with its audit evide
   assert.equal(audit.includes(payload.plaintext), false, 'audit evidence never contains the secret')
 })
 
+test('create rejects omitted or empty scopes before opening a transaction', async () => {
+  for (const body of [{ name: 'omitted scopes' }, { name: 'empty scopes', scopes: [] }]) {
+    reset()
+
+    const response = await post(body)
+
+    assert.equal(response.status, 400)
+    assert.match((await response.json()).error, /at least one scope is required/)
+    assert.deepEqual(state.executed, [], 'invalid scope sets never reach storage')
+  }
+})
+
+test('update rejects clearing a key to an empty scope set before opening a transaction', async () => {
+  reset()
+
+  const response = await patchKey({ id: KEY_ID, scopes: [] })
+
+  assert.equal(response.status, 400)
+  assert.match((await response.json()).error, /at least one scope is required/)
+  assert.deepEqual(state.executed, [], 'invalid scope sets never reach storage')
+})
+
 test('a forced audit failure leaves no created key or leaked plaintext behind', async () => {
   reset()
   state.failOnText = 'insert into audit_log'
