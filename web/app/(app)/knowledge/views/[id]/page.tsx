@@ -5,7 +5,7 @@ import { Download, FileText, Pencil } from 'lucide-react'
 import { Badge, Button, DetailHeader, EmptyState, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../../components/page-layout'
 import { Pagination } from '../../../../../components/pagination'
-import { parseListParams } from '../../../../../lib/list-params'
+import { isUuid, parseListParams } from '../../../../../lib/list-params'
 import { dateTime } from '../../../../../lib/format'
 import { requirePermission } from '../../../../../lib/authz'
 import { canRunReportEntity } from '../../../../../lib/report-authz'
@@ -58,7 +58,7 @@ export default async function ViewRunPage({
   const sp = await searchParams
   const listParams = parseListParams(sp, { sort: 'updated', dir: 'desc', perPage: PER_PAGE, allowedSorts: ['updated'] as const })
 
-  const view = /^[0-9a-f-]{36}$/i.test(id)
+  const view = isUuid(id)
     ? await loadView(authz.user.orgId, id, authz.user.id, authz.permissions)
     : null
 
