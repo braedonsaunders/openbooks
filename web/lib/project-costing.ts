@@ -95,11 +95,19 @@ async function projectCostSummaryInSnapshot(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
     `),
-    // committed: open order remainders tagged to the project
+    // committed: open order remainders tagged to the project. Order amounts
+    // are transaction-currency facts; translate each contribution through the
+    // document's txn→functional rate before combining it with posted actuals.
     db.execute(sql`
       select
-        coalesce(sum((dl.quantity - dl.quantity_billed) * dl.unit_price) filter (where d.kind = 'purchase_order'), 0) as committed_cost,
-        coalesce(sum((dl.quantity - dl.quantity_billed) * dl.unit_price) filter (where d.kind = 'sales_order'), 0) as committed_revenue
+        coalesce(sum(round(
+          (dl.quantity - dl.quantity_billed) * dl.unit_price * d.fx_rate,
+          4
+        )) filter (where d.kind = 'purchase_order'), 0) as committed_cost,
+        coalesce(sum(round(
+          (dl.quantity - dl.quantity_billed) * dl.unit_price * d.fx_rate,
+          4
+        )) filter (where d.kind = 'sales_order'), 0) as committed_revenue
       from document_lines dl
       join documents d on d.id = dl.document_id and d.org_id = dl.org_id
       where dl.org_id = ${orgId}
@@ -399,10 +407,15 @@ export async function projectUnbilled(orgId: string, projectId: string, opts: Un
        where te.org_id = ${orgId} and te.project_id = ${projectId}
          and te.status = 'approved' and te.is_billable and te.billing_status = 'unbilled'${dateFilter}
     `),
+    // Document-backed billable costs and charges are transaction-currency
+    // facts too. Convert each source line before summing so unbilled revenue
+    // and cost stay in the same functional currency as the time rollup.
     db.execute(sql`
-      select coalesce(sum(case when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
-                               else dl.amount * coalesce(nullif(dl.cost_multiplier, 0), 1) end), 0) as revenue,
-             coalesce(sum(dl.amount), 0) as cost,
+      select coalesce(sum(case when d.kind = 'project_charge'
+                               then round(coalesce(dl.bill_amount, 0) * d.fx_rate, 4)
+                               else round(dl.amount * coalesce(nullif(dl.cost_multiplier, 0), 1) * d.fx_rate, 4)
+                          end), 0) as revenue,
+             coalesce(sum(round(dl.amount * d.fx_rate, 4)), 0) as cost,
              count(*) as cnt
         from document_lines dl
         join documents d on d.id = dl.document_id and d.org_id = dl.org_id
