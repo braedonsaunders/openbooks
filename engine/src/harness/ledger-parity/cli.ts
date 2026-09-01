@@ -970,6 +970,35 @@ async function ensureErpMaster<T extends { name: string }>(
   return client.create(doctype, create) as Promise<T>;
 }
 
+function requireParityCurrency(
+  value: string | null | undefined,
+  source: string,
+): string {
+  const currency = value?.trim().toUpperCase();
+  if (!currency) throw new Error(`${source} has no configured currency`);
+  return currency;
+}
+
+function resolveParityCurrency(input: {
+  erpCompanyCurrency: string | null | undefined;
+  openBooksSubsidiaryCurrency: string | null | undefined;
+}): string {
+  const erpCurrency = requireParityCurrency(
+    input.erpCompanyCurrency,
+    "ERPNext company",
+  );
+  const openBooksCurrency = requireParityCurrency(
+    input.openBooksSubsidiaryCurrency,
+    "OpenBooks parity subsidiary",
+  );
+  if (erpCurrency !== openBooksCurrency) {
+    throw new Error(
+      `parity currencies disagree: ERPNext company ${erpCurrency} vs OpenBooks subsidiary ${openBooksCurrency}`,
+    );
+  }
+  return openBooksCurrency;
+}
+
 async function provision(): Promise<void> {
   mkdirSync(runtimeDir, { recursive: true });
   if (existsSync(manifestPath)) {
@@ -985,9 +1014,13 @@ async function provision(): Promise<void> {
 
   const config = erpConfig();
   const client = new ErpNextParityClient(config);
-  const companies = await client.list<{ name: string; abbr: string }>(
+  const companies = await client.list<{
+    name: string;
+    abbr: string;
+    default_currency: string | null;
+  }>(
     "Company",
-    ["name", "abbr"],
+    ["name", "abbr", "default_currency"],
     [["name", "=", config.company]],
     "name asc",
     1,
@@ -1064,9 +1097,16 @@ async function provision(): Promise<void> {
     account_number: string | null;
     account_type: string | null;
     parent_account: string | null;
+    account_currency: string | null;
   }>(
     "Account",
-    ["name", "account_number", "account_type", "parent_account"],
+    [
+      "name",
+      "account_number",
+      "account_type",
+      "parent_account",
+      "account_currency",
+    ],
     [
       ["company", "=", config.company],
       ["is_group", "=", 0],
@@ -1088,27 +1128,6 @@ async function provision(): Promise<void> {
       );
     return found;
   };
-  let bank2 = erpAccounts.find(
-    (row) => row.name === `Parity Savings - ${company.abbr}`,
-  )?.name;
-  if (!bank2) {
-    const bankParent = erpAccounts.find(
-      (row) => row.account_type === "Bank",
-    )?.parent_account;
-    if (!bankParent)
-      throw new Error("ERPNext default bank account has no parent account");
-    const created = await client.create<{ name: string }>("Account", {
-      account_name: "Parity Savings",
-      company: config.company,
-      parent_account: bankParent,
-      account_type: "Bank",
-      root_type: "Asset",
-      report_type: "Balance Sheet",
-      account_currency: "CAD",
-      is_group: 0,
-    });
-    bank2 = created.name;
-  }
   const costCenters = await client.list<{ name: string }>(
     "Cost Center",
     ["name"],
@@ -1125,6 +1144,59 @@ async function provision(): Promise<void> {
   // one tenant is created; no database or application stack is provisioned.
   const scratch = await createScratchOrg();
   const actors = await seedFlowActors(scratch.orgId);
+  const subsidiary = await db.execute<{ base_currency: string | null }>(sql`
+    select nullif(trim(base_currency), '') as base_currency
+      from subsidiaries
+     where org_id = ${scratch.orgId}
+       and id = ${scratch.subsidiaryId}
+       and is_active
+  `);
+  const parityCurrency = resolveParityCurrency({
+    erpCompanyCurrency: company.default_currency,
+    openBooksSubsidiaryCurrency: subsidiary.rows[0]?.base_currency,
+  });
+  // The manifest schema and the parity scenarios are intentionally CAD-only;
+  // refuse a differently configured tenant rather than creating a partially
+  // valid harness with mixed currencies.
+  if (parityCurrency !== "CAD") {
+    throw new Error(
+      `ledger parity currently supports CAD only; configured currency is ${parityCurrency}`,
+    );
+  }
+
+  const existingBank2 = erpAccounts.find(
+    (row) => row.name === `Parity Savings - ${company.abbr}`,
+  );
+  let bank2 = existingBank2?.name;
+  if (existingBank2) {
+    const existingCurrency = requireParityCurrency(
+      existingBank2.account_currency,
+      "ERPNext Parity Savings account",
+    );
+    if (existingCurrency !== parityCurrency) {
+      throw new Error(
+        `ERPNext Parity Savings currency ${existingCurrency} does not match parity currency ${parityCurrency}`,
+      );
+    }
+  }
+  if (!bank2) {
+    const bankParent = erpAccounts.find(
+      (row) => row.account_type === "Bank",
+    )?.parent_account;
+    if (!bankParent)
+      throw new Error("ERPNext default bank account has no parent account");
+    const created = await client.create<{ name: string }>("Account", {
+      account_name: "Parity Savings",
+      company: config.company,
+      parent_account: bankParent,
+      account_type: "Bank",
+      root_type: "Asset",
+      report_type: "Balance Sheet",
+      account_currency: parityCurrency,
+      is_group: 0,
+    });
+    bank2 = created.name;
+  }
   const bank2Id = randomUUID();
   await db.transaction(async (tx) => {
     await tx.execute(sql`
@@ -1155,10 +1227,12 @@ async function provision(): Promise<void> {
     await tx.execute(sql`
       insert into accounts
         (id, org_id, number, name, type, is_summary, is_active, eliminate,
-         reconcilable, required_dimensions, custom, subsidiary_include_children)
+         reconcilable, currency_restriction, required_dimensions, custom,
+         subsidiary_include_children)
       values
         (${bank2Id}, ${scratch.orgId}, '1001', 'Parity Savings', 'asset_bank',
-         false, true, false, true, '[]'::jsonb, '{}'::jsonb, true)
+         false, true, false, true, ${parityCurrency}, '[]'::jsonb,
+         '{}'::jsonb, true)
     `);
   });
 

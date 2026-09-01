@@ -1,6 +1,9 @@
 import { strict as assert } from "node:assert";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { computeCostRate, convertFixedLaborComponents, convertLaborWage, type LaborCostComponent } from "./labor-costing.ts";
+
+const laborSource = readFileSync(new URL("./labor-costing.ts", import.meta.url), "utf8");
 
 const cfg = (components: LaborCostComponent[], hoursPerDay = 8) => ({ hoursPerDay, components });
 
@@ -95,4 +98,28 @@ test("only fixed labor components convert to subsidiary functional currency", ()
     { ...components[1], value: "2.2500" },
     { ...components[2], value: "45.0000" },
   ]);
+});
+
+test("labor clearing project drill keeps the positive job-tagged debit sign", () => {
+  const queryStart = laborSource.indexOf("const perProject =");
+  assert.ok(queryStart >= 0);
+  const query = laborSource.slice(queryStart, laborSource.indexOf("const subsidiary =", queryStart));
+
+  // postProjectLaborCost writes the project WIP debit with a positive amount;
+  // its balancing clearing credit has no project_id. Reversed entries retain
+  // those signs and cancel when summed, so this drill must not negate them.
+  assert.match(query, /select l\.project_id, p\.name, sum\(l\.amount\) as standard/);
+  assert.match(query, /l\.project_id is not null/);
+  assert.match(query, /having sum\(l\.amount\) <> 0/);
+  assert.match(query, /order by sum\(l\.amount\) desc/);
+  assert.doesNotMatch(query, /-sum\(l\.amount\)/);
+
+  const posting = [
+    { projectId: "project-1", amount: 125 },
+    { projectId: null, amount: -125 },
+  ];
+  const projectDebit = posting
+    .filter((line) => line.projectId !== null)
+    .reduce((total, line) => total + line.amount, 0);
+  assert.equal(projectDebit, 125);
 });
