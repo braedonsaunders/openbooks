@@ -101,7 +101,6 @@ async function publishForOrg(orgId: string, effectiveFrom: string): Promise<void
       try {
         const res = await fetch(`${appBaseUrl()}/api/internal/overhead/publish`, {
           method: "POST",
-          redirect: "error",
           headers: { "Content-Type": "application/json", "x-internal-token": process.env.OPENBOOKS_INTERNAL_TOKEN || "" },
           body: JSON.stringify({ orgId, effectiveFrom }),
           redirect: "error",
