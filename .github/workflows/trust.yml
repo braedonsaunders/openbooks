@@ -199,7 +199,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -224,23 +224,21 @@ jobs:
             --out docs/trust \
             --sha "${GITHUB_SHA}"
 
-      - name: Commit
+      - name: Upload trust corpus
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: trust-corpus
+          path: docs/trust
+          retention-days: 90
+
+      - name: Summary
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/trust
-          if git diff --staged --quiet; then
-            echo "trust corpus unchanged"
-            exit 0
-          fi
-          git commit -m "chore: publish trust corpus [skip ci]"
-          for attempt in 1 2 3; do
-            git fetch origin main
-            git rebase origin/main
-            if git push origin HEAD:main; then
-              exit 0
+          {
+            echo "### Trust corpus"
+            echo
+            echo "Built for \`${GITHUB_SHA}\`. Download the **trust-corpus** artifact from this run."
+            echo
+            if [ -f docs/trust/conformance-matrix.md ]; then
+              head -40 docs/trust/conformance-matrix.md
             fi
-            echo "main advanced during trust publication; retrying ($attempt/3)" >&2
-          done
-          echo "unable to publish trust corpus after 3 attempts" >&2
-          exit 1
+          } >> "$GITHUB_STEP_SUMMARY"
