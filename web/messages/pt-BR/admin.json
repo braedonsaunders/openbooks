@@ -1188,55 +1188,55 @@
       }
     },
     "taxDepreciationSetup": {
-      "navTitle": "Tax Depreciation",
-      "title": "Tax Depreciation",
-      "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
-      "tabsAria": "Fixed asset setup sections",
+      "navTitle": "Depreciação fiscal",
+      "title": "Depreciação fiscal",
+      "description": "Instale pacotes de depreciação fiscal por país e configure atribuições de classes, regimes, classes, convenções e regras do primeiro ano. Isso é independente da configuração de imposto sobre vendas, IVA e nexo fiscal.",
+      "tabsAria": "Seções de configuração de ativos imobilizados",
       "tabs": {
-        "overview": "Overview",
-        "categories": "Asset categories",
-        "regimes": "Tax regimes",
-        "classes": "Tax classes",
-        "firstYear": "First-year rules",
-        "methods": "Methods",
-        "books": "Book policies"
+        "overview": "Visão geral",
+        "categories": "Categorias de ativos",
+        "regimes": "Regimes fiscais",
+        "classes": "Classes fiscais",
+        "firstYear": "Regras do primeiro ano",
+        "methods": "Métodos",
+        "books": "Políticas por livro"
       },
-      "packsTitle": "Country depreciation packs",
-      "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
-      "recommended": "Company country",
-      "installed": "Installed",
-      "install": "Install pack",
-      "installing": "Installing…",
-      "installFailed": "Could not install the depreciation pack",
-      "installedToast": "Installed {count} depreciation classes",
-      "assignmentFailed": "Could not save the tax class assignment",
-      "assignmentsTitle": "Asset-category class assignments",
-      "assignmentsDescription": "Choose the default tax class for each asset category.",
-      "assetCategory": "Asset category",
-      "notAssigned": "Not assigned",
-      "classCount": "{count, plural, one {# class} other {# classes}}",
+      "packsTitle": "Pacotes de depreciação por país",
+      "packsDescription": "A instalação de um pacote cria uma configuração editável do tenant. As substituições existentes nunca são substituídas.",
+      "recommended": "País da empresa",
+      "installed": "Instalado",
+      "install": "Instalar pacote",
+      "installing": "Instalando…",
+      "installFailed": "Não foi possível instalar o pacote de depreciação",
+      "installedToast": "Foram instaladas {count} classes de depreciação",
+      "assignmentFailed": "Não foi possível salvar a atribuição da classe fiscal",
+      "assignmentsTitle": "Atribuições de classes por categoria de ativo",
+      "assignmentsDescription": "Escolha a classe fiscal padrão aplicada aos ativos de cada categoria. As escolhas individuais de ativos podem substituir esses padrões.",
+      "assetCategory": "Categoria de ativo",
+      "notAssigned": "Não atribuído",
+      "classCount": "{count, plural, one {# classe} other {# classes}}",
       "models": {
-        "pool": "Class pool",
-        "macrs": "Per-asset MACRS"
+        "pool": "Conjunto de classes",
+        "macrs": "MACRS por ativo"
       },
-      "customizeTitle": "Customize",
-      "customizeDescription": "Country packs are starting points; seeded values remain editable.",
+      "customizeTitle": "Personalizar",
+      "customizeDescription": "Os pacotes nacionais são um ponto de partida. Adicione regimes e classes personalizados ou substitua qualquer valor predefinido.",
       "links": {
         "regimes": {
-          "title": "Regimes",
-          "description": "Country, calculation model and asset class attribute."
+          "title": "Regimes fiscais",
+          "description": "País, modelo de cálculo e atributo da classe de ativo."
         },
         "classes": {
-          "title": "Classes and methods",
-          "description": "Rates, recovery periods, methods and conventions."
+          "title": "Classes e métodos",
+          "description": "Alíquotas, períodos de recuperação, sistemas MACRS, métodos e convenções."
         },
         "firstYear": {
-          "title": "First-year rules",
-          "description": "Effective-dated acceleration and eligibility."
+          "title": "Regras do primeiro ano",
+          "description": "Aceleração e elegibilidade do primeiro ano com data de vigência."
         },
         "assignments": {
-          "title": "Asset-category assignments",
-          "description": "Assign categories to regime classes in Tax attributes."
+          "title": "Atribuições por categoria de ativo",
+          "description": "Atribua cada categoria de ativo a uma classe de regime nos atributos fiscais."
         }
       }
     },
@@ -1631,6 +1631,11 @@
         "title": "Grupos de Seguro Acidentário",
         "description": "Grupos de alíquota de seguro acidentário para custeio de mão de obra."
       },
+      "overhead-rates": {
+        "title": "Taxas de custos indiretos",
+        "description": "Taxas de custos indiretos com datas de vigência aplicadas ao custo de mão de obra.",
+        "singular": "Taxa de custo indireto"
+      },
       "asset-categories": {
         "title": "Categorias de Ativo",
         "description": "Método de depreciação e contas padrão para ativos imobilizados."
@@ -1942,6 +1947,10 @@
       "endOfLife": {
         "fullyDepreciate": "Depreciar totalmente",
         "retainBalance": "Reter saldo"
+      },
+      "overheadMethod": {
+        "live": "Ao vivo",
+        "standard": "Padrão"
       },
       "fxRateType": {
         "spot": "À vista",

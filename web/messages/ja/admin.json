@@ -1188,55 +1188,55 @@
       }
     },
     "taxDepreciationSetup": {
-      "navTitle": "Tax Depreciation",
-      "title": "Tax Depreciation",
-      "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
-      "tabsAria": "Fixed asset setup sections",
+      "navTitle": "税務減価償却",
+      "title": "税務減価償却",
+      "description": "国別の税務減価償却パックをインストールし、クラスの割り当て、税制、税務クラス、計上方法、初年度ルールを設定します。売上税、付加価値税、ネクサスの設定とは別に管理されます。",
+      "tabsAria": "固定資産設定のセクション",
       "tabs": {
-        "overview": "Overview",
-        "categories": "Asset categories",
-        "regimes": "Tax regimes",
-        "classes": "Tax classes",
-        "firstYear": "First-year rules",
-        "methods": "Methods",
-        "books": "Book policies"
+        "overview": "概要",
+        "categories": "資産カテゴリ",
+        "regimes": "税制",
+        "classes": "税務クラス",
+        "firstYear": "初年度ルール",
+        "methods": "方法",
+        "books": "帳簿ポリシー"
       },
-      "packsTitle": "Country depreciation packs",
-      "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
-      "recommended": "Company country",
-      "installed": "Installed",
-      "install": "Install pack",
-      "installing": "Installing…",
-      "installFailed": "Could not install the depreciation pack",
-      "installedToast": "Installed {count} depreciation classes",
-      "assignmentFailed": "Could not save the tax class assignment",
-      "assignmentsTitle": "Asset-category class assignments",
-      "assignmentsDescription": "Choose the default tax class for each asset category.",
-      "assetCategory": "Asset category",
-      "notAssigned": "Not assigned",
-      "classCount": "{count, plural, one {# class} other {# classes}}",
+      "packsTitle": "国別減価償却パック",
+      "packsDescription": "パックをインストールすると、編集可能なテナント設定が作成されます。既存の上書き設定が置き換えられることはありません。",
+      "recommended": "会社の国",
+      "installed": "インストール済み",
+      "install": "パックをインストール",
+      "installing": "インストール中…",
+      "installFailed": "減価償却パックをインストールできませんでした",
+      "installedToast": "{count} 件の減価償却クラスをインストールしました",
+      "assignmentFailed": "税務クラスの割り当てを保存できませんでした",
+      "assignmentsTitle": "資産カテゴリの税務クラス割り当て",
+      "assignmentsDescription": "各カテゴリの資産に適用する既定の税務クラスを選択します。個々の資産での選択により、これらの既定値を上書きできます。",
+      "assetCategory": "資産カテゴリ",
+      "notAssigned": "未割り当て",
+      "classCount": "{count, plural, other {# クラス}}",
       "models": {
-        "pool": "Class pool",
-        "macrs": "Per-asset MACRS"
+        "pool": "クラスプール",
+        "macrs": "資産別 MACRS"
       },
-      "customizeTitle": "Customize",
-      "customizeDescription": "Country packs are starting points; seeded values remain editable.",
+      "customizeTitle": "カスタマイズ",
+      "customizeDescription": "国別パックは出発点です。カスタムの税制やクラスを追加したり、初期値を上書きしたりできます。",
       "links": {
         "regimes": {
-          "title": "Regimes",
-          "description": "Country, calculation model and asset class attribute."
+          "title": "税制",
+          "description": "国、計算モデル、資産クラス属性。"
         },
         "classes": {
-          "title": "Classes and methods",
-          "description": "Rates, recovery periods, methods and conventions."
+          "title": "クラスと方法",
+          "description": "税率、償却期間、MACRS システム、方法、計上方法。"
         },
         "firstYear": {
-          "title": "First-year rules",
-          "description": "Effective-dated acceleration and eligibility."
+          "title": "初年度ルール",
+          "description": "適用日付きの加速償却と初年度の適格性。"
         },
         "assignments": {
-          "title": "Asset-category assignments",
-          "description": "Assign categories to regime classes in Tax attributes."
+          "title": "資産カテゴリの割り当て",
+          "description": "税務属性で各資産カテゴリを税制クラスに割り当てます。"
         }
       }
     },
@@ -1631,6 +1631,11 @@
         "title": "労災保険グループ",
         "description": "労務原価計算用の労災補償料率グループ。"
       },
+      "overhead-rates": {
+        "title": "間接費率",
+        "description": "労務コストに適用される発効日付きの間接費率。",
+        "singular": "間接費率"
+      },
       "asset-categories": {
         "title": "資産カテゴリ",
         "description": "固定資産の既定の減価償却方法および勘定。"
@@ -1942,6 +1947,10 @@
       "endOfLife": {
         "fullyDepreciate": "全額償却",
         "retainBalance": "残高を保持"
+      },
+      "overheadMethod": {
+        "live": "ライブ",
+        "standard": "標準"
       },
       "fxRateType": {
         "spot": "スポット",
