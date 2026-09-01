@@ -729,6 +729,32 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "applied the prior migration already have an equivalent schema before "
       + "and after the restamp.",
   },
+  {
+    filename: "generated/0079_budget_subsidiary.sql",
+    from: "1bec7d225490c8a1fcb0b8a69dccc5b22b77d6da13447d2992a20bc044998353",
+    to: "fabec3977b4b5345923a8871098ce46c183fc8bf52a9d7e8026cb4b092f99fac",
+    strategy: "restamp",
+    reason:
+      "local/origin reconciliation: both lines published 0079 with divergent "
+      + "bytes and no transition. The local revision is authoritative because it "
+      + "carries the newer subsidiary-identity fix (preserve subsidiary identity "
+      + "in budget cells) that supersedes the origin revision; the owner-fill and "
+      + "resulting budget_lines.subsidiary_id state are equivalent before and "
+      + "after, so a ledger recorded at the origin digest advances safely.",
+  },
+  {
+    filename: "generated/0080_payment_instruction_claim_fence_bundle_guard.sql",
+    from: "091062cfeecd8047d8eb22f21eaa8c1917b4735b4d822f294e1bfb9c8186f759",
+    to: "98c8992c32ed83463ea2709a2f4b9a929a0ce366b05a271e65f954997712c93c",
+    strategy: "restamp",
+    reason:
+      "local/origin reconciliation: both lines published 0080 with divergent "
+      + "bytes and no transition. The local revision is authoritative because it "
+      + "moves the claim-fence bundle guard forward and retains the sandbox "
+      + "teardown carve-out; the installed trigger and its guard semantics are "
+      + "equivalent before and after, so a ledger recorded at the origin digest "
+      + "advances safely.",
+  },
 ];
 
 async function executeTrackedMigration(

@@ -905,7 +905,7 @@ test("ownership consolidation excludes activity outside an interest's effective 
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const { childId, interestId, accounts } = await seedOwnershipConsolidationFixture(org);
+    const { childId, interestId } = await seedOwnershipConsolidationFixture(org);
     await db.execute(sql`
       update subsidiary_ownership_interests
          set effective_from = '2026-07-16', effective_to = '2026-07-20'

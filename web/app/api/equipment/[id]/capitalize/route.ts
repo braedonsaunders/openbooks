@@ -181,15 +181,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     // asset row cannot survive as an orphan.  Turn that expected race into the
     // route's established conflict response; unrelated failures still surface.
     if (!isCapitalizationRace(error)) throw error
-    const winner = (await db.execute<{ fixed_asset_id: string | null }>(sql`
-      select fixed_asset_id
-        from equipment_units
-       where id = ${id} and org_id = ${orgId}
-       limit 1`)).rows[0]
-    return NextResponse.json(
-      { error: winner?.fixed_asset_id ? 'already_capitalized' : 'capitalization_conflict' },
-      { status: 409 },
-    )
+    return NextResponse.json({ error: 'already_capitalized' }, { status: 409 })
   }
 
   if (result.kind === 'not_found') return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildProvision, deferredAssetAdjustmentLabel } from "./income-tax-provision.ts";
+import {
+  buildProvision,
+  deferredAssetAdjustmentLabel,
+  hasPriorDeferredTaxMeasurement,
+} from "./income-tax-provision.ts";
 
 test("framework changes recognition language, not math (ASC 740 vs IAS 12)", () => {
   const base = {
@@ -23,6 +27,42 @@ test("framework changes recognition language, not math (ASC 740 vs IAS 12)", () 
 });
 
 const RATE = "26.5";
+
+test("inactive entities with prior deferred balances remain in the unwind plan", () => {
+  const prior = {
+    dtaGross: "10000",
+    dtlGross: "0",
+    valuationAllowance: "0",
+    netTemporaryDifference: "-37735.8491",
+  };
+  assert.equal(hasPriorDeferredTaxMeasurement(prior), true);
+  assert.equal(
+    hasPriorDeferredTaxMeasurement({
+      dtaGross: "0",
+      dtlGross: "0",
+      valuationAllowance: "0",
+      netTemporaryDifference: "0",
+    }),
+    false,
+  );
+
+  const unwind = buildProvision({
+    pretaxBookIncome: "0",
+    enactedRatePercent: RATE,
+    permanentDifferences: [],
+    lossCarryforwardUsed: "0",
+    valuationAllowance: "0",
+    differences: [],
+    prior: {
+      dtaGross: prior.dtaGross,
+      dtlGross: prior.dtlGross,
+      valuationAllowance: prior.valuationAllowance,
+    },
+    priorNetTemporaryDifference: prior.netTemporaryDifference,
+  });
+  assert.equal(unwind.movement.dtaGross, "-10000.0000");
+  assert.equal(unwind.deferredExpense, "10000.0000");
+});
 
 test("provision on plain pretax income: current tax only, effective rate = statutory", () => {
   const c = buildProvision({

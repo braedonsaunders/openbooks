@@ -141,6 +141,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   // -- name / activation ---------------------------------------------------
+  if (body.name !== undefined && typeof body.name !== 'string') {
+    return bad('Project name must be a string')
+  }
   const name = body.name !== undefined ? body.name.trim() : undefined
   const willBeActive = body.isActive ?? existing.rows[0].is_active
   const effectiveName = name ?? existing.rows[0].name.trim()

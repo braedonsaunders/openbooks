@@ -67,6 +67,13 @@ export interface ExpensesDashboardData {
 }
 
 type MoneyInput = string | number
+type SqlNumber = MoneyInput | null
+
+interface ExpenseTrendRow extends Record<string, unknown> {
+  month: string | null
+  expense_amount: SqlNumber
+  bill_amount: SqlNumber
+}
 
 const moneyUnits = (value: unknown): bigint => {
   if (value === null || value === undefined) return 0n
@@ -271,7 +278,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
     })
     .filter((c) => toUnits(c.currentAmount) > 0n || toUnits(c.priorAmount) > 0n)
 
-  const monthlyTrends = (trendRes.rows as any[]).map((r) => ({
+  const monthlyTrends = (trendRes.rows as ExpenseTrendRow[]).map((r) => ({
     month: String(r.month),
     expenseAmount: canonicalMoney(r.expense_amount),
     billAmount: canonicalMoney(r.bill_amount),

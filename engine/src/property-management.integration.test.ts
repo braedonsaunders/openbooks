@@ -214,6 +214,22 @@ test("a shared-source expense feeds exactly one CAM reconciliation", { skip: !DB
       expectConflict,
     );
 
+    // Finalization is a financial commitment: the source GL period must be
+    // closed before actuals can become immutable or be billed to tenants.
+    await assert.rejects(
+      () => finalizeCamPool(fixture.org.orgId, actor, primary.id),
+      (error: unknown) => error instanceof PropertyManagementError && /Close the GL module/.test(error.message),
+    );
+    const untouched = (await db.execute<{
+      status: string; actualAmount: string | null; allocations: number;
+    }>(sql`
+      select cp.status,cp.actual_amount::text as "actualAmount",
+             (select count(*)::int from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id) as allocations
+        from cam_pools cp where cp.org_id=${fixture.org.orgId} and cp.id=${primary.id}`)).rows[0]!;
+    assert.equal(untouched.status, "open");
+    assert.equal(untouched.actualAmount, null);
+    assert.equal(untouched.allocations, 0);
+
     // Only one ordinary reconciliation exists for the ledger source: the survivor
     // finalizes against the full GL activity once, bills once, and rerunning is a no-op.
     await closeGlModule(fixture, actor);

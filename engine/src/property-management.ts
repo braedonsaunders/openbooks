@@ -1523,52 +1523,43 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
     const pool = poolResult.rows[0]; if (!pool || !["draft","open"].includes(pool.status)) throw new PropertyManagementError("Open CAM pool not found");
     if (!pool.location_id) throw new PropertyManagementError("Property needs a location dimension before CAM actuals can be calculated");
 
-    // Finalization turns a live GL sum into immutable tenant-facing amounts.
-    // Serialize the complete gate/read/commit window against both journal
-    // posting and period-close writers. The kernel takes the shared side of
-    // these exact keys (period_posting_fence, migration 0022), while close
-    // takes the exclusive side (periodScopeAdvisoryLock). Every active book
-    // and every standard or adjustment period overlapping the CAM window is
-    // included because this pool has no book selector and its source query
-    // reads the combined posted GL.
+    // A finalized pool's actuals are immutable, but the source GL is live:
+    // an expense posted into the covered window after the sum below yet
+    // before this commit would be silently missing from the finalized pool.
+    // Guard the whole [gate -> read -> compute -> commit] window with BOTH:
+    //
+    // 1. FENCE - take the EXCLUSIVE side of the exact advisory keys journal
+    //    mutations hold SHARED across their own period-state check
+    //    (period_posting_fence, migration 0022) and period close/reopen
+    //    writers take exclusively (periodScopeAdvisoryLock). Every covered
+    //    posting therefore either fully commits before our reads begin, and
+    //    is counted by them, or parks behind this transaction until it ends -
+    //    where its own closed-module check rejects it. Scope covers every
+    //    active book and every period overlapping the CAM dates, standard or
+    //    adjustment; ordering by (period, book) keeps concurrent finalizations
+    //    deadlock-free.
     const coveredScopes = (await tx.execute<{ period_id: string; book_id: string }>(sql`
-      select p.id as period_id,b.id as book_id
-        from accounting_periods p
+      select p.id as period_id,b.id as book_id from accounting_periods p
         join accounting_books b on b.org_id=${orgId} and b.is_active
-       where p.org_id=${orgId}
-         and p.starts_on<=${pool.period_ends_on}
-         and p.ends_on>=${pool.period_starts_on}
-       order by p.id,b.id`));
-    if (!coveredScopes.rows.length) {
-      throw new PropertyManagementError("No accounting periods overlap the CAM pool's dates");
-    }
+        where p.org_id=${orgId} and p.starts_on<=${pool.period_ends_on} and p.ends_on>=${pool.period_starts_on}
+        order by p.id,b.id`));
+    if (!coveredScopes.rows.length) throw new PropertyManagementError("No accounting periods overlap the CAM pool's dates");
     for (const scope of coveredScopes.rows) {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`period-lock:${orgId}:${scope.period_id}:${scope.book_id}`}, 0))`);
     }
+    // 2. GATE - require those GL modules CLOSED at the property's subsidiary,
+    //    so a queued journal cannot merely wait out finalization and post late.
     const openScope = (await tx.execute<{ name: string; code: string }>(sql`
-      select p.name,b.code
-        from accounting_periods p
+      select p.name,b.code from accounting_periods p
         join accounting_books b on b.org_id=${orgId} and b.is_active
-       where p.org_id=${orgId}
-         and p.starts_on<=${pool.period_ends_on}
-         and p.ends_on>=${pool.period_starts_on}
-         and not period_module_is_closed(${orgId},p.id,b.id,${pool.subsidiary_id},'gl')
-       order by p.name,b.code limit 1`)).rows[0];
-    if (openScope) {
-      throw new PropertyManagementError(
-        `Close the GL module for ${openScope.name} in book ${openScope.code} before finalizing CAM actuals`,
-      );
-    }
-
-    // Re-read the source immediately before committing below. The advisory
-    // fence covers normal journal paths; this second read also fails closed
-    // if an incoherent writer bypassed those period keys.
+        where p.org_id=${orgId} and p.starts_on<=${pool.period_ends_on} and p.ends_on>=${pool.period_starts_on}
+          and not period_module_is_closed(${orgId},p.id,b.id,${pool.subsidiary_id},'gl')
+        order by p.name,b.code limit 1`)).rows[0];
+    if (openScope) throw new PropertyManagementError(`Close the GL module for ${openScope.name} in book ${openScope.code} before finalizing CAM actuals`);
     const sourceTotals = () => tx.execute<{ amount: string; lines: number; last_change: string }>(sql`
-      select coalesce(sum(jl.amount),0)::text as amount,
-             count(*)::int as lines,
-             coalesce(max(greatest(je.posted_at,je.updated_at))::text,'') as last_change
-        from journal_lines jl
-        join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
+      select coalesce(sum(jl.amount),0)::text as amount, count(*)::int as lines,
+        coalesce(max(greatest(je.posted_at,je.updated_at))::text,'') as last_change
+      from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
       where jl.org_id=${orgId} and je.status='posted' and je.posting_date between ${pool.period_starts_on} and ${pool.period_ends_on} and jl.location_id=${pool.location_id}
         and jl.account_id::text in(select jsonb_array_elements_text(${JSON.stringify(pool.expense_account_ids)}::jsonb))`);
     const actual = await sourceTotals();
@@ -1616,12 +1607,14 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
       budgetAllocations.push(forceResidual ? add(pool.budget_amount, neg(sum(budgetAllocations))) : mulPercent(pool.budget_amount, share));
       actualAllocations.push(forceResidual ? add(actualAmount, neg(sum(actualAllocations))) : mulPercent(actualAmount, share));
     }
+    // Commit-time consistency proof: the fences above seal the kernel's
+    // posting paths, but a write that bypassed the covered scopes entirely
+    // (e.g. an incoherent explicit period override) would still be invisible
+    // to both. Re-reading the exact source predicate immediately before
+    // committing turns any residual change into a refused finalization
+    // instead of stale immutable actuals.
     const verified = await sourceTotals();
-    if (
-      verified.rows[0]!.lines !== actual.rows[0]!.lines
-      || verified.rows[0]!.amount !== actual.rows[0]!.amount
-      || verified.rows[0]!.last_change !== actual.rows[0]!.last_change
-    ) {
+    if (verified.rows[0]!.lines !== actual.rows[0]!.lines || verified.rows[0]!.amount !== actual.rows[0]!.amount || verified.rows[0]!.last_change !== actual.rows[0]!.last_change) {
       throw new PropertyManagementError("CAM source ledgers changed while finalizing; resolve the entries and retry");
     }
     const finalizeSourceFingerprint = createHash("sha256").update(canonicalJson({

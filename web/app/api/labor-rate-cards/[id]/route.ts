@@ -184,7 +184,13 @@ export async function PUT(
   const parsedBody = await parseJsonBody(req, nameBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as CardInput;
-  if (!body.name?.trim() || !body.code?.trim()) return error("name");
+  if (
+    typeof body.name !== "string" ||
+    typeof body.code !== "string" ||
+    !body.name.trim() ||
+    !body.code.trim()
+  )
+    return error("name");
   // Rate-book currency is Multi-currency configuration. Turning that
   // switch off must refuse a write; omitting currency keeps the
   // stored book.

@@ -26,7 +26,8 @@ export function ItemsTab({ data, onDrill }: { data: HealthData; onDrill: (id: st
     )
   }
 
-  const sorted = [...rows].sort((a, b) => Math.abs(b[sort] ?? 0) - Math.abs(a[sort] ?? 0))
+  const sortValue = (item: ItemRow) => (sort === 'prior' ? item.prior : item[sort])
+  const sorted = [...rows].sort((a, b) => Math.abs(sortValue(b) ?? 0) - Math.abs(sortValue(a) ?? 0))
   const topMovers = [...rows].sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 10)
 
   return (

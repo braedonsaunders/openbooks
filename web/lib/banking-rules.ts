@@ -1,10 +1,10 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { db, schema } from '@openbooks/engine/src/db.ts'
 import { postDocument } from '@openbooks/engine/src/posting.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { startReconciliation, createMatch, excludeStatementLine } from '@openbooks/engine/src/banking.ts'
+import { startReconciliation, createMatchWithJournal, excludeStatementLine } from '@openbooks/engine/src/banking.ts'
 import { controlDeps } from './documents'
 import { nextDocumentNumber } from './bills'
 import {
@@ -189,81 +189,6 @@ export async function applyRuleToLine(
   await postCategorizeForLine(orgId, userId, ctx, recId, line.account_id, line, rule)
 }
 
-/**
- * Create a journal and match it while holding the statement-line lock.
- *
- * The banking engine exposes `createMatch`, which validates and persists a
- * match for an existing journal. Rule application also needs to create that
- * journal, so the lock must be acquired before the journal factory runs. The
- * ambient organization transaction is reused by both operations; a competing
- * invocation therefore waits for this lock and observes the committed
- * `matched` status before it can create a second journal.
- */
-async function createRuleMatchWithJournal(
-  opts: {
-    reconciliationId: string
-    statementLineId: string
-    matchedBy: 'rule' | 'manual'
-    createJournal: () => Promise<string>
-  },
-  ctx: { orgId: string; userId: string },
-): Promise<void> {
-  await withOrgTransaction(ctx.orgId, async () => {
-    const reconciliation = (await db.execute<{
-      id: string
-      account_id: string
-      through_date: string
-      currency: string
-      status: string
-    }>(sql`
-      select id, account_id, through_date, currency, status
-        from reconciliations
-       where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
-       for update
-    `)).rows[0]
-    if (!reconciliation) throw new Error('Reconciliation not found')
-    if (reconciliation.status === 'signed_off') {
-      throw new Error('Reconciliation is already signed off')
-    }
-
-    const statementLine = (await db.execute<{ id: string }>(sql`
-      select id
-        from bank_statement_lines
-       where id = ${opts.statementLineId}
-         and org_id = ${ctx.orgId}
-         and account_id = ${reconciliation.account_id}
-         and currency = ${reconciliation.currency}
-         and posted_on <= ${reconciliation.through_date}
-         and match_status = 'unmatched'
-       for update
-    `)).rows[0]
-    if (!statementLine) {
-      throw new Error(
-        'Statement line is unavailable, outside the reconciliation cutoff, or already matched',
-      )
-    }
-
-    const bankJournalLineId = await opts.createJournal()
-    await createMatch(
-      {
-        reconciliationId: opts.reconciliationId,
-        statementLineId: opts.statementLineId,
-        journalLineIds: [bankJournalLineId],
-      },
-      ctx,
-    )
-    if (opts.matchedBy === 'rule') {
-      await db.execute(sql`
-        update reconciliation_matches
-           set matched_by = 'rule'
-         where reconciliation_id = ${opts.reconciliationId}
-           and statement_line_id = ${opts.statementLineId}
-           and org_id = ${ctx.orgId}
-      `)
-    }
-  })
-}
-
 /** Post the categorizing journal for one line under one rule, then match it. */
 async function postCategorizeForLine(
   orgId: string,
@@ -280,7 +205,7 @@ async function postCategorizeForLine(
   const headerParty = outcome.partyId ?? null
   const memo = outcome.memo ?? line.description ?? rule.name
 
-  await createRuleMatchWithJournal(
+  await createMatchWithJournal(
     {
       reconciliationId,
       statementLineId: line.id,
@@ -515,7 +440,7 @@ export async function addJournalMatchFromLine(
   `))
   const line = lineRes.rows[0]
   if (!line) throw new Error('Statement line not found or already matched')
-  await createRuleMatchWithJournal(
+  await createMatchWithJournal(
     {
       reconciliationId: opts.reconciliationId,
       statementLineId: opts.statementLineId,

@@ -3,11 +3,32 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { env } from "@openbooks/engine/src/db.ts";
 
+// Run the child with React's normal Node condition so Next's navigation
+// boundary receives the full React API (the react-server export omits
+// createContext). The production modules still import server-only as a
+// marker; replace that marker only inside this trusted integration process.
+const serverOnlyLoader = `data:text/javascript,${encodeURIComponent(`
+  import { registerHooks } from "node:module";
+  registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (specifier === "server-only") {
+        return {
+          url: "data:text/javascript,export {}",
+          format: "module",
+          shortCircuit: true,
+        };
+      }
+      return nextResolve(specifier, context);
+    },
+  });
+`)}`;
+
 function runIntegrationSource(source: string): void {
   const result = spawnSync(
     process.execPath,
     [
-      "--conditions=react-server",
+      "--import",
+      serverOnlyLoader,
       "--import",
       "tsx",
       "--import",

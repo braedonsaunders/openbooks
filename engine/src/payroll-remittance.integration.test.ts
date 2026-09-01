@@ -291,98 +291,6 @@ test(
 );
 
 test(
-  "remittance bills reject overlapping live periods for one destination",
-  { skip: !DB },
-  async () => {
-    const fixture = await createRemittanceFixture();
-    try {
-      await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-15", amount: "10.00",
-      });
-      await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
-        partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
-      });
-
-      await assert.rejects(
-        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
-          partyId: fixture.org.vendorId, from: "2026-01-15", to: "2026-02-15",
-        }),
-        /overlaps 2026-01-01 – 2026-01-31/,
-      );
-      const bills = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n
-          from documents
-         where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
-           and custom->'payrollRemittance'->>'partyId' = ${fixture.org.vendorId}
-           and status <> 'voided'
-      `)).rows[0]!;
-      assert.equal(bills.n, 1);
-      const overlappingSummary = await payrollRemittanceSummary(fixture.org.orgId, {
-        from: "2026-01-15", to: "2026-02-15",
-      });
-      assert.equal(overlappingSummary[0]!.existingBills.length, 1);
-    } finally {
-      await dropScratchOrgReporting(fixture.org.orgId);
-    }
-  },
-);
-
-test(
-  "remittance bill snapshots accruals after the destination fence is released",
-  { skip: !DB },
-  async () => {
-    const fixture = await createRemittanceFixture();
-    const key = remittanceFenceLockKey(fixture.org.orgId, {
-      partyId: fixture.org.vendorId, filingAccountId: null,
-    });
-    let release!: () => void;
-    const holderReady = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let signalReady!: () => void;
-    const lockReady = new Promise<void>((resolve) => {
-      signalReady = resolve;
-    });
-    const holder = db.transaction(async (tx) => {
-      await tx.execute(sql`
-        select pg_advisory_xact_lock(hashtextextended(${key}, 0))
-      `);
-      signalReady();
-      await holderReady;
-    });
-    try {
-      await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-15", amount: "10.00",
-      });
-      await lockReady;
-      const creating = createRemittanceBill(fixture.org.orgId, fixture.actorId, {
-        partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
-      });
-      await waitForRemittanceFenceWaiter(key);
-
-      // This commit happens while the creator waits on the shared fence. The
-      // old preflight summary had already captured only the first accrual;
-      // the fenced implementation must read both before inserting its bill.
-      await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-20", amount: "20.00",
-      });
-      release();
-      const bill = await creating;
-      await holder;
-      const total = (await db.execute<{ total: string }>(sql`
-        select total::text as total from documents
-         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}
-      `)).rows[0]!.total;
-      assert.equal(cmp(total, "30"), 0);
-    } finally {
-      release();
-      await holder;
-      await dropScratchOrgReporting(fixture.org.orgId);
-    }
-  },
-);
-
-test(
   "mixed-subsidiary pay run payment balances each legal entity",
   { skip: !DB },
   async () => {
@@ -509,7 +417,9 @@ test(
       });
       assert.equal(cmp(payment.total, "250"), 0);
 
-      const paymentEntry = (await db.execute<{ origin: string }>(sql`
+      const paymentEntry = (await db.execute<{
+        origin: string;
+      }>(sql`
         select origin from journal_entries
          where org_id = ${org.orgId} and id = ${payment.entryId}
       `)).rows[0]!;
@@ -553,6 +463,98 @@ test(
       assert.equal(applications.n, 2);
     } finally {
       await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "remittance bills reject overlapping live periods for one destination",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-01-15", amount: "10.00",
+      });
+      await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+      });
+
+      await assert.rejects(
+        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+          partyId: fixture.org.vendorId, from: "2026-01-15", to: "2026-02-15",
+        }),
+        /overlaps 2026-01-01 – 2026-01-31/,
+      );
+      const bills = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n
+          from documents
+         where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
+           and custom->'payrollRemittance'->>'partyId' = ${fixture.org.vendorId}
+           and status <> 'voided'
+      `)).rows[0]!;
+      assert.equal(bills.n, 1);
+      const overlappingSummary = await payrollRemittanceSummary(fixture.org.orgId, {
+        from: "2026-01-15", to: "2026-02-15",
+      });
+      assert.equal(overlappingSummary[0]!.existingBills.length, 1);
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "remittance bill snapshots accruals after the destination fence is released",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    const key = remittanceFenceLockKey(fixture.org.orgId, {
+      partyId: fixture.org.vendorId, filingAccountId: null,
+    });
+    let release!: () => void;
+    const holderReady = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let signalReady!: () => void;
+    const lockReady = new Promise<void>((resolve) => {
+      signalReady = resolve;
+    });
+    const holder = db.transaction(async (tx) => {
+      await tx.execute(sql`
+        select pg_advisory_xact_lock(hashtextextended(${key}, 0))
+      `);
+      signalReady();
+      await holderReady;
+    });
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-01-15", amount: "10.00",
+      });
+      await lockReady;
+      const creating = createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+      });
+      await waitForRemittanceFenceWaiter(key);
+
+      // This commit happens while the creator waits on the shared fence. The
+      // old preflight summary had already captured only the first accrual;
+      // the fenced implementation must read both before inserting its bill.
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-01-20", amount: "20.00",
+      });
+      release();
+      const bill = await creating;
+      await holder;
+      const total = (await db.execute<{ total: string }>(sql`
+        select total::text as total from documents
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}
+      `)).rows[0]!.total;
+      assert.equal(cmp(total, "30"), 0);
+    } finally {
+      release();
+      await holder;
+      await dropScratchOrgReporting(fixture.org.orgId);
     }
   },
 );

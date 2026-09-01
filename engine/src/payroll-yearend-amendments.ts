@@ -529,7 +529,11 @@ export interface RecordFilingIssueInput {
    */
   rowIds?: readonly string[];
   note?: string | null;
-  /** The operator's affirmative explanation when withdrawing a filing. */
+  /**
+   * The operator's explanation for a cancellation. The API requires this
+   * separately from the generic filing note; accepting it here also makes the
+   * engine boundary explicit for trusted internal callers.
+   */
   reason?: string | null;
   /** Extra parameters the filing's own download builder parses. */
   params?: Record<string, string>;
@@ -565,13 +569,14 @@ export async function recordFilingIssue(
   input: RecordFilingIssueInput,
 ): Promise<RecordFilingIssueResult> {
   const { orgId, actorId, country, filingKey, taxYear, revision } = input;
+  const cancellationReason = input.reason?.trim() || input.note?.trim() || null;
   const filing = yearEndFiling(country, filingKey);
 
-  // Normalize cancellation evidence once at the service boundary. The
-  // correction path performs the required eligibility checks first, then
-  // refuses a cancellation that has no affirmative evidence.
+  // Normalize the evidence once at the service boundary. A trusted caller
+  // may use `reason`, while older callers may already supply the filing note;
+  // either way a cancellation is persisted with the confirmed explanation.
   const normalizedInput = revision === "cancelled"
-    ? { ...input, note: input.reason?.trim() || input.note?.trim() || null }
+    ? { ...input, note: cancellationReason }
     : input;
 
   if (revision === "original") {
