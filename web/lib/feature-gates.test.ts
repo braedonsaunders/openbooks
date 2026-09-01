@@ -1540,8 +1540,13 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/api/items/[id]/route.ts'),
-    /INVENTORY_ITEM_KINDS[\s\S]{0,200}status: 404/,
+    /INVENTORY_ITEM_KINDS\.has\(nextKind\)[\s\S]{0,120}throw new PatchNotFound\(\)/,
     'item catalog PATCH must 404 — not persist — inventory kinds when Inventory is off',
+  )
+  assert.match(
+    read('app/api/items/[id]/route.ts'),
+    /if \(e instanceof PatchNotFound\) return NextResponse\.json\(\{ error: 'not found' \}, \{ status: 404 \}\)/,
+    'item catalog PATCH feature refusals must surface as 404 responses',
   )
   assert.match(
     read('app/api/items/[id]/route.ts'),
@@ -1550,7 +1555,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/api/items/[id]/route.ts'),
-    /nextKind === 'equipment_charge'[\s\S]{0,200}status: 404/,
+    /nextKind === 'equipment_charge'[\s\S]{0,120}throw new PatchNotFound\(\)/,
     'item catalog PATCH must 404 — not persist — equipment_charge when Equipment is off',
   )
   assert.match(
