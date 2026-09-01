@@ -70,7 +70,7 @@ export const MASTER_ENTITIES: MasterEntity[] = [
     readPermission: 'gl.read',
     writePermission: 'admin.setup.manage',
     cols: [
-      { key: 'number', column: 'number', kind: 'text', lockedOnEdit: true },
+      { key: 'number', column: 'number', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', column: 'name', kind: 'text', required: true },
       { key: 'type', column: 'type', kind: 'select', required: true, options: ACCOUNT_TYPE_OPTS },
       { key: 'description', column: 'description', kind: 'text' },
