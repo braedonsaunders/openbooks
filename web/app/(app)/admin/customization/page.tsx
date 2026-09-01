@@ -61,7 +61,7 @@ export default async function CustomizationPage({
   // Optional-module kinds 404 when their Features switch is off; stored
   // layouts stay in the database and reappear when the switch comes back.
   const requestedType = pickString(sp.recordType)
-  const catalogType = requestedType && requestedType in RECORD_TYPE_BY_KEY ? requestedType : null
+  const catalogType = requestedType && Object.hasOwn(RECORD_TYPE_BY_KEY, requestedType) ? requestedType : null
   const hiddenKinds = new Set(await disabledRecordTypes(authz.user.orgId))
   if (catalogType && hiddenKinds.has(catalogType)) notFound()
   const recordType = catalogType
