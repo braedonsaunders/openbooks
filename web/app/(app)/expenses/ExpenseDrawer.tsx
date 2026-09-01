@@ -315,7 +315,7 @@ export function ExpenseDrawer({
   function applyCanonicalRead(
     incoming: PersistedDocumentSnapshot<ExpensePayload>,
     notifyOnConflict = true,
-  ) {
+  ): ReturnType<typeof reconcileCanonicalDraftRead>['action'] {
     const decision = reconcileCanonicalDraftRead({
       current: draftBaseline.current,
       incoming,
@@ -336,10 +336,13 @@ export function ExpenseDrawer({
       adoptReload(decision.snapshot)
       if (notifyOnConflict) toast.error(DOCUMENT_CHANGED_AFTER_OPEN)
     }
+    return decision.action
   }
 
-  async function refreshFromServer(notifyOnConflict = true): Promise<void> {
-    applyCanonicalRead(
+  async function refreshFromServer(
+    notifyOnConflict = true,
+  ): Promise<ReturnType<typeof reconcileCanonicalDraftRead>['action']> {
+    return applyCanonicalRead(
       await loadDraftDocumentSnapshot(`/api/expenses/${doc.id}`, t('toasts.actionFailed')),
       notifyOnConflict,
     )
@@ -364,7 +367,22 @@ export function ExpenseDrawer({
   async function save() {
     setBusy(true)
     setSaveState('saving')
-    if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
+    if (documentRevisionRef.current == null) {
+      const refreshAction = await refreshFromServer().catch(() => null)
+      // A canonical read can rehydrate the form or drop conflicting edits.
+      // Never pair the payload captured by this render with that newly adopted
+      // revision; only a pin proves the local edit buffer is still current.
+      if (refreshAction !== 'pin') {
+        if (refreshAction == null) {
+          setSaveState('error')
+          toast.error(t('toasts.actionFailed'))
+        } else {
+          setSaveState('saved')
+        }
+        setBusy(false)
+        return
+      }
+    }
     const revision = documentRevisionRef.current
     if (revision == null) {
       setSaveState('error')
