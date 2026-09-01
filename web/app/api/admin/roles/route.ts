@@ -96,8 +96,8 @@ async function audit(args: {
   action: "insert" | "update" | "delete";
   changes: Record<string, unknown>;
   actorId: string;
-}) {
-  await db.execute(sql`
+}, executor: Pick<typeof db, "execute"> = db) {
+  await executor.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${args.orgId}, 'app_roles', ${args.rowId}, ${args.action},
             ${JSON.stringify(args.changes)}, ${args.actorId})`);
@@ -261,17 +261,23 @@ export async function DELETE(req: Request) {
   }
 
   // No DB-level FK cascade yet (informal FKs) — remove assignments explicitly.
-  await db.execute(sql`
-    delete from role_assignments where role_id = ${id} and org_id = ${actor.orgId}`);
-  await db.execute(sql`
-    delete from role_dashboard_layouts where role_key = ${role.key} and org_id = ${actor.orgId}`);
-  await db.execute(sql`delete from app_roles where id = ${id} and org_id = ${actor.orgId}`);
-  await audit({
-    orgId: actor.orgId,
-    rowId: id,
-    action: "delete",
-    changes: { key: [role.key, null], name: [role.name, null] },
-    actorId: actor.id,
+  // Keep cleanup and its audit evidence in one transaction so a failed write
+  // rolls back every part of the role deletion.
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      delete from role_assignments where role_id = ${id} and org_id = ${actor.orgId}`);
+    await tx.execute(sql`
+      delete from role_dashboard_layouts where role_key = ${role.key} and org_id = ${actor.orgId}`);
+    await tx.execute(
+      sql`delete from app_roles where id = ${id} and org_id = ${actor.orgId}`,
+    );
+    await audit({
+      orgId: actor.orgId,
+      rowId: id,
+      action: "delete",
+      changes: { key: [role.key, null], name: [role.name, null] },
+      actorId: actor.id,
+    }, tx);
   });
   return NextResponse.json({ ok: true });
 }
