@@ -29,7 +29,7 @@
     "taxDepreciation": "Depreciação fiscal"
   },
   "taxPools": {
-    "configure": "Configure",
+    "configure": "Configurar",
     "regime": "Regime fiscal",
     "title": "Depreciação fiscal (CCA)",
     "description": "Calcule a dedução por custo de capital por grupo de classe para um ano fiscal.",
