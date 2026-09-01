@@ -575,6 +575,15 @@ export async function runAppEndpoint(opts: {
       durationMs: Date.now() - started,
     };
   } catch (e) {
+    if (Date.now() > deadline) {
+      return {
+        status: "timeout",
+        error: "execution timed out",
+        logs,
+        units,
+        durationMs: Date.now() - started,
+      };
+    }
     return {
       status: "error",
       error: (e as Error).message,
