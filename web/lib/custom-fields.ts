@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { parseIsoDate } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal, compareDecimal } from './exact-decimal'
@@ -65,6 +66,12 @@ export interface ValidationResult {
   cleaned: Record<string, unknown>
 }
 
+/** Accept only real UTC calendar dates in canonical YYYY-MM-DD form. */
+function isValidIsoDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  return parseIsoDate(value).toISOString().slice(0, 10) === value
+}
+
 export function validateCustomValues(
   defs: CustomFieldDef[],
   values: Record<string, unknown> | undefined | null,
@@ -127,7 +134,7 @@ export function validateCustomValues(
         break
       }
       case 'date': {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(raw))) errors[def.key] = `${def.label} must be a date`
+        if (!isValidIsoDate(raw)) errors[def.key] = `${def.label} must be a date`
         else cleaned[def.key] = raw
         break
       }
