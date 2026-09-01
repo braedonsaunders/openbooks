@@ -469,10 +469,11 @@ export async function categoryWeekly(
     const accountTotals = new Map<string, Money>();
     for (const x of r.rows as any[]) {
       const net = normalizeMoneyValue(String(x.net));
-      const v = useNet ? net : absMoney(net);
-      weeklyHistory[x.wk] = addMoney(weeklyHistory[x.wk] ?? ZERO_MONEY, v);
+      const gross = normalizeMoneyValue(String(x.gross));
+      const activity = useNet ? net : gross;
+      weeklyHistory[x.wk] = addMoney(weeklyHistory[x.wk] ?? ZERO_MONEY, activity);
       const label = [x.number, x.name].filter(Boolean).join(" · ");
-      accountTotals.set(label, addMoney(accountTotals.get(label) ?? ZERO_MONEY, absMoney(net)));
+      accountTotals.set(label, addMoney(accountTotals.get(label) ?? ZERO_MONEY, absMoney(activity)));
     }
     let totalHistory = ZERO_MONEY;
     let weeksCounted = 0;
