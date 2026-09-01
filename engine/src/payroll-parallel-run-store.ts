@@ -58,8 +58,6 @@ import {
  *     parallel run exists to prevent.
  */
 
-const MAX_REGISTER_ROWS = 50_000;
-
 type ParallelRunExecutor = Pick<typeof db, "execute">;
 
 /**
@@ -672,8 +670,7 @@ export async function loadPriorSide(
       from payroll_prior_stubs s
       left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.register_id = ${registerId}
-     order by employee_name
-     limit ${MAX_REGISTER_ROWS}`));
+     order by employee_name`));
 
   const amounts = (await runner.execute<Record<string, unknown>>(sql`
     select a.prior_stub_id, a.kind, a.slot, a.amount, a.source_column
@@ -1211,8 +1208,7 @@ export async function comparisonFindings(
       left join parties p on p.id = f.employee_party_id and p.org_id = f.org_id
      where ${sql.join(filters, sql` and `)}
        and (${findingScopeFilter})
-     order by f.employee_name, f.sequence, f.slot
-     limit ${MAX_REGISTER_ROWS}`));
+     order by f.employee_name, f.sequence, f.slot`));
 
   return rows.rows.map((row) => ({
     id: String(row.id),
