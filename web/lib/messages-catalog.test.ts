@@ -456,3 +456,9 @@ test('catalog completeness counts missing and declared fallback keys as untransl
     )
   }
 })
+
+test('Portuguese fixed-asset tax pool uses the reviewed regime label', () => {
+  const catalog = flattenCatalog('pt-BR')
+
+  assert.equal(catalog.get('assets.taxPools.regime'), 'Regime fiscal')
+})
