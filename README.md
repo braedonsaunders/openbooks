@@ -563,10 +563,11 @@ sign-out revokes the current record rather than only deleting its browser
 cookie. Session, login-limit, and MFA-challenge state is stored in PostgreSQL,
 so it remains effective when several web replicas are deployed.
 The stateful session format intentionally invalidates cookies issued by builds
-before migration `0129`; users sign in again once after this upgrade. Apply the
-migration first, then replace all old web replicas as one coordinated or
-blue/green cutover. Do not use a mixed-version rolling deployment for this one
-authentication-format transition. Homogeneous replicas are supported afterward.
+before the stateful-authentication baseline; users sign in again once after this
+upgrade. Ensure the database is at the current schema before replacing all old
+web replicas as one coordinated or blue/green cutover. Do not use a mixed-version
+rolling deployment for this one authentication-format transition. Homogeneous
+replicas are supported afterward.
 
 TOTP MFA is enabled by each user from **Account → Sign-in security**. Setup
 requires the current password, is bound to the initiating session, expires after
