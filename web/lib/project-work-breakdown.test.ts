@@ -173,6 +173,28 @@ const scopeMockSources = new Map<string, string>([
   ],
 ])
 
+let workBreakdown!: typeof import('./project-work-breakdown.ts')
+let workBreakdownRoute!: typeof import('../app/api/projects/[id]/tasks/[taskId]/route.ts')
+const ALLOWED_SUBSIDIARY = '00000000-0000-4000-8000-00000000a001'
+const DENIED_SUBSIDIARY = '00000000-0000-4000-8000-00000000b001'
+let resolveModules!: () => void
+const modulesReady = new Promise<void>((resolve) => {
+  resolveModules = resolve
+})
+
+// Register these before the top-level dynamic imports below. The repository's
+// trusted runner uses --test-force-exit, which cancels tests registered after a
+// top-level await even when their promises would otherwise settle.
+test('WBS helper blocks reads, creates, and updates outside the caller subsidiary scope', async () => {
+  await modulesReady
+  await runWorkBreakdownScopeTest()
+})
+
+test('WBS PATCH returns an indistinguishable 404 before task writes for a denied subsidiary', async () => {
+  await modulesReady
+  await runWorkBreakdownPatchScopeTest()
+})
+
 const scopeHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'server-only') return { url: 'mock:server-only', shortCircuit: true }
@@ -189,7 +211,7 @@ const scopeHooks = registerHooks({
 })
 
 const scopeModuleSpecifier = './project-work-breakdown.ts?subsidiary-scope-regression' as string
-const workBreakdown = (await import(scopeModuleSpecifier)) as typeof import('./project-work-breakdown.ts')
+workBreakdown = (await import(scopeModuleSpecifier)) as typeof import('./project-work-breakdown.ts')
 scopeHooks.deregister()
 
 const routeHooks = registerHooks({
@@ -250,11 +272,9 @@ const routeHooks = registerHooks({
 })
 
 const routeModuleSpecifier = '../app/api/projects/[id]/tasks/[taskId]/route.ts?subsidiary-scope-regression' as string
-const workBreakdownRoute = (await import(routeModuleSpecifier)) as typeof import('../app/api/projects/[id]/tasks/[taskId]/route.ts')
+workBreakdownRoute = (await import(routeModuleSpecifier)) as typeof import('../app/api/projects/[id]/tasks/[taskId]/route.ts')
 routeHooks.deregister()
-
-const ALLOWED_SUBSIDIARY = '00000000-0000-4000-8000-00000000a001'
-const DENIED_SUBSIDIARY = '00000000-0000-4000-8000-00000000b001'
+resolveModules()
 
 function resetScope(projectSubsidiary: string | null, allowedSubsidiaryIds: Set<string> | null): void {
   scopeState.calls.length = 0
@@ -262,7 +282,7 @@ function resetScope(projectSubsidiary: string | null, allowedSubsidiaryIds: Set<
   scopeState.allowedSubsidiaryIds = allowedSubsidiaryIds
 }
 
-test('WBS helper blocks reads, creates, and updates outside the caller subsidiary scope', async () => {
+async function runWorkBreakdownScopeTest(): Promise<void> {
   resetScope(DENIED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]))
 
   await assert.rejects(
@@ -350,9 +370,9 @@ test('WBS helper blocks reads, creates, and updates outside the caller subsidiar
   resetScope(null, null)
   const unrestricted = await workBreakdown.loadWorkBreakdownTasks('org-1', 'project-1', null)
   assert.equal(unrestricted[0]?.name, 'Allowed task')
-})
+}
 
-test('WBS PATCH returns an indistinguishable 404 before task writes for a denied subsidiary', async () => {
+async function runWorkBreakdownPatchScopeTest(): Promise<void> {
   resetScope(DENIED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]))
 
   const response = await workBreakdownRoute.PATCH(
@@ -403,4 +423,4 @@ test('WBS PATCH returns an indistinguishable 404 before task writes for a denied
   assert.equal((await allowedResponse.json()).task.name, 'Allowed update')
   assert.ok(scopeState.calls.some((statement) => statement.includes('update project_tasks')))
   assert.ok(scopeState.calls.some((statement) => statement.includes('insert into audit_log')))
-})
+}
