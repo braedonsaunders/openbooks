@@ -17,7 +17,10 @@ test('cancellation cannot issue from an accidental click without reviewed eviden
 })
 
 test('cancellation reason and preview state are reset when their evidence context changes', () => {
-  assert.match(ui, /useEffect\(\(\) => \{[\s\S]*setPreview\(\{ status: 'idle' \}\)[\s\S]*setCancellationReason\(''\)[\s\S]*\}, \[review\.rowId, review\.lastRevision\]\)/)
+  assert.match(
+    ui,
+    /return <FilingCorrectionSectionBody key=\{`\$\{review\.rowId\}:\$\{review\.lastRevision \?\? 'none'\}`\} \{\.\.\.props\} \/>/,
+  )
   assert.match(ui, /setCancellationReason\(''\)[\s\S]*try \{[\s\S]*fetch\(correctionHref\(revision, 'json'\)/)
   assert.match(ui, /const reason = cancellationReason\.trim\(\)/)
   assert.match(ui, /cancelReasonRequired/)
