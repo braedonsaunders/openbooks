@@ -90,6 +90,14 @@
     "customize": "Anpassen",
     "empty": "Noch keine Schnellaktionen",
     "addFirst": "Fügen Sie Ihre erste Aktion hinzu",
+    "labels": {
+      "newJournalEntry": "Neue Journalbuchung",
+      "newBill": "Neue Eingangsrechnung",
+      "newInvoice": "Neue Ausgangsrechnung",
+      "newPayment": "Neue Zahlung",
+      "newExpense": "Neue Ausgabe",
+      "runReport": "Bericht ausführen"
+    },
     "editor": {
       "title": "Schnellaktionen anpassen",
       "description": "Verknüpfungskacheln hinzufügen, neu anordnen und entfernen.",

@@ -10,6 +10,8 @@ import {
   MAX_QUICK_ACTIONS,
   TONE_KEYS,
   TONES,
+  isCuratedQuickAction,
+  quickActionLabel,
   toneOf,
   visibleQuickActions,
   type QuickAction,
@@ -113,7 +115,13 @@ export function QuickActionsEditor({
     }
     setItems((prev) => [
       ...prev,
-      { id: genId(), label: opt.label, href: opt.href, iconKey: opt.iconKey, tone: opt.tone },
+      {
+        id: opt.id ?? genId(),
+        ...(opt.labelKey ? { labelKey: opt.labelKey } : { label: opt.label }),
+        href: opt.href,
+        iconKey: opt.iconKey,
+        tone: opt.tone,
+      },
     ])
     setView('list')
     setSearch('')
@@ -140,8 +148,14 @@ export function QuickActionsEditor({
 
   async function handleSave() {
     const clean = items
-      .map((a) => ({ ...a, label: a.label.trim(), href: a.href.trim() }))
-      .filter((a) => a.label && a.href)
+      .map((a): QuickAction => {
+        const href = a.href.trim()
+        if (isCuratedQuickAction(a)) {
+          return { ...a, label: undefined, href }
+        }
+        return { id: a.id, label: a.label?.trim(), href, iconKey: a.iconKey, tone: a.tone }
+      })
+      .filter((a) => (a.labelKey || a.label) && a.href)
     setSaving(true)
     try {
       const res = await saveAction(clean)
@@ -279,7 +293,7 @@ function ListView({
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                    {a.label || t('quickActions.editor.unnamed')}
+                    {quickActionLabel(a, t) || t('quickActions.editor.unnamed')}
                   </span>
                   <span className="block truncate text-[11px] text-slate-400 dark:text-slate-500">
                     {a.href}
@@ -512,8 +526,9 @@ function EditView({
           {t('quickActions.editor.label')}
         </label>
         <Input
-          value={action.label}
-          onChange={(e) => onPatch({ label: e.target.value })}
+          value={quickActionLabel(action, t)}
+          onChange={(e) => onPatch({ label: e.target.value, labelKey: undefined })}
+          readOnly={isCuratedQuickAction(action)}
           placeholder={t('quickActions.editor.labelPlaceholder')}
           maxLength={80}
         />
@@ -599,7 +614,7 @@ function ActionPreview({ action }: { action: QuickAction }) {
           <Icon size={14} />
         </span>
         <span className={`min-w-0 flex-1 truncate text-[13px] font-medium ${tc.label}`}>
-          {action.label || t('quickActions.editor.unnamed')}
+          {quickActionLabel(action, t) || t('quickActions.editor.unnamed')}
         </span>
       </div>
     </div>

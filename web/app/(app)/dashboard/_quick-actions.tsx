@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl'
 import {
   DEFAULT_QUICK_ACTIONS,
   isExternalHref,
+  quickActionLabel,
   toneOf,
   visibleQuickActions,
   type QuickAction,
@@ -93,30 +94,31 @@ export function QuickActions({
 }
 
 function ActionTile({ action, index }: { action: QuickAction; index: number }) {
-  const t = toneOf(action.tone)
+  const t = useTranslations('dashboard')
+  const tone = toneOf(action.tone)
   const Icon = QUICK_ACTION_ICONS[action.iconKey] ?? FALLBACK_ICON
   const external = isExternalHref(action.href)
 
   const inner = (
     <>
       <span
-        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${t.chip}`}
+        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${tone.chip}`}
       >
         <Icon size={14} />
       </span>
       <span
-        className={`min-w-0 flex-1 text-left text-[13px] leading-snug font-medium transition-colors ${t.label}`}
+        className={`min-w-0 flex-1 text-left text-[13px] leading-snug font-medium transition-colors ${tone.label}`}
       >
-        {action.label}
+        {quickActionLabel(action, t)}
       </span>
       <ArrowUpRight
         size={14}
-        className={`shrink-0 translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 ${t.arrow}`}
+        className={`shrink-0 translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 ${tone.arrow}`}
       />
     </>
   )
 
-  const className = `group flex h-full min-h-0 w-full items-center gap-2.5 overflow-hidden rounded-xl border px-3 py-1.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none dark:focus-visible:ring-offset-slate-900 ${t.tile}`
+  const className = `group flex h-full min-h-0 w-full items-center gap-2.5 overflow-hidden rounded-xl border px-3 py-1.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none dark:focus-visible:ring-offset-slate-900 ${tone.tile}`
 
   return (
     <motion.div

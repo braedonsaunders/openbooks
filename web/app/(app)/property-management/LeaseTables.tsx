@@ -1,27 +1,29 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Badge, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
 import { Empty, Status } from "./workspace-ui";
 import type { DepositRow, LeaseRow, Money, ScheduleRow } from "./types";
 
 export function LeasesTable({ leases, money, onOpen }: { leases: LeaseRow[]; money: Money; onOpen: (id: string) => void }) {
+  const t = useTranslations("entities.propertyManagement");
   if (!leases.length)
     return (
       <Empty
-        title="No leases yet"
-        detail="Create a tenant lease to establish rent, CAM, deposit, and billing policy."
+        title={t("detail.leases.emptyTitle")}
+        detail={t("detail.leases.emptyDetail")}
       />
     );
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Lease</TableHead>
-          <TableHead>Property / unit</TableHead>
-          <TableHead>Tenant</TableHead>
-          <TableHead>Term</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Deposit held</TableHead>
+          <TableHead>{t("detail.leases.table.lease")}</TableHead>
+          <TableHead>{t("detail.leases.table.unit")}</TableHead>
+          <TableHead>{t("detail.leases.table.tenant")}</TableHead>
+          <TableHead>{t("detail.leases.table.term")}</TableHead>
+          <TableHead>{t("detail.leases.table.status")}</TableHead>
+          <TableHead className="text-right">{t("workspace.metrics.depositsHeld")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -46,7 +48,7 @@ export function LeasesTable({ leases, money, onOpen }: { leases: LeaseRow[]; mon
             </TableCell>
             <TableCell>{lease.tenantName}</TableCell>
             <TableCell>
-              {lease.startsOn} – {lease.endsOn || "Open"}
+              {lease.startsOn} – {lease.endsOn || t("detail.leases.openTerm")}
             </TableCell>
             <TableCell>
               <Status value={lease.status} />
@@ -62,24 +64,26 @@ export function LeasesTable({ leases, money, onOpen }: { leases: LeaseRow[]; mon
 }
 
 export function RentTable({ schedules, leases, money }: { schedules: ScheduleRow[]; leases: LeaseRow[]; money: Money }) {
+  const t = useTranslations("entities.propertyManagement");
+  const tc = useTranslations("common");
   if (!schedules.length)
     return (
       <Empty
-        title="No rent schedule yet"
-        detail="Activate a lease to generate effective-dated rent and additional-charge periods."
+        title={t("detail.rent.title")}
+        detail={t("detail.rent.description")}
       />
     );
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Due</TableHead>
-          <TableHead>Lease</TableHead>
-          <TableHead>Charge</TableHead>
-          <TableHead>Period</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Invoice</TableHead>
-          <TableHead className="text-right">Amount</TableHead>
+          <TableHead>{tc("labels.dueDate")}</TableHead>
+          <TableHead>{t("detail.leases.table.lease")}</TableHead>
+          <TableHead>{t("leaseSections.charges.table.charge")}</TableHead>
+          <TableHead>{tc("labels.period")}</TableHead>
+          <TableHead>{t("detail.leases.table.status")}</TableHead>
+          <TableHead>{tc("transactionTypes.invoice")}</TableHead>
+          <TableHead className="text-right">{tc("labels.amount")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -112,24 +116,26 @@ export function RentTable({ schedules, leases, money }: { schedules: ScheduleRow
 }
 
 export function DepositTable({ deposits, leases, money, onReverse }: { deposits: DepositRow[]; leases: LeaseRow[]; money: Money; onReverse?: (row: DepositRow) => void }) {
+  const t = useTranslations("entities.propertyManagement");
+  const tc = useTranslations("common");
   if (!deposits.length)
     return (
       <Empty
-        title="No security-deposit activity"
-        detail="Deposit receipts, applications, interest, adjustments, and refunds appear here with journal evidence."
+        title={t("leaseSections.deposits.emptyTitle")}
+        detail={t("leaseSections.deposits.emptyDetail")}
       />
     );
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Date</TableHead>
-          <TableHead>Lease</TableHead>
-          <TableHead>Transaction</TableHead>
-          <TableHead>Memo</TableHead>
-          <TableHead>Journal</TableHead>
-          <TableHead className="text-right">Amount</TableHead>
-          {onReverse ? <TableHead className="text-right">Actions</TableHead> : null}
+          <TableHead>{tc("labels.date")}</TableHead>
+          <TableHead>{t("detail.leases.table.lease")}</TableHead>
+          <TableHead>{t("leaseSections.deposits.labels.transaction")}</TableHead>
+          <TableHead>{tc("labels.memo")}</TableHead>
+          <TableHead>{tc("transactionTypes.journal")}</TableHead>
+          <TableHead className="text-right">{tc("labels.amount")}</TableHead>
+          {onReverse ? <TableHead className="text-right">{tc("labels.actions")}</TableHead> : null}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -142,8 +148,8 @@ export function DepositTable({ deposits, leases, money, onReverse }: { deposits:
               <TableCell>
                 <div className="flex flex-wrap items-center gap-2">
                   <Status value={row.kind} />
-                  {row.reversalOfId ? <Badge variant="secondary">Reversal</Badge> : null}
-                  {row.reversed ? <Badge variant="secondary">Reversed</Badge> : null}
+                  {row.reversalOfId ? <Badge variant="secondary">{tc("status.reversed")}</Badge> : null}
+                  {row.reversed ? <Badge variant="secondary">{tc("status.reversed")}</Badge> : null}
                 </div>
               </TableCell>
               <TableCell>{row.memo || "—"}</TableCell>
@@ -160,10 +166,10 @@ export function DepositTable({ deposits, leases, money, onReverse }: { deposits:
                 <TableCell className="text-right">
                   {!row.reversalOfId && !row.reversed ? (
                     <Button size="sm" variant="outline" onClick={() => onReverse(row)}>
-                      Reverse
+                      {t("leaseSections.deposits.postReversal")}
                     </Button>
                   ) : (
-                    <span className="text-xs text-slate-400">Locked</span>
+                    <span className="text-xs text-slate-400">{tc("status.closed")}</span>
                   )}
                 </TableCell>
               ) : null}
