@@ -8,6 +8,7 @@ import { ChevronLeft, Pin, PinOff, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { InsightQuery, VizSettings, VizType } from '@openbooks/analytics'
 import { Badge, Button, Input, Label, PageHeader, Select } from '@openbooks/ui'
+import { confirmDialog } from '../../../../../lib/confirm'
 import { DetailPageLayout } from '../../../../../components/page-layout'
 import { CardTile, type CardTileData } from '../../CardTile'
 
@@ -230,7 +231,11 @@ export function DashboardBuilder({
   }
 
   async function remove() {
-    if (!confirm(t('builder.deleteConfirm'))) return
+    const confirmed = await confirmDialog({
+      message: t('builder.deleteConfirm'),
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setBusy(true)
     const res = await fetch(`/api/insights/dashboards/${dashboard.id}`, { method: 'DELETE' })
     if (!res.ok) {
