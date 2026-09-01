@@ -1,16 +1,13 @@
 import { notFound } from "next/navigation";
 import { publicPaymentPage } from "@openbooks/engine/src/payment-acceptance.ts";
+import { createMoneyFormatter } from "@/lib/money-format";
+import { decimalCmp } from "@/lib/statement-format";
 import { PayButton } from "./PayButton";
 
 export const dynamic = "force-dynamic";
 
 function format(amount: string, currency: string): string {
-  const n = Number(amount);
-  try {
-    return new Intl.NumberFormat("en", { style: "currency", currency }).format(n);
-  } catch {
-    return `${n.toFixed(2)} ${currency}`;
-  }
+  return createMoneyFormatter("en", currency).money(amount);
 }
 
 /**
@@ -45,7 +42,7 @@ export default async function PayPage({ params }: { params: Promise<{ token: str
                 <dt className="text-slate-500 dark:text-slate-400">Invoice amount</dt>
                 <dd className="tabular-nums text-slate-900 dark:text-white">{format(view.invoiceAmount, view.currency)}</dd>
               </div>
-              {Number(view.surchargeAmount) > 0 ? (
+              {decimalCmp(view.surchargeAmount, "0") > 0 ? (
                 <div className="flex justify-between">
                   <dt className="text-slate-500 dark:text-slate-400">Processing fee</dt>
                   <dd className="tabular-nums text-slate-900 dark:text-white">{format(view.surchargeAmount, view.currency)}</dd>
