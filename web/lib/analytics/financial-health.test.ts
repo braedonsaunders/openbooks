@@ -182,7 +182,7 @@ function renderSql(value: unknown): string {
   const query = value as { strings?: unknown[]; values?: unknown[] };
   if (!Array.isArray(query.strings)) return String(value);
   const values = Array.isArray(query.values) ? query.values : [];
-  return query.strings.reduce(
+  return query.strings.reduce<string>(
     (text, part, index) => text + String(part) + (index < values.length ? renderSql(values[index]) : ""),
     "",
   );
