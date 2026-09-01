@@ -1631,10 +1631,6 @@
         "title": "工伤保险组",
         "description": "用于人工成本核算的工伤补偿费率组。"
       },
-      "labor-burden-rates": {
-        "title": "人工负担费率",
-        "description": "应用于人工成本的生效日期化负担费率。"
-      },
       "asset-categories": {
         "title": "资产类别",
         "description": "固定资产的默认折旧方法和科目。"
@@ -1946,10 +1942,6 @@
       "endOfLife": {
         "fullyDepreciate": "全额折旧",
         "retainBalance": "保留余额"
-      },
-      "burdenMethod": {
-        "live": "实时",
-        "standard": "标准"
       },
       "fxRateType": {
         "spot": "即期",

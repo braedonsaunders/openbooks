@@ -27,8 +27,6 @@
   "costSource": "Quelle der Ist-Kosten",
   "costDimension": "Kostenkontengruppe",
   "laborSource": "Quelle der Arbeitskosten",
-  "burdenSource": "Quelle der Gemeinkosten",
-  "burdenDimension": "Gemeinkostenkontengruppe",
   "budgetSource": "Quelle des Kostenbudgets",
   "committedKinds": "Bindungskosten aus",
   "committedStatuses": "Lebenszyklusstatus der Bindungskosten",

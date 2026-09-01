@@ -1631,10 +1631,6 @@
         "title": "Unfallversicherungsgruppen",
         "description": "Beitragsgruppen der Arbeiterunfallversicherung für die Personalkostenrechnung."
       },
-      "labor-burden-rates": {
-        "title": "Personalgemeinkostensätze",
-        "description": "Datierte Gemeinkostensätze, die auf Personalkosten angewendet werden."
-      },
       "asset-categories": {
         "title": "Anlagekategorien",
         "description": "Standard-Abschreibungsmethode und -konten für Anlagevermögen."
@@ -1946,10 +1942,6 @@
       "endOfLife": {
         "fullyDepreciate": "Vollständig abschreiben",
         "retainBalance": "Restwert beibehalten"
-      },
-      "burdenMethod": {
-        "live": "Live",
-        "standard": "Standard"
       },
       "fxRateType": {
         "spot": "Kassakurs",

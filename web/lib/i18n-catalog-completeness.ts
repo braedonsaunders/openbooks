@@ -20,6 +20,8 @@ export interface LocaleCompleteness {
   translated: number
   untranslated: number
   declaredFallbacks: number
+  /** Keys carried by the locale that are no longer present in English. */
+  extraKeys: string[]
   coverage: string
 }
 
@@ -93,6 +95,7 @@ export function completenessReport(manifest = readFallbackManifest()): LocaleCom
     .map((locale) => {
       const catalog = flattenCatalog(locale)
       const missing = [...source.keys()].filter((key) => !catalog.has(key))
+      const extraKeys = [...catalog.keys()].filter((key) => !source.has(key)).sort()
       const declared = manifest.fallbacks[locale] ?? []
       const untranslated = new Set([...missing, ...declared]).size
       const translated = source.size - untranslated
@@ -102,6 +105,7 @@ export function completenessReport(manifest = readFallbackManifest()): LocaleCom
         translated,
         untranslated,
         declaredFallbacks: declared.length,
+        extraKeys,
         coverage: ((translated / source.size) * 100).toFixed(2),
       }
     })
