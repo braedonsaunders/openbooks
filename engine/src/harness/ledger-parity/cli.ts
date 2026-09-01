@@ -1155,10 +1155,11 @@ async function provision(): Promise<void> {
     await tx.execute(sql`
       insert into accounts
         (id, org_id, number, name, type, is_summary, is_active, eliminate,
-         reconcilable, required_dimensions, custom, subsidiary_include_children)
+         reconcilable, currency_restriction, required_dimensions, custom,
+         subsidiary_include_children)
       values
         (${bank2Id}, ${scratch.orgId}, '1001', 'Parity Savings', 'asset_bank',
-         false, true, false, true, '[]'::jsonb, '{}'::jsonb, true)
+         false, true, false, true, 'CAD', '[]'::jsonb, '{}'::jsonb, true)
     `);
   });
 
