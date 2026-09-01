@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { glActivityBuckets, glSummaryEligibleDims } from "../gl-summary";
+import { glActivityBuckets, glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
 import { ZERO, compareAbsoluteDescending, decimalSubtract } from "./decimals";
@@ -103,6 +103,7 @@ export async function cashFlowIndirect(
   to: string,
   dims?: DimFilter,
   orgId?: string,
+  bookId?: string | null,
 ): Promise<CashFlowIndirectResult> {
   const resolvedOrgId = await resolveOrgId(orgId);
   const dim = dimWhere(dims);
@@ -124,6 +125,7 @@ export async function cashFlowIndirect(
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
+         and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
        group by l.entry_id
       having not bool_or(l.account_id in (
                select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank'))
@@ -133,7 +135,7 @@ export async function cashFlowIndirect(
 
   // Net income for the window (credit-normal positive), posted only.
   const niBuckets = glSummaryEligibleDims(dims)
-    ? glActivityBuckets(resolvedOrgId, { minDate: from, maxDate: to, boundaries: [] })
+    ? glActivityBuckets(resolvedOrgId, { minDate: from, maxDate: to, boundaries: [], bookId })
     : null;
   const ni = (await db.execute<{ ni: string }>(
     niBuckets
@@ -152,6 +154,7 @@ export async function cashFlowIndirect(
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
            where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
              and e.posting_date >= ${from} and e.posting_date <= ${to}
+             and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
              and a.type in ${PNL_TYPES} and ${dim}`,
   ));
   const netIncome = ni.rows[0]?.ni ?? ZERO;
@@ -168,6 +171,7 @@ export async function cashFlowIndirect(
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
+         and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
          and e.origin = 'revaluation' and a.type in ${PNL_TYPES} and ${dim}
     `));
     const impact = a.rows[0]?.impact ?? ZERO;
@@ -184,6 +188,7 @@ export async function cashFlowIndirect(
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.id in (select id from flagged)
+         and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
          and e.origin <> 'revaluation'
          and a.type in ${PNL_TYPES} and ${dim}
        group by l.account_id, a.number, a.name
@@ -216,6 +221,7 @@ export async function cashFlowIndirect(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed') and e.posting_date <= ${to}
+       and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
        and a.type in ${[...CF_WC_ASSET_TYPES, ...CF_WC_LIABILITY_TYPES]} and ${dim}
      group by l.account_id, a.number, a.name, a.type
   `));
@@ -250,6 +256,7 @@ export async function cashFlowIndirect(
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
+         and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
          and l.account_id in (
            select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank')
          and e.origin <> 'translation'
@@ -260,6 +267,7 @@ export async function cashFlowIndirect(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where e.id in (select id from cash_entries)
        and l.org_id = ${resolvedOrgId}
+       and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
        and (
          a.type in ${IF_TYPES}
          or (a.type in ${PNL_TYPES} and e.origin = 'disposal')
@@ -293,6 +301,7 @@ export async function cashFlowIndirect(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
        and e.posting_date >= ${from} and e.posting_date <= ${to}
+       and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
        and e.origin = 'translation' and a.type = 'asset_bank' and ${dim}
   `));
   const fxEffectOnCash = fx.rows[0]?.effect ?? ZERO;
@@ -311,6 +320,7 @@ export async function cashFlowIndirect(
         minDate: null,
         maxDate: to,
         boundaries: [{ date: from, kind: 'start' }],
+        bookId,
       })
     : null;
   const cash = (await db.execute<{ opening: string; closing: string }>(
@@ -329,6 +339,7 @@ export async function cashFlowIndirect(
                  coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+              and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
            where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}`,
   ));
