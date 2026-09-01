@@ -46,8 +46,6 @@ const METHOD_STYLES: Record<string, string> = {
   DELETE: 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300',
 }
 
-const TOKEN_KEY = 'openbooks.apiConsole.token.v1'
-
 function sampleFor(type: string): unknown {
   const base = type.split(' (')[0]
   if (base === 'number') return 0
@@ -111,15 +109,6 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
   const [busy, setBusy] = useState(false)
   const [response, setResponse] = useState<ResponseState | null>(null)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
-
-  useEffect(() => {
-    try {
-      const s = sessionStorage.getItem(TOKEN_KEY)
-      if (s) setToken(s)
-    } catch {
-      /* ignore */
-    }
-  }, [])
 
   const selected = useMemo(() => schema.find((s) => s.key === selectedKey) ?? null, [schema, selectedKey])
   const methods = useMemo(() => (selected ? methodsFor(selected) : []), [selected])
@@ -186,12 +175,6 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
 
   function onTokenChange(v: string) {
     setToken(v)
-    try {
-      if (v) sessionStorage.setItem(TOKEN_KEY, v)
-      else sessionStorage.removeItem(TOKEN_KEY)
-    } catch {
-      /* ignore */
-    }
   }
 
   return (
