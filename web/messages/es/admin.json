@@ -676,7 +676,7 @@
   "users": {
     "metaTitle": "Usuarios",
     "title": "Usuarios",
-    "description": "Quién puede iniciar sesión y qué roles tiene. El acceso de un usuario es la unión de sus roles asignados; los usuarios sin asignación conservan su rol heredado.",
+    "description": "Quién puede iniciar sesión y qué roles tiene. El acceso es la unión de los roles asignados explícitamente; los usuarios sin ningún rol no tienen acceso concedido por ningún rol.",
     "manageRoles": "Administrar roles",
     "searchPlaceholder": "Buscar nombre o correo electrónico…",
     "statusFilter": "Estado",
