@@ -381,3 +381,178 @@ test(
     }
   },
 );
+
+test(
+  "mixed-subsidiary pay run payment balances each legal entity",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const childSubsidiaryId = randomUUID();
+      const netPayableId = randomUUID();
+      const dueFromId = randomUUID();
+      const dueToId = randomUUID();
+      const scheduleId = randomUUID();
+      const documentId = randomUUID();
+      const postedEntryId = randomUUID();
+      const rootEmployeeId = randomUUID();
+      const childEmployeeId = randomUUID();
+
+      await db.execute(sql`
+        insert into subsidiaries
+          (id, org_id, parent_id, name, base_currency, country, tax_ids,
+           is_elimination, is_active, custom)
+        values
+          (${childSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Child Co',
+           'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into accounts
+          (id, org_id, number, name, type, is_summary, is_active, eliminate,
+           reconcilable, required_dimensions, custom, subsidiary_include_children)
+        values
+          (${netPayableId}, ${org.orgId}, '2300', 'Net pay payable',
+           'liability_current', false, true, false, false, '[]'::jsonb,
+           '{}'::jsonb, true),
+          (${dueFromId}, ${org.orgId}, '1410', 'Due from Child Co',
+           'asset_current_other', false, true, true, false, '[]'::jsonb,
+           '{}'::jsonb, true),
+          (${dueToId}, ${org.orgId}, '2410', 'Due to Main Co',
+           'liability_current_other', false, true, true, false, '[]'::jsonb,
+           '{}'::jsonb, true)`);
+      await db.execute(sql`
+        insert into intercompany_pairs
+          (id, org_id, from_subsidiary_id, to_subsidiary_id,
+           due_from_account_id, due_to_account_id, is_active, created_by, updated_by)
+        values
+          (${randomUUID()}, ${org.orgId}, ${org.subsidiaryId}, ${childSubsidiaryId},
+           ${dueFromId}, ${dueToId}, true, ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        update orgs
+           set settings = settings || ${JSON.stringify({
+             payroll: { netPayAccountId: netPayableId },
+           })}::jsonb
+         where id = ${org.orgId}`);
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, subsidiary_id,
+                             is_active, custom, created_by, updated_by)
+        values
+          (${rootEmployeeId}, ${org.orgId}, 'person', 'Root Employee',
+           ${org.subsidiaryId}, true, '{}'::jsonb, ${actorId}, ${actorId}),
+          (${childEmployeeId}, ${org.orgId}, 'person', 'Child Employee',
+           ${childSubsidiaryId}, true, '{}'::jsonb, ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into pay_schedules
+          (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+           pay_date_offset_days, is_active, created_by, updated_by)
+        values
+          (${scheduleId}, ${org.orgId}, 'Mixed Co Schedule', 'monthly', 12,
+           '2026-07-31', 0, true, ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, subsidiary_id, document_date,
+           posting_date, posting_period_id, currency, status, memo, created_by,
+           updated_by)
+        values
+          (${documentId}, ${org.orgId}, 'pay_run', 'PAY-MIXED-001',
+           ${org.subsidiaryId}, '2026-07-15', '2026-07-15', ${org.periodId},
+           'CAD', 'draft', 'Mixed subsidiary payment fixture', ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, origin, source_document_id, created_by,
+           updated_by)
+        values
+          (${postedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'PAY-MIXED-SOURCE', '2026-07-15', ${org.periodId},
+           'Mixed subsidiary payroll accrual', 'draft', 'payroll', ${documentId},
+           ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
+           currency, txn_amount, fx_rate, party_id, is_open_item, memo)
+        values
+          (${org.orgId}, ${postedEntryId}, 1, ${org.accounts.cogs},
+           ${org.subsidiaryId}, '100.0000', 'CAD', '100.0000', 1,
+           null, false, 'Root wages'),
+          (${org.orgId}, ${postedEntryId}, 2, ${netPayableId},
+           ${org.subsidiaryId}, '-100.0000', 'CAD', '-100.0000', 1,
+           ${rootEmployeeId}, true, 'Root net pay'),
+          (${org.orgId}, ${postedEntryId}, 3, ${org.accounts.cogs},
+           ${childSubsidiaryId}, '150.0000', 'CAD', '150.0000', 1,
+           null, false, 'Child wages'),
+          (${org.orgId}, ${postedEntryId}, 4, ${netPayableId},
+           ${childSubsidiaryId}, '-150.0000', 'CAD', '-150.0000', 1,
+           ${childEmployeeId}, true, 'Child net pay')`);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now(), posted_by = ${actorId}
+         where id = ${postedEntryId} and org_id = ${org.orgId}`);
+      await db.execute(sql`
+        update documents
+           set status = 'posted', posted_entry_id = ${postedEntryId},
+               updated_at = now(), updated_by = ${actorId}
+         where id = ${documentId} and org_id = ${org.orgId}`);
+      await db.execute(sql`
+        insert into pay_runs
+          (document_id, org_id, pay_schedule_id, period_start, period_end,
+           pay_date, tax_year, run_status, run_type, created_by, updated_by)
+        values
+          (${documentId}, ${org.orgId}, ${scheduleId}, '2026-07-01', '2026-07-15',
+           '2026-07-15', 2026, 'committed', 'regular', ${actorId}, ${actorId})`);
+
+      const payment = await recordPayRunPayment({
+        orgId: org.orgId,
+        actorId,
+        documentId,
+        bankAccountId: org.accounts.bank,
+      });
+      assert.equal(cmp(payment.total, "250"), 0);
+
+      const paymentEntry = (await db.execute<{ origin: string }>(sql`
+        select origin from journal_entries
+         where org_id = ${org.orgId} and id = ${payment.entryId}
+      `)).rows[0]!;
+      assert.equal(paymentEntry.origin, "intercompany");
+
+      const subsidiaryBalances = (await db.execute<{
+        subsidiary_id: string; total: string;
+      }>(sql`
+        select subsidiary_id, sum(amount)::text as total
+          from journal_lines
+         where org_id = ${org.orgId} and entry_id = ${payment.entryId}
+         group by subsidiary_id
+         order by subsidiary_id
+      `)).rows;
+      assert.equal(subsidiaryBalances.length, 2);
+      assert.ok(subsidiaryBalances.every((row) => cmp(row.total, "0") === 0));
+
+      const dueLegs = (await db.execute<{
+        account_id: string; subsidiary_id: string; amount: string;
+      }>(sql`
+        select account_id, subsidiary_id, amount::text as amount
+          from journal_lines
+         where org_id = ${org.orgId} and entry_id = ${payment.entryId}
+           and account_id in (${dueFromId}, ${dueToId})
+         order by subsidiary_id
+      `)).rows;
+      const dueByAccount = new Map(dueLegs.map((row) => [row.account_id, row]));
+      assert.deepEqual(dueByAccount.get(dueFromId), {
+        account_id: dueFromId, subsidiary_id: org.subsidiaryId, amount: "150.0000",
+      });
+      assert.deepEqual(dueByAccount.get(dueToId), {
+        account_id: dueToId, subsidiary_id: childSubsidiaryId, amount: "-150.0000",
+      });
+
+      const applications = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n
+          from applications a
+          join journal_lines jl on jl.id = a.from_line_id
+         where a.org_id = ${org.orgId} and jl.entry_id = ${payment.entryId}
+      `)).rows[0]!;
+      assert.equal(applications.n, 2);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
