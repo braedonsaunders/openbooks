@@ -20,8 +20,8 @@
     "done": "{kind} — {delta}"
   },
   "taxPools": {
-    "configure": "Configure",
-    "regime": "Tax regime",
+    "configure": "Configurer",
+    "regime": "Régime fiscal",
     "title": "Amortissement fiscal — catégories d’immobilisations",
     "description": "Calculez l’amortissement fiscal annuel des immobilisations par catégorie, notamment le MACRS américain, la DPA canadienne, les déductions pour amortissement britanniques et les régimes fiscaux configurables par pays.",
     "taxYear": "Année d’imposition",
@@ -99,14 +99,14 @@
     "noAvailableSubsidiary": "Votre rôle ne dispose d'aucune filiale active pour cet actif."
   },
   "drawer": {
-    "taxDepreciation": "Tax depreciation",
-    "taxCategoryDefault": "Category default: {value}",
+    "taxDepreciation": "Amortissement fiscal",
+    "taxCategoryDefault": "Valeur par défaut de la catégorie : {value}",
     "notAssigned": "Not assigned",
     "taxClass": "Tax class",
-    "useCategoryDefault": "Use category default",
-    "businessUsePercent": "Business use (%)",
-    "section179": "Section 179 election",
-    "bonusPercent": "Bonus depreciation (%)",
+    "useCategoryDefault": "Utiliser la valeur par défaut de la catégorie",
+    "businessUsePercent": "Usage professionnel (%)",
+    "section179": "Option de la section 179",
+    "bonusPercent": "Amortissement bonifié (%)",
     "tabsAria": "Sections de l’immobilisation",
     "customForm": "Formulaire du dossier",
     "newAsset": "Nouvel actif",

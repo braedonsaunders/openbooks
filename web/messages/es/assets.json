@@ -20,8 +20,8 @@
     "done": "{kind} — {delta}"
   },
   "taxPools": {
-    "configure": "Configure",
-    "regime": "Tax regime",
+    "configure": "Configurar",
+    "regime": "Régimen fiscal",
     "title": "Depreciación fiscal — grupos por clase",
     "description": "Calcula la depreciación fiscal anual de los activos fijos por clase, incluidos el MACRS estadounidense, la CCA canadiense, las deducciones por amortización del Reino Unido y los regímenes fiscales configurables por país.",
     "taxYear": "Año fiscal",
@@ -99,14 +99,14 @@
     "noAvailableSubsidiary": "Su rol no tiene ninguna subsidiaria activa disponible para este activo."
   },
   "drawer": {
-    "taxDepreciation": "Tax depreciation",
-    "taxCategoryDefault": "Category default: {value}",
+    "taxDepreciation": "Depreciación fiscal",
+    "taxCategoryDefault": "Valor predeterminado de la categoría: {value}",
     "notAssigned": "Not assigned",
     "taxClass": "Tax class",
-    "useCategoryDefault": "Use category default",
-    "businessUsePercent": "Business use (%)",
-    "section179": "Section 179 election",
-    "bonusPercent": "Bonus depreciation (%)",
+    "useCategoryDefault": "Usar el valor predeterminado de la categoría",
+    "businessUsePercent": "Uso empresarial (%)",
+    "section179": "Elección de la Sección 179",
+    "bonusPercent": "Depreciación adicional (%)",
     "tabsAria": "Secciones del activo",
     "customForm": "Formulario del registro",
     "newAsset": "Nuevo activo",

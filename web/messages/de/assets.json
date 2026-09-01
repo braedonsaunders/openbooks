@@ -20,8 +20,8 @@
     "done": "{kind} — {delta}"
   },
   "taxPools": {
-    "configure": "Configure",
-    "regime": "Tax regime",
+    "configure": "Konfigurieren",
+    "regime": "Steuerregime",
     "title": "Steuerliche Abschreibung — Klassenpools",
     "description": "Berechnen Sie die jährliche steuerliche Abschreibung von Anlagegütern nach Klassen, einschließlich des US-amerikanischen MACRS, der kanadischen CCA, britischer Abschreibungsabzüge und konfigurierbarer länderspezifischer Steuerregime.",
     "taxYear": "Steuerjahr",
@@ -99,14 +99,14 @@
     "noAvailableSubsidiary": "Ihrer Rolle steht keine aktive Tochtergesellschaft für diese Anlage zur Verfügung."
   },
   "drawer": {
-    "taxDepreciation": "Tax depreciation",
-    "taxCategoryDefault": "Category default: {value}",
+    "taxDepreciation": "Steuerliche Abschreibung",
+    "taxCategoryDefault": "Standardwert der Kategorie: {value}",
     "notAssigned": "Not assigned",
     "taxClass": "Tax class",
-    "useCategoryDefault": "Use category default",
-    "businessUsePercent": "Business use (%)",
-    "section179": "Section 179 election",
-    "bonusPercent": "Bonus depreciation (%)",
+    "useCategoryDefault": "Standardwert der Kategorie verwenden",
+    "businessUsePercent": "Betriebliche Nutzung (%)",
+    "section179": "Wahlrecht nach § 179",
+    "bonusPercent": "Sonderabschreibung (%)",
     "tabsAria": "Bereiche des Anlagensatzes",
     "customForm": "Datensatzformular",
     "newAsset": "Neue Anlage",
