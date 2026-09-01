@@ -1188,55 +1188,55 @@
       }
     },
     "taxDepreciationSetup": {
-      "navTitle": "Tax Depreciation",
-      "title": "Tax Depreciation",
-      "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
-      "tabsAria": "Fixed asset setup sections",
+      "navTitle": "税务折旧",
+      "title": "税务折旧",
+      "description": "安装各国税务折旧包，并配置类别分配、税制、税类、惯例和首年规则。此设置独立于销售税、增值税和税务关联设置。",
+      "tabsAria": "固定资产设置分区",
       "tabs": {
-        "overview": "Overview",
-        "categories": "Asset categories",
-        "regimes": "Tax regimes",
-        "classes": "Tax classes",
-        "firstYear": "First-year rules",
-        "methods": "Methods",
-        "books": "Book policies"
+        "overview": "概览",
+        "categories": "资产类别",
+        "regimes": "税制",
+        "classes": "税类",
+        "firstYear": "首年规则",
+        "methods": "方法",
+        "books": "账簿政策"
       },
-      "packsTitle": "Country depreciation packs",
-      "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
-      "recommended": "Company country",
-      "installed": "Installed",
-      "install": "Install pack",
-      "installing": "Installing…",
-      "installFailed": "Could not install the depreciation pack",
-      "installedToast": "Installed {count} depreciation classes",
-      "assignmentFailed": "Could not save the tax class assignment",
-      "assignmentsTitle": "Asset-category class assignments",
-      "assignmentsDescription": "Choose the default tax class for each asset category.",
-      "assetCategory": "Asset category",
-      "notAssigned": "Not assigned",
-      "classCount": "{count, plural, one {# class} other {# classes}}",
+      "packsTitle": "国家折旧包",
+      "packsDescription": "安装折旧包会创建可编辑的租户配置。现有覆盖项永远不会被替换。",
+      "recommended": "公司所在国家/地区",
+      "installed": "已安装",
+      "install": "安装折旧包",
+      "installing": "正在安装…",
+      "installFailed": "无法安装折旧包",
+      "installedToast": "已安装 {count} 个折旧税类",
+      "assignmentFailed": "无法保存税类分配",
+      "assignmentsTitle": "资产类别税类分配",
+      "assignmentsDescription": "选择应用于每个类别资产的默认税类。单个资产的选择可以覆盖这些默认值。",
+      "assetCategory": "资产类别",
+      "notAssigned": "未分配",
+      "classCount": "{count, plural, one {# 个税类} other {# 个税类}}",
       "models": {
-        "pool": "Class pool",
-        "macrs": "Per-asset MACRS"
+        "pool": "税类池",
+        "macrs": "按资产 MACRS"
       },
-      "customizeTitle": "Customize",
-      "customizeDescription": "Country packs are starting points; seeded values remain editable.",
+      "customizeTitle": "自定义",
+      "customizeDescription": "国家折旧包只是起点。你可以添加自定义税制和税类，或覆盖任何预置值。",
       "links": {
         "regimes": {
-          "title": "Regimes",
-          "description": "Country, calculation model and asset class attribute."
+          "title": "税制",
+          "description": "国家/地区、计算模型和资产类别属性。"
         },
         "classes": {
-          "title": "Classes and methods",
-          "description": "Rates, recovery periods, methods and conventions."
+          "title": "税类和方法",
+          "description": "税率、回收年限、MACRS 系统、方法和惯例。"
         },
         "firstYear": {
-          "title": "First-year rules",
-          "description": "Effective-dated acceleration and eligibility."
+          "title": "首年规则",
+          "description": "按生效日期管理的加速和首年资格。"
         },
         "assignments": {
-          "title": "Asset-category assignments",
-          "description": "Assign categories to regime classes in Tax attributes."
+          "title": "资产类别分配",
+          "description": "在税务属性中，将每个资产类别分配到税制税类。"
         }
       }
     },
@@ -1631,6 +1631,11 @@
         "title": "工伤保险组",
         "description": "用于人工成本核算的工伤补偿费率组。"
       },
+      "overhead-rates": {
+        "title": "间接费用率",
+        "description": "应用于人工成本的按生效日期管理的间接费用率。",
+        "singular": "间接费用率"
+      },
       "asset-categories": {
         "title": "资产类别",
         "description": "固定资产的默认折旧方法和科目。"
@@ -1942,6 +1947,10 @@
       "endOfLife": {
         "fullyDepreciate": "全额折旧",
         "retainBalance": "保留余额"
+      },
+      "overheadMethod": {
+        "live": "实时",
+        "standard": "标准"
       },
       "fxRateType": {
         "spot": "即期",
