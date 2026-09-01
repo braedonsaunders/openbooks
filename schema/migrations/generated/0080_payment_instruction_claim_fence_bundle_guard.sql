@@ -33,9 +33,12 @@ BEGIN
   subject_id := COALESCE(NEW.id, OLD.id);
 
   -- Sandbox teardown destroys scratch data wholesale; it never posts, and it
-  -- must remain able to remove rows regardless of leftover claim state.
-  IF COALESCE(current_setting('openbooks.sandbox_wipe', true), '') = 'on' THEN
-    RETURN COALESCE(NEW, OLD);
+  -- must remain able to remove rows regardless of leftover claim state. The
+  -- canonical helper checks both the caller's teardown GUC and the tenant's
+  -- sandbox classification; a raw session setting is never authority, and
+  -- INSERT/UPDATE must continue through the claim fence.
+  IF TG_OP = 'DELETE' AND public.openbooks_sandbox_wipe_allowed(OLD.org_id) THEN
+    RETURN OLD;
   END IF;
 
   SELECT r.status, r.posting_claim_token
