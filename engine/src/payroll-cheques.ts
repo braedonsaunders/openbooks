@@ -192,7 +192,7 @@ export function amountInWords(amount: string): string {
   const negative = amount.trim().startsWith("-");
   const [whole = "0", fraction = ""] = amount.trim().replace(/^[-+]/, "").split(".");
   const cents = `${fraction}00`.slice(0, 2);
-  let dollars = BigInt(whole || "0");
+  let dollars = BigInt((whole || "0").replace(/,/g, ""));
   if (dollars === 0n) return capitalize(`${negative ? "minus " : ""}zero and ${cents}/100`);
   const groups: string[] = [];
   let scale = 0;
