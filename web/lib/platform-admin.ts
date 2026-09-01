@@ -354,16 +354,22 @@ export async function platformUser(
     `)) as { rows: PlatformUser[] };
     const user = usersResult.rows[0];
     if (!user) return null;
-    const grants = await platformGrants({
-      q: user.email,
-      page: 1,
-      perPage: 100,
-      dir: "asc",
-      sort: "organization",
-    });
+    const grantsResult = await db.execute<PlatformGrant>(sql`
+      select a.id, a.member_user_id as "memberUserId", m.email as "memberEmail", m.name as "memberName",
+             mo.name as "memberOrgName", a.org_id as "orgId", o.name as "orgName",
+             a.acting_user_id as "actingUserId", au.email as "actingEmail", au.name as "actingName",
+             a.is_active as "isActive", a.created_at as "createdAt", a.updated_at as "updatedAt"
+        from user_org_access a
+        join users m on m.id = a.member_user_id
+        join orgs mo on mo.id = m.org_id
+        join orgs o on o.id = a.org_id
+        join users au on au.id = a.acting_user_id
+       where a.member_user_id = ${id}
+       order by o.name asc, m.email asc
+    `);
     return {
       user,
-      grants: grants.rows.filter((grant) => grant.memberUserId === id),
+      grants: grantsResult.rows,
     };
   });
 }
