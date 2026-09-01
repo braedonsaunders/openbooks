@@ -4,8 +4,41 @@ import test from "node:test";
 import {
   SubcontractError,
   computeVendorApplication,
+  parseSubcontractTransitionAction,
   revisedSubcontractSovValue,
 } from "./subcontracts.ts";
+
+test("subcontract transition parser is strict and runs before transaction work", () => {
+  for (const action of ["substantially_complete", "close", "void"] as const) {
+    assert.equal(parseSubcontractTransitionAction(action), action);
+  }
+
+  for (const invalid of [
+    "approve",
+    "",
+    "void ",
+    undefined,
+    null,
+    42,
+    { action: "void" },
+    ["void"],
+  ]) {
+    assert.throws(
+      () => parseSubcontractTransitionAction(invalid),
+      (error) => error instanceof SubcontractError && error.message === "Invalid subcontract transition action",
+    );
+  }
+
+  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
+  const transitionStart = source.indexOf("export async function transitionSubcontract");
+  const transactionStart = source.indexOf("await db.transaction", transitionStart);
+  const parserStart = source.indexOf(
+    "const action = parseSubcontractTransitionAction(input.action)",
+    transitionStart,
+  );
+  assert.ok(transitionStart >= 0, "transitionSubcontract is defined");
+  assert.ok(parserStart >= 0 && parserStart < transactionStart, "transition validation precedes transaction work");
+});
 
 test("vendor application treats stored materials as a cumulative balance", () => {
   const result = computeVendorApplication([{
