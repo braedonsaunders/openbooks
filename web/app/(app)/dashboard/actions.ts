@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { can, getAuthz } from '@/lib/authz'
@@ -12,6 +13,7 @@ import { WIDGETS } from './_widget-registry'
 import { featureEnabled, hiddenNavModules, resolvedFeatureState } from '@/lib/features'
 import {
   CURATED_QUICK_ACTIONS,
+  normalizeQuickActions,
   type QuickActionOption,
 } from './_quick-actions-shared'
 import { QuickActionsSchema } from './_quick-actions-input'
@@ -65,7 +67,7 @@ export async function saveDashboardLayout(input: unknown) {
        limit 1
     `)))
     const existingLayout = existing.rows[0]?.layout as DashboardLayoutData | undefined
-    if (existingLayout?.quickActions) layout.quickActions = existingLayout.quickActions
+    if (existingLayout?.quickActions) layout.quickActions = normalizeQuickActions(existingLayout.quickActions)
 
     await tx.execute(sql`
       insert into user_dashboard_layouts (id, org_id, user_id, layout, source_role, is_customised, created_at, updated_at)
@@ -110,7 +112,8 @@ export async function saveQuickActions(input: unknown) {
   const dashboardDefault = await resolveDashboardDefault(authz, role)
   const sourceRole = dashboardDefault.sourceKey
   const hiddenIds = new Set(await hiddenQuickActionIdsForOrg(authz.user.orgId))
-  const incoming = parsed.data.filter((action) => !hiddenIds.has(action.id))
+  const normalized = normalizeQuickActions(parsed.data)
+  const incoming = normalized.filter((action) => !hiddenIds.has(action.id))
 
   // Same single-connection transactional lock as saveDashboardLayout — the
   // advisory lock is only meaningful for the statements sharing its txn.
@@ -125,7 +128,8 @@ export async function saveQuickActions(input: unknown) {
        limit 1
     `)))
     const existingLayout = (existing.rows[0]?.layout ?? { widgets: [] }) as DashboardLayoutData
-    const preserved = (existingLayout.quickActions ?? []).filter((action) => hiddenIds.has(action.id))
+    const preserved = normalizeQuickActions(existingLayout.quickActions ?? [])
+      .filter((action) => hiddenIds.has(action.id))
     const incomingIds = new Set(incoming.map((action) => action.id))
     const quickActions = [
       ...incoming,
@@ -158,6 +162,7 @@ export async function listQuickActionOptions(): Promise<{
   if (!authz) return { common: [] }
 
   const common: QuickActionOption[] = []
+  const t = await getTranslations('dashboard')
 
   // One authoritative feature snapshot drives both curated create chips and
   // navigate options. hiddenNavModules is the SAME mapping the sidebar
@@ -171,7 +176,9 @@ export async function listQuickActionOptions(): Promise<{
     if (action.requiredPermission && !can(authz, action.requiredPermission)) continue
     if (action.requiredFeature && !featureEnabled(featureState, action.requiredFeature)) continue
     common.push({
-      label: action.label,
+      id: action.id,
+      label: t(`quickActions.labels.${action.labelKey}`),
+      labelKey: action.labelKey,
       href: action.href,
       iconKey: action.iconKey,
       tone: action.tone,

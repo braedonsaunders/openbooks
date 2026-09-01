@@ -90,6 +90,14 @@
     "customize": "自定义",
     "empty": "尚无快捷操作",
     "addFirst": "添加您的第一个操作",
+    "labels": {
+      "newJournalEntry": "新建日记账分录",
+      "newBill": "新建账单",
+      "newInvoice": "新建发票",
+      "newPayment": "新建付款",
+      "newExpense": "新建费用",
+      "runReport": "运行报告"
+    },
     "editor": {
       "title": "自定义快捷操作",
       "description": "添加、重新排序和移除快捷方式磁贴。",

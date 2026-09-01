@@ -90,6 +90,14 @@
     "customize": "Customize",
     "empty": "No quick actions yet",
     "addFirst": "Add your first action",
+    "labels": {
+      "newJournalEntry": "New journal entry",
+      "newBill": "New bill",
+      "newInvoice": "New invoice",
+      "newPayment": "New payment",
+      "newExpense": "New expense",
+      "runReport": "Run report"
+    },
     "editor": {
       "title": "Customize quick actions",
       "description": "Add, reorder, and remove shortcut tiles.",

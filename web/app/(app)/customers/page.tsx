@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { cn, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { HomeStatTile, HomePanel } from '../../../components/module-home/client'
@@ -43,6 +43,7 @@ export default async function CustomersHomePage({
   // permissions opens the home; panels stay org-wide counts.
   if (!['ar.read', 'crm.read', 'parties.read'].some((p) => can(authz, p))) assertCan(authz, 'ar.read')
   const t = await getTranslations('customers')
+  const locale = await getLocale()
   const tNav = await getTranslations('nav')
   const sp = await searchParams
 
@@ -94,7 +95,7 @@ export default async function CustomersHomePage({
     .map((i) => ({ href: i.href, label: i.label, iconKey: i.iconKey, badge: badgeFor(i.href) }))
 
   const attention = needsAttention(data.topExposure, t, moneyCompact)
-  const trendLabels = data.trend.map((w) => weekLabel(w.weekStart))
+  const trendLabels = data.trend.map((w) => weekLabel(w.weekStart, locale))
 
   return (
     <ListPageLayout
@@ -278,8 +279,8 @@ function needsAttention(exposure: CustomerExposureRow[], t: T, moneyCompact: (va
   return items.slice(0, 6)
 }
 
-function weekLabel(weekStart: string): string {
-  return new Date(weekStart + 'T00:00:00Z').toLocaleDateString('en-US', {
+function weekLabel(weekStart: string, locale: string): string {
+  return new Date(weekStart + 'T00:00:00Z').toLocaleDateString(locale, {
     month: 'short',
     day: 'numeric',
     timeZone: 'UTC',
