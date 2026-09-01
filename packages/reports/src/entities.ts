@@ -981,8 +981,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   },
 ]
 
-export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.fromEntries(
-  REPORT_ENTITIES.map((e) => [e.key, e]),
+export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.assign(
+  Object.create(null) as Record<string, ReportEntity>,
+  Object.fromEntries(REPORT_ENTITIES.map((e) => [e.key, e])),
 )
 
 /** Item kinds that belong to the Inventory Features switch. The items report

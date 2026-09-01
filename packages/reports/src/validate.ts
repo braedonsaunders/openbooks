@@ -36,7 +36,9 @@ export function validateCustomQuery(
     throw new Error('Report queries use the ordered "sorts" array')
   }
   const entity = String(q.entity ?? '')
-  const entityMeta = entityMap[entity] ?? null
+  const entityMeta = Object.prototype.hasOwnProperty.call(entityMap, entity)
+    ? entityMap[entity] ?? null
+    : null
   if (!entityMeta) {
     throw new Error(`Invalid entity: ${entity}`)
   }
