@@ -15,17 +15,81 @@ import { db, env } from "../db.ts";
  *   3. Destructive ops (reset/wipe) REFUSE any org that is not sim-tagged — so a
  *      wrong id can never wipe a real tenant.
  *
- * If the DB name does look disposable (contains sim/test/sandbox/scratch) we note
- * it; if it does not, we proceed but the org-tag guard above is what keeps real
- * data safe.
+ * Provisioning additionally requires a loopback host and a disposable
+ * database name.  This prevents a production URL from reaching a query even
+ * when OPENBOOKS_SIM is accidentally enabled, while preserving the existing
+ * remote-dedicated-database behavior for replay/sim callers.
  */
 
-const NAME_MARKERS = ["sim", "test", "sandbox", "scratch"];
+const NAME_MARKERS = ["sim", "test", "sandbox", "scratch"] as const;
 export const SIM_ORG_PREFIX = "SIM · ";
 
-function databaseName(url: string): string {
+type DisposableDatabaseUrl = {
+  host: string;
+  databaseName: string;
+};
+
+function parseDatabaseUrl(url: string): DisposableDatabaseUrl {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("OPENBOOKS_DB_URL is not a valid PostgreSQL URL");
+  }
+  if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
+    throw new Error("OPENBOOKS_DB_URL must use the postgres or postgresql scheme");
+  }
+  let databaseName: string;
+  try {
+    databaseName = decodeURIComponent(parsed.pathname.replace(/^\/+/, ""));
+  } catch {
+    throw new Error("OPENBOOKS_DB_URL contains an invalid database name");
+  }
+  if (!databaseName || databaseName.includes("/")) {
+    throw new Error("OPENBOOKS_DB_URL must include a database name");
+  }
+  return { host: parsed.hostname.toLowerCase(), databaseName: databaseName.toLowerCase() };
+}
+
+// The shared replay/sim guard historically identified dedicated databases by
+// substring alone. Keep that permissive behavior for existing callers; the
+// strict URL parser above is reserved for provisioning's fail-closed gate.
+function legacyDatabaseName(url: string): string {
   const afterSlash = url.split("/").pop() ?? "";
   return afterSlash.split("?")[0]!.toLowerCase();
+}
+
+function hasDisposableMarker(databaseName: string): boolean {
+  // Keep the established shared-policy contract: callers that already use
+  // assertDedicatedSimDatabase accept any database name containing a marker.
+  return NAME_MARKERS.some((marker) => databaseName.includes(marker));
+}
+
+/**
+ * Validate a database URL before any harness query is attempted.  The URL is
+ * never included in an error so credentials cannot leak through diagnostics.
+ */
+export function assertDisposableDatabaseUrl(
+  url: string,
+  op = "database operation",
+  options: { requireLoopback?: boolean } = {},
+): DisposableDatabaseUrl {
+  const parsed = parseDatabaseUrl(url);
+  if (
+    options.requireLoopback &&
+    parsed.host !== "127.0.0.1" &&
+    parsed.host !== "localhost"
+  ) {
+    throw new Error(
+      `refusing "${op}": OPENBOOKS_DB_URL host must be 127.0.0.1 or localhost (got ${parsed.host || "<empty>"})`,
+    );
+  }
+  if (!hasDisposableMarker(parsed.databaseName)) {
+    throw new Error(
+      `refusing "${op}": database name must contain an approved disposable marker (sim, test, sandbox, or scratch)`,
+    );
+  }
+  return parsed;
 }
 
 /**
@@ -36,9 +100,8 @@ function databaseName(url: string): string {
  * such as dunning's runDunningForOrg are safe for the simulator's tagged org.
  * Gate org-less ops on this.
  */
-export function isDedicatedSimDatabase(): boolean {
-  const name = databaseName(env.OPENBOOKS_DB_URL ?? "");
-  return NAME_MARKERS.some((m) => name.includes(m));
+export function isDedicatedSimDatabase(url = env.OPENBOOKS_DB_URL ?? ""): boolean {
+  return hasDisposableMarker(legacyDatabaseName(url));
 }
 
 export function assertDedicatedSimDatabase(op: string): void {
@@ -51,6 +114,13 @@ export function assertDedicatedSimDatabase(op: string): void {
   }
 }
 
+/** Strict provisioning gate: disposable databases must be loopback-only. */
+export function assertLoopbackDisposableDatabase(op: string): void {
+  const url = env.OPENBOOKS_DB_URL;
+  if (!url) throw new Error("OPENBOOKS_DB_URL is not set");
+  assertDisposableDatabaseUrl(url, op, { requireLoopback: true });
+}
+
 /** Gate every run: OPENBOOKS_SIM must be explicitly set. */
 export function assertSimEnabled(): void {
   if (env.OPENBOOKS_SIM !== "1") {
@@ -60,8 +130,8 @@ export function assertSimEnabled(): void {
     );
   }
   if (!env.OPENBOOKS_DB_URL) throw new Error("OPENBOOKS_DB_URL is not set");
-  const name = databaseName(env.OPENBOOKS_DB_URL);
-  if (!NAME_MARKERS.some((m) => name.includes(m))) {
+  const name = legacyDatabaseName(env.OPENBOOKS_DB_URL);
+  if (!hasDisposableMarker(name)) {
     console.error(
       `[sim] note: database "${name}" is not a dedicated sim database — sim orgs are ` +
         `tagged "${SIM_ORG_PREFIX}…" and isolated by org; destructive ops refuse untagged orgs.`,
