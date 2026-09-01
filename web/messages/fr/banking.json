@@ -129,7 +129,7 @@
     "emptyDescription": "Importez un relevé OFX ou CSV depuis un compte pour le voir ici."
   },
   "reconsPage": {
-    "title": "Réconciliations",
+    "title": "Rapprochements bancaires",
     "description": "Réconciliations ouvertes et signées sur tous les comptes.",
     "search": "Rechercher par date ou compte…",
     "emptyTitle": "Aucune réconciliation pour l’instant",
@@ -432,7 +432,7 @@
     "create": "Créer",
     "createFailed": "Impossible de créer le serveur SFTP",
     "createNote": "Le mot de passe s’affiche une seule fois après la création — copiez-le à ce moment.",
-    "namePlaceholder": "ex. RBC entrant",
+    "namePlaceholder": "ex. Fichiers bancaires entrants",
     "username": "Identifiant",
     "backendLabel": "Stockage",
     "backendS3": "Stockage objet",

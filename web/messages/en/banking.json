@@ -542,7 +542,7 @@
     "create": "Create login",
     "createFailed": "Could not create the login",
     "createNote": "The password is shown once after creation — copy it then. You can rotate it later if it’s lost.",
-    "namePlaceholder": "e.g. RBC inbound",
+    "namePlaceholder": "e.g. Inbound bank files",
     "username": "Username",
     "backendLabel": "Storage",
     "backendS3": "Cloud",
