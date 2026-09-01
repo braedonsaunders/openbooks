@@ -170,6 +170,15 @@ export function BudgetDrawer({
     }
   }, [bookId, description, editable, execute, fiscalYear, kind, name, router, scenario.id, t])
 
+  // Keep the unmount handler pointed at the latest callbacks without making
+  // the handler itself rerun (and flush) whenever an editor value changes.
+  const flushCellsRef = useRef(flushCells)
+  const saveMetadataNowRef = useRef(saveMetadataNow)
+  useEffect(() => {
+    flushCellsRef.current = flushCells
+    saveMetadataNowRef.current = saveMetadataNow
+  }, [flushCells, saveMetadataNow])
+
   useEffect(() => {
     if (!editable) return
     if (JSON.stringify([name, description, kind, bookId, fiscalYear]) === metadataBaselineRef.current) return
@@ -181,6 +190,8 @@ export function BudgetDrawer({
   useEffect(() => () => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     if (metadataTimer.current) clearTimeout(metadataTimer.current)
+    void flushCellsRef.current()
+    void saveMetadataNowRef.current()
   }, [])
 
   const pageTotalUnits = useMemo(() => Object.entries(values).reduce((sum, [key, value]) => {
