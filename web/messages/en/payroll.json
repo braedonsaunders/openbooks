@@ -670,7 +670,7 @@
         "description": "Statutory withholding for Canadian pay runs, remittances, and year-end.",
         "edition": "{edition, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} edition (effective {effective})",
         "engine": "CRA T4127 statutory engine —",
-        "coverage": "All provinces & territories. Quebec: QPP, QPIP, and the federal side; provincial income tax is administered by Revenu Québec and is not included.",
+        "coverage": "All provinces & territories. Quebec: QPP, QPIP, federal and provincial income tax withholding are included; provincial income tax is administered by Revenu Québec.",
         "components": "Statutory pay components: base pay, overtime, bonus, vacation, income tax, CPP, EI, QPIP.",
         "verified": "Verified penny-exact against CRA PDOC."
       },
