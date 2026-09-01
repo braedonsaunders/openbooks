@@ -2,12 +2,16 @@ import type { DashboardQuickAction } from '@openbooks/schema'
 
 export type QuickAction = DashboardQuickAction
 
+export type QuickActionTranslator = (key: string) => string
+
 type QuickActionsSaveResult = { ok: true } | { ok: false; error?: string }
 
 export type SaveQuickActionsAction = (input: QuickAction[]) => Promise<QuickActionsSaveResult>
 
 export type QuickActionOption = {
+  id?: string
   label: string
+  labelKey?: string
   href: string
   iconKey: string
   tone: string
@@ -117,8 +121,9 @@ export function isExternalHref(href: string): boolean {
 
 export const MAX_QUICK_ACTIONS = 12
 
-type CuratedQuickAction = QuickActionOption & {
+type CuratedQuickAction = Omit<QuickActionOption, 'label' | 'id'> & {
   id: string
+  labelKey: string
   requiredPermission: string | null
   /** Features switch — omit from the catalog and live chips when off. */
   requiredFeature?: string
@@ -127,7 +132,7 @@ type CuratedQuickAction = QuickActionOption & {
 export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   {
     id: 'd-journal',
-    label: 'New journal entry',
+    labelKey: 'newJournalEntry',
     href: '/journal',
     iconKey: 'journal',
     tone: 'teal',
@@ -136,7 +141,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   },
   {
     id: 'd-bill',
-    label: 'New bill',
+    labelKey: 'newBill',
     href: '/ap',
     iconKey: 'file',
     tone: 'orange',
@@ -145,7 +150,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   },
   {
     id: 'd-invoice',
-    label: 'New invoice',
+    labelKey: 'newInvoice',
     href: '/ar',
     iconKey: 'file-check',
     tone: 'emerald',
@@ -154,7 +159,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   },
   {
     id: 'd-payment',
-    label: 'New payment',
+    labelKey: 'newPayment',
     href: '/payments',
     iconKey: 'receipt',
     tone: 'violet',
@@ -163,7 +168,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   },
   {
     id: 'd-expense',
-    label: 'New expense',
+    labelKey: 'newExpense',
     href: '/expenses/reports',
     iconKey: 'clipboard',
     tone: 'amber',
@@ -174,7 +179,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   },
   {
     id: 'd-report',
-    label: 'Run report',
+    labelKey: 'runReport',
     href: '/reports',
     iconKey: 'chart',
     tone: 'slate',
@@ -184,8 +189,60 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
 ]
 
 export const DEFAULT_QUICK_ACTIONS: QuickAction[] = CURATED_QUICK_ACTIONS.map(
-  ({ id, label, href, iconKey, tone }) => ({ id, label, href, iconKey, tone }),
+  ({ id, labelKey, href, iconKey, tone }) => ({ id, labelKey, href, iconKey, tone }),
 )
+
+const CURATED_BY_ID = new Map(CURATED_QUICK_ACTIONS.map((action) => [action.id, action]))
+
+export function isCuratedQuickAction(action: Pick<QuickAction, 'id'>): boolean {
+  return CURATED_BY_ID.has(action.id)
+}
+
+/**
+ * Resolve a quick-action label at the point it is rendered. Curated actions
+ * carry a stable key so the current request locale wins; rows written before
+ * labelKey existed retain their stored label as a safe legacy fallback.
+ */
+export function quickActionLabel(action: QuickAction, t: QuickActionTranslator): string {
+  const curated = CURATED_BY_ID.get(action.id)
+  const labelKey = curated?.labelKey
+  if (labelKey) {
+    const messageKey = `quickActions.labels.${labelKey}`
+    try {
+      const translated = t(messageKey)
+      // Some next-intl configurations return the key instead of throwing for
+      // a missing message; retain a label written by an older layout then too.
+      return translated === messageKey ? action.label ?? '' : translated
+    } catch {
+      // A deployment with an older catalogue can still render a legacy label.
+      return action.label ?? ''
+    }
+  }
+  return action.label ?? ''
+}
+
+/** Strip locale-dependent labels from product-owned actions before persistence. */
+export function normalizeQuickAction(action: QuickAction): QuickAction {
+  const curated = CURATED_BY_ID.get(action.id)
+  if (!curated) {
+    return {
+      ...action,
+      label: action.label?.trim() || undefined,
+      labelKey: undefined,
+    }
+  }
+  return {
+    id: curated.id,
+    labelKey: curated.labelKey,
+    href: action.href.trim() || curated.href,
+    iconKey: action.iconKey || curated.iconKey,
+    tone: action.tone || curated.tone,
+  }
+}
+
+export function normalizeQuickActions(actions: readonly QuickAction[]): QuickAction[] {
+  return actions.map(normalizeQuickAction)
+}
 
 export function hiddenCuratedQuickActionIds(
   featureOn: (key: string) => boolean,

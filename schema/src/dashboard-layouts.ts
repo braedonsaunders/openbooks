@@ -10,7 +10,10 @@ import { auditColumns, id, orgRef } from "./helpers";
 
 export type DashboardQuickAction = {
   id: string;
-  label: string;
+  /** User-authored label for custom actions and legacy curated rows. */
+  label?: string;
+  /** Product-owned label key; resolve through dashboard.quickActions.labels. */
+  labelKey?: string;
   href: string;
   iconKey: string;
   tone: string;

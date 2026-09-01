@@ -34,6 +34,7 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
   const money = (value: string | number) => moneyCompact(value)
   const money0 = (value: string | number) => formatMoney(value, { maximumFractionDigits: 0 })
   const t = useTranslations('expenses.dashboard')
+  const tc = useTranslations('common')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const topCats = data.categories.slice(0, 8)
   const drillRow = 'cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50'
@@ -132,7 +133,7 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
                         {q.documentNumber} · {q.date}
                       </span>
                     </span>
-                    <Badge variant={STATUS_VARIANT[q.status] ?? 'secondary'}>{q.status.replace('_', ' ')}</Badge>
+                    <Badge variant={STATUS_VARIANT[q.status] ?? 'secondary'}>{statusLabel(q.status, tc)}</Badge>
                     <span className="shrink-0 font-semibold tabular-nums text-slate-900 dark:text-slate-100">{money0(q.total)}</span>
                   </Link>
                 </li>
@@ -207,4 +208,15 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
       <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
     </div>
   )
+}
+
+const STATUS_LABEL_KEYS: Record<string, 'status.approved' | 'status.pendingApproval' | 'status.draft'> = {
+  approved: 'status.approved',
+  pending_approval: 'status.pendingApproval',
+  draft: 'status.draft',
+}
+
+function statusLabel(status: string, t: (key: string) => string): string {
+  const key = STATUS_LABEL_KEYS[status]
+  return key ? t(key) : t('labels.status')
 }

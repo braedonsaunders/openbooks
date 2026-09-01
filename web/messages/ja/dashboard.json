@@ -90,6 +90,14 @@
     "customize": "カスタマイズ",
     "empty": "クイックアクションはまだありません",
     "addFirst": "最初のアクションを追加",
+    "labels": {
+      "newJournalEntry": "新規仕訳",
+      "newBill": "新規仕入請求書",
+      "newInvoice": "新規請求書",
+      "newPayment": "新規支払い",
+      "newExpense": "新規経費",
+      "runReport": "レポートを実行"
+    },
     "editor": {
       "title": "クイックアクションをカスタマイズ",
       "description": "ショートカットタイルを追加、並べ替え、削除します。",
