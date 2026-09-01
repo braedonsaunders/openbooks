@@ -106,6 +106,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     throw e
   }
 
+  if (body.name !== undefined && typeof body.name !== 'string') return bad('Dashboard name must be a string')
   const name = body.name !== undefined ? body.name.trim() : undefined
   if (name !== undefined && name === '') return bad('Dashboard name cannot be empty')
 
