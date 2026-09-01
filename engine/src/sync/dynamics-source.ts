@@ -265,8 +265,7 @@ export class DynamicsSource implements MigrationSource {
     // Payments (customer + vendor) — one journal-line entity each; the bank
     // account is the payment journal's balancing account.
     for (const [path, entity] of [["customerPayments", "customerPayment"], ["vendorPayments", "vendorPayment"]] as const) {
-      let rows: BCDoc[] = [];
-      try { rows = await this.client.list<BCDoc>(path, filter); } catch { rows = []; }
+      const rows = await this.client.list<BCDoc>(path, filter);
       for (const p of rows) {
         track(p.lastModifiedDateTime);
         const built = buildNativeFromBC(ctx, entity, p, opts);
