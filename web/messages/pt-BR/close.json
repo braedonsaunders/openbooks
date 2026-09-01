@@ -196,7 +196,7 @@
   },
   "lockStates": {
     "open": "Aberto",
-    "soft_closed": "Fechado parcialmente",
+    "soft_closed": "Fechamento flexível",
     "closed": "Fechado"
   },
   "publish": {
@@ -475,7 +475,7 @@
     },
     "states": {
       "open": "Aberto",
-      "soft_closed": "Fechado parcialmente",
+      "soft_closed": "Fechamento flexível",
       "partial": "Parcialmente fechado",
       "closed": "Fechado"
     },
