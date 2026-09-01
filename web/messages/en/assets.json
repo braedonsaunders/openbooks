@@ -17,6 +17,11 @@
     "date": "Date",
     "action": "Apply",
     "working": "Applying…",
+    "kinds": {
+      "revalued": "Revalued",
+      "impaired": "Impaired",
+      "unknown": "Remeasurement"
+    },
     "done": "{kind} — {delta}"
   },
   "tabs": { "register": "Register", "taxDepreciation": "Tax depreciation" },

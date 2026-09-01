@@ -17,8 +17,14 @@
     "date": "Data",
     "action": "Aplicar",
     "working": "Aplicando…",
+    "kinds": {
+      "revalued": "Reavaliado",
+      "impaired": "Desvalorizado",
+      "unknown": "Reavaliação"
+    },
     "done": "{kind} — {delta}"
   },
+  "tabs": { "register": "Registro", "taxDepreciation": "Depreciação fiscal" },
   "taxPools": {
     "configure": "Configure",
     "regime": "Tax regime",
@@ -154,6 +160,11 @@
     "deleteFailed": "Não foi possível excluir o equipamento",
     "activate": "Ativar",
     "deactivate": "Desativar",
+    "capitalize": "Capitalizar como ativo imobilizado",
+    "capitalizeTitle": "Capitalizar como ativo imobilizado",
+    "capitalizeMessage": "Crie um ativo imobilizado a partir deste equipamento (custo, datas e série), vincule-o e inicie a depreciação. Você definirá a categoria de depreciação no novo ativo.",
+    "capitalized": "Ativo imobilizado criado e vinculado",
+    "capitalizeFailed": "Não foi possível capitalizar este equipamento",
     "fixedAssets": "Ativos imobilizados",
     "taxDepreciation": "Depreciação fiscal",
     "documentation": "Documentação",

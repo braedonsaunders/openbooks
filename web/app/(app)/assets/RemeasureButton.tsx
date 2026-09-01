@@ -8,6 +8,20 @@ import { Scale } from 'lucide-react'
 import { Button, Input, Label, Popover } from '@openbooks/ui'
 import { useBusinessToday } from '../../../components/business-date-provider'
 
+type RemeasurementKindKey = 'revalued' | 'impaired' | 'unknown'
+
+/** Keep API result codes behind the translation catalog; unknown codes must never render raw. */
+function remeasurementKindKey(kind: unknown): RemeasurementKindKey {
+  switch (kind) {
+    case 'revalued':
+      return 'revalued'
+    case 'impaired':
+      return 'impaired'
+    default:
+      return 'unknown'
+  }
+}
+
 /** Revalue / impair an asset to a new carrying value (posts the adjustment and
  *  rebuilds the remaining schedule). Shown in the asset drawer for in-service assets. */
 export function RemeasureButton({ assetId }: { assetId: string }) {
@@ -33,7 +47,8 @@ export function RemeasureButton({ assetId }: { assetId: string }) {
       })
       const d = (await res.json().catch(() => ({}))) as { error?: string; kind?: string; delta?: string }
       if (!res.ok) throw new Error(d.error)
-      toast.success(t('remeasure.done', { kind: d.kind ?? '', delta: d.delta ?? '0' }))
+      const kind = t(`remeasure.kinds.${remeasurementKindKey(d.kind)}`)
+      toast.success(t('remeasure.done', { kind, delta: d.delta ?? '0' }))
       setOpen(false)
       router.refresh()
     } catch (e) {

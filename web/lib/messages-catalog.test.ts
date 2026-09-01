@@ -90,6 +90,12 @@ const catalogs = locales.flatMap((locale) =>
     .map((file) => ({ locale, file, path: join(MESSAGES, locale, file) })),
 )
 
+const ASSET_REMEASUREMENT_KIND_KEYS = ['revalued', 'impaired', 'unknown'] as const
+const REMEASURE_BUTTON_SOURCE = readFileSync(
+  new URL('../app/(app)/assets/RemeasureButton.tsx', import.meta.url),
+  'utf8',
+)
+
 /** Every key in a catalog, as the dotted path a caller would pass to `t()`. */
 function walk(
   node: unknown,
@@ -144,6 +150,43 @@ test('no message value is an empty string', () => {
     })
   }
   assert.deepEqual(blanks, [], `these keys resolve to nothing:\n${blanks.join('\n')}`)
+})
+
+test('every assets catalog matches English and has localized remeasurement result labels', () => {
+  const source = flattenCatalog('en')
+  const sourceKeys = [...source.keys()].filter((key) => key.startsWith('assets.')).sort()
+
+  for (const locale of locales) {
+    const catalog = flattenCatalog(locale)
+    const assetKeys = [...catalog.keys()].filter((key) => key.startsWith('assets.')).sort()
+    assert.deepEqual(
+      assetKeys,
+      sourceKeys,
+      `${locale}/assets.json must contain exactly the English assets key structure`,
+    )
+
+    for (const kind of ASSET_REMEASUREMENT_KIND_KEYS) {
+      const key = `assets.remeasure.kinds.${kind}`
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale}/assets.json is missing ${key}`)
+      assert.notEqual(value, kind, `${locale}/assets.json must localize ${key}`)
+      if (locale !== 'en') {
+        assert.notEqual(value, source.get(key), `${locale}/assets.json must not copy English ${key}`)
+      }
+    }
+  }
+})
+
+test('remeasurement result kinds are allow-listed before translation', () => {
+  assert.match(REMEASURE_BUTTON_SOURCE, /switch \(kind\)/)
+  assert.match(REMEASURE_BUTTON_SOURCE, /case 'revalued':\s+return 'revalued'/)
+  assert.match(REMEASURE_BUTTON_SOURCE, /case 'impaired':\s+return 'impaired'/)
+  assert.match(REMEASURE_BUTTON_SOURCE, /default:\s+return 'unknown'/)
+  assert.match(
+    REMEASURE_BUTTON_SOURCE,
+    /t\(`remeasure\.kinds\.\$\{remeasurementKindKey\(d\.kind\)\}`\)/,
+  )
+  assert.doesNotMatch(REMEASURE_BUTTON_SOURCE, /kind: d\.kind/)
 })
 
 test('the generated fallback manifest exactly identifies untranslated property-management copy', () => {

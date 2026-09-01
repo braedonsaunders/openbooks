@@ -17,8 +17,14 @@
     "date": "Fecha",
     "action": "Aplicar",
     "working": "Aplicando…",
+    "kinds": {
+      "revalued": "Revaluado",
+      "impaired": "Deteriorado",
+      "unknown": "Revaluación"
+    },
     "done": "{kind} — {delta}"
   },
+  "tabs": { "register": "Registro", "taxDepreciation": "Depreciación fiscal" },
   "taxPools": {
     "configure": "Configure",
     "regime": "Tax regime",
@@ -154,6 +160,11 @@
     "deleteFailed": "No se pudo eliminar el equipo",
     "activate": "Activar",
     "deactivate": "Desactivar",
+    "capitalize": "Capitalizar como activo fijo",
+    "capitalizeTitle": "Capitalizar como activo fijo",
+    "capitalizeMessage": "Cree un activo fijo a partir de este equipo (costo, fechas y serie), vincúlelo y comience la depreciación. Definirá la categoría de depreciación en el nuevo activo.",
+    "capitalized": "Activo fijo creado y vinculado",
+    "capitalizeFailed": "No se pudo capitalizar este equipo",
     "fixedAssets": "Activos fijos",
     "taxDepreciation": "Depreciación fiscal",
     "documentation": "Documentación",

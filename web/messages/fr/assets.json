@@ -17,8 +17,14 @@
     "date": "Date",
     "action": "Appliquer",
     "working": "Application…",
+    "kinds": {
+      "revalued": "Réévalué",
+      "impaired": "Déprécié",
+      "unknown": "Réévaluation"
+    },
     "done": "{kind} — {delta}"
   },
+  "tabs": { "register": "Registre", "taxDepreciation": "Amortissement fiscal" },
   "taxPools": {
     "configure": "Configure",
     "regime": "Tax regime",
@@ -154,6 +160,11 @@
     "deleteFailed": "Impossible de supprimer l’équipement",
     "activate": "Activer",
     "deactivate": "Désactiver",
+    "capitalize": "Immobiliser comme actif",
+    "capitalizeTitle": "Immobiliser comme actif",
+    "capitalizeMessage": "Créer une immobilisation à partir de cet équipement (coût, dates et numéro de série), la lier et commencer l’amortissement. Vous définirez la catégorie d’amortissement sur la nouvelle immobilisation.",
+    "capitalized": "Immobilisation créée et liée",
+    "capitalizeFailed": "Impossible d’immobiliser cet équipement",
     "fixedAssets": "Immobilisations",
     "taxDepreciation": "Amortissement fiscal",
     "documentation": "Documentation",

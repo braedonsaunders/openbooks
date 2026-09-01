@@ -17,8 +17,14 @@
     "date": "日付",
     "action": "適用",
     "working": "適用中…",
+    "kinds": {
+      "revalued": "再評価済み",
+      "impaired": "減損",
+      "unknown": "再測定"
+    },
     "done": "{kind} — {delta}"
   },
+  "tabs": { "register": "台帳", "taxDepreciation": "税務減価償却" },
   "taxPools": {
     "configure": "Configure",
     "regime": "Tax regime",
@@ -154,6 +160,11 @@
     "deleteFailed": "設備を削除できませんでした",
     "activate": "有効化",
     "deactivate": "無効化",
+    "capitalize": "固定資産として計上",
+    "capitalizeTitle": "固定資産として計上",
+    "capitalizeMessage": "この設備から取得原価、日付、シリアル番号を引き継いで固定資産を作成・リンクし、減価償却を開始します。新しい資産で減価償却カテゴリを設定します。",
+    "capitalized": "固定資産を作成してリンクしました",
+    "capitalizeFailed": "この設備を固定資産として計上できませんでした",
     "fixedAssets": "固定資産",
     "taxDepreciation": "税務減価償却",
     "documentation": "ドキュメント",
