@@ -10,6 +10,7 @@ import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
 import { documentRevisionSql } from '../../../../../lib/documents'
+import { isDocumentRevisionToken } from '../../../../../lib/api/registry-data'
 
 export const runtime = 'nodejs'
 
@@ -42,6 +43,10 @@ type Body = {
 function validateBody(body: Body, creating: boolean): string | null {
   if (body.bankName !== undefined && !body.bankName?.trim()) return 'bankName required'
   if (creating && !body.bankName?.trim()) return 'bankName required'
+  if (body.accountNumber !== undefined || creating) {
+    const accountNumber = typeof body.accountNumber === 'string' ? body.accountNumber.trim() : ''
+    if (accountNumber.length < 4) return 'accountNumber required'
+  }
   if (body.country && !normalizeCountryCode(body.country)) return 'country must be a valid ISO country code'
   if (body.currency && !/^[A-Za-z]{3}$/.test(body.currency.trim())) return 'currency must be a 3-letter code'
   if (body.routing !== undefined) {
@@ -52,6 +57,11 @@ function validateBody(body: Body, creating: boolean): string | null {
     }
   }
   return null
+}
+
+/** Require the opaque six-digit PostgreSQL revision token on every mutation. */
+function canonicalRevision(value: unknown): string | null {
+  return isDocumentRevisionToken(value) ? value : null
 }
 
 /** Party record boundary shared by every verb here (null-subsidiary parties are org-wide). */
@@ -87,10 +97,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   const validationError = validateBody(body, true)
   if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
-  const accountNumber = (body.accountNumber ?? '').trim()
-  if (!accountNumber || accountNumber.length < 4) {
-    return NextResponse.json({ error: 'accountNumber required' }, { status: 400 })
-  }
+  const accountNumber = body.accountNumber!.trim()
   const country = normalizeCountryCode(body.country) ?? null
 
   const inserted = (await db.execute<{ id: string }>(sql`
@@ -160,7 +167,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (reason.length < 5 || reason.length > 500) {
     return NextResponse.json({ error: 'a change reason between 5 and 500 characters is required' }, { status: 422 })
   }
-  if (!body.expectedUpdatedAt || body.expectedUpdatedAt !== existing.rows[0]!.updatedAt) {
+  const expectedUpdatedAt = canonicalRevision(body.expectedUpdatedAt)
+  if (!expectedUpdatedAt || expectedUpdatedAt !== existing.rows[0]!.updatedAt) {
     return NextResponse.json(
       { error: 'these bank details changed after you opened them; reload and review the latest revision' },
       { status: 409 },
@@ -210,7 +218,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       where id = ${accountId}
         and party_id = ${partyId}
         and org_id = ${user.orgId}
-        and updated_at = ${existing.rows[0]!.updatedAt}::timestamptz
+        and updated_at = ${expectedUpdatedAt}::timestamptz
         and retired_at is null
       returning id
     `))
@@ -295,6 +303,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!body.expectedUpdatedAt) {
     return NextResponse.json({ error: 'the bank-detail revision is required; reload and try again' }, { status: 409 })
   }
+  const expectedUpdatedAt = canonicalRevision(body.expectedUpdatedAt)
+  if (!expectedUpdatedAt) {
+    return NextResponse.json(
+      { error: 'these bank details changed or were already retired; reload and review the latest revision' },
+      { status: 409 },
+    )
+  }
   const dependencies = (await db.execute<{ in_flight_payment: boolean; live_mandate: boolean }>(sql`
     select
       exists (
@@ -333,7 +348,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
              updated_by = ${user.id}
        where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
          and retired_at is null
-         and updated_at = ${body.expectedUpdatedAt}::timestamptz
+         and updated_at = ${expectedUpdatedAt}::timestamptz
        returning id
     `))
     if (!updated.rows[0]) {
