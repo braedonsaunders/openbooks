@@ -25,7 +25,7 @@ function namedStep(name) {
 test('test workflow propagates tee producer failures and retains its failure guards', (t) => {
   const pipelines = [
     { stepName: 'Integration canary', logFile: 'canary.tap' },
-    { stepName: 'Test suite with coverage', logFile: 'coverage.txt' },
+    { stepName: 'Full test suite (with database)', logFile: 'coverage.txt' },
   ]
   const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-test-workflow-'))
   t.after(() => rmSync(tempDirectory, { recursive: true, force: true }))
@@ -86,12 +86,10 @@ test('test workflow propagates tee producer failures and retains its failure gua
 
   const bypass = 'OPENBOOKS_TRUSTED_TEST_BYPASS: "1"'
   const restoreDrill = namedStep('Export, destroy, restore, and verify an isolated backup')
-  const coverage = namedStep('Test suite with coverage')
   assert.equal(
     occurrenceCount(workflow, bypass),
-    2,
-    'trusted test bypass must be limited to the two steps that import its guard',
+    1,
+    'trusted test bypass must be limited to the restore drill step that imports its guard',
   )
   assert.equal(occurrenceCount(restoreDrill, bypass), 1)
-  assert.equal(occurrenceCount(coverage, bypass), 1)
 })
