@@ -155,7 +155,7 @@ const record = {
     : null,
 };
 
-const existing = history.findIndex((entry) => entry.gitSha && entry.gitSha === sha);
+const existing = history.findIndex((entry) => entry.gitSha === sha);
 if (existing >= 0) history[existing] = record;
 else history.push(record);
 
