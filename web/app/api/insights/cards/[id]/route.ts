@@ -97,6 +97,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     )
   }
 
+  if (body.name !== undefined && typeof body.name !== 'string') return bad('Card name must be a string')
   const name = body.name !== undefined ? body.name.trim() : undefined
   if (name !== undefined && name === '') return bad('Card name cannot be empty')
 

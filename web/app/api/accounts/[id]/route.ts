@@ -93,6 +93,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
   }
 
+  if (body.name !== undefined && typeof body.name !== 'string') return bad('name_required', 'name')
   const name = body.name === undefined ? undefined : body.name.trim()
   if (name !== undefined && !name) return bad('name_required', 'name')
   if (body.type !== undefined && !ACCOUNT_TYPES.includes(body.type as (typeof ACCOUNT_TYPES)[number])) {

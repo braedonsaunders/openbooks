@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     body.currency !== undefined
       ? String(body.currency).trim().toUpperCase()
       : (org.rows[0]?.base_currency ?? "");
-  if (!body.name?.trim() || !/^[A-Z]{3}$/.test(currency))
+  if (typeof body.name !== "string" || !body.name.trim() || !/^[A-Z]{3}$/.test(currency))
     return NextResponse.json({ errorCode: "save" }, { status: 422 });
   const name = body.name.trim();
   const code = `LAB-${Date.now().toString(36).toUpperCase()}`;
