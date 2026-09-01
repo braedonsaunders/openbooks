@@ -22,8 +22,8 @@
   "taxPools": {
     "configure": "Configure",
     "regime": "Tax regime",
-    "title": "税務減価償却 (CCA)",
-    "description": "税務年度のクラスプールごとに資本的支出控除を計算します。",
+    "title": "税務減価償却 — クラスプール",
+    "description": "クラス別に固定資産の年間税務減価償却を計算します。米国 MACRS、カナダ CCA、英国の償却控除、および国別に設定可能な税制に対応しています。",
     "taxYear": "税務年度",
     "run": "実行",
     "running": "実行中…",
@@ -32,11 +32,11 @@
     "totals": "合計",
     "columns": {
       "class": "クラス",
-      "opening": "期首UCC",
+      "opening": "期首残高",
       "additions": "追加",
       "dispositions": "除却",
-      "allowance": "CCA",
-      "closing": "期末UCC",
+      "allowance": "控除額",
+      "closing": "期末残高",
       "recapture": "戻入",
       "terminalLoss": "終了損"
     }
@@ -135,7 +135,7 @@
     "selectCategory": "カテゴリを選択",
     "saveFailed": "保存に失敗しました",
     "runFailed": "実行に失敗しました",
-    "deleteBlocked": "この資産には記帳済みの減価償却があるため、削除できません。",
+    "deleteBlocked": "この資産には減価償却の証憑があるため、削除できません。",
     "deleteTitle": "この資産を削除しますか？",
     "deleteMessage": "これにより下書きの資産とそのスケジュールが完全に削除されます。この操作は元に戻せません。",
     "deleted": "資産を削除しました",

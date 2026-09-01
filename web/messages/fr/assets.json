@@ -22,8 +22,8 @@
   "taxPools": {
     "configure": "Configure",
     "regime": "Tax regime",
-    "title": "Amortissement fiscal (DPA)",
-    "description": "Calculez la déduction pour amortissement par catégorie pour une année d’imposition.",
+    "title": "Amortissement fiscal — catégories d’immobilisations",
+    "description": "Calculez l’amortissement fiscal annuel des immobilisations par catégorie, notamment le MACRS américain, la DPA canadienne, les déductions pour amortissement britanniques et les régimes fiscaux configurables par pays.",
     "taxYear": "Année d’imposition",
     "run": "Exécuter",
     "running": "Exécution…",
@@ -32,11 +32,11 @@
     "totals": "Total",
     "columns": {
       "class": "Catégorie",
-      "opening": "FNACC d’ouverture",
+      "opening": "Solde d’ouverture",
       "additions": "Acquisitions",
       "dispositions": "Dispositions",
-      "allowance": "DPA",
-      "closing": "FNACC de clôture",
+      "allowance": "Déduction",
+      "closing": "Solde de clôture",
       "recapture": "Récupération",
       "terminalLoss": "Perte finale"
     }
@@ -135,7 +135,7 @@
     "selectCategory": "Sélectionner une catégorie",
     "saveFailed": "Échec de l'enregistrement",
     "runFailed": "Échec de l'exécution",
-    "deleteBlocked": "Cet actif a un amortissement comptabilisé et ne peut pas être supprimé.",
+    "deleteBlocked": "Cet actif comporte des justificatifs d’amortissement et ne peut pas être supprimé.",
     "deleteTitle": "Supprimer cet actif ?",
     "deleteMessage": "Cela supprime définitivement l'actif brouillon et son plan. Cette action est irréversible.",
     "deleted": "Actif supprimé",

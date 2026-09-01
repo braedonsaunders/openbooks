@@ -22,8 +22,8 @@
   "taxPools": {
     "configure": "Configure",
     "regime": "Tax regime",
-    "title": "Steuerliche Abschreibung (CCA)",
-    "description": "Berechnen Sie die Kapitalkostenzulage nach Klassenpool für ein Steuerjahr.",
+    "title": "Steuerliche Abschreibung — Klassenpools",
+    "description": "Berechnen Sie die jährliche steuerliche Abschreibung von Anlagegütern nach Klassen, einschließlich des US-amerikanischen MACRS, der kanadischen CCA, britischer Abschreibungsabzüge und konfigurierbarer länderspezifischer Steuerregime.",
     "taxYear": "Steuerjahr",
     "run": "Ausführen",
     "running": "Wird ausgeführt…",
@@ -32,11 +32,11 @@
     "totals": "Gesamt",
     "columns": {
       "class": "Klasse",
-      "opening": "Anfangs-UCC",
+      "opening": "Anfangssaldo",
       "additions": "Zugänge",
       "dispositions": "Abgänge",
-      "allowance": "CCA",
-      "closing": "End-UCC",
+      "allowance": "Abzug",
+      "closing": "Endsaldo",
       "recapture": "Nachversteuerung",
       "terminalLoss": "Endgültiger Verlust"
     }
@@ -135,7 +135,7 @@
     "selectCategory": "Kategorie auswählen",
     "saveFailed": "Speichern fehlgeschlagen",
     "runFailed": "Ausführung fehlgeschlagen",
-    "deleteBlocked": "Diese Anlage hat gebuchte Abschreibungen und kann nicht gelöscht werden.",
+    "deleteBlocked": "Diese Anlage weist Abschreibungsbelege auf und kann nicht gelöscht werden.",
     "deleteTitle": "Diese Anlage löschen?",
     "deleteMessage": "Dadurch werden der Anlagenentwurf und sein Plan endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.",
     "deleted": "Anlage gelöscht",

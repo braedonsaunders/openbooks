@@ -22,8 +22,8 @@
   "taxPools": {
     "configure": "Configure",
     "regime": "Tax regime",
-    "title": "Depreciación fiscal (CCA)",
-    "description": "Calcule la deducción por costo de capital por grupo de clase para un año fiscal.",
+    "title": "Depreciación fiscal — grupos por clase",
+    "description": "Calcula la depreciación fiscal anual de los activos fijos por clase, incluidos el MACRS estadounidense, la CCA canadiense, las deducciones por amortización del Reino Unido y los regímenes fiscales configurables por país.",
     "taxYear": "Año fiscal",
     "run": "Ejecutar",
     "running": "Ejecutando…",
@@ -32,11 +32,11 @@
     "totals": "Total",
     "columns": {
       "class": "Clase",
-      "opening": "UCC inicial",
+      "opening": "Saldo inicial",
       "additions": "Adiciones",
       "dispositions": "Disposiciones",
-      "allowance": "CCA",
-      "closing": "UCC final",
+      "allowance": "Deducción",
+      "closing": "Saldo final",
       "recapture": "Recuperación",
       "terminalLoss": "Pérdida final"
     }
@@ -135,7 +135,7 @@
     "selectCategory": "Seleccionar categoría",
     "saveFailed": "Error al guardar",
     "runFailed": "Error al ejecutar",
-    "deleteBlocked": "Este activo tiene depreciación contabilizada y no se puede eliminar.",
+    "deleteBlocked": "Este activo tiene evidencia de depreciación y no se puede eliminar.",
     "deleteTitle": "¿Eliminar este activo?",
     "deleteMessage": "Esto elimina permanentemente el activo borrador y su cronograma. Esta acción no se puede deshacer.",
     "deleted": "Activo eliminado",
