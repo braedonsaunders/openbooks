@@ -1,10 +1,15 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@openbooks/engine/src/db.ts";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { guardPermission } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
+
+const nameBodySchema = z.looseObject({
+  name: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -13,7 +18,7 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "projects")))
     return NextResponse.json({ errorCode: "notFound" }, { status: 404 });
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, nameBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { name?: string; currency?: string };
   // Rate-book currency is Multi-currency configuration. Turning that

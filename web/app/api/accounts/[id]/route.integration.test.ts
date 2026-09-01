@@ -502,3 +502,27 @@ test(
     }
   },
 );
+
+test(
+  "account PATCH rejects non-string names at the JSON boundary",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { adminId } = await seedFlowActors(org.orgId);
+      routeState.authz = {
+        user: { orgId: org.orgId, id: adminId },
+        permissions: new Set(),
+        allowedSubsidiaryIds: null,
+      };
+      const accountId = await seedAccount(org.orgId, "9401", false);
+      const response = await PATCH(patchRequest({ name: 0 }), {
+        params: Promise.resolve({ id: accountId }),
+      });
+      assert.equal(response.status, 400);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

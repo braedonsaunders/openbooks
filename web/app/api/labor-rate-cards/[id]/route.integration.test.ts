@@ -297,3 +297,35 @@ test(
     }
   },
 );
+
+test(
+  "PUT rejects non-string rate-card names at the JSON boundary",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const fixture = await withBypass(seed);
+    try {
+      const response = await withOrgContext(fixture.orgId, () =>
+        put(fixture, { ...putBody(fixture), name: 0 }),
+      );
+      assert.equal(response.status, 400);
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);
+
+test(
+  "PUT rejects non-string rate-card codes at the JSON boundary",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const fixture = await withBypass(seed);
+    try {
+      const response = await withOrgContext(fixture.orgId, () =>
+        put(fixture, { ...putBody(fixture), code: 0 }),
+      );
+      assert.equal(response.status, 400);
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);
