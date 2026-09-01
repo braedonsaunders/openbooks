@@ -74,7 +74,7 @@ test(
              party_id, document_date, posting_date, currency, fx_rate,
              subtotal, tax_total, total, created_by)
           values
-            (${billId}, ${org.orgId}, 'vendor_bill', 'approved', ${number},
+            (${billId}, ${org.orgId}, 'vendor_bill', 'draft', ${number},
              ${org.subsidiaryId}, ${org.vendorId}, ${org.date}, ${org.date},
              'CAD', '1', '100', '0', '100', ${actorId})
         `);
@@ -85,6 +85,11 @@ test(
           values
             (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', '100',
              '100', '0', '0', ${actorId})
+        `);
+        await db.execute(sql`
+          update documents
+             set status = 'approved', updated_at = now(), updated_by = ${actorId}
+           where id = ${billId} and org_id = ${org.orgId}
         `);
         await postDocument(billId, {
           control: {
@@ -187,7 +192,7 @@ test(
            where id = ${identity.first_item_id} and org_id = ${org.orgId}
         `),
         (error: unknown) =>
-          errorChainMatches(error, /payment_run_items_instruction_identity/),
+          errorChainMatches(error, /payment_run_items_instruction_run/),
       );
 
       // A legacy cross-run link must stop the rollout before its instruction
@@ -198,7 +203,7 @@ test(
           await tx.execute(
             sql.raw(`
             alter table public.payment_run_items
-            drop constraint payment_run_items_instruction_identity
+            drop constraint payment_run_items_instruction_run
           `),
           );
           await tx.execute(sql`
@@ -216,7 +221,7 @@ test(
         (error: unknown) =>
           errorChainMatches(
             error,
-            /cannot enforce payment-run instruction identity/,
+            /cannot enforce live payment-run selection: org .* payment-run item .* references an instruction of another payment run/,
           ),
       );
 
@@ -227,7 +232,7 @@ test(
         await tx.execute(
           sql.raw(`
           alter table public.payment_run_items
-          drop constraint payment_run_items_instruction_identity
+          drop constraint payment_run_items_instruction_run
         `),
         );
         await tx.execute(sql`
@@ -261,7 +266,7 @@ test(
         await tx.execute(
           sql.raw(`
           alter table public.payment_run_items
-          add constraint payment_run_items_instruction_identity
+          add constraint payment_run_items_instruction_run
           foreign key (org_id, payment_run_id, payment_instruction_id)
           references public.payment_instructions (org_id, payment_run_id, id)
           deferrable
