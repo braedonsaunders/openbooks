@@ -3,6 +3,7 @@ import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { profitAndLoss, balanceSheet, type StatementRow } from "../reports";
+import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalSum, type ExactDecimal } from '../statement-format'
 
@@ -247,13 +248,33 @@ function monthsBetween(from: string, to: string): number {
 
 async function depreciationAmortization(orgId: string, from: string, to: string): Promise<number> {
   const r = ((await db.execute(sql`
+    with da_accounts as (
+      -- These account references are the authoritative D&A classification. They
+      -- remain correct when a tenant names its chart in any language.
+      select c.depreciation_expense_account_id as account_id
+        from asset_categories c
+       where c.org_id = ${orgId}
+      union
+      select coalesce(a.depreciation_expense_account_id, c.depreciation_expense_account_id) as account_id
+        from fixed_assets a
+        join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
+       where a.org_id = ${orgId}
+      union
+      select l.amortization_expense_account_id as account_id
+        from lease_agreements l
+       where l.org_id = ${orgId}
+    )
     select coalesce(sum(l.amount), 0) as s
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId}
        and a.type in ('expense', 'expense_other', 'expense_deferred')
-       and (lower(a.name) like '%deprec%' or lower(a.name) like '%amort%')
+       and e.status in ('posted', 'reversed')
+       and e.book_id = ${statementBookExpr(orgId)}
+       and (e.origin = 'depreciation' or exists (
+         select 1 from da_accounts d where d.account_id = a.id
+       ))
        and e.posting_date >= ${from} and e.posting_date <= ${to}
   `)));
   // expense accounts are debit-positive → already the D&A magnitude
