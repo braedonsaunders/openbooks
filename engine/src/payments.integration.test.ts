@@ -62,14 +62,16 @@ function isCrossRunInstructionConflict(error: unknown): boolean {
 
 /** Poll until some session is blocked by the given backend, proving the two
  *  writers really contend instead of merely running near each other. */
-async function waitForBlockedBy(blockerPid: number, minimum = 1): Promise<void> {
+async function waitForBlockedBy(blockerPid: number, minimum = 1): Promise<number> {
   for (let attempt = 0; attempt < 200; attempt += 1) {
-    const blocked = await withBypass(() => db.execute<{ count: number }>(sql`
-      select count(*)::int as count
+    const blocked = await withBypass(() => db.execute<{ pid: number; count: number }>(sql`
+      select activity.pid::int as pid, count(*) over ()::int as count
         from pg_stat_activity activity
        where ${blockerPid} = any(pg_blocking_pids(activity.pid))
+       order by activity.pid
+       limit 1
     `));
-    if ((blocked.rows[0]?.count ?? 0) >= minimum) return;
+    if ((blocked.rows[0]?.count ?? 0) >= minimum) return blocked.rows[0]!.pid;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`timed out waiting for a query blocked by backend ${blockerPid}`);
@@ -1447,7 +1449,7 @@ test("a terminal transition fences a stale payment-run worker before downstream 
     // underneath still judges that same promise, so the test keeps proving
     // the stale worker dies with exactly this error.
     staleWorker.catch(() => {});
-    await waitForBlockedBy(blockerPid);
+    const workerPid = await waitForBlockedBy(blockerPid);
 
     // The bank return for the first instruction queues behind the parked
     // worker; releasing the instruction lets the worker commit its send,
@@ -1461,6 +1463,11 @@ test("a terminal transition fences a stale payment-run worker before downstream 
       returnCode: "R01",
       returnReason: "posting-claim concurrency regression",
     }));
+    // Prove the terminal writer has actually queued behind the worker's run
+    // lock before releasing the child-row blocker. Without this causal wait,
+    // the worker can legitimately finish first and the assertion below would
+    // race a settlement that had not yet reached its lock boundary.
+    await waitForBlockedBy(workerPid);
     secondInstructionReleased();
     await blocker;
     await settlement;
