@@ -91,6 +91,95 @@ const catalogs = locales.flatMap((locale) =>
 )
 
 const ASSET_REMEASUREMENT_KIND_KEYS = ['revalued', 'impaired', 'unknown'] as const
+const ASSET_TAX_LABEL_KEYS = [
+  'taxPools.configure',
+  'taxPools.regime',
+  'drawer.taxDepreciation',
+  'drawer.taxCategoryDefault',
+  'drawer.notAssigned',
+  'drawer.taxClass',
+  'drawer.useCategoryDefault',
+  'drawer.businessUsePercent',
+  'drawer.section179',
+  'drawer.bonusPercent',
+] as const
+type AssetTaxLabelKey = (typeof ASSET_TAX_LABEL_KEYS)[number]
+
+/** Reviewed financial terminology for every supported translation locale. */
+const ASSET_TAX_LABEL_EXPECTATIONS: Record<string, Record<AssetTaxLabelKey, string>> = {
+  de: {
+    'taxPools.configure': 'Konfigurieren',
+    'taxPools.regime': 'Steuerregime',
+    'drawer.taxDepreciation': 'Steuerliche Abschreibung',
+    'drawer.taxCategoryDefault': 'Standardwert der Kategorie: {value}',
+    'drawer.notAssigned': 'Nicht zugeordnet',
+    'drawer.taxClass': 'Steuerklasse',
+    'drawer.useCategoryDefault': 'Standardwert der Kategorie verwenden',
+    'drawer.businessUsePercent': 'Betriebliche Nutzung (%)',
+    'drawer.section179': 'Wahlrecht nach § 179',
+    'drawer.bonusPercent': 'Sonderabschreibung (%)',
+  },
+  es: {
+    'taxPools.configure': 'Configurar',
+    'taxPools.regime': 'Régimen fiscal',
+    'drawer.taxDepreciation': 'Depreciación fiscal',
+    'drawer.taxCategoryDefault': 'Valor predeterminado de la categoría: {value}',
+    'drawer.notAssigned': 'Sin asignar',
+    'drawer.taxClass': 'Clase fiscal',
+    'drawer.useCategoryDefault': 'Usar el valor predeterminado de la categoría',
+    'drawer.businessUsePercent': 'Uso empresarial (%)',
+    'drawer.section179': 'Elección de la Sección 179',
+    'drawer.bonusPercent': 'Depreciación adicional (%)',
+  },
+  fr: {
+    'taxPools.configure': 'Configurer',
+    'taxPools.regime': 'Régime fiscal',
+    'drawer.taxDepreciation': 'Amortissement fiscal',
+    'drawer.taxCategoryDefault': 'Valeur par défaut de la catégorie : {value}',
+    'drawer.notAssigned': 'Non affecté',
+    'drawer.taxClass': 'Classe fiscale',
+    'drawer.useCategoryDefault': 'Utiliser la valeur par défaut de la catégorie',
+    'drawer.businessUsePercent': 'Usage professionnel (%)',
+    'drawer.section179': 'Option de la section 179',
+    'drawer.bonusPercent': 'Amortissement bonifié (%)',
+  },
+  ja: {
+    'taxPools.configure': '設定',
+    'taxPools.regime': '税制',
+    'drawer.taxDepreciation': '税務減価償却',
+    'drawer.taxCategoryDefault': 'カテゴリの既定値: {value}',
+    'drawer.notAssigned': '未割り当て',
+    'drawer.taxClass': '税務クラス',
+    'drawer.useCategoryDefault': 'カテゴリの既定値を使用',
+    'drawer.businessUsePercent': '事業使用率（%）',
+    'drawer.section179': 'セクション179の選択',
+    'drawer.bonusPercent': '特別償却（%）',
+  },
+  'pt-BR': {
+    'taxPools.configure': 'Configurar',
+    'taxPools.regime': 'Regime fiscal',
+    'drawer.taxDepreciation': 'Depreciação fiscal',
+    'drawer.taxCategoryDefault': 'Valor padrão da categoria: {value}',
+    'drawer.notAssigned': 'Não atribuído',
+    'drawer.taxClass': 'Classe fiscal',
+    'drawer.useCategoryDefault': 'Usar o valor padrão da categoria',
+    'drawer.businessUsePercent': 'Uso empresarial (%)',
+    'drawer.section179': 'Opção da Seção 179',
+    'drawer.bonusPercent': 'Depreciação adicional (%)',
+  },
+  zh: {
+    'taxPools.configure': '配置',
+    'taxPools.regime': '税制',
+    'drawer.taxDepreciation': '税务折旧',
+    'drawer.taxCategoryDefault': '类别默认值：{value}',
+    'drawer.notAssigned': '未分配',
+    'drawer.taxClass': '税类',
+    'drawer.useCategoryDefault': '使用类别默认值',
+    'drawer.businessUsePercent': '业务用途（%）',
+    'drawer.section179': '第179条选择',
+    'drawer.bonusPercent': '额外折旧（%）',
+  },
+}
 const REMEASURE_BUTTON_SOURCE = readFileSync(
   new URL('../app/(app)/assets/RemeasureButton.tsx', import.meta.url),
   'utf8',
@@ -187,6 +276,36 @@ test('remeasurement result kinds are allow-listed before translation', () => {
     /t\(`remeasure\.kinds\.\$\{remeasurementKindKey\(d\.kind\)\}`\)/,
   )
   assert.doesNotMatch(REMEASURE_BUTTON_SOURCE, /kind: d\.kind/)
+})
+
+test('fixed-asset tax labels are structurally complete and semantically localized', () => {
+  const source = flattenCatalog('en')
+  const sourceKeys = [...source.keys()].filter((key) => key.startsWith('assets.')).sort()
+
+  for (const locale of locales) {
+    const catalog = flattenCatalog(locale)
+    const assetKeys = [...catalog.keys()].filter((key) => key.startsWith('assets.')).sort()
+    assert.deepEqual(
+      assetKeys,
+      sourceKeys,
+      `${locale}/assets.json must contain exactly the English assets key structure`,
+    )
+
+    const expectations = locale === 'en' ? undefined : ASSET_TAX_LABEL_EXPECTATIONS[locale]
+    if (locale !== 'en') assert.ok(expectations, `${locale}/assets.json has no reviewed tax-label expectations`)
+
+    for (const key of ASSET_TAX_LABEL_KEYS) {
+      const fullKey = `assets.${key}`
+      const value = catalog.get(fullKey)
+      assert.ok(value && value.trim(), `${locale}/assets.json is missing ${fullKey}`)
+      if (locale === 'en') {
+        assert.equal(value, source.get(fullKey), `${fullKey} must match the English source`)
+      } else {
+        assert.equal(value, expectations?.[key], `${locale}/assets.json has an unreviewed ${fullKey}`)
+        assert.notEqual(value, source.get(fullKey), `${locale}/assets.json must localize ${fullKey}`)
+      }
+    }
+  }
 })
 
 test('the generated fallback manifest exactly identifies untranslated property-management copy', () => {
