@@ -183,10 +183,10 @@ export function JournalDrawer({
   const doc = journal.doc
   const isDraft = doc.status === 'draft'
   // Existing records default to read-only; newly created drafts can explicitly
-  // request edit mode. Draft and POSTED
-  // journals are both editable — saving a posted journal re-materializes its
-  // GL-Impact projection (the server blocks only GL changes into a closed
-  // period). voided journals are read-only. Save is EXPLICIT — no autosave.
+  // request edit mode. Only draft journals are editable. Once a journal enters
+  // approval or posts, its accounting evidence is preserved; use the controlled
+  // correction/void workflows for changes. Voided journals are read-only. Save
+  // is EXPLICIT — no autosave.
   const canEditStatus = doc.status === 'draft'
   const [mode, setMode] = useState<DrawerMode>(
     initialDrawerMode(initialMode, canEditStatus),
