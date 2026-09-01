@@ -40,7 +40,7 @@ const recordTypeSchema = z
   .string()
   .min(1)
   .max(60)
-  .refine((k) => k in RECORD_TYPE_BY_KEY, { message: "unknown record type" });
+  .refine((k) => Object.hasOwn(RECORD_TYPE_BY_KEY, k), { message: "unknown record type" });
 
 const headerFieldPlacementSchema = z.object({
   key: fieldKeySchema,
