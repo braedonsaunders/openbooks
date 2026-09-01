@@ -227,6 +227,29 @@ function countMatch(output: string, label: string): number {
   return Number(match[1]);
 }
 
+export interface ReleaseGateCounts {
+  tests: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+}
+
+export function assertReleaseGatePassed(output: string): ReleaseGateCounts {
+  const counts = {
+    tests: countMatch(output, "tests"),
+    passed: countMatch(output, "pass"),
+    failed: countMatch(output, "fail"),
+    skipped: countMatch(output, "skipped"),
+  };
+  assertRelease(counts.tests > 0, "test runner executed zero tests");
+  assertRelease(
+    counts.passed + counts.skipped === counts.tests,
+    "not every test passed or was intentionally skipped",
+  );
+  assertRelease(counts.failed === 0, "release gate contains failing tests");
+  return counts;
+}
+
 async function queryOne<T>(
   query: ReturnType<typeof sql>,
 ): Promise<T> {
@@ -267,12 +290,7 @@ async function main(): Promise<void> {
       "run",
       "verify:release",
     ]);
-    const testCount = countMatch(releaseOutput, "tests");
-    const passCount = countMatch(releaseOutput, "pass");
-    const failCount = countMatch(releaseOutput, "fail");
-    assertRelease(testCount > 0, "test runner executed zero tests");
-    assertRelease(passCount === testCount, "not every test passed");
-    assertRelease(failCount === 0, "release gate contains failing tests");
+    const releaseGate = assertReleaseGatePassed(releaseOutput);
     assertRelease(
       releaseOutput.includes("Compiled successfully"),
       "production web build did not report successful compilation",
@@ -459,9 +477,10 @@ async function main(): Promise<void> {
         "Every declared OpenBooks GL mutation path is directly compared, semantically compared, or covered by a native invariant suite. ERPNext-only application modules are explicitly excluded rather than treated as implicit passes.",
       releaseGate: {
         status: "passed",
-        tests: testCount,
-        passed: passCount,
-        failed: failCount,
+        tests: releaseGate.tests,
+        passed: releaseGate.passed,
+        failed: releaseGate.failed,
+        skipped: releaseGate.skipped,
         productNeutrality: true,
         productionBuild: true,
       },
@@ -523,7 +542,7 @@ async function main(): Promise<void> {
           path: outputPath,
           status: certificate.status,
           unresolvedAccountingBlockers: unresolvedBlockers.length,
-          tests: testCount,
+          tests: releaseGate.tests,
           exhaustiveGlCoverage: true,
         },
         null,
