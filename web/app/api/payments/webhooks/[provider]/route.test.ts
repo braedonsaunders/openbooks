@@ -77,15 +77,6 @@ test("GoCardless webhook verification distinguishes invalid signatures and prese
 });
 
 test("the route acknowledges a signed adyen delivery after isolating its malformed item", { skip: !DB }, async () => {
-  const arrayItem = {
-    pspReference: "PSP-ROUTE-ARRAY",
-    originalReference: "",
-    merchantAccountCode: "TestMerchant",
-    merchantReference: "tok_route_array",
-    amount: { value: 10300, currency: "CAD" },
-    eventCode: ["IGNORED", "AUTHORISATION"],
-    success: ["false", "true"],
-  };
   const org = await createScratchOrg();
   const originalConsoleError = console.error;
   const malformedLogs: string[] = [];
