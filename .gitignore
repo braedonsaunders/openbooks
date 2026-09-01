@@ -4,7 +4,11 @@
 !.env.compose.example
 .env.compose
 /extraction/
+# Both forms: the trailing-slash pattern matches directories only, so a
+# symlink named node_modules (mode 120000) slipped past it and was committed
+# with a host-absolute target, which breaks any clean checkout.
 node_modules/
+node_modules
 gl-dump/
 web/.env.local
 
