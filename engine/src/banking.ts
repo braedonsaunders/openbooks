@@ -6,6 +6,8 @@ import { fromUnits, isZero, sum, toUnits } from "./money.ts";
 /**
  * Banking: statement parsing (OFX / CSV) → import with dedupe → auto/manual
  * matching against posted journal lines → reconciliation sign-off.
+ * Reversed originals remain ledger history for financial reports, but are not
+ * eligible for bank matching; matching may use only the current posted entry.
  *
  * Statement lines are the immutable imported truth (bank's perspective,
  * signed). Matching connects them to unreconciled journal lines on the same
