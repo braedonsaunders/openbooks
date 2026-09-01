@@ -46,6 +46,9 @@ const mockSources = new Map<string, string>([
         if (text.includes('select approval_status')) {
           return { rows: [{ approvalStatus: 'approved', updatedAt: '${EXACT_REVISION}' }] }
         }
+        if (text.includes('from party_bank_accounts') && !text.includes('update party_bank_accounts')) {
+          return { rows: [{ updatedAt: '${EXACT_REVISION}' }] }
+        }
         if (text.includes('update party_bank_accounts')) return { rows: [{ id: '${ACCOUNT_ID}' }] }
         return { rows: [] }
       }
