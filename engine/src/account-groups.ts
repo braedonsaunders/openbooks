@@ -284,7 +284,7 @@ export async function resolveAccountGroups(dimension: string, orgId?: string): P
       byAccount.set(a.id, pinned);
       continue;
     }
-    let hit = groups.find((g) => !g.isCatchAll && matchesRule(acct, g.match)) ?? catchAll;
+    const hit = groups.find((g) => !g.isCatchAll && matchesRule(acct, g.match)) ?? catchAll;
     if (hit) byAccount.set(a.id, { groupId: hit.id, key: hit.key, name: hit.name, color: hit.color });
   }
   return { groups, byAccount, pinned: new Set(pins.keys()) };
