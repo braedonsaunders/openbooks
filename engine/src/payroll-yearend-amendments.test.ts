@@ -1121,13 +1121,26 @@ test(
         /cancel them instead/,
       );
 
+      // Cancellation is an affirmative statutory declaration, not merely a
+      // row-state transition. Missing evidence refuses after the row's
+      // eligibility was established and leaves the issued history untouched.
+      await assert.rejects(
+        recordFilingIssue({
+          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
+          taxYear: 2026, revision: "cancelled", rowIds: [fx.rowId], note: "   ",
+        }),
+        /nonblank cancellation reason is required/,
+      );
+      assert.equal((await filingSubmissions(fx.orgId, "CA", "t4", 2026)).length, 1);
+
       const cancelled = await recordFilingIssue({
         orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
         taxYear: 2026, revision: "cancelled", rowIds: [fx.rowId],
-        note: "Employee belonged to the other entity",
+        reason: "  Employee belonged to the other entity  ",
       });
       assert.equal(cancelled.submission.revision, "cancelled");
       assert.equal(cancelled.submission.supersedesId, issued.submission.id);
+      assert.equal(cancelled.submission.note, "Employee belonged to the other entity");
       assert.match(cancelled.file!.body, /<rpt_tcd>C<\/rpt_tcd>/);
       assert.match(cancelled.file!.body, /<RPT_TCD>C<\/RPT_TCD>/);
       // The CRA's instruction: a cancelled slip carries the SAME information

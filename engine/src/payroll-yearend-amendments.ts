@@ -529,6 +529,8 @@ export interface RecordFilingIssueInput {
    */
   rowIds?: readonly string[];
   note?: string | null;
+  /** The operator's affirmative explanation when withdrawing a filing. */
+  reason?: string | null;
   /** Extra parameters the filing's own download builder parses. */
   params?: Record<string, string>;
 }
@@ -565,6 +567,13 @@ export async function recordFilingIssue(
   const { orgId, actorId, country, filingKey, taxYear, revision } = input;
   const filing = yearEndFiling(country, filingKey);
 
+  // Normalize cancellation evidence once at the service boundary. The
+  // correction path performs the required eligibility checks first, then
+  // refuses a cancellation that has no affirmative evidence.
+  const normalizedInput = revision === "cancelled"
+    ? { ...input, note: input.reason?.trim() || input.note?.trim() || null }
+    : input;
+
   if (revision === "original") {
     // An original artifact and its per-slip evidence must observe one
     // database snapshot. Pack builders use the shared `db` handle, which
@@ -579,7 +588,7 @@ export async function recordFilingIssue(
       // Reuse the caller's pinned transaction; its isolation level governs
       // this issuing operation and its uncommitted writes remain visible.
       const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
-      return await issueOriginal(input, filing, submissions);
+      return await issueOriginal(normalizedInput, filing, submissions);
     }
 
     // Do not use the ambient db proxy for the outer transaction: a caller may
@@ -597,7 +606,7 @@ export async function recordFilingIssue(
       const txDb = drizzle({ client });
       const result = await orgContext.run({ orgId, bypass: false, txDb }, async () => {
         const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
-        return await issueOriginal(input, filing, submissions);
+        return await issueOriginal(normalizedInput, filing, submissions);
       });
       await client.query("commit");
       return result;
@@ -613,7 +622,7 @@ export async function recordFilingIssue(
     }
   }
   const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
-  return await issueCorrection(input, filing, submissions, revision);
+  return await issueCorrection(normalizedInput, filing, submissions, revision);
 }
 
 async function issueOriginal(
@@ -679,6 +688,7 @@ async function issueCorrection(
   revision: PayrollFilingCorrectionKind,
 ): Promise<RecordFilingIssueResult> {
   const { orgId, country, filingKey, taxYear } = input;
+  const cancellationReason = input.reason?.trim() || input.note?.trim() || null;
   const amendment = filing.amendment;
 
   // The pack's own refusal, by name. This is the doctrine the product's
@@ -722,6 +732,11 @@ async function issueCorrection(
       `these rows were never issued on a ${filing.label} for ${taxYear}, so they cannot be `
       + `${revision === "cancelled" ? "cancelled" : "amended"}: `
       + unknown.map((rowId) => byRow.get(rowId)?.label || rowId).join(", "),
+    );
+  }
+  if (revision === "cancelled" && !cancellationReason) {
+    throw new PayrollError(
+      "a nonblank cancellation reason is required and is retained in the filing history",
     );
   }
   if (revision === "amended") {
