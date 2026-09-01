@@ -1,9 +1,10 @@
 import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { formatInZone } from '@openbooks/engine/src/business-date.ts'
 import { Badge, Button, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
@@ -97,6 +98,7 @@ export default async function BankingAccount({
   const canReconcile = can(authz, 'banking.reconcile')
   const t = await getTranslations('banking')
   const tCommon = await getTranslations('common')
+  const locale = await getLocale()
   const reconStatusLabel = (status: string) =>
     RECON_STATUS_KEYS.includes(status) ? t(`reconStatus.${status}`) : String(status).replace(/_/g, ' ')
   const { accountId } = await params
@@ -104,6 +106,26 @@ export default async function BankingAccount({
   const orgId = authz.user.orgId
   const sp = await searchParams
   const basePath = `/banking/${accountId}`
+
+  // Keep timestamp rendering aligned with the business-date machinery: the
+  // organization's configured time zone is stored in org settings, with UTC
+  // as the same safe fallback used by businessToday when it is absent/invalid.
+  const orgTimeZoneRes = await db.execute<{ time_zone: string | null }>(sql`
+    select settings->>'timeZone' as time_zone from orgs where id = ${orgId}
+  `)
+  const configuredTimeZone = orgTimeZoneRes.rows[0]?.time_zone?.trim()
+  const timeZone = configuredTimeZone
+    ? (() => {
+        try {
+          formatInZone(new Date(), configuredTimeZone)
+          return configuredTimeZone
+        } catch {
+          return 'UTC'
+        }
+      })()
+    : 'UTC'
+  const timestampFormatter = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone })
+  const formatTimestamp = (value: string) => timestampFormatter.format(new Date(value))
 
   const accountRes = (await db.execute<AccountRow>(sql`
     select a.id, a.number, a.name, a.type, a.currency_restriction,
@@ -330,7 +352,7 @@ export default async function BankingAccount({
                       <TableCell className="text-right tabular-nums">{money(s.opening_balance)}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(s.closing_balance)}</TableCell>
                       <TableCell className="text-slate-500 dark:text-slate-400">
-                        {new Date(s.imported_at).toLocaleDateString('en-CA')}
+                        {formatTimestamp(s.imported_at)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -383,10 +405,10 @@ export default async function BankingAccount({
                         <Badge variant={RECON_VARIANT[r.status] ?? 'secondary'}>{reconStatusLabel(r.status)}</Badge>
                       </TableCell>
                       <TableCell className="text-slate-500 dark:text-slate-400">
-                        {new Date(r.created_at).toLocaleDateString('en-CA')}
+                        {formatTimestamp(r.created_at)}
                       </TableCell>
                       <TableCell className="text-slate-500 dark:text-slate-400">
-                        {r.signed_off_at ? new Date(r.signed_off_at).toLocaleDateString('en-CA') : '—'}
+                        {r.signed_off_at ? formatTimestamp(r.signed_off_at) : '—'}
                       </TableCell>
                       <TableCell>
                         <Button variant="outline" size="sm" asChild>
