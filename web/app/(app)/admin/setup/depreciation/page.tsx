@@ -24,7 +24,7 @@ export default async function DepreciationSetupPage({
   await requireFeatureEnabled(authz.user.orgId, 'fixedAssets')
   const sp = await searchParams
   const requested = pickString(sp.tab)
-  const tab: Tab = requested && requested in ENTITY_BY_TAB ? requested as Tab : 'methods'
+  const tab: Tab = requested && Object.hasOwn(ENTITY_BY_TAB, requested) ? requested as Tab : 'methods'
   const t = await getTranslations('admin.setup.assetDepreciationSetup')
   const tabs: { key: Tab; label: string }[] = [
     { key: 'methods', label: t('tabs.methods') },
