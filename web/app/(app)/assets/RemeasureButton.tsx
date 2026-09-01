@@ -33,7 +33,12 @@ export function RemeasureButton({ assetId }: { assetId: string }) {
       })
       const d = (await res.json().catch(() => ({}))) as { error?: string; kind?: string; delta?: string }
       if (!res.ok) throw new Error(d.error)
-      toast.success(t('remeasure.done', { kind: d.kind ?? '', delta: d.delta ?? '0' }))
+      const kind = d.kind === 'revalued'
+        ? t('remeasure.kinds.revalued')
+        : d.kind === 'impaired'
+          ? t('remeasure.kinds.impaired')
+          : t('remeasure.kinds.unknown')
+      toast.success(t('remeasure.done', { kind, delta: d.delta ?? '0' }))
       setOpen(false)
       router.refresh()
     } catch (e) {
