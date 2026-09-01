@@ -22,6 +22,24 @@ function namedStep(name) {
   return workflow.slice(start, next === -1 ? workflow.length : next)
 }
 
+function topLevelJob(name) {
+  const marker = `\n  ${name}:\n`
+  const start = workflow.indexOf(marker)
+  assert.notEqual(start, -1, `workflow must contain the ${name} job`)
+  const next = workflow.slice(start + marker.length).search(/\n  (?=\S)/)
+  return workflow.slice(start, next === -1 ? workflow.length : start + marker.length + next)
+}
+
+test('unit job gives the canonical no-database suite a bounded timeout with measured headroom', () => {
+  const unit = topLevelJob('unit')
+  const timeout = /\n    timeout-minutes:\s*(\d+)\s*\n/.exec(unit)
+  assert.ok(timeout, 'unit job must declare a timeout-minutes bound')
+  const minutes = Number(timeout[1])
+  assert.ok(minutes >= 30, `unit timeout must leave headroom beyond the measured ~11-minute local suite and recent ~20-minute CI runs (got ${minutes})`)
+  assert.ok(minutes <= 45, `unit timeout must remain bounded rather than masking a hung suite (got ${minutes})`)
+  assert.match(unit, /npm test -- --test-concurrency=4/, 'unit job must retain the canonical no-database test command')
+})
+
 test('test workflow propagates tee producer failures and retains its failure guards', (t) => {
   const pipelines = [
     { stepName: 'Integration canary', logFile: 'canary.tap' },

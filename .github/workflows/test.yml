@@ -54,9 +54,16 @@ jobs:
 
   unit:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The unchanged canonical no-database suite measured 11m07s locally; recent
+    # ubuntu runs approach 20 minutes while still progressing. Keep a bounded
+    # 30-minute ceiling for runner variance without hiding a hang.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Register reachability tests audit local main and historical closing
+          # commits; a shallow checkout turns those checks into a partial pass.
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
@@ -104,6 +111,10 @@ jobs:
       PGPASSWORD: openbooks
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Register reachability tests audit local main and historical closing
+          # commits; a shallow checkout turns those checks into a partial pass.
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
