@@ -720,7 +720,7 @@
   "users": {
     "metaTitle": "Utilisateurs",
     "title": "Utilisateurs",
-    "description": "Qui peut se connecter, et quels rôles chacun détient. L’accès d’un utilisateur est l’union de ses rôles attribués; les utilisateurs sans attribution retombent sur leur ancien rôle.",
+    "description": "Qui peut se connecter, et quels rôles chacun détient. L’accès est l’union des rôles explicitement attribués ; les utilisateurs sans rôle ne disposent d’aucun accès accordé par un rôle.",
     "manageRoles": "Gérer les rôles",
     "searchPlaceholder": "Rechercher un nom ou un courriel…",
     "statusFilter": "Statut",

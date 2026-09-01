@@ -697,7 +697,7 @@
   "users": {
     "metaTitle": "Benutzer",
     "title": "Benutzer",
-    "description": "Wer sich anmelden kann und welche Rollen er hat. Der Zugriff eines Benutzers ist die Vereinigung seiner zugewiesenen Rollen; Benutzer ohne Zuweisung greifen auf ihre Altrolle zurück.",
+    "description": "Wer sich anmelden kann und welche Rollen er hat. Der Zugriff ist die Vereinigung der ausdrücklich zugewiesenen Rollen; Benutzer ohne Rolle haben keinen durch Rollen gewährten Zugriff.",
     "manageRoles": "Rollen verwalten",
     "searchPlaceholder": "Name oder E-Mail suchen…",
     "statusFilter": "Status",
