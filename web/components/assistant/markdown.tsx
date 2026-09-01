@@ -31,7 +31,7 @@ export function ChatMarkdown({ children, className }: { children: string; classN
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ href, children: linkChildren }) =>
-            href?.startsWith('/') ? (
+            href?.startsWith('/') && !href.startsWith('//') ? (
               <Link href={href}>{linkChildren}</Link>
             ) : (
               <a href={href} target="_blank" rel="noreferrer">
