@@ -421,10 +421,10 @@ test(
         aOnly();
         const outOfScope = await createRun({ payScheduleId: scheduleB });
         const outOfScopeBody = await outOfScope.text();
-        assert.equal(outOfScope.status, 422, outOfScopeBody);
+        assert.equal(outOfScope.status, 404, outOfScopeBody);
         const missing = await createRun({ payScheduleId: randomUUID() });
         const missingBody = await missing.text();
-        assert.equal(missing.status, 422, missingBody);
+        assert.equal(missing.status, 404, missingBody);
         // Indistinguishable: identical body to a schedule that does not exist.
         assert.equal(outOfScopeBody, missingBody);
       }
