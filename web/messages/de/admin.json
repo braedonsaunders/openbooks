@@ -1188,55 +1188,55 @@
       }
     },
     "taxDepreciationSetup": {
-      "navTitle": "Tax Depreciation",
-      "title": "Tax Depreciation",
-      "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
-      "tabsAria": "Fixed asset setup sections",
+      "navTitle": "Steuerliche Abschreibung",
+      "title": "Steuerliche Abschreibung",
+      "description": "Installieren Sie länderspezifische Pakete für die steuerliche Abschreibung und konfigurieren Sie Klassenzuordnungen, Steuerregime, Steuerklassen, Konventionen und Regeln für das erste Jahr. Dies ist unabhängig von der Einrichtung für Umsatzsteuer, Mehrwertsteuer und steuerlichen Nexus.",
+      "tabsAria": "Abschnitte für die Einrichtung von Anlagegütern",
       "tabs": {
-        "overview": "Overview",
-        "categories": "Asset categories",
-        "regimes": "Tax regimes",
-        "classes": "Tax classes",
-        "firstYear": "First-year rules",
-        "methods": "Methods",
-        "books": "Book policies"
+        "overview": "Übersicht",
+        "categories": "Anlagekategorien",
+        "regimes": "Steuerregime",
+        "classes": "Steuerklassen",
+        "firstYear": "Erstjahresregeln",
+        "methods": "Methoden",
+        "books": "Buchrichtlinien"
       },
-      "packsTitle": "Country depreciation packs",
-      "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
-      "recommended": "Company country",
-      "installed": "Installed",
-      "install": "Install pack",
-      "installing": "Installing…",
-      "installFailed": "Could not install the depreciation pack",
-      "installedToast": "Installed {count} depreciation classes",
-      "assignmentFailed": "Could not save the tax class assignment",
-      "assignmentsTitle": "Asset-category class assignments",
-      "assignmentsDescription": "Choose the default tax class for each asset category.",
-      "assetCategory": "Asset category",
-      "notAssigned": "Not assigned",
-      "classCount": "{count, plural, one {# class} other {# classes}}",
+      "packsTitle": "Länderspezifische Abschreibungspakete",
+      "packsDescription": "Durch die Installation eines Pakets wird eine bearbeitbare Mandantenkonfiguration erstellt. Vorhandene Überschreibungen werden nie ersetzt.",
+      "recommended": "Land des Unternehmens",
+      "installed": "Installiert",
+      "install": "Paket installieren",
+      "installing": "Wird installiert…",
+      "installFailed": "Abschreibungspaket konnte nicht installiert werden",
+      "installedToast": "{count, plural, one {# Abschreibungsklasse installiert} other {# Abschreibungsklassen installiert}}",
+      "assignmentFailed": "Steuerklassenzuordnung konnte nicht gespeichert werden",
+      "assignmentsTitle": "Klassenzuordnungen für Anlagekategorien",
+      "assignmentsDescription": "Wählen Sie die standardmäßige Steuerklasse für die Anlagen jeder Kategorie. Individuelle Anlagenwahlen können diese Standardeinstellungen überschreiben.",
+      "assetCategory": "Anlagekategorie",
+      "notAssigned": "Nicht zugeordnet",
+      "classCount": "{count, plural, one {# Klasse} other {# Klassen}}",
       "models": {
-        "pool": "Class pool",
-        "macrs": "Per-asset MACRS"
+        "pool": "Klassenpool",
+        "macrs": "MACRS je Anlage"
       },
-      "customizeTitle": "Customize",
-      "customizeDescription": "Country packs are starting points; seeded values remain editable.",
+      "customizeTitle": "Anpassen",
+      "customizeDescription": "Länderpakete sind ein Ausgangspunkt. Fügen Sie eigene Steuerregime und -klassen hinzu oder überschreiben Sie beliebige vorgegebene Werte.",
       "links": {
         "regimes": {
-          "title": "Regimes",
-          "description": "Country, calculation model and asset class attribute."
+          "title": "Steuerregime",
+          "description": "Land, Berechnungsmodell und Attribut der Anlagenklasse."
         },
         "classes": {
-          "title": "Classes and methods",
-          "description": "Rates, recovery periods, methods and conventions."
+          "title": "Klassen und Methoden",
+          "description": "Sätze, Nutzungsdauern, MACRS-Systeme, Methoden und Konventionen."
         },
         "firstYear": {
-          "title": "First-year rules",
-          "description": "Effective-dated acceleration and eligibility."
+          "title": "Erstjahresregeln",
+          "description": "Datumsbezogene Beschleunigung und Berechtigung für das erste Jahr."
         },
         "assignments": {
-          "title": "Asset-category assignments",
-          "description": "Assign categories to regime classes in Tax attributes."
+          "title": "Zuordnungen für Anlagekategorien",
+          "description": "Ordnen Sie jede Anlagekategorie in den Steuerattributen einer Regimeklasse zu."
         }
       }
     },
@@ -1631,6 +1631,11 @@
         "title": "Unfallversicherungsgruppen",
         "description": "Beitragsgruppen der Arbeiterunfallversicherung für die Personalkostenrechnung."
       },
+      "overhead-rates": {
+        "title": "Gemeinkostensätze",
+        "description": "Datierte Gemeinkostensätze, die auf Arbeitskosten angewendet werden.",
+        "singular": "Gemeinkostensatz"
+      },
       "asset-categories": {
         "title": "Anlagekategorien",
         "description": "Standard-Abschreibungsmethode und -konten für Anlagevermögen."
@@ -1942,6 +1947,10 @@
       "endOfLife": {
         "fullyDepreciate": "Vollständig abschreiben",
         "retainBalance": "Restwert beibehalten"
+      },
+      "overheadMethod": {
+        "live": "Live",
+        "standard": "Standard"
       },
       "fxRateType": {
         "spot": "Kassakurs",
