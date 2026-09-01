@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalCmp, decimalSum, type ExactDecimal } from "../statement-format";
 import { decimalRatio, decimalSubtract } from "./decimals";
@@ -84,13 +85,14 @@ export function groupProjectProfitabilityRows(rows: ProjectProfitRow[]): Project
  * approved time) in the period, its revenue, COGS, expenses, gross profit, net
  * and margin — reader-signed so revenue and profit read positive. Money comes
  * straight from `journal_lines.project_id`, so each project row ties exactly to
- * the P&L filtered on that project (the row links there). `hours` is approved
- * `time_entries` for the period, an operational read on the money.
+ * the same-book P&L filtered on that project (the row links there). `bookId`
+ * selects the accounting book, defaulting to the org's primary book. `hours`
+ * is approved `time_entries` for the period, an operational read on the money.
  */
 export async function projectProfitability(
   from: string,
   to: string,
-  opts: { dims?: DimFilter; customerId?: string; search?: string; projectScope?: 'active' | 'all'; orgId?: string } = {},
+  opts: { dims?: DimFilter; customerId?: string; search?: string; projectScope?: 'active' | 'all'; orgId?: string; bookId?: string | null } = {},
 ): Promise<ProjectProfitResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const r = (await db.execute<{
@@ -104,6 +106,7 @@ export async function projectProfitability(
              coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0) as expenses
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+          and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.project_id is not null
          and l.org_id = ${orgId}
