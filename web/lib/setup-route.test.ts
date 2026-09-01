@@ -130,16 +130,19 @@ const hooks = registerHooks({
 })
 
 const routeUrl = '../app/api/admin/setup/[entity]/route.ts?currency-route-test'
-const { POST, PATCH, DELETE } = await import(routeUrl) as typeof import('../app/api/admin/setup/[entity]/route.ts')
-hooks.deregister()
+const routeReady = import(routeUrl).then((module) => {
+  hooks.deregister()
+  return module as typeof import('../app/api/admin/setup/[entity]/route.ts')
+})
 
 test('currency mutations fail closed before parsing or touching the database', async () => {
+  const { POST, PATCH, DELETE } = await routeReady
   routeState.executeCalls = 0
   routeState.transactionCalls = 0
   const params = { params: Promise.resolve({ entity: 'currencies' }) }
   const responses = [
     await POST(new Request('http://localhost/api/admin/setup/currencies', { method: 'POST', body: '{not-json' }), params),
-    await PATCH(new Request('http://localhost/api/admin/setup/currencies', { method: 'PATCH', body: '{}' }), params),
+    await PATCH(new Request('http://localhost/api/admin/setup/currencies', { method: 'PATCH', body: '{not-json' }), params),
     await DELETE(new Request('http://localhost/api/admin/setup/currencies', { method: 'DELETE' }), params),
   ]
   for (const response of responses) {
