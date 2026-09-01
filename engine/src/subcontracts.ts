@@ -7,6 +7,22 @@ import { add, cmp, mulPercent, neg, normalizeMoney, sum } from "./money.ts";
 
 export class SubcontractError extends Error {}
 
+export type SubcontractTransitionAction = "substantially_complete" | "close" | "void";
+
+const subcontractTransitionActions = new Set<SubcontractTransitionAction>([
+  "substantially_complete",
+  "close",
+  "void",
+]);
+
+/** Parse lifecycle transitions at the domain boundary so invalid values fail closed. */
+export function parseSubcontractTransitionAction(value: unknown): SubcontractTransitionAction {
+  if (typeof value !== "string" || !subcontractTransitionActions.has(value as SubcontractTransitionAction)) {
+    throw new SubcontractError("Invalid subcontract transition action");
+  }
+  return value as SubcontractTransitionAction;
+}
+
 /** Persist leftover create-path original commitment through exact decimal then ledger money. Fail closed. */
 function persistSubcontractOriginalCommitment(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
@@ -497,24 +513,25 @@ export async function transitionSubcontract(input: {
   orgId: string;
   userId: string;
   id: string;
-  action: "substantially_complete" | "close" | "void";
+  action: SubcontractTransitionAction;
 }): Promise<void> {
+  const action = parseSubcontractTransitionAction(input.action);
   await db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
     const row = (await tx.execute<{ status: string }>(sql`select status from subcontracts where org_id = ${input.orgId} and id = ${input.id} for update`));
     const status = row.rows[0]?.status;
     if (!status) throw new SubcontractError("Subcontract not found");
-    const next = input.action === "substantially_complete" ? "substantially_complete" : input.action === "close" ? "closed" : "void";
-    const allowed = input.action === "substantially_complete" ? status === "active"
-      : input.action === "close" ? status === "substantially_complete"
+    const next = action === "substantially_complete" ? "substantially_complete" : action === "close" ? "closed" : "void";
+    const allowed = action === "substantially_complete" ? status === "active"
+      : action === "close" ? status === "substantially_complete"
         : ["draft", "pending_approval"].includes(status);
-    if (!allowed) throw new SubcontractError(`Cannot ${input.action.replace("_", " ")} a ${status} subcontract`);
+    if (!allowed) throw new SubcontractError(`Cannot ${action.replace("_", " ")} a ${status} subcontract`);
     if (next === "closed") {
       const open = (await tx.execute(sql`select 1 from vendor_pay_applications where org_id = ${input.orgId} and subcontract_id = ${input.id} and status in ('draft','submitted','approved') limit 1`));
       if (open.rows.length) throw new SubcontractError("Complete or void open vendor applications before closing");
     }
     await tx.execute(sql`update subcontracts set status = ${next}, closed_at = case when ${next} = 'closed' then now() else closed_at end, closed_by = case when ${next} = 'closed' then ${input.userId} else closed_by end, updated_at = now(), updated_by = ${input.userId} where org_id = ${input.orgId} and id = ${input.id}`);
-    await audit(tx, input.orgId, "subcontracts", input.id, input.action, { before: { status }, after: { status: next } }, input.userId);
+    await audit(tx, input.orgId, "subcontracts", input.id, action, { before: { status }, after: { status: next } }, input.userId);
   });
 }
 

@@ -13,6 +13,7 @@ import {
   createSubcontractPaymentControl,
   createVendorPayApplication,
   generateVendorPayApplicationBill,
+  parseSubcontractTransitionAction,
   releaseSubcontractPaymentControl,
   releaseVendorRetainage,
   removeSubcontractSovLine,
@@ -238,9 +239,19 @@ export async function POST(request: Request) {
       case "approveSubcontract":
         await approveSubcontract(orgId, userId, String(body.id));
         break;
-      case "transitionSubcontract":
-        await transitionSubcontract({ orgId, userId, id: String(body.id), action: body.transition });
+      case "transitionSubcontract": {
+        let transition: ReturnType<typeof parseSubcontractTransitionAction>;
+        try {
+          transition = parseSubcontractTransitionAction(body.transition);
+        } catch (error) {
+          if (error instanceof SubcontractError) {
+            return NextResponse.json({ error: error.message }, { status: 400 });
+          }
+          throw error;
+        }
+        await transitionSubcontract({ orgId, userId, id: String(body.id), action: transition });
         break;
+      }
       case "addChangeOrder": {
         const amount = exactMoney(body.amount);
         if (amount === null) return invalidDecimal("Amount");
