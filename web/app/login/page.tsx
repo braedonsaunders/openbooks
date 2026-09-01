@@ -31,7 +31,7 @@ const RIGHT_ENTRIES = [
 // `/\\evil.example`, which a browser would otherwise treat as cross-origin.
 const SAFE_RETURN_TO_ORIGIN = 'https://openbooks.invalid'
 
-function safeNextPath(value: string | null): string {
+export function safeNextPath(value: string | null): string {
   if (!value || value.length > 2048 || !value.startsWith('/') || value.startsWith('//')) return '/'
   try {
     const parsed = new URL(value, SAFE_RETURN_TO_ORIGIN)
