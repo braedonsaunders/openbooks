@@ -52,7 +52,12 @@ export default async function PaymentOperationsSetupPage({
            ${stateWhere}
          order by x.is_active desc, x.name
          limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
-      db.execute(sql`select count(*)::int as n from payment_bank_profiles x where x.org_id = ${orgId} and x.name ilike ${q} ${stateWhere}`),
+      db.execute(sql`select count(*)::int as n
+          from payment_bank_profiles x
+          join payment_formats f on f.id = x.payment_format_id and f.org_id = x.org_id
+          join accounts a on a.id = x.bank_account_id and a.org_id = x.org_id
+         where x.org_id = ${orgId} and (x.name ilike ${q} or f.name ilike ${q} or a.name ilike ${q})
+           ${stateWhere}`),
       db.execute(sql`select case when is_active then 'active' else 'archived' end as value, count(*)::int as count from payment_bank_profiles where org_id = ${orgId} group by is_active`),
       selectedId ? db.execute(sql`select * from payment_bank_profiles where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),
     ])
@@ -77,7 +82,11 @@ export default async function PaymentOperationsSetupPage({
           from payment_schedules x join payment_bank_profiles p on p.id = x.payment_bank_profile_id and p.org_id = x.org_id
          where x.org_id = ${orgId} and (x.name ilike ${q} or p.name ilike ${q}) ${stateWhere}
          order by x.is_active desc, x.name limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
-      db.execute(sql`select count(*)::int as n from payment_schedules x where x.org_id = ${orgId} and x.name ilike ${q} ${stateWhere}`),
+      db.execute(sql`select count(*)::int as n
+          from payment_schedules x
+          join payment_bank_profiles p on p.id = x.payment_bank_profile_id and p.org_id = x.org_id
+         where x.org_id = ${orgId} and (x.name ilike ${q} or p.name ilike ${q})
+           ${stateWhere}`),
       db.execute(sql`select case when is_active then 'active' else 'archived' end as value, count(*)::int as count from payment_schedules where org_id = ${orgId} group by is_active`),
       selectedId ? db.execute(sql`select * from payment_schedules where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),
     ])
