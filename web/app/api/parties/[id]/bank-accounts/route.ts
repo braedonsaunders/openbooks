@@ -296,8 +296,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!body.expectedUpdatedAt) {
     return NextResponse.json({ error: 'the bank-detail revision is required; reload and try again' }, { status: 409 })
   }
-  const existing = (await db.execute<{ updatedAt: Date }>(sql`
-    select updated_at as "updatedAt"
+  // Keep the retirement OCC token in PostgreSQL's six-digit wire form. A
+  // driver Date round-trip truncates microseconds and could retire a row
+  // against a revision the caller never actually observed.
+  const existing = (await db.execute<{ updatedAt: string }>(sql`
+    select ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
       from party_bank_accounts
      where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
   `))
@@ -308,7 +311,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     )
   }
   const expectedUpdatedAt = existing.rows[0].updatedAt
-  if (new Date(body.expectedUpdatedAt).getTime() !== new Date(expectedUpdatedAt).getTime()) {
+  if (body.expectedUpdatedAt !== expectedUpdatedAt) {
     return NextResponse.json(
       { error: 'these bank details changed or were already retired; reload and review the latest revision' },
       { status: 409 },
@@ -350,7 +353,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
              updated_by = ${user.id}
        where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
          and retired_at is null
-         and updated_at = ${expectedUpdatedAt}
+         and updated_at = ${expectedUpdatedAt}::timestamptz
        returning id
     `))
     if (!updated.rows[0]) {

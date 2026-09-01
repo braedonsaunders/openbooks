@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 
 const PARTY_ID = '00000000-0000-4000-8000-000000000001'
 const ACCOUNT_ID = '00000000-0000-4000-8000-000000000002'
-const ACTUAL_UPDATED_AT = '2026-08-31T12:34:56.789Z'
+const ACTUAL_UPDATED_AT = '2026-08-31T12:34:56.789123Z'
 
 interface RouteState {
   operation: 'patch' | 'delete'
@@ -29,29 +29,6 @@ const state: RouteState = {
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksBankAccountsNextResponse = NextResponse
-
-function queryText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
-  return chunks
-    .map((chunk) => {
-      if (typeof chunk === 'string') return ''
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return queryText(chunk)
-      return ''
-    })
-    .join('')
-}
-
-function queryParams(query: unknown): unknown[] {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return []
-  return chunks.filter((chunk) => {
-    if (!chunk || typeof chunk !== 'object') return true
-    return !('value' in chunk || 'queryChunks' in chunk)
-  })
-}
 
 const mockSources = new Map<string, string>([
   [
@@ -136,16 +113,24 @@ const mockSources = new Map<string, string>([
         })
       }
       export async function withOrgTransaction(_orgId, work) { return work() }
+      export const schema = {}
+      export async function withOrg(_orgId, work) { return work() }
+      export async function withOrgContext(_orgId, work) { return work() }
+      export async function withBypass(work) { return work() }
+      export async function withBypassContext(work) { return work() }
+      export function registerRequestOrgResolver() {}
+      export const pool = {}
+      export const env = {}
       export const db = {
         async execute(query) {
           const text = queryText(query)
           state.queries.push(text)
           if (text.includes('from parties')) return { rows: [{ subsidiaryId: null }] }
           if (text.includes('select approval_status') && text.includes('from party_bank_accounts')) {
-            return { rows: [{ approvalStatus: 'approved', updatedAt: new Date(state.updatedAt) }] }
+            return { rows: [{ approvalStatus: 'approved', updatedAt: state.updatedAt }] }
           }
-          if (text.includes('select updated_at') && text.includes('from party_bank_accounts')) {
-            return { rows: [{ updatedAt: new Date(state.updatedAt) }] }
+          if (text.includes('from party_bank_accounts') && !text.includes('update party_bank_accounts')) {
+            return { rows: [{ updatedAt: state.updatedAt }] }
           }
           if (text.includes('from payment_instructions') && text.includes('payment_mandates')) {
             return { rows: [{ in_flight_payment: false, live_mandate: false }] }
@@ -154,8 +139,8 @@ const mockSources = new Map<string, string>([
           if (text.includes('update party_bank_accounts')) {
             state.updateParams.push(queryParams(query))
             if (state.operation === 'delete') {
-              const timestamp = queryParams(query).find((value) => value instanceof Date)
-              if (timestamp instanceof Date && timestamp.getTime() === new Date(state.updatedAt).getTime()) {
+              const timestamp = queryParams(query).find((value) => value === state.updatedAt)
+              if (timestamp === state.updatedAt) {
                 return { rows: [{ id: 'account-1' }] }
               }
               return { rows: [] }
@@ -264,17 +249,17 @@ test('PATCH accepts a valid account update and stores its last four digits', asy
   assert.equal(state.flowCalls, 1)
 })
 
-test('DELETE accepts semantically equal timestamp spellings and attributes the retirement', async () => {
+test('DELETE accepts the exact six-digit revision and attributes the retirement', async () => {
   reset('delete')
   const response = await request('DELETE', {
     retirementReason: 'account retired',
-    expectedUpdatedAt: '2026-08-31T08:34:56.789-04:00',
+    expectedUpdatedAt: ACTUAL_UPDATED_AT,
   })
 
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), { ok: true })
   assert.equal(state.updateParams.length, 1)
-  assert.ok(state.updateParams[0]?.some((value) => value instanceof Date))
+  assert.ok(state.updateParams[0]?.includes(ACTUAL_UPDATED_AT))
   assert.equal(state.auditCalls, 1)
   assert.ok(state.auditParams[0]?.includes('user-1'))
 })
