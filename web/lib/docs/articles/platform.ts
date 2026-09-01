@@ -140,14 +140,15 @@ endpoints and includes an interactive console.
 
 ## Create and scope a key
 
-Create a key with a name and, optionally, an expiry and a set of **scopes**.
-Scopes are chosen from the permission catalogue, which is also used for app
-authorization. Effective access follows two rules:
+Create a key with a name, at least one explicit **scope**, and, optionally, an
+expiry. Scopes are chosen from the permission catalogue, which is also used for
+app authorization. Effective access follows two rules:
 
 - a key's effective access is its **scopes intersected with its owner's own
   permissions**, so the key cannot exceed its owner's authority; and
-- a key left with **no scopes inherits the owner's full permissions** — grant
-  explicit scopes for anything that should be limited.
+- an omitted or empty scope list is **rejected**. A key never inherits the
+  owner's full permissions from missing scopes, so every key must name the
+  permissions it is allowed to use.
 
 The full key value (an **ob_live_** token) is shown **once**, at creation. Store
 it securely because only a hash is retained afterward. The list shows each key's
