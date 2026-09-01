@@ -20,8 +20,8 @@
     "done": "{kind} — {delta}"
   },
   "taxPools": {
-    "configure": "Configure",
-    "regime": "Tax regime",
+    "configure": "設定",
+    "regime": "税制",
     "title": "税務減価償却 — クラスプール",
     "description": "クラス別に固定資産の年間税務減価償却を計算します。米国 MACRS、カナダ CCA、英国の償却控除、および国別に設定可能な税制に対応しています。",
     "taxYear": "税務年度",
@@ -99,14 +99,14 @@
     "noAvailableSubsidiary": "この資産に利用できる有効な子会社が、あなたのロールにはありません。"
   },
   "drawer": {
-    "taxDepreciation": "Tax depreciation",
-    "taxCategoryDefault": "Category default: {value}",
+    "taxDepreciation": "税務減価償却",
+    "taxCategoryDefault": "カテゴリの既定値: {value}",
     "notAssigned": "Not assigned",
     "taxClass": "Tax class",
-    "useCategoryDefault": "Use category default",
-    "businessUsePercent": "Business use (%)",
-    "section179": "Section 179 election",
-    "bonusPercent": "Bonus depreciation (%)",
+    "useCategoryDefault": "カテゴリの既定値を使用",
+    "businessUsePercent": "事業使用率（%）",
+    "section179": "セクション179の選択",
+    "bonusPercent": "特別償却（%）",
     "tabsAria": "固定資産レコードのセクション",
     "customForm": "レコードフォーム",
     "newAsset": "新規資産",
