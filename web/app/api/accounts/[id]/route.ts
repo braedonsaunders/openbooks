@@ -1,6 +1,7 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db } from '@openbooks/engine/src/db.ts'
 import { ACCOUNT_TYPES } from '@openbooks/schema'
 import { guardPermission } from '../../../../lib/authz'
@@ -30,6 +31,12 @@ interface PatchBody {
   requiredDimensions?: string[]
   custom?: Record<string, unknown>
 }
+
+// Keep name validation at the shared JSON boundary so malformed field types
+// receive the parser's 400 response before any string methods are called.
+const patchBodySchema = z.looseObject({
+  name: z.string().optional(),
+})
 
 function bad(error: string, field?: string) {
   return NextResponse.json({ error, ...(field ? { field } : {}) }, { status: 422 })
@@ -75,10 +82,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const existingPayload = await loadAccount(id, gate.user.orgId)
   if (!existingPayload) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const existing = (existingPayload.account)
-  const parsedBody = await parseJsonBody(request, jsonObject);
+  const parsedBody = await parseJsonBody(request, patchBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const parsed = parsedBody.data
-  const body = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as PatchBody : {}
+  const body = parsed as PatchBody
   if (body.currencyRestriction !== undefined && !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
   }
