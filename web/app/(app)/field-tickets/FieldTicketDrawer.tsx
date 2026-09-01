@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { Mail, Plus, Send, Trash2 } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, cn } from '@openbooks/ui'
 import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
+import { add } from '@openbooks/engine/src/money.ts'
 import {
   executeDocumentSave,
   persistedDocumentRevision,
@@ -128,12 +129,25 @@ export interface TicketPayload {
   }[]
 }
 
-interface GridRow {
+export interface GridRow {
   employeePartyId: string
   itemId: string | null
   projectTaskId: string | null
   cells: Record<string, string>
 }
+
+export interface CrewGridSaveRow {
+  employeePartyId: string
+  itemId: string | null
+  projectTaskId: string | null
+  timeTypeId: string | null
+  hours: Record<string, number>
+}
+
+/** A legacy/native entry can be missing its time type. Keep it in the same
+ * cell map as typed entries under a non-UUID key so a grid save can round-trip
+ * it instead of treating it as a cleared cell. */
+const UNCLASSIFIED_TIME_TYPE_ID = '__unclassified__'
 
 const STATUS_VARIANT: Record<string, 'secondary' | 'warning' | 'success' | 'outline'> = {
   draft: 'secondary',
@@ -165,21 +179,45 @@ function ticketWindow(period: string, anchor: string): { start: string; end: str
   return { start, end: date.toISOString().slice(0, 10) }
 }
 
-function buildGrid(entries: EntryRow[]): GridRow[] {
+export function buildGrid(entries: EntryRow[]): GridRow[] {
   const byKey = new Map<string, GridRow>()
   for (const e of entries) {
-    // Draft/native input always has a time type. A null can only be retained
-    // historic snapshot evidence; approved tickets are read-only.
-    if (!e.time_type_id) continue
     const k = `${e.employee_party_id}|${e.item_id ?? ''}|${e.project_task_id ?? ''}`
     let row = byKey.get(k)
     if (!row) {
       row = { employeePartyId: e.employee_party_id, itemId: e.item_id, projectTaskId: e.project_task_id, cells: {} }
       byKey.set(k, row)
     }
-    row.cells[`${e.time_type_id}|${e.worked_on}`] = String(Number(e.hours))
+    const timeTypeId = e.time_type_id ?? UNCLASSIFIED_TIME_TYPE_ID
+    const cellKey = `${timeTypeId}|${e.worked_on}`
+    const previous = row.cells[cellKey]
+    row.cells[cellKey] = previous === undefined ? String(e.hours) : add(previous, String(e.hours))
   }
   return [...byKey.values()]
+}
+
+/** Convert the editable grid back to the server's replacement shape. The
+ * unclassified sentinel is deliberately converted to null: that is the
+ * database value used by legacy entries and the save endpoint's key format. */
+export function serializeGridRows(grid: GridRow[]): CrewGridSaveRow[] {
+  return grid
+    .filter((r) => r.employeePartyId)
+    .flatMap((r) => {
+      const byType: Record<string, Record<string, number>> = {}
+      for (const [k, v] of Object.entries(r.cells)) {
+        const [timeTypeId, day] = k.split('|')
+        const h = Number(v)
+        if (!Number.isFinite(h) || h <= 0) continue
+        ;(byType[timeTypeId!] ??= {})[day!] = h
+      }
+      return Object.entries(byType).map(([timeTypeId, hours]) => ({
+        employeePartyId: r.employeePartyId,
+        itemId: r.itemId,
+        projectTaskId: r.projectTaskId,
+        timeTypeId: timeTypeId === UNCLASSIFIED_TIME_TYPE_ID ? null : timeTypeId,
+        hours,
+      }))
+    })
 }
 
 function relatedDocumentHref(kind: string, id: string, projectId: string | null): string | null {
@@ -326,6 +364,13 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   /** New keys ship with the catalogue (web/messages is owned elsewhere); read
    *  through a fallback so the field works today and translates later. */
   const tOr = (key: string, english: string) => (t.has(key as never) ? t(key as never) : english)
+  const unclassifiedTimeTypeName = tOr('editor.crew.unclassified', 'Unclassified')
+  const gridTimeTypes = useMemo(() => {
+    const hasUnclassified = grid.some((row) => Object.keys(row.cells).some((key) => key.startsWith(`${UNCLASSIFIED_TIME_TYPE_ID}|`)))
+    return hasUnclassified
+      ? [...props.timeTypes, { id: UNCLASSIFIED_TIME_TYPE_ID, name: unclassifiedTimeTypeName, bill_multiplier: '1' }]
+      : props.timeTypes
+  }, [grid, props.timeTypes, unclassifiedTimeTypeName])
   /** The crew this ticket names — the only people its equipment can be
    *  attributed to. Taken from the hours grid so a member added in this session
    *  is selectable as soon as the crew is saved. */
@@ -506,24 +551,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   }
 
   async function saveGrid(): Promise<boolean> {
-    const rows = grid
-      .filter((r) => r.employeePartyId)
-      .flatMap((r) => {
-        const byType: Record<string, Record<string, number>> = {}
-        for (const [k, v] of Object.entries(r.cells)) {
-          const [timeTypeId, day] = k.split('|')
-          const h = Number(v)
-          if (!Number.isFinite(h) || h <= 0) continue
-          ;(byType[timeTypeId!] ??= {})[day!] = h
-        }
-        return Object.entries(byType).map(([timeTypeId, hours]) => ({
-          employeePartyId: r.employeePartyId,
-          itemId: r.itemId,
-          projectTaskId: r.projectTaskId,
-          timeTypeId,
-          hours,
-        }))
-      })
+    const rows = serializeGridRows(grid)
     const saved = await call('POST', { action: 'save-grid', rows }, { preserveDraft: true })
     if (saved) setGridDirty(false)
     return saved
@@ -751,7 +779,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
 
   const rowHours = (r: GridRow) => Object.values(r.cells).reduce((a, v) => a + (Number(v) || 0), 0)
   const dayHours = (day: string) =>
-    grid.reduce((a, r) => a + props.timeTypes.reduce((b, tt) => b + (Number(r.cells[`${tt.id}|${day}`]) || 0), 0), 0)
+    grid.reduce((a, r) => a + gridTimeTypes.reduce((b, tt) => b + (Number(r.cells[`${tt.id}|${day}`]) || 0), 0), 0)
   const totalHours = grid.reduce((a, r) => a + rowHours(r), 0)
   const dayLabel = (isoDay: string) => {
     const d = new Date(`${isoDay}T12:00:00Z`)
@@ -993,7 +1021,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                     {days.map((d) => (
                       <td key={d} className="px-1 py-1.5">
                         <div className="flex flex-col gap-0.5">
-                          {props.timeTypes.map((tt) => {
+                          {gridTimeTypes.map((tt) => {
                             const k = `${tt.id}|${d}`
                             const v = row.cells[k] ?? ''
                             return (
