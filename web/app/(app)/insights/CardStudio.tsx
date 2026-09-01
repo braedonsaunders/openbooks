@@ -209,16 +209,6 @@ export function CardStudio({
     else {
       setStatus(next ? 'published' : 'draft')
       toast.success(next ? t('cardStudio.publishedToast') : t('cardStudio.draftToast'))
-      // Publishing also advances updated_at. Refresh the exact token before
-      // a later edit so the next autosave does not fence against the draft
-      // revision that existed before this lifecycle change.
-      try {
-        const latest = await fetch(`/api/insights/cards/${card.id}`, { cache: 'no-store' })
-        const latestData = (await latest.json()) as { updated_at?: unknown }
-        revisionRef.current = latest.ok && typeof latestData.updated_at === 'string' ? latestData.updated_at : null
-      } catch {
-        revisionRef.current = null
-      }
     }
     setBusy(false)
     router.refresh()
