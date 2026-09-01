@@ -150,7 +150,7 @@ export async function calculateForecast(scope: ForecastScope) {
            select 1
              from crm_opportunity_documents od
              join forecast_scope fo on fo.id = od.opportunity_id
-            where od.org_id = ${scope.orgId}
+           where od.org_id = ${scope.orgId}
               and od.document_id = d.id
          )` : sql``
   const rows = (await db.execute<Record<string, string>>(sql`
