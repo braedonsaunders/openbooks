@@ -435,7 +435,7 @@
     "create": "Criar login",
     "createFailed": "Não foi possível criar o login",
     "createNote": "A senha é exibida uma vez após a criação — copie-a nesse momento. Você pode rotacioná-la depois se ela for perdida.",
-    "namePlaceholder": "ex.: Entrada RBC",
+    "namePlaceholder": "ex.: Arquivos bancários recebidos",
     "username": "Nome de usuário",
     "backendLabel": "Armazenamento",
     "backendS3": "Nuvem",
