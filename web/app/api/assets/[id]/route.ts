@@ -166,12 +166,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.acquisitionCost !== undefined) {
     const v = moneyOrNull(body.acquisitionCost)
     if (v === 'invalid') return bad('Acquisition cost must be a number')
+    if (v !== null && cmp(v, '0') < 0) return bad('Acquisition cost must be a non-negative number')
     cost = v ?? '0'
   }
   let salvage: string | undefined
   if (body.salvageValue !== undefined) {
     const v = moneyOrNull(body.salvageValue)
     if (v === 'invalid') return bad('Salvage value must be a number')
+    if (v !== null && cmp(v, '0') < 0) return bad('Salvage value must be a non-negative number')
     salvage = v ?? '0'
   }
 
