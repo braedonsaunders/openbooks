@@ -345,11 +345,11 @@ async function writeMaster(
           err = `${c.key} is required`
           break
         }
+        if (!present) continue
         if (c.kind === 'boolean') {
           setCols.push({ column: c.column, value: coerceBoolean(raw) })
           continue
         }
-        if (!present) continue
         if (c.kind === 'reference' && c.ref) {
           const id = await resolveMasterRefId(resolver, c.ref, raw, ctx.orgId)
           if (!id) {
