@@ -140,8 +140,12 @@ CREATE OR REPLACE FUNCTION public.openbooks_scheduler_outbox_replay_allowed(p_or
 RETURNS boolean
     LANGUAGE sql STABLE
     AS $$
-  SELECT coalesce(current_setting('openbooks.scheduler_outbox_replay_org', true), '') <> ''
-     AND current_setting('openbooks.scheduler_outbox_replay_org', true) = p_org_id::text
+  SELECT coalesce(
+    p_org_id IS NOT NULL
+    AND coalesce(current_setting('openbooks.scheduler_outbox_replay_org', true), '') <> ''
+    AND current_setting('openbooks.scheduler_outbox_replay_org', true) = p_org_id::text,
+    false
+  )
 $$;
 
 COMMENT ON FUNCTION public.openbooks_scheduler_outbox_replay_allowed(uuid) IS
@@ -188,7 +192,7 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'a scheduler_outbox replay reset requires its replay_authorized audit evidence first';
   END IF;
-  IF NOT public.openbooks_scheduler_outbox_replay_allowed(OLD.org_id) THEN
+  IF public.openbooks_scheduler_outbox_replay_allowed(OLD.org_id) IS NOT TRUE THEN
     RAISE EXCEPTION 'a scheduler_outbox replay reset requires its organization''s authorization pin';
   END IF;
   RETURN NEW;
