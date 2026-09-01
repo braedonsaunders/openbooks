@@ -103,7 +103,6 @@ const connectorPaths = [
   /^engine\/src\/reversal-journal-lines\.integration\.test\.ts$/,
   /^web\/lib\/feature-gates\.test\.ts$/,
   /^engine\/src\/worker\/migration-worker\.ts$/,
-  /^engine\/src\/harness\/ledger-parity\//,
   /^engine\/src\/harness\/differential\//,
   /^integrations\//,
   /^scripts\/verify-financial-release\.ts$/,

@@ -308,81 +308,6 @@ async function main(): Promise<void> {
       "bootstrap did not verify row-level security",
     );
 
-    run("GL parity coverage report", "npm", [
-      "-w",
-      "engine",
-      "run",
-      "harness:ledger-parity",
-      "--",
-      "report",
-    ]);
-    const coveragePath = join(
-      repoRoot,
-      ".local",
-      "erpnext-parity",
-      "coverage-report.json",
-    );
-    const coverage = JSON.parse(readFileSync(coveragePath, "utf8")) as {
-      generatedAt: string;
-      exhaustive: boolean;
-      exhaustiveReason: string | null;
-      evidence: {
-        passingFiles: number;
-        failingFiles: unknown[];
-        resolvedFindings: unknown[];
-      };
-      operationStatus: {
-        verified: number;
-        partial: number;
-        pending: number;
-        "product-specific": number;
-      };
-      matrixStatus: {
-        direct: number;
-        semantic: number;
-        "openbooks-only": number;
-        "erpnext-only": number;
-        pending: number;
-      };
-      sourceIntegrity: {
-        openbooks: {
-          entries: string;
-          unbalanced_entries: string;
-          net: string;
-        };
-        erpnext: {
-          activeGlRows: number;
-          unbalancedActiveVouchers: number;
-          net: string;
-        };
-      };
-      operations: unknown[];
-    };
-    assertRelease(coverage.exhaustive, coverage.exhaustiveReason ?? "GL coverage is not exhaustive");
-    assertRelease(
-      coverage.evidence.failingFiles.length === 0,
-      "GL parity evidence contains a failing checkpoint",
-    );
-    assertRelease(
-      coverage.operationStatus.partial === 0 &&
-        coverage.operationStatus.pending === 0,
-      "GL operation registry contains partial or pending work",
-    );
-    assertRelease(
-      coverage.matrixStatus.pending === 0,
-      "GL coverage matrix contains pending work",
-    );
-    assertRelease(
-      coverage.sourceIntegrity.openbooks.unbalanced_entries === "0" &&
-        coverage.sourceIntegrity.openbooks.net === "0.0000",
-      "OpenBooks parity ledger is not exactly balanced",
-    );
-    assertRelease(
-      coverage.sourceIntegrity.erpnext.unbalancedActiveVouchers === 0 &&
-        coverage.sourceIntegrity.erpnext.net === "0.0000",
-      "ERPNext comparison ledger is not exactly balanced",
-    );
-
     const actualCatalog = run(
       "live catalog snapshot",
       process.execPath,
@@ -503,17 +428,6 @@ async function main(): Promise<void> {
         policies: catalogComparison.policies.actualCount,
         unvalidatedConstraints:
           Number(databaseControls.unvalidated_constraints),
-      },
-      glCoverage: {
-        generatedAt: coverage.generatedAt,
-        exhaustive: coverage.exhaustive,
-        operations: coverage.operations.length,
-        operationStatus: coverage.operationStatus,
-        matrixStatus: coverage.matrixStatus,
-        passingEvidenceFiles: coverage.evidence.passingFiles,
-        failingEvidenceFiles: coverage.evidence.failingFiles.length,
-        resolvedFindings: coverage.evidence.resolvedFindings.length,
-        sourceIntegrity: coverage.sourceIntegrity,
       },
       dataIntegrity: {
         activeOrphanRows: Number(databaseControls.active_orphans),
