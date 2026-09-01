@@ -1036,6 +1036,29 @@ async function countScheduledRuns(scriptId: string): Promise<number> {
   ).rows[0]!.n;
 }
 
+/**
+ * Keep these scheduler assertions deterministic even when the release host
+ * exposes a Redis URL for unrelated tests. The occurrence tests deliberately
+ * exercise the scheduler's inline fallback; a successful queue enqueue would
+ * leave the durable occurrence queued because this test process has no worker.
+ */
+async function runDueScriptsInline(): Promise<void> {
+  const redisEnv = {
+    OPENBOOKS_REDIS_URL: process.env.OPENBOOKS_REDIS_URL,
+    REDIS_URL: process.env.REDIS_URL,
+  };
+  delete process.env.OPENBOOKS_REDIS_URL;
+  delete process.env.REDIS_URL;
+  try {
+    await runDueScripts();
+  } finally {
+    for (const [key, value] of Object.entries(redisEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
 test("a malformed legacy scheduled script is durably quarantined and runs after repair", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const invalidCron = "definitely not a cron expression";
@@ -1052,7 +1075,7 @@ test("a malformed legacy scheduled script is durably quarantined and runs after 
        where id = ${scriptId}
     `);
 
-    await runDueScripts();
+    await runDueScriptsInline();
 
     // The invalid occurrence never executes and never silently disappears:
     // the exact repairable cron/cursor survive while the row is explicitly
@@ -1125,7 +1148,7 @@ test("a malformed legacy scheduled script is durably quarantined and runs after 
     assert.equal(audit.changes.after.cron, invalidCron);
     assert.equal(new Date(audit.changes.after.nextRunAt).toISOString(), dueAt.toISOString());
 
-    await runDueScripts();
+    await runDueScriptsInline();
     const evidenceCount = (
       await db.execute<{ n: number }>(sql`
         select count(*)::int as n
@@ -1145,7 +1168,7 @@ test("a malformed legacy scheduled script is durably quarantined and runs after 
              is_active = true, updated_at = now()
        where id = ${scriptId}
     `);
-    await runDueScripts();
+    await runDueScriptsInline();
 
     assert.equal(await countScheduledRuns(scriptId), 1);
     assert.equal((await loadOccurrence(scriptId)).status, "ok");
@@ -1174,7 +1197,7 @@ test("a valid scheduled-script control commits its durable occurrence with the c
     const dueAt = new Date(Date.now() - 60_000);
     await db.execute(sql`update user_scripts set next_run_at = ${dueAt} where id = ${scriptId}`);
 
-    await runDueScripts();
+    await runDueScriptsInline();
 
     // The ledger row exists, carries the deterministic occurrence identity and
     // the scheduled-for stamp, and reached a terminal state via the inline
