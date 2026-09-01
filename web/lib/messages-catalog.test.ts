@@ -127,6 +127,11 @@ test('catalog completeness counts missing and declared fallback keys as untransl
   const manifest = readFallbackManifest()
 
   for (const row of completenessReport(manifest)) {
+    assert.deepEqual(
+      row.extraKeys,
+      [],
+      `${row.locale} contains keys absent from the English source: ${row.extraKeys.join(', ')}`,
+    )
     const declaredFallbacks = manifest.fallbacks[row.locale] ?? []
     for (const key of declaredFallbacks) {
       assert.ok(source.has(key), `${row.locale} fallback key is absent from English source: ${key}`)
