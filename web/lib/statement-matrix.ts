@@ -591,10 +591,16 @@ export async function statementMatrix(opts: {
     bookId: opts.bookId,
   })
 
+  // A dimension or segment breakout can legitimately have no groups when the
+  // selected period has no qualifying activity. There is no value column (or
+  // SQL aggregate) to build in that case, so return an empty matrix rather
+  // than generating a malformed select list below.
+  if (cols.length === 0) return { columns: [], rows: [], truncated }
+
   // Overall window spanning every column, used to bound the base join.
   const froms = cols.map((c) => c.from).filter((x): x is string => !!x)
   const overallFrom = froms.length ? froms.reduce((a, b) => (a < b ? a : b)) : opts.period.from
-  const overallTo = cols.map((c) => c.to).reduce((a, b) => (a > b ? a : b))
+  const overallTo = cols.length ? cols.map((c) => c.to).reduce((a, b) => (a > b ? a : b)) : opts.period.to
   // Every report answers for exactly one accounting book — journal entries are
   // book-mandatory and an unscoped read would fuse parallel books.
   const baseBook = sql`and e.book_id = ${statementBookExpr(orgId, opts.bookId)}`
