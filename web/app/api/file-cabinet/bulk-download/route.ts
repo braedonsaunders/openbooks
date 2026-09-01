@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
-import { buildZip, filesZipManifest, MAX_ZIP_FILES } from '../../../../lib/file-zip'
+import { buildZip, filesZipManifest, MAX_ZIP_FILES, ZipSizeLimitError } from '../../../../lib/file-zip'
 import { fileViewer } from '../lib'
 
 export const runtime = 'nodejs'
@@ -24,7 +24,16 @@ export async function POST(req: Request) {
   }
 
   const entries = await filesZipManifest(gate.user.orgId, fileIds)
-  const { bytes, included } = await buildZip(gate.user.orgId, fileViewer(gate), entries)
+  let bytes: Buffer
+  let included: number
+  try {
+    ;({ bytes, included } = await buildZip(gate.user.orgId, fileViewer(gate), entries))
+  } catch (error) {
+    if (error instanceof ZipSizeLimitError) {
+      return NextResponse.json({ error: error.message }, { status: 413 })
+    }
+    throw error
+  }
   if (included === 0) return NextResponse.json({ error: 'nothing to download' }, { status: 404 })
 
   const stamp = await businessToday(gate.user.orgId)
