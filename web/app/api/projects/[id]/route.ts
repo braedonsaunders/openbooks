@@ -1,6 +1,7 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
@@ -12,6 +13,10 @@ import { guardProjectsFeature } from '../../../../lib/projects-gate'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'
 
 export const runtime = 'nodejs'
+
+const nameBodySchema = z.looseObject({
+  name: z.string().optional(),
+})
 
 const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -123,7 +128,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const existingDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiary_id)
   if (existingDenied) return existingDenied
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, nameBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as PatchBody
   if (body.tasks !== undefined) {

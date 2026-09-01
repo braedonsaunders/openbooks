@@ -1,12 +1,17 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@openbooks/engine/src/db.ts";
 import { getAuthz, can } from "../../../../../lib/authz";
 import { parseListView } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
 
 export const runtime = "nodejs";
+
+const nameBodySchema = z.looseObject({
+  name: z.string().optional(),
+});
 
 async function loadOwn(orgId: string, userId: string, id: string) {
   const r = (await db.execute(sql`
@@ -49,7 +54,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (existing.scope === "user" && existing.ownerId !== user.id)
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, nameBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     name?: string;

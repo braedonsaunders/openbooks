@@ -1,12 +1,17 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
+import { z } from 'zod'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadDashboard, normalizeAllowedRoles, normalizeLayout, strOrNull } from '../../_lib'
 
 export const runtime = 'nodejs'
+
+const nameBodySchema = z.looseObject({
+  name: z.string().optional(),
+})
 
 function bad(error: string) {
   return NextResponse.json({ error }, { status: 422 })
@@ -92,7 +97,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const existing = await loadDashboard(id, user.orgId)
   if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, nameBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as PatchBody
 

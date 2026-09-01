@@ -1,6 +1,7 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@openbooks/engine/src/db.ts";
 import { cmp, normalizeDecimal, normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardPermission } from "../../../../lib/authz";
@@ -14,6 +15,11 @@ import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal"
 import { isFeatureEnabled } from "../../../../lib/features";
 
 export const runtime = "nodejs";
+
+const nameBodySchema = z.looseObject({
+  name: z.string().optional(),
+  code: z.string().optional(),
+});
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
@@ -175,7 +181,7 @@ export async function PUT(
   if (projectsGate) return projectsGate;
   const { id } = await params;
   if (!isUuid(id)) return error("notFound", 404);
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, nameBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as CardInput;
   if (!body.name?.trim() || !body.code?.trim()) return error("name");
