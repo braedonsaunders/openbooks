@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Button, Input, SearchSelect, Select } from '@openbooks/ui'
 import type { FlowSubjectProfile, LogicRule } from '@openbooks/forms-core'
 import type { OrgUser } from './graph'
+import { defaultLeaf, makeGroup, type GroupOp } from './logic-rule-builder'
 
 /**
  * Recursive LogicRule editor — the one condition language shared with the
@@ -13,7 +14,6 @@ import type { OrgUser } from './graph'
  * the subject profile's field type.
  */
 
-type GroupOp = 'and' | 'or' | 'not'
 type LeafOp = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'notIn' | 'isSet' | 'isNotSet'
 
 const LEAF_OPS: LeafOp[] = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'in', 'notIn', 'isSet', 'isNotSet']
@@ -24,23 +24,10 @@ const MAX_DEPTH = 2
 const isGroup = (r: LogicRule): r is Extract<LogicRule, { rules: LogicRule[] } | { rule: LogicRule }> =>
   r.op === 'and' || r.op === 'or' || r.op === 'not'
 
-const defaultLeaf = (field: string): LogicRule => ({ op: 'isSet', field })
-
 function groupChildren(r: LogicRule): LogicRule[] {
   if ('rules' in r) return r.rules
   if ('rule' in r) return [r.rule]
   return []
-}
-
-function makeGroup(op: GroupOp, children: LogicRule[], fallbackField: string, previousOp?: 'and' | 'or'): LogicRule {
-  if (op === 'not') {
-    if (children.length === 0 && previousOp === undefined) {
-      return { op: 'not', rule: defaultLeaf(fallbackField) }
-    }
-    const rule = children.length === 1 ? children[0] : { op: previousOp ?? 'and', rules: children }
-    return { op: 'not', rule: rule ?? defaultLeaf(fallbackField) }
-  }
-  return { op, rules: children }
 }
 
 /** Change a leaf's operator, keeping the value when the shape still fits. */
