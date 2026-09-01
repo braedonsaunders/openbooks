@@ -36,7 +36,7 @@
     "subtotalAmount": "小计 {amount}",
     "taxTotalAmount": "税 {amount}",
     "totalAmount": "合计 {amount}",
-    "balanceDueAmount": "应付余额 {amount}",
+    "balanceDueAmount": "应收余额 {amount}",
     "saveState": {
       "saved": "所有更改已保存",
       "error": "保存失败——修正后重试",
