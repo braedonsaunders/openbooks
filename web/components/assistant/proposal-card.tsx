@@ -12,6 +12,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { Check, ExternalLink, FileWarning, Sparkles } from 'lucide-react'
 import { Button } from '@openbooks/ui'
+import { decimalCmp, decimalNeg } from '@/lib/statement-format'
 type ProposalData = {
   kind: string
   preview: {
@@ -116,7 +117,7 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
           </thead>
           <tbody>
             {lines.map((l, i) => {
-              const amount = Number(l.amount)
+              const amountSign = decimalCmp(l.amount, '0')
               return (
                 <tr key={i} className="border-t border-teal-100 dark:border-teal-900/30">
                   <td className="py-1 pr-2 text-slate-700 dark:text-slate-200">
@@ -128,10 +129,10 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
                     ) : null}
                   </td>
                   <td className="py-1 text-right tabular-nums text-slate-700 dark:text-slate-200">
-                    {amount > 0 ? money(l.amount) : ''}
+                    {amountSign > 0 ? money(l.amount) : ''}
                   </td>
                   <td className="py-1 text-right tabular-nums text-slate-700 dark:text-slate-200">
-                    {amount < 0 ? money(-amount) : ''}
+                    {amountSign < 0 ? money(decimalNeg(l.amount)) : ''}
                   </td>
                 </tr>
               )
