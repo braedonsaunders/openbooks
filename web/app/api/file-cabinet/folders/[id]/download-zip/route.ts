@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { getFolder } from '../../../../../../lib/file-cabinet'
-import { buildZip, folderZipManifest, MAX_ZIP_FILES } from '../../../../../../lib/file-zip'
+import { buildZip, folderZipManifest, MAX_ZIP_FILES, ZipSizeLimitError } from '../../../../../../lib/file-zip'
 import { isUuid } from '../../../../../../lib/list-params'
 import { fileViewer, requireFolderAccess, requireSession } from '../../../lib'
 
@@ -28,7 +28,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     )
   }
 
-  const { bytes } = await buildZip(gate.user.orgId, fileViewer(gate), entries)
+  let bytes: Buffer
+  try {
+    ;({ bytes } = await buildZip(gate.user.orgId, fileViewer(gate), entries))
+  } catch (error) {
+    if (error instanceof ZipSizeLimitError) {
+      return NextResponse.json({ error: error.message }, { status: 413 })
+    }
+    throw error
+  }
   const stamp = await businessToday(gate.user.orgId)
   const name = `${folder.name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\/]/g, '_').trim() || 'folder'}-${stamp}.zip`
   return new NextResponse(new Uint8Array(bytes), {

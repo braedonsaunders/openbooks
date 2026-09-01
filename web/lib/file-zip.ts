@@ -6,9 +6,19 @@ import { getFileBlob, type FileViewer } from './file-cabinet'
 
 /** Guardrails — zipping fetches every blob (often from object storage), so cap
  *  the work per request. Bulk selections and folder subtrees both go through
- *  these limits. */
+ *  these limits; buildZip enforces the source-byte cap after each authorized
+ *  blob is read, before adding it to the in-memory archive. */
 export const MAX_ZIP_FILES = 300
 export const MAX_ZIP_BYTES = 250 * 1024 * 1024 // 250 MB (uncompressed source)
+
+export class ZipSizeLimitError extends Error {
+  readonly limit = MAX_ZIP_BYTES
+
+  constructor() {
+    super(`zip source exceeds ${MAX_ZIP_BYTES / (1024 * 1024)} MB limit`)
+    this.name = 'ZipSizeLimitError'
+  }
+}
 
 export type ZipEntry = {
   id: string
@@ -65,11 +75,14 @@ export async function buildZip(
   const zip = new JSZip()
   const used = new Set<string>()
   let included = 0
+  let sourceBytes = 0
   for (const e of entries) {
     // A single unreadable blob (missing object, storage hiccup) must not sink
     // the whole archive — skip it.
     const blob = await getFileBlob(orgId, e.id, viewer).catch(() => null)
     if (!blob) continue
+    if (sourceBytes + blob.bytes.length > MAX_ZIP_BYTES) throw new ZipSizeLimitError()
+    sourceBytes += blob.bytes.length
     let path = e.path
     if (used.has(path)) {
       const dot = path.lastIndexOf('.')
