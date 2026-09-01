@@ -66,7 +66,7 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
     if (!form) return
     setBusy(true)
     const body: Record<string, unknown> = {
-      currency: form.currency, unitPrice: form.unitPrice, lowValue: form.lowValue || null, highValue: form.highValue || null,
+      currency: form.currency, unitPrice: form.unitPrice, lowValue: form.lowValue === '' ? null : form.lowValue, highValue: form.highValue === '' ? null : form.highValue,
       effectiveFrom: form.effectiveFrom || null, effectiveTo: form.effectiveTo || null, isActive: form.isActive,
     }
     if (form.id) body.id = form.id
