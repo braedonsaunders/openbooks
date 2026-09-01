@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { addMonthsIso } from "@openbooks/reports";
 import { analyticsConfig } from "./config";
 
 /**
@@ -166,6 +167,11 @@ export interface SentinelData {
 const conformity1D = (mad: number) => (mad <= 0.006 ? "Excellent" : mad <= 0.012 ? "Acceptable" : mad <= 0.015 ? "Marginal" : "Non-Conforming");
 const conformity2D = (mad: number) => (mad <= 0.0012 ? "Excellent" : mad <= 0.0022 ? "Acceptable" : mad <= 0.0033 ? "Marginal" : "Non-Conforming");
 
+/** Return the inclusive start of the 36-month vendor-statistics baseline. */
+export function sentinelBaselineFrom(to: string): string {
+  return addMonthsIso(to, -36);
+}
+
 // ---- main -------------------------------------------------------------------
 
 export async function sentinelData(orgId: string, period: { from: string; to: string; label: string }): Promise<SentinelData> {
@@ -193,7 +199,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
 
   // Baseline window for vendor statistics: 36 months before period end.
   const end = new Date(to + "T00:00:00Z");
-  const baselineFrom = `${end.getUTCFullYear() - 3}${to.slice(4)}`;
+  const baselineFrom = sentinelBaselineFrom(to);
 
   // Shared filter: non-voided spend documents in the period, |total| ≥ 1.
   const periodDocs = sql`
