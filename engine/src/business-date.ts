@@ -53,12 +53,17 @@ function validZone(value: string | null | undefined): string | null {
   }
 }
 
-/** The org's business day (YYYY-MM-DD); UTC day when no valid zone is set. */
-export async function businessToday(orgId: string): Promise<string> {
+/** The org's configured IANA time zone; UTC when it is absent or invalid. */
+export async function businessTimeZone(orgId: string): Promise<string> {
   const r = (await db.execute<{ time_zone: string | null }>(sql`
     select settings->>'timeZone' as time_zone from orgs where id = ${orgId}
   `));
-  return formatInZone(now(), validZone(r.rows[0]?.time_zone) ?? "UTC");
+  return validZone(r.rows[0]?.time_zone) ?? "UTC";
+}
+
+/** The org's business day (YYYY-MM-DD); UTC day when no valid zone is set. */
+export async function businessToday(orgId: string): Promise<string> {
+  return formatInZone(now(), await businessTimeZone(orgId));
 }
 
 /** Parse YYYY-MM-DD as a UTC calendar date — no local-timezone shift. */

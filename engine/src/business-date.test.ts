@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { withSimClock } from "./clock.ts";
 import {
-  addCalendarDays, addCalendarMonthsStart, businessToday, calendarQuarterBounds,
+  addCalendarDays, addCalendarMonthsStart, businessTimeZone, businessToday, calendarQuarterBounds,
   formatInZone, mondayOfIsoWeek, startOfMonth, weekStartsEndingOn,
 } from "./business-date.ts";
 import { createScratchOrg, dropScratchOrgReporting } from "./test-fixtures.ts";
@@ -51,6 +51,24 @@ test("calendar helpers stay on the YYYY-MM-DD grid, not the host timezone", () =
 
 test("an unrecognized zone is refused, never silently misformatted", () => {
   assert.throws(() => formatInZone(new Date(), "Mars/Olympus_Mons"), RangeError);
+});
+
+test("businessTimeZone resolves a valid org zone and preserves the UTC fallback", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`
+      update orgs set settings = ${JSON.stringify({ timeZone: "Pacific/Auckland" })}::jsonb
+       where id = ${org.orgId}`);
+    assert.equal(await businessTimeZone(org.orgId), "Pacific/Auckland");
+
+    for (const settings of ["{}", JSON.stringify({ timeZone: "Not/AZone" })]) {
+      await db.execute(sql`update orgs set settings = ${settings}::jsonb where id = ${org.orgId}`);
+      assert.equal(await businessTimeZone(org.orgId), "UTC");
+    }
+    assert.equal(await businessTimeZone("00000000-0000-0000-0000-000000000000"), "UTC");
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
 });
 
 test("businessToday honours the org's zone and falls back to the UTC day", { skip: !DB }, async () => {
