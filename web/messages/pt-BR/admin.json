@@ -697,7 +697,7 @@
   "users": {
     "metaTitle": "Usuários",
     "title": "Usuários",
-    "description": "Quem pode fazer login e quais funções possui. O acesso de um usuário é a união de suas funções atribuídas; usuários sem atribuição recorrem à sua função legada.",
+    "description": "Quem pode fazer login e quais funções possui. O acesso é a união das funções atribuídas explicitamente; usuários sem uma função não têm acesso concedido por função alguma.",
     "manageRoles": "Gerenciar funções",
     "searchPlaceholder": "Buscar nome ou e-mail…",
     "statusFilter": "Status",
