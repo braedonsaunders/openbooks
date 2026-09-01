@@ -5,12 +5,29 @@ import { join } from "node:path";
 import { test } from "node:test";
 import {
   accountingReleaseStatus,
+  assertReleaseGatePassed,
   loadAccountingBlockerManifest,
   parseAccountingBlockerManifest,
   unresolvedAccountingBlockers,
 } from "./verify-financial-release.ts";
 
 const REVIEWED_AT = "2026-08-28T12:00:00.000Z";
+
+test("a release gate with only skipped tests still passes", () => {
+  const output = [
+    "ℹ tests 4159",
+    "ℹ pass 4157",
+    "ℹ fail 0",
+    "ℹ skipped 2",
+  ].join("\n");
+
+  assert.deepEqual(assertReleaseGatePassed(output), {
+    tests: 4159,
+    passed: 4157,
+    failed: 0,
+    skipped: 2,
+  });
+});
 
 test("an unresolved reviewed accounting blocker prevents a ready certificate", () => {
   const manifest = parseAccountingBlockerManifest({
