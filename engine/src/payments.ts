@@ -757,7 +757,7 @@ export async function postPaymentWithApplications(
   paymentDocId: string,
   allocations?: AllocationInput[],
   userId?: string,
-  auditSource: "ui" | "api" | "mcp" | "assistant" = "ui",
+  auditSource: "ui" | "api" | "mcp" | "assistant" | "flows" = "ui",
   options: { deferEffects?: boolean } = {},
 ): Promise<{ entryId: string }> {
   const [preflight] = await db.select().from(schema.documents).where(eq(schema.documents.id, paymentDocId));
