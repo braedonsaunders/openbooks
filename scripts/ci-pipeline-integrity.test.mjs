@@ -252,26 +252,34 @@ test('every workflow step that runs the test suite supplies the trusted-bypass c
   )
 })
 
-/** Quoted glob or path arguments, which is how both commands name their tests. */
-function testTargets(command) {
-  return new Set([...command.matchAll(/'([^']+\.(?:test\.ts|test\.mjs|test\.ts))'/g)].map((m) => m[1]))
-}
 
-test('the coverage job runs at least everything the canonical test command runs', () => {
-  // The coverage job called itself the full suite and published an lcov
-  // artifact, while its globs omitted web/app, web/components and both script
-  // tests — including this file. A failing assertion in any of them left the
-  // coverage job green.
-  const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
+test('the coverage run executes the canonical test command, not a parallel glob list', () => {
+  // This job used to maintain its own copy of the test globs, drifted from the
+  // canonical list, and published an lcov artifact for a suite it had not run.
+  // Coverage is now produced by the same `npm test` invocation that gates the
+  // merge, so the two cannot diverge by construction. Assert exactly that.
   const workflow = readFileSync(join(WORKFLOW_DIR, 'test.yml'), 'utf8')
-  const coverageStep = workflow.slice(workflow.indexOf('Test suite with coverage'))
-  const canonical = testTargets(scripts.test)
-  const covered = testTargets(coverageStep.slice(0, coverageStep.indexOf('- name:', 1)))
-  const missing = [...canonical].filter((target) => !covered.has(target))
-  assert.deepEqual(
-    missing,
-    [],
-    `the coverage job advertises the full suite but does not run:\n${missing.join('\n')}`,
+  const blocks = runBlocks(workflow)
+  const covering = blocks.filter((b) => /--experimental-test-coverage/.test(withoutComments(b.body)))
+  assert.equal(
+    covering.length,
+    1,
+    'exactly one step must produce coverage; it is missing or duplicated',
+  )
+  const body = withoutComments(covering[0].body)
+  assert.match(
+    body,
+    /npm test\b/,
+    'the coverage step must run the canonical `npm test` script so its membership cannot drift from the merge gate',
+  )
+  assert.ok(
+    !/engine\/src\/\*\*|web\/\*\*|packages\/\*\*/.test(body),
+    'the coverage step must not re-specify test globs; that is the drift this test exists to prevent',
+  )
+  assert.match(
+    body,
+    /--test-reporter=lcov/,
+    'the coverage step must still emit lcov',
   )
 })
 
@@ -553,7 +561,14 @@ test('the merge-gating workflow runs the golden harness, after real activity, in
 
   // "as part of its check command": the harness rides in the same job as the
   // full database-backed suite, so one green check covers both.
-  assert.ok(integration.includes('run: npm test'), 'this contract pins the integration job, the one that runs the full suite')
+  // Match the invocation, not a literal `run: npm test` line: the step is a
+  // block scalar now because it also emits lcov, and pinning the exact text
+  // made an unrelated formatting change look like a removed test run.
+  assert.match(
+    integration,
+    /\bnpm test\b/,
+    'this contract pins the integration job, the one that runs the full suite',
+  )
   assert.ok(
     integration.includes(harnessCode.trim().split('\n')[0]),
     'the golden harness must run in the same job as the full suite, not in a workflow merges do not wait for',

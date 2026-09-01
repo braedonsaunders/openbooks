@@ -14,6 +14,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Nightly, for the disaster-recovery drill only.
+    - cron: "17 7 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -130,8 +133,34 @@ jobs:
           node -e 'const s=require("fs").readFileSync("canary.tap","utf8"); if (/# SKIP(?:\s|$)/im.test(s)) { console.error("FATAL: integration tests skipped — DB wiring is broken"); process.exit(1); } if (/^not ok \d+ - /m.test(s)) { console.error("FATAL: canary recorded a failing test"); process.exit(1); } if (!/^# fail 0$/m.test(s)) { console.error("FATAL: canary did not report zero failures"); process.exit(1); } if (!/^ok \d+ - /m.test(s)) { console.error("FATAL: canary ran zero tests"); process.exit(1); } console.log("canary ok: integration tests executed against the database");'
 
       - name: Full test suite (with database)
-        run: npm test
+        shell: bash
+        run: |
+          # One run produces both the pass/fail signal and lcov. A separate
+          # coverage job re-ran this identical suite a third time per push.
+          set -o pipefail
+          npm test -- --experimental-test-coverage \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=lcov --test-reporter-destination=lcov.info 2>&1 | tee coverage.txt
 
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          {
+            echo "# Test coverage"
+            echo ""
+            echo '```'
+            awk '/start of coverage report/,0' coverage.txt | sed 's/^ℹ //' | head -60 || tail -40 coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage
+          path: |
+            lcov.info
+            coverage.txt
+          if-no-files-found: ignore
       - name: Drive a seeded company through real activity
         # The golden harness below is only meaningful over a ledger that real
         # activity has stressed. The simulation provisions a deterministic,
@@ -177,7 +206,11 @@ jobs:
           path: engine/sim-runs/**/defects/**
           if-no-files-found: ignore
 
+
   restore-drill:
+    # A backup export/destroy/restore rehearsal is a disaster-recovery drill,
+    # not a per-commit gate. Nightly and on demand.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -214,93 +247,6 @@ jobs:
           node --import tsx --import ./engine/src/test-database-bypass.ts
           --test --test-force-exit
           engine/src/backup-restore.integration.test.ts
-
-  coverage:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
-        env:
-          POSTGRES_USER: openbooks
-          POSTGRES_PASSWORD: openbooks
-          POSTGRES_DB: openbooks_coverage
-        ports:
-          - 5433:5432
-        options: >-
-          --health-cmd "pg_isready -U openbooks -d openbooks_coverage"
-          --health-interval 5s --health-timeout 5s --health-retries 12
-      redis:
-        image: redis:7.4.5-alpine3.21@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s --health-timeout 5s --health-retries 12
-    env:
-      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_coverage
-      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_coverage
-      OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
-      PGPASSWORD: openbooks
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - name: Install qpdf
-        # Payroll ciphertext certification shells out to the real qpdf binary;
-        # without it the sender fail-closes on spawn ENOENT and the suite can
-        # never exercise the verified-ciphertext contract.
-        run: sudo apt-get update && sudo apt-get install -y qpdf
-
-      - name: Load schema
-        run: npx tsx scripts/bootstrap.ts
-
-      - name: Test suite with coverage
-        env:
-          # The same trusted-bypass contract the root `npm test` script and the
-          # restore drill use. Without it every DB-backed integration file
-          # throws on import, and this job silently measured a smaller suite.
-          NODE_ENV: test
-          OPENBOOKS_TRUSTED_TEST_BYPASS: "1"
-        shell: bash
-        run: |
-          # `tee` exits 0, so without pipefail a failing suite greens the step.
-          set -o pipefail
-          # Membership must match the canonical `npm test` command exactly.
-          # Keep the repository-artifacts contract test first, just as it is in
-          # the canonical command, so coverage cannot omit a script test.
-          node --import tsx --import ./engine/src/test-database-bypass.ts \
-            --test --test-force-exit --experimental-test-coverage \
-            --test-reporter=spec --test-reporter-destination=stdout \
-            --test-reporter=lcov --test-reporter-destination=lcov.info \
-            'scripts/check-repository-artifacts.test.mjs' \
-            'scripts/deploy-edge-workflow.test.mjs' 'scripts/ci-pipeline-integrity.test.mjs' \
-            'engine/src/**/*.test.ts' 'packages/**/*.test.ts' \
-            'web/**/*.test.ts' 'schema/**/*.test.ts' 2>&1 | tee coverage.txt
-
-      - name: Publish coverage summary
-        if: always()
-        run: |
-          {
-            echo "# Test coverage"
-            echo ""
-            echo '```'
-            awk '/start of coverage report/,0' coverage.txt | sed 's/^ℹ //' | head -60 || tail -40 coverage.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload coverage artifacts
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: coverage
-          path: |
-            lcov.info
-            coverage.txt
-          if-no-files-found: ignore
 
   e2e:
     runs-on: ubuntu-latest
