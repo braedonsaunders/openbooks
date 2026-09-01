@@ -27,8 +27,6 @@
   "costSource": "实际成本来源",
   "costDimension": "成本科目组",
   "laborSource": "人工成本来源",
-  "burdenSource": "间接费用来源",
-  "burdenDimension": "间接费用科目组",
   "budgetSource": "成本预算来源",
   "committedKinds": "承诺成本来自",
   "committedStatuses": "承诺成本生命周期状态",

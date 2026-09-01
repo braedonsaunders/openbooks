@@ -1631,10 +1631,6 @@
         "title": "Grupos de Seguro Acidentário",
         "description": "Grupos de alíquota de seguro acidentário para custeio de mão de obra."
       },
-      "labor-burden-rates": {
-        "title": "Taxas de Encargos de Mão de Obra",
-        "description": "Taxas de encargos com datas de vigência aplicadas ao custo de mão de obra."
-      },
       "asset-categories": {
         "title": "Categorias de Ativo",
         "description": "Método de depreciação e contas padrão para ativos imobilizados."
@@ -1946,10 +1942,6 @@
       "endOfLife": {
         "fullyDepreciate": "Depreciar totalmente",
         "retainBalance": "Reter saldo"
-      },
-      "burdenMethod": {
-        "live": "Ao vivo",
-        "standard": "Padrão"
       },
       "fxRateType": {
         "spot": "À vista",

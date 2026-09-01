@@ -27,8 +27,6 @@
   "costSource": "実際原価のソース",
   "costDimension": "原価の勘定グループ",
   "laborSource": "労務原価のソース",
-  "burdenSource": "間接費のソース",
-  "burdenDimension": "間接費の勘定グループ",
   "budgetSource": "原価予算のソース",
   "committedKinds": "コミット済み原価の取得元",
   "committedStatuses": "コミット済み原価のライフサイクル状態",
