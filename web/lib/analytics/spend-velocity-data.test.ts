@@ -11,7 +11,9 @@ const hooks = registerHooks({
   },
 });
 
-const { getSpendVelocityComparisonWindows } = await import("./spend-velocity-data.ts");
+const { getSpendVelocityComparisonWindows, velocityAndAcceleration } = await import(
+  "./spend-velocity-data.ts"
+);
 hooks.deregister();
 
 test("comparison windows preserve inclusive current-period length", () => {
@@ -38,4 +40,46 @@ test("one-day periods still produce one-day prior windows", () => {
       twoBackTo: "2026-02-12",
     },
   );
+});
+
+test("flat spend has zero velocity and acceleration", () => {
+  assert.deepEqual(velocityAndAcceleration([200, 200, 200, 200, 200, 200]), {
+    velocity: 0,
+    acceleration: 0,
+    trend: "stable",
+  });
+});
+
+test("repeating spend does not turn a shared midpoint into acceleration", () => {
+  assert.deepEqual(velocityAndAcceleration([100, 200, 100, 200]), {
+    velocity: 26,
+    acceleration: 0,
+    trend: "high",
+  });
+});
+
+test("rising spend detects acceleration from disjoint equal-length halves", () => {
+  const amounts = [100, 100, 100, 200, 300, 500];
+  const midpoint = Math.floor(amounts.length / 2);
+  const earlier = amounts.slice(0, midpoint);
+  const later = amounts.slice(midpoint);
+
+  assert.equal(earlier.length, later.length);
+  assert.deepEqual([...earlier, ...later], amounts);
+  const earlierIndexes = earlier.map((_, index) => index);
+  const laterIndexes = later.map((_, index) => index + midpoint);
+  assert.equal(new Set([...earlierIndexes, ...laterIndexes]).size, amounts.length);
+  assert.deepEqual(velocityAndAcceleration(amounts), {
+    velocity: 38,
+    acceleration: 58.1,
+    trend: "accelerating",
+  });
+});
+
+test("falling spend retains the acceleration signal from disjoint halves", () => {
+  assert.deepEqual(velocityAndAcceleration([500, 300, 200, 100, 100, 100]), {
+    velocity: -27.5,
+    acceleration: 36.8,
+    trend: "declining",
+  });
 });
