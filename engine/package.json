@@ -34,7 +34,6 @@
     "demo": "tsx src/demo-e2e.ts",
     "conformance": "tsx src/conformance/cli.ts",
     "harness": "tsx src/harness/cli.ts",
-    "harness:ledger-parity": "tsx src/harness/ledger-parity/cli.ts",
     "harness:differential": "tsx src/harness/differential/cli.ts",
     "harness:replay": "tsx src/harness/replay/cli.ts",
     "posting-effects:ops": "tsx src/posting-effects-cli.ts",
