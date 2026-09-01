@@ -883,10 +883,15 @@ export async function customerData(period: { from: string; to: string; label: st
   const avgMonthlyGrowth = matureGrowthRates.length ? Math.round((matureGrowthRates.reduce((a, r) => a + r, 0) / matureGrowthRates.length) * 10) / 10 : 0;
   let trend: CustomerData["growth"]["trend"] = "stable";
   if (monthly.length >= 6) {
-    const recent6 = monthly.slice(-6).reduce((a, m) => a + m.revenue, 0) / 6;
-    const prior6Set = monthly.length >= 12 ? monthly.slice(-12, -6) : monthly.slice(0, Math.min(6, monthly.length));
-    const prior6 = prior6Set.reduce((a, m) => a + m.revenue, 0) / prior6Set.length;
-    const pct = prior6 > 0 ? ((recent6 - prior6) / prior6) * 100 : 0;
+    // Compare equal-length, adjacent windows. With less than twelve months of
+    // history, use the largest pair available (three to five months each)
+    // rather than reusing months in both windows and damping the signal.
+    const windowSize = Math.min(6, Math.floor(monthly.length / 2));
+    const recentWindow = monthly.slice(-windowSize);
+    const priorWindow = monthly.slice(-windowSize * 2, -windowSize);
+    const recentAverage = recentWindow.reduce((a, m) => a + m.revenue, 0) / windowSize;
+    const priorAverage = priorWindow.reduce((a, m) => a + m.revenue, 0) / windowSize;
+    const pct = priorAverage > 0 ? ((recentAverage - priorAverage) / priorAverage) * 100 : 0;
     if (pct > 10) trend = "growing";
     else if (pct < -10) trend = "declining";
   }
