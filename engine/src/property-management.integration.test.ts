@@ -220,15 +220,15 @@ test("a shared-source expense feeds exactly one CAM reconciliation", { skip: !DB
       () => finalizeCamPool(fixture.org.orgId, actor, primary.id),
       (error: unknown) => error instanceof PropertyManagementError && /Close the GL module/.test(error.message),
     );
-    const untouched = (await db.execute<{
+    const untouchedAfterOverlapGuards = (await db.execute<{
       status: string; actualAmount: string | null; allocations: number;
     }>(sql`
       select cp.status,cp.actual_amount::text as "actualAmount",
              (select count(*)::int from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id) as allocations
         from cam_pools cp where cp.org_id=${fixture.org.orgId} and cp.id=${primary.id}`)).rows[0]!;
-    assert.equal(untouched.status, "open");
-    assert.equal(untouched.actualAmount, null);
-    assert.equal(untouched.allocations, 0);
+    assert.equal(untouchedAfterOverlapGuards.status, "open");
+    assert.equal(untouchedAfterOverlapGuards.actualAmount, null);
+    assert.equal(untouchedAfterOverlapGuards.allocations, 0);
 
     // Only one ordinary reconciliation exists for the ledger source: the survivor
     // finalizes against the full GL activity once, bills once, and rerunning is a no-op.

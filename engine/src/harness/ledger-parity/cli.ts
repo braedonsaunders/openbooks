@@ -69,6 +69,7 @@ import {
   mirrorSourceDeletion,
 } from "../../sync/source-deletions.ts";
 import { trueUpResidualGl } from "../../sync/trueup.ts";
+import { assertLoopbackDisposableDatabase } from "../../sim/db-guard.ts";
 import type { MigrationSource } from "../../sync/source.ts";
 import {
   computeImportedLineTaxEvidence,
@@ -86,7 +87,6 @@ import { ErpNextParityClient } from "./erpnext-client.ts";
 import { GL_COVERAGE_MATRIX } from "./matrix.ts";
 import { GL_OPERATION_REGISTRY } from "./operations.ts";
 import type {
-import { assertLoopbackDisposableDatabase } from "../../sim/db-guard.ts";
   CanonicalGlLine,
   CanonicalGlSnapshot,
   ErpNextConfig,
