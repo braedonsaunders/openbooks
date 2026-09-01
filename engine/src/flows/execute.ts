@@ -267,6 +267,7 @@ export async function executeFlowPlan(
               subjectId,
               undefined,
               ctx.userId ?? undefined,
+              "flows",
             )
           ).entryId;
         } else {
