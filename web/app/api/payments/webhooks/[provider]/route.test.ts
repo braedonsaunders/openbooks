@@ -159,13 +159,16 @@ test("the route acknowledges a signed adyen delivery after isolating its malform
       console.error = originalConsoleError;
     }
 
-    // Isolation keeps the boundary a structured acknowledgement — never an
-    // unhandled crash — and the quarantined item is absent from the response.
+    // The delivery stays a structured acknowledgement, and normalized array
+    // fields preserve the provider's event order alongside the valid sibling.
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
       received: true,
-      status: "unknown_attempt",
-      events: [{ externalRef: "PSP-ROUTE-GOOD", status: "unknown_attempt" }],
+      status: "processed",
+      events: [
+        { externalRef: "PSP-ROUTE-ARRAY", status: "unknown_attempt" },
+        { externalRef: "PSP-ROUTE-GOOD", status: "unknown_attempt" },
+      ],
     });
 
     const emitted = malformedLogs
