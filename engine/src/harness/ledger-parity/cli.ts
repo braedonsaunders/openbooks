@@ -5883,7 +5883,7 @@ async function runFxSettlementParity(): Promise<void> {
       (${invoiceId}, ${manifest.openbooks.orgId}, 'customer_invoice',
        ${`PARITY-FX-INV-${marker}`}, ${manifest.openbooks.customerId},
        ${manifest.openbooks.subsidiaryId}, '2026-07-15', '2026-07-15',
-       '2026-07-30', 'USD', 1.25, 'approved', 100, 0, 100, false,
+       '2026-07-30', 'USD', 1.25, 'draft', 100, 0, 100, false,
        '{}'::jsonb, '{}'::jsonb, ${manifest.openbooks.actorId},
        ${manifest.openbooks.actorId})
   `);
@@ -5899,18 +5899,26 @@ async function runFxSettlementParity(): Promise<void> {
        false, 0, 0, '{}'::jsonb, '{}'::jsonb,
        ${manifest.openbooks.actorId}, ${manifest.openbooks.actorId})
   `);
-  await postDocument(invoiceId, {
-    control: {
-      ar: manifest.openbooks.accounts.ar!,
-      ap: manifest.openbooks.accounts.ap!,
-      bank: manifest.openbooks.accounts.bank!,
-      fxRealizedGainLoss: manifest.openbooks.accounts.fxGainLoss,
-    },
-  });
+  const invoiceDraft = await one<{ status: string; line_count: number }>(sql`
+    select d.status, count(line.id)::int as line_count
+      from documents d
+      left join document_lines line
+        on line.org_id = d.org_id and line.document_id = d.id
+     where d.org_id = ${manifest.openbooks.orgId}
+       and d.id = ${invoiceId}
+     group by d.status
+  `);
+  if (invoiceDraft.status !== "draft" || invoiceDraft.line_count !== 1) {
+    throw new Error(
+      "FX settlement invoice lines must be inserted while the document is draft",
+    );
+  }
+  await approveAndPost(manifest, invoiceId);
 
   const erpInvoice = await client.create<{ name: string }>("Sales Invoice", {
     company: manifest.erpnext.company,
     customer: manifest.erpnext.customer,
+    set_posting_time: 1,
     posting_date: "2026-07-15",
     due_date: "2026-07-30",
     currency: "USD",
