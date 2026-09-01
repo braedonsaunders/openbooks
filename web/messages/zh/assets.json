@@ -22,8 +22,8 @@
   "taxPools": {
     "configure": "Configure",
     "regime": "Tax regime",
-    "title": "税务折旧（CCA）",
-    "description": "按类别资产池计算某纳税年度的资本成本抵减额。",
+    "title": "税务折旧 — 类别资产池",
+    "description": "按类别计算固定资产的年度税务折旧，包括美国 MACRS、加拿大 CCA、英国折旧扣除以及可配置的各国税制。",
     "taxYear": "纳税年度",
     "run": "运行",
     "running": "运行中…",
@@ -32,11 +32,11 @@
     "totals": "合计",
     "columns": {
       "class": "类别",
-      "opening": "期初 UCC",
+      "opening": "期初余额",
       "additions": "增加",
       "dispositions": "处置",
-      "allowance": "CCA",
-      "closing": "期末 UCC",
+      "allowance": "折旧扣除",
+      "closing": "期末余额",
       "recapture": "回收",
       "terminalLoss": "终止损失"
     }
@@ -135,7 +135,7 @@
     "selectCategory": "选择类别",
     "saveFailed": "保存失败",
     "runFailed": "运行失败",
-    "deleteBlocked": "此资产已有已过账折旧，无法删除。",
+    "deleteBlocked": "此资产有折旧凭证，无法删除。",
     "deleteTitle": "删除此资产？",
     "deleteMessage": "此操作将永久删除该草稿资产及其计划，且无法撤销。",
     "deleted": "资产已删除",
