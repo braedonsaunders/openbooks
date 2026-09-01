@@ -21,7 +21,7 @@ import { FlowManualButtons } from './flow-manual-buttons'
 import { ApprovalActions } from './approval-actions'
 import { ApprovalHistory } from './approval-history'
 import { PDF_RECORD_TYPE_BY_KEY } from '../lib/pdf-templates/catalog'
-import { cmp } from '@openbooks/engine/src/money.ts'
+import { add, cmp, normalizeMoney, sum } from '@openbooks/engine/src/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
 import { confirmDialog } from '../lib/confirm'
 import { promptDialog } from '../lib/prompt'
@@ -85,6 +85,7 @@ interface LineRow extends Record<string, unknown> {
   classId: string
   taxProfileId: string
   amount: string
+  taxInputAmount: string
   taxOverridden: boolean
   taxAmount: string
 }
@@ -337,6 +338,7 @@ const emptyLine = (): LineRow => ({
   classId: '',
   taxProfileId: '',
   amount: '',
+  taxInputAmount: '',
   taxOverridden: false,
   taxAmount: '',
 })
@@ -363,12 +365,98 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
     classId: l.class_id ?? '',
     taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
     amount: l.amount != null ? String(l.amount) : '',
+    taxInputAmount: l.tax_input_amount != null ? String(l.tax_input_amount) : '',
     taxOverridden: l.tax_overridden === true,
     taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
   }
   for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
   for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
   return row
+}
+
+type DrawerTotalsRow = Pick<LineRow, 'accountId' | 'amount' | 'taxInputAmount' | 'taxProfileId' | 'taxOverridden' | 'taxAmount'>
+
+export type DocumentDrawerTotals = {
+  subtotal: string
+  taxTotal: string
+  total: string
+}
+
+/**
+ * Keep the edit-mode footer in lockstep with the line payload. Persisted
+ * inclusive-tax lines retain both their net `amount` and the original gross
+ * `taxInputAmount`; use the latter only while the amount still matches its
+ * derived net value, so a subsequent amount edit is treated as fresh input.
+ */
+export function computeDocumentDrawerTotals(
+  rows: readonly DrawerTotalsRow[],
+  taxByProfile: ReadonlyMap<string, TaxComponentConfig[]>,
+  hasTax: boolean,
+): DocumentDrawerTotals {
+  const lineTotals = rows
+    .filter((row) => row.accountId && String(row.amount ?? '').trim() !== '')
+    .map((row) => {
+      const amount = String(row.amount)
+      const taxConfig = taxByProfile.get(row.taxProfileId) ?? []
+      if (!hasTax) {
+        try {
+          return { subtotal: normalizeMoney(amount), taxTotal: '0.0000' }
+        } catch {
+          return { subtotal: '0.0000', taxTotal: '0.0000' }
+        }
+      }
+
+      const persistedInput = String(row.taxInputAmount ?? '').trim()
+      let inputAmount = amount
+      if (persistedInput && taxConfig.some((component) => component.priceIncludesTax)) {
+        try {
+          const normalizedAmount = normalizeMoney(amount)
+          const persistedResult = computeLineTaxes(persistedInput, taxConfig)
+          if (cmp(persistedResult.netAmount, normalizedAmount) === 0) inputAmount = persistedInput
+        } catch {
+          // An incomplete profile or malformed persisted value is handled by
+          // the normal calculation/fallback below; never block the drawer.
+        }
+      }
+
+      try {
+        const result = computeLineTaxes(
+          inputAmount,
+          taxConfig,
+          row.taxOverridden
+            ? { overridden: true, taxAmount: row.taxAmount }
+            : undefined,
+        )
+        return { subtotal: result.netAmount, taxTotal: result.taxTotal }
+      } catch {
+        // The save boundary still rejects malformed amounts. Showing a zero
+        // for an invalid draft cell avoids inventing a numeric total here.
+        try {
+          return {
+            subtotal: normalizeMoney(amount),
+            taxTotal: row.taxOverridden ? normalizeMoney(row.taxAmount) : '0.0000',
+          }
+        } catch {
+          return { subtotal: '0.0000', taxTotal: '0.0000' }
+        }
+      }
+    })
+  const subtotal = sum(lineTotals.map((line) => line.subtotal))
+  const taxTotal = sum(lineTotals.map((line) => line.taxTotal))
+  return { subtotal, taxTotal, total: add(subtotal, taxTotal) }
+}
+
+function drawerTaxInputAmount(row: DrawerTotalsRow, taxConfig: TaxComponentConfig[]): string {
+  const amount = String(row.amount ?? '')
+  const persistedInput = String(row.taxInputAmount ?? '').trim()
+  if (!persistedInput || !taxConfig.some((component) => component.priceIncludesTax)) return amount
+  try {
+    return cmp(computeLineTaxes(persistedInput, taxConfig).netAmount, normalizeMoney(amount)) === 0
+      ? persistedInput
+      : amount
+  } catch {
+    return amount
+  }
 }
 
 export interface DocumentDrawerProps {
@@ -531,11 +619,29 @@ export function DocumentDrawer({
   )
   const lineTax = (row: LineRow) => {
     try {
-      return computeLineTaxes(String(row.amount || '0'), taxByProfile.get(row.taxProfileId) ?? []).taxTotal
+      const taxConfig = taxByProfile.get(row.taxProfileId) ?? []
+      return computeLineTaxes(drawerTaxInputAmount(row, taxConfig), taxConfig).taxTotal
     } catch {
       return '0.0000'
     }
   }
+
+  const calculatedTotals = useMemo<DocumentDrawerTotals | null>(() => {
+    if (!editable) return null
+    if (isTransfer) {
+      try {
+        const amount = normalizeMoney(String(transfer?.amount ?? ''))
+        return { subtotal: amount, taxTotal: '0.0000', total: amount }
+      } catch {
+        return { subtotal: '0.0000', taxTotal: '0.0000', total: '0.0000' }
+      }
+    }
+    // Project-charge lines are immutable here; their source editor owns the
+    // rate snapshot and the server-provided totals remain authoritative.
+    if (config.kind === 'project_charge') return null
+    return computeDocumentDrawerTotals(rows, taxByProfile, config.hasTax)
+  }, [editable, isTransfer, transfer, config.kind, config.hasTax, rows, taxByProfile])
+  const effectiveTotals = calculatedTotals ?? totals
 
   // -- subsidiaries (multi-subsidiary orgs only; empty/undefined = no UI) ----
   const multiSub = (subsidiaries?.length ?? 0) > 0
@@ -614,7 +720,13 @@ export function DocumentDrawer({
                 quantity: r.quantity !== '' ? r.quantity : null,
                 unit: r.unit || null,
                 unitPrice: r.unitPrice !== '' ? r.unitPrice : null,
-                amount: r.amount,
+                // Inclusive-tax rows are displayed from their persisted net
+                // amount, but the edit API accepts the original gross input.
+                // Keep an untouched row round-tripping without changing its
+                // tax treatment; an edited amount is detected by the helper.
+                amount: config.hasTax
+                  ? drawerTaxInputAmount(r, taxByProfile.get(r.taxProfileId) ?? [])
+                  : r.amount,
                 taxCodeId: config.hasTax && r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
                 taxGroupId: config.hasTax && r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
                 taxOverridden: config.hasTax ? r.taxOverridden : false,
@@ -634,7 +746,7 @@ export function DocumentDrawer({
               })),
           }),
     }
-  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config])
+  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile])
 
   const [dirty, setDirty] = useState(false)
   useEffect(() => {
@@ -1368,13 +1480,13 @@ export function DocumentDrawer({
         return <ApprovalActions subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
       case 'submit':
         return isDraft && canCreate && !config.directPost ? (
-          <Button disabled={busy || (config.partyRole ? !partyId : false) || !positiveAmount(totals.total)} onClick={() => act('submit')}>
+          <Button disabled={busy || (config.partyRole ? !partyId : false) || !positiveAmount(effectiveTotals.total)} onClick={() => act('submit')}>
             {t('actions.submitForApproval')}
           </Button>
         ) : null
       case 'post':
         return (isDraft && canCreate && config.directPost) || (doc.status === 'approved' && canPost) ? (
-          <Button disabled={busy || (isDraft && !positiveAmount(totals.total))} onClick={() => act('post')}>
+          <Button disabled={busy || (isDraft && !positiveAmount(effectiveTotals.total))} onClick={() => act('post')}>
             {tCommon('actions.post')}
           </Button>
         ) : null
@@ -1488,11 +1600,11 @@ export function DocumentDrawer({
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            {t('drawer.subtotalAmount', { amount: money(totals.subtotal, { currency: doc.currency }) })}
-            {config.hasTax ? <> · {t('drawer.taxTotalAmount', { amount: money(totals.taxTotal, { currency: doc.currency }) })}</> : null}
+            {t('drawer.subtotalAmount', { amount: money(effectiveTotals.subtotal, { currency: doc.currency }) })}
+            {config.hasTax ? <> · {t('drawer.taxTotalAmount', { amount: money(effectiveTotals.taxTotal, { currency: doc.currency }) })}</> : null}
             {' · '}
             <strong className="text-slate-900 dark:text-slate-100">
-              {t('drawer.totalAmount', { amount: money(totals.total, { currency: doc.currency }) })}
+              {t('drawer.totalAmount', { amount: money(effectiveTotals.total, { currency: doc.currency }) })}
             </strong>
             {isPosted && config.showsBalance ? (
               <>
