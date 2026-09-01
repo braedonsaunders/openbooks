@@ -126,7 +126,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
   const from = addCalendarMonthsStart(to, -11)
   const priorFrom = addCalendarMonthsStart(to, -23)
 
-  const [pipeRes, spenderRes, catRes, trendRes, queueRes] = (await Promise.all([
+  const [pipeRes, spenderRes, spenderKpiRes, catRes, categoryKpiRes, trendRes, queueRes] = (await Promise.all([
     // Approval pipeline — live counts/values by status + posted this month.
     db.execute(sql`
       select
@@ -157,6 +157,27 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       order by 3 desc nulls last
       limit 50
     `),
+    // Spender KPIs aggregate the full population; the display query above is
+    // intentionally capped for the top-spenders table.
+    db.execute(sql`
+      select
+        coalesce(sum(s.current_spend), 0) as expense_report_total,
+        count(*) filter (
+          where s.prior_spend > 0
+            and round(((s.current_spend - s.prior_spend) / nullif(s.prior_spend, 0)) * 100, 1) > 20
+        ) as high_spender_count
+      from (
+        select
+          sum(d.total) filter (where d.posting_date >= ${from}) as current_spend,
+          sum(d.total) filter (where d.posting_date < ${from}) as prior_spend
+        from documents d
+        left join parties p on p.id = d.party_id and p.org_id = d.org_id
+        where d.org_id = ${orgId} and d.kind = 'expense_report' and d.voided_at is null
+          and d.posting_date >= ${priorFrom} and d.posting_date <= ${to}
+        group by d.party_id, p.display_name
+        having sum(d.total) > 0
+      ) s
+    `),
     // Expense categories (accounts on expense-report lines), current vs prior.
     db.execute(sql`
       select l.account_id as category_id, a.name as category_name,
@@ -173,6 +194,28 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       group by 1, 2
       order by 3 desc nulls last
       limit 50
+    `),
+    // Category KPI aggregates the full population; the display query above is
+    // intentionally capped for the categories table.
+    db.execute(sql`
+      select coalesce(sum(c.current_amount - c.prior_amount) filter (
+        where c.prior_amount > 0
+          and round(((c.current_amount - c.prior_amount) / nullif(c.prior_amount, 0)) * 100, 1) > 10
+      ), 0) as category_increase_total
+      from (
+        select
+          sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
+          sum(l.amount) filter (where e.posting_date < ${from}) as prior_amount
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+        join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id
+        where l.org_id = ${orgId} and d.voided_at is null
+          and d.kind = 'expense_report'
+          and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
+          and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
+        group by l.account_id, a.name
+      ) c
     `),
     // Monthly expense-report vs vendor-bill spend (the SV comparison chart).
     db.execute(sql`
@@ -220,13 +263,11 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
     })
     .filter((s) => toUnits(s.totalSpend) > 0n || toUnits(s.priorSpend) > 0n)
 
-  let categoryIncreaseTotal = 0n
   const categories: ExpenseCategory[] = (catRes.rows as any[])
     .map((r) => {
       const current = toUnits(r.current_amount ?? 0)
       const prior = toUnits(r.prior_amount ?? 0)
       const changePct = percentageChange(current, prior)
-      if (changePct > 10) categoryIncreaseTotal += current - prior
       return {
         categoryId: r.category_id,
         categoryName: r.category_name ?? '',
@@ -242,6 +283,8 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
     expenseAmount: canonicalMoney(r.expense_amount),
     billAmount: canonicalMoney(r.bill_amount),
   }))
+  const spenderKpi = spenderKpiRes.rows[0] ?? {}
+  const categoryKpi = categoryKpiRes.rows[0] ?? {}
 
   return {
     period: { from, to, priorFrom },
@@ -256,10 +299,10 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       postedMonthCount: Number(pipe.posted_month_count ?? 0),
     },
     summary: aggregateExpenseSummary({
-      topSpenderTotals: topSpenders.map((spender) => spender.totalSpend),
+      topSpenderTotals: [canonicalMoney(spenderKpi.expense_report_total)],
       vendorBillTotals: monthlyTrends.map((trend) => trend.billAmount),
-      categoryIncreaseTotal: fromUnits(categoryIncreaseTotal),
-      highSpenderCount: topSpenders.filter((s) => s.changePct > 20).length,
+      categoryIncreaseTotal: canonicalMoney(categoryKpi.category_increase_total),
+      highSpenderCount: Number(spenderKpi.high_spender_count ?? 0),
     }),
     topSpenders,
     categories,
