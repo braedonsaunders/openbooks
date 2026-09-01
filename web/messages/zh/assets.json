@@ -17,8 +17,14 @@
     "date": "日期",
     "action": "应用",
     "working": "应用中…",
+    "kinds": {
+      "revalued": "已重估",
+      "impaired": "已减值",
+      "unknown": "重估"
+    },
     "done": "{kind} — {delta}"
   },
+  "tabs": { "register": "登记簿", "taxDepreciation": "税务折旧" },
   "taxPools": {
     "configure": "Configure",
     "regime": "Tax regime",
@@ -154,6 +160,11 @@
     "deleteFailed": "无法删除设备",
     "activate": "启用",
     "deactivate": "停用",
+    "capitalize": "资本化为固定资产",
+    "capitalizeTitle": "资本化为固定资产",
+    "capitalizeMessage": "从此设备创建固定资产（成本、日期和序列号），建立关联并开始折旧。您将在新资产中设置折旧类别。",
+    "capitalized": "已创建并关联固定资产",
+    "capitalizeFailed": "无法将此设备资本化",
     "fixedAssets": "固定资产",
     "taxDepreciation": "税务折旧",
     "documentation": "文档",

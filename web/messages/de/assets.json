@@ -17,8 +17,14 @@
     "date": "Datum",
     "action": "Anwenden",
     "working": "Wird angewendet…",
+    "kinds": {
+      "revalued": "Neu bewertet",
+      "impaired": "Wertgemindert",
+      "unknown": "Neubewertung"
+    },
     "done": "{kind} — {delta}"
   },
+  "tabs": { "register": "Anlagenregister", "taxDepreciation": "Steuerliche Abschreibung" },
   "taxPools": {
     "configure": "Configure",
     "regime": "Tax regime",
@@ -154,6 +160,11 @@
     "deleteFailed": "Gerät konnte nicht gelöscht werden",
     "activate": "Aktivieren",
     "deactivate": "Deaktivieren",
+    "capitalize": "Als Anlage aktivieren",
+    "capitalizeTitle": "Als Anlage aktivieren",
+    "capitalizeMessage": "Aus diesem Gerät eine Anlage erstellen (Kosten, Daten und Seriennummer), verknüpfen und Abschreibung beginnen. Die Abschreibungskategorie legen Sie in der neuen Anlage fest.",
+    "capitalized": "Anlage erstellt und verknüpft",
+    "capitalizeFailed": "Gerät konnte nicht als Anlage aktiviert werden",
     "fixedAssets": "Anlagevermögen",
     "taxDepreciation": "Steuerliche Abschreibung",
     "documentation": "Dokumentation",
