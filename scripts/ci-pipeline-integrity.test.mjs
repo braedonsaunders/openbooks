@@ -674,6 +674,20 @@ test('the campaign checker honors an explicit commit ref and rejects a missing o
   )
 })
 
+test('jobs running the campaign suite retain complete local history', () => {
+  const source = readFileSync(join(WORKFLOW_DIR, 'test.yml'), 'utf8')
+  for (const jobName of ['unit', 'integration']) {
+    const job = topLevelBlock(source, jobName)
+    const checkout = /\n      - uses: actions\/checkout@[^\n]+[\s\S]*?(?=\n      - )/.exec(job)?.[0] ?? ''
+
+    assert.match(
+      checkout,
+      /fetch-depth:\s*0/,
+      `${jobName} campaign tests need complete history for local main and closing commits`,
+    )
+  }
+})
+
 test('malformed or empty live campaign input fails closed before any tree check', () => {
   for (const value of ['not-json', JSON.stringify({ findings: [] })]) {
     const env = { ...process.env, OPENBOOKS_REGISTER_JSON: value }
