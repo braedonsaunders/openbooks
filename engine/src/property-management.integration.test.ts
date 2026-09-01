@@ -87,13 +87,19 @@ async function seedCamProperty(): Promise<CamFixture> {
 }
 
 /** Posted GL activity feeding the pool's source account at the property location. */
-async function postLedgerExpense(fixture: CamFixture, amount: string): Promise<void> {
+async function postLedgerExpense(
+  fixture: CamFixture,
+  amount: string,
+  options: { postingDate?: string; periodId?: string } = {},
+): Promise<void> {
+  const postingDate = options.postingDate ?? "2026-07-15";
+  const periodId = options.periodId ?? fixture.org.periodId;
   const entryId = randomUUID();
   await db.execute(sql`
     insert into journal_entries
       (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
     values (${entryId}, ${fixture.org.orgId}, ${fixture.org.bookId}, ${fixture.org.subsidiaryId},
-            ${`CAM-${entryId.slice(0, 8)}`}, '2026-07-15', ${fixture.org.periodId},
+            ${`CAM-${entryId.slice(0, 8)}`}, ${postingDate}, ${periodId},
             'CAM source activity', 'draft', 'manual', null, null)`);
   await db.execute(sql`
     insert into journal_lines
@@ -109,11 +115,11 @@ async function postLedgerExpense(fixture: CamFixture, amount: string): Promise<v
 
 /** The sanctioned direct-seed GL close every finalizeCamPool caller needs.
  * locked_by carries a real user row, so the actor must be a real one too. */
-async function closeGlModule(fixture: CamFixture, actorId: string): Promise<void> {
+async function closeGlModule(fixture: CamFixture, actorId: string, periodId = fixture.org.periodId): Promise<void> {
   await db.execute(sql`
     insert into period_locks
       (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, locked_by, reason, created_by, updated_by)
-    values (${fixture.org.orgId}, ${fixture.org.periodId}, ${fixture.org.bookId}, ${fixture.org.subsidiaryId},
+    values (${fixture.org.orgId}, ${periodId}, ${fixture.org.bookId}, ${fixture.org.subsidiaryId},
             'gl', 'closed', now(), ${actorId}, 'CAM finalization requires frozen source periods',
             ${actorId}, ${actorId})`);
 }
@@ -136,6 +142,22 @@ test("a shared-source expense feeds exactly one CAM reconciliation", { skip: !DB
 
     const primary = await createCamPool({ ...poolInputs, name: "FY26 CAM A", expenseAccountIds: [fixture.ledgerAccount] });
     assert.ok(primary.id);
+
+    // Finalization freezes the source ledger into tenant-facing actuals. The
+    // current source period must therefore be closed before that commitment.
+    await assert.rejects(
+      () => finalizeCamPool(fixture.org.orgId, actor, primary.id),
+      (error: unknown) => error instanceof PropertyManagementError && /Close the GL module/.test(error.message),
+    );
+    const untouched = (await db.execute<{
+      status: string; actualAmount: string | null; allocations: number;
+    }>(sql`
+      select cp.status,cp.actual_amount::text as "actualAmount",
+             (select count(*)::int from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id) as allocations
+        from cam_pools cp where cp.org_id=${fixture.org.orgId} and cp.id=${primary.id}`)).rows[0]!;
+    assert.equal(untouched.status, "open");
+    assert.equal(untouched.actualAmount, null);
+    assert.equal(untouched.allocations, 0);
 
     // Non-overlapping neighbours stay valid even when the accounts are identical…
     const neighbour = await createCamPool({
@@ -202,6 +224,52 @@ test("a shared-source expense feeds exactly one CAM reconciliation", { skip: !DB
     assert.equal(billed.documents.length, 1);
     const rebilled = await billCamReconciliation(fixture.org.orgId, actor, primary.id, "2026-07-15");
     assert.deepEqual(rebilled.documents, []);
+  } finally {
+    await dropScratchOrg(fixture.org.orgId);
+  }
+});
+
+test("late CAM expense is handled by a separately closed supplemental pool", { skip: !DB }, async () => {
+  const fixture = await seedCamProperty();
+  try {
+    const actor = await createScratchUser(fixture.org.orgId, "CAM operator", "admin");
+    await postLedgerExpense(fixture, "1000");
+    await db.execute(sql`update property_leases set ends_on='2026-08-31' where org_id=${fixture.org.orgId} and property_id=${fixture.propertyId}`);
+    const primary = await createCamPool({
+      orgId: fixture.org.orgId, actorId: actor, propertyId: fixture.propertyId,
+      name: "FY26 CAM PRIMARY", fiscalYear: 2026, periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31",
+      allocationBasis: "equal", budgetAmount: "1000", expenseAccountIds: [fixture.ledgerAccount],
+    });
+    await closeGlModule(fixture, actor);
+    const finalized = await finalizeCamPool(fixture.org.orgId, actor, primary.id);
+    assert.equal(finalized.actualAmount, "1000.0000");
+
+    // A late cost belongs to the later open GL period. It must not rewrite the
+    // frozen July result; a non-overlapping supplemental pool can reconcile it
+    // after the August GL module is explicitly closed.
+    const augustPeriodId = randomUUID();
+    const calendarId = (await db.execute<{ id: string }>(sql`
+      select fiscal_calendar_id as id from accounting_periods where org_id=${fixture.org.orgId} and id=${fixture.org.periodId}`)).rows[0]!.id;
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      values (${augustPeriodId}, ${fixture.org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calendarId})`);
+    await postLedgerExpense(fixture, "250", { postingDate: "2026-08-15", periodId: augustPeriodId });
+    const supplemental = await createCamPool({
+      orgId: fixture.org.orgId, actorId: actor, propertyId: fixture.propertyId,
+      name: "FY26 CAM SUPPLEMENTAL", fiscalYear: 2026, periodStartsOn: "2026-08-01", periodEndsOn: "2026-08-31",
+      allocationBasis: "equal", budgetAmount: "0", expenseAccountIds: [fixture.ledgerAccount],
+    });
+    await assert.rejects(
+      () => finalizeCamPool(fixture.org.orgId, actor, supplemental.id),
+      (error: unknown) => error instanceof PropertyManagementError && /Close the GL module/.test(error.message),
+    );
+    await closeGlModule(fixture, actor, augustPeriodId);
+    const late = await finalizeCamPool(fixture.org.orgId, actor, supplemental.id);
+    assert.equal(late.actualAmount, "250.0000");
+    const july = (await db.execute<{ actualAmount: string }>(sql`
+      select actual_amount::text as "actualAmount" from cam_pools where org_id=${fixture.org.orgId} and id=${primary.id}`)).rows[0]!;
+    assert.equal(july.actualAmount, "1000.0000");
   } finally {
     await dropScratchOrg(fixture.org.orgId);
   }

@@ -105,7 +105,7 @@ interface DepositReversalRow extends Record<string, unknown> {
 interface CamPoolDbRow extends Record<string, unknown> {
   id: string; property_id: string; status: string; location_id: string | null; period_starts_on: string;
   period_ends_on: string; expense_account_ids: string[]; allocation_basis: "rentable_area" | "equal" | "custom";
-  budget_amount: string;
+  budget_amount: string; subsidiary_id: string;
 }
 interface CamLeaseRow extends Record<string, unknown> {
   id: string; cam_share_percent: string | null; rentable_area: string | null; overlap_start: string;
@@ -1519,12 +1519,59 @@ export async function reopenFinalizedCamPool(orgId: string, actorId: string, poo
 export async function finalizeCamPool(orgId: string, actorId: string, poolId: string): Promise<{ actualAmount: string; allocations: number }> {
   return db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
-    const poolResult = (await tx.execute<CamPoolDbRow>(sql`select cp.*,p.location_id from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${orgId} and cp.id=${poolId} for update`));
+    const poolResult = (await tx.execute<CamPoolDbRow>(sql`select cp.*,p.location_id,p.subsidiary_id from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${orgId} and cp.id=${poolId} for update`));
     const pool = poolResult.rows[0]; if (!pool || !["draft","open"].includes(pool.status)) throw new PropertyManagementError("Open CAM pool not found");
     if (!pool.location_id) throw new PropertyManagementError("Property needs a location dimension before CAM actuals can be calculated");
-    const actual = (await tx.execute<{ amount: string }>(sql`select coalesce(sum(jl.amount),0)::text as amount from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
+
+    // Finalization turns a live GL sum into immutable tenant-facing amounts.
+    // Serialize the complete gate/read/commit window against both journal
+    // posting and period-close writers. The kernel takes the shared side of
+    // these exact keys (period_posting_fence, migration 0022), while close
+    // takes the exclusive side (periodScopeAdvisoryLock). Every active book
+    // and every standard or adjustment period overlapping the CAM window is
+    // included because this pool has no book selector and its source query
+    // reads the combined posted GL.
+    const coveredScopes = (await tx.execute<{ period_id: string; book_id: string }>(sql`
+      select p.id as period_id,b.id as book_id
+        from accounting_periods p
+        join accounting_books b on b.org_id=${orgId} and b.is_active
+       where p.org_id=${orgId}
+         and p.starts_on<=${pool.period_ends_on}
+         and p.ends_on>=${pool.period_starts_on}
+       order by p.id,b.id`));
+    if (!coveredScopes.rows.length) {
+      throw new PropertyManagementError("No accounting periods overlap the CAM pool's dates");
+    }
+    for (const scope of coveredScopes.rows) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`period-lock:${orgId}:${scope.period_id}:${scope.book_id}`}, 0))`);
+    }
+    const openScope = (await tx.execute<{ name: string; code: string }>(sql`
+      select p.name,b.code
+        from accounting_periods p
+        join accounting_books b on b.org_id=${orgId} and b.is_active
+       where p.org_id=${orgId}
+         and p.starts_on<=${pool.period_ends_on}
+         and p.ends_on>=${pool.period_starts_on}
+         and not period_module_is_closed(${orgId},p.id,b.id,${pool.subsidiary_id},'gl')
+       order by p.name,b.code limit 1`)).rows[0];
+    if (openScope) {
+      throw new PropertyManagementError(
+        `Close the GL module for ${openScope.name} in book ${openScope.code} before finalizing CAM actuals`,
+      );
+    }
+
+    // Re-read the source immediately before committing below. The advisory
+    // fence covers normal journal paths; this second read also fails closed
+    // if an incoherent writer bypassed those period keys.
+    const sourceTotals = () => tx.execute<{ amount: string; lines: number; last_change: string }>(sql`
+      select coalesce(sum(jl.amount),0)::text as amount,
+             count(*)::int as lines,
+             coalesce(max(greatest(je.posted_at,je.updated_at))::text,'') as last_change
+        from journal_lines jl
+        join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
       where jl.org_id=${orgId} and je.status='posted' and je.posting_date between ${pool.period_starts_on} and ${pool.period_ends_on} and jl.location_id=${pool.location_id}
-        and jl.account_id::text in(select jsonb_array_elements_text(${JSON.stringify(pool.expense_account_ids)}::jsonb))`));
+        and jl.account_id::text in(select jsonb_array_elements_text(${JSON.stringify(pool.expense_account_ids)}::jsonb))`);
+    const actual = await sourceTotals();
     const actualAmount = exactMoney(actual.rows[0]?.amount ?? "0", "CAM actual amount");
     if (cmp(actualAmount, "0") < 0) throw new PropertyManagementError("CAM expense activity is net-negative; review the selected accounts before finalizing");
     const leases = (await tx.execute<CamLeaseRow>(sql`select l.id,l.cam_share_percent,u.rentable_area,
@@ -1568,6 +1615,14 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
       const forceResidual = pool.allocation_basis !== "custom" && index === shares.length - 1;
       budgetAllocations.push(forceResidual ? add(pool.budget_amount, neg(sum(budgetAllocations))) : mulPercent(pool.budget_amount, share));
       actualAllocations.push(forceResidual ? add(actualAmount, neg(sum(actualAllocations))) : mulPercent(actualAmount, share));
+    }
+    const verified = await sourceTotals();
+    if (
+      verified.rows[0]!.lines !== actual.rows[0]!.lines
+      || verified.rows[0]!.amount !== actual.rows[0]!.amount
+      || verified.rows[0]!.last_change !== actual.rows[0]!.last_change
+    ) {
+      throw new PropertyManagementError("CAM source ledgers changed while finalizing; resolve the entries and retry");
     }
     const finalizeSourceFingerprint = createHash("sha256").update(canonicalJson({
       kind: "cam_finalize.v1",
