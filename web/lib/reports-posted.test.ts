@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { env } from "@openbooks/engine/src/db.ts";
+
+test("transaction detail scopes both reads to the statement accounting book", () => {
+  const source = readFileSync(new URL("./reports/transaction-detail.ts", import.meta.url), "utf8");
+  assert.match(source, /bookId\?: string \| null/);
+  assert.match(source, /statementBookExpr/);
+  assert.match(source, /const bookFilter = sql`e\.book_id = \$\{statementBookExpr\(orgId, opts\.bookId\)\}`/);
+  assert.match(source, /and \$\{bookFilter\}/);
+});
 
 test("financial statements exclude draft and other unposted journals", { skip: !env.OPENBOOKS_DB_URL }, () => {
   // Web report modules intentionally import `server-only`. Run this DB-backed
@@ -211,6 +220,58 @@ test("financial statements exclude draft and other unposted journals", { skip: !
         assert.ok(regularPeriod, "regular completed period appears in trends");
         assert.equal(regularPeriod.revenue, "100.0000");
         assert.equal(regularPeriod.net_income, "100.0000");
+      });
+
+      // Statement drill-downs must stay on the same accounting book as the
+      // statement cell. Seed different revenue amounts in the primary and a
+      // parallel tax book so both the default and explicit scopes are visible.
+      const taxBookId = randomUUID();
+      await withBypass(async () => {
+        await db.execute(sql\`
+          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)\`);
+        const postRevenue = async (bookId, amount, tag) => {
+          const entryId = randomUUID();
+          await db.execute(sql\`
+            insert into journal_entries
+              (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+               period_id, memo, status, origin)
+            values
+              (\${entryId}, \${scratch.orgId}, \${bookId}, \${scratch.subsidiaryId},
+               \${'DRILL-' + tag}, \${scratch.date}, \${scratch.periodId},
+               \${tag}, 'draft', 'manual')\`);
+          await db.execute(sql\`
+            insert into journal_lines
+              (org_id, entry_id, line_number, account_id, subsidiary_id,
+               amount, currency, txn_amount, fx_rate)
+            values
+              (\${scratch.orgId}, \${entryId}, 1, \${scratch.accounts.bank},
+               \${scratch.subsidiaryId}, \${amount}, 'CAD', \${amount}, '1'),
+              (\${scratch.orgId}, \${entryId}, 2, \${scratch.accounts.revenue},
+               \${scratch.subsidiaryId}, \${'-' + amount}, 'CAD', \${'-' + amount}, '1')\`);
+          await db.execute(sql\`
+            update journal_entries set status = 'posted', posted_at = now()
+             where id = \${entryId}\`);
+        };
+        await postRevenue(scratch.bookId, '100.0000', 'PRIMARY');
+        await postRevenue(taxBookId, '250.0000', 'TAX');
+      });
+
+      await withOrg(scratch.orgId, async () => {
+        const detail = (bookId) => transactionDetail({
+          accountTypes: ['income'],
+          from: scratch.date,
+          to: scratch.date,
+          mode: 'flow',
+          orgId: scratch.orgId,
+          bookId,
+        });
+        const primary = await detail(undefined);
+        assert.equal(primary.net, '100.0000', 'default drill-down uses the primary book');
+        assert.equal(primary.count, 1, 'default drill-down excludes parallel-book lines');
+        const tax = await detail(taxBookId);
+        assert.equal(tax.net, '250.0000', 'explicit drill-down uses the selected book');
+        assert.equal(tax.count, 1, 'explicit drill-down excludes primary-book lines');
       });
     } finally {
       await withBypass(() => dropScratchOrg(scratch.orgId));

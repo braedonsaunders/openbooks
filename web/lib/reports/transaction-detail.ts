@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { resolveOrgId } from "../org-scope";
 import type { ExactDecimal } from "../statement-format";
+import { statementBookExpr } from "../gl-summary";
 import { CREDIT_NORMAL } from "./statements";
 import { type DimFilter, dimWhere } from "./filters";
 
@@ -67,6 +68,8 @@ export async function transactionDetail(opts: {
   limit?: number
   offset?: number
   orgId?: string
+  /** Restrict the drill-down to the statement's accounting book. */
+  bookId?: string | null
 }): Promise<TxnDetailResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const limit = opts.limit ?? 2000
@@ -119,7 +122,8 @@ export async function transactionDetail(opts: {
       )`
     : sql``
 
-  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${partyFilter}${projectCustomerFilter}${projectSearchFilter}${activeProjectFilter}`
+  const bookFilter = sql`e.book_id = ${statementBookExpr(orgId, opts.bookId)}`
+  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${bookFilter} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${partyFilter}${projectCustomerFilter}${projectSearchFilter}${activeProjectFilter}`
   const readerNet = opts.profitSigned
     ? sql`-l.amount`
     : sql`case when a.type in ${[...CREDIT_NORMAL]} then -l.amount else l.amount end`
