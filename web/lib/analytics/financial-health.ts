@@ -366,7 +366,7 @@ export async function financialHealth(
     mk("cogs_ratio", revenue > 0 ? cogs / revenue : 0, "pct", 0.6, true, `${M(cogs)} / ${M(revenue)}`),
     mk("opex_ratio", revenue > 0 ? opex / revenue : 0, "pct", 0.25, true, `${M(opex)} / ${M(revenue)}`),
     mk("operating_leverage", operatingLeverage, "num", 1.5, false, `${fmtPct(opIncGrowth)} / ${fmtPct(revenueGrowth)}`),
-    mk("interest_coverage", otherExpense > 0 ? operatingIncome / otherExpense : 99, "num", 5.0, false, otherExpense > 0 ? `${M(operatingIncome)} / ${M(otherExpense)}` : "No interest expense"),
+    mk("interest_coverage", otherExpense > 0 ? operatingIncome / otherExpense : null, "num", 5.0, false, otherExpense > 0 ? `${M(operatingIncome)} / ${M(otherExpense)}` : "No interest expense", otherExpense <= 0, "No interest expense"),
     mk("rule_of_40", rule40, "raw", 40, false, `${fmtPct(revenueGrowth)} + ${fmtPct(operatingMargin)}`),
   ];
 
