@@ -133,26 +133,26 @@ function rewriteBarrel(
   const absolute = join(root, barrel.path);
   const directory = dirname(absolute);
   const pattern = new RegExp(barrel.modulePattern);
-  const years: number[] = [];
+  const modules: { entry: string; year: number }[] = [];
   for (const entry of existsSync(directory) ? readdirSync(directory) : []) {
     const match = pattern.exec(entry);
-    if (match?.[1]) years.push(Number(match[1]));
+    if (match?.[1]) modules.push({ entry, year: Number(match[1]) });
   }
-  years.sort((a, b) => a - b);
-  const imports = years
-    .map((year) => {
+  modules.sort((a, b) => a.year - b.year);
+  const imports = modules
+    .map(({ entry, year }) => {
       const name = fill(barrel.exportName, year);
-      return `import { ${name} } from "./rates-${year}.ts";\n`;
+      return `import { ${name} } from "./${entry}";\n`;
     })
     .join("");
-  const entries = years.length === 0
+  const entries = modules.length === 0
     ? ""
-    : `\n${years.map((year) => `  ${fill(barrel.exportName, year)},`).join("\n")}\n`;
+    : `\n${modules.map(({ year }) => `  ${fill(barrel.exportName, year)},`).join("\n")}\n`;
   const body = barrel.template
     .replace("{imports}", imports)
     .replace("{entries}", entries);
   if (!dryRun) writeFileSync(absolute, body, "utf8");
-  return { path: barrel.path, years };
+  return { path: barrel.path, years: modules.map(({ year }) => year) };
 }
 
 /** One publication scope a year needs before the pack's tables are loaded. */
