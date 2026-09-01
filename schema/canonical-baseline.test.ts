@@ -83,6 +83,8 @@ const payDerivedRulesEffectiveVersioningMigrationPath =
   "schema/migrations/generated/0083_pay_derived_rules_effective_versioning.sql";
 const recognitionEventTenantCoherenceMigrationPath =
   "schema/migrations/generated/0084_recognition_event_tenant_coherence.sql";
+const syncRunConnectionNullableMigrationPath =
+  "schema/migrations/generated/0085_sync_run_connection_nullable.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -171,6 +173,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0082_asset_draft_number_uniqueness.sql",
     "0083_pay_derived_rules_effective_versioning.sql",
     "0084_recognition_event_tenant_coherence.sql",
+    "0085_sync_run_connection_nullable.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1495,6 +1498,29 @@ test("recognition event obligation references are tenant-coherent", () => {
     schema,
     /foreignKey\(\{\s+columns: \[t\.orgId, t\.obligationId\],\s+foreignColumns: \[performanceObligations\.orgId, performanceObligations\.id\],\s+name: "recognition_events_obligation_id_fkey",/,
   );
+});
+
+test("sync-run connection detachment is published and replay-safe", () => {
+  const migration = readFileSync(syncRunConnectionNullableMigrationPath, "utf8");
+
+  // The exact forward migration is part of the published sequence above, and
+  // its DDL is convergent: dropping NOT NULL and replacing a column comment
+  // are both safe when bootstrap encounters an already-detached schema.
+  assert.match(
+    migration,
+    /^-- OpenBooks forward migration 0085_sync_run_connection_nullable\./,
+  );
+  assert.match(
+    migration,
+    /ALTER TABLE public\.sync_runs\s+ALTER COLUMN connection_id DROP NOT NULL;/,
+  );
+  assert.match(
+    migration,
+    /COMMENT ON COLUMN public\.sync_runs\.connection_id IS\s+'Connection that produced this run; NULL preserves run history after the connection is deleted\.';/,
+  );
+  // The rollout only changes schema metadata; it never rewrites or removes
+  // historical sync-run evidence on first application or replay.
+  assert.doesNotMatch(migration, /^\s*(?:INSERT|UPDATE|DELETE\s+FROM|TRUNCATE)\b/im);
 });
 
 test("the SFTP login username is globally unique in storage, not by allocation luck", () => {
