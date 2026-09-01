@@ -1043,6 +1043,11 @@ async function countScheduledRuns(scriptId: string): Promise<number> {
  * leave the durable occurrence queued because this test process has no worker.
  */
 async function runDueScriptsInline(): Promise<void> {
+  // Live-Redis tests earlier in this file may have initialized the shared
+  // producer connection. Clearing the environment cannot affect that cached
+  // client, so close it before forcing the queue attempt to fail and taking
+  // the inline path.
+  await closeJobConnections();
   const redisEnv = {
     OPENBOOKS_REDIS_URL: process.env.OPENBOOKS_REDIS_URL,
     REDIS_URL: process.env.REDIS_URL,
