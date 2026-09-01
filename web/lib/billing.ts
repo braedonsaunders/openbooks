@@ -197,6 +197,8 @@ export async function generateInvoiceFromBillingRequest(
       timeTypeId: string | null
       /** Source cost line to stamp billed_by_line_id on (materials billing). */
       sourceCostLineId: string | null
+      /** All source cost lines represented by this invoice line after grouping. */
+      sourceCostLineIds?: string[]
       unit?: string | null
       equipmentUnitId?: string | null
       rateVersionId?: string | null
@@ -534,6 +536,14 @@ export async function generateInvoiceFromBillingRequest(
         prior.quantity = add(prior.quantity, l.quantity)
         prior.amount = add(prior.amount, l.amount)
         if (prior.baseAmount != null && l.baseAmount != null) prior.baseAmount = add(prior.baseAmount, l.baseAmount)
+        const sourceCostLineIds = prior.sourceCostLineIds ?? (prior.sourceCostLineId ? [prior.sourceCostLineId] : [])
+        if (l.sourceCostLineId && !sourceCostLineIds.includes(l.sourceCostLineId)) {
+          sourceCostLineIds.push(l.sourceCostLineId)
+        }
+        for (const sourceCostLineId of l.sourceCostLineIds ?? []) {
+          if (!sourceCostLineIds.includes(sourceCostLineId)) sourceCostLineIds.push(sourceCostLineId)
+        }
+        prior.sourceCostLineIds = sourceCostLineIds
       }
       built.length = 0
       built.push(...kept)
@@ -745,7 +755,8 @@ export async function generateInvoiceFromBillingRequest(
            where id = ${l.timeEntryId} and org_id = ${orgId}
              and billing_status = 'unbilled'`)
       }
-      if (l.sourceCostLineId) {
+      const sourceCostLineIds = l.sourceCostLineIds ?? (l.sourceCostLineId ? [l.sourceCostLineId] : [])
+      for (const sourceCostLineId of sourceCostLineIds) {
         // Migration 0034 freezes every non-draft source line, including the
         // approved project-charge rows this path is required to consume. The
         // billed-link is provenance metadata rather than a financial edit, so
@@ -756,7 +767,7 @@ export async function generateInvoiceFromBillingRequest(
         const stamped = await tx.execute<{ id: string }>(sql`
           update document_lines
              set billed_by_line_id = ${billedBy}
-           where id = ${l.sourceCostLineId}
+           where id = ${sourceCostLineId}
              and org_id = ${orgId}
              and billed_by_line_id is null
            returning id
