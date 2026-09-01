@@ -168,3 +168,51 @@ test("operating metrics exclude income_other from operating income and its deriv
   assert.equal(roce?.value, 0.04);
   assert.equal(operatingLeverage?.value, 0);
 });
+
+test("interest coverage is missing without positive interest expense and does not inflate health scores", async () => {
+  const noInterestPnl = pnl({
+    items: [
+      row("income", 100),
+      row("cogs", 60),
+      row("expense", 20),
+      row("expense_other", 0),
+    ],
+    revenue: 100,
+    cogs: 60,
+    grossProfit: 40,
+    netIncome: 20,
+  });
+  state.current = noInterestPnl;
+  state.prior = noInterestPnl;
+
+  const result = await financialHealth(
+    { from: "2026-01-01", to: "2026-01-31", label: "January 2026" },
+    undefined,
+    "org-1",
+  );
+  const interestCoverage = result.ratios.operating.find(
+    (ratio) => ratio.id === "interest_coverage",
+  );
+  const operatingScore = result.categoryScores.find(
+    (category) => category.key === "operating",
+  );
+
+  assert.deepEqual(
+    {
+      value: interestCoverage?.value,
+      score: interestCoverage?.score,
+      noData: interestCoverage?.noData,
+      noDataMsg: interestCoverage?.noDataMsg,
+      calc: interestCoverage?.calc,
+    },
+    {
+      value: null,
+      score: null,
+      noData: true,
+      noDataMsg: "No interest expense",
+      calc: "No interest expense",
+    },
+  );
+  assert.ok(Math.abs((operatingScore?.score ?? Number.NaN) - 79.16666666666667) < 1e-9);
+  assert.ok(Math.abs(result.overallScore - 47.06349206349206) < 1e-9);
+});
