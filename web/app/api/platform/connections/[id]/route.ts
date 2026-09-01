@@ -197,6 +197,14 @@ export async function DELETE(
   if (!existing)
     return NextResponse.json({ error: "not found" }, { status: 404 });
   await db.transaction(async (tx) => {
+    // Preserve run history while detaching it from the connection being
+    // removed.  The migration makes connection_id nullable; doing this
+    // explicitly keeps the delete independent of deferred FK timing.
+    await tx.execute(sql`
+      update sync_runs
+         set connection_id = null
+       where org_id = ${orgId} and connection_id = ${id}
+    `);
     await tx.execute(
       sql`delete from connections where org_id = ${orgId} and id = ${id}`,
     );
