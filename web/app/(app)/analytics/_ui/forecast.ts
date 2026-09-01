@@ -219,7 +219,10 @@ export function applyForecastMethod(
   const z = Z[confidence] ?? 1.645
   let seasonalPeriod = 0
   if (seasonality === 'auto' && n >= 12) seasonalPeriod = detectSeasonality(data)
-  else if (seasonality === 'monthly') seasonalPeriod = 1
+  // The input series is monthly, so "monthly" seasonality repeats annually.
+  // A period of 1 has no seasonal variation and collapses decomposition to
+  // the underlying linear trend.
+  else if (seasonality === 'monthly') seasonalPeriod = 12
   else if (seasonality === 'quarterly') seasonalPeriod = 3
 
   let result: ForecastResult
