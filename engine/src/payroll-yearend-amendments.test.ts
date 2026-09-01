@@ -966,7 +966,7 @@ test(
           rows: [{ rowId: "row-1", marker: await readMarker() }],
         }),
         slip: {
-          build: async (_orgId, _taxYear, _rowId) => ({
+          build: async () => ({
             formCode: "ZZ_SNAPSHOT",
             formName: "Snapshot filing",
             headerFields: [],

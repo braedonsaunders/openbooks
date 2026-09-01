@@ -64,9 +64,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   };
   const sets: ReturnType<typeof sql>[] = [];
   const changes: Record<string, unknown> = {};
+  if (body.name !== undefined && typeof body.name !== "string") {
+    return NextResponse.json({ error: "name must be a string" }, { status: 400 });
+  }
   if (body.name !== undefined && body.name.trim()) {
-    sets.push(sql`name = ${body.name.trim()}`);
-    changes.name = body.name.trim();
+    const name = body.name.trim();
+    sets.push(sql`name = ${name}`);
+    changes.name = name;
   }
   if (body.config !== undefined) {
     const parsed = parseListView(body.config);

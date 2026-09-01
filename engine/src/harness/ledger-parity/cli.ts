@@ -86,6 +86,7 @@ import { ErpNextParityClient } from "./erpnext-client.ts";
 import { GL_COVERAGE_MATRIX } from "./matrix.ts";
 import { GL_OPERATION_REGISTRY } from "./operations.ts";
 import type {
+import { assertLoopbackDisposableDatabase } from "../../sim/db-guard.ts";
   CanonicalGlLine,
   CanonicalGlSnapshot,
   ErpNextConfig,
@@ -1000,6 +1001,9 @@ function resolveParityCurrency(input: {
 }
 
 async function provision(): Promise<void> {
+  // Fail closed before reading ERPNext or OpenBooks.  Provisioning creates
+  // tenant rows, so a production/shared database URL must never reach a query.
+  assertLoopbackDisposableDatabase("ledger parity provisioning");
   mkdirSync(runtimeDir, { recursive: true });
   if (existsSync(manifestPath)) {
     const current = readManifest();

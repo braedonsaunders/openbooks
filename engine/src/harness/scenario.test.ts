@@ -92,7 +92,13 @@ test("inventory-subledger-gl-tieout holds across receipt, issue, PPV and standar
     // open period covering the real current month.
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-      select ${randomUUID()}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, fiscal_calendar_id
+      select ${randomUUID()}, ${org.orgId},
+             extract(year from current_date)::int,
+             extract(month from current_date)::int,
+             to_char(current_date, 'YYYY-MM'),
+             date_trunc('month', current_date)::date,
+             (date_trunc('month', current_date) + interval '1 month - 1 day')::date,
+             false, fiscal_calendar_id
         from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`);
     const entries = await db.transaction((tx) =>
       revalueOpenLayersToStandardCost(

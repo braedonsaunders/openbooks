@@ -240,7 +240,7 @@ test("Dynamics OData pagination follows same-origin relative and absolute nextLi
       [`${baseItemsUrl}?$skiptoken=absolute`, `${baseItemsUrl}?$skiptoken=absolute`],
     ] as const) {
       const seen: string[] = [];
-      globalThis.fetch = ((input, _init) => {
+      globalThis.fetch = ((input) => {
         const url = String(input);
         seen.push(url);
         const body = seen.length === 1 ? { value: [{ No: "10000" }], "@odata.nextLink": nextLink } : { value: [{ No: "10001" }] };

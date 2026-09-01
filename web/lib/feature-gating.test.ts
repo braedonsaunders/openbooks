@@ -47,6 +47,14 @@ registerHooks({
           export async function guardPermission() {
             return { user: { id: state.userId, orgId: state.orgId }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
           }
+          export function guardSubsidiaryScope(authz, subsidiaryId) {
+            if (authz.allowedSubsidiaryIds === null) return null
+            if (subsidiaryId !== null && subsidiaryId !== undefined && authz.allowedSubsidiaryIds.has(String(subsidiaryId))) return null
+            return new Response(JSON.stringify({ error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } })
+          }
+          export function subsidiariesInScope(authz, ids) {
+            return authz.allowedSubsidiaryIds === null || ids.every((id) => id !== null && id !== undefined && authz.allowedSubsidiaryIds.has(id))
+          }
         `,
       }
     }

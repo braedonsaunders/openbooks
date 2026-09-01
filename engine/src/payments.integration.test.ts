@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import test, { after } from "node:test";
+import { readFileSync } from "node:fs";
+import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
-import { db, withBypass, withOrgContext, withOrgTransaction } from "./db.ts";
+import { db, pool, withBypass, withOrgContext, withOrgTransaction } from "./db.ts";
 import {
   generatePaymentFileArtifact,
   recordPaymentSettlement,
@@ -25,15 +26,13 @@ import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixt
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-// Remittance scenarios open the durable email queue; its idle Redis socket
-// must not keep the runner alive after the suite has finished.
-after(async () => {
-  const { getEmailQueue, getConnection } = await import("@openbooks/jobs");
-  await getEmailQueue().close().catch(() => {});
-  // BullMQ does not close a caller-provided connection instance; drop the
-  // package's memoized Redis client so the runner can drain.
-  (getConnection() as unknown as { disconnect(): void }).disconnect();
-});
+const paymentInstructionClaimFenceBundleGuardMigration = readFileSync(
+  new URL(
+    "../../schema/migrations/generated/0080_payment_instruction_claim_fence_bundle_guard.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 /** The storage-enforced duplicate-live-reservation violation, anywhere in a cause chain. */
 function isLiveSourceConflict(error: unknown): boolean {
@@ -63,14 +62,16 @@ function isCrossRunInstructionConflict(error: unknown): boolean {
 
 /** Poll until some session is blocked by the given backend, proving the two
  *  writers really contend instead of merely running near each other. */
-async function waitForBlockedBy(blockerPid: number, minimum = 1): Promise<void> {
+async function waitForBlockedBy(blockerPid: number, minimum = 1): Promise<number> {
   for (let attempt = 0; attempt < 200; attempt += 1) {
-    const blocked = await withBypass(() => db.execute<{ count: number }>(sql`
-      select count(*)::int as count
+    const blocked = await withBypass(() => db.execute<{ pid: number; count: number }>(sql`
+      select activity.pid::int as pid, count(*) over ()::int as count
         from pg_stat_activity activity
        where ${blockerPid} = any(pg_blocking_pids(activity.pid))
+       order by activity.pid
+       limit 1
     `));
-    if ((blocked.rows[0]?.count ?? 0) >= minimum) return;
+    if ((blocked.rows[0]?.count ?? 0) >= minimum) return blocked.rows[0]!.pid;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`timed out waiting for a query blocked by backend ${blockerPid}`);
@@ -1206,104 +1207,109 @@ test("one concurrent payment-run poster owns the processing claim and its eviden
   }
 });
 
-test("an in-flight automatic remittance decision holds the run against a concurrent bank return", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  let releaseProfileTable!: () => void;
-  const profileTableReleased = new Promise<void>((resolve) => { releaseProfileTable = resolve; });
+test("0080 payment-instruction claim-fence bundle guard replays safely", { skip: !DB }, async () => {
+  const client = await pool.connect();
   try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Tail serializer", "admin"));
-    const seeded = await withOrgContext(org.orgId, () =>
-      seedPostingClaimRun(org, actorId, 1, { autoRemittance: true }));
-    await withOrgContext(org.orgId, () => db.execute(sql`
-      insert into vendor_roles (org_id, party_id, eft_notification_email, created_by, updated_by)
-      values (${org.orgId}, ${org.vendorId}, 'ap@vendor.example', ${actorId}, ${actorId})
-    `));
+    await client.query("begin");
+    await client.query(paymentInstructionClaimFenceBundleGuardMigration);
+    await client.query(paymentInstructionClaimFenceBundleGuardMigration);
 
-    // Park the worker inside its remittance staging transaction, after it
-    // committed the first instruction as `sent`: holding this table stops the
-    // tail's context read at the exact point where a bank return could
-    // otherwise interleave.
-    let signalLocked!: (pid: number) => void;
-    const profileTableLocked = new Promise<number>((resolve) => { signalLocked = resolve; });
-    const blocker = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-      const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
-      await tx.execute(sql`lock table payment_bank_profiles in access exclusive mode`);
-      signalLocked(pid.rows[0]!.pid);
-      await profileTableReleased;
+    const functionState = await client.query<{ definition: string; trigger_count: number }>(`
+      select pg_get_functiondef(
+               'public.enforce_payment_instruction_posting_claim()'::regprocedure
+             ) as definition,
+             (select count(*)::int
+                from pg_trigger
+               where tgrelid = 'public.payment_instructions'::regclass
+                 and tgname = 'payment_instructions_posting_claim_fence'
+                 and not tgisinternal) as trigger_count
+    `);
+    assert.match(functionState.rows[0]!.definition, /to_jsonb\(new\).*status/i);
+    assert.equal(functionState.rows[0]!.trigger_count, 1);
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+});
+
+test("0080 payment-instruction claim fence rejects an untrusted sandbox-wipe GUC", { skip: !DB }, async () => {
+  // Keep this regression self-contained: a focused run must exercise the
+  // forward migration after 0078 just as a full bootstrap does.
+  const migrationClient = await pool.connect();
+  try {
+    await migrationClient.query("begin");
+    await migrationClient.query(paymentInstructionClaimFenceBundleGuardMigration);
+    await migrationClient.query(paymentInstructionClaimFenceBundleGuardMigration);
+    await migrationClient.query("commit");
+  } catch (error) {
+    await migrationClient.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    migrationClient.release();
+  }
+
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Sandbox-wipe fence", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
+    await installPostingClaim(org, seeded.runId, actorId);
+
+    const withRawSandboxWipe = <T>(
+      work: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>,
+    ): Promise<T> => withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+      await tx.execute(sql`
+        select set_config('openbooks.sandbox_wipe', 'on', true)
+      `);
+      return work(tx);
     }));
-    const blockerPid = await profileTableLocked;
 
-    const worker = withOrgContext(org.orgId, () =>
-      postPaymentRun(seeded.runId, org.orgId, actorId));
-    await waitForState(async () =>
-      withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          run_status: string;
-          instruction_status: string;
-        }>(sql`
-        select run.status as run_status,
-               (select status from payment_instructions
-                  where id = ${seeded.instructionIds[0]!}) as instruction_status
-          from payment_runs run
-         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]), {
-        run_status: "processing",
-        instruction_status: "sent",
-      });
-    await waitForBlockedBy(blockerPid);
-
-    // The parked staging transaction owns the aggregate: it holds the run row
-    // for its whole decision, so a concurrent bank return can only choose one
-    // side of the commit — before it (fencing the worker) or after it (a
-    // legitimately advised payment). A NOWAIT probe proves the row really is
-    // held while the tail is parked; an unfenced tail that merely reads holds
-    // nothing and the probe would sail through.
-    await assert.rejects(
-      withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        await tx.execute(sql`
-          select id from payment_runs
-           where id = ${seeded.runId} and org_id = ${org.orgId}
-           for update nowait
-        `);
-      })),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.match(error.message, /could not obtain the lock|nowait|55006/i);
-        return true;
-      },
+    // The caller-controlled GUC is not teardown authority for a production
+    // tenant: every trigger operation remains behind the processing claim.
+    await assertInstructionFenceRejected(
+      withRawSandboxWipe((tx) => tx.execute(sql`
+        insert into payment_instructions
+          (id, org_id, payment_run_id, payee_party_id, amount, currency,
+           status, created_by, updated_by)
+        values
+          (${randomUUID()}, ${org.orgId}, ${seeded.runId}, ${org.vendorId},
+           '25', 'CAD', 'pending', ${actorId}, ${actorId})
+      `)),
+    );
+    await assertInstructionFenceRejected(
+      withRawSandboxWipe((tx) => tx.execute(sql`
+        update payment_instructions
+           set amount = '99', updated_at = now(), updated_by = ${actorId}
+         where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
+      `)),
+    );
+    await assertInstructionFenceRejected(
+      withRawSandboxWipe((tx) => tx.execute(sql`
+        delete from payment_instructions
+         where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
+      `)),
     );
 
-    releaseProfileTable();
-    await blocker;
-    assert.deepEqual(await worker, { posted: 1, failures: [] });
-
-    // The advice legitimately went out for a still-sent instruction under the
-    // live claim, exactly once, and the run completed under the same claim.
-    const final = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{
-        run_status: string;
-        instruction_status: string;
-        claim_token: boolean;
-        remittances: number;
-      }>(sql`
-        select run.status as run_status,
-               (select status from payment_instructions
-                  where id = ${seeded.instructionIds[0]!}) as instruction_status,
-               run.posting_claim_token is not null as claim_token,
-               (select count(*)::int from payment_remittances remittance
-                  where remittance.payment_instruction_id = ${seeded.instructionIds[0]!}
-                    and remittance.org_id = ${org.orgId}) as remittances
-          from payment_runs run
-         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(final, {
-      run_status: "confirmed",
-      instruction_status: "sent",
-      claim_token: false,
-      remittances: 1,
-    });
+    // Once the tenant is explicitly classified as a sandbox, the same
+    // transaction-local GUC is an authorized teardown context for DELETE.
+    await withBypass(() => db.execute(sql`
+      update orgs set env_kind = 'sandbox'
+       where id = ${org.orgId} and name like 'Scratch %'
+    `));
+    await withRawSandboxWipe((tx) => tx.execute(sql`
+      delete from payment_instructions
+       where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
+    `));
+    const remaining = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ count: number }>(sql`
+        select count(*)::int as count
+          from payment_instructions
+         where payment_run_id = ${seeded.runId} and org_id = ${org.orgId}
+      `)).rows[0]?.count);
+    assert.equal(remaining, 1);
   } finally {
-    releaseProfileTable?.();
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
@@ -1350,8 +1356,9 @@ test("the instruction fence is enforced by storage: superseded claim tokens cann
          where id = ${seeded.instructionIds[2]!} and org_id = ${org.orgId}
       `)),
     );
-    // A stale writer cannot bundle a financial or remittance mutation with
-    // the settlement-style status carve-out.
+    // A stale writer cannot bundle financial or payment-file metadata with
+    // the settlement-style status carve-out. The row-wide guard also covers
+    // payment_run_id and payee_bank_account_id mutations.
     await assertInstructionFenceRejected(
       withPostingClaim(org, seeded.runId, supersededToken, (tx) => tx.execute(sql`
         update payment_instructions
@@ -1442,7 +1449,7 @@ test("a terminal transition fences a stale payment-run worker before downstream 
     // underneath still judges that same promise, so the test keeps proving
     // the stale worker dies with exactly this error.
     staleWorker.catch(() => {});
-    await waitForBlockedBy(blockerPid);
+    const workerPid = await waitForBlockedBy(blockerPid);
 
     // The bank return for the first instruction queues behind the parked
     // worker; releasing the instruction lets the worker commit its send,
@@ -1456,6 +1463,11 @@ test("a terminal transition fences a stale payment-run worker before downstream 
       returnCode: "R01",
       returnReason: "posting-claim concurrency regression",
     }));
+    // Prove the terminal writer has actually queued behind the worker's run
+    // lock before releasing the child-row blocker. Without this causal wait,
+    // the worker can legitimately finish first and the assertion below would
+    // race a settlement that had not yet reached its lock boundary.
+    await waitForBlockedBy(workerPid);
     secondInstructionReleased();
     await blocker;
     await settlement;
@@ -2211,5 +2223,107 @@ test("customer-payment surcharge posting rejects a non-income fee account", { sk
     assert.deepEqual(unchanged.rows[0], { status: "draft", total: "0.0000", lines: 0 });
   } finally {
     await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an in-flight automatic remittance decision holds the run against a concurrent bank return", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  let releaseProfileTable!: () => void;
+  const profileTableReleased = new Promise<void>((resolve) => { releaseProfileTable = resolve; });
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Tail serializer", "admin"));
+    const seeded = await withOrgContext(org.orgId, () =>
+      seedPostingClaimRun(org, actorId, 1, { autoRemittance: true }));
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      insert into vendor_roles (org_id, party_id, eft_notification_email, created_by, updated_by)
+      values (${org.orgId}, ${org.vendorId}, 'ap@vendor.example', ${actorId}, ${actorId})
+    `));
+
+    // Park the worker inside its remittance staging transaction, after it
+    // committed the first instruction as `sent`: holding this table stops the
+    // tail's context read at the exact point where a bank return could
+    // otherwise interleave.
+    let signalLocked!: (pid: number) => void;
+    const profileTableLocked = new Promise<number>((resolve) => { signalLocked = resolve; });
+    const blocker = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+      const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
+      await tx.execute(sql`lock table payment_bank_profiles in access exclusive mode`);
+      signalLocked(pid.rows[0]!.pid);
+      await profileTableReleased;
+    }));
+    const blockerPid = await profileTableLocked;
+
+    const worker = withOrgContext(org.orgId, () =>
+      postPaymentRun(seeded.runId, org.orgId, actorId));
+    await waitForState(async () =>
+      withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          run_status: string;
+          instruction_status: string;
+        }>(sql`
+        select run.status as run_status,
+               (select status from payment_instructions
+                  where id = ${seeded.instructionIds[0]!}) as instruction_status
+          from payment_runs run
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]), {
+        run_status: "processing",
+        instruction_status: "sent",
+      });
+    await waitForBlockedBy(blockerPid);
+
+    // The parked staging transaction owns the aggregate: it holds the run row
+    // for its whole decision, so a concurrent bank return can only choose one
+    // side of the commit — before it (fencing the worker) or after it (a
+    // legitimately advised payment). A NOWAIT probe proves the row really is
+    // held while the tail is parked; an unfenced tail that merely reads holds
+    // nothing and the probe would sail through.
+    await assert.rejects(
+      withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+        await tx.execute(sql`
+          select id from payment_runs
+           where id = ${seeded.runId} and org_id = ${org.orgId}
+           for update nowait
+        `);
+      })),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /could not obtain the lock|nowait|55006/i);
+        return true;
+      },
+    );
+
+    releaseProfileTable();
+    await blocker;
+    assert.deepEqual(await worker, { posted: 1, failures: [] });
+
+    // The advice legitimately went out for a still-sent instruction under the
+    // live claim, exactly once, and the run completed under the same claim.
+    const final = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{
+        run_status: string;
+        instruction_status: string;
+        claim_token: boolean;
+        remittances: number;
+      }>(sql`
+        select run.status as run_status,
+               (select status from payment_instructions
+                  where id = ${seeded.instructionIds[0]!}) as instruction_status,
+               run.posting_claim_token is not null as claim_token,
+               (select count(*)::int from payment_remittances remittance
+                  where remittance.payment_instruction_id = ${seeded.instructionIds[0]!}
+                    and remittance.org_id = ${org.orgId}) as remittances
+          from payment_runs run
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(final, {
+      run_status: "confirmed",
+      instruction_status: "sent",
+      claim_token: false,
+      remittances: 1,
+    });
+  } finally {
+    releaseProfileTable?.();
+    await withBypass(() => dropScratchOrg(org.orgId));
   }
 });

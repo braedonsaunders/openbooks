@@ -119,6 +119,8 @@ export const ANALYTICS_CONFIG: Record<string, { fields: ConfigField[]; defaults:
 
 export type AnalyticsDashboard = keyof typeof ANALYTICS_CONFIG;
 
+type AnalyticsConfigResult = AnalyticsConfigValues | CashflowConfig;
+
 function clampTo(dashboard: AnalyticsDashboard, field: ConfigField, v: unknown): number | string | null {
   if (dashboard === "cashflow" && field.key === "weeklyApCap") {
     try {
@@ -139,7 +141,7 @@ function clampTo(dashboard: AnalyticsDashboard, field: ConfigField, v: unknown):
 export function mergeConfig(dashboard: "cashflow", stored: unknown): CashflowConfig;
 export function mergeConfig(dashboard: Exclude<AnalyticsDashboard, "cashflow">, stored: unknown): Record<string, number>;
 export function mergeConfig(dashboard: AnalyticsDashboard, stored: unknown): AnalyticsConfigValues;
-export function mergeConfig(dashboard: AnalyticsDashboard, stored: unknown): any {
+export function mergeConfig(dashboard: AnalyticsDashboard, stored: unknown): AnalyticsConfigResult {
   const spec = ANALYTICS_CONFIG[dashboard]!;
   const out = { ...spec.defaults };
   if (stored && typeof stored === "object") {
@@ -148,14 +150,14 @@ export function mergeConfig(dashboard: AnalyticsDashboard, stored: unknown): any
       if (v !== null) out[f.key] = v;
     }
   }
-  return out;
+  return out as AnalyticsConfigResult;
 }
 
 /** Effective config for one dashboard: org overrides over defaults. */
 export async function analyticsConfig(orgId: string, dashboard: "cashflow"): Promise<CashflowConfig>;
 export async function analyticsConfig(orgId: string, dashboard: Exclude<AnalyticsDashboard, "cashflow">): Promise<Record<string, number>>;
 export async function analyticsConfig(orgId: string, dashboard: AnalyticsDashboard): Promise<AnalyticsConfigValues>;
-export async function analyticsConfig(orgId: string, dashboard: AnalyticsDashboard): Promise<any> {
+export async function analyticsConfig(orgId: string, dashboard: AnalyticsDashboard): Promise<AnalyticsConfigResult> {
   const r = ((await db.execute(sql`
     select settings -> 'analytics' -> ${dashboard} as cfg from orgs where id = ${orgId}
   `)));

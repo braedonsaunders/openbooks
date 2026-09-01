@@ -129,6 +129,10 @@ const hooks = registerHooks({
   },
 })
 
+// Register tests before awaiting route evaluation: --test-force-exit may mark
+// a test declared after a top-level await as cancelled even after its body has
+// completed. Keeping the import promise in the test also lets the hook remain
+// active until every intercepted dependency has loaded.
 const routeUrl = '../app/api/admin/setup/[entity]/route.ts?currency-route-test'
 const routeReady = import(routeUrl).then((module) => {
   hooks.deregister()

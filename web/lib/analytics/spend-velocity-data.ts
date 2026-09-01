@@ -187,7 +187,7 @@ function velocityCAGR(monthlyAmounts: number[], minBase = CFG.minBaseAmount): nu
   return calculateCAGR(start, end, periods);
 }
 
-function velocityAndAcceleration(amounts: number[], C: typeof CFG = CFG): { velocity: number; acceleration: number; trend: VelocityRow["trend"] } {
+export function velocityAndAcceleration(amounts: number[], C: typeof CFG = CFG): { velocity: number; acceleration: number; trend: VelocityRow["trend"] } {
   let velocity = 0, acceleration = 0;
   let trend: VelocityRow["trend"] = "stable";
   if (amounts.length >= 2) {

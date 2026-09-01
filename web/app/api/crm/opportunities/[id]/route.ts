@@ -33,6 +33,22 @@ function textOrNull(value: unknown): string | null {
 
 type QueryExecutor = Pick<typeof db, 'execute'>
 
+type LockedOpportunityRow = {
+  party_id: string | null
+  primary_contact_id: string | null
+  owner_user_id: string | null
+  sales_team_id: string | null
+  lead_source_id: string | null
+  status_id: string
+  probability: number | string
+  forecast_category: string
+  title: string
+  currency: string
+  win_loss_reason: string | null
+  projected_amount: string | number
+  weighted_amount: string | number
+}
+
 async function orgUuidExistsWith(executor: QueryExecutor, table: 'parties' | 'contacts' | 'users' | 'crm_sales_teams' | 'crm_lead_sources', id: string | null, orgId: string, lock = false): Promise<boolean> {
   if (!id) return true
   if (!isUuid(id)) return false
@@ -199,7 +215,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // locked by this write transaction.  The preflight snapshot above may have
     // gone stale while validation was running; using it here would let a later
     // save restore fields changed by an earlier concurrent save.
-    const lockedResult = (await tx.execute<any>(sql`
+    const lockedResult = (await tx.execute<LockedOpportunityRow>(sql`
       select o.*, s.is_closed, s.is_won, s.probability as status_probability,
              s.default_forecast_category as status_default_forecast_category
         from crm_opportunities o

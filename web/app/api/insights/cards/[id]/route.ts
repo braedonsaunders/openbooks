@@ -1,7 +1,7 @@
 import { parseJsonBody } from "@/lib/api/json";
+import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { z } from 'zod'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -16,20 +16,46 @@ import {
 
 export const runtime = 'nodejs'
 
-const nameBodySchema = z.looseObject({
-  name: z.string().optional(),
-})
+/** Lossless wire representation for PostgreSQL's six-digit timestamptz. */
+function cardRevisionSql(column: ReturnType<typeof sql.raw>) {
+  return sql<string>`to_char(
+    ${column} at time zone 'UTC',
+    'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+  )`
+}
+
+const CARD_REVISION_REQUIRED = 'the card revision is required; reload and review the latest revision'
+const CARD_REVISION_CONFLICT = 'this card changed after you opened it; reload and review the latest revision'
+
+class CardRevisionConflictError extends Error {}
+
+/** The route hands callers an exact persisted revision, never a driver Date. */
+async function loadCardForResponse(id: string, orgId: string) {
+  const card = await loadCard(id, orgId)
+  if (!card) return null
+  const revision = await db.execute<{ updatedAt: string }>(sql`
+    select ${cardRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+      from insight_cards
+     where id = ${id} and org_id = ${orgId}
+  `)
+  const updatedAt = revision.rows[0]?.updatedAt
+  return updatedAt ? { ...card, updated_at: updatedAt } : null
+}
 
 function bad(error: string) {
   return NextResponse.json({ error }, { status: 422 })
 }
+
+const nameBodySchema = z.looseObject({
+  name: z.string().optional(),
+})
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('insights.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const card = await loadCard(id, gate.user.orgId)
+  const card = await loadCardForResponse(id, gate.user.orgId)
   if (!card) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(card)
 }
@@ -41,6 +67,7 @@ interface PatchBody {
   vizType?: string
   vizSettings?: unknown
   allowedRoles?: unknown
+  expectedUpdatedAt?: string
 }
 
 /** Autosave for the card studio: name, query plan, viz type + settings, gating. */
@@ -58,6 +85,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as PatchBody
 
+  // Autosave is a full-card replacement. Require the exact revision the
+  // caller loaded so an older debounced request can never restore stale
+  // analytical definitions after a newer save commits.
+  if (body.expectedUpdatedAt === undefined) {
+    return NextResponse.json({ error: CARD_REVISION_REQUIRED }, { status: 409 })
+  }
+  if (
+    typeof body.expectedUpdatedAt !== 'string'
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(body.expectedUpdatedAt)
+    || Number.isNaN(new Date(body.expectedUpdatedAt).getTime())
+  ) {
+    return NextResponse.json(
+      { error: 'expectedUpdatedAt must be the exact updatedAt revision previously read for this card' },
+      { status: 422 },
+    )
+  }
+
+  if (body.name !== undefined && typeof body.name !== 'string') return bad('Card name must be a string')
   const name = body.name !== undefined ? body.name.trim() : undefined
   if (name !== undefined && name === '') return bad('Card name cannot be empty')
 
@@ -90,7 +135,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  await db.execute(sql`
+  try {
+    const updated = await db.execute(sql`
     update insight_cards set
       name = ${name !== undefined ? name : sql`name`},
       description = ${body.description !== undefined ? strOrNull(body.description) : sql`description`},
@@ -98,11 +144,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       viz_type = ${body.vizType !== undefined ? body.vizType : sql`viz_type`},
       viz_settings = ${vizSettings !== undefined ? sql`${JSON.stringify(vizSettings)}::jsonb` : sql`viz_settings`},
       allowed_roles = ${allowedRoles !== undefined ? sql`${allowedRoles ? JSON.stringify(allowedRoles) : null}::jsonb` : sql`allowed_roles`},
-      updated_at = now(), updated_by = ${user.id}
-    where id = ${id} and org_id = ${user.orgId}
+      updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
+      updated_by = ${user.id}
+    where id = ${id}
+      and org_id = ${user.orgId}
+      and updated_at = ${body.expectedUpdatedAt}::timestamptz
+    returning id
   `)
+    if (!updated.rows[0]) throw new CardRevisionConflictError()
+  } catch (error) {
+    if (error instanceof CardRevisionConflictError) {
+      return NextResponse.json({ error: CARD_REVISION_CONFLICT }, { status: 409 })
+    }
+    throw error
+  }
 
-  const card = await loadCard(id, user.orgId)
+  const card = await loadCardForResponse(id, user.orgId)
+  if (!card) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(card)
 }
 

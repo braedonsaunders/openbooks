@@ -43,4 +43,5 @@ test("canonical JSON rejects unsafe values", () => {
   assert.throws(() => canonicalJson({ handler: () => undefined }), NonJsonValueError);
   assert.throws(() => canonicalJson(new Map([["amount", "100.00"]])), NonJsonValueError);
   assert.throws(() => canonicalJson(new Set(["approval"])), NonJsonValueError);
+  assert.throws(() => canonicalJson(/approval/), NonJsonValueError);
 });

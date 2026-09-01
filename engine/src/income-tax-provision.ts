@@ -433,6 +433,18 @@ export interface EntityBaseline extends DeferredBalances {
   netTemporaryDifference: string;
 }
 
+/** Whether an opening deferred-tax baseline gives an entity something to unwind. */
+export function hasPriorDeferredTaxMeasurement(
+  baseline: EntityBaseline | null | undefined,
+): boolean {
+  return (
+    !isZero(baseline?.dtaGross ?? "0") ||
+    !isZero(baseline?.dtlGross ?? "0") ||
+    !isZero(baseline?.valuationAllowance ?? "0") ||
+    !isZero(baseline?.netTemporaryDifference ?? "0")
+  );
+}
+
 /**
  * Everything outside the preparer's own inputs that a provision measurement
  * depends on. Captured at compute time, stored in the draft payload, and
@@ -1252,10 +1264,7 @@ export async function computeProvisionRun(
         (autoByEntity.get(id)?.length ?? 0) > 0 ||
         (manualByEntity.get(id)?.length ?? 0) > 0 ||
         (permanentByEntity.get(id)?.length ?? 0) > 0 ||
-        !isZero(prior?.dtaGross ?? "0") ||
-        !isZero(prior?.dtlGross ?? "0") ||
-        !isZero(prior?.valuationAllowance ?? "0") ||
-        !isZero(prior?.netTemporaryDifference ?? "0") ||
+        hasPriorDeferredTaxMeasurement(prior) ||
         !isZero(override?.lossCarryforwardUsed ?? (id === root?.id ? opts.lossCarryforwardUsed ?? "0" : "0")) ||
         !isZero(override?.valuationAllowance ?? (id === root?.id ? opts.valuationAllowance ?? "0" : "0"))
       );

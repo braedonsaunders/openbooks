@@ -77,9 +77,14 @@ const camPoolSourceAccountOverlapMigrationPath =
   "schema/migrations/generated/0061_cam_pool_source_account_overlap.sql";
 const recognitionEventsMigrationPath =
   "schema/migrations/generated/0062_recognition_events.sql";
-const intentionallySkippedMigrationOrdinals = [80] as const;
 const sandboxWipeGuardAuthorizationMigrationPath =
   "schema/migrations/generated/0078_sandbox_wipe_guard_authorization.sql";
+const payDerivedRulesEffectiveVersioningMigrationPath =
+  "schema/migrations/generated/0083_pay_derived_rules_effective_versioning.sql";
+const recognitionEventTenantCoherenceMigrationPath =
+  "schema/migrations/generated/0084_recognition_event_tenant_coherence.sql";
+const syncRunConnectionNullableMigrationPath =
+  "schema/migrations/generated/0085_sync_run_connection_nullable.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -163,19 +168,13 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0077_project_overhead_adjustment_reversal_uniqueness.sql",
     "0078_sandbox_wipe_guard_authorization.sql",
     "0079_budget_subsidiary.sql",
-    // 0080 is intentionally unused; no migration was shipped for this ordinal.
+    "0080_payment_instruction_claim_fence_bundle_guard.sql",
     "0081_account_group_member_dimension_uniqueness.sql",
     "0082_asset_draft_number_uniqueness.sql",
     "0083_pay_derived_rules_effective_versioning.sql",
+    "0084_recognition_event_tenant_coherence.sql",
+    "0085_sync_run_connection_nullable.sql",
   ]);
-  for (const ordinal of intentionallySkippedMigrationOrdinals) {
-    const prefix = ordinal.toString().padStart(4, "0");
-    assert.equal(
-      generated.some((file) => file.startsWith(`${prefix}_`)),
-      false,
-      `migration ordinal ${prefix} is intentionally skipped`,
-    );
-  }
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
     ["environments.sql"],
@@ -694,6 +693,27 @@ test("one effective tax-rate window per tax code is enforced by storage, not by 
   );
   // The baseline keeps its published trigger untouched.
   assert.match(baseline, /CREATE FUNCTION public\.tax_rates_no_overlap_guard/);
+});
+
+test("derived-pay rule versioning is replay-safe and preserves storage invariants", () => {
+  const migration = readFileSync(payDerivedRulesEffectiveVersioningMigrationPath, "utf8");
+
+  // PostgreSQL has no ADD CONSTRAINT IF NOT EXISTS. The catalog guard keeps a
+  // second application a no-op while retaining the exact tenant/code window
+  // exclusion predicate on the first application.
+  assert.match(migration, /DO \$pay_derived_rules_no_active_overlap\$/);
+  assert.match(migration, /pg_catalog\.pg_constraint/);
+  assert.match(migration, /ADD CONSTRAINT pay_derived_rules_no_active_overlap\s+EXCLUDE USING gist/);
+  assert.match(migration, /org_id WITH =/);
+  assert.match(migration, /code WITH =/);
+  assert.match(migration, /\(daterange\(effective_from, COALESCE\(effective_to, 'infinity'::date\), '\[\]'\)\) WITH &&/);
+  assert.match(migration, /WHERE \(is_active\)/);
+
+  // Replay replaces the trigger/function definitions but never rewrites or
+  // deletes existing pay-rule rows.
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.pay_derived_rules_immutable_guard/);
+  assert.match(migration, /DROP TRIGGER IF EXISTS pay_derived_rules_immutable/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s+public\.pay_derived_rules/im);
 });
 test("payroll commit has durable exact-source selection evidence", () => {
   const migration = readFileSync(payrollCommitSelectionFenceMigrationPath, "utf8");
@@ -1443,6 +1463,64 @@ test("recognition_events table stores milestone and usage recognition evidence",
   assert.doesNotMatch(migration, /TO openbooks_app/);
   // No data rewrite.
   assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
+});
+
+test("recognition event obligation references are tenant-coherent", () => {
+  const migration = readFileSync(recognitionEventTenantCoherenceMigrationPath, "utf8");
+  const schema = readFileSync("schema/src/revenue.ts", "utf8");
+
+  // The upgrade is fail-closed and does not rewrite or discard existing
+  // recognition evidence when it discovers a legacy mismatch.
+  assert.match(migration, /DO \$recognition_event_tenant_coherence_preflight\$/);
+  assert.match(migration, /legacy data violates tenant coherence: public\.recognition_events\.obligation_id/);
+  assert.match(migration, /this migration will not rewrite financial evidence/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
+
+  // The storage relationship, not RLS or an application preflight, owns the
+  // organization boundary. Replaying the migration must converge cleanly.
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX IF NOT EXISTS performance_obligations_org_id_id_unique\s+ON public\.performance_obligations USING btree \(org_id, id\)/,
+  );
+  assert.match(
+    migration,
+    /ADD CONSTRAINT recognition_events_obligation_id_fkey\s+FOREIGN KEY \(org_id, obligation_id\)\s+REFERENCES public\.performance_obligations \(org_id, id\)\s+ON DELETE CASCADE\s+DEFERRABLE NOT VALID/,
+  );
+  assert.match(migration, /VALIDATE CONSTRAINT recognition_events_obligation_id_fkey/);
+  assert.match(migration, /DROP CONSTRAINT IF EXISTS recognition_events_obligation_id_fkey/);
+
+  // Drizzle's schema mirror publishes the same parent key and composite edge.
+  assert.match(
+    schema,
+    /uniqueIndex\("performance_obligations_org_id_id_unique"\)\.on\(t\.orgId, t\.id\)/,
+  );
+  assert.match(
+    schema,
+    /foreignKey\(\{\s+columns: \[t\.orgId, t\.obligationId\],\s+foreignColumns: \[performanceObligations\.orgId, performanceObligations\.id\],\s+name: "recognition_events_obligation_id_fkey",/,
+  );
+});
+
+test("sync-run connection detachment is published and replay-safe", () => {
+  const migration = readFileSync(syncRunConnectionNullableMigrationPath, "utf8");
+
+  // The exact forward migration is part of the published sequence above, and
+  // its DDL is convergent: dropping NOT NULL and replacing a column comment
+  // are both safe when bootstrap encounters an already-detached schema.
+  assert.match(
+    migration,
+    /^-- OpenBooks forward migration 0085_sync_run_connection_nullable\./,
+  );
+  assert.match(
+    migration,
+    /ALTER TABLE public\.sync_runs\s+ALTER COLUMN connection_id DROP NOT NULL;/,
+  );
+  assert.match(
+    migration,
+    /COMMENT ON COLUMN public\.sync_runs\.connection_id IS\s+'Connection that produced this run; NULL preserves run history after the connection is deleted\.';/,
+  );
+  // The rollout only changes schema metadata; it never rewrites or removes
+  // historical sync-run evidence on first application or replay.
+  assert.doesNotMatch(migration, /^\s*(?:INSERT|UPDATE|DELETE\s+FROM|TRUNCATE)\b/im);
 });
 
 test("the SFTP login username is globally unique in storage, not by allocation luck", () => {
