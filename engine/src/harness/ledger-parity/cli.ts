@@ -6264,7 +6264,7 @@ async function runRevenueRecognitionParity(): Promise<void> {
       (${invoiceId}, ${manifest.openbooks.orgId}, 'customer_invoice',
        ${`PARITY-REV-INV-${marker}`}, ${manifest.openbooks.customerId},
        ${manifest.openbooks.subsidiaryId}, '2026-07-01', '2026-07-01',
-       '2026-07-31', 'CAD', 1, 'approved', 300, 0, 300, false,
+       '2026-07-31', 'CAD', 1, 'draft', 300, 0, 300, false,
        '{}'::jsonb, '{}'::jsonb, ${manifest.openbooks.actorId},
        ${manifest.openbooks.actorId})
   `);
@@ -6319,6 +6319,10 @@ async function runRevenueRecognitionParity(): Promise<void> {
       { includeControlParty: true },
     ),
   );
+  await db
+    .update(schema.documents)
+    .set({ status: "approved", updatedBy: manifest.openbooks.actorId })
+    .where(eq(schema.documents.id, invoiceId));
   await postDocument(invoiceId, {
     control: {
       ar: manifest.openbooks.accounts.ar!,
