@@ -43,7 +43,7 @@
       "billsHint": "逾期 {overdue}",
       "paymentsHint": "本周付款",
       "expensesHint": "待入账",
-      "vendorsHint": "位活跃供应商"
+      "vendorsHint": "活跃供应商"
     },
     "attention": {
       "title": "需要关注",
