@@ -25,6 +25,23 @@ const RIGHT_ENTRIES = [
   'M28 23.4 C 31 21.6 35 20.8 38.5 21.5',
   'M28 29.4 C 31 27.6 35 26.8 38.5 27.5',
 ]
+
+// Keep the post-login destination on this origin. Parsing against a fixed
+// sentinel also catches backslash-normalized protocol-relative URLs such as
+// `/\\evil.example`, which a browser would otherwise treat as cross-origin.
+const SAFE_RETURN_TO_ORIGIN = 'https://openbooks.invalid'
+
+function safeNextPath(value: string | null): string {
+  if (!value || value.length > 2048 || !value.startsWith('/') || value.startsWith('//')) return '/'
+  try {
+    const parsed = new URL(value, SAFE_RETURN_TO_ORIGIN)
+    if (parsed.origin !== SAFE_RETURN_TO_ORIGIN) return '/'
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return '/'
+  }
+}
+
 // Entries fade in one-by-one once the covers finish opening (~1.05s).
 const entryDelay = (i: number): CSSProperties => ({ animationDelay: `${1.0 + i * 0.1}s` })
 
@@ -78,6 +95,7 @@ function LoginForm() {
   const tCommon = useTranslations('common')
   const router = useRouter()
   const params = useSearchParams()
+  const nextPath = safeNextPath(params.get('next'))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [mfaCode, setMfaCode] = useState('')
@@ -112,7 +130,7 @@ function LoginForm() {
       setPassword('')
       setBusy(false)
     } else if (res.ok) {
-      router.push(params.get('next') ?? '/')
+      router.push(nextPath)
       router.refresh()
     } else {
       // 429 is the ingress limiter, not a credential verdict — say so instead
@@ -212,7 +230,7 @@ function LoginForm() {
                   <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
                 </div>
                 <a
-                  href={`/api/auth/oidc/start?next=${encodeURIComponent(params.get('next') ?? '/')}`}
+                  href={`/api/auth/oidc/start?next=${encodeURIComponent(nextPath)}`}
                   className="flex h-11 w-full items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-900 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:hover:bg-slate-800"
                 >
                   {oidc.label}
