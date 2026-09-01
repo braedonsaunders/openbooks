@@ -194,7 +194,7 @@ function velocityAndAcceleration(amounts: number[], C: typeof CFG = CFG): { velo
     velocity = velocityCAGR(amounts);
     if (amounts.length >= 4) {
       const mid = Math.floor(amounts.length / 2);
-      acceleration = velocityCAGR(amounts.slice(mid)) - velocityCAGR(amounts.slice(0, mid + 1));
+      acceleration = velocityCAGR(amounts.slice(mid)) - velocityCAGR(amounts.slice(0, mid));
     }
     if (velocity > C.velocityHighThreshold) trend = acceleration > 0 ? "accelerating" : "high";
     else if (velocity > C.velocityMediumThreshold) trend = "rising";
