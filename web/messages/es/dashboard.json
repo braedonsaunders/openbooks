@@ -90,6 +90,14 @@
     "customize": "Personalizar",
     "empty": "Sin acciones rápidas",
     "addFirst": "Añade tu primera acción",
+    "labels": {
+      "newJournalEntry": "Nuevo asiento contable",
+      "newBill": "Nueva factura de proveedor",
+      "newInvoice": "Nueva factura",
+      "newPayment": "Nuevo pago",
+      "newExpense": "Nuevo gasto",
+      "runReport": "Ejecutar informe"
+    },
     "editor": {
       "title": "Personalizar acciones rápidas",
       "description": "Añadir, reordenar y eliminar accesos directos.",

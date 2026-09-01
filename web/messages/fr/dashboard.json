@@ -90,6 +90,14 @@
     "customize": "Personnaliser",
     "empty": "Aucune action rapide",
     "addFirst": "Ajouter votre première action",
+    "labels": {
+      "newJournalEntry": "Nouvelle écriture de journal",
+      "newBill": "Nouvelle facture fournisseur",
+      "newInvoice": "Nouvelle facture client",
+      "newPayment": "Nouveau paiement",
+      "newExpense": "Nouvelle dépense",
+      "runReport": "Exécuter le rapport"
+    },
     "editor": {
       "title": "Personnaliser les actions rapides",
       "description": "Ajouter, réorganiser et supprimer des raccourcis.",

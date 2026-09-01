@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { PageHeader } from "@openbooks/ui";
@@ -9,7 +10,8 @@ import { CollectionsClient } from "./CollectionsClient";
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: "Recurring & Collections" };
+  const t = await getTranslations("nav");
+  return { title: t("modules.collections") };
 }
 
 /**
@@ -20,6 +22,10 @@ export async function generateMetadata() {
  * engine/src/subscription-billing.ts) is added. All run from the scheduler.
  */
 export default async function CollectionsPage() {
+  const [tNav, tAr] = await Promise.all([
+    getTranslations("nav"),
+    getTranslations("ar"),
+  ]);
   const authz = await requirePermission("documents.manage").catch(() => null);
   if (!authz) redirect("/dashboard");
 
@@ -44,8 +50,8 @@ export default async function CollectionsPage() {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6">
       <PageHeader
-        title="Recurring & Collections"
-        description="Automate repeating invoices and chase overdue receivables."
+        title={tNav("modules.collections")}
+        description={tAr("cockpit.description")}
       />
       <CollectionsClient
         subscriptionsEnabled={subscriptionsEnabled}

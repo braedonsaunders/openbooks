@@ -90,6 +90,14 @@
     "customize": "Personalizar",
     "empty": "Nenhuma ação rápida ainda",
     "addFirst": "Adicione sua primeira ação",
+    "labels": {
+      "newJournalEntry": "Novo lançamento contábil",
+      "newBill": "Nova conta a pagar",
+      "newInvoice": "Nova fatura",
+      "newPayment": "Novo pagamento",
+      "newExpense": "Nova despesa",
+      "runReport": "Executar relatório"
+    },
     "editor": {
       "title": "Personalizar ações rápidas",
       "description": "Adicione, reordene e remova blocos de atalho.",

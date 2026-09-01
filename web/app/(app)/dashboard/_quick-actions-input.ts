@@ -8,7 +8,8 @@ const safeHref = (href: string) =>
 
 const QuickActionSchema = z.object({
   id: z.string().min(1).max(64),
-  label: z.string().trim().min(1).max(80),
+  label: z.string().trim().min(1).max(80).optional(),
+  labelKey: z.string().trim().min(1).max(96).optional(),
   href: z
     .string()
     .trim()
@@ -17,6 +18,9 @@ const QuickActionSchema = z.object({
     .refine(safeHref, 'Link must be an internal path or http(s) URL'),
   iconKey: z.string().min(1).max(48),
   tone: z.string().min(1).max(24),
+}).refine((action) => Boolean(action.labelKey || action.label), {
+  message: 'A quick action needs a label or a product label key',
+  path: ['label'],
 })
 
 export const QuickActionsSchema = z.array(QuickActionSchema).max(MAX_QUICK_ACTIONS)
