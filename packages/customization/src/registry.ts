@@ -1684,8 +1684,12 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   LABOR_RATE_CARD,
 ];
 
-export const RECORD_TYPE_BY_KEY: Record<string, RecordTypeMeta> = Object.fromEntries(
-  RECORD_TYPES.map((r) => [r.key, r]),
+export const RECORD_TYPE_BY_KEY: Record<string, RecordTypeMeta> = RECORD_TYPES.reduce(
+  (byKey, recordType) => {
+    byKey[recordType.key] = recordType;
+    return byKey;
+  },
+  Object.create(null) as Record<string, RecordTypeMeta>,
 );
 
 export function getRecordType(key: string): RecordTypeMeta | undefined {
