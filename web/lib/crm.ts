@@ -137,30 +137,43 @@ export interface ForecastScope {
 /** Exact forecast rollup performed by PostgreSQL numeric arithmetic. */
 export async function calculateForecast(scope: ForecastScope) {
   const ownerFilter = scope.ownerUserId ? sql`and o.owner_user_id = ${scope.ownerUserId}` : sql``
-  const teamFilter = scope.salesTeamId ? sql`and o.sales_team_id = ${scope.salesTeamId}` : sql``
-  const actualsTeamFilter = scope.salesTeamId ? sql`
-           and exists (
-             select 1
-               from crm_opportunity_documents od
-               join crm_opportunities o on o.id = od.opportunity_id and o.org_id = od.org_id
-              where od.org_id = ${scope.orgId}
-                and od.document_id = d.id
-                and o.sales_team_id = ${scope.salesTeamId}
-           )` : sql``
+  /**
+   * A team forecast is the set of opportunities assigned to that team. Keep
+   * that boundary in one CTE so pipeline and closed-revenue rows cannot drift
+   * into different populations. The CTE deliberately does not require an
+   * opportunity to be active or in-period: historical invoices linked to an
+   * opportunity remain attributable to its team.
+   */
+  const teamScopeFilter = scope.salesTeamId ? sql`and o.sales_team_id = ${scope.salesTeamId}` : sql``
+  const teamActualsFilter = scope.salesTeamId ? sql`
+         and exists (
+           select 1
+             from crm_opportunity_documents od
+             join forecast_scope fo on fo.id = od.opportunity_id
+           where od.org_id = ${scope.orgId}
+              and od.document_id = d.id
+         )` : sql``
   const rows = (await db.execute<Record<string, string>>(sql`
-    with opportunity_base as (
+    with forecast_scope as (
+      select o.id
+        from crm_opportunities o
+       where o.org_id = ${scope.orgId}
+         ${teamScopeFilter}
+    ), opportunity_base as (
       select o.currency, o.projected_amount, o.weighted_amount, o.forecast_category, s.is_closed, s.is_won
-        from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
+        from crm_opportunities o
+        join forecast_scope fo on fo.id = o.id
+        join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
        where o.org_id = ${scope.orgId} and o.is_active
          and o.expected_close_date between ${scope.periodStart}::date and ${scope.periodEnd}::date
-         ${ownerFilter} ${teamFilter}
+         ${ownerFilter}
     ), actuals as (
       select d.currency, coalesce(sum(d.total), 0)::numeric(19,4) as closed_amount
         from documents d
        where d.org_id = ${scope.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
          and d.document_date between ${scope.periodStart}::date and ${scope.periodEnd}::date
          ${scope.ownerUserId ? sql`and exists (select 1 from crm_account_profiles cp where cp.org_id = ${scope.orgId} and cp.party_id = d.party_id and cp.owner_user_id = ${scope.ownerUserId})` : sql``}
-         ${actualsTeamFilter}
+         ${teamActualsFilter}
        group by d.currency
     ), currencies as (
       select currency from opportunity_base union select currency from actuals
