@@ -30,6 +30,38 @@ test("accepts ordinary files and repository-relative symlinks", () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("rejects tracked NUL-containing source blobs", () => {
+  const directory = repository();
+  writeFileSync(join(directory, "src.ts"), Buffer.from("export const value = 1;\0\n"));
+  execFileSync("git", ["add", "src.ts"], { cwd: directory });
+
+  const result = run(directory);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /NUL bytes/);
+  assert.match(result.stderr, /src\.ts/);
+});
+
+test("accepts clean tracked source blobs", () => {
+  const directory = repository();
+  writeFileSync(join(directory, "src.ts"), "export const value = 1;\n");
+  execFileSync("git", ["add", "src.ts"], { cwd: directory });
+
+  const result = run(directory);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("accepts legitimate tracked binary assets", () => {
+  const directory = repository();
+  writeFileSync(
+    join(directory, "asset.png"),
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]),
+  );
+  execFileSync("git", ["add", "asset.png"], { cwd: directory });
+
+  const result = run(directory);
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("rejects tracked dependency artifacts", () => {
   const directory = repository();
   mkdirSync(join(directory, "node_modules"));
