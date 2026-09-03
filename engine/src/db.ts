@@ -208,6 +208,21 @@ function activeOrgCtx(): OrgCtx | undefined {
   return orgContext.getStore() ?? dbRuntime.__openbooksRequestOrgResolver?.();
 }
 
+/**
+ * The ambient tenant id for defense-in-depth explicit predicates. Resolves
+ * from the same source the pooled-query wrapper applies GUCs from (the
+ * AsyncLocalStorage store, else the host-registered request resolver), but
+ * returns null under bypass or with no context — callers that need a tenant
+ * boundary must fail closed on null rather than read unscoped. Reads (not
+ * writes) the context: it never installs scope, so adapters stay pure
+ * consumers of whatever boundary the caller established.
+ */
+export function ambientTenantOrgId(): string | null {
+  const ctx = activeOrgCtx();
+  if (!ctx || ctx.bypass) return null;
+  return ctx.orgId;
+}
+
 const rawConnect = async (): Promise<pg.PoolClient> =>
   protectCheckedOutClient(
     await (pg.Pool.prototype.connect as (...a: unknown[]) => Promise<pg.PoolClient>).call(basePool),

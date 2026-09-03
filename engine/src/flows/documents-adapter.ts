@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db, schema } from "../db.ts";
+import { ambientTenantOrgId, db, schema } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import {
   DOCUMENT_FIELDS,
@@ -288,12 +288,21 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
 
     async findCandidateIds(limit: number): Promise<string[]> {
       // Coarse newest-first fetch for scheduled fan-out; the select rule does
-      // the real filtering in JS against each record's loaded context. Runs
-      // inside withOrg(flow.orgId), so RLS scopes the org. Voided docs are
-      // terminal and never candidates.
+      // the real filtering in JS against each record's loaded context. The
+      // explicit org_id predicate is the tenant boundary — NOT the RLS GUCs
+      // withOrg pins on its own client: pooled sibling connections (and any
+      // bypass-ambient resolver, e.g. the test harness's) can otherwise see
+      // every tenant, which fanned one flow's firing out across orgs. Fails
+      // closed when no ambient tenant is active rather than reading unscoped.
+      const orgId = ambientTenantOrgId();
+      if (!orgId) {
+        throw new Error(
+          `findCandidateIds for "${kind}" requires an ambient tenant context (withOrg)`,
+        );
+      }
       const r = (await db.execute<{ id: string }>(sql`
         select id from documents
-         where kind = ${kind} and status <> 'voided'
+         where org_id = ${orgId} and kind = ${kind} and status <> 'voided'
          order by created_at desc
          limit ${limit}
       `));
