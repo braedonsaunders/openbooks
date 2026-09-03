@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { createConnection } from "node:net";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "./db.ts";
+import { db, pool, withBypassContext } from "./db.ts";
 
 /**
  * DB test fixtures — a disposable scratch org with the full accounting spine a
@@ -33,11 +34,23 @@ export interface ScratchOrg {
   vendorId: string;
   /** a date inside the open period. */
   date: string;
+  /** Internal pool snapshot keys; callers should treat this as opaque. */
+  readonly baselineIds?: Readonly<Record<string, readonly string[]>>;
+  /** Database-backed template schema used for committed lease resets. */
+  readonly snapshotSchema?: string;
 }
 
-export async function createScratchOrg(): Promise<ScratchOrg> {
+/** Build one pristine scratch tenant. The pool wrapper below calls this only
+ * during fixed-size process setup; ordinary callers retain the historical
+ * one-off behavior when pooling is not explicitly enabled. */
+async function bootstrapScratchOrg(): Promise<ScratchOrg> {
   const orgId = randomUUID();
   const date = "2026-07-15";
+  const baselineIds: Record<string, string[]> = {};
+  const mark = (table: string, id: string) => {
+    (baselineIds[table] ??= []).push(id);
+    return id;
+  };
 
   // CI loads the schema without the product seed. Financial fixtures still
   // need a valid ISO registry row before they can snapshot functional currency
@@ -51,7 +64,7 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
     insert into orgs (id, name, base_currency, country, settings, env_kind)
     values (${orgId}, ${"Scratch " + orgId.slice(0, 8)}, 'CAD', 'CA', '{}'::jsonb, 'production')`);
 
-  const fiscalCalendarId = randomUUID();
+  const fiscalCalendarId = mark("fiscal_calendars", randomUUID());
   await db.execute(sql`
     insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone,
                                   adjustment_period_enabled, is_default, is_active, config)
@@ -60,35 +73,35 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
   // Keep the fixture's accounting spine to one open period. Suites that need
   // future or historical months seed those periods explicitly so their
   // scenario-specific calendars cannot collide with shared fixture defaults.
-  const periodId = randomUUID();
+  const periodId = mark("accounting_periods", randomUUID());
   await db.execute(sql`
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
     values (${periodId}, ${orgId}, 2026, 7, '2026-07', '2026-07-01', '2026-07-31', false, ${fiscalCalendarId})`);
 
-  const bookId = randomUUID();
+  const bookId = mark("accounting_books", randomUUID());
   await db.execute(sql`
     insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
     values (${bookId}, ${orgId}, 'PRI', 'Primary', true, true, true)`);
 
-  const subsidiaryId = randomUUID();
+  const subsidiaryId = mark("subsidiaries", randomUUID());
   await db.execute(sql`
     insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
     values (${subsidiaryId}, ${orgId}, 'Main Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
 
-  const locationId = randomUUID();
+  const locationId = mark("locations", randomUUID());
   await db.execute(sql`
     insert into locations (id, org_id, name, is_active, custom, subsidiary_include_children)
     values (${locationId}, ${orgId}, 'HQ', true, '{}'::jsonb, true)`);
-  const locationId2 = randomUUID();
+  const locationId2 = mark("locations", randomUUID());
   await db.execute(sql`
     insert into locations (id, org_id, name, is_active, custom, subsidiary_include_children)
     values (${locationId2}, ${orgId}, 'DC', true, '{}'::jsonb, true)`);
 
-  const stockLocationId = randomUUID();
+  const stockLocationId = mark("stock_locations", randomUUID());
   await db.execute(sql`
     insert into stock_locations (id, org_id, location_id, code, kind, is_active)
     values (${stockLocationId}, ${orgId}, ${locationId}, 'MAIN', 'warehouse', true)`);
-  const stockLocationId2 = randomUUID();
+  const stockLocationId2 = mark("stock_locations", randomUUID());
   await db.execute(sql`
     insert into stock_locations (id, org_id, location_id, code, kind, is_active)
     values (${stockLocationId2}, ${orgId}, ${locationId2}, 'STAGE', 'warehouse', true)`);
@@ -113,7 +126,7 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
   ];
   const accounts = {} as ScratchOrg["accounts"];
   for (const [key, number, name, type] of acctDefs) {
-    const id = randomUUID();
+    const id = mark("accounts", randomUUID());
     accounts[key] = id;
     await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
@@ -129,15 +142,16 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
 
   // Items + inventory profiles.
   async function inventoryItem(name: string, method: "fifo" | "moving_average" | "standard", standardCost?: string): Promise<string> {
-    const id = randomUUID();
+    const id = mark("items", randomUUID());
     await db.execute(sql`
       insert into items (id, org_id, kind, name, show_on_timesheet, is_active, custom, create_plans_on, revenue_allocation, income_account_id)
       values (${id}, ${orgId}, 'inventory', ${name}, false, true, '{}'::jsonb, 'billing', 'normal', ${accounts.revenue})`);
+    const profileId = mark("item_inventory_profiles", randomUUID());
     await db.execute(sql`
       insert into item_inventory_profiles
         (id, org_id, item_id, costing_method, tracking, asset_account_id, cogs_account_id, adjustment_account_id,
          variance_account_id, received_not_billed_account_id, standard_cost, base_unit, unit_conversions)
-      values (${randomUUID()}, ${orgId}, ${id}, ${method}, 'none', ${accounts.invAsset}, ${accounts.cogs}, ${accounts.adjustment},
+      values (${profileId}, ${orgId}, ${id}, ${method}, 'none', ${accounts.invAsset}, ${accounts.cogs}, ${accounts.adjustment},
               ${accounts.adjustment}, ${accounts.clearing}, ${standardCost ?? null}, 'ea', '{}'::jsonb)`);
     return id;
   }
@@ -147,16 +161,17 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
     standard: await inventoryItem("Std Widget", "standard", "2.00"),
     component: await inventoryItem("Component", "fifo"),
     assembly: await inventoryItem("Assembly", "fifo"),
-    service: randomUUID(),
+    service: mark("items", randomUUID()),
   } as ScratchOrg["items"];
 
   // BOM: assembly needs 2 components.
+  const bomId = mark("bom_components", randomUUID());
   await db.execute(sql`
     insert into bom_components (id, org_id, assembly_item_id, component_item_id, quantity_per, sort_order)
-    values (${randomUUID()}, ${orgId}, ${items.assembly}, ${items.component}, '2', 0)`);
+    values (${bomId}, ${orgId}, ${items.assembly}, ${items.component}, '2', 0)`);
 
   // Revenue recognition rule + service item.
-  const recognitionRuleId = randomUUID();
+  const recognitionRuleId = mark("recognition_rules", randomUUID());
   await db.execute(sql`
     insert into recognition_rules
       (id, org_id, code, name, method, is_forecast, recognition_periods, start_date_source, end_date_source,
@@ -169,17 +184,292 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
     values (${items.service}, ${orgId}, 'service', 'Annual Subscription', false, true, '{}'::jsonb, 'billing', 'normal',
             ${accounts.revenue}, ${recognitionRuleId}, ${accounts.deferred})`);
 
-  const customerId = randomUUID();
+  const customerId = mark("parties", randomUUID());
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
     values (${customerId}, ${orgId}, 'customer', 'Acme Customer', true, '{}'::jsonb)`);
 
-  const vendorId = randomUUID();
+  const vendorId = mark("parties", randomUUID());
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
     values (${vendorId}, ${orgId}, 'vendor', 'Acme Vendor', true, '{}'::jsonb)`);
 
-  return { orgId, subsidiaryId, periodId, bookId, locationId, stockLocationId, stockLocationId2, accounts, items, recognitionRuleId, customerId, vendorId, date };
+  mark("orgs", orgId);
+  return { orgId, subsidiaryId, periodId, bookId, locationId, stockLocationId, stockLocationId2, accounts, items, recognitionRuleId, customerId, vendorId, date, baselineIds };
+}
+
+export interface ScratchOrgLifecycleMetrics {
+  poolSize: number;
+  fullBootstrap: number;
+  leases: number;
+  releases: number;
+  resets: number;
+  fullTeardown: number;
+  schemaWideVerification: number;
+  activeLeases: number;
+  leakDetections: number;
+}
+
+export interface ScratchOrgPoolStore<T extends { orgId: string }> {
+  bootstrap(): Promise<T>;
+  reset(org: T): Promise<void>;
+  teardown(org: T): Promise<void>;
+}
+
+export interface ScratchOrgPoolOptions<T extends { orgId: string }> {
+  size: number;
+  isolatedDatabase: boolean;
+  store: ScratchOrgPoolStore<T>;
+}
+
+type PoolSlot<T extends { orgId: string }> = { org: T; leased: boolean; tainted: boolean };
+
+/**
+ * A bounded lease pool for integration fixtures. The pool deliberately knows
+ * nothing about PostgreSQL: the store owns committed reset/teardown semantics,
+ * which keeps this lifecycle contract executable without a database and makes
+ * it impossible for a test-only shortcut to replace RLS in production code.
+ */
+export class ScratchOrgPool<T extends { orgId: string }> {
+  readonly metrics: ScratchOrgLifecycleMetrics;
+  private readonly store: ScratchOrgPoolStore<T>;
+  private readonly slots: PoolSlot<T>[] = [];
+  private readonly waiters: {
+    resolve: (slot: PoolSlot<T>) => void;
+    reject: (error: Error) => void;
+  }[] = [];
+  private started = false;
+  private closed = false;
+  private startPromise: Promise<void> | undefined;
+
+  constructor(options: ScratchOrgPoolOptions<T>) {
+    if (!Number.isInteger(options.size) || options.size < 1 || options.size > 16) {
+      throw new Error(`scratch fixture pool size must be an integer in [1, 16], got ${options.size}`);
+    }
+    if (!options.isolatedDatabase) {
+      throw new Error(
+        "scratch fixture pooling requires an explicitly dedicated ephemeral database; refusing shared DB",
+      );
+    }
+    this.store = options.store;
+    this.metrics = {
+      poolSize: options.size,
+      fullBootstrap: 0,
+      leases: 0,
+      releases: 0,
+      resets: 0,
+      fullTeardown: 0,
+      schemaWideVerification: 0,
+      activeLeases: 0,
+      leakDetections: 0,
+    };
+    this.targetSize = options.size;
+  }
+
+  private readonly targetSize: number;
+
+  async start(): Promise<void> {
+    if (this.closed) throw new Error("scratch fixture pool is already closed");
+    if (this.started) return this.startPromise;
+    this.startPromise = (async () => {
+      for (let i = 0; i < this.targetSize; i += 1) {
+        this.slots.push({ org: await this.store.bootstrap(), leased: false, tainted: false });
+        this.metrics.fullBootstrap += 1;
+      }
+      this.started = true;
+    })();
+    await this.startPromise;
+  }
+
+  private async nextSlot(): Promise<PoolSlot<T>> {
+    const available = this.slots.find((slot) => !slot.leased && !slot.tainted);
+    if (available) return available;
+    return await new Promise<PoolSlot<T>>((resolve, reject) => this.waiters.push({ resolve, reject }));
+  }
+
+  async lease(): Promise<T> {
+    await this.start();
+    if (this.closed) throw new Error("scratch fixture pool is already closed");
+    const slot = await this.nextSlot();
+    slot.leased = true;
+    this.metrics.leases += 1;
+    this.metrics.activeLeases += 1;
+    return slot.org;
+  }
+
+  async release(orgId: string): Promise<void> {
+    const slot = this.slots.find((candidate) => candidate.org.orgId === orgId);
+    if (!slot) throw new Error(`scratch fixture ${orgId} is not owned by this pool`);
+    // Preserve dropScratchOrg's historical idempotence. A second drop after
+    // a successful reset is a no-op; callers still receive errors for IDs
+    // that are not owned by this pool.
+    if (!slot.leased) return;
+    let failure: unknown;
+    try {
+      await this.store.reset(slot.org);
+      this.metrics.resets += 1;
+    } catch (error) {
+      slot.tainted = true;
+      this.metrics.leakDetections += 1;
+      failure = error;
+    } finally {
+      slot.leased = false;
+      this.metrics.activeLeases -= 1;
+      this.metrics.releases += 1;
+    }
+    const waiter = this.waiters.shift();
+    if (waiter) {
+      if (slot.tainted) waiter.reject(new Error(`scratch fixture ${orgId} was tainted by a failed reset`));
+      else waiter.resolve(slot);
+    }
+    if (failure) throw failure;
+  }
+
+  has(orgId: string): boolean {
+    return this.slots.some((slot) => slot.org.orgId === orgId);
+  }
+
+  async close(): Promise<void> {
+    if (this.closed) return;
+    if (this.startPromise) await this.startPromise;
+    this.closed = true;
+    if (this.metrics.activeLeases > 0) this.metrics.leakDetections += this.metrics.activeLeases;
+    const errors: unknown[] = [];
+    for (const slot of this.slots) {
+      try {
+        await this.store.teardown(slot.org);
+        this.metrics.fullTeardown += 1;
+        this.metrics.schemaWideVerification += 1;
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    for (const waiter of this.waiters.splice(0)) waiter.reject(new Error("scratch fixture pool closed"));
+    if (errors.length > 0 || this.metrics.leakDetections > 0) {
+      throw new Error(
+        `scratch fixture pool closed with lifecycle failures: ${JSON.stringify({
+          errors: errors.map((error) => String(error)),
+          metrics: this.metrics,
+        })}`,
+      );
+    }
+  }
+}
+
+export function scratchOrgPoolSize(): number {
+  const raw = process.env.OPENBOOKS_TEST_FIXTURE_POOL_SIZE ?? "4";
+  const size = Number(raw);
+  if (!Number.isInteger(size) || size < 1 || size > 16) {
+    throw new Error(`OPENBOOKS_TEST_FIXTURE_POOL_SIZE must be an integer in [1, 16], got ${raw}`);
+  }
+  return size;
+}
+
+export function fixturePoolingEnabled(): boolean {
+  return process.env.OPENBOOKS_TEST_FIXTURE_POOL === "1";
+}
+
+function fixtureOwnerPort(): number | undefined {
+  const raw = process.env.OPENBOOKS_TEST_FIXTURE_OWNER_PORT;
+  if (!raw) return undefined;
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`OPENBOOKS_TEST_FIXTURE_OWNER_PORT is invalid: ${raw}`);
+  }
+  return port;
+}
+
+async function fixtureOwnerRequest<T>(request: Record<string, string>): Promise<T> {
+  const port = fixtureOwnerPort();
+  if (!port) throw new Error("fixture owner is not configured");
+  return await new Promise<T>((resolve, reject) => {
+    const socket = createConnection({ host: "127.0.0.1", port });
+    let buffer = "";
+    let settled = false;
+    const finish = (error?: Error, value?: T) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      if (error) reject(error);
+      else resolve(value as T);
+    };
+    socket.setTimeout(120_000, () => finish(new Error("fixture owner request timed out")));
+    socket.on("error", (error) => finish(error));
+    socket.on("data", (chunk) => {
+      buffer += chunk.toString();
+      const newline = buffer.indexOf("\n");
+      if (newline < 0) return;
+      try {
+        const response = JSON.parse(buffer.slice(0, newline));
+        if (!response.ok) throw new Error(String(response.error ?? "fixture owner request failed"));
+        finish(undefined, response as T);
+      } catch (error) {
+        finish(error as Error);
+      }
+    });
+    socket.on("connect", () => socket.write(`${JSON.stringify(request)}\n`));
+  });
+}
+
+// Test files run in isolated Node processes.  When the suite-level fixture
+// owner is enabled, keep a process-local ledger of leases so the lifecycle
+// hook can return every tenant at process exit even when a legacy test helper
+// forgot to call dropScratchOrg explicitly.  The owner remains the only
+// process that mutates the bounded pool; this ledger merely closes the lease
+// protocol at the worker boundary.
+const outstandingFixtureOwnerLeases = new Set<string>();
+const completedFixtureOwnerLeases = new Set<string>();
+const outstandingFixturePoolLeases = new Set<string>();
+
+export async function releaseOutstandingScratchOrgLeases(): Promise<void> {
+  const leases = fixtureOwnerPort() ? outstandingFixtureOwnerLeases : outstandingFixturePoolLeases;
+  if (leases.size === 0) return;
+  const failures: unknown[] = [];
+  for (const orgId of [...leases]) {
+    try {
+      await dropScratchOrg(orgId);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(
+      `scratch fixture worker could not release ${failures.length} lease(s): ${failures
+        .map((error) => String(error))
+        .join("; ")}`,
+    );
+  }
+}
+
+export function getOutstandingScratchOrgLeaseCount(): number {
+  return fixtureOwnerPort() ? outstandingFixtureOwnerLeases.size : outstandingFixturePoolLeases.size;
+}
+
+export function hasEphemeralDatabaseMarker(comment: string | null | undefined, expected: string | undefined): boolean {
+  return Boolean(expected && expected.startsWith("openbooks-ci-ephemeral-") && comment === expected);
+}
+
+export async function assertDedicatedFixtureDatabase(): Promise<void> {
+  if (process.env.OPENBOOKS_TEST_DB_ISOLATED !== "1") {
+    throw new Error(
+      "scratch fixture pooling requires OPENBOOKS_TEST_DB_ISOLATED=1; refusing to mutate a shared database",
+    );
+  }
+  if (!process.env.OPENBOOKS_DB_URL?.trim()) {
+    throw new Error("scratch fixture pooling requires OPENBOOKS_DB_URL");
+  }
+  const expected = process.env.OPENBOOKS_TEST_DB_MARKER;
+  if (!expected) {
+    throw new Error("scratch fixture pooling requires OPENBOOKS_TEST_DB_MARKER");
+  }
+  const result = await pool.query<{ marker: string | null }>(
+    "select shobj_description(oid, 'pg_database') as marker from pg_database where datname = current_database()",
+  );
+  if (!hasEphemeralDatabaseMarker(result.rows[0]?.marker, expected)) {
+    throw new Error(
+      "scratch fixture pooling requires the canonical ephemeral database marker; refusing shared/non-ephemeral database",
+    );
+  }
 }
 
 export interface FlowActors {
@@ -533,21 +823,19 @@ async function genericDeletePasses(
  * named 'Scratch %' — the shared dev database also holds real production
  * data, so the guard is absolute. Idempotent: a repeat call (or a call after
  * a partial failure) resumes and finishes the wipe.
+ *
+ * The wipe is inherently multi-transaction (per-step commits, trigger
+ * disable/enable, one targeted deferred constraint) and MUST NOT participate
+ * in a caller's pinned transaction: inside withBypass/withOrg the db proxy
+ * folds every db.transaction() into the caller's single uncommitted
+ * transaction, so the deletes never commit on their own, the verification
+ * below reads that uncommitted state and passes, the first failure aborts
+ * the shared transaction (25P02 for everything after), and the caller's
+ * final rollback silently undoes every "successful" drop — the 2026-08-16
+ * mass-purge phantom. Every caller below therefore enters through a
+ * context-only bypass scope, giving every internal transaction its own
+ * connection, commit, and rollback.
  */
-export async function dropScratchOrg(orgId: string): Promise<void> {
-  // The wipe is inherently multi-transaction (per-step commits, trigger
-  // disable/enable, one targeted deferred constraint) and MUST NOT participate
-  // in a caller's pinned transaction: inside withBypass/withOrg the db proxy
-  // folds every db.transaction() into the caller's single uncommitted
-  // transaction, so the deletes never commit on their own, the verification
-  // below reads that uncommitted state and passes, the first failure aborts
-  // the shared transaction (25P02 for everything after), and the caller's
-  // final rollback silently undoes every "successful" drop — the 2026-08-16
-  // mass-purge phantom. Escaping to a context-only bypass scope gives every
-  // internal transaction its own connection, commit, and rollback.
-  return withBypassContext(() => dropScratchOrgEscaped(orgId));
-}
-
 async function dropScratchOrgEscaped(orgId: string): Promise<void> {
   // Hard scope guard. If the orgs row is gone the wipe already completed
   // (orgs is deleted last); if it exists under any other name, refuse.
@@ -717,5 +1005,322 @@ export async function dropScratchOrgReporting(orgId: string): Promise<void> {
     await dropScratchOrg(orgId);
   } catch (error) {
     console.error(`scratch-org teardown failed for ${orgId} (rows may be leaked on the shared dev DB):`, error);
+    if (fixtureOwnerPort() || fixturePoolingEnabled()) throw error;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Bounded integration-fixture pool.
+// ---------------------------------------------------------------------------
+
+function quoteIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+function snapshotSchemaName(orgId: string): string {
+  return `scratch_fixture_snapshot_${orgId.replaceAll(/[^a-zA-Z0-9]/g, "")}`;
+}
+
+type OrgTableColumns = ReadonlyMap<string, readonly string[]>;
+
+async function loadOrgTableColumns(tables: readonly string[]): Promise<OrgTableColumns> {
+  const result = await db.execute<{ table_name: string; column_name: string }>(sql`
+    select table_name, column_name
+      from information_schema.columns
+     where table_schema = 'public'
+       and table_name in (${sql.join(tables.map((table) => sql`${table}`), sql`, `)})
+       and is_generated = 'NEVER'
+     order by table_name, ordinal_position`);
+  const columns = new Map<string, string[]>();
+  for (const row of result.rows) {
+    const tableColumns = columns.get(row.table_name) ?? [];
+    if (!columns.has(row.table_name)) columns.set(row.table_name, tableColumns);
+    tableColumns.push(row.column_name);
+  }
+  return columns;
+}
+
+function rowMatch(columns: readonly string[], left: string, right: string): string {
+  return columns.map((column) => `${left}.${quoteIdentifier(column)} is not distinct from ${right}.${quoteIdentifier(column)}`).join(" and ");
+}
+
+/** Persist a committed template for every org-owned row. This snapshot is
+ * database-backed (not a module/temp-table cache), so all test connections
+ * restore the same exact baseline, including updates to seeded rows. */
+async function snapshotScratchOrg(org: ScratchOrg, tables: readonly string[]): Promise<ScratchOrg> {
+  const schema = snapshotSchemaName(org.orgId);
+  await db.transaction(async (tx) => {
+    await tx.execute(sql.raw(`create schema if not exists ${quoteIdentifier(schema)}`));
+    for (const table of tables) {
+      const target = `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
+      const source = `public.${quoteIdentifier(table)}`;
+      await tx.execute(sql.raw(`drop table if exists ${target}`));
+      await tx.execute(sql.raw(`create table ${target} as table ${source} with no data`));
+      if (table === "orgs") {
+        await tx.execute(sql`insert into ${sql.raw(target)} select * from ${sql.raw(source)} where id = ${org.orgId}`);
+      } else {
+        await tx.execute(sql`insert into ${sql.raw(target)} select * from ${sql.raw(source)} where org_id = ${org.orgId}`);
+      }
+    }
+  });
+  return { ...org, snapshotSchema: schema };
+}
+
+/**
+ * Reset a leased tenant without dropping its bootstrap spine. Test-created
+ * rows are removed in one committed, retrying server-side pass while the
+ * known bootstrap ids remain. Any row that cannot be removed is an error: the
+ * slot is tainted and will never be handed to another test. Full teardown and
+ * the schema-wide 371-table proof happen only when the fixed pool closes.
+ */
+async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[], columns: OrgTableColumns): Promise<void> {
+  const schema = org.snapshotSchema;
+  if (!schema) throw new Error(`scratch fixture ${org.orgId} has no committed baseline snapshot`);
+  let remaining = [...tables].filter((table) => table !== "orgs");
+  const errors = new Map<string, string>();
+
+  for (let pass = 0; pass < 10 && remaining.length > 0; pass += 1) {
+    const failed = await db.transaction(async (tx) => {
+      await setTeardownGucs(tx);
+      // This is a dedicated disposable database owned by the CI job. Deferring
+      // every trigger (including immutable-evidence and FK trigger functions)
+      // for this one transaction makes the whole-tenant snapshot restore
+      // independent of table order, while the post-transaction snapshot
+      // comparison remains fail-closed. No application or shared DB path can
+      // enable pooling without the database marker checked above.
+      await tx.execute(sql`set local session_replication_role = replica`);
+      await tx.execute(sql`set constraints documents_posted_entry_id_fkey, documents_reversal_entry_id_fkey deferred`);
+      const failures: { table: string; error: string }[] = [];
+
+      // These guards are intentionally unconditional. Disable only the named
+      // test-evidence triggers for this transaction, exactly as full teardown
+      // does, and re-enable them before commit.
+      for (const { table, trigger } of GUARDED_EVIDENCE) {
+        if (!tables.includes(table)) continue;
+        await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
+      }
+      const hasBankFiles = (await tx.execute(sql`select 1 as x from pay_run_bank_files where org_id = ${org.orgId} limit 1`)).rows.length > 0;
+      if (hasBankFiles) {
+        await tx.execute(sql.raw(`alter table public."pay_run_bank_files" disable trigger pay_run_bank_file_immutable`));
+        await tx.execute(sql.raw(`alter table public."file_blobs" disable trigger payroll_bank_file_blob_immutable`));
+        await tx.execute(sql`delete from pay_run_bank_files where org_id = ${org.orgId}`);
+      }
+      await tx.execute(sql`delete from file_blobs where version_id in
+        (select v.id from file_versions v join files f on f.id = v.file_id where f.org_id = ${org.orgId})`);
+      await tx.execute(sql`delete from file_versions where file_id in (select id from files where org_id = ${org.orgId})`);
+      if (hasBankFiles) {
+        await tx.execute(sql.raw(`alter table public."file_blobs" enable trigger payroll_bank_file_blob_immutable`));
+        await tx.execute(sql.raw(`alter table public."pay_run_bank_files" enable trigger pay_run_bank_file_immutable`));
+      }
+      await tx.execute(sql`delete from tax_group_members where tax_group_id in
+        (select id from tax_groups where org_id = ${org.orgId})`);
+      await tx.execute(sql`update time_entries set invoiced_by_line_id = null, cost_journal_entry_id = null where org_id = ${org.orgId}`);
+      await tx.execute(sql`update payment_schedules set last_payment_run_id = null where org_id = ${org.orgId}`);
+      for (const [index, table] of remaining.entries()) {
+        const savepoint = `scratch_fixture_reset_${pass}_${index}`;
+        await tx.execute(sql.raw(`savepoint ${savepoint}`));
+        try {
+          const target = `public.${quoteIdentifier(table)}`;
+          const snapshot = `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
+          const tableColumns = columns.get(table) ?? [];
+          if (tableColumns.includes("id")) {
+            await tx.execute(sql`
+              delete from ${sql.raw(target)} as target
+               where target.org_id = ${org.orgId}
+                 and not exists (select 1 from ${sql.raw(snapshot)} as baseline where baseline.id = target.id)`);
+          } else {
+            // A handful of join/projection tables are keyed by composite
+            // columns and have no synthetic id. Compare every nullable column
+            // with IS NOT DISTINCT FROM, then restore missing template rows;
+            // the savepoint/pass machinery keeps FK ordering recoverable.
+            const match = rowMatch(tableColumns, "target", "baseline");
+            const insertColumns = tableColumns.map(quoteIdentifier).join(", ");
+            await tx.execute(sql.raw(
+              `delete from ${target} as target where target.org_id = '${org.orgId}' and not exists (select 1 from ${snapshot} as baseline where ${match})`,
+            ));
+            await tx.execute(sql.raw(
+              `insert into ${target} (${insertColumns}) select ${insertColumns} from ${snapshot} as baseline where not exists (select 1 from ${target} as target where target.org_id = '${org.orgId}' and ${rowMatch(tableColumns, "target", "baseline")})`,
+            ));
+          }
+          await tx.execute(sql.raw(`release savepoint ${savepoint}`));
+        } catch (error) {
+          // PostgreSQL aborts a transaction after any statement error. A
+          // savepoint creates a real subtransaction so one FK-blocked table
+          // can be deferred to the next deterministic pass without poisoning
+          // the committed reset transaction.
+          await tx.execute(sql.raw(`rollback to savepoint ${savepoint}`));
+          await tx.execute(sql.raw(`release savepoint ${savepoint}`));
+          failures.push({ table, error: String(error) });
+        }
+      }
+      for (const { table, trigger } of GUARDED_EVIDENCE) {
+        if (!tables.includes(table)) continue;
+        await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
+      }
+      return failures;
+    });
+    for (const table of remaining) errors.delete(table);
+    for (const failure of failed) errors.set(failure.table, failure.error);
+    const failedNames = failed.map((failure) => failure.table);
+    if (failedNames.length === 0) {
+      remaining = [];
+      break;
+    }
+    if (failedNames.length === remaining.length) break;
+    remaining = failedNames;
+  }
+
+  if (remaining.length > 0) {
+    const detail = remaining.map((table) => `${table}: ${errors.get(table) ?? "unknown reset failure"}`).join("; ");
+    throw new Error(`scratch fixture ${org.orgId} leaked rows that could not be reset — ${detail}`);
+  }
+  // Restore every mutable column from the committed template. Deleting only
+  // newly-created rows is insufficient: tests routinely update seeded books,
+  // periods, accounts, items, and org settings before committing. Missing
+  // baseline rows are reinserted as well; bounded passes handle FK ordering.
+  let restoreRemaining = tables.filter((table) => (columns.get(table) ?? []).includes("id"));
+  const restoreErrors = new Map<string, string>();
+  for (let pass = 0; pass < 10 && restoreRemaining.length > 0; pass += 1) {
+    const failed = await db.transaction(async (tx) => {
+      await setTeardownGucs(tx);
+      const failures: { table: string; error: string }[] = [];
+      for (const [index, table] of restoreRemaining.entries()) {
+        const tableColumns = columns.get(table) ?? [];
+        const mutable = tableColumns.filter((column) => column !== "id");
+        const target = `public.${quoteIdentifier(table)}`;
+        const snapshot = `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
+        const assignments = mutable.map((column) => `${quoteIdentifier(column)} = baseline.${quoteIdentifier(column)}`).join(", ");
+        const insertColumns = tableColumns.map(quoteIdentifier).join(", ");
+        const ownerPredicate = table === "orgs" ? `target.id = '${org.orgId}'` : `target.org_id = '${org.orgId}'`;
+        const savepoint = `scratch_fixture_restore_${pass}_${index}`;
+        await tx.execute(sql.raw(`savepoint ${savepoint}`));
+        try {
+          if (mutable.length > 0) {
+            await tx.execute(sql.raw(
+              `update ${target} as target set ${assignments} from ${snapshot} as baseline where target.id = baseline.id and ${ownerPredicate}`,
+            ));
+          }
+          await tx.execute(sql.raw(
+            `insert into ${target} (${insertColumns}) select ${insertColumns} from ${snapshot} as baseline where not exists (select 1 from ${target} as target where target.id = baseline.id)`,
+          ));
+          await tx.execute(sql.raw(`release savepoint ${savepoint}`));
+        } catch (error) {
+          await tx.execute(sql.raw(`rollback to savepoint ${savepoint}`));
+          await tx.execute(sql.raw(`release savepoint ${savepoint}`));
+          failures.push({ table, error: String(error) });
+        }
+      }
+      return failures;
+    });
+    for (const table of restoreRemaining) restoreErrors.delete(table);
+    for (const failure of failed) restoreErrors.set(failure.table, failure.error);
+    const failedNames = failed.map((failure) => failure.table);
+    if (failedNames.length === 0) {
+      restoreRemaining = [];
+      break;
+    }
+    if (failedNames.length === restoreRemaining.length) break;
+    restoreRemaining = failedNames;
+  }
+  if (restoreRemaining.length > 0) {
+    const detail = restoreRemaining.map((table) => `${table}: ${restoreErrors.get(table) ?? "unknown restore failure"}`).join("; ");
+    throw new Error(`scratch fixture baseline restore failed — ${detail}`);
+  }
+  await db.transaction(async (tx) => {
+    await setTeardownGucs(tx);
+    await tx.execute(sql`update orgs set env_kind = 'production' where id = ${org.orgId} and name like 'Scratch %'`);
+  });
+}
+
+async function dropScratchOrgAndSnapshot(org: ScratchOrg): Promise<void> {
+  try {
+    await dropScratchOrgEscaped(org.orgId);
+  } finally {
+    if (org.snapshotSchema) {
+      await db.execute(sql.raw(`drop schema if exists ${quoteIdentifier(org.snapshotSchema)} cascade`));
+    }
+  }
+}
+
+let scratchPoolPromise: Promise<ScratchOrgPool<ScratchOrg>> | undefined;
+let scratchPoolInstance: ScratchOrgPool<ScratchOrg> | undefined;
+let scratchPoolTables: string[] | undefined;
+let scratchPoolColumns: OrgTableColumns | undefined;
+
+async function productionScratchPool(): Promise<ScratchOrgPool<ScratchOrg>> {
+  if (!fixturePoolingEnabled()) throw new Error("scratch fixture pooling is disabled");
+  await assertDedicatedFixtureDatabase();
+  if (!scratchPoolPromise) {
+    scratchPoolPromise = (async () => {
+      scratchPoolTables = await withBypassContext(async () => [
+        ...new Set([...(await listOrgIdTables()), "orgs"]),
+      ]);
+      scratchPoolColumns = await withBypassContext(() => loadOrgTableColumns(scratchPoolTables ?? []));
+      const pool = new ScratchOrgPool<ScratchOrg>({
+        size: scratchOrgPoolSize(),
+        isolatedDatabase: true,
+        store: {
+          bootstrap: () => withBypassContext(async () => snapshotScratchOrg(await bootstrapScratchOrg(), scratchPoolTables ?? [])),
+          reset: (org) => withBypassContext(() => resetScratchOrgEscaped(org, scratchPoolTables ?? [], scratchPoolColumns ?? new Map())),
+          teardown: (org) => withBypassContext(() => dropScratchOrgAndSnapshot(org)),
+        },
+      });
+      scratchPoolInstance = pool;
+      return pool;
+    })();
+  }
+  const pool = await scratchPoolPromise;
+  await pool.start();
+  return pool;
+}
+
+/** Create a pooled lease in CI, or retain the historical one-off fixture locally. */
+export async function createScratchOrg(): Promise<ScratchOrg> {
+  if (fixtureOwnerPort()) {
+    const response = await fixtureOwnerRequest<{ org: ScratchOrg }>({ op: "lease" });
+    outstandingFixtureOwnerLeases.add(response.org.orgId);
+    completedFixtureOwnerLeases.delete(response.org.orgId);
+    return response.org;
+  }
+  if (!fixturePoolingEnabled()) return bootstrapScratchOrg();
+  const org = await (await productionScratchPool()).lease();
+  outstandingFixturePoolLeases.add(org.orgId);
+  return org;
+}
+
+/** Release a pooled lease; manually seeded scratch orgs still use full teardown. */
+export async function dropScratchOrg(orgId: string): Promise<void> {
+  if (fixtureOwnerPort()) {
+    // Preserve the historical idempotence of dropScratchOrg: a second drop of
+    // a lease already returned to the owner is a no-op, while an unknown id
+    // still traverses the owner so production-name/refusal checks remain
+    // fail-closed.
+    if (!outstandingFixtureOwnerLeases.has(orgId) && completedFixtureOwnerLeases.has(orgId)) return;
+    await fixtureOwnerRequest<{ ok: true }>({ op: "release", orgId });
+    outstandingFixtureOwnerLeases.delete(orgId);
+    completedFixtureOwnerLeases.add(orgId);
+    return;
+  }
+  if (!fixturePoolingEnabled()) return withBypassContext(() => dropScratchOrgEscaped(orgId));
+  const pool = await productionScratchPool();
+  if (pool.has(orgId)) {
+    await pool.release(orgId);
+    outstandingFixturePoolLeases.delete(orgId);
+    return;
+  }
+  return withBypassContext(() => dropScratchOrgEscaped(orgId));
+}
+
+export function getScratchOrgLifecycleMetrics(): ScratchOrgLifecycleMetrics {
+  return scratchPoolInstance?.metrics ?? {
+    poolSize: scratchOrgPoolSize(), fullBootstrap: 0, leases: 0, releases: 0, resets: 0,
+    fullTeardown: 0, schemaWideVerification: 0, activeLeases: 0, leakDetections: 0,
+  };
+}
+
+export async function closeScratchOrgPool(): Promise<void> {
+  if (fixtureOwnerPort()) return;
+  if (!scratchPoolPromise) return;
+  const pool = await scratchPoolPromise;
+  await pool.close();
 }
