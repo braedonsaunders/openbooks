@@ -510,6 +510,31 @@ function stepAround(source, needle) {
   return source.slice(start, end === -1 ? undefined : end)
 }
 
+test('every step that invokes the sim CLI arms its OPENBOOKS_SIM interlock', () => {
+  // engine/src/sim/db-guard.ts refuses to run without OPENBOOKS_SIM=1 for
+  // EVERY subcommand, including read-only ones like `coverage`. A step that
+  // invokes the CLI without the flag therefore fails on the interlock and
+  // never reports on what it was meant to gate. That is exactly how folding
+  // sim-smoke.yml's coverage gate into test.yml broke it: sim-smoke set the
+  // flag job-wide, and the fold carried the command but not the environment.
+  for (const file of readdirSync(WORKFLOW_DIR).filter((name) => name.endsWith('.yml'))) {
+    const source = readFileSync(join(WORKFLOW_DIR, file), 'utf8')
+    for (const block of runBlocks(source)) {
+      const code = withoutComments(block.body)
+      if (!/\bsim\s+--\s/.test(code)) continue
+      // Anchor on the sim line itself, not the block's first line: several
+      // blocks open with `set -o pipefail`, and stepAround resolves by first
+      // match, so a shared opening line points at the wrong step.
+      const step = stepAround(source, code.split('\n').find((entry) => /\bsim\s+--\s/.test(entry)))
+      assert.match(
+        step,
+        /OPENBOOKS_SIM:\s*["']?1/,
+        `${file}: a step invoking the sim CLI must set OPENBOOKS_SIM=1, or it fails on the interlock instead of on its gate`,
+      )
+    }
+  }
+})
+
 test('the merge-gating workflow runs the golden harness, after real activity, in the full-suite job', () => {
   // test.yml is the workflow pull requests actually merge against, so this is
   // where "runs the golden harness as part of its check command" has to hold.

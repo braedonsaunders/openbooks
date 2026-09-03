@@ -242,6 +242,13 @@ jobs:
         # sim-smoke ran byte-identical provision/run commands on a strict
         # subset of this workflow's triggers, so the workflow itself earned
         # no keep; this one line preserves its unique signal.
+        #
+        # The sim CLI refuses to run without OPENBOOKS_SIM=1 for every
+        # subcommand, including this read-only one. sim-smoke.yml set the flag
+        # job-wide; folding the step into this job dropped it, so the gate
+        # failed on the interlock rather than on coverage.
+        env:
+          OPENBOOKS_SIM: "1"
         run: npm --prefix engine run --silent sim -- coverage "$SIM_RUN" --require vendor_bill,vendor_payment,customer_invoice,customer_payment,period_close,period_immutability
 
       - name: Upload checkpoint for the trust evidence pipeline
