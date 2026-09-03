@@ -60,6 +60,12 @@ jobs:
       ORG_COUNTRY: US
       ORG_CURRENCY: USD
       PGPASSWORD: openbooks-owner-release-test-password
+      # The release database is a throwaway service container, so the pooled
+      # tenant fixtures verify:release runs are allowed to bootstrap and tear
+      # down tenants in it. Both halves are required: this flag states intent,
+      # and the database-side marker written below proves it.
+      OPENBOOKS_TEST_DB_ISOLATED: "1"
+      OPENBOOKS_TEST_FIXTURE_POOL_SIZE: "4"
     steps:
       - name: Validate the pinned source commit
         run: |
@@ -104,6 +110,19 @@ jobs:
           npx tsx -e "import { assertSafeRuntimeDatabaseRole, pool } from './engine/src/db.ts';
           void (async () => { try { await assertSafeRuntimeDatabaseRole(); }
           finally { await pool.end(); } })();"
+      - name: Mark database as the owned ephemeral fixture
+        # verify:release runs npm test, whose integration half leases pooled
+        # tenants and refuses to mutate a database that has not been claimed as
+        # throwaway. A caller-controlled OPENBOOKS_TEST_DB_ISOLATED flag is not
+        # authority: the pool requires this database-side nonce, written only
+        # after the throwaway service is provisioned in this job.
+        shell: bash
+        run: |
+          set -euo pipefail
+          MARKER="openbooks-release-ephemeral-$(uuidgen)"
+          psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 \
+            -c "comment on database openbooks_release is '$MARKER'"
+          echo "OPENBOOKS_TEST_DB_MARKER=$MARKER" >> "$GITHUB_ENV"
       - name: Install qpdf
         # Payroll ciphertext certification shells out to the real qpdf binary;
         # without it verify:release fail-closes on spawn ENOENT and can never

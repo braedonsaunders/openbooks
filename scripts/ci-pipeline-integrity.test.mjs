@@ -746,7 +746,7 @@ test('jobs running the campaign suite retain complete local history', () => {
   // checkout, where the register gates reported "PARTIAL PASS" and the
   // explicit-ref gate could not resolve its commit at all. Cover every
   // workflow that reaches the suite, whichever script name it arrives by.
-  const SUITE_ENTRYPOINTS = /npm (?:run )?(?:test\b|verify:release\b)/
+  const SUITE_ENTRYPOINTS = /npm (?:run )?test(?![:\w-])|npm run verify:release\b/
   for (const file of readdirSync(WORKFLOW_DIR).filter((name) => name.endsWith('.yml'))) {
     const workflow = readFileSync(join(WORKFLOW_DIR, file), 'utf8')
     const jobsAt = workflow.indexOf('\njobs:')

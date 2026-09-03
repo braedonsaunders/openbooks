@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { join, resolve } from "node:path";
@@ -110,6 +110,40 @@ test("CI marks its database isolated and reports fixture lifecycle counts", () =
   assert.match(workflow, /OPENBOOKS_TEST_FIXTURE_POOL_SIZE:/);
   assert.match(workflow, /OPENBOOKS_TEST_DB_MARKER/);
   assert.match(workflow, /fixture.*lifecycle|lifecycle.*fixture/i);
+});
+
+test("every workflow job that runs the integration suite claims its database as throwaway", () => {
+  // test.yml is not the only route into the pooled integration suite:
+  // publish-container.yml's verify job reaches it through verify:release. The
+  // pool refuses to bootstrap tenants without BOTH the intent flag and the
+  // database-side marker, so a job missing them fails at fixture-owner startup
+  // AFTER a full unit run -- which is exactly how the release path broke.
+  const dir = new URL("../.github/workflows/", import.meta.url);
+  for (const file of readdirSync(dir).filter((name) => name.endsWith(".yml"))) {
+    const source = readFileSync(new URL(file, dir), "utf8");
+    const jobsAt = source.indexOf("\njobs:");
+    if (jobsAt === -1) continue;
+    const body = source.slice(jobsAt);
+    for (const match of body.matchAll(/\n {2}([A-Za-z0-9_-]+):\n/g)) {
+      const start = match.index;
+      const rest = body.slice(start + 1);
+      const next = rest.search(/\n {2}(?=\S)/);
+      const job = next === -1 ? rest : rest.slice(0, next);
+      // Only jobs that actually reach the pooled integration half.
+      if (!/npm (?:run )?test(?![:\w-])|npm run verify:release\b|test-suite\.mjs integration/.test(job)) continue;
+      if (/OPENBOOKS_DB_URL:\s*$/m.test(job)) continue; // unit-only job
+      assert.match(
+        job,
+        /OPENBOOKS_TEST_DB_ISOLATED:\s*["']?1/,
+        `${file}:${match[1]} runs the pooled integration suite, so it must declare its database throwaway`,
+      );
+      assert.match(
+        job,
+        /OPENBOOKS_TEST_DB_MARKER/,
+        `${file}:${match[1]} must write the database-side fixture marker; the isolation flag alone is not authority`,
+      );
+    }
+  }
 });
 
 test("the lifecycle receipt survives an owner that exits immediately after writing it", async () => {
