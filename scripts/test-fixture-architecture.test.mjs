@@ -112,6 +112,11 @@ test("CI marks its database isolated and reports fixture lifecycle counts", () =
   assert.match(workflow, /fixture.*lifecycle|lifecycle.*fixture/i);
 });
 
+// Read the canonical prefix out of the source of truth rather than restating
+// it, so a change to hasEphemeralDatabaseMarker cannot leave this guard
+// asserting a prefix the pool no longer accepts.
+const CANONICAL_MARKER_PREFIX = /startsWith\("([a-z-]+)"\)/.exec(fixtures)?.[1];
+
 test("every workflow job that runs the integration suite claims its database as throwaway", () => {
   // test.yml is not the only route into the pooled integration suite:
   // publish-container.yml's verify job reaches it through verify:release. The
@@ -141,6 +146,14 @@ test("every workflow job that runs the integration suite claims its database as 
         job,
         /OPENBOOKS_TEST_DB_MARKER/,
         `${file}:${match[1]} must write the database-side fixture marker; the isolation flag alone is not authority`,
+      );
+      // The prefix is not cosmetic: hasEphemeralDatabaseMarker requires it
+      // literally, so a job-specific prefix produces a marker the pool reads
+      // as a non-ephemeral database and rejects after the whole unit run.
+      assert.match(
+        job,
+        new RegExp(`MARKER="${CANONICAL_MARKER_PREFIX}`),
+        `${file}:${match[1]} must mint its marker with the canonical ${CANONICAL_MARKER_PREFIX} prefix that hasEphemeralDatabaseMarker requires`,
       );
     }
   }

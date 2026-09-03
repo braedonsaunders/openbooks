@@ -119,7 +119,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          MARKER="openbooks-release-ephemeral-$(uuidgen)"
+          # The prefix is canonical: hasEphemeralDatabaseMarker in
+          # engine/src/test-fixtures.ts requires it literally, so a
+          # job-specific prefix reads as a non-ephemeral database.
+          MARKER="openbooks-ci-ephemeral-$(uuidgen)"
           psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 \
             -c "comment on database openbooks_release is '$MARKER'"
           echo "OPENBOOKS_TEST_DB_MARKER=$MARKER" >> "$GITHUB_ENV"
