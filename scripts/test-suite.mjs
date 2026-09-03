@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'
-import { existsSync, globSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, globSync, mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(new URL('..', import.meta.url).pathname)
@@ -156,6 +156,8 @@ function ownerRequest(port, request) {
   })
 }
 
+const RECEIPT_PATH = resolve(ROOT, '.local', 'fixture-lifecycle-receipt.txt')
+
 async function startFixtureOwner(env) {
   const owner = spawn(process.execPath, [
     '--import', 'tsx',
@@ -199,7 +201,18 @@ export async function stopFixtureOwner(handle) {
     response = await ownerRequest(handle.port, { op: 'close' })
   } finally {
     await new Promise((resolveClose) => handle.owner.once('close', resolveClose))
-    if (handle.output) process.stdout.write(handle.output)
+    if (handle.output) {
+      process.stdout.write(handle.output)
+      // Also persist the lifecycle receipt to a file. The stdout copy travels
+      // through `tee` and can be lost when the process exits before the pipe
+      // drains, which silently failed the CI receipt gate while every test
+      // passed. A file is not subject to that race.
+      const receipt = handle.output.split('\n').find((line) => line.startsWith('[fixture-lifecycle] '))
+      if (receipt) {
+        mkdirSync(dirname(RECEIPT_PATH), { recursive: true })
+        writeFileSync(RECEIPT_PATH, receipt + '\n')
+      }
+    }
   }
   return response
 }

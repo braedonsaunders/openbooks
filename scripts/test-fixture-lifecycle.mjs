@@ -1,5 +1,26 @@
+import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
+import { dirname, resolve } from "node:path";
 import { after, afterEach, beforeEach } from "node:test";
+import { fileURLToPath } from "node:url";
+
+const RECEIPT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "..", ".local", "fixture-lifecycle-receipt.txt");
+
+// The receipt is the only evidence CI has that every lease was released.
+// process.stdout is a pipe here, so writes are asynchronous and an
+// immediate process.exit() truncates them -- that is how a fully green
+// suite still failed the receipt gate. Write the file first, because a
+// synchronous file write cannot be lost, then flush the stream.
+function publishReceipt(metrics) {
+  const line = `[fixture-lifecycle] ${JSON.stringify(metrics)}`;
+  try {
+    mkdirSync(dirname(RECEIPT_PATH), { recursive: true });
+    writeFileSync(RECEIPT_PATH, `${line}\n`);
+  } catch {
+    // A read-only checkout still has the stdout copy below.
+  }
+  return line;
+}
 
 async function runOwner() {
   const { createScratchOrg, dropScratchOrg, closeScratchOrgPool, getScratchOrgLifecycleMetrics } =
@@ -36,9 +57,12 @@ async function runOwner() {
             }
             const metrics = getScratchOrgLifecycleMetrics();
             response = closeError ? { ok: false, error: closeError, metrics } : { ok: true, metrics };
-            process.stdout.write(`[fixture-lifecycle] ${JSON.stringify(metrics)}\n`);
+            const receipt = publishReceipt(metrics);
             socket.end(`${JSON.stringify(response)}\n`);
-            server.close(() => process.exit(closeError ? 1 : 0));
+            // Exit only after the stream write is acknowledged.
+            process.stdout.write(`${receipt}\n`, () => {
+              server.close(() => process.exit(closeError ? 1 : 0));
+            });
             return;
           } else {
             throw new Error(`unknown fixture owner operation: ${request.op}`);
@@ -128,7 +152,7 @@ if (process.argv.includes("--owner")) {
       // zero-valued per-process metrics that could be mistaken for the suite
       // total by CI verification.
       if (!process.env.OPENBOOKS_TEST_FIXTURE_OWNER_PORT) {
-        process.stdout.write(`[fixture-lifecycle] ${JSON.stringify(getScratchOrgLifecycleMetrics())}\n`);
+        process.stdout.write(`${publishReceipt(getScratchOrgLifecycleMetrics())}\n`);
       }
     }
     if (failure) throw failure;
