@@ -724,6 +724,26 @@ test('the campaign checker honors an explicit commit ref and rejects a missing o
   )
 })
 
+test('a job that supersets the integration suite is budgeted at least as much time', () => {
+  // publish-container's verify job runs everything test.yml's integration job
+  // runs and more, but carried a 35-minute budget against that job's 45. Once
+  // it actually reached the integration half it was cancelled at 35m00s having
+  // run the suite rather than failed it -- a timeout reads as "cancelled", so
+  // nothing in the log says the budget was the cause.
+  const testWorkflow = readFileSync(join(WORKFLOW_DIR, 'test.yml'), 'utf8')
+  const budget = (job) => Number(/timeout-minutes:\s*(\d+)/.exec(job)?.[1] ?? 0)
+  const reference = budget(topLevelBlock(testWorkflow, 'integration'))
+  assert.ok(reference > 0, 'the integration job must declare a timeout to compare against')
+
+  const publish = readFileSync(join(WORKFLOW_DIR, 'publish-container.yml'), 'utf8')
+  const verify = topLevelBlock(publish.slice(publish.indexOf('\njobs:')), 'verify')
+  assert.match(verify, /npm run verify:release/, 'this guard is pinned to the job that runs verify:release')
+  assert.ok(
+    budget(verify) >= reference,
+    `verify:release runs the integration suite plus lint, typecheck and the build, so its ${budget(verify)}-minute budget cannot be below integration's ${reference}`,
+  )
+})
+
 test('jobs running the campaign suite retain complete local history', () => {
   // 2026-09: the unit job was deleted as a strict subset of integration, so
   // integration is the only campaign-suite job left to pin. Do not re-add
