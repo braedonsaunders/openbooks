@@ -1,16 +1,16 @@
 name: trust
 
-# The public evidence pipeline. Two independent jobs produce the two halves of
-# the trust corpus, and a third publishes them:
+# The public evidence pipeline. The conformance job produces the
+# accounting-standards corpus (ASC/IFRS) against a real kernel; the publish
+# job combines it with the ledger checkpoint emitted by the SOLE golden
+# harness run in test.yml's integration job.
 #
-#   conformance — accounting-standards corpus (ASC/IFRS) against a real kernel
-#   invariants  — seeded company driven through real activity, then the golden
-#                 harness asserts the ledger invariants and emits a checkpoint
-#   publish     — on main only: badges, matrix, and append-only history under
-#                 docs/trust/, which TRUST.md links to
-#
-# Both evidence jobs gate the build. A failing invariant or a failing
-# conformance case is a red build, not a footnote.
+# The sim + harness copy that used to live here as the `invariants` job was
+# deleted 2026-09 as byte-identical duplication (same profile, seed, window,
+# and commands as test.yml integration). test.yml is now the single owner of
+# the checkpoint; this workflow consumes it via workflow_run and never
+# produces simulation evidence of its own. A failing conformance case is a
+# red build, not a footnote.
 
 on:
   push:
@@ -22,6 +22,10 @@ on:
   schedule:
     # Nightly, so the evidence has a time series even in a quiet week.
     - cron: "17 6 * * *"
+  workflow_run:
+    workflows: ["test"]
+    types: [completed]
+    branches: [main]
 
 concurrency:
   group: trust-${{ github.ref }}
@@ -108,100 +112,24 @@ jobs:
           path: .local/conformance/
           if-no-files-found: error
 
-  invariants:
-    name: ledger invariants
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    services:
-      postgres:
-        image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
-        env:
-          POSTGRES_USER: openbooks
-          POSTGRES_PASSWORD: openbooks
-          POSTGRES_DB: openbooks_sim
-        ports:
-          - 5433:5432
-        options: >-
-          --health-cmd "pg_isready -U openbooks -d openbooks_sim"
-          --health-interval 5s --health-timeout 5s --health-retries 12
-    env:
-      OPENBOOKS_SIM: "1"
-      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_sim
-      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_sim
-      OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
-      PGPASSWORD: openbooks
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-
-      - name: Load schema
-        run: npx tsx scripts/bootstrap.ts
-
-      - name: Generate a company and drive it through real activity
-        # The invariant oracle runs after every action and halts the run on the
-        # first failure, so this step failing IS the invariant report.
-        run: |
-          # Without pipefail the pipeline reports `node`'s status, so a failed
-          # provision that still emitted parseable JSON would read as success.
-          set -o pipefail
-          RUN=$(npm --prefix engine run --silent sim -- provision \
-            --profile general-contractor --seed 1 --start 2026-01-01 --end 2026-03-31 \
-            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).runDir))')
-          echo "SIM_RUN=$RUN" >> "$GITHUB_ENV"
-          npm --prefix engine run --silent sim -- run "$RUN"
-
-      - name: Assert the ledger invariants and emit a checkpoint
-        run: |
-          ORG_ID=$(node -e '
-            const { readFileSync } = require("node:fs");
-            const { join } = require("node:path");
-            const manifest = JSON.parse(readFileSync(join(process.env.SIM_RUN, "manifest.json"), "utf8"));
-            if (!manifest.orgId) throw new Error("simulation manifest is missing orgId");
-            process.stdout.write(manifest.orgId);
-          ')
-          npm --prefix engine run --silent harness -- "$ORG_ID"
-
-      - name: Summary
-        if: always()
-        run: |
-          {
-            echo "# Ledger invariants"
-            echo ""
-            echo '```json'
-            cat engine/harness-checkpoints/*.json 2>/dev/null \
-              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const c=JSON.parse(s);console.log(JSON.stringify({pass:c.pass,cutoff:c.cutoff,counts:c.counts,trialBalance:c.trialBalance,checks:c.checks},null,2));})' \
-              || echo "no checkpoint produced"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
-        with:
-          name: checkpoint
-          path: engine/harness-checkpoints/
-          if-no-files-found: error
-
-      - name: Upload defect bundles (if the oracle halted)
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: sim-defects
-          path: engine/sim-runs/**/defects/**
-          if-no-files-found: ignore
-
   publish:
     name: publish trust corpus
-    needs: [conformance, invariants]
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # Consumer, not producer: the checkpoint comes from the test.yml
+    # integration run that triggered this workflow; conformance is produced
+    # by the job below in this same run. The invariants sim/harness job was
+    # deleted 2026-09 as duplication of test.yml integration, so there is no
+    # longer a same-run checkpoint to `needs:` — the workflow_run trigger is
+    # what binds this corpus to a green, harness-gated test run on main.
+    needs: [conformance]
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
@@ -215,14 +143,19 @@ jobs:
         with:
           name: checkpoint
           path: engine/harness-checkpoints
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build badges, matrix, and history
+        # On workflow_run the default GITHUB_SHA is the trust branch tip, not
+        # the tested commit. Stamp the corpus with the head SHA of the test
+        # run the checkpoint came from, or provenance silently drifts.
         run: |
           node scripts/publish-trust.mjs \
             --conformance .local/conformance \
             --checkpoint engine/harness-checkpoints \
             --out docs/trust \
-            --sha "${GITHUB_SHA}"
+            --sha "${{ github.event.workflow_run.head_sha }}"
 
       - name: Upload trust corpus
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -236,7 +169,7 @@ jobs:
           {
             echo "### Trust corpus"
             echo
-            echo "Built for \`${GITHUB_SHA}\`. Download the **trust-corpus** artifact from this run."
+            echo "Built for \`${{ github.event.workflow_run.head_sha }}\`. Download the **trust-corpus** artifact from this run."
             echo
             if [ -f docs/trust/conformance-matrix.md ]; then
               head -40 docs/trust/conformance-matrix.md
