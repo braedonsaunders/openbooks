@@ -27,7 +27,12 @@ env:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # verify:release strictly supersets test.yml's integration job: the same
+    # pooled integration suite, plus the unit suite, lint, typecheck and the
+    # production build. That job takes ~35 minutes and is budgeted 45, so 35
+    # here could never pass once this job actually reached the integration
+    # half — it was cancelled at 35m00s having run the suite, not failed it.
+    timeout-minutes: 90
     services:
       postgres:
         image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
