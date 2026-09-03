@@ -156,8 +156,17 @@ jobs:
         run: |
           node - <<'NODE'
           const fs = require('node:fs');
-          const text = fs.readFileSync('coverage.txt', 'utf8');
-          const line = text.split('\n').find((value) => value.startsWith('[fixture-lifecycle] '));
+          // The receipt is written to a file by scripts/test-suite.mjs. It is also
+          // echoed to stdout, but that copy travels through `tee` and can be lost
+          // when the process exits before the pipe drains — which failed this gate
+          // while every test passed. Prefer the file, fall back to the stream.
+          const receiptPath = '.local/fixture-lifecycle-receipt.txt';
+          let line = fs.existsSync(receiptPath)
+            ? fs.readFileSync(receiptPath, 'utf8').split('\n').find((value) => value.startsWith('[fixture-lifecycle] '))
+            : undefined;
+          if (!line && fs.existsSync('coverage.txt')) {
+            line = fs.readFileSync('coverage.txt', 'utf8').split('\n').find((value) => value.startsWith('[fixture-lifecycle] '));
+          }
           if (!line) throw new Error('missing fixture lifecycle receipt');
           const metrics = JSON.parse(line.slice('[fixture-lifecycle] '.length));
           const budget = Number(process.env.OPENBOOKS_TEST_FIXTURE_POOL_SIZE);

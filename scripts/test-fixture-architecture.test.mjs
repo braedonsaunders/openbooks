@@ -112,6 +112,48 @@ test("CI marks its database isolated and reports fixture lifecycle counts", () =
   assert.match(workflow, /fixture.*lifecycle|lifecycle.*fixture/i);
 });
 
+test("the lifecycle receipt survives an owner that exits immediately after writing it", async () => {
+  // process.stdout is a pipe for the spawned owner, so its writes are
+  // asynchronous. An immediate process.exit() truncates them, which once let a
+  // fully green suite fail CI's receipt gate with no failing test. Two
+  // independent guarantees now carry the receipt: a synchronous file write, and
+  // a stream write that is flushed before the exit.
+  const owner = readFileSync(new URL("./test-fixture-lifecycle.mjs", import.meta.url), "utf8");
+  assert.match(owner, /writeFileSync\(RECEIPT_PATH/, "the owner must persist the receipt to a file");
+  assert.doesNotMatch(
+    owner,
+    /process\.stdout\.write\(`\$\{receipt\}\\n`\);\s*\n\s*server\.close\(\(\) => process\.exit/,
+    "the owner must not exit before its receipt write is acknowledged",
+  );
+  assert.match(owner, /process\.stdout\.write\(`\$\{receipt\}\\n`, \(\) =>/, "the exit must wait on the write callback");
+  assert.match(workflow, /fixture-lifecycle-receipt\.txt/, "CI must read the persisted receipt, not only the tee'd stream");
+
+  // Demonstrate the underlying platform behavior rather than trusting the shape
+  // of the source: fill the pipe, then compare both exit disciplines.
+  const dir = mkdtempSync(join(tmpdir(), "receipt-flush-"));
+  const child = join(dir, "child.mjs");
+  const run = (mode) =>
+    new Promise((resolveRun) => {
+      const proc = spawn(process.execPath, [child, mode], { stdio: ["ignore", "pipe", "inherit"] });
+      let out = "";
+      proc.stdout.on("data", (chunk) => {
+        out += chunk.toString();
+      });
+      proc.once("close", () => resolveRun(out.includes("[fixture-lifecycle]")));
+    });
+  writeFileSync(
+    child,
+    [
+      "const receipt = '[fixture-lifecycle] {}';",
+      "process.stdout.write('x'.repeat(200000) + '\\n');",
+      "if (process.argv[2] === 'unflushed') { process.stdout.write(receipt + '\\n'); process.exit(0); }",
+      "else process.stdout.write(receipt + '\\n', () => process.exit(0));",
+    ].join("\n"),
+  );
+  assert.equal(await run("unflushed"), false, "an unflushed exit is expected to lose the receipt");
+  assert.equal(await run("flushed"), true, "a flushed exit must retain the receipt");
+});
+
 const behavior = process.env.OPENBOOKS_TEST_FIXTURE_BEHAVIOR === "1";
 
 test("pool refuses shared databases even when the isolation flag is spoofed", { skip: !behavior }, async () => {
