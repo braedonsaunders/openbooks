@@ -30,14 +30,24 @@ function topLevelJob(name) {
   return workflow.slice(start, next === -1 ? workflow.length : start + marker.length + next)
 }
 
-test('unit job gives the canonical no-database suite a bounded timeout with measured headroom', () => {
-  const unit = topLevelJob('unit')
-  const timeout = /\n    timeout-minutes:\s*(\d+)\s*\n/.exec(unit)
-  assert.ok(timeout, 'unit job must declare a timeout-minutes bound')
-  const minutes = Number(timeout[1])
-  assert.ok(minutes >= 30, `unit timeout must leave headroom beyond the measured ~11-minute local suite and recent ~20-minute CI runs (got ${minutes})`)
-  assert.ok(minutes <= 45, `unit timeout must remain bounded rather than masking a hung suite (got ${minutes})`)
-  assert.match(unit, /npm test -- --test-concurrency=4/, 'unit job must retain the canonical no-database test command')
+test('no separate unit job duplicates the suite; integration owns the canonical concurrency', () => {
+  // The old unit job ran the identical `npm test` with an empty
+  // OPENBOOKS_DB_URL (every DB file self-skips): a strict file-for-file
+  // subset of the integration run, paying a second checkout + npm ci + runner
+  // per push. Deleted 2026-09. This pins the deletion AND the concurrency
+  // consequence: with the `--test-concurrency=4` override gone, the whole
+  // suite reverts to the canonical --test-concurrency=1 from package.json.
+  assert.equal(
+    workflow.indexOf('\n  unit:\n'),
+    -1,
+    'test.yml must not contain a top-level unit job: it duplicated the integration suite',
+  )
+  const integration = topLevelJob('integration')
+  assert.match(integration, /\bnpm test\b/, 'the integration job must still run the full suite')
+  assert.ok(
+    !integration.includes('--test-concurrency=4'),
+    'no job may reintroduce the concurrency-4 override; the canonical --test-concurrency=1 from package.json is the single flake-surface owner',
+  )
 })
 
 test('test workflow propagates tee producer failures and retains its failure guards', (t) => {

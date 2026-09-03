@@ -579,25 +579,50 @@ test('the merge-gating workflow runs the golden harness, after real activity, in
   assert.match(on, /pull_request:/, 'test.yml must keep its pull_request trigger or the gate gates nothing')
 })
 
-test('the trust workflow keeps running the golden harness on pull requests too', () => {
-  // Defense in depth: trust.yml's invariants job is the original harness run
-  // and the source of the published evidence corpus. Dropping it — or its
-  // pull_request trigger — must fail here just like dropping the merge-gate
-  // copy above.
+test('the trust workflow consumes the checkpoint but never produces simulation evidence', () => {
+  // Sole-producer/consumer split, 2026-09: the invariants sim/harness job was
+  // deleted from trust.yml as byte-identical duplication of test.yml
+  // integration. test.yml is now the single owner of the checkpoint; trust
+  // consumes it via workflow_run and must never reintroduce its own sim run.
+  // Re-expressing the invariant, not deleting it: a consumer that silently
+  // becomes a second producer would resurrect the double-run with no red.
   const source = readFileSync(join(WORKFLOW_DIR, 'trust.yml'), 'utf8')
   const on = source.slice(source.indexOf('\non:'), source.indexOf('\njobs:'))
   assert.match(on, /pull_request:/, 'trust.yml must keep its pull_request trigger')
+  assert.match(
+    withoutComments(on),
+    /workflow_run:/,
+    'trust.yml must stay bound to test.yml completion via workflow_run',
+  )
 
   const blocks = runBlocks(source)
   const harness = blocks.filter((b) => GOLDEN_HARNESS.test(withoutComments(b.body)))
-  assert.equal(harness.length, 1, 'trust.yml must keep running the golden harness exactly once')
-  assert.ok(
-    !toleratesFailure(withoutComments(harness[0].body)),
-    'the evidence pipeline must not tolerate a failed harness invocation',
+  assert.equal(
+    harness.length,
+    0,
+    'trust.yml must run the golden harness zero times: test.yml integration is the sole producer',
   )
   const provision = blocks.find((b) => SIM_PROVISION.test(withoutComments(b.body)))
-  assert.ok(provision, 'trust.yml must keep driving real activity before asserting invariants')
-  assert.ok(provision.line < harness[0].line, 'the harness must run after the simulation, not before it')
+  assert.equal(
+    provision,
+    undefined,
+    'trust.yml must not provision simulation companies: the checkpoint arrives from test.yml',
+  )
+
+  // The consumer wiring itself is pinned: publish must download the
+  // checkpoint from the triggering test run (run-id), not from thin air, and
+  // must stamp the corpus with that run's SHA rather than its own checkout.
+  const publishBlock = topLevelBlock(source, 'publish')
+  assert.match(
+    publishBlock,
+    /run-id:\s*\$\{\{\s*github\.event\.workflow_run\.id\s*\}\}/,
+    'trust publish must download the checkpoint from the triggering test run by run-id',
+  )
+  assert.match(
+    publishBlock,
+    /workflow_run\.head_sha/,
+    'trust publish must attribute the corpus to the tested commit, not its own checkout',
+  )
 })
 
 test('a live campaign invocation remains strict and emits machine-readable irreducible rows', () => {
@@ -675,8 +700,11 @@ test('the campaign checker honors an explicit commit ref and rejects a missing o
 })
 
 test('jobs running the campaign suite retain complete local history', () => {
+  // 2026-09: the unit job was deleted as a strict subset of integration, so
+  // integration is the only campaign-suite job left to pin. Do not re-add
+  // 'unit' here without restoring the job itself.
   const source = readFileSync(join(WORKFLOW_DIR, 'test.yml'), 'utf8')
-  for (const jobName of ['unit', 'integration']) {
+  for (const jobName of ['integration']) {
     const job = topLevelBlock(source, jobName)
     const checkout = /\n      - uses: actions\/checkout@[^\n]+[\s\S]*?(?=\n      - )/.exec(job)?.[0] ?? ''
 

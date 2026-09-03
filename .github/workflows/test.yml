@@ -3,11 +3,15 @@ name: test
 # Test gate for the monorepo. Jobs:
 #   typecheck   — fast, no database; fails on any workspace tsc error or a
 #                 product-neutrality violation so broken code cannot reach main
-#   unit        — fast, no database; integration files self-skip
 #   integration — full suite against a throwaway postgres:16, with a canary
-#                 that fails the job if the DB-backed tests silently skipped
-#   coverage    — full suite with V8 coverage, summary in the job page + lcov
-#                 artifact upload
+#                 that fails the job if the DB-backed tests silently skipped.
+#                 This job is the SOLE runner of the unit suite too: the old
+#                 unit job ran the identical `npm test` with an empty
+#                 OPENBOOKS_DB_URL (every DB file self-skips), a strict
+#                 file-for-file subset of this run, while paying a second
+#                 checkout + npm ci + runner per push. Deleted 2026-09: the
+#                 concurrency-4 override went with it, strictly reducing flake
+#                 surface toward the canonical --test-concurrency=1.
 #   e2e         — Playwright browser smoke against the real app + real DB
 
 on:
@@ -51,36 +55,6 @@ jobs:
         # Fails the job if any workspace with a `typecheck` script errors;
         # workspaces without one are skipped by --if-present.
         run: npm run typecheck --workspaces --if-present
-
-  unit:
-    runs-on: ubuntu-latest
-    # The unchanged canonical no-database suite measured 11m07s locally; recent
-    # ubuntu runs approach 20 minutes while still progressing. Keep a bounded
-    # 30-minute ceiling for runner variance without hiding a hang.
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          # Register reachability tests audit local main and historical closing
-          # commits; a shallow checkout turns those checks into a partial pass.
-          fetch-depth: 0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - name: Install qpdf
-        # Payroll ciphertext certification shells out to the real qpdf binary;
-        # without it the sender fail-closes on spawn ENOENT and the suite can
-        # never exercise the verified-ciphertext contract.
-        run: sudo apt-get update && sudo apt-get install -y qpdf
-      - name: Unit tests (no database)
-        # OPENBOOKS_DB_URL deliberately unset/empty: *.integration.test.ts
-        # files self-skip, everything else must pass. Keep file-level fan-out
-        # bounded so a larger dependency graph cannot exhaust runner resources.
-        env:
-          OPENBOOKS_DB_URL: ""
-        run: npm test -- --test-concurrency=4
 
   integration:
     runs-on: ubuntu-latest
@@ -195,10 +169,12 @@ jobs:
       - name: Golden harness asserts the ledger invariants
         # The harness exits non-zero when any hard check fails (trial balance,
         # subledger↔GL and inventory tie-outs), so a fix that breaks a ledger
-        # invariant fails HERE, before merge — not at the next audit. Same
-        # contract trust.yml's invariants job enforces; this copy is what the
-        # pull request actually waits for. Pinned by
-        # scripts/ci-pipeline-integrity.test.mjs so it cannot be dropped.
+        # invariant fails HERE, before merge — not at the next audit. This is
+        # the SOLE harness run in CI: the trust.yml invariants copy was
+        # deleted 2026-09 as byte-identical duplication (same profile, seed,
+        # and window), and the trust publish job consumes the checkpoint
+        # emitted below. Pinned by scripts/ci-pipeline-integrity.test.mjs so
+        # it cannot be dropped or duplicated.
         run: |
           ORG_ID=$(node -e '
             const { readFileSync } = require("node:fs");
@@ -208,6 +184,24 @@ jobs:
             process.stdout.write(manifest.orgId);
           ')
           npm --prefix engine run --silent harness -- "$ORG_ID"
+
+      - name: Assert the simulated company exercised the required scenarios
+        # Folded in from the deleted sim-smoke.yml 2026-09: the only content
+        # there not already covered by this job was this coverage-kinds gate.
+        # sim-smoke ran byte-identical provision/run commands on a strict
+        # subset of this workflow's triggers, so the workflow itself earned
+        # no keep; this one line preserves its unique signal.
+        run: npm --prefix engine run --silent sim -- coverage "$SIM_RUN" --require vendor_bill,vendor_payment,customer_invoice,customer_payment,period_close,period_immutability
+
+      - name: Upload checkpoint for the trust evidence pipeline
+        # trust.yml publish consumes this artifact via workflow_run. Same-run
+        # provenance: it describes the exact harness run above, on this SHA.
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: checkpoint
+          path: engine/harness-checkpoints/
+          if-no-files-found: error
 
       - name: Upload defect bundles (if the oracle halted)
         if: failure()
