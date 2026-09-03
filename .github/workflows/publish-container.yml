@@ -70,6 +70,21 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.SOURCE_COMMIT }}
+          # verify runs npm test, whose campaign suite audits closing commits
+          # for ancestry against main. A depth-1 checkout has neither the
+          # history nor the ref, so those gates degrade to "PARTIAL PASS"
+          # instead of passing or failing honestly.
+          fetch-depth: 0
+      - name: Materialize the local main ref the campaign suite audits
+        # Checking out an explicit ref leaves HEAD detached, so the local `main`
+        # branch does not exist even with full history. test.yml gets it free
+        # because it checks out a branch on a push event; this job must create
+        # it. main is exactly what the register's reachability contract means.
+        run: |
+          git fetch --no-tags --force origin +refs/heads/main:refs/heads/main
+          echo "main is now $(git rev-parse main)"
+          git merge-base --is-ancestor "$SOURCE_COMMIT" main \
+            || { echo "the pinned source commit is not on main; refusing to release it" >&2; exit 1; }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24

@@ -739,6 +739,39 @@ test('jobs running the campaign suite retain complete local history', () => {
       `${jobName} campaign tests need complete history for local main and closing commits`,
     )
   }
+
+  // test.yml is not the only workflow that runs the campaign suite:
+  // publish-container.yml's verify job runs `npm run verify:release`, which
+  // calls `npm test`. Pinning only test.yml let that job ship a depth-1
+  // checkout, where the register gates reported "PARTIAL PASS" and the
+  // explicit-ref gate could not resolve its commit at all. Cover every
+  // workflow that reaches the suite, whichever script name it arrives by.
+  const SUITE_ENTRYPOINTS = /npm (?:run )?(?:test\b|verify:release\b)/
+  for (const file of readdirSync(WORKFLOW_DIR).filter((name) => name.endsWith('.yml'))) {
+    const workflow = readFileSync(join(WORKFLOW_DIR, file), 'utf8')
+    const jobsAt = workflow.indexOf('\njobs:')
+    if (jobsAt === -1) continue
+    const jobNames = [...workflow.slice(jobsAt).matchAll(/\n {2}([A-Za-z0-9_-]+):\n/g)].map((m) => m[1])
+    for (const jobName of jobNames) {
+      const job = topLevelBlock(workflow.slice(jobsAt), jobName)
+      if (!SUITE_ENTRYPOINTS.test(withoutComments(job))) continue
+      assert.match(
+        job,
+        /fetch-depth:\s*0/,
+        `${file}:${jobName} runs the campaign suite, so its checkout needs fetch-depth: 0`,
+      )
+      // Full history is necessary but not sufficient: a checkout pinned to an
+      // explicit ref is detached, so the local `main` branch the register
+      // audits still does not exist and the gate silently degrades.
+      if (/ref:\s*\$\{\{/.test(job)) {
+        assert.match(
+          job,
+          /refs\/heads\/main:refs\/heads\/main/,
+          `${file}:${jobName} checks out a pinned ref, so it must materialize the local main branch the register reachability check audits`,
+        )
+      }
+    }
+  }
 })
 
 test('malformed or empty live campaign input fails closed before any tree check', () => {
