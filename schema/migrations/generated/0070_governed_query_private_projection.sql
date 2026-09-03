@@ -261,4 +261,3 @@ $_$;
 -- Rebuild now for already-deployed tenants.  The function itself owns the
 -- private projections, so this remains safe on every subsequent refresh.
 SELECT public.openbooks_refresh_query_catalog();
-

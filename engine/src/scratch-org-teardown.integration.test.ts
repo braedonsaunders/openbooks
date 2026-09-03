@@ -24,10 +24,17 @@ import {
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+// In the bounded integration partition, dropScratchOrg recycles a leased org
+// through the suite-global owner.  Destructive removal is reserved for pool
+// close, so this test asserts exact baseline restoration in pooled mode while
+// retaining the historical zero-row assertion for standalone runs.
+const POOLED_FIXTURES = process.env.OPENBOOKS_TEST_FIXTURE_POOL === "1"
+  || Boolean(process.env.OPENBOOKS_TEST_FIXTURE_OWNER_PORT);
 
 test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   let dropped = false;
+  const baselineCounts = POOLED_FIXTURES ? await orgRowCounts(org.orgId) : undefined;
   try {
     const actorId = await createScratchUser(org.orgId, "Teardown Actor", "accountant");
     const deps = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
@@ -123,8 +130,10 @@ test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
     await dropScratchOrg(org.orgId);
     dropped = true;
 
-    // The invariant: nothing org-scoped survives, in ANY org_id table.
-    assert.deepEqual(await orgRowCounts(org.orgId), {});
+    // Standalone teardown is destructive; pooled teardown restores the exact
+    // database-backed baseline snapshot so the leased org can be reused.
+    const remainingCounts = await orgRowCounts(org.orgId);
+    assert.deepEqual(remainingCounts, POOLED_FIXTURES ? baselineCounts : {});
 
     // file_versions/file_blobs carry no org_id, so the invariant above cannot
     // see them — assert the payroll blob chain is gone explicitly.
@@ -148,6 +157,7 @@ test("dropScratchOrg commits durably from inside a pinned bypass transaction", {
   // teardown must escape that scope, so its work survives even when the
   // surrounding withBypass block itself fails and rolls back.
   const org = await createScratchOrg();
+  const baselineCounts = POOLED_FIXTURES ? await orgRowCounts(org.orgId) : undefined;
   try {
     const sentinel = new Error("outer transaction rolls back");
     await assert.rejects(
@@ -158,8 +168,14 @@ test("dropScratchOrg commits durably from inside a pinned bypass transaction", {
       sentinel,
     );
     const r = (await db.execute(sql`select 1 as x from orgs where id = ${org.orgId}`));
-    assert.equal(r.rows.length, 0, "the drop must be committed, not staged in the caller's transaction");
-    assert.deepEqual(await orgRowCounts(org.orgId), {});
+    assert.equal(
+      r.rows.length,
+      POOLED_FIXTURES ? 1 : 0,
+      POOLED_FIXTURES
+        ? "pooled drop must commit the reset while retaining the leased baseline org"
+        : "the drop must be committed, not staged in the caller's transaction",
+    );
+    assert.deepEqual(await orgRowCounts(org.orgId), POOLED_FIXTURES ? baselineCounts : {});
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }

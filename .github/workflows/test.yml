@@ -82,6 +82,12 @@ jobs:
       OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
+      OPENBOOKS_REDIS_URL: redis://localhost:6379/0
+      # Pooling is permitted only for this explicitly provisioned disposable
+      # database. The marker is set by the provisioning step below and checked
+      # from pg_database by the fixture owner before any tenant is leased.
+      OPENBOOKS_TEST_DB_ISOLATED: "1"
+      OPENBOOKS_TEST_FIXTURE_POOL_SIZE: "4"
       PGPASSWORD: openbooks
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -105,6 +111,18 @@ jobs:
         # canonical baseline, row-level security, and base seeds.
         run: npx tsx scripts/bootstrap.ts
 
+      - name: Mark database as the owned ephemeral fixture
+        # A caller-controlled OPENBOOKS_TEST_DB_ISOLATED flag is not authority.
+        # The fixture pool requires this database-side nonce, which is written
+        # only after the throwaway service is provisioned in this job.
+        shell: bash
+        run: |
+          set -euo pipefail
+          MARKER="openbooks-ci-ephemeral-$(uuidgen)"
+          psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 \
+            -c "comment on database openbooks_test is '$MARKER'"
+          echo "OPENBOOKS_TEST_DB_MARKER=$MARKER" >> "$GITHUB_ENV"
+
       - name: Integration canary
         # DB-backed tests self-skip when OPENBOOKS_DB_URL is missing, which
         # would turn this job green while running nothing. Run one known
@@ -120,12 +138,36 @@ jobs:
       - name: Full test suite (with database)
         shell: bash
         run: |
-          # One run produces both the pass/fail signal and lcov. A separate
-          # coverage job re-ran this identical suite a third time per push.
+          # The canonical `npm test` script fans out to the manifest-owned
+          # unit and integration partitions (the integration partition runs
+          # under the single fixture owner). Flags appended here reach the
+          # integration run, which produces the lcov artifact and the
+          # owner lifecycle receipt verified by the step below.
           set -o pipefail
           npm test -- --experimental-test-coverage \
             --test-reporter=spec --test-reporter-destination=stdout \
             --test-reporter=lcov --test-reporter-destination=lcov.info 2>&1 | tee coverage.txt
+
+      - name: Verify bounded fixture lifecycle receipt
+        # The single aggregator owner emits one immutable receipt after every
+        # lease has been released. Fail if full work multiplied by test files,
+        # or if a teardown/schema-wide verification was omitted.
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const text = fs.readFileSync('coverage.txt', 'utf8');
+          const line = text.split('\n').find((value) => value.startsWith('[fixture-lifecycle] '));
+          if (!line) throw new Error('missing fixture lifecycle receipt');
+          const metrics = JSON.parse(line.slice('[fixture-lifecycle] '.length));
+          const budget = Number(process.env.OPENBOOKS_TEST_FIXTURE_POOL_SIZE);
+          for (const key of ['fullBootstrap', 'fullTeardown', 'schemaWideVerification']) {
+            if (!Number.isInteger(metrics[key]) || metrics[key] > budget) throw new Error(`${key} exceeded pool budget: ${metrics[key]} > ${budget}`);
+          }
+          if (metrics.fullTeardown !== metrics.fullBootstrap || metrics.schemaWideVerification !== metrics.fullTeardown) throw new Error(`incomplete fixture lifecycle: ${JSON.stringify(metrics)}`);
+          if (metrics.activeLeases !== 0 || metrics.leakDetections !== 0) throw new Error(`fixture leak detected: ${JSON.stringify(metrics)}`);
+          console.log(`fixture lifecycle ok: ${JSON.stringify(metrics)}`);
+          NODE
 
       - name: Publish coverage summary
         if: always()

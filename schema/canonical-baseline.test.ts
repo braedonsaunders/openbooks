@@ -79,6 +79,8 @@ const recognitionEventsMigrationPath =
   "schema/migrations/generated/0062_recognition_events.sql";
 const sandboxWipeGuardAuthorizationMigrationPath =
   "schema/migrations/generated/0078_sandbox_wipe_guard_authorization.sql";
+const governedQueryPrivateProjectionMigrationPath =
+  "schema/migrations/generated/0070_governed_query_private_projection.sql";
 const payDerivedRulesEffectiveVersioningMigrationPath =
   "schema/migrations/generated/0083_pay_derived_rules_effective_versioning.sql";
 const recognitionEventTenantCoherenceMigrationPath =
@@ -183,6 +185,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
   assert.match(baseline, /CREATE FUNCTION public\.je_check_posted_balance/);
   assert.match(baseline, /CREATE POLICY org_isolation/);
   assert.match(baseline, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+});
+
+test("governed-query redaction migration has one canonical trailing newline", () => {
+  const migration = readFileSync(governedQueryPrivateProjectionMigrationPath, "utf8");
+  assert.match(migration, /SELECT public\.openbooks_refresh_query_catalog\(\);\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
 });
 
 test("reporting framework policy is explicit and preserves the legacy effective value", () => {
