@@ -50,14 +50,18 @@ async function ctx(): Promise<Harness> {
       import("../engine/src/test-fixtures.ts"),
     ]);
     const org = await createScratchOrg();
-    const retainageAccountId = randomUUID();
-    await db.execute(sql`
-      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                            reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${retainageAccountId}, ${org.orgId}, '1150', 'Retainage Receivable',
-              'asset_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-    harness = { db, postDocument, org, retainageAccountId };
+    harness = { db, postDocument, org, retainageAccountId: randomUUID() };
   }
+  // The tenant fixture is pooled and reset between files, which drops any
+  // account this suite added. Re-assert it on every entry rather than only on
+  // first construction, or the second test inserts a line referencing an
+  // account_id the reset already removed and trips document_lines_account_id_fkey.
+  await harness.db.execute(sql`
+    insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                          reconcilable, required_dimensions, custom, subsidiary_include_children)
+    values (${harness.retainageAccountId}, ${harness.org.orgId}, '1150', 'Retainage Receivable',
+            'asset_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
+    on conflict (id) do nothing`);
   return harness;
 }
 
