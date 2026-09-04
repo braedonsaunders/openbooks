@@ -26,7 +26,26 @@ jobs:
           node-version: 24
           cache: npm
       - name: Reject moderate-or-higher production dependency advisories
-        run: npm audit --omit=dev --audit-level=moderate
+        # `npm audit` needs the registry's advisory endpoint, which times out
+        # often enough to fail releases on infrastructure rather than on a
+        # finding. Retry the TRANSPORT only: a run that reaches a verdict --
+        # clean or not -- is returned immediately, so a real advisory still
+        # fails on the first attempt and is never retried into a pass.
+        shell: bash
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            output=$(npm audit --omit=dev --audit-level=moderate 2>&1) && { echo "$output"; exit 0; }
+            echo "$output"
+            grep -qiE "audit endpoint returned an error|network timeout|ENOTFOUND|ECONNRESET|EAI_AGAIN" <<< "$output" || {
+              echo "npm audit reported findings; failing." >&2
+              exit 1
+            }
+            echo "attempt ${attempt}: the advisory endpoint was unreachable, retrying..." >&2
+            sleep $((attempt * 10))
+          done
+          echo "npm audit could not reach the advisory endpoint after 3 attempts." >&2
+          exit 1
 
   repository-scan:
     runs-on: ubuntu-latest
