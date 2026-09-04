@@ -778,9 +778,9 @@ test('jobs running the campaign suite retain complete local history', () => {
   // explicit-ref gate could not resolve its commit at all. Cover every
   // workflow that reaches the suite, whichever script name it arrives by.
   const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
-  const suiteScripts = Object.keys(scripts).filter((name) => /npm test\b/.test(scripts[name]))
+  const scriptsRunningSuite = Object.keys(scripts).filter((name) => /npm test\b/.test(scripts[name]))
   const SUITE_ENTRYPOINTS = new RegExp(
-    ['npm (?:run )?test(?![:\\w-])', ...suiteScripts.map((name) => `npm run ${name}\\b`)].join('|'),
+    ['npm (?:run )?test(?![:\\w-])', ...scriptsRunningSuite.map((name) => `npm run ${name}\\b`)].join('|'),
   )
   for (const file of readdirSync(WORKFLOW_DIR).filter((name) => name.endsWith('.yml'))) {
     const workflow = readFileSync(join(WORKFLOW_DIR, file), 'utf8')
