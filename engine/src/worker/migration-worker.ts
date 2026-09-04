@@ -13,6 +13,7 @@ import {
   runFullMigration,
   runSync,
   runTargetedRepair,
+  SyncRunAlreadyActiveError,
 } from "../sync/sync.ts";
 import { syncProjectFinancialInputs } from "../sync/project-financial-inputs.ts";
 import {
@@ -216,17 +217,33 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
             }
           : undefined;
       const ctx = { orgId, connectionId, postedChangeAuthorization };
-      const result =
-        mode === "full_migration"
-          ? await runFullMigration(source, triggeredBy ?? "worker", ctx)
-          : mode === "targeted_repair"
-            ? await runTargetedRepair(
-                source,
-                sourceRefs!,
-                triggeredBy ?? "worker",
-                ctx,
-              )
-          : await runSync(source, triggeredBy ?? "worker", ctx);
+      let result;
+      try {
+        result =
+          mode === "full_migration"
+            ? await runFullMigration(source, triggeredBy ?? "worker", ctx)
+            : mode === "targeted_repair"
+              ? await runTargetedRepair(
+                  source,
+                  sourceRefs!,
+                  triggeredBy ?? "worker",
+                  ctx,
+                )
+            : await runSync(source, triggeredBy ?? "worker", ctx);
+      } catch (error) {
+        if (error instanceof SyncRunAlreadyActiveError) {
+          // A stalled re-delivery of a job whose original attempt is still
+          // running. The live attempt owns the work, so stand down rather than
+          // fail: throwing here would burn a BullMQ attempt and, at
+          // maxStalledCount, surface an alarming failure for a run that is
+          // proceeding normally.
+          console.log(
+            `[migration-worker] ${mode} already active for connection ${connectionId}; standing down`,
+          );
+          return { skipped: "run_already_active" as const };
+        }
+        throw error;
+      }
 
       return {
         runId: result.runId,
