@@ -1062,12 +1062,25 @@ export async function setDocumentTotalsFromEntry(docId: string, orgId: string): 
     await tx.execute(sql`set local openbooks.amend = on`);
     await tx.execute(sql`
     update documents d set
-      total = coalesce(nullif(j.oi, 0), j.pos, 0),
+      total = coalesce(nullif(j.signed, 0), j.pos, 0),
       tax_total = coalesce(abs(lt.tax), 0),
-      subtotal = coalesce(nullif(j.oi, 0), j.pos, 0) - coalesce(abs(lt.tax), 0)
+      subtotal = coalesce(nullif(j.signed, 0), j.pos, 0) - coalesce(abs(lt.tax), 0)
     from documents d2
     left join lateral (
       select sum(jl.amount) filter (where jl.amount > 0) as pos,
+             -- The header must tie to the DOCUMENT's lines -- that is the
+             -- invariant's whole contract -- so take the MAGNITUDE from the
+             -- open item (which nets retainage correctly, unlike a sum of
+             -- positive journal lines) and the SIGN from the lines. A credit
+             -- document whose lines the importer stores positive then states a
+             -- positive header instead of a negative one that could never tie,
+             -- while a credit whose lines really are negative still states a
+             -- negative header. Sign and magnitude each come from the source
+             -- that is authoritative for it.
+             sign(coalesce((select sum(l2.amount) from document_lines l2
+                             where l2.document_id = d2.id and l2.org_id = d2.org_id), 0))
+               * abs(sum(jl.amount * case when a.type like 'liability%' then -1 else 1 end)
+                       filter (where jl.is_open_item)) as signed,
              -- State the open item in the DOCUMENT's direction, not the ledger's.
              -- A vendor bill of 39.92 is +39.92 (its lines sum to that), but the
              -- AP leg that makes it an open item is a CREDIT (-39.92), where a
