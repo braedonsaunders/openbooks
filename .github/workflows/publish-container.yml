@@ -27,12 +27,10 @@ env:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    # verify:release strictly supersets test.yml's integration job: the same
-    # pooled integration suite, plus the unit suite, lint, typecheck and the
-    # production build. That job takes ~35 minutes and is budgeted 45, so 35
-    # here could never pass once this job actually reached the integration
-    # half — it was cancelled at 35m00s having run the suite, not failed it.
-    timeout-minutes: 90
+    # Release-only checks, now that the merge gate proves the suite for this
+    # exact commit: lint, typecheck, dependency and container-security scans,
+    # and the production build. The suite itself is no longer re-run here.
+    timeout-minutes: 40
     services:
       postgres:
         image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
@@ -65,12 +63,6 @@ jobs:
       ORG_COUNTRY: US
       ORG_CURRENCY: USD
       PGPASSWORD: openbooks-owner-release-test-password
-      # The release database is a throwaway service container, so the pooled
-      # tenant fixtures verify:release runs are allowed to bootstrap and tear
-      # down tenants in it. Both halves are required: this flag states intent,
-      # and the database-side marker written below proves it.
-      OPENBOOKS_TEST_DB_ISOLATED: "1"
-      OPENBOOKS_TEST_FIXTURE_POOL_SIZE: "4"
     steps:
       - name: Validate the pinned source commit
         run: |
@@ -81,11 +73,31 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.SOURCE_COMMIT }}
-          # verify runs npm test, whose campaign suite audits closing commits
-          # for ancestry against main. A depth-1 checkout has neither the
-          # history nor the ref, so those gates degrade to "PARTIAL PASS"
-          # instead of passing or failing honestly.
+          # check:register-reachability audits closing commits for ancestry
+          # against main. A depth-1 checkout has neither the history nor the
+          # ref, so it degrades to "PARTIAL PASS" rather than passing or
+          # failing honestly. The merge-gate check below also needs the SHA.
           fetch-depth: 0
+      - name: Require a green merge gate for this exact commit
+        # The suite is NOT re-run here. test.yml already ran it — unit,
+        # pooled integration, sim and golden harness — against this exact SHA,
+        # and re-running it cost ~35 minutes per release to reproduce a result
+        # that already existed. That trade is only sound if the green run is
+        # verified rather than assumed, so this fails closed: no successful
+        # `test` run for this commit, no release.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          conclusions=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${SOURCE_COMMIT}&status=success" \
+            --jq '[.workflow_runs[] | select(.name == "test") | .conclusion] | join(" ")')
+          if ! grep -qw success <<< "$conclusions"; then
+            echo "No successful 'test' run for ${SOURCE_COMMIT}." >&2
+            echo "The merge gate must pass on the exact commit being released." >&2
+            exit 1
+          fi
+          echo "Merge gate is green for ${SOURCE_COMMIT}; running release-only checks."
       - name: Materialize the local main ref the campaign suite audits
         # Checking out an explicit ref leaves HEAD detached, so the local `main`
         # branch does not exist even with full history. test.yml gets it free
@@ -115,22 +127,6 @@ jobs:
           npx tsx -e "import { assertSafeRuntimeDatabaseRole, pool } from './engine/src/db.ts';
           void (async () => { try { await assertSafeRuntimeDatabaseRole(); }
           finally { await pool.end(); } })();"
-      - name: Mark database as the owned ephemeral fixture
-        # verify:release runs npm test, whose integration half leases pooled
-        # tenants and refuses to mutate a database that has not been claimed as
-        # throwaway. A caller-controlled OPENBOOKS_TEST_DB_ISOLATED flag is not
-        # authority: the pool requires this database-side nonce, written only
-        # after the throwaway service is provisioned in this job.
-        shell: bash
-        run: |
-          set -euo pipefail
-          # The prefix is canonical: hasEphemeralDatabaseMarker in
-          # engine/src/test-fixtures.ts requires it literally, so a
-          # job-specific prefix reads as a non-ephemeral database.
-          MARKER="openbooks-ci-ephemeral-$(uuidgen)"
-          psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 \
-            -c "comment on database openbooks_release is '$MARKER'"
-          echo "OPENBOOKS_TEST_DB_MARKER=$MARKER" >> "$GITHUB_ENV"
       - name: Install qpdf
         # Payroll ciphertext certification shells out to the real qpdf binary;
         # without it verify:release fail-closes on spawn ENOENT and can never

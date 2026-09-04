@@ -724,23 +724,34 @@ test('the campaign checker honors an explicit commit ref and rejects a missing o
   )
 })
 
-test('a job that supersets the integration suite is budgeted at least as much time', () => {
-  // publish-container's verify job runs everything test.yml's integration job
-  // runs and more, but carried a 35-minute budget against that job's 45. Once
-  // it actually reached the integration half it was cancelled at 35m00s having
-  // run the suite rather than failed it -- a timeout reads as "cancelled", so
-  // nothing in the log says the budget was the cause.
-  const testWorkflow = readFileSync(join(WORKFLOW_DIR, 'test.yml'), 'utf8')
-  const budget = (job) => Number(/timeout-minutes:\s*(\d+)/.exec(job)?.[1] ?? 0)
-  const reference = budget(topLevelBlock(testWorkflow, 'integration'))
-  assert.ok(reference > 0, 'the integration job must declare a timeout to compare against')
-
+test('the release job does not re-run the suite, and fails closed without a green merge gate', () => {
+  // The suite ran ~35 minutes inside publish-container's verify job to
+  // reproduce a result test.yml had already produced for the same commit
+  // minutes earlier. Removing that is only sound while the substitute is
+  // enforced, so this pins BOTH halves: the job must not run the suite, and
+  // it must verify a successful `test` run for the exact SHA it releases.
   const publish = readFileSync(join(WORKFLOW_DIR, 'publish-container.yml'), 'utf8')
   const verify = topLevelBlock(publish.slice(publish.indexOf('\njobs:')), 'verify')
-  assert.match(verify, /npm run verify:release/, 'this guard is pinned to the job that runs verify:release')
+
+  const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
+  assert.doesNotMatch(
+    scripts['verify:release'],
+    /npm test\b/,
+    'verify:release must not run the suite; the merge gate proves it for this commit',
+  )
+  assert.match(
+    scripts['verify:release:full'],
+    /npm test\b/,
+    'verify:release:full must retain the suite so a full local verification is still available',
+  )
+
+  const gate = stepAround(verify, 'actions/runs?head_sha=')
+  assert.match(gate, /select\(\.name == "test"\)/, 'the gate must look for the merge-gate workflow by name')
+  assert.match(gate, /head_sha=\$\{SOURCE_COMMIT\}/, 'the gate must be scoped to the exact commit being released')
+  assert.match(gate, /exit 1/, 'the gate must fail closed when no green run exists')
   assert.ok(
-    budget(verify) >= reference,
-    `verify:release runs the integration suite plus lint, typecheck and the build, so its ${budget(verify)}-minute budget cannot be below integration's ${reference}`,
+    !/continue-on-error/.test(gate),
+    'an advisory merge-gate check would let an unverified commit be released',
   )
 })
 
@@ -766,7 +777,11 @@ test('jobs running the campaign suite retain complete local history', () => {
   // checkout, where the register gates reported "PARTIAL PASS" and the
   // explicit-ref gate could not resolve its commit at all. Cover every
   // workflow that reaches the suite, whichever script name it arrives by.
-  const SUITE_ENTRYPOINTS = /npm (?:run )?test(?![:\w-])|npm run verify:release\b/
+  const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
+  const suiteScripts = Object.keys(scripts).filter((name) => /npm test\b/.test(scripts[name]))
+  const SUITE_ENTRYPOINTS = new RegExp(
+    ['npm (?:run )?test(?![:\\w-])', ...suiteScripts.map((name) => `npm run ${name}\\b`)].join('|'),
+  )
   for (const file of readdirSync(WORKFLOW_DIR).filter((name) => name.endsWith('.yml'))) {
     const workflow = readFileSync(join(WORKFLOW_DIR, file), 'utf8')
     const jobsAt = workflow.indexOf('\njobs:')

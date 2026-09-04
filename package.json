@@ -62,7 +62,8 @@
     "test": "npm run check:product-neutrality && npm run check:credential-fetch-redirects && npm run check:repository-artifacts && NODE_ENV=test OPENBOOKS_DB_URL= OPENBOOKS_DATA_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f OPENBOOKS_TRUSTED_TEST_BYPASS=1 node scripts/test-suite.mjs unit && NODE_ENV=test OPENBOOKS_DATA_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f OPENBOOKS_TRUSTED_TEST_BYPASS=1 node scripts/test-suite.mjs integration",
     "test:unit": "npm run check:product-neutrality && npm run check:credential-fetch-redirects && npm run check:repository-artifacts && NODE_ENV=test OPENBOOKS_DB_URL= OPENBOOKS_DATA_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f OPENBOOKS_TRUSTED_TEST_BYPASS=1 node scripts/test-suite.mjs unit",
     "test:integration": "NODE_ENV=test OPENBOOKS_DATA_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f OPENBOOKS_TRUSTED_TEST_BYPASS=1 node scripts/test-suite.mjs integration",
-    "verify:release": "npm run check:repository-artifacts && npm run check:dependencies && npm run check:container-security && npm run check:explicit-any && npm run lint && npm run typecheck:e2e && npm run typecheck --workspaces --if-present && npm test && npm -w web run build"
+    "verify:release": "npm run check:repository-artifacts && npm run check:dependencies && npm run check:container-security && npm run check:explicit-any && npm run lint && npm run typecheck:e2e && npm run typecheck --workspaces --if-present && npm -w web run build",
+    "verify:release:full": "npm run check:repository-artifacts && npm run check:dependencies && npm run check:container-security && npm run check:explicit-any && npm run lint && npm run typecheck:e2e && npm run typecheck --workspaces --if-present && npm test && npm -w web run build"
   },
   "allowScripts": {
     "@parcel/watcher@2.5.6": true,

@@ -117,6 +117,16 @@ test("CI marks its database isolated and reports fixture lifecycle counts", () =
 // asserting a prefix the pool no longer accepts.
 const CANONICAL_MARKER_PREFIX = /startsWith\("([a-z-]+)"\)/.exec(fixtures)?.[1];
 
+// Derive the entrypoints that actually reach the suite from package.json, so a
+// script that stops running it cannot leave this guard demanding a fixture
+// claim the job no longer needs.
+const SUITE_SCRIPTS = Object.entries(JSON.parse(readFileSync("package.json", "utf8")).scripts)
+  .filter(([, body]) => /npm test\b/.test(body))
+  .map(([name]) => name);
+const SUITE_ENTRYPOINTS = new RegExp(
+  ["npm (?:run )?test(?![:\\w-])", "test-suite\\.mjs integration", ...SUITE_SCRIPTS.map((n) => `npm run ${n}\\b`)].join("|"),
+);
+
 test("every workflow job that runs the integration suite claims its database as throwaway", () => {
   // test.yml is not the only route into the pooled integration suite:
   // publish-container.yml's verify job reaches it through verify:release. The
@@ -135,7 +145,7 @@ test("every workflow job that runs the integration suite claims its database as 
       const next = rest.search(/\n {2}(?=\S)/);
       const job = next === -1 ? rest : rest.slice(0, next);
       // Only jobs that actually reach the pooled integration half.
-      if (!/npm (?:run )?test(?![:\w-])|npm run verify:release\b|test-suite\.mjs integration/.test(job)) continue;
+      if (!SUITE_ENTRYPOINTS.test(job)) continue;
       if (/OPENBOOKS_DB_URL:\s*$/m.test(job)) continue; // unit-only job
       assert.match(
         job,
