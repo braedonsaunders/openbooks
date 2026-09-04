@@ -7,6 +7,7 @@ import {
   CloseError,
   closeModuleForDocument,
 } from "./close.ts";
+import { nextFreeEntryNumber } from "./entry-number.ts";
 import { reversalJournalLines } from "./reversal-journal-lines.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
@@ -405,7 +406,11 @@ export async function completeRequestedDocumentVoid(
               orgId,
               bookId: String(source.book_id),
               subsidiaryId: String(source.subsidiary_id),
-              entryNumber: `${String(source.entry_number)}-${suffix}`,
+              entryNumber: await nextFreeEntryNumber(
+                tx,
+                orgId,
+                `${String(source.entry_number)}-${suffix}`,
+              ),
               postingDate: reversalDate,
               periodId: period.rows[0]!.id,
               memo: `Reversal: ${String(doc.void_reason)}`,

@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema, withOrg } from "../db.ts";
+import { nextFreeEntryNumber } from "../entry-number.ts";
 import { reversalJournalLines } from "../reversal-journal-lines.ts";
 import {
   captureTransactionAuditSnapshot,
@@ -149,7 +150,11 @@ export async function mirrorSourceDeletion(input: {
           orgId: input.orgId,
           bookId: entry.bookId,
           subsidiaryId: entry.subsidiaryId,
-          entryNumber: `${entry.entryNumber}-SOURCE-DELETE`,
+          entryNumber: await nextFreeEntryNumber(
+            tx,
+            input.orgId,
+            `${entry.entryNumber}-SOURCE-DELETE`,
+          ),
           postingDate: entry.postingDate,
           periodId: entry.periodId,
           memo: `Source deletion ${input.source}:${input.sourceRef}`,
@@ -312,7 +317,11 @@ export async function resolveSourceDeletion(input: {
             orgId: input.orgId,
             bookId: entry.bookId,
             subsidiaryId: entry.subsidiaryId,
-            entryNumber: `${entry.entryNumber}-SOURCE-DELETE`,
+            entryNumber: await nextFreeEntryNumber(
+              tx,
+              input.orgId,
+              `${entry.entryNumber}-SOURCE-DELETE`,
+            ),
             postingDate,
             periodId: entry.periodId,
             memo: `Source deletion ${source}:${input.sourceRef}${input.note ? ` — ${input.note}` : ""}`,
