@@ -120,11 +120,11 @@ const CANONICAL_MARKER_PREFIX = /startsWith\("([a-z-]+)"\)/.exec(fixtures)?.[1];
 // Derive the entrypoints that actually reach the suite from package.json, so a
 // script that stops running it cannot leave this guard demanding a fixture
 // claim the job no longer needs.
-const SUITE_SCRIPTS = Object.entries(JSON.parse(readFileSync("package.json", "utf8")).scripts)
+const SCRIPTS_RUNNING_SUITE = Object.entries(JSON.parse(readFileSync("package.json", "utf8")).scripts)
   .filter(([, body]) => /npm test\b/.test(body))
   .map(([name]) => name);
 const SUITE_ENTRYPOINTS = new RegExp(
-  ["npm (?:run )?test(?![:\\w-])", "test-suite\\.mjs integration", ...SUITE_SCRIPTS.map((n) => `npm run ${n}\\b`)].join("|"),
+  ["npm (?:run )?test(?![:\\w-])", "test-suite\\.mjs integration", ...SCRIPTS_RUNNING_SUITE.map((n) => `npm run ${n}\\b`)].join("|"),
 );
 
 test("every workflow job that runs the integration suite claims its database as throwaway", () => {
