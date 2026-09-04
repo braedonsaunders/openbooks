@@ -126,6 +126,7 @@ export async function budgetVsActualView(
   orgId: string,
   labels: BudgetLabels,
   dims: Partial<BudgetDimensions> = {},
+  subsidiaryIds?: readonly string[],
 ): Promise<StatementView | null> {
   const sc = (await db.execute<{ id: string; book_id: string; fiscal_year: number; name: string }>(sql`
     select id, book_id, fiscal_year, name from budget_scenarios where id = ${scenarioId} and org_id = ${orgId}
@@ -141,6 +142,7 @@ export async function budgetVsActualView(
   if (!range?.from || !range?.to) return null
   const fy = { from: range.from, to: range.to }
 
+  const subsidiaryList = subsidiaryIds?.length ? sql.join(subsidiaryIds.map((id) => sql`${id}::uuid`), sql`, `) : sql`null`
   const actualRows = (await db.execute<{ account_id: string; amt: string }>(sql`
     select l.account_id, coalesce(sum(l.amount), 0) as amt
       from journal_lines l
@@ -148,6 +150,7 @@ export async function budgetVsActualView(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where e.org_id = ${orgId} and a.org_id = ${orgId}
        and a.type in ${PNL_TYPES} and e.book_id = ${scenario.book_id}
+       ${subsidiaryIds ? sql`and l.subsidiary_id in (${subsidiaryList})` : sql``}
        and e.posting_date >= ${fy.from} and e.posting_date <= ${fy.to}
        ${dims.departmentId ? sql`and l.department_id = ${dims.departmentId}` : sql``}
        ${dims.projectId ? sql`and l.project_id = ${dims.projectId}` : sql``}
@@ -160,6 +163,7 @@ export async function budgetVsActualView(
     select bl.account_id, coalesce(sum(bl.amount), 0) as amt
       from budget_lines bl
      where bl.org_id = ${orgId} and bl.scenario_id = ${scenarioId}
+       ${subsidiaryIds ? sql`and bl.subsidiary_id in (${subsidiaryList})` : sql``}
        ${dims.departmentId ? sql`and bl.department_id = ${dims.departmentId}` : sql``}
        ${dims.projectId ? sql`and bl.project_id = ${dims.projectId}` : sql``}
        ${dims.locationId ? sql`and bl.location_id = ${dims.locationId}` : sql``}

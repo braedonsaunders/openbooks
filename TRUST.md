@@ -353,9 +353,9 @@ Stated plainly, because a trust page that lists only strengths is marketing.
   two highest-value things this project does not have.
 - **Browser coverage.** End-to-end testing is a smoke tier. Full user-journey
   coverage per module is not yet in place.
-- **Concurrency and fault injection.** There is no suite that fires parallel
-  postings at the same period, item, or open invoice, and none that kills the
-  process mid-transaction to prove no half-posted state survives.
+- **Concurrency and fault injection.** Database integration tests exercise concurrent posting, claims and
+  locking. These are not a complete process-kill or infrastructure fault-injection
+  campaign; recovery under failures still needs broader operational evidence.
 - **Scale evidence.** No published benchmark at ten million journal lines with
   stated hardware.
 - **Standards coverage.** Business combinations, financial instruments,

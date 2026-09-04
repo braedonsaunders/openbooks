@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../../lib/authz'
-import { guardReportEntity } from '../../../../../../lib/report-authz'
+import { canAccessReportArtifact } from '../../../../../../lib/report-execution-context'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 export const runtime = 'nodejs'
@@ -14,16 +14,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { user } = gate
   const { id } = await params
 
-  const r = (await db.execute<{ result_csv: string | null; status: string; slug: string; query: unknown }>(sql`
-    select run.result_csv, run.status, def.slug, def.query
+  const r = (await db.execute<{ result_csv: string | null; status: string; slug: string; authorization_snapshot: unknown }>(sql`
+    select run.result_csv, run.status, def.slug, run.authorization_snapshot
       from report_runs run
       join report_definitions def on def.id = run.definition_id and def.org_id = run.org_id
      where run.id = ${id} and run.org_id = ${user.orgId}
   `))
   const row = r.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const denied = await guardReportEntity(gate, row.query)
-  if (denied) return denied
+  if (!(await canAccessReportArtifact(gate, row.authorization_snapshot))) {
+    return NextResponse.json({ error: 'report artifact access denied or original scope unavailable' }, { status: 403 })
+  }
   if (row.status !== 'succeeded' || row.result_csv == null) {
     return NextResponse.json({ error: 'no result available for this run' }, { status: 409 })
   }

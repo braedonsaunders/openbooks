@@ -1,3 +1,4 @@
+import { authorizeReportRun } from './render-client.ts';
 import { Worker } from "bullmq";
 import { EMAIL_QUEUE, getBlockingConnection, type EmailJobData } from "@openbooks/jobs";
 import {
@@ -15,7 +16,8 @@ import {
   markEmailUncertain,
   resolveOrgEmailTransport,
 } from "../email-config.ts";
-import { withOrgContext } from "../db.ts";
+import { sql } from "drizzle-orm";
+import { db, withOrgContext } from "../db.ts";
 import { isSandboxOrg } from "../sandbox/guard.ts";
 import {
   markReportDeliveryFailed,
@@ -158,6 +160,20 @@ export function createEmailWorker(): Worker<EmailJobData> {
       });
 
       try {
+        // Check current grants immediately before transmission. Keep this in
+        // the attempt boundary so revoked access becomes durable not-sent
+        // evidence, and accepted retries can reconcile without sending again.
+        if (reportDeliveryId) {
+          const run = (await db.execute<{ run_id: string; definition_id: string }>(sql`
+            select r.id as run_id, r.definition_id
+              from report_delivery_outbox delivery
+              join report_runs r on r.id = delivery.run_id and r.org_id = delivery.org_id
+             where delivery.id = ${reportDeliveryId} and delivery.org_id = ${d.orgId}
+               and delivery.recipient = ${d.to}
+          `)).rows[0];
+          if (!run) throw new Error('Report delivery evidence not found');
+          await authorizeReportRun(d.orgId, run.definition_id, run.run_id);
+        }
         const outcome = await sendVia(transport, {
           to: d.to,
           subject: d.subject,

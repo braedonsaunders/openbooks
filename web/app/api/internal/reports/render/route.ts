@@ -1,3 +1,4 @@
+import { scheduledReportAuthz, withReportAuthz, type ReportAuthorization } from '../../../../../lib/report-execution-context'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
@@ -39,20 +40,17 @@ export async function GET(req: Request) {
   try {
     return await withOrg(orgId, async () => {
     const t = (await getTranslations('reports')) as unknown as Translator
-    const q = parseReportQuery(p)
-    const period = await resolvePeriod(q.period, {
-      customFrom: p.get('from') ?? undefined,
-      customTo: p.get('to') ?? undefined,
-      orgId,
-    })
     const runId = p.get('runId')
+    if (!runId) return NextResponse.json({ error: 'scheduled runId is required' }, { status: 422 })
+    let authorization_snapshot: ReportAuthorization | null = null
     let extraFilters: ReportRuleGroup | null = null
     if (runId) {
-      const run = (await db.execute<{ filters: Record<string, unknown> | null }>(sql`
-        select filters from report_runs
+      const run = (await db.execute<{ filters: Record<string, unknown> | null; authorization_snapshot: ReportAuthorization | null }>(sql`
+        select filters, authorization_snapshot from report_runs
          where id=${runId} and org_id=${orgId} and definition_id=${definitionId} and trigger='scheduled'
       `))
       if (!run.rows[0]) return NextResponse.json({ error: 'scheduled report run not found' }, { status: 404 })
+      authorization_snapshot = run.rows[0].authorization_snapshot
       const stored = run.rows[0].filters
       // A schedule's filters carry either a query-report extra rule group
       // (legacy shape: the group itself) or a statement-params snapshot taken
@@ -75,13 +73,16 @@ export async function GET(req: Request) {
       customTo: p.get('to') ?? undefined,
       orgId,
     })
-    const data = await resolveDefinitionToExportData(
+    if (!authorization_snapshot) return NextResponse.json({ error: 'report schedule requires reauthorization' }, { status: 403 })
+    const authz = await scheduledReportAuthz(orgId, authorization_snapshot)
+    if (p.get('authorizeOnly') === '1') return new NextResponse(null, { status: 204 })
+    const data = await withReportAuthz(authz, () => resolveDefinitionToExportData(
       orgId,
       definitionId,
       p,
       { orgId, t, period: scheduledPeriod, query: scheduledQ },
-      { extraFilters },
-    )
+      { extraFilters, definition: authorization_snapshot!.definition },
+    ))
     const stamp = await businessToday(orgId)
     if (p.get('format') === 'xlsx') {
       const xlsx = await exportDataToXlsx(data, {

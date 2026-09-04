@@ -151,7 +151,7 @@ export async function EntityListView({
     sql`, `,
   )
   const [allowedSubs, today] = await Promise.all([
-    allowedSubsidiaryIds(userId),
+    allowedSubsidiaryIds(userId, orgId),
     businessToday(orgId),
   ])
   const adhoc = {

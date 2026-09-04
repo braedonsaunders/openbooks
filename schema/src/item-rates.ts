@@ -353,7 +353,8 @@ export const chargeRateComponents = pgTable(
     rateLineId: uuid("rate_line_id"),
     unitCode: text("unit_code").notNull(),
     unitName: text("unit_name").notNull(),
-    quantity: money("quantity").notNull(),
+    quantity: numeric("quantity", { precision: 28, scale: 8 }).notNull(),
+    quantityRatio: jsonb("quantity_ratio").$type<{ numerator: string; denominator: string }>(),
     rate: money("rate").notNull(),
     amount: money("amount").notNull(),
     sequence: integer("sequence").notNull(),
@@ -366,6 +367,14 @@ export const chargeRateComponents = pgTable(
       t.sequence,
     ),
     check("charge_rate_components_positive_quantity", sql`${t.quantity} > 0`),
+    check("charge_rate_fraction_shape", sql`${t.quantityRatio} is null or coalesce((
+      jsonb_typeof(${t.quantityRatio}) = 'object'
+      and jsonb_typeof(${t.quantityRatio}->'numerator') = 'string'
+      and jsonb_typeof(${t.quantityRatio}->'denominator') = 'string'
+      and ${t.quantityRatio}->>'numerator' ~ '^[1-9][0-9]*$'
+      and ${t.quantityRatio}->>'denominator' ~ '^[1-9][0-9]*$'
+      and ${t.quantityRatio} ? 'numerator' and ${t.quantityRatio} ? 'denominator'
+    ), false)`),
     check("charge_rate_components_nonnegative_rate", sql`${t.rate} >= 0`),
     check("charge_rate_components_nonnegative_amount", sql`${t.amount} >= 0`),
   ],

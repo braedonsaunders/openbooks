@@ -1,4 +1,5 @@
 import "server-only";
+import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -272,7 +273,17 @@ export async function loadTrueCostConfig(orgId: string): Promise<{ activeProfile
   return { activeProfileId, profiles, profile };
 }
 
-export async function trueCostData(orgId: string, period: { from: string; to: string; label: string }): Promise<TrueCostData> {
+export async function trueCostData(orgId: string, period: { from: string; to: string; label: string }, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<TrueCostData> {
+  if (!(await isFeatureEnabled(orgId, "projects"))) throw new Error("projects feature is disabled")
+  const ids = allowedSubsidiaryIds === null ? null : [...allowedSubsidiaryIds]
+  const allowed = ids?.length ? sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `) : sql`null`
+  const ledgerScope = ids === null ? sql`` : sql`and l.subsidiary_id in (${allowed})`
+  const timeScope = ids === null ? sql`` : sql`and exists (
+    select 1 from parties scope_employee
+    left join projects scope_project on scope_project.id = t.project_id and scope_project.org_id = t.org_id
+    where scope_employee.id = t.employee_party_id and scope_employee.org_id = t.org_id
+      and coalesce(scope_project.subsidiary_id, scope_employee.subsidiary_id) in (${allowed})
+  )`
   const { money } = await getMoneyFormatter(orgId)
   const { from, to } = period;
   const start = new Date(from + "T00:00:00Z");
@@ -294,7 +305,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      where l.org_id = ${orgId}
+      where l.org_id = ${orgId} ${ledgerScope}
         and a.type in ('expense', 'expense_other', 'expense_deferred')
         and a.is_summary = false
         and e.posting_date >= ${from} and e.posting_date <= ${to}
@@ -310,7 +321,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
         coalesce(sum(t.hours) filter (where t.is_billable), 0) as billed_hours,
         coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) as nonbill_cost
       from time_entries t
-      where t.org_id = ${orgId} and t.worked_on >= ${from} and t.worked_on <= ${to}
+      where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${from} and t.worked_on <= ${to}
       group by 1, 2
     `),
     // Per-employee weighted labour rate + dominant dept/labour class.
@@ -321,17 +332,17 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
           sum(coalesce(t.cost_rate, 0) * t.hours) / nullif(sum(t.hours) filter (where t.cost_rate > 0), 0) as rate
         from time_entries t
         left join parties p on p.id = t.employee_party_id and p.org_id = t.org_id
-        where t.org_id = ${orgId} and t.worked_on >= ${from} and t.worked_on <= ${to}
+        where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${from} and t.worked_on <= ${to}
         group by 1, 2
       ), dom_dept as (
         select distinct on (employee_party_id) employee_party_id, department_id
-        from (select employee_party_id, department_id, sum(hours) h from time_entries
-              where org_id = ${orgId} and worked_on >= ${from} and worked_on <= ${to} group by 1, 2) x
+        from (select employee_party_id, department_id, sum(hours) h from time_entries t
+              where t.org_id = ${orgId} ${timeScope} and worked_on >= ${from} and worked_on <= ${to} group by 1, 2) x
         order by employee_party_id, h desc
       ), dom_item as (
         select distinct on (x.employee_party_id) x.employee_party_id, i.name as title
-        from (select employee_party_id, item_id, sum(hours) h from time_entries
-              where org_id = ${orgId} and worked_on >= ${from} and worked_on <= ${to} group by 1, 2) x
+        from (select employee_party_id, item_id, sum(hours) h from time_entries t
+              where t.org_id = ${orgId} ${timeScope} and worked_on >= ${from} and worked_on <= ${to} group by 1, 2) x
         join items i on i.id = x.item_id and i.org_id = ${orgId}
         order by x.employee_party_id, x.h desc
       )
@@ -347,13 +358,13 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     db.execute(sql`
       select l.account_id, sum(l.amount) as amount,
         (select coalesce(sum(t.hours) filter (where t.is_billable), 0) from time_entries t
-          where t.org_id = ${orgId} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}) as billed_hours,
+          where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}) as billed_hours,
         (select coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) from time_entries t
-          where t.org_id = ${orgId} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}) as nonbill_cost
+          where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}) as nonbill_cost
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      where l.org_id = ${orgId} and a.type in ('expense', 'expense_other', 'expense_deferred')
+      where l.org_id = ${orgId} ${ledgerScope} and a.type in ('expense', 'expense_other', 'expense_deferred')
         and a.is_summary = false and e.posting_date >= ${priorFrom} and e.posting_date <= ${priorTo}
       group by 1
     `),
@@ -363,7 +374,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      where l.org_id = ${orgId} and a.name ~* 'burden applied|overhead burden'
+      where l.org_id = ${orgId} ${ledgerScope} and a.name ~* 'burden applied|overhead burden'
         and e.posting_date >= ${from} and e.posting_date <= ${to}
     `),
     db.execute(sql`select id, name from departments where org_id = ${orgId} order by name`),
@@ -389,14 +400,14 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
                coalesce(sum(l.amount) filter (where l.account_id in (
                  select id from accounts where org_id = ${orgId} and type = 'cogs')), 0) as direct_cost
           from journal_lines l
-         where l.org_id = ${orgId} and l.department_id is not null
+         where l.org_id = ${orgId} ${ledgerScope} and l.department_id is not null
            and l.posting_date >= ${from} and l.posting_date <= ${to}
          group by l.department_id
       ),
       hc as (
         select t.department_id, count(distinct t.employee_party_id) as headcount
           from time_entries t
-         where t.org_id = ${orgId} and t.department_id is not null
+         where t.org_id = ${orgId} ${timeScope} and t.department_id is not null
            and t.worked_on >= ${from} and t.worked_on <= ${to}
          group by t.department_id
       )

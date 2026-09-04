@@ -102,7 +102,9 @@ test(
            where org_id = ${org.orgId} and id = ${documentId}
         `))
         const priorToken = raw.rows[0]?.updatedAt
-        assert.equal(priorToken, '2026-08-24 12:34:56.123456+00')
+        assert.equal(typeof priorToken, 'string')
+        assert.equal(new Date(priorToken!).toISOString(), '2026-08-24T12:34:56.123Z')
+        assert.match(priorToken!, /\.123456[+-]/)
         await assert.rejects(
           inOrg(() => platform.update('bills', documentId, {
             expectedUpdatedAt: priorToken,

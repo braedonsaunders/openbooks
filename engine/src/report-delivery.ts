@@ -60,6 +60,7 @@ type CadenceRow = {
   recipient_emails: string[];
   filters: Record<string, unknown> | null;
   next_run_at: Date | string;
+  authorization_snapshot: Record<string, unknown> | null;
 };
 
 /**
@@ -71,7 +72,7 @@ export async function materializeDueReportRuns(now = new Date(), limit = 50): Pr
   return db.transaction(async (tx) => {
     const due = (await tx.execute<CadenceRow>(sql`
       select id, org_id, definition_id, cadence, day_of_week, day_of_month,
-             hour, minute, timezone, recipient_emails, filters, next_run_at
+             hour, minute, timezone, recipient_emails, filters, next_run_at, authorization_snapshot
         from report_schedules
        where active and next_run_at <= ${now}
        order by next_run_at
@@ -92,10 +93,10 @@ export async function materializeDueReportRuns(now = new Date(), limit = 50): Pr
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into report_runs
           (org_id, schedule_id, definition_id, trigger, status, scheduled_for,
-           recipient_emails, filters, next_attempt_at)
+           recipient_emails, filters, next_attempt_at, authorization_snapshot)
         values (${schedule.org_id}, ${schedule.id}, ${schedule.definition_id}, 'scheduled', 'queued',
                 ${scheduledFor}, ${JSON.stringify(schedule.recipient_emails ?? [])}::jsonb,
-                ${JSON.stringify(schedule.filters)}::jsonb, now())
+                ${JSON.stringify(schedule.filters)}::jsonb, now(), ${JSON.stringify(schedule.authorization_snapshot)}::jsonb)
         on conflict (schedule_id, scheduled_for)
           where schedule_id is not null and scheduled_for is not null
         do nothing

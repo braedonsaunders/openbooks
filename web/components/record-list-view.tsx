@@ -156,7 +156,7 @@ export async function RecordListView({
   )
   const joins = source.joins ?? sql``
   // Role-based subsidiary visibility (null = unrestricted).
-  const allowedSubs = await allowedSubsidiaryIds(userId)
+  const allowedSubs = await allowedSubsidiaryIds(userId, orgId)
   const whereBuilder = source.where ?? documentWhere
   const where = whereBuilder(source.kinds, view, { q: params.q, status, kind, from, to, filters: extraQuickValues }, orgId, allowedSubs)
   const statusCountView = { ...view, filters: view.filters.filter((filter) => filter.key !== 'status') }

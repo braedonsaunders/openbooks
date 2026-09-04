@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { validateCustomQuery, validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../../lib/authz'
+import { canAccessReportDefinition } from '../../../../../lib/report-execution-context'
 import { canRunReportEntity, canRunReportStatement, guardReportEntity } from '../../../../../lib/report-authz'
 import {
   loadReportDefinition,
@@ -57,6 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const existing = await loadReportDefinition(user.orgId, id)
   if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await canAccessReportDefinition(gate, existing))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -137,6 +139,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   const existing = await loadReportDefinition(user.orgId, id)
   if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await canAccessReportDefinition(gate, existing))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })
   if (existing.kind === 'built_in') {
     return NextResponse.json(
       { error: 'Built-in reports cannot be deleted — clone it instead.' },

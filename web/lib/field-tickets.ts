@@ -604,10 +604,10 @@ async function addTicketLineUnlocked(
   for (const component of components) {
     await tx.execute(sql`
       insert into charge_rate_components (org_id, document_line_id, role, rate_line_id, unit_code, unit_name,
-                                           quantity, rate, amount, sequence, created_by, updated_by)
+                                           quantity, rate, amount, sequence, created_by, updated_by, quantity_ratio)
       values (${orgId}, ${inserted.rows[0]!.id}, ${component.role}, ${component.rateLineId}, ${component.unitCode},
               ${component.unitName}, ${component.quantity}, ${component.rate}, ${component.amount}, ${sequence++},
-              ${userId}, ${userId})`)
+              ${userId}, ${userId}, ${'quantityRatio' in component && component.quantityRatio ? JSON.stringify(component.quantityRatio) : null}::jsonb)`)
   }
   await recomputeTotals(orgId, ticketId, tx)
 }
@@ -993,15 +993,16 @@ export async function releaseFieldTicketApproval(
   if (lines.rows.length > 0 && doc.project_id && !chargeDocumentId) {
     const lineIds = `{${lines.rows.map((line) => line.id).join(',')}}`
     const componentRows = (await db.execute<{ document_line_id: string; role: 'cost' | 'bill'; rate_line_id: string | null; unit_code: string;
-        unit_name: string; quantity: string; rate: string; amount: string }>(sql`
-      select document_line_id, role, rate_line_id, unit_code, unit_name, quantity, rate, amount
+        unit_name: string; quantity: string; rate: string; amount: string; quantity_ratio: { numerator: string; denominator: string } | null }>(sql`
+      select document_line_id, role, rate_line_id, unit_code, unit_name, quantity, rate, amount, quantity_ratio
         from charge_rate_components
        where org_id = ${orgId} and document_line_id = any(${lineIds}::uuid[])
        order by document_line_id, role, sequence`))
     const componentsFor = (lineId: string, role: 'cost' | 'bill') => componentRows.rows
       .filter((component) => component.document_line_id === lineId && component.role === role)
       .map((component) => ({ rateLineId: component.rate_line_id, unitCode: component.unit_code,
-        unitName: component.unit_name, quantity: component.quantity, rate: component.rate, amount: component.amount }))
+        unitName: component.unit_name, quantity: component.quantity, rate: component.rate, amount: component.amount,
+        ...(component.quantity_ratio ? { quantityRatio: component.quantity_ratio } : {}) }))
     const charge = await createProjectCharge(
       orgId,
       userId,
@@ -1175,7 +1176,7 @@ export async function loadFieldTicket(
              case when eu.id is null then null else eu.unit_number || ' · ' || eu.name end as equipment_name,
              coalesce((select jsonb_agg(jsonb_build_object(
                'rateLineId', c.rate_line_id, 'unitCode', c.unit_code, 'unitName', c.unit_name,
-               'quantity', c.quantity, 'rate', c.rate, 'amount', c.amount
+               'quantity', c.quantity, 'rate', c.rate, 'amount', c.amount, 'quantityRatio', c.quantity_ratio
              ) order by c.sequence) from charge_rate_components c
                where c.document_line_id = dl.id and c.org_id = dl.org_id and c.role = 'bill'), '[]'::jsonb) as rate_components
         from document_lines dl

@@ -1,4 +1,5 @@
 import 'server-only'
+import { trueCostExportData } from './analytics/true-cost-report'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
@@ -22,7 +23,6 @@ import {
   type DimFilter,
 } from './reports'
 import { balanceSheetView, profitAndLossView, type StatementView } from './statement-matrix'
-import { reportSubsidiaryView } from './consolidation'
 import { budgetVsActualView } from './budget-report'
 import {
   agingExportData,
@@ -48,6 +48,8 @@ import {
 } from './custom-reports'
 import type { ReportQuery } from './report-filters'
 import { isFeatureEnabled } from './features'
+import { requireReportAuthz, canAccessReportDefinition, type ReportAuthorization } from './report-execution-context'
+import { resolveSubsidiaryView } from './consolidation'
 import { STATEMENT_KIND_FEATURE } from './report-authz'
 
 /**
@@ -74,6 +76,7 @@ export const REPORT_KINDS = [
   'budget',
   'partner-statement',
   'project-profitability',
+  'true-cost',
 ] as const
 export type ReportKind = (typeof REPORT_KINDS)[number]
 
@@ -112,6 +115,8 @@ export function statementPageHref(statement: { kind?: string; params?: Record<st
       return '/reports/journal'
     case 'project-profitability':
       return '/reports/project-profitability'
+    case 'true-cost':
+      return '/reports/true-cost'
     case 'aging':
       return `/reports/aging?side=${p.side ?? 'ar'}`
     case 'registers':
@@ -153,7 +158,8 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   }
   // Subsidiary context: exports and scheduled runs honor the same picker value
   // as the on-screen report (consolidated subtree + translation included).
-  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+  const authz = await requireReportAuthz(orgId)
+  const subView = await resolveSubsidiaryView(q.subsidiaryId, period.to, authz.allowedSubsidiaryIds)
   const dims: DimFilter = {
     departmentId: q.dims.departmentId,
     projectId: q.dims.projectId,
@@ -222,7 +228,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
           expenses: t('pnl.expenses'),
           netIncome: t('pnl.netIncome'),
           totalOf: secTotal,
-        }, q.dims)
+        }, q.dims, dims.subsidiaryIds)
       }
     }
     if (!view) throw new Error('no data')
@@ -255,8 +261,10 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     case 'partner-statement': {
       const partyId = p.get('party')
       if (!partyId) throw new Error('party required')
-      return { render: 'data', data: partnerStatementExportData(await partnerStatement(partyId, orgId, { from: period.from, to: period.to, side }), t) }
+      return { render: 'data', data: partnerStatementExportData(await partnerStatement(partyId, orgId, { from: period.from, to: period.to, side, dims }), t) }
     }
+    case 'true-cost':
+      return { render: 'data', data: await trueCostExportData(orgId, period) }
     case 'project-profitability':
       return {
         render: 'data',
@@ -282,7 +290,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       return { render: 'data', data: trialBalanceExportData(await trialBalance(asOf, dims, orgId), asOf, t) }
     case 'partners': {
       const s = (p.get('side') === 'receivable' ? 'receivable' : 'payable') as 'receivable' | 'payable'
-      return { render: 'data', data: partnersExportData(s, await partnerBalances(s, orgId), t) }
+      return { render: 'data', data: partnersExportData(s, await partnerBalances(s, orgId, asOf, undefined, dims), t) }
     }
     case 'aging':
       return { render: 'data', data: agingExportData(side, await agingByParty(side, asOf, dims, orgId), t) }
@@ -311,7 +319,7 @@ export async function resolveDefinitionToExportData(
   id: string,
   p: URLSearchParams,
   ctx: ResolveReportCtx,
-  options: { extraFilters?: ReportRuleGroup | null } = {},
+  options: { extraFilters?: ReportRuleGroup | null; definition?: ReportAuthorization['definition'] } = {},
 ): Promise<ExportData> {
   const r = (await db.execute<{
       kind: string
@@ -326,8 +334,11 @@ export async function resolveDefinitionToExportData(
       from report_definitions
      where id = ${id} and org_id = ${orgId}
   `))
-  const row = r.rows[0]
+  const row = options.definition ?? r.rows[0]
   if (!row) throw new Error('report not found')
+
+  const authz = await requireReportAuthz(orgId)
+  if (!(await canAccessReportDefinition(authz, row as ReportAuthorization['definition']))) throw new Error('Report access denied')
 
   if (row.report_type === 'statement') {
     const spec = row.statement ?? {}

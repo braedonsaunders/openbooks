@@ -43,7 +43,7 @@ export async function createDraftJournal(
   // from the actor so they cannot bypass the same invariant as this route.
   // Unrestricted roles resolve to null and retain the existing root behavior.
   const resolvedScope = options.allowedSubsidiaryIds === undefined
-    ? await resolveAllowedSubsidiaryIds(userId)
+    ? await resolveAllowedSubsidiaryIds(userId, orgId)
     : options.allowedSubsidiaryIds
   const scope = resolvedScope === null
     ? null

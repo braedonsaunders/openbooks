@@ -117,6 +117,8 @@ export const reportSchedules = pgTable(
     /** Next UTC instant this schedule is due (computed via computeNextRunAt). */
     nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
     active: boolean("active").notNull().default(true),
+    /** Authorized principal, immutable definition and legal-entity execution scope. */
+    authorizationSnapshot: jsonb("authorization_snapshot").$type<Record<string, unknown>>(),
     ...auditColumns,
   },
   (t) => [
@@ -166,6 +168,8 @@ export const reportRuns = pgTable(
     terminalFailedAt: timestamp("terminal_failed_at", { withTimezone: true }),
     /** System identity of the worker attempt that recorded the terminal failure. */
     terminalFailedBy: text("terminal_failed_by"),
+    /** Immutable original authorization_snapshot evidence; NULL legacy output is not downloadable. */
+    authorizationSnapshot: jsonb("authorization_snapshot").$type<Record<string, unknown>>(),
     ...auditColumns,
   },
   (t) => [

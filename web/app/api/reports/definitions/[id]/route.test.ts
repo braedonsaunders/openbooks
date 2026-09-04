@@ -93,6 +93,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:reports-authz",
     `
+      export async function canAccessReportDefinition() { return true }
       export async function canRunReportEntity() { return true }
       export async function canRunReportStatement() { return true }
       export async function guardReportEntity() { return null }
@@ -117,6 +118,7 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/db.ts", mockUrl("db")],
   ["../../../../../lib/authz", mockUrl("authz")],
   ["../../../../../lib/report-authz", mockUrl("reports-authz")],
+  ["../../../../../lib/report-execution-context", mockUrl("reports-authz")],
   ["../../../../../lib/custom-reports", mockUrl("custom-reports")],
 ]);
 

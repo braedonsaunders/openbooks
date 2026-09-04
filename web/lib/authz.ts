@@ -27,24 +27,29 @@ export interface Authz {
 export async function getAuthz(): Promise<Authz | null> {
   const user = await currentUser();
   if (!user) return null;
+  return resolveUserAuthz(user);
+}
+
+/** Resolve current grants for a verified active identity, including scheduled execution. */
+export async function resolveUserAuthz(user: SessionUser): Promise<Authz> {
   // Super admins hold every permission in whatever org they're currently in.
   if (user.isSuperAdmin) {
     return { user, permissions: new Set<string>(["*"]), allowedSubsidiaryIds: null };
   }
   const [assignments, overrides, allowedSubs] = (await Promise.all([
-    db.execute(sql`
+    db.execute<{ permissions: string[] }>(sql`
       select r.permissions
         from role_assignments a
         join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where a.user_id = ${user.id} and a.org_id = ${user.orgId}`),
-    db.execute(sql`
+    db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
       select permission, effect
         from user_permission_overrides
        where user_id = ${user.id} and org_id = ${user.orgId}`),
-    allowedSubsidiaryIds(user.id),
-  ])) as unknown as [any, any, any];
+    allowedSubsidiaryIds(user.id, user.orgId),
+  ]));
   const permissions = resolveEffectivePermissions({
-    rolePermissionSets: assignments.rows.map((r: any) =>
+    rolePermissionSets: assignments.rows.map((r) =>
       Array.isArray(r.permissions) ? r.permissions : [],
     ),
     overrides: overrides.rows,

@@ -98,6 +98,8 @@ export type ReportEntity = {
   /** Qualified org-scoping column (e.g. `jl.org_id`). The executor ALWAYS
    *  ANDs `orgColumn = $org` into the WHERE — no query escapes the org. */
   orgColumn: string
+  /** Server-owned legal-entity boundary. null explicitly denotes shared org metadata. */
+  subsidiaryScope?: { column: string; sharedNull?: boolean } | null
   /** Columns selectable for output AND filterable. Order is preserved. */
   columns: ReportEntityColumn[]
   defaultSort?: { column: string; direction: 'asc' | 'desc' }
@@ -164,6 +166,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN locations loc ON loc.id = jl.location_id AND loc.org_id = jl.org_id
       LEFT JOIN classes cls ON cls.id = jl.class_id AND cls.org_id = jl.org_id`,
     orgColumn: 'jl.org_id',
+    subsidiaryScope: { column: 'jl.subsidiary_id' },
     columns: [
       { key: 'posting_date', label: 'Posting date', kind: 'date', expr: 'je.posting_date' },
       { key: 'entry_number', label: 'Entry #', kind: 'text', expr: 'je.entry_number' },
@@ -208,6 +211,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN locations loc ON loc.id = d.location_id AND loc.org_id = d.org_id
       LEFT JOIN classes cls ON cls.id = d.class_id AND cls.org_id = d.org_id`,
     orgColumn: 'd.org_id',
+    subsidiaryScope: { column: 'd.subsidiary_id' },
     columns: [
       { key: 'kind', label: 'Type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
       { key: 'document_number', label: 'Document #', kind: 'text', expr: 'd.document_number' },
@@ -254,6 +258,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN locations loc ON loc.id = coalesce(dl.location_id, d.location_id) AND loc.org_id = dl.org_id
       LEFT JOIN classes cls ON cls.id = coalesce(dl.class_id, d.class_id) AND cls.org_id = dl.org_id`,
     orgColumn: 'dl.org_id',
+    subsidiaryScope: { column: 'd.subsidiary_id' },
     columns: [
       { key: 'kind', label: 'Type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
       { key: 'document_number', label: 'Document #', kind: 'text', expr: 'd.document_number' },
@@ -296,6 +301,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description: 'Journal-entry headers — number, posting date, status, origin and memo. Use Ledger lines for line-level GL detail.',
     from: `journal_entries je`,
     orgColumn: 'je.org_id',
+    subsidiaryScope: { column: 'je.subsidiary_id' },
     columns: [
       { key: 'entry_number', label: 'Entry #', kind: 'text', expr: 'je.entry_number' },
       { key: 'posting_date', label: 'Posting date', kind: 'date', expr: 'je.posting_date' },
@@ -318,6 +324,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN accounts exp ON exp.id = it.expense_account_id AND exp.org_id = it.org_id
       LEFT JOIN accounts rec ON rec.id = it.cost_recovery_account_id AND rec.org_id = it.org_id`,
     orgColumn: 'it.org_id',
+    subsidiaryScope: null,
     columns: [
       { key: 'code', label: 'Code', kind: 'text', expr: 'it.code' },
       { key: 'name', label: 'Name', kind: 'text', expr: 'it.name' },
@@ -351,6 +358,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN documents d ON d.id = dl.document_id AND d.org_id = im.org_id
       LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = im.org_id`,
     orgColumn: 'im.org_id',
+    subsidiaryScope: { column: 'im.subsidiary_id' },
     featureKey: 'inventory',
     // A recall is event history, not a fiscal-period statement. In particular,
     // expires_on being the first date column must never create an implicit
@@ -414,6 +422,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN parties cust ON cust.id = prj.customer_id AND cust.org_id = prj.org_id
       LEFT JOIN parties mgr ON mgr.id = prj.manager_id AND mgr.org_id = prj.org_id`,
     orgColumn: 'prj.org_id',
+    subsidiaryScope: { column: 'prj.subsidiary_id' },
     columns: [
       { key: 'code', label: 'Code', kind: 'text', expr: 'prj.code' },
       { key: 'name', label: 'Name', kind: 'text', expr: 'prj.name' },
@@ -442,6 +451,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN items it ON it.id = te.item_id AND it.org_id = te.org_id
       LEFT JOIN departments dep ON dep.id = te.department_id AND dep.org_id = te.org_id`,
     orgColumn: 'te.org_id',
+    subsidiaryScope: { column: 'coalesce(prj.subsidiary_id, emp.subsidiary_id)' },
     columns: [
       { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
       { key: 'worked_on', label: 'Worked on', kind: 'date', expr: 'te.worked_on' },
@@ -469,6 +479,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN users sub ON sub.id = tw.submitted_by
       LEFT JOIN users apr ON apr.id = tw.approved_by`,
     orgColumn: 'tw.org_id',
+    subsidiaryScope: { column: 'emp.subsidiary_id' },
     columns: [
       { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
       { key: 'week_start', label: 'Week starting', kind: 'date', expr: 'tw.week_start' },
@@ -499,6 +510,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN projects prj ON prj.id = fa.project_id AND prj.org_id = fa.org_id
       LEFT JOIN departments dep ON dep.id = fa.department_id AND dep.org_id = fa.org_id`,
     orgColumn: 'fa.org_id',
+    subsidiaryScope: { column: 'fa.subsidiary_id' },
     columns: [
       { key: 'asset_number', label: 'Asset #', kind: 'text', expr: 'fa.asset_number' },
       { key: 'name', label: 'Name', kind: 'text', expr: 'fa.name' },
@@ -529,6 +541,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN fixed_assets fa ON fa.id = eu.fixed_asset_id AND fa.org_id = eu.org_id
       LEFT JOIN item_rate_books rb ON rb.id = eu.rate_book_id AND rb.org_id = eu.org_id`,
     orgColumn: 'eu.org_id',
+    subsidiaryScope: { column: 'eu.subsidiary_id' },
     columns: [
       { key: 'unit_number', label: 'Equipment #', kind: 'text', expr: 'eu.unit_number' },
       { key: 'name', label: 'Name', kind: 'text', expr: 'eu.name' },
@@ -561,6 +574,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description: 'Tax codes — jurisdiction, scope and recoverability.',
     from: `tax_codes tc`,
     orgColumn: 'tc.org_id',
+    subsidiaryScope: null,
     columns: [
       { key: 'code', label: 'Code', kind: 'text', expr: 'tc.code' },
       { key: 'name', label: 'Name', kind: 'text', expr: 'tc.name' },
@@ -584,6 +598,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN vendor_roles vr ON vr.party_id = pt.id AND vr.org_id = pt.org_id
       LEFT JOIN employee_roles er ON er.party_id = pt.id AND er.org_id = pt.org_id`,
     orgColumn: 'pt.org_id',
+    subsidiaryScope: { column: 'pt.subsidiary_id', sharedNull: true },
     columns: [
       { key: 'display_name', label: 'Name', kind: 'text', expr: 'pt.display_name' },
       { key: 'legal_name', label: 'Legal name', kind: 'text', expr: 'pt.legal_name' },
@@ -610,6 +625,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description: 'The chart of accounts — number, name, type and posting flags.',
     from: `accounts a`,
     orgColumn: 'a.org_id',
+    subsidiaryScope: { column: 'a.subsidiary_id', sharedNull: true },
     columns: [
       { key: 'number', label: 'Account #', kind: 'text', expr: 'a.number' },
       { key: 'name', label: 'Name', kind: 'text', expr: 'a.name' },
@@ -637,6 +653,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       JOIN parties p ON p.id = s.employee_party_id AND p.org_id = s.org_id
       LEFT JOIN pay_schedules ps ON ps.id = r.pay_schedule_id AND ps.org_id = r.org_id`,
     orgColumn: 's.org_id',
+    subsidiaryScope: { column: 'd.subsidiary_id' },
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
     columns: [
@@ -694,6 +711,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN projects prj ON prj.id = l.project_id AND prj.org_id = l.org_id
       LEFT JOIN departments dep ON dep.id = l.department_id AND dep.org_id = l.org_id`,
     orgColumn: 'l.org_id',
+    subsidiaryScope: { column: 'd.subsidiary_id' },
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
     latestOrderExpr: 's.pay_date DESC, s.id DESC, l.id DESC',
@@ -756,6 +774,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN documents d ON d.id = cmp.pay_run_document_id AND d.org_id = cmp.org_id
       LEFT JOIN pay_runs r ON r.document_id = cmp.pay_run_document_id AND r.org_id = cmp.org_id`,
     orgColumn: 'f.org_id',
+    subsidiaryScope: { column: 'd.subsidiary_id' },
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
     latestOrderExpr: 'cmp.compared_at DESC, f.id DESC',
@@ -880,6 +899,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
          LIMIT 1
       ) lim ON TRUE`,
     orgColumn: 'bal.org_id',
+    subsidiaryScope: { column: 'p.subsidiary_id' },
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
     columns: [
@@ -940,6 +960,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN pay_components c ON c.id = t.component_id AND c.org_id = t.org_id
       LEFT JOIN departments dep ON dep.id = er.department_id AND dep.org_id = er.org_id`,
     orgColumn: 't.org_id',
+    subsidiaryScope: { column: 'p.subsidiary_id' },
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
     baseFilter: {

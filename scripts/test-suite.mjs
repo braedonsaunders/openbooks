@@ -9,16 +9,8 @@ const ROOT = resolve(new URL('..', import.meta.url).pathname)
 // Keep this list in one place. Every CI suite and the developer-facing `npm
 // test` command derives its membership from the same inventory, so a new test
 // cannot accidentally land in one job but not the other.
-const TEST_PATTERNS = [
-  'scripts/check-repository-artifacts.test.mjs',
-  'scripts/deploy-edge-workflow.test.mjs',
-  'scripts/ci-pipeline-integrity.test.mjs',
-  'deploy/swarm-release.test.mjs',
-  'engine/**/*.test.ts',
-  'packages/**/*.test.ts',
-  'web/**/*.test.ts',
-  'schema/**/*.test.ts',
-]
+const TEST_PATTERNS = ['scripts', 'deploy', 'engine', 'packages', 'web', 'schema']
+  .flatMap((root) => ['ts', 'tsx', 'js', 'mjs'].map((ext) => `${root}/**/*.test.${ext}`))
 
 // Most database tests predate the `.integration.test.ts` naming convention.
 // Keep their ownership explicit here instead of guessing from arbitrary
@@ -104,7 +96,7 @@ function allTestFiles() {
 // legacy files that contain both pure and database-backed cases without relying
 // on naming alone; each file still executes exactly once in CI.
 function isDatabaseOwned(file) {
-  return /\.integration\.test\.(?:ts|mjs|js)$/.test(file) || DATABASE_TEST_OVERRIDES.has(file)
+  return /\.integration\.test\.(?:tsx?|mjs|js)$/.test(file) || DATABASE_TEST_OVERRIDES.has(file)
 }
 
 export function testManifest() {
@@ -121,6 +113,12 @@ function printManifest() {
   process.stdout.write(`${JSON.stringify(testManifest(), null, 2)}\n`)
 }
 
+/** Node's --test operands are globs even when they name an existing file.
+ * Escape route segments such as [id] so discovery and execution agree. */
+export function literalTestPath(file) {
+  return file.replace(/[\[\]*?{}]/g, (character) => `[${character}]`)
+}
+
 export function runChild(args, env) {
   return new Promise((resolveResult, reject) => {
     const child = spawn(process.execPath, args, { cwd: ROOT, stdio: 'inherit', env })
@@ -129,7 +127,7 @@ export function runChild(args, env) {
   })
 }
 
-function ownerRequest(port, request) {
+function ownerRequest(port, request, timeoutMs) {
   return new Promise((resolveResult, reject) => {
     const socket = createConnection({ host: '127.0.0.1', port })
     let buffer = ''
@@ -141,8 +139,9 @@ function ownerRequest(port, request) {
       if (error) reject(error)
       else resolveResult(value)
     }
-    socket.setTimeout(120_000, () => finish(new Error('fixture owner close timed out')))
+    socket.setTimeout(timeoutMs, () => finish(new Error('fixture owner close timed out')))
     socket.once('error', (error) => finish(error))
+    socket.once('close', () => finish(new Error('fixture owner closed without a response')))
     socket.on('data', (chunk) => {
       buffer += chunk.toString()
       const newline = buffer.indexOf('\n')
@@ -153,7 +152,9 @@ function ownerRequest(port, request) {
         finish(error)
       }
     })
-    socket.on('connect', () => socket.end(`${JSON.stringify(request)}\n`))
+    // This is a newline-framed request, not an EOF-framed request. Half-closing
+    // here makes the server close its response side before async cleanup ends.
+    socket.on('connect', () => socket.write(`${JSON.stringify(request)}\n`))
   })
 }
 
@@ -195,13 +196,30 @@ async function startFixtureOwner(env) {
   }
 }
 
-export async function stopFixtureOwner(handle) {
+export async function stopFixtureOwner(handle, { timeoutMs = 120_000 } = {}) {
   handle.clearTimeout()
+  // Subscribe before sending the request: TCP response and process close can
+  // arrive in either order. A referenced timeout also prevents silent exit.
+  const completion = new Promise((resolveClose) => {
+    if (handle.owner.exitCode != null || handle.owner.signalCode != null) {
+      resolveClose(handle.owner.exitCode ?? 1)
+      return
+    }
+    const timer = setTimeout(() => {
+      handle.owner.kill('SIGKILL')
+      resolveClose(1)
+    }, timeoutMs)
+    handle.owner.once('close', (status) => {
+      clearTimeout(timer)
+      resolveClose(status ?? 1)
+    })
+  })
   let response
   try {
-    response = await ownerRequest(handle.port, { op: 'close' })
+    response = await ownerRequest(handle.port, { op: 'close' }, timeoutMs)
   } finally {
-    await new Promise((resolveClose) => handle.owner.once('close', resolveClose))
+    const ownerStatus = await completion
+    if (ownerStatus !== 0) response = { ok: false }
     if (handle.output) {
       process.stdout.write(handle.output)
       // Also persist the lifecycle receipt to a file. The stdout copy travels
@@ -240,6 +258,7 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
     ...process.env,
     ...envOverrides,
     NODE_ENV: process.env.NODE_ENV ?? 'test',
+    TSX_TSCONFIG_PATH: resolve(ROOT, 'web/tsconfig.json'),
     OPENBOOKS_TRUSTED_TEST_BYPASS: process.env.OPENBOOKS_TRUSTED_TEST_BYPASS ?? '1',
     OPENBOOKS_TEST_FIXTURE_BEHAVIOR: process.env.OPENBOOKS_TEST_FIXTURE_BEHAVIOR ?? '1',
     ...(pooled
@@ -263,7 +282,7 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
     // fixture cannot contend with another while preserving each test's own
     // concurrency assertions.
     ...((suite === 'integration' || suite === 'restore' || suite === 'all') ? ['--test-concurrency=1'] : []),
-    ...files,
+    ...files.map(literalTestPath),
   ]
   let owner
   try {
@@ -272,6 +291,8 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
       childEnv.OPENBOOKS_TEST_FIXTURE_OWNER_PORT = String(owner.port)
     }
     const status = await runChild(args, childEnv)
+    // Remain failed until both child execution and shutdown evidence complete.
+    process.exitCode = 1
     let ownerStatus = 0
     if (owner) {
       const response = await stopFixtureOwner(owner)
@@ -279,6 +300,7 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
     }
     process.exitCode = status === 0 && ownerStatus === 0 ? 0 : 1
   } catch (error) {
+    process.exitCode = 1
     if (owner) {
       try { await stopFixtureOwner(owner) } catch {}
     }
