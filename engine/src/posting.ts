@@ -2016,7 +2016,7 @@ export async function postDocument(
     // model, not a data error, and an importer cannot ask a human to renumber
     // it. journal_entries_org_number spans every kind, so the second document
     // to post could not obtain an entry number at all and simply failed; a
-    // production NetSuite migration lost documents to exactly this.
+    // production migration lost documents to exactly this.
     //
     // Numbers stay unique. A collision with a DIFFERENT document is instead
     // resolved automatically by qualifying with the document's kind, in the
