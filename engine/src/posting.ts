@@ -1568,6 +1568,59 @@ async function resolvePostingPeriod(
   return period;
 }
 
+/**
+ * Resolve the entry number for a document's posting, qualifying it only when
+ * the natural number is already held by a DIFFERENT document.
+ *
+ * Entry numbers are unique per organization across every document kind, but
+ * source systems number per transaction type — a vendor bill and an expense
+ * report are both legitimately "1000". The importer cannot renumber the
+ * source, so the ledger resolves the clash itself rather than refusing the
+ * document.
+ *
+ * Deterministic given the ledger's state, and stable once assigned: a document
+ * that already holds a number keeps it, so re-posting and repair paths do not
+ * renumber. Document numbers are unique within a kind, so the kind-qualified
+ * form cannot itself collide; the counter is a belt-and-braces terminator, not
+ * an expected path.
+ *
+ * The caller holds `for update` on the org row, which serializes posting within
+ * an organization and makes this read-then-insert atomic.
+ */
+async function allocateEntryNumber(
+  tx: Tx,
+  orgId: string,
+  documentId: string,
+  preferred: string,
+  kind: string,
+): Promise<string> {
+  const holder = async (candidate: string): Promise<string | null | undefined> => {
+    const found = await tx.execute<{ source_document_id: string | null }>(sql`
+      select source_document_id from journal_entries
+       where org_id = ${orgId} and entry_number = ${candidate}
+       limit 1`);
+    return found.rows.length === 0 ? undefined : found.rows[0]!.source_document_id;
+  };
+
+  const held = await holder(preferred);
+  // Free, or already this document's own number.
+  if (held === undefined || held === documentId) return preferred;
+
+  // Qualify by kind, matching the -SOURCE-CORR / -SOURCE-REV suffix style.
+  const qualified = `${preferred}-${kind.toUpperCase()}`;
+  const qualifiedHeld = await holder(qualified);
+  if (qualifiedHeld === undefined || qualifiedHeld === documentId) return qualified;
+
+  for (let generation = 2; generation <= 50; generation += 1) {
+    const candidate = `${qualified}-${generation}`;
+    const candidateHeld = await holder(candidate);
+    if (candidateHeld === undefined || candidateHeld === documentId) return candidate;
+  }
+  throw new PostingError(
+    `could not allocate a journal entry number for document number "${preferred}"`,
+  );
+}
+
 export async function postDocument(
   documentId: string,
   deps: PostingDeps,
@@ -1958,6 +2011,31 @@ export async function postDocument(
     // the winner commits, then fails with a unique violation. Translate that
     // into the same PostingError the flip guard below produces: the racing
     // caller must see "already posted", never a raw driver error.
+    // Source systems number per TRANSACTION TYPE, so a vendor bill and an
+    // expense report can both legitimately be "1000" -- that is the source's
+    // model, not a data error, and an importer cannot ask a human to renumber
+    // it. journal_entries_org_number spans every kind, so the second document
+    // to post could not obtain an entry number at all and simply failed; a
+    // production NetSuite migration lost documents to exactly this.
+    //
+    // Numbers stay unique. A collision with a DIFFERENT document is instead
+    // resolved automatically by qualifying with the document's kind, in the
+    // same hyphen-suffix style the source-correction path already mints
+    // (-SOURCE-CORR / -SOURCE-REV). Document numbers are unique WITHIN a kind,
+    // so the qualified form cannot collide in turn.
+    //
+    // A concurrent post of the SAME document still resolves to the same
+    // preferred number and still collides on the index, which is what the
+    // 23505 branch below and the flip guard rely on. That is safe to keep:
+    // this transaction already holds `for update` on the org row, so postings
+    // in an organization are serialized and this read cannot race an insert.
+    const entryNumber = await allocateEntryNumber(
+      tx,
+      doc.orgId,
+      doc.id,
+      `${effectiveDoc.documentNumber}`,
+      doc.kind,
+    );
     let entry: { id: string };
     try {
       entry = (await tx
@@ -1966,7 +2044,7 @@ export async function postDocument(
           orgId: doc.orgId,
           bookId: book.id,
           subsidiaryId: subApplied.docSubId,
-          entryNumber: `${effectiveDoc.documentNumber}`,
+          entryNumber,
           postingDate,
           periodId: period.id,
           memo: effectiveDoc.memo,
@@ -1995,12 +2073,12 @@ export async function postDocument(
             from journal_entries e
             left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
            where e.org_id = ${doc.orgId}
-             and e.entry_number = ${effectiveDoc.documentNumber}
+             and e.entry_number = ${entryNumber}
            limit 1`);
         const other = claimant.rows[0];
         if (other && other.source_document_id !== doc.id) {
           throw new PostingError(
-            `journal entry number "${effectiveDoc.documentNumber}" is already used by ${other.kind ?? "another document"} ${other.document_number ?? ""} — entry numbers are unique across document kinds; give this ${doc.kind} a different document number`,
+            `journal entry number "${entryNumber}" is already used by ${other.kind ?? "another document"} ${other.document_number ?? ""}`,
           );
         }
         throw new PostingError(
