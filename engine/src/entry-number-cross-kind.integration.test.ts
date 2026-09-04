@@ -5,9 +5,9 @@
  * kind. Source systems number per TRANSACTION TYPE, so a vendor bill and an
  * expense report are both legitimately "1000" -- and an importer cannot ask a
  * human to renumber the source. Before this, the second document to post could
- * not obtain an entry number and simply failed; a production NetSuite
- * migration lost documents to it, and the error told the operator to renumber
- * a document they did not control.
+ * not obtain an entry number and simply failed; a production migration lost
+ * documents to it, and the error told the operator to renumber a document
+ * they did not control.
  *
  * The ledger now resolves the clash itself, qualifying the loser with its kind
  * in the same hyphen-suffix style the source-correction path mints. These
