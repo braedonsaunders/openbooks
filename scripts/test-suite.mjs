@@ -13,6 +13,7 @@ const TEST_PATTERNS = [
   'scripts/check-repository-artifacts.test.mjs',
   'scripts/deploy-edge-workflow.test.mjs',
   'scripts/ci-pipeline-integrity.test.mjs',
+  'deploy/swarm-release.test.mjs',
   'engine/**/*.test.ts',
   'packages/**/*.test.ts',
   'web/**/*.test.ts',
