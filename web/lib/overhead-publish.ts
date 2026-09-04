@@ -22,7 +22,7 @@ export async function computeLiveOverheadRates(orgId: string): Promise<Published
   const to = await businessToday(orgId)
   const [y, m, d] = to.split('-').map(Number)
   const from = `${(y ?? 0) - 1}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-  const tc = await trueCostData(orgId, { from, to, label: 'TTM' })
+  const tc = await trueCostData(orgId, { from, to, label: 'TTM' }, null)
   return tc.departments
     .filter((d) => d.composite > 0)
     .map((d) => ({ departmentId: d.id, ratePerHour: formatMoney(String(d.composite), 2) }))

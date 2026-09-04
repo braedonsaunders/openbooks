@@ -1,4 +1,6 @@
 import 'server-only'
+import { requireReportAuthz, snapshotReportAuthorization, withReportAuthz } from './report-execution-context'
+import { canRunReportEntity } from './report-authz'
 import { sql } from 'drizzle-orm'
 import { db, pool } from '@openbooks/engine/src/db.ts'
 import {
@@ -140,14 +142,19 @@ export async function statementDefinitionId(
   kind: string,
   match: Record<string, string> = {},
 ): Promise<string | null> {
-  const r = (await db.execute<{ id: string }>(sql`
+  const findDefinition = () => db.execute<{ id: string }>(sql`
     select id from report_definitions
      where org_id = ${orgId} and report_type = 'statement'
        and statement->>'kind' = ${kind}
        and coalesce(statement->'params', '{}'::jsonb) @> ${JSON.stringify(match)}::jsonb
      order by (kind = 'built_in') desc, created_at
      limit 1
-  `))
+  `)
+  let r = await findDefinition()
+  if (!r.rows[0]) {
+    await ensureReportDefinitions(orgId)
+    r = await findDefinition()
+  }
   return r.rows[0]?.id ?? null
 }
 
@@ -313,6 +320,8 @@ async function prepareReportExecution(
   query: ReportCustomQuery,
   labels?: ReportRunLabels,
 ) {
+  const authz = await requireReportAuthz(orgId)
+  if (!(await canRunReportEntity(authz, query))) throw new Error('Report access denied')
   const featureKey = reportEntityFeatureKey(query)
   if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
     throw new Error(`${featureKey} feature is disabled`)
@@ -328,6 +337,7 @@ async function prepareReportExecution(
     options: {
       orgId,
       entityMap: REPORT_ENTITY_MAP,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds],
       fiscalStartMonth: startMonth,
       asOf,
       labels: runLabels,
@@ -454,17 +464,22 @@ export async function recordReportRun(args: {
   scheduleId?: string | null
   maxRows?: number
 }): Promise<{ runId: string; result: ReportRunResult | null; error: string | null }> {
+  const authz = await requireReportAuthz(args.orgId)
+  if (authz.user.id !== args.userId || !(await canRunReportEntity(authz, args.query))) throw new Error('Report access denied')
+  const definition = await loadReportDefinition(args.orgId, args.definitionId)
+  if (!definition) throw new Error('Report not found')
+  const authorization_snapshot = snapshotReportAuthorization(authz, { ...definition, query: args.query as unknown as Record<string, unknown> })
   const started = new Date().toISOString()
   const inserted = (await db.execute<{ id: string }>(sql`
-    insert into report_runs (org_id, definition_id, schedule_id, trigger, status, started_at, created_by)
+    insert into report_runs (org_id, definition_id, schedule_id, trigger, status, started_at, created_by, authorization_snapshot)
     values (${args.orgId}, ${args.definitionId}, ${args.scheduleId ?? null}, ${args.trigger},
-            'running', ${started}, ${args.userId})
+            'running', ${started}, ${args.userId}, ${JSON.stringify(authorization_snapshot)}::jsonb)
     returning id
   `))
   const runId = inserted.rows[0]!.id
 
   try {
-    const result = await executeReport(args.orgId, args.query, args.maxRows ?? REPORT_MAX_ROWS)
+    const result = await withReportAuthz(authz, () => executeReport(args.orgId, args.query, args.maxRows ?? REPORT_MAX_ROWS))
     // The stored CSV artifact bakes the locale of whoever triggered the run.
     const csv = reportResultToCsv(result, await reportCsvOptions())
     await db.execute(sql`

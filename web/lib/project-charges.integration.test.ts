@@ -33,6 +33,7 @@ test(
       import { installTrustedTestDatabaseBypass } from './engine/src/test-database-bypass.ts';
       import { createScratchOrg, dropScratchOrg, seedFlowActors } from './engine/src/test-fixtures.ts';
       import { ChargeCommittedError, createProjectCharge } from './web/lib/project-charges.ts';
+      import { priceCappedLadder } from './engine/src/item-rate-pricing.ts';
 
       installTrustedTestDatabaseBypass();
       const org = await createScratchOrg();
@@ -99,6 +100,23 @@ test(
         assert.ok(draft.id);
         assert.match(draft.documentNumber, /^CHG-/);
         assert.equal(draft.approvalPending, false);
+
+        const tier = { unitCode: 'pack', unitName: 'Package', baseQuantity: '3', costRate: '100', billRate: '300' };
+        const fractional = await createProjectCharge(org.orgId, actorId, {
+          projectId, documentDate: org.date,
+          lines: [{ itemId, quantity: '0.0001', rateSnapshot: {
+            rateVersionId: null, baseUnit: 'unit', invoicePresentation: 'rate_components',
+            cost: priceCappedLadder('0.0001', [tier], 'cost'),
+            bill: priceCappedLadder('0.0001', [tier], 'bill'),
+          } }],
+        }, { post: false });
+        const fraction = (await db.execute(sql\`
+          select c.quantity, c.amount, c.quantity_ratio from charge_rate_components c
+          join document_lines l on l.id = c.document_line_id and l.org_id = c.org_id
+          where l.document_id = \${fractional.id} and c.role = 'bill'
+        \`)).rows[0];
+        assert.deepEqual(fraction, { quantity: '0.00003333', amount: '0.0100',
+          quantity_ratio: { numerator: '1', denominator: '30000' } });
       } finally {
         await dropScratchOrg(org.orgId);
       }

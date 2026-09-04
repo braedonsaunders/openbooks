@@ -29,7 +29,7 @@ test("capped ladder preserves strict greater-than promotion", () => {
   const result = priceCappedLadder("3", tiers, "bill");
   assert.equal(result.amount, "300.0000");
   assert.equal(result.components[0]!.unitCode, "day");
-  assert.equal(result.components[0]!.quantity, "3.0000");
+  assert.equal(result.components[0]!.quantity, "3.00000000");
 });
 
 test("zero cost and positive billing price are independent", () => {
@@ -52,4 +52,13 @@ test("an explicitly selected package is not promoted or decomposed", () => {
   const result = priceSelectedRateUnit("2", threeTier[1]!, "bill");
   assert.equal(result.amount, "500.0000");
   assert.deepEqual(result.components.map((c) => [c.unitCode, c.quantity, c.rate]), [["week", "2.0000", "250"]]);
+});
+
+test("fractional package money rounds once without dropping small usage", () => {
+  const tier: RateTier = { unitCode: 'pack', unitName: 'Package', baseQuantity: '3', costRate: '100', billRate: '300' };
+  assert.equal(priceCappedLadder('1', [tier], 'cost').amount, '33.3333');
+  const tiny = priceCappedLadder('0.0001', [tier], 'bill');
+  assert.equal(tiny.amount, '0.0100');
+  assert.equal(tiny.components.length, 1);
+  assert.deepEqual(tiny.components[0]!.quantityRatio, { numerator: '1', denominator: '30000' });
 });

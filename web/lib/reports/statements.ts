@@ -240,7 +240,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
  * Interactive callers default to the org's business day; exports and other
  * reproducible reads can pin that same boundary explicitly.
  */
-export async function partnerBalances(kind: "receivable" | "payable", orgId?: string, asOf?: string, bookId?: string | null) {
+export async function partnerBalances(kind: "receivable" | "payable", orgId?: string, asOf?: string, bookId?: string | null, dims?: DimFilter) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
   const resolvedAsOf = asOf ?? (await businessToday(resolvedOrgId));
   const type = kind === "receivable" ? "asset_receivable" : "liability_payable";
@@ -258,7 +258,7 @@ export async function partnerBalances(kind: "receivable" | "payable", orgId?: st
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = ${resolvedOrgId}
      where a.org_id = ${resolvedOrgId} and l.org_id = ${resolvedOrgId}
-       and a.type = ${type}
+       and a.type = ${type} and ${dimWhere(dims)}
      group by p.id, p.display_name
     having abs(sum(l.amount)) > 0
      order by abs(sum(l.amount)) desc

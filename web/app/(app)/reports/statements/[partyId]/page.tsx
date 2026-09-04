@@ -39,7 +39,7 @@ export default async function PartnerStatementPage({
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const [st, org] = await Promise.all([
-    partnerStatement(partyId, authz.user.orgId, { from: period.from, to: period.to, side }),
+    partnerStatement(partyId, authz.user.orgId, { from: period.from, to: period.to, side, dims: { subsidiaryIds: authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds] } }),
     orgInfo(),
   ])
   const m = (v: string) => money(v, { currency: org?.base_currency })

@@ -7,13 +7,13 @@ import { useFormatter, useTranslations } from 'next-intl'
 import {
   AlertTriangle, Building2, Calculator, ChartArea, CheckCircle2, Clock, Coins, DollarSign,
   Grid3X3, Info, Layers, Package, Percent, Pin, PlusCircle, RotateCcw, Scale, SlidersHorizontal,
-  TrendingDown, TrendingUp, Trophy, UserRound, Wand2, Gauge as GaugeIcon, Download,
+  TrendingDown, TrendingUp, UserRound, Wand2, Gauge as GaugeIcon, Download,
 } from 'lucide-react'
 import { cn, Select, Drawer } from '@openbooks/ui'
 import type { CustomCategory, TrueCostData, TrueCostProfile } from '../../../../lib/analytics/true-cost-data'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
-import { Donut, Chart } from '../_ui/charts'
+import { Donut } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
@@ -22,17 +22,17 @@ import { useMoney } from '@/components/money-provider'
 
 /* ------------------------------------------------------------------ helpers */
 
-type Tab = 'overview' | 'categories' | 'matrix' | 'absorption' | 'selling' | 'trends' | 'config'
+type Tab = 'categories' | 'matrix' | 'absorption' | 'selling' | 'config'
 
 /**
  * Which tabs each surface owns. The BUILDER (categories/matrix/config) lives in
  * the Setup "Overhead Model" workspace — the single source of truth for the
- * rate-engine config; the analytics dashboard is a read-only consumer
- * (overview/absorption/selling/trends) that links to Setup to configure.
+ * rate-engine config. Recovery/selling planners link to Setup to configure;
+ * historical analytical output lives in the shared True Cost report.
  */
 export type TrueCostMode = 'analytics' | 'setup'
 const MODE_TABS: Record<TrueCostMode, readonly Tab[]> = {
-  analytics: ['overview', 'absorption', 'selling', 'trends'],
+  analytics: ['absorption', 'selling'],
   setup: ['categories', 'matrix', 'config'],
 }
 const useRate = () => {
@@ -130,17 +130,10 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
   const tabs = MODE_TABS[mode]
   const [tab, setTab] = useState<Tab>(tabs[0]!)
   const [openCatId, setOpenCatId] = useState<string | null>(null)
-  const [openDeptId, setOpenDeptId] = useState<string | null>(null)
   const [cell, setCell] = useState<CellRef | null>(null)
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const k = data.kpis
   const under = k.gap < 0
-  // Cross-surface navigation: a builder tab requested from the read-only
-  // analytics surface routes to the Setup workspace (and vice versa).
-  const goTo = (t: Tab) => {
-    if (tabs.includes(t)) setTab(t)
-    else router.push(mode === 'analytics' ? '/admin/setup/overhead' : '/analytics/true-cost')
-  }
 
   return (
     <div className="space-y-5">
@@ -175,144 +168,17 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
       </div>
 
       <div key={tab}>
-        {tab === 'overview' ? <OverviewTab data={data} goTo={goTo} openCat={setOpenCatId} openDept={setOpenDeptId} /> : null}
         {tab === 'categories' ? <CategoriesTab data={data} openCat={setOpenCatId} /> : null}
         {tab === 'matrix' ? <MatrixTab data={data} onDrill={setCell} /> : null}
         {tab === 'absorption' ? <AbsorptionTab data={data} /> : null}
         {tab === 'selling' ? <SellingTab data={data} /> : null}
-        {tab === 'trends' ? <TrendsTab data={data} /> : null}
         {tab === 'config' ? <ConfigTab data={data} /> : null}
       </div>
 
       {openCatId ? <CategoryFlyout catId={openCatId} data={data} onClose={() => setOpenCatId(null)} onDrillAccount={setDrill} /> : null}
-      {openDeptId ? <DeptFlyout deptId={openDeptId} data={data} onClose={() => setOpenDeptId(null)} /> : null}
       {cell ? <CellFlyout cell={cell} data={data} onClose={() => setCell(null)} /> : null}
       <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
     </div>
-  )
-}
-
-/* ---------------------------------------------------------------- Overview */
-
-function OverviewTab({ data, goTo, openCat, openDept }: { data: TrueCostData; goTo: (t: Tab) => void; openCat: (id: string) => void; openDept: (id: string) => void }) {
-  const t = useTranslations('analytics.trueCost')
-  const rate = useRate()
-  const whole = useWholeNumber()
-  const percent = usePercent()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
-  const money0 = (n: number) => fmtMoney(n)
-  const k = data.kpis
-  const cats = data.categories
-
-  return (
-    <div className="space-y-5">
-      <Panel
-        title={t('panels.rateComposition')}
-        icon={Layers}
-        actions={
-          <span className="flex items-center gap-2">
-            {data.unassigned.length > 0 ? (
-              <button type="button" onClick={() => goTo('categories')} className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
-                <AlertTriangle size={12} />
-                <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">{whole(data.unassigned.length)}</span>
-                {t('actions.unassigned')}
-              </button>
-            ) : null}
-            <button type="button" onClick={() => goTo('categories')} className="rounded-md border border-teal-500/50 px-2.5 py-1 text-xs font-medium text-teal-600 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-950/40">{t('actions.manage')}</button>
-          </span>
-        }
-        bodyClassName="p-0"
-      >
-        {/* Summary strip */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/60 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/30">
-          <div>
-            <p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('summary.compositeRate')}</p>
-            <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{rate(k.compositeRate)}</p>
-          </div>
-          <div className="flex gap-6 text-right">
-            <div><p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('summary.periodBurden')}</p><p className="text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">{money0(k.totalOverhead)}</p></div>
-            <div><p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('summary.billedHours')}</p><p className="text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">{whole(k.billedHours)}</p></div>
-            <div><p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('summary.categories')}</p><p className="text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">{whole(cats.length)}</p></div>
-          </div>
-        </div>
-
-        {/* Segmented composition bar */}
-        {k.compositeRate > 0 ? (
-          <div className="px-4 pt-3">
-            <div className="flex h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-              {cats.map((c) => (
-                <div key={c.id} title={`${c.name} ${rate(c.rate)}`} style={{ width: `${Math.max(0, (c.rate / k.compositeRate) * 100)}%`, backgroundColor: c.color ?? FALLBACK }} />
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {/* Category cards grid with mini donuts */}
-        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
-          {cats.map((c) => {
-            const pct = k.compositeRate > 0 ? (c.rate / k.compositeRate) * 100 : 0
-            const deptSlices = data.departments.map((d) => ({ value: c.byDept[d.id]?.amount ?? 0 })).filter((s) => s.value > 0)
-            return (
-              <button key={c.id} type="button" onClick={() => openCat(c.id)} className="rounded-xl bg-slate-50/80 p-3 text-left transition-all hover:bg-white hover:shadow dark:bg-slate-800/40 dark:hover:bg-slate-800">
-                <div className="flex items-center gap-3">
-                  <MiniDonut color={c.color ?? FALLBACK} slices={deptSlices.length ? deptSlices.map((s) => s.value) : [1]} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">{c.name}</p>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500">{t(c.categoryType === 'expense' ? 'cards.typeExpense' : c.categoryType === 'time' ? 'cards.typeTime' : 'cards.typeCustom')} · {percent(pct)}</p>
-                  </div>
-                  <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{rate(c.rate)}</p>
-                </div>
-                <div className="mt-2.5 flex justify-between border-t border-slate-200/70 pt-2 text-center dark:border-slate-700/60">
-                  <span className="flex-1"><span className="block text-[9px] uppercase text-slate-400">{t('cards.period')}</span><span className="text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300">{money(c.totalAmount)}</span></span>
-                  {c.categoryType === 'expense'
-                    ? <span className="flex-1"><span className="block text-[9px] uppercase text-slate-400">{t('cards.accounts')}</span><span className="text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300">{whole(c.accounts.length)}</span></span>
-                    : <span className="flex-1"><span className="block text-[9px] uppercase text-slate-400">{t('cards.source')}</span><span className="text-xs font-semibold capitalize text-slate-600 dark:text-slate-300">{c.categoryType === 'time' ? t('cards.timesheets') : c.categoryType}</span></span>}
-                  <span className="flex-1"><span className="block text-[9px] uppercase text-slate-400">{t('cards.base')}</span><span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t('cards.baseHours')}</span></span>
-                </div>
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="flex gap-5 border-t border-slate-100 bg-slate-50/60 px-4 py-2 text-xs text-slate-400 dark:border-slate-800 dark:bg-slate-800/30 dark:text-slate-500">
-          <span className="flex items-center gap-1.5"><Building2 size={12} />{t('footer.departments', { count: data.departments.length })}</span>
-          <span className="flex items-center gap-1.5"><UserRound size={12} />{t('footer.employees', { count: Math.round(k.employeeCount) })}</span>
-          <span className="flex items-center gap-1.5"><Clock size={12} />{t('footer.hoursWorked', { count: Math.round(k.totalHours) })}</span>
-        </div>
-      </Panel>
-
-      <Panel title={t('panels.rateByDepartment')} icon={Building2} actions={<button type="button" onClick={() => goTo('matrix')} className="text-xs font-medium text-teal-600 hover:underline dark:text-teal-400">{t('actions.viewFullMatrix')}</button>}>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-          {data.departments.map((d) => (
-            <button key={d.id} type="button" onClick={() => openDept(d.id)} className="rounded-lg bg-slate-50/80 p-3 text-center transition-all hover:bg-white hover:shadow dark:bg-slate-800/40 dark:hover:bg-slate-800">
-              <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400" title={d.name}>{d.name}</p>
-              <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{rate(d.composite)}</p>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500">{t('absorption.hrsShort', { count: Math.round(d.billedHours) })}</p>
-            </button>
-          ))}
-        </div>
-      </Panel>
-    </div>
-  )
-}
-
-/** Tiny SVG donut for category cards (dept split in the category colour). */
-function MiniDonut({ color, slices }: { color: string; slices: number[] }) {
-  const total = slices.reduce((s, v) => s + v, 0) || 1
-  const r = 16, cx = 22, cy = 22, sw = 8
-  const circ = 2 * Math.PI * r
-  const offsets = slices.map((_, index) => slices.slice(0, index).reduce((sum, value) => sum + value, 0) / total)
-  return (
-    <svg width="44" height="44" viewBox="0 0 44 44" className="shrink-0 -rotate-90">
-      {slices.map((v, i) => {
-        const frac = v / total
-        const dash = frac * circ
-        return (
-          <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeOpacity={1 - i * 0.18} strokeWidth={sw} strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={-offsets[i]! * circ} />
-        )
-      })}
-    </svg>
   )
 }
 
@@ -506,51 +372,6 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
 }
 
 /* ------------------------------------------------------ Dept + cell drills */
-
-function DeptFlyout({ deptId, data, onClose }: { deptId: string; data: TrueCostData; onClose: () => void }) {
-  const t = useTranslations('analytics.trueCost')
-  const rate = useRate()
-  const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: number) => fmtMoney(n)
-  const dept = data.departments.find((d) => d.id === deptId)
-  if (!dept) return null
-  const rows = data.categories
-    .map((c) => ({ c, r: c.byDept[deptId]?.rate ?? 0, amt: c.byDept[deptId]?.amount ?? 0 }))
-    .filter((x) => x.amt !== 0)
-    .sort((a, b) => b.r - a.r)
-  return (
-    <Drawer open onClose={onClose} size="md" title={dept.name} description={t('deptFlyout.description', { billed: Math.round(dept.billedHours), total: Math.round(dept.totalHours) })} bodyClassName="p-0 overflow-y-auto">
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-white dark:bg-slate-900">
-          <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-            <th className="px-4 py-2 text-left font-medium">{t('deptFlyout.colCategory')}</th>
-            <th className="px-4 py-2 text-right font-medium">{t('deptFlyout.colExpense')}</th>
-            <th className="px-4 py-2 text-right font-medium">{t('deptFlyout.colRate')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ c, r, amt }) => (
-            <tr key={c.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-              <td className="px-4 py-2">
-                <span className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: c.color ?? FALLBACK }} />
-                  {c.name}
-                </span>
-              </td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money0(amt)}</td>
-              <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{rate(r)}</td>
-            </tr>
-          ))}
-          <tr className="bg-slate-50/70 font-bold dark:bg-slate-800/40">
-            <td className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{t('deptFlyout.composite')}</td>
-            <td className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(rows.reduce((s, x) => s + x.amt, 0))}</td>
-            <td className="px-4 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{rate(dept.composite)}</td>
-          </tr>
-        </tbody>
-      </table>
-    </Drawer>
-  )
-}
 
 function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData; onClose: () => void }) {
   const t = useTranslations('analytics.trueCost')
@@ -1297,160 +1118,6 @@ function SellingTab({ data }: { data: TrueCostData }) {
             />
           </Panel>
         </div>
-      </div>
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ Trends */
-
-type TrendMode = 'composite' | 'category' | 'department'
-
-function TrendsTab({ data }: { data: TrueCostData }) {
-  const t = useTranslations('analytics.trueCost')
-  const rate = useRate()
-  const whole = useWholeNumber()
-  const format = useFormatter()
-  const signedPercent = (value: number, fractionDigits = 0) => format.number(value / 100, {
-    style: 'percent',
-    signDisplay: 'exceptZero',
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  })
-  const [mode, setMode] = useState<TrendMode>('composite')
-  const active = data.monthly.filter((m) => m.billedHours > 0)
-  const current = active.at(-1)?.rate ?? 0
-  const prev = active.at(-2)?.rate ?? current
-  const change = prev > 0 ? ((current - prev) / prev) * 100 : 0
-  const avg = active.length ? active.reduce((s, m) => s + m.rate, 0) / active.length : 0
-  const min = active.length ? Math.min(...active.map((m) => m.rate)) : 0
-  const max = active.length ? Math.max(...active.map((m) => m.rate)) : 0
-
-  const monthLabel = (value: string) => {
-    const match = /^(\d{4})-(\d{2})/.exec(value)
-    if (!match) return value
-    return format.dateTime(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1)), {
-      month: 'short',
-      year: '2-digit',
-      timeZone: 'UTC',
-    })
-  }
-  const labels = [...data.monthly.map((m) => monthLabel(m.month)), ...data.forecast.map((f) => monthLabel(f.month))]
-  const chartOption = (() => {
-    const base = {
-      grid: { top: 28, bottom: 26, left: 52, right: 14 },
-      legend: { top: 0, type: 'scroll' as const },
-      tooltip: { trigger: 'axis' as const, valueFormatter: (v: unknown) => (v == null ? '—' : rate(Number(v))) },
-      xAxis: { type: 'category' as const, data: labels },
-      yAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => rate(v) } },
-    }
-    if (mode === 'composite') {
-      return {
-        ...base,
-        series: [
-          { name: t('trends.seriesComposite'), type: 'line' as const, areaStyle: { opacity: 0.12 }, data: [...data.monthly.map((m) => m.rate), ...data.forecast.map(() => null)], lineStyle: { width: 2, color: '#14b8a6' }, itemStyle: { color: '#14b8a6' } },
-          { name: t('trends.seriesForecast'), type: 'line' as const, data: [...data.monthly.map((month, i) => (i === data.monthly.length - 1 ? month.rate : null)), ...data.forecast.map((f) => f.rate)], lineStyle: { width: 2, type: 'dashed' as const, color: '#14b8a6' }, itemStyle: { color: '#14b8a6' }, symbol: 'diamond' },
-        ],
-      }
-    }
-    if (mode === 'category') {
-      return {
-        ...base,
-        series: data.categories.map((c) => ({
-          name: c.name, type: 'line' as const,
-          data: [...data.monthly.map((m) => m.byCategory[c.key] ?? 0), ...data.forecast.map(() => null)],
-          lineStyle: { width: 1.5, color: c.color ?? undefined }, itemStyle: { color: c.color ?? undefined }, symbolSize: 4,
-        })),
-      }
-    }
-    return {
-      ...base,
-      series: data.departments.map((d) => ({
-        name: d.name, type: 'line' as const,
-        data: [...data.monthly.map((m) => m.byDept[d.id] ?? 0), ...data.forecast.map(() => null)],
-        lineStyle: { width: 1.5 }, symbolSize: 4,
-      })),
-    }
-  })()
-
-  const movers = (() => {
-    if (active.length < 2) return []
-    const last = active.at(-1)!
-    const before = active.at(-2)!
-    return data.categories.map((c) => {
-      const curr = last.byCategory[c.key] ?? 0
-      const prior = before.byCategory[c.key] ?? 0
-      return { cat: c, curr, change: prior > 0 ? ((curr - prior) / prior) * 100 : curr > 0 ? 100 : 0 }
-    }).sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 6)
-  })()
-
-  const lastActiveMonth = active.at(-1)
-  const priorActiveMonth = active.at(-2)
-  const scorecard = [...data.departments].sort((a, b) => a.composite - b.composite).map((d, i) => {
-      const curr = lastActiveMonth?.byDept[d.id] ?? d.composite
-      const prior = priorActiveMonth?.byDept[d.id] ?? curr
-      return { d, rank: i + 1, change: prior > 0 ? ((curr - prior) / prior) * 100 : 0 }
-    })
-  const maxComposite = Math.max(...data.departments.map((d) => d.composite), 1)
-
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={GaugeIcon} accent="sky" label={t('trends.currentRate')} value={rate(current)} sub={t('trends.latestMonth')} />
-        <KpiCard icon={change > 0 ? TrendingUp : TrendingDown} accent={change > 0 ? 'red' : 'emerald'} label={t('trends.monthChange')} value={signedPercent(change, 1)} sub={t('trends.vsPriorMonth')} tone={change > 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={Scale} accent="violet" label={t('trends.periodAverage')} value={rate(avg)} sub={t('trends.monthsCount', { count: active.length })} />
-        <KpiCard icon={ChartArea} accent="amber" label={t('trends.range')} value={`${rate(min)}–${rate(max)}`} sub={t('trends.monthlyComposite')} />
-      </div>
-
-      <Panel
-        title={t('panels.compositeTrend')}
-        icon={ChartArea}
-        actions={
-          <span className="flex gap-1">
-            {(['composite', 'category', 'department'] as TrendMode[]).map((m) => (
-              <button key={m} type="button" onClick={() => setMode(m)} className={cn('rounded-md border px-2 py-1 text-[11px] font-medium capitalize', mode === m ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400')}>{m === 'composite' ? t('trends.modeComposite') : m === 'category' ? t('trends.modeByCategory') : t('trends.modeByDepartment')}</button>
-            ))}
-          </span>
-        }
-      >
-        <Chart option={chartOption as never} height={300} />
-      </Panel>
-
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Panel title={t('panels.biggestMovers')} icon={TrendingUp} hint={t('hints.movers')} bodyClassName="p-0">
-          <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-            {movers.map((m, i) => (
-              <li key={m.cat.id} className="px-4 py-2.5">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="w-5 text-xs font-semibold text-slate-300 dark:text-slate-600">#{whole(i + 1)}</span>
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: m.cat.color ?? FALLBACK }} />
-                  <span className="min-w-0 flex-1 truncate font-medium text-slate-700 dark:text-slate-300">{m.cat.name}</span>
-                  <span className="tabular-nums text-slate-500 dark:text-slate-400">{rate(m.curr)}</span>
-                  <span className={cn('w-16 text-right text-xs font-bold tabular-nums', m.change > 0 ? 'text-rose-600 dark:text-rose-400' : m.change < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>{signedPercent(m.change)}</span>
-                </div>
-                <div className="ml-7 mt-1 h-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                  <div className={cn('h-full rounded-full', m.change > 0 ? 'bg-rose-400' : 'bg-emerald-400')} style={{ width: `${Math.min(100, Math.abs(m.change))}%` }} />
-                </div>
-              </li>
-            ))}
-            {!movers.length ? <li className="px-4 py-6 text-center text-sm text-slate-400">{t('trends.notEnoughHistory')}</li> : null}
-          </ul>
-        </Panel>
-        <Panel title={t('panels.deptScorecard')} icon={Trophy} hint={t('hints.scorecard')} bodyClassName="p-0">
-          <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-            {scorecard.map(({ d, rank, change: ch }) => (
-              <li key={d.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                <span className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold', rank === 1 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' : rank === 2 ? 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300' : rank === 3 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400' : 'bg-slate-100 text-slate-400 dark:bg-slate-800')}>{whole(rank)}</span>
-                <span className="w-28 truncate font-medium text-slate-700 dark:text-slate-300">{d.name}</span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                  <div className="h-full rounded-full bg-teal-400" style={{ width: `${(d.composite / maxComposite) * 100}%` }} />
-                </div>
-                <span className="w-20 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{rate(d.composite)}</span>
-                <span className={cn('w-14 text-right text-xs font-semibold tabular-nums', ch > 0 ? 'text-rose-500' : ch < 0 ? 'text-emerald-500' : 'text-slate-400')}>{signedPercent(ch)}</span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
       </div>
     </div>
   )

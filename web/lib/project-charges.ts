@@ -293,10 +293,10 @@ export async function createProjectCharge(
       for (const c of componentRows) {
         await tx.execute(sql`
           insert into charge_rate_components (org_id, document_line_id, role, rate_line_id, unit_code, unit_name,
-                                               quantity, rate, amount, sequence, created_by)
+                                               quantity, rate, amount, sequence, created_by, quantity_ratio)
           values (${orgId}, ${insertedLine!.id}, ${c.role}, ${c.rateLineId}, ${c.unitCode}, ${c.unitName},
                   ${exactQuantity(c.quantity, 'Component quantity')}, ${exactMoney(c.rate, 'Component rate')},
-                  ${exactMoney(c.amount, 'Component amount')}, ${componentSequence++}, ${userId})
+                  ${exactMoney(c.amount, 'Component amount')}, ${componentSequence++}, ${userId}, ${'quantityRatio' in c && c.quantityRatio ? JSON.stringify(c.quantityRatio) : null}::jsonb)
         `)
       }
       amounts.push(costAmount)

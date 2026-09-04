@@ -107,6 +107,12 @@ export const STANDARD_STATEMENT_DEFINITIONS: StandardStatementDefinition[] = [
     params: { kind: 'payable' },
   },
   {
+    slug: 'true-cost',
+    name: 'True Cost',
+    description: 'Overhead allocation, department rates and period trends from the configured cost model.',
+    statementKind: 'true-cost',
+  },
+  {
     slug: 'project-profitability',
     name: 'Project Profitability',
     description: 'Per-project revenue, cost and margin with approved job hours; ties to the P&L.',

@@ -171,7 +171,7 @@ export async function resolveApiKeyAuth(
       select permission, effect
         from user_permission_overrides
        where user_id = ${keyRow.user_id} and org_id = ${keyRow.org_id}`),
-    allowedSubsidiaryIds(keyRow.user_id),
+    allowedSubsidiaryIds(keyRow.user_id, keyRow.org_id),
   ]);
   const assignments = assignmentResult as unknown as { rows: ApiKeyRoleSqlRow[] };
   const overrides = overrideResult as unknown as { rows: PermissionOverrideSqlRow[] };

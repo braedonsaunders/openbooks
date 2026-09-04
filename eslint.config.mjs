@@ -19,6 +19,8 @@ export default defineConfig([
     "test-results/**",
     // Vendored third-party tarballs are not maintained in this repository.
     "vendor/**",
+    "tmp/**",
+    ".local/**",
   ]),
   // Next.js route handlers are server request scopes, not React render scopes;
   // they contain no components or hooks. The use-prefixed helpers they call

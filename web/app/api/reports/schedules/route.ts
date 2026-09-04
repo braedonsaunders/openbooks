@@ -1,13 +1,14 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import {
   computeNextRunAt,
   normalizeReportRecipientEmails,
   validateCadenceInput,
 } from '@openbooks/reports'
 import { can, guardPermission } from '../../../../lib/authz'
+import { canAccessReportArtifact, canAccessReportDefinition, snapshotReportAuthorization } from '../../../../lib/report-execution-context'
 import { loadReportDefinition } from '../../../../lib/custom-reports'
 
 export const runtime = 'nodejs'
@@ -21,14 +22,24 @@ export async function GET(req: Request) {
 
   const rows = (await db.execute(sql`
     select id, definition_id, cadence, day_of_week, day_of_month, hour, minute,
-           timezone, recipient_emails, next_run_at, active
+           timezone, recipient_emails, next_run_at, active, authorization_snapshot
       from report_schedules
      where org_id = ${user.orgId}
        ${definitionId ? sql`and definition_id = ${definitionId}` : sql``}
      order by next_run_at
   `))
+  const schedules = []
+  for (const row of rows.rows) {
+    const def = await loadReportDefinition(user.orgId, String(row.definition_id))
+    if (def && await canAccessReportDefinition(gate, def) &&
+        (row.authorization_snapshot == null || await canAccessReportArtifact(gate, row.authorization_snapshot))) {
+      const visible = { ...row }
+      delete visible.authorization_snapshot
+      schedules.push(visible)
+    }
+  }
   return NextResponse.json({
-    schedules: rows.rows,
+    schedules,
     canSchedule: can(gate, 'reports.schedule') || can(gate, '*'),
   })
 }
@@ -63,6 +74,7 @@ export async function POST(req: Request) {
   }
   const def = await loadReportDefinition(user.orgId, body.definitionId)
   if (!def) return NextResponse.json({ error: 'report not found' }, { status: 404 })
+  if (!(await canAccessReportDefinition(gate, def))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })
 
   let cadence
   let recipients: string[]
@@ -107,17 +119,27 @@ export async function POST(req: Request) {
   }
   const nextRunAt = computeNextRunAt(cadence)
 
+  return withOrgTransaction(user.orgId, async () => {
   const inserted = (await db.execute(sql`
     insert into report_schedules (org_id, definition_id, cadence, day_of_week, day_of_month,
                                   hour, minute, timezone, recipient_emails, filters, next_run_at, active,
-                                  created_by, updated_by)
+                                  created_by, updated_by, authorization_snapshot)
     values (${user.orgId}, ${def.id}, ${cadence.cadence}, ${cadence.dayOfWeek}, ${cadence.dayOfMonth},
             ${cadence.hour}, ${cadence.minute}, ${cadence.timezone}, ${JSON.stringify(recipients)}::jsonb,
             ${filters ? JSON.stringify(filters) : null}::jsonb,
-            ${nextRunAt.toISOString()}, ${body.active !== false}, ${user.id}, ${user.id})
+            ${nextRunAt.toISOString()}, ${body.active !== false}, ${user.id}, ${user.id}, ${JSON.stringify(snapshotReportAuthorization(gate, def))}::jsonb)
     returning id, definition_id, cadence, day_of_week, day_of_month, hour, minute,
               timezone, recipient_emails, next_run_at, active
   `))
 
-  return NextResponse.json({ schedule: inserted.rows[0] }, { status: 201 })
+  const created = inserted.rows[0]
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, at, request_id)
+    values (${user.orgId}, 'report_schedules', ${created!.id}, 'insert',
+      ${JSON.stringify({ reason: 'report schedule created', before: null,
+        after: { ...created, authorization_snapshot: snapshotReportAuthorization(gate, def) } })}::jsonb,
+      ${user.id}, now(), ${req.headers.get('X-Request-Id')})
+  `)
+  return NextResponse.json({ schedule: created }, { status: 201 })
+  })
 }

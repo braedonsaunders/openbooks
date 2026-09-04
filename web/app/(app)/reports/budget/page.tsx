@@ -64,7 +64,7 @@ export default async function BudgetPage({
     netIncome: t('pnl.netIncome'),
     totalOf: (section: string) => t('statement.sectionTotal', { section }),
   }
-  const view = await budgetVsActualView(scenarioId, authz.user.orgId, labels, q.dims)
+  const view = await budgetVsActualView(scenarioId, authz.user.orgId, labels, q.dims, authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds])
   return (
     <ListPageLayout
       header={

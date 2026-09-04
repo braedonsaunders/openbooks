@@ -113,7 +113,8 @@ export function subsidiaryVisibleFilter(column: SQL, allowed: ReadonlySet<string
  * A user without a role receives an empty set. Feed the result to list/report WHERE clauses:
  * `and subsidiary_id = any(...)` only when non-null.
  */
-export async function allowedSubsidiaryIds(userId: string): Promise<Set<string> | null> {
+export async function allowedSubsidiaryIds(userId: string, orgId: string): Promise<Set<string> | null> {
+  if (!orgId) throw new Error("Subsidiary authorization requires an organization");
   // Identity-layer lookup: the user's assignments and super-admin flag live in
   // their HOME org, which is invisible under another org's RLS context when a
   // member is acting cross-org (org switch). Read them with the identity
@@ -125,7 +126,7 @@ export async function allowedSubsidiaryIds(userId: string): Promise<Set<string> 
     const assignments = (await db.execute<{ restriction: SubsidiaryRestriction | null }>(sql`
       select r.subsidiary_restriction as restriction
         from role_assignments a join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-       where a.user_id = ${userId}`));
+       where a.user_id = ${userId} and a.org_id = ${orgId}`));
     return { superAdmin: su.rows[0]?.is_super_admin === true, rows: assignments.rows as { restriction: SubsidiaryRestriction | null }[] };
   });
   if (identity.superAdmin) return null;

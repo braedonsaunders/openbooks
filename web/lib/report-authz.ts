@@ -43,6 +43,7 @@ export function reportEntityFeatureKey(query: unknown): string | null {
 /** Statement kinds that disappear when their Features switch is off. */
 export const STATEMENT_KIND_FEATURE: Partial<Record<string, string>> = {
   'project-profitability': 'projects',
+  'true-cost': 'projects',
   budget: 'budgets',
 }
 
@@ -53,6 +54,8 @@ export function reportStatementFeatureKey(kind: string | null | undefined): stri
 
 /** True when `authz` may execute a plan against this entity. */
 export async function canRunReportEntity(authz: Authz, query: unknown): Promise<boolean> {
+  const entity = (query as { entity?: string } | null)?.entity
+  if (!entity || !REPORT_ENTITY_MAP[entity]) return false
   const required = reportEntityPermission(query)
   if (required && !can(authz, required)) return false
   const featureKey = reportEntityFeatureKey(query)

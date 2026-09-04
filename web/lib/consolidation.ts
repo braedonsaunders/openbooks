@@ -40,18 +40,18 @@ export async function resolveSubsidiaryView(
   const all = await subsidiaryOptions(false, true);
   const visible = allowed ? all.filter((s) => allowed.has(s.id)) : all;
   const pickerOptions = visible.filter((s) => !s.isElimination);
-  if (all.filter((s) => !s.isElimination).length <= 1) return { consolidated: false, options: [] };
+  if (allowed === null && all.filter((s) => !s.isElimination).length <= 1) return { consolidated: false, options: [] };
 
   const root = all.find((s) => s.parentId === null);
   const node =
     (subsidiaryId && pickerOptions.find((s) => s.id === subsidiaryId)) ||
     (allowed ? pickerOptions[0] : root && pickerOptions.find((s) => s.id === root.id)) ||
     pickerOptions[0];
-  if (!node) return { consolidated: false, options: pickerOptions };
+  if (!node) return { consolidated: false, options: pickerOptions, subsidiary: { ids: [] } };
 
   const subtree = subtreeIds(all, node.id);
   const members = all.filter(
-    (s) => subtree.has(s.id) && (!allowed || allowed.has(s.id) || s.isElimination),
+    (s) => subtree.has(s.id) && (!allowed || allowed.has(s.id)),
   );
   const nonElim = members.filter((s) => !s.isElimination);
   const consolidated = nonElim.length > 1;
@@ -162,11 +162,12 @@ export async function reportSubsidiaryView(
 ): Promise<ResolvedSubsidiaryView & { picker: { id: string; label: string }[] }> {
   const user = await currentUser();
   const subsidiaryUiEnabled = Boolean(user && await subsidiaryFeatureEnabled(user.orgId));
-  if (!subsidiaryUiEnabled) {
+  const allowed = user ? (user.isSuperAdmin ? null : await allowedSubsidiaryIds(user.id, user.orgId)) : new Set<string>();
+  if (!subsidiaryUiEnabled && allowed === null) {
     return { consolidated: false, options: [], picker: [] };
   }
-  const allowed = user && !user.isSuperAdmin ? await allowedSubsidiaryIds(user.id) : null;
   const view = await resolveSubsidiaryView(subsidiaryId, periodTo, allowed);
+  if (!subsidiaryUiEnabled) return { ...view, picker: [] };
   const hasChildren = new Set(view.options.map((s) => s.parentId).filter(Boolean));
   const picker = view.options.map((s) => ({
     id: s.id,

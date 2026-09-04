@@ -12,6 +12,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function Reports() {
   const t = await getTranslations('reports')
+  const tc = await getTranslations('analytics.trueCost')
   const authz = await getAuthz()
   const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
 
@@ -119,7 +120,8 @@ const card = (key: string, href: string, icon: string) => ({
       key: 'projects',
       label: t('hub.groups.projects'),
       accent: 'sky',
-      cards: [card('projectProfitability', '/reports/project-profitability', 'Coins')],
+      cards: [card('projectProfitability', '/reports/project-profitability', 'Coins'),
+        { href: '/reports/true-cost', title: tc('title'), desc: tc('summary.compositeRate'), icon: 'Calculator' }],
     } satisfies HubGroup] : []),
     ...(payrollDefinitions.length > 0 ? [{
       key: 'payroll',

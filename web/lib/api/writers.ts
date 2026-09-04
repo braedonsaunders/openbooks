@@ -408,7 +408,7 @@ async function mutationSubsidiaryScope(
   user: SessionUser,
   explicit: ReadonlySet<string> | null | undefined,
 ): Promise<ReadonlySet<string> | null> {
-  return explicit === undefined ? loadAllowedSubsidiaryIds(user.id) : explicit;
+  return explicit === undefined ? loadAllowedSubsidiaryIds(user.id, user.orgId) : explicit;
 }
 
 function subsidiaryInMutationScope(

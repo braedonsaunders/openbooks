@@ -7,6 +7,8 @@ import {
   normalizeReportRecipientEmails,
   validateCadenceInput,
 } from '@openbooks/reports'
+import { loadReportDefinition } from '../../../../../lib/custom-reports'
+import { canAccessReportArtifact, canAccessReportDefinition, snapshotReportAuthorization } from '../../../../../lib/report-execution-context'
 import { guardPermission } from '../../../../../lib/authz'
 
 export const runtime = 'nodejs'
@@ -62,6 +64,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
        for update
     `)).rows[0]
     if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const def = await loadReportDefinition(user.orgId, existing.definition_id)
+    if (!def || !(await canAccessReportDefinition(gate, def))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })
+    if (existing.authorization_snapshot != null && !(await canAccessReportArtifact(gate, existing.authorization_snapshot))) return NextResponse.json({ error: 'original report scope access denied' }, { status: 403 })
 
     // Re-validate the whole cadence (falling back to the locked stored values)
     // so a partial edit never yields an inconsistent day pair.
@@ -98,6 +103,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         hour = ${cadence.hour}, minute = ${cadence.minute}, timezone = ${cadence.timezone},
         recipient_emails = ${JSON.stringify(recipients)}::jsonb,
         next_run_at = ${nextRunAt.toISOString()}, active = ${active},
+        authorization_snapshot = ${JSON.stringify(snapshotReportAuthorization(gate, def))}::jsonb,
         updated_at = now(), updated_by = ${user.id}
       where id = ${id} and org_id = ${user.orgId}
       returning *
@@ -145,6 +151,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
        for update
     `)).rows[0]
     if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const def = await loadReportDefinition(user.orgId, existing.definition_id)
+    if (!def || !(await canAccessReportDefinition(gate, def))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })
+    if (existing.authorization_snapshot != null && !(await canAccessReportArtifact(gate, existing.authorization_snapshot))) return NextResponse.json({ error: 'original report scope access denied' }, { status: 403 })
 
     await db.execute(sql`
       delete from report_schedules where id = ${id} and org_id = ${user.orgId}

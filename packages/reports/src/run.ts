@@ -105,6 +105,7 @@ export async function runCustomQuery(
     fiscalStartMonth: opts.fiscalStartMonth,
     asOf: opts.asOf,
     page: opts.page,
+    allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
   })
   const { rows } = await client.query(compiled.text, compiled.values)
 
@@ -363,7 +364,7 @@ function shapeSummarizeResult(
     // disjoint per-bucket series (one employee's component YTD), so the sum
     // of endings IS the combined ending. avg/min/max stay blank.
     const summable = measures.map(
-      (m) => m.fn === 'sum' || m.fn === 'count' || m.fn === 'count_distinct' || m.fn === 'latest',
+      (m) => m.fn === 'sum' || m.fn === 'count' || m.fn === 'latest',
     )
     const totalLabel = (label: string) => labels.subtotal?.(label) ?? `${label} — total`
     // Subtotal level: the first breakout that ISN'T the section column.
@@ -550,7 +551,7 @@ function shapeSummarizeResult(
     },
   ]
   measures.forEach((m, i) => {
-    if (m.fn === 'count' || m.fn === 'count_distinct' || m.fn === 'sum') {
+    if (m.fn === 'count' || m.fn === 'sum') {
       const total = sumExactDecimals(dataRows.map((row) => row[`m${i}`]))
       summary.push({
         label:

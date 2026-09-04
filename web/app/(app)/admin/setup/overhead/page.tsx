@@ -49,7 +49,7 @@ export default async function OverheadModelSetup({
   const fromDate = parseIsoDate(today)
   fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
   const from = fromDate.toISOString().slice(0, 10)
-  const data = await trueCostData(authz.user.orgId, { from, to: today, label: 'TTM' })
+  const data = await trueCostData(authz.user.orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds)
   const typesRes = (await db.execute<{ id: string; name: string; overhead: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null }>(sql`
     select pt.id, pt.name,
            version.financial_profile->'overhead' as overhead

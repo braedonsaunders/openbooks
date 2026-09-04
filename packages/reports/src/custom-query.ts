@@ -50,6 +50,8 @@ export type CompiledReportQuery = {
 }
 
 export type CompileCustomQueryOpts = {
+  /** Server-owned allowlist; an empty array grants no entity rows. */
+  allowedSubsidiaryIds?: readonly string[] | null;
   /** Extra clamp under MAX_REPORT_ROWS (e.g. 50 for studio previews). */
   maxRows?: number
   /** Org fiscal-year start month (1–12) for the `fiscal_*` temporal bins. The
@@ -88,8 +90,17 @@ export function compileCustomQuery(
 }
 
 /** The entity's implicit predicates: org scope + optional baseFilter. */
-function implicitWhere(entity: ReportEntity, orgId: string, params: SqlParams): string[] {
+function implicitWhere(entity: ReportEntity, orgId: string, params: SqlParams, opts: CompileCustomQueryOpts): string[] {
   const parts = [`${entity.orgColumn} = ${params.add(orgId)}`]
+  if (opts.allowedSubsidiaryIds != null) {
+    const scope = entity.subsidiaryScope
+    if (scope === undefined) throw new Error(`Report entity ${entity.key} has no subsidiary policy`)
+    if (opts.allowedSubsidiaryIds.length === 0) parts.push('FALSE')
+    else if (scope) {
+      const predicate = `${scope.column} = ANY(${params.add([...opts.allowedSubsidiaryIds])}::uuid[])`
+      parts.push(scope.sharedNull ? `(${scope.column} IS NULL OR ${predicate})` : predicate)
+    }
+  }
   if (entity.baseFilter) {
     const base = compileRuleGroup(entity, entity.baseFilter, params)
     if (base) parts.push(base)
@@ -111,7 +122,7 @@ function compileRows(
   }
 
   const params = new SqlParams()
-  const whereParts = implicitWhere(entity, orgId, params)
+  const whereParts = implicitWhere(entity, orgId, params, opts)
   const from = bindReportFromAsOf(entity.from, opts.asOf, (value) => params.add(value))
   const countFrom = from.replace(/\r?\n/g, ' ')
   const filters = compileCustomFilters(entity, q, params)
@@ -200,7 +211,7 @@ function compileSummarize(
   const measSelect = measures.map((m, i) => `${measureExpr(entity, m)} AS "m${i}"`)
 
   const params = new SqlParams()
-  const whereParts = implicitWhere(entity, orgId, params)
+  const whereParts = implicitWhere(entity, orgId, params, opts)
   const from = bindReportFromAsOf(entity.from, opts.asOf, (value) => params.add(value))
   const filters = compileCustomFilters(entity, q, params)
   if (filters) whereParts.push(`(${filters})`)

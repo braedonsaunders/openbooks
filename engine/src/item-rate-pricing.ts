@@ -1,4 +1,4 @@
-import { cmp, fromUnits, mul, sum, toUnits } from "./money.ts";
+import { cmp, fromUnits, mul, roundDiv, sum, toUnits } from "./money.ts";
 
 export type RateRole = "cost" | "bill";
 export type PricingPolicy = "capped_ladder" | "lowest_cost";
@@ -19,6 +19,8 @@ export interface RateComponent {
   quantity: string;
   rate: string;
   amount: string;
+  /** Exact package fraction when quantity is only a rounded display value. */
+  quantityRatio?: { numerator: string; denominator: string };
 }
 
 export interface RatePrice {
@@ -75,23 +77,34 @@ export function priceCappedLadder(baseQuantity: string, tiers: RateTier[], role:
   }
   const smallest = toUnits(usable[0]!.baseQuantity);
   // The smallest tier can be fractional (hours, partial days, kilometres).
-  counts[0] = (remaining * 10_000n) / smallest;
+  counts[0] = roundDiv(remaining * 10_000n, smallest);
+  let fractional = remaining > 0n;
+  const fractionalAmount = fromUnits(roundDiv(remaining * toUnits(rateFor(usable[0]!, role)!), smallest));
 
   for (let i = 0; i < usable.length - 1; i++) {
-    if (counts[i] === 0n) continue;
-    const lowerSubtotal = mul(fromUnits(counts[i]!), rateFor(usable[i]!, role)!);
+    if (counts[i] === 0n && !(i === 0 && fractional)) continue;
+    const lowerSubtotal = i === 0 && fractional ? fractionalAmount : mul(fromUnits(counts[i]!), rateFor(usable[i]!, role)!);
     const upperRate = rateFor(usable[i + 1]!, role)!;
     if (cmp(lowerSubtotal, upperRate) > 0) {
       counts[i] = 0n;
+      if (i === 0) fractional = false;
       counts[i + 1] = counts[i + 1]! + 10_000n;
     }
   }
 
+  const fractionalUnits = roundDiv(remaining * 100_000_000n, smallest);
+  if (fractional && fractionalUnits === 0n) throw new Error("Package fraction is below supported quantity precision");
+  const fractionalQuantity = `${fractionalUnits / 100_000_000n}.${(fractionalUnits % 100_000_000n).toString().padStart(8, '0')}`;
   const components = usable
-    .map((tier, i) => ({ tier, quantity: counts[i]! }))
-    .filter((x) => x.quantity !== 0n)
+    .map((tier, i) => ({ tier, quantity: counts[i]!, fractional: i === 0 && fractional }))
+    .filter((x) => x.quantity !== 0n || x.fractional)
     .reverse()
-    .map((x) => component(x.tier, role, x.quantity));
+    .map((x) => x.fractional ? {
+      ...component(x.tier, role, x.quantity),
+      quantity: fractionalQuantity,
+      amount: fractionalAmount,
+      quantityRatio: { numerator: remaining.toString(), denominator: smallest.toString() },
+    } : component(x.tier, role, x.quantity));
   return { amount: sum(components.map((c) => c.amount)), components };
 }
 

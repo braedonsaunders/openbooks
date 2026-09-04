@@ -557,23 +557,21 @@ test("numeric default FX header rates resolve a stored spot instead of a 1:1 peg
   }
 });
 
-test("cross-document journal-number collisions identify the claimant document", { skip: !DB }, async () => {
+test("different document kinds sharing a number post to distinct journal identities", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const deps = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
   try {
     const invoiceId = await seedApprovedDocument(org, "customer_invoice", "DUP-POSTING-1");
     await postDocument(invoiceId, deps, { deferEffects: true, suppressAutomation: true });
     const billId = await seedApprovedDocument(org, "vendor_bill", "DUP-POSTING-1");
-    await assert.rejects(
-      postDocument(billId, deps, { deferEffects: true, suppressAutomation: true }),
-      (error: unknown) =>
-        error instanceof Error &&
-        /journal entry number "DUP-POSTING-1" is already used by customer_invoice/.test(error.message) &&
-        !/already posted or voided/.test(error.message),
-    );
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from documents where id = ${billId} and org_id = ${org.orgId}`)).rows[0]?.status;
-    assert.equal(status, "approved");
+    await postDocument(billId, deps, { deferEffects: true, suppressAutomation: true });
+    const entries = (await db.execute<{ entry_number: string; source_document_id: string }>(sql`
+      select entry_number, source_document_id from journal_entries
+       where org_id = ${org.orgId} and source_document_id in (${invoiceId}, ${billId})
+    `)).rows;
+    assert.equal(entries.length, 2);
+    assert.equal(new Set(entries.map((entry) => entry.entry_number)).size, 2);
+    assert.deepEqual(new Set(entries.map((entry) => entry.source_document_id)), new Set([invoiceId, billId]));
   } finally {
     await dropScratchOrg(org.orgId);
   }

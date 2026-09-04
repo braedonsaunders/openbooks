@@ -82,12 +82,12 @@ const EXECUTION_PATHS: Array<{ file: string; symbol: string; why: string }> = [
   },
   {
     file: '../app/api/reports/runs/[id]/csv/route.ts',
-    symbol: 'guardReportEntity',
+    symbol: 'canAccessReportArtifact',
     why: 'downloading a recorded run CSV returns the same rows',
   },
   {
     file: '../app/api/reports/runs/[id]/artifact/route.ts',
-    symbol: 'guardReportEntity',
+    symbol: 'canAccessReportArtifact',
     why: 'scheduled-run artifacts are the same report, rendered',
   },
 ]
@@ -103,7 +103,7 @@ for (const { file, symbol, why } of EXECUTION_PATHS) {
     )
     assert.match(
       source,
-      /from '(\.\.\/)*(\.\.\/)*.*report-authz'/,
+      /from '(\.\.\/)*(\.\.\/)*.*report-(?:authz|execution-context)'/,
       `${file} must import the gate rather than re-implement it`,
     )
   })

@@ -1,3 +1,4 @@
+import { requirePermission } from '../../../../lib/authz'
 import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
@@ -27,6 +28,8 @@ export default async function Partners({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const authz = await requirePermission('reports.read')
+  const scope = authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds]
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('reports.partners')
   const tr = await getTranslations('reports')
@@ -35,7 +38,7 @@ export default async function Partners({
   const scheduleDefId = await reportScheduleAnchor('partners', { kind: sp.kind === 'payable' ? 'payable' : 'receivable' })
   const k = sp.kind === 'receivable' ? 'receivable' : 'payable'
   const params = parseListParams(sp, { sort: 'balance', allowedSorts: ['balance'] as const, perPage: PER_PAGE })
-  const [all, org] = await Promise.all([partnerBalances(k), orgInfo()])
+  const [all, org] = await Promise.all([partnerBalances(k, authz.user.orgId, undefined, undefined, { subsidiaryIds: scope }), orgInfo()])
   const m = (v: string) => money(v, { currency: org?.base_currency })
   const q = params.q?.toLowerCase()
   const filtered = q ? all.filter((r) => (r.display_name ?? '').toLowerCase().includes(q)) : all

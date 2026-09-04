@@ -30,7 +30,7 @@ export default async function ProjectProfitabilityPage({
   const search = sp.q?.trim() || undefined
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
-  const dims = q.dims
+  const dims = { ...q.dims, subsidiaryIds: authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds] }
   const [result, opts, customers, org, branding] = await Promise.all([
     projectProfitability(period.from, period.to, {
       dims,
