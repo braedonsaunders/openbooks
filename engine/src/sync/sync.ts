@@ -1700,26 +1700,39 @@ export async function runSync(
             // Old importer versions could commit the approved document before
             // posting failed. Rebuild its lines/evidence and post as one unit;
             // a repeat failure leaves the prior approved row unchanged.
-            await db.execute(sql`set local openbooks.amend = on`);
-            await db.execute(sql`
-              update documents
-                 set document_number = ${sourceDocumentNumber},
-                     posting_date = ${doc.postingDate ?? doc.documentDate},
-                     posting_period_id = ${doc.postingPeriodId ?? null},
-                     status = 'approved',
-                     updated_at = now()
-               where id = ${have.id} and org_id = ${org.id}
-            `);
-            await db.execute(
-              sql`delete from document_lines where document_id = ${have.id} and org_id = ${org.id}`,
-            );
-            await insertImportedLines(
-              db as unknown as SyncTx,
-              org.id,
-              have.id,
-              doc.lines,
-              taxEvidence,
-            );
+            //
+            // This MUST run in one explicit transaction holding both trusted
+            // -replay settings. document_line_immutability admits a rebuild
+            // only for a caller that holds `openbooks.migration` AND
+            // `openbooks.amend` together — either alone is deliberately not an
+            // edit bypass — and `set local` outside an explicit transaction
+            // lasts only for its own implicit one, so issuing these as separate
+            // pool statements set nothing by the time the delete ran. The
+            // rebuild therefore hit the guard and the document was lost for the
+            // run. The sibling amend path below already does exactly this.
+            await db.transaction(async (tx) => {
+              await tx.execute(sql`set local openbooks.amend = on`);
+              await tx.execute(sql`set local openbooks.migration = on`);
+              await tx.execute(sql`
+                update documents
+                   set document_number = ${sourceDocumentNumber},
+                       posting_date = ${doc.postingDate ?? doc.documentDate},
+                       posting_period_id = ${doc.postingPeriodId ?? null},
+                       status = 'approved',
+                       updated_at = now()
+                 where id = ${have.id} and org_id = ${org.id}
+              `);
+              await tx.execute(
+                sql`delete from document_lines where document_id = ${have.id} and org_id = ${org.id}`,
+              );
+              await insertImportedLines(
+                tx,
+                org.id,
+                have.id,
+                doc.lines,
+                taxEvidence,
+              );
+            });
             await postDocument(have.id, deps, {
               deferEffects: true,
               suppressAutomation: true,
