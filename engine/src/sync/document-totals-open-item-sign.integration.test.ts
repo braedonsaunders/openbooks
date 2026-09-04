@@ -35,7 +35,7 @@ async function ctx(): Promise<ScratchOrg> {
  *  denormalizes from is a genuine posted entry with a real open-item leg. */
 async function postOneLineDocument(
   o: ScratchOrg,
-  kind: "vendor_bill" | "customer_invoice",
+  kind: "vendor_bill" | "customer_invoice" | "customer_credit",
   amount: string,
 ): Promise<string> {
   const id = randomUUID();
@@ -126,6 +126,33 @@ test(
       Number(h.total),
       39.92,
       "the receivable side must be untouched by the payable-side correction",
+    );
+  },
+);
+
+test(
+  "a credit whose lines are stored positive gets a header that ties to them",
+  { skip: !DB, timeout: 120_000 },
+  async () => {
+    const o = await ctx();
+    // The importer stores a credit's lines POSITIVE, but its AR control leg is
+    // a credit, so deriving the sign from that leg produced a negative header
+    // against positive lines -- a header that could never tie, which is what
+    // the remaining production failures were: exact magnitude, wrong sign.
+    const creditId = await postOneLineDocument(o, "customer_credit", "2503.8400");
+
+    const leg = await openItemLeg(o.orgId, creditId);
+    assert.ok(leg < 0, "a customer credit's AR open-item leg is a credit");
+
+    await setDocumentTotalsFromEntry(creditId, o.orgId);
+    const h = await header(o.orgId, creditId);
+    const lines = await db.execute<{ sum: string }>(sql`
+      select coalesce(sum(amount), 0) as sum from document_lines
+       where document_id = ${creditId} and org_id = ${o.orgId}`);
+    assert.equal(
+      Number(h.total),
+      Number(lines.rows[0]!.sum),
+      "the derived header must tie to the document's own lines, in sign as well as magnitude",
     );
   },
 );
