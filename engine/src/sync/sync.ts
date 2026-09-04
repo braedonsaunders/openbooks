@@ -1043,68 +1043,69 @@ export async function claimSyncRun(opts: {
   });
 }
 
-/** Denormalize a posted document's header totals from its journal entry.
- *  Exported for the open-item sign regression suite. */
-export async function setDocumentTotalsFromEntry(docId: string, orgId: string): Promise<void> {
-  // The document total is the signed amount on its OPEN-ITEM (AR/AP control) leg
-  // — the receivable/payable — not the sum of every positive journal line. A
-  // retainage / holdback line debits an income account (a positive amount that is
-  // NOT the total); summing all positives double-counts it and overstates the
-  // invoice by the holdback. Fall back to the positive-side sum for docs with no
-  // open item (cash sales etc.). Credit memos retain their negative control-leg
-  // sign. subtotal = total − tax.
-  //
+/**
+ * Refresh a document's denormalized header totals from its own lines.
+ *
+ * The header exists so lists and reports need not re-aggregate lines, and
+ * document_total_line_invariant (0017) enforces that it agrees with them. That
+ * invariant computes its expectation purely from document_lines, so the header
+ * must be computed the same way or the two can disagree — which is exactly what
+ * happened. This previously derived the header from the posted entry's
+ * open-item (AR/AP control) leg, and every way that leg can differ from the
+ * lines became a lost document on import:
+ *
+ *   - SIGN. The leg's sign belongs to the ACCOUNT, not the document: a customer
+ *     invoice's AR leg is a debit, a vendor bill's AP leg a credit. Read
+ *     verbatim, every open payable stated a negative total against positive
+ *     lines.
+ *   - DIRECTION for credits. An importer stores a credit's lines positive while
+ *     its control leg is a credit, so the derived header could never tie.
+ *   - ROUNDING. Even with sign and magnitude right, per-line rounding leaves the
+ *     posted leg a cent or two from the line sum, and the invariant is exact.
+ *
+ * Deriving from the lines removes the whole class by construction rather than
+ * chasing each difference. The ledger is unaffected: it is projected from the
+ * same lines at posting, and this only writes the header denormalization.
+ *
+ * Retainage still nets correctly — a holdback is a negative LINE, so it is
+ * inside this sum, which is the original reason the naive "sum of positive
+ * journal lines" was wrong. Mirrors 0017's own branch for journal/pay_run,
+ * whose total is the debit side rather than amount + tax.
+ *
+ * Exported for the header-totals regression suite.
+ */
+export async function refreshDocumentHeaderTotals(docId: string, orgId: string): Promise<void> {
   // Runs under the governed amend flag: the target is a POSTED document, whose
   // header financials are otherwise immutable at the database layer
   // (documents_posted_financial_guard). This write is the engine deriving the
-  // header FROM the posted entry — the one direction that cannot drift.
+  // header FROM the document's own lines — the one direction that cannot drift.
   await db.transaction(async (tx) => {
     await tx.execute(sql`set local openbooks.amend = on`);
     await tx.execute(sql`
-    update documents d set
-      total = coalesce(nullif(j.signed, 0), j.pos, 0),
-      tax_total = coalesce(abs(lt.tax), 0),
-      subtotal = coalesce(nullif(j.signed, 0), j.pos, 0) - coalesce(abs(lt.tax), 0)
-    from documents d2
-    left join lateral (
-      select sum(jl.amount) filter (where jl.amount > 0) as pos,
-             -- The header must tie to the DOCUMENT's lines -- that is the
-             -- invariant's whole contract -- so take the MAGNITUDE from the
-             -- open item (which nets retainage correctly, unlike a sum of
-             -- positive journal lines) and the SIGN from the lines. A credit
-             -- document whose lines the importer stores positive then states a
-             -- positive header instead of a negative one that could never tie,
-             -- while a credit whose lines really are negative still states a
-             -- negative header. Sign and magnitude each come from the source
-             -- that is authoritative for it.
-             sign(coalesce((select sum(l2.amount) from document_lines l2
-                             where l2.document_id = d2.id and l2.org_id = d2.org_id), 0))
-               * abs(sum(jl.amount * case when a.type like 'liability%' then -1 else 1 end)
-                       filter (where jl.is_open_item)) as signed,
-             -- State the open item in the DOCUMENT's direction, not the ledger's.
-             -- A vendor bill of 39.92 is +39.92 (its lines sum to that), but the
-             -- AP leg that makes it an open item is a CREDIT (-39.92), where a
-             -- customer invoice's AR leg is a DEBIT (+X). Taking the signed leg
-             -- verbatim states every open payable negatively and trips the
-             -- header/lines invariant, which is why a migration rejected ~35% of
-             -- its documents. Multiplying by the control account's normal side
-             -- restores the document direction and PRESERVES genuine credits: a
-             -- vendor credit posts its AP leg as a debit (+X) and becomes -X,
-             -- and a credit memo keeps its negative sign. Account type is the
-             -- chart's authoritative normal-balance semantic (see
-             -- CONTROL_ACCOUNT_TYPE_POLICY), so the prefix is the signal. For
-             -- receivable control legs the multiplier is 1, making this
-             -- algebraically identical to the previous expression.
-             sum(jl.amount * case when a.type like 'liability%' then -1 else 1 end)
-               filter (where jl.is_open_item) as oi
-        from journal_lines jl
-        -- LEFT so a line without a resolvable account still counts toward pos.
-        left join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
-       where jl.entry_id = d2.posted_entry_id and jl.org_id = d2.org_id and jl.org_id = ${orgId}) j on true
-    left join lateral (
-      select sum(l.tax_amount) as tax from document_lines l where l.document_id = d2.id and l.org_id = d2.org_id and l.org_id = ${orgId}) lt on true
-    where d.id = d2.id and d2.id = ${docId} and d.org_id = ${orgId} and d2.org_id = ${orgId}
-  `);
+      update documents d set
+        subtotal = w.want_subtotal,
+        tax_total = w.want_tax,
+        total = w.want_total
+      from documents d2
+      join lateral (
+        select count(*)::int as line_count,
+               coalesce(sum(l.amount), 0) as amount_sum,
+               coalesce(sum(l.tax_amount), 0) as tax_sum,
+               coalesce(sum(l.amount) filter (where l.amount > 0), 0) as debit_sum
+          from document_lines l
+         where l.document_id = d2.id and l.org_id = d2.org_id and l.org_id = ${orgId}) ls on true
+      join lateral (
+        select case when d2.kind in ('journal', 'pay_run')
+                    then ls.debit_sum - ls.tax_sum else ls.amount_sum end as want_subtotal,
+               ls.tax_sum as want_tax,
+               case when d2.kind in ('journal', 'pay_run')
+                    then ls.debit_sum else ls.amount_sum + ls.tax_sum end as want_total) w on true
+      where d.id = d2.id and d2.id = ${docId}
+        and d.org_id = ${orgId} and d2.org_id = ${orgId}
+        -- 0017 returns early for a document with no lines, so leave those alone
+        -- rather than stamping zeros over a header it does not govern.
+        and ls.line_count > 0
+    `);
   });
 }
 
@@ -1654,7 +1655,7 @@ export async function runSync(
                 deferEffects: true,
                 suppressAutomation: true,
               });
-              await setDocumentTotalsFromEntry(row!.id, org.id);
+              await refreshDocumentHeaderTotals(row!.id, org.id);
             }
             return row!.id;
           });
@@ -1737,7 +1738,7 @@ export async function runSync(
               deferEffects: true,
               suppressAutomation: true,
             });
-            await setDocumentTotalsFromEntry(have.id, org.id);
+            await refreshDocumentHeaderTotals(have.id, org.id);
           });
           try {
             await runPostDocumentEffects(have.id, have.status, {
@@ -1796,7 +1797,7 @@ export async function runSync(
               );
               return result.changed;
             });
-            if (projectionChanged) await setDocumentTotalsFromEntry(have.id, org.id);
+            if (projectionChanged) await refreshDocumentHeaderTotals(have.id, org.id);
           }
           if (have.documentNumber === sourceDocumentNumber) {
             if (projectionChanged) docsAmended++;
@@ -1965,7 +1966,7 @@ export async function runSync(
             });
           }
         });
-        if (have.posted) await setDocumentTotalsFromEntry(have.id, org.id);
+        if (have.posted) await refreshDocumentHeaderTotals(have.id, org.id);
         numberOwners.delete(
           documentNumberOwnerKey(doc.kind, have.documentNumber),
         );

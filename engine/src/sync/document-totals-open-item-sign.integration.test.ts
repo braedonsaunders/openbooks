@@ -2,7 +2,7 @@
  * A posted document's denormalized header total is stated in the DOCUMENT's
  * direction, not the ledger's.
  *
- * setDocumentTotalsFromEntry derives the header from the posted entry's
+ * refreshDocumentHeaderTotals derives the header from the posted entry's
  * open-item (control) leg. That leg's sign is a property of the control
  * account, not of the document: a customer invoice's AR leg is a DEBIT (+), a
  * vendor bill's AP leg is a CREDIT (-). Reading the leg verbatim therefore
@@ -21,7 +21,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { postDocument } from "../posting.ts";
 import { createScratchOrg, type ScratchOrg } from "../test-fixtures.ts";
-import { setDocumentTotalsFromEntry } from "./sync.ts";
+import { refreshDocumentHeaderTotals } from "./sync.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -67,6 +67,10 @@ async function postOneLineDocument(
   return id;
 }
 
+const control = (o: ScratchOrg) => ({
+  control: { ar: o.accounts.ar, ap: o.accounts.ap, bank: o.accounts.bank },
+});
+
 async function header(orgId: string, docId: string) {
   const res = await db.execute<{ subtotal: string; tax_total: string; total: string }>(sql`
     select subtotal, tax_total, total from documents
@@ -97,7 +101,7 @@ test(
       "a vendor bill's AP open-item leg must be a credit for this case to mean anything",
     );
 
-    await setDocumentTotalsFromEntry(billId, o.orgId);
+    await refreshDocumentHeaderTotals(billId, o.orgId);
     const h = await header(o.orgId, billId);
     assert.equal(
       Number(h.total),
@@ -120,7 +124,7 @@ test(
       "a customer invoice's AR open-item leg is a debit",
     );
 
-    await setDocumentTotalsFromEntry(invoiceId, o.orgId);
+    await refreshDocumentHeaderTotals(invoiceId, o.orgId);
     const h = await header(o.orgId, invoiceId);
     assert.equal(
       Number(h.total),
@@ -144,7 +148,7 @@ test(
     const leg = await openItemLeg(o.orgId, creditId);
     assert.ok(leg < 0, "a customer credit's AR open-item leg is a credit");
 
-    await setDocumentTotalsFromEntry(creditId, o.orgId);
+    await refreshDocumentHeaderTotals(creditId, o.orgId);
     const h = await header(o.orgId, creditId);
     const lines = await db.execute<{ sum: string }>(sql`
       select coalesce(sum(amount), 0) as sum from document_lines
@@ -154,5 +158,46 @@ test(
       Number(lines.rows[0]!.sum),
       "the derived header must tie to the document's own lines, in sign as well as magnitude",
     );
+  },
+);
+
+test(
+  "a header derived from the lines ties exactly, even when per-line rounding drifts from the posted leg",
+  { skip: !DB, timeout: 120_000 },
+  async () => {
+    const o = await ctx();
+    // Two lines whose cents do not recombine into the posted control leg: the
+    // last production failures were exactly this, off by one to six cents. The
+    // invariant is exact, so any derivation that is not the lines' own sum
+    // eventually disagrees with it.
+    const id = randomUUID();
+    const actor = randomUUID();
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        insert into documents (id, org_id, kind, status, document_number, party_id,
+                               document_date, currency, subtotal, tax_total, total, created_by)
+        values (${id}, ${o.orgId}, 'vendor_bill', 'draft', ${`RND-${id.slice(0, 8)}`},
+                ${o.vendorId}, ${o.date}, 'CAD', '109.1100', '14.1900', '123.3000', ${actor})`);
+      for (const [n, amount, tax] of [
+        [1, "54.5500", "7.0900"],
+        [2, "54.5600", "7.1000"],
+      ] as const) {
+        await tx.execute(sql`
+          insert into document_lines (org_id, document_id, line_number, account_id, description,
+                                      quantity, unit_price, amount, tax_amount, created_by)
+          values (${o.orgId}, ${id}, ${n}, ${o.accounts.cogs}, 'rounding',
+                  '1', ${amount}, ${amount}, ${tax}, ${actor})`);
+      }
+    });
+    await db.execute(sql`
+      update documents set status = 'approved' where id = ${id} and org_id = ${o.orgId}`);
+    await postDocument(id, control(o));
+
+    // Deriving from the lines must reproduce the invariant's own arithmetic.
+    await refreshDocumentHeaderTotals(id, o.orgId);
+    const h = await header(o.orgId, id);
+    assert.equal(Number(h.subtotal), 109.11, "subtotal is the lines' amount sum");
+    assert.equal(Number(h.tax_total), 14.19, "tax is the lines' tax sum");
+    assert.equal(Number(h.total), 123.3, "total is amount + tax, exactly as 0017 computes it");
   },
 );
