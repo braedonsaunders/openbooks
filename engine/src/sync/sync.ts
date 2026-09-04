@@ -471,6 +471,20 @@ class SyncVerificationError extends Error {
   }
 }
 
+/**
+ * A run for this connection and kind is already in flight.
+ *
+ * Distinct from a failure: the work is being done by the live attempt, so the
+ * caller should stand down rather than retry. The stale-run reaper releases the
+ * claim if the live attempt's worker died without writing a terminal status.
+ */
+export class SyncRunAlreadyActiveError extends Error {
+  constructor(kind: string) {
+    super(`a ${kind} run is already active for this connection`);
+    this.name = "SyncRunAlreadyActiveError";
+  }
+}
+
 /** One-click migration: master data, then every native transaction, verified. */
 export function runFullMigration(
   source: MigrationSource,
@@ -984,8 +998,54 @@ async function setProgress(
   }
 }
 
-/** Denormalize a posted document's header totals from its journal entry. */
-async function setDocumentTotalsFromEntry(docId: string, orgId: string): Promise<void> {
+/**
+ * Take exclusive ownership of a connection for one run kind, or refuse.
+ *
+ * The platform API guards ENQUEUE, but a BullMQ stalled re-delivery never
+ * passes through it: when a worker's lock lapses (a deploy rollout, or a tick
+ * that outruns lockDuration) the queue hands the same job to another worker
+ * while the first may still be writing. That is how one connection ended up
+ * running two concurrent full migrations over the same documents.
+ *
+ * The advisory lock serializes competing claims so two callers cannot both read
+ * "nothing running"; the status check then rejects the loser. The stale-run
+ * reaper releases a claim whose owner died without writing a terminal status.
+ */
+export async function claimSyncRun(opts: {
+  orgId: string;
+  connectionId: string;
+  kind: string;
+  sourceName: string;
+  triggeredBy: string;
+}): Promise<{ id: string }[]> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(
+        hashtext(${opts.orgId}),
+        hashtext(${`sync-run:${opts.connectionId}:${opts.kind}`})
+      )`);
+    const live = await tx.execute(sql`
+      select 1 from sync_runs
+       where org_id = ${opts.orgId} and connection_id = ${opts.connectionId}
+         and kind = ${opts.kind} and status = 'running'
+       limit 1`);
+    if (live.rows.length > 0) throw new SyncRunAlreadyActiveError(opts.kind);
+    return tx
+      .insert(schema.syncRuns)
+      .values({
+        orgId: opts.orgId,
+        connectionId: opts.connectionId,
+        source: opts.sourceName,
+        kind: opts.kind as "incremental" | "full_migration" | "targeted_repair",
+        triggeredBy: opts.triggeredBy,
+      })
+      .returning();
+  });
+}
+
+/** Denormalize a posted document's header totals from its journal entry.
+ *  Exported for the open-item sign regression suite. */
+export async function setDocumentTotalsFromEntry(docId: string, orgId: string): Promise<void> {
   // The document total is the signed amount on its OPEN-ITEM (AR/AP control) leg
   // — the receivable/payable — not the sum of every positive journal line. A
   // retainage / holdback line debits an income account (a positive amount that is
@@ -1008,8 +1068,26 @@ async function setDocumentTotalsFromEntry(docId: string, orgId: string): Promise
     from documents d2
     left join lateral (
       select sum(jl.amount) filter (where jl.amount > 0) as pos,
-             sum(jl.amount) filter (where jl.is_open_item) as oi
-        from journal_lines jl where jl.entry_id = d2.posted_entry_id and jl.org_id = d2.org_id and jl.org_id = ${orgId}) j on true
+             -- State the open item in the DOCUMENT's direction, not the ledger's.
+             -- A vendor bill of 39.92 is +39.92 (its lines sum to that), but the
+             -- AP leg that makes it an open item is a CREDIT (-39.92), where a
+             -- customer invoice's AR leg is a DEBIT (+X). Taking the signed leg
+             -- verbatim states every open payable negatively and trips the
+             -- header/lines invariant, which is why a migration rejected ~35% of
+             -- its documents. Multiplying by the control account's normal side
+             -- restores the document direction and PRESERVES genuine credits: a
+             -- vendor credit posts its AP leg as a debit (+X) and becomes -X,
+             -- and a credit memo keeps its negative sign. Account type is the
+             -- chart's authoritative normal-balance semantic (see
+             -- CONTROL_ACCOUNT_TYPE_POLICY), so the prefix is the signal. For
+             -- receivable control legs the multiplier is 1, making this
+             -- algebraically identical to the previous expression.
+             sum(jl.amount * case when a.type like 'liability%' then -1 else 1 end)
+               filter (where jl.is_open_item) as oi
+        from journal_lines jl
+        -- LEFT so a line without a resolvable account still counts toward pos.
+        left join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
+       where jl.entry_id = d2.posted_entry_id and jl.org_id = d2.org_id and jl.org_id = ${orgId}) j on true
     left join lateral (
       select sum(l.tax_amount) as tax from document_lines l where l.document_id = d2.id and l.org_id = d2.org_id and l.org_id = ${orgId}) lt on true
     where d.id = d2.id and d2.id = ${docId} and d.org_id = ${orgId} and d2.org_id = ${orgId}
@@ -1188,16 +1266,13 @@ export async function runSync(
     throw new Error("posted-change authorization is invalid");
   }
 
-  const [run] = await db
-    .insert(schema.syncRuns)
-    .values({
-      orgId: org.id,
-      connectionId,
-      source: source.name,
-      kind,
-      triggeredBy,
-    })
-    .returning();
+  const [run] = await claimSyncRun({
+    orgId: org.id,
+    connectionId,
+    kind,
+    sourceName: source.name,
+    triggeredBy,
+  });
 
   try {
     // -- 1. watermark (computed first so high-volume master-data streams — e.g.
