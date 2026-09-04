@@ -124,3 +124,40 @@ test(
     assert.equal(entries.rows[0]!.n, 1, "a document can never produce two entries");
   },
 );
+
+test(
+  "a derived entry name that is already taken steps to the next generation",
+  { skip: !DB, timeout: 120_000 },
+  async () => {
+    const o = await ctx();
+    const base = `Z${randomUUID().slice(0, 8)}`;
+
+    // Stand up the lineage a re-migration walks a second time: the derived
+    // name already exists, so recomputing it verbatim would collide and lose
+    // the write -- which is what a source correction did on re-import.
+    const { nextFreeEntryNumber } = await import("./entry-number.ts");
+    const billId = await approvedDocument(o, "vendor_bill", base);
+    await postDocument(billId, control(o));
+
+    const first = await db.transaction((tx) =>
+      nextFreeEntryNumber(tx, o.orgId, `${base}-SOURCE-REV`),
+    );
+    assert.equal(first, `${base}-SOURCE-REV`, "an unused derived name is used as-is");
+
+    // Claim it, exactly as the first correction pass would have.
+    await db.execute(sql`
+      insert into journal_entries (org_id, book_id, subsidiary_id, entry_number,
+                                   posting_date, period_id, status, origin)
+      select ${o.orgId}, ${o.bookId}, ${o.subsidiaryId}, ${first},
+             ${o.date}, ${o.periodId}, 'draft', 'migration'`);
+
+    const second = await db.transaction((tx) =>
+      nextFreeEntryNumber(tx, o.orgId, `${base}-SOURCE-REV`),
+    );
+    assert.equal(
+      second,
+      `${base}-SOURCE-REV-2`,
+      "the second pass must step to a free generation instead of colliding",
+    );
+  },
+);

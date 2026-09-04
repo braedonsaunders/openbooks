@@ -46,6 +46,7 @@ import {
   recordTransactionAudit,
 } from "./transaction-audit.ts";
 import { assertBillPostingAllowed, ComplianceError } from "./compliance.ts";
+import { allocateEntryNumber, nextFreeEntryNumber } from "./entry-number.ts";
 import { reversalJournalLines } from "./reversal-journal-lines.ts";
 import {
   readTaxRateProviderConfig,
@@ -1568,59 +1569,6 @@ async function resolvePostingPeriod(
   return period;
 }
 
-/**
- * Resolve the entry number for a document's posting, qualifying it only when
- * the natural number is already held by a DIFFERENT document.
- *
- * Entry numbers are unique per organization across every document kind, but
- * source systems number per transaction type — a vendor bill and an expense
- * report are both legitimately "1000". The importer cannot renumber the
- * source, so the ledger resolves the clash itself rather than refusing the
- * document.
- *
- * Deterministic given the ledger's state, and stable once assigned: a document
- * that already holds a number keeps it, so re-posting and repair paths do not
- * renumber. Document numbers are unique within a kind, so the kind-qualified
- * form cannot itself collide; the counter is a belt-and-braces terminator, not
- * an expected path.
- *
- * The caller holds `for update` on the org row, which serializes posting within
- * an organization and makes this read-then-insert atomic.
- */
-async function allocateEntryNumber(
-  tx: Tx,
-  orgId: string,
-  documentId: string,
-  preferred: string,
-  kind: string,
-): Promise<string> {
-  const holder = async (candidate: string): Promise<string | null | undefined> => {
-    const found = await tx.execute<{ source_document_id: string | null }>(sql`
-      select source_document_id from journal_entries
-       where org_id = ${orgId} and entry_number = ${candidate}
-       limit 1`);
-    return found.rows.length === 0 ? undefined : found.rows[0]!.source_document_id;
-  };
-
-  const held = await holder(preferred);
-  // Free, or already this document's own number.
-  if (held === undefined || held === documentId) return preferred;
-
-  // Qualify by kind, matching the -SOURCE-CORR / -SOURCE-REV suffix style.
-  const qualified = `${preferred}-${kind.toUpperCase()}`;
-  const qualifiedHeld = await holder(qualified);
-  if (qualifiedHeld === undefined || qualifiedHeld === documentId) return qualified;
-
-  for (let generation = 2; generation <= 50; generation += 1) {
-    const candidate = `${qualified}-${generation}`;
-    const candidateHeld = await holder(candidate);
-    if (candidateHeld === undefined || candidateHeld === documentId) return candidate;
-  }
-  throw new PostingError(
-    `could not allocate a journal entry number for document number "${preferred}"`,
-  );
-}
-
 export async function postDocument(
   documentId: string,
   deps: PostingDeps,
@@ -2863,7 +2811,11 @@ export async function regenerateGlImpactTx(
       orgId: doc.orgId,
       bookId: entry.bookId,
       subsidiaryId: entry.subsidiaryId,
-      entryNumber: `${entry.entryNumber}-SOURCE-REV`,
+      entryNumber: await nextFreeEntryNumber(
+        tx,
+        doc.orgId,
+        `${entry.entryNumber}-SOURCE-REV`,
+      ),
       postingDate: entry.postingDate,
       periodId: entry.periodId,
       memo: `Source correction reversal: ${reason}`,
@@ -2913,10 +2865,13 @@ export async function regenerateGlImpactTx(
       orgId: doc.orgId,
       bookId: entry.bookId,
       subsidiaryId: subApplied.docSubId,
-      entryNumber:
+      entryNumber: await nextFreeEntryNumber(
+        tx,
+        doc.orgId,
         correctionGen === 1
           ? `${doc.documentNumber}-SOURCE-CORR`
           : `${doc.documentNumber}-SOURCE-CORR-${correctionGen}`,
+      ),
       postingDate,
       periodId: period.id,
       memo: doc.memo,
