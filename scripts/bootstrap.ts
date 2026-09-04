@@ -626,6 +626,50 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "objects returned to pg_dump order. Verified: dumps identical.",
   },
   {
+    filename: "generated/0026_scheduler_outbox_terminal_audit.sql",
+    from: "c7dde9ba1846fd0609faaa4426f70d5cbbd14d5a3731a51fb666c048a4a8b235",
+    to: "929fd15922f09e86d1b416a6cfedca684492d2b7e20f19e700a83b64a3cfa286",
+    strategy: "reapply",
+    reason:
+      "the corrective revision makes the replay-allowed predicate NULL-safe: a "
+      + "NULL p_org_id previously left the comparison NULL, so `IF NOT ...` "
+      + "fell through instead of denying. It now returns false for NULL and the "
+      + "trigger tests `IS NOT TRUE`, closing a fail-open path on system-scan "
+      + "rows that carry no tenant. Every statement is idempotent — CREATE TABLE "
+      + "/ INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF "
+      + "EXISTS, a policy guarded by IF NOT EXISTS, and an anti-joined backfill "
+      + "— so reapplying redefines the guard and inserts no duplicate evidence.",
+  },
+  {
+    filename: "generated/0060_lease_base_rent_window_exclusive.sql",
+    from: "03f488dd20d7e56efc3a1a4ccc7d5d20977c9f88b821561186a902bb30535e9c",
+    to: "72410c818c0c0b5bd006d29cbc7d281f6097f90ca5833690219554b81cabd4da",
+    strategy: "restamp",
+    reason:
+      "the sole difference is one line inside the one-time repair DO block, "
+      + "where a cancelled-line counter overwrote instead of accumulating and so "
+      + "under-reported in its RAISE NOTICE. The repair has already run on any "
+      + "database carrying the old digest and the count was only ever logged, "
+      + "never stored. Restamp rather than reapply: the file ends in ALTER TABLE "
+      + "... ADD CONSTRAINT, which has no IF NOT EXISTS form and would fail on a "
+      + "database that already has the exclusion constraint.",
+  },
+  {
+    filename: "generated/0015_payment_instruction_posting_claim_fence.sql",
+    from: "8c71d6c3dfdde2f83c5d7a13c48296bfc3841d54020d6cb29a87cee8e89e663f",
+    to: "90b8dcf7b3dccc670bcfc4edb3078ce1a8a234cf0e050254215a6ad59309efc9",
+    strategy: "reapply",
+    reason:
+      "the corrective revision TIGHTENS the fence: the settlement-style retreat "
+      + "carve-out (settled/returned/rejected) now also requires every other "
+      + "instruction field to be unchanged, so a bank-outcome writer can no "
+      + "longer alter unrelated columns without holding the posting claim. The "
+      + "file is idempotent — CREATE OR REPLACE FUNCTION, DROP TRIGGER IF "
+      + "EXISTS, then comments — so reapplying only redefines the trigger and "
+      + "touches no row. A database still on the looser definition is strictly "
+      + "less protected until it runs.",
+  },
+  {
     filename: "generated/0010_bank_statement_source_evidence.sql",
     from: "577f345ac58b2b585fce5802f2895234c2a0494e2835677ad223d735280e2ec6",
     to: "0f36b431a4574d340da65f401fdac15f2e5a92339118d2a2d041529c495be631",
