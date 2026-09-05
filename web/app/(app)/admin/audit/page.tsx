@@ -1,7 +1,9 @@
 import Link from 'next/link'
+import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { Button, EmptyState, PageHeader } from '@openbooks/ui'
 import { BookOpen, ScrollText } from 'lucide-react'
 import { ListPageLayout } from '../../../../components/page-layout'
@@ -24,12 +26,36 @@ const humanize = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.t
 // else in the log renders verbatim as the stored action code.
 const KNOWN_ACTIONS = new Set(['insert', 'update', 'delete', 'post', 'void', 'approve', 'reject'])
 
+interface AuditRowMetadata extends Record<string, unknown> {
+  id: string
+  row_id: string
+  action: string
+  at: string
+  actor_name: string | null
+  rtype: string
+}
+
+interface AuditListSource extends AuditRowMetadata {
+  summary_kind: AuditListRow['summaryKind']
+  change_count: string
+}
+
+interface AuditEventSource extends AuditRowMetadata {
+  request_id: string | null
+  changes: unknown
+}
+
 export default async function Audit({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('admin.audit.read')
+  // The company log spans configuration, multi-entity transactions and
+  // deleted records whose scope cannot be inferred from a current row. Like
+  // the raw query console, this whole-company surface requires an explicit
+  // unrestricted grant. Record-specific audit routes retain their own scope.
+  if (authz.allowedSubsidiaryIds !== null) redirect('/')
   const t = await getTranslations('admin.audit')
   const tHub = await getTranslations('admin.hub')
   const sp = await searchParams
@@ -40,6 +66,8 @@ export default async function Audit({
   const from = pickString(sp.from)
   const to = pickString(sp.to)
   const eventId = pickString(sp.event)
+  if ((actor && actor !== 'system' && !isUuid(actor))
+    || (from && !isIsoCalendarDate(from)) || (to && !isIsoCalendarDate(to))) notFound()
 
   // Effective record type: the raw table for most rows, but the document's KIND
   // (customer_invoice, vendor_bill, journal_entry, …) for the shared `documents`
@@ -62,7 +90,7 @@ export default async function Audit({
     ${params.q ? sql` and ((${rtypeExpr}) ilike ${'%' + params.q + '%'} or u.name ilike ${'%' + params.q + '%'} or a.row_id::text = ${params.q})` : sql``}`
 
   const [rows, totalRow, actions, rtypes, users, selectedResult] = await Promise.all([
-    (db.execute(sql`
+    (db.execute<AuditListSource>(sql`
       select a.id, a.row_id, a.action, a.at, u.name as actor_name, (${rtypeExpr}) as rtype,
              case
                when a.changes ? 'before' or a.changes ? 'after' then 'snapshot'
@@ -79,27 +107,27 @@ export default async function Audit({
        order by a.at desc
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `)),
-    db.execute(sql`select count(*) as n ${auditFrom} where ${where}`) as any,
-    (db.execute(sql`
+    db.execute<{ n: string }>(sql`select count(*) as n ${auditFrom} where ${where}`),
+    (db.execute<{ action: string; n: string }>(sql`
       select action, count(*) as n
         from audit_log
        where org_id = ${authz.user.orgId}
        group by 1 order by 2 desc
     `)),
-    (db.execute(sql`
+    (db.execute<{ rtype: string; n: string }>(sql`
       select (${rtypeExpr}) as rtype, count(*) as n
         ${auditFrom}
        where a.org_id = ${authz.user.orgId}
        group by 1 order by 2 desc limit 60
     `)),
-    (db.execute(sql`
+    (db.execute<{ actor_id: string | null; name: string | null; n: string }>(sql`
       select a.actor_id, u.name, count(*) as n
         from audit_log a left join users u on u.id = a.actor_id and u.org_id = a.org_id
        where a.org_id = ${authz.user.orgId}
        group by 1, 2 order by 3 desc limit 50
     `)),
     eventId && isUuid(eventId)
-      ? (db.execute(sql`
+      ? (db.execute<AuditEventSource>(sql`
           select a.id, a.row_id, a.action, a.at, a.request_id, a.changes,
                  u.name as actor_name, (${rtypeExpr}) as rtype
             ${auditFrom}
@@ -108,9 +136,9 @@ export default async function Audit({
         `))
       : Promise.resolve({ rows: [] }),
   ])
-  const total = Number(totalRow.rows[0].n)
+  const total = Number(totalRow.rows[0]!.n)
   const actionLabel = (a: string) => (KNOWN_ACTIONS.has(a) ? t(`actions.${a}`) : a)
-  const auditRows: AuditListRow[] = rows.rows.map((row: any) => ({
+  const auditRows: AuditListRow[] = rows.rows.map((row) => ({
     id: row.id,
     rowId: row.row_id,
     at: new Date(row.at).toISOString(),
@@ -120,7 +148,7 @@ export default async function Audit({
     summaryKind: row.summary_kind,
     changeCount: Number(row.change_count),
   }))
-  const selectedRow = selectedResult.rows[0] as any | undefined
+  const selectedRow = selectedResult.rows[0]
   const selectedEvent: AuditEvent | null = selectedRow ? {
     id: selectedRow.id,
     rowId: selectedRow.row_id,
@@ -156,14 +184,14 @@ export default async function Audit({
               currentParams={sp}
               paramKey="rtype"
               label={t('recordTypeFilter')}
-              options={rtypes.rows.map((r: any) => ({ value: r.rtype, label: humanize(r.rtype), count: Number(r.n) }))}
+              options={rtypes.rows.map((r) => ({ value: r.rtype, label: humanize(r.rtype), count: Number(r.n) }))}
             />
             <FilterChips
               basePath="/admin/audit"
               currentParams={sp}
               paramKey="actor"
               label={t('userFilter')}
-              options={users.rows.map((r: any) => ({
+              options={users.rows.map((r) => ({
                 value: r.actor_id ?? 'system',
                 label: r.name ?? t('systemActor'),
                 count: Number(r.n),
@@ -174,7 +202,7 @@ export default async function Audit({
               currentParams={sp}
               paramKey="action"
               label={t('actionFilter')}
-              options={actions.rows.map((r: any) => ({ value: r.action, label: actionLabel(r.action), count: Number(r.n) }))}
+              options={actions.rows.map((r) => ({ value: r.action, label: actionLabel(r.action), count: Number(r.n) }))}
             />
             <DateRangeFilter fromLabel={t('dateFrom')} toLabel={t('dateTo')} clearLabel={t('clearDates')} />
           </div>
