@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
 
@@ -20,10 +21,14 @@ export async function GET(req: Request) {
   const user = gate.user;
   const url = new URL(req.url);
   const digit = Number(url.searchParams.get("digit"));
-  const dim = url.searchParams.get("dim") === "2d" ? "2d" : "1d";
+  const dim = url.searchParams.get("dim") ?? "1d";
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
-  if (!Number.isFinite(digit) || !from || !to) return NextResponse.json({ error: "digit, from, to required" }, { status: 400 });
+  if ((dim !== "1d" && dim !== "2d") || !Number.isInteger(digit)
+    || digit < (dim === "2d" ? 10 : 1) || digit > (dim === "2d" ? 99 : 9)
+    || !isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to) {
+    return NextResponse.json({ error: "valid digit, dimension and date range required" }, { status: 400 });
+  }
 
   const kindsIn = sql.join(SPEND_KINDS.map((k) => sql`${k}`), sql`, `);
   const subsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds);
@@ -35,6 +40,7 @@ export async function GET(req: Request) {
 
   const base = sql`
     from documents d
+    left join parties p on p.id = d.party_id and p.org_id = d.org_id
     where d.org_id = ${user.orgId} and d.voided_at is null and d.kind in (${kindsIn})
       ${subsidiaryFilter}
       and abs(d.total) >= 1

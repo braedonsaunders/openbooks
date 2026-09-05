@@ -892,3 +892,21 @@ ceilings. The final 3,042-test unit suite, web typecheck and locked production
 build passed. Receipts are retained under `audit-viewer-scope-2026-09-05` in
 thread storage. The next full integration run targets frozen 5ad0e8ee, which
 includes the preceding authentication, account and payroll corrections.
+
+## Sentinel forensics authorization and drilldown — continuation from aca21500
+
+The Sentinel page, service and assistant exposed whole-company comparisons and
+retained audit snapshots to subsidiary-restricted and reports-only roles.
+All three boundaries now require unrestricted subsidiary access and both
+report and administrative audit permissions. The document-only Benford
+drilldown retains its subsidiary filtering and report permission. Its missing
+party join, which made valid requests fail in PostgreSQL, is corrected;
+invalid dimensions, digit ranges and calendar-date ranges are refused before
+queries run.
+
+The 28 focused tests cover real roles, database records, page rendering,
+assistant dispatch, successful drilldowns and malformed filters. All 3,050
+unit tests passed. A test-fixture union type initially failed compilation;
+after its annotation was corrected, web typechecking and the locked production
+build passed. Baselines and receipts are retained under
+`audit-sentinel-access-2026-09-05` in thread storage.

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { addMonthsIso } from "@openbooks/reports";
 import { analyticsConfig } from "./config";
+import { can, ForbiddenError, type Authz } from "../authz";
 
 /**
  * Sentinel — transaction integrity forensics re-engineered for scale.
@@ -174,7 +175,14 @@ export function sentinelBaselineFrom(to: string): string {
 
 // ---- main -------------------------------------------------------------------
 
-export async function sentinelData(orgId: string, period: { from: string; to: string; label: string }): Promise<SentinelData> {
+export async function sentinelData(orgId: string, period: { from: string; to: string; label: string }, authz: Authz): Promise<SentinelData> {
+  // Whole-company forensics includes cross-entity baselines, identity matches
+  // and retained administrative audit snapshots. Partial access cannot be
+  // represented by silently dropping evidence or returning zero-risk counts.
+  if (!authz || authz.user.orgId !== orgId || authz.allowedSubsidiaryIds !== null
+    || !can(authz, "reports.read") || !can(authz, "admin.audit.read")) {
+    throw new ForbiddenError("unrestricted reports and audit access");
+  }
   const { from, to } = period;
   const t0 = Date.now();
   const kindsIn = sql.join(SPEND_KINDS.map((k) => sql`${k}`), sql`, `);
