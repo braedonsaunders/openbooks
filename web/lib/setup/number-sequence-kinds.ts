@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import { DOC_KIND_FEATURE } from '../document-kinds'
 import { featureEnabled, orgFeatureState } from '../features'
 
@@ -56,16 +56,14 @@ function friendlyUnknownKind(kind: string): string {
 }
 
 /** Built-in kinds plus this organization's custom-record and extension kinds. */
-export async function loadNumberSequenceKindOptions(orgId: string): Promise<NumberSequenceKindOption[]> {
-  const [customTypes, configured, features] = await Promise.all([
-    db.execute(sql`
+export async function loadNumberSequenceKindOptions(orgId: string, executor: SqlExecutor = db): Promise<NumberSequenceKindOption[]> {
+  const customTypes = await executor.execute(sql`
       select key, name from custom_record_types
-       where org_id = ${orgId} order by name`),
-    db.execute(sql`
+       where org_id = ${orgId} order by name`)
+  const configured = await executor.execute(sql`
       select distinct document_kind from number_sequences
-       where org_id = ${orgId} order by document_kind`),
-    orgFeatureState(orgId),
-  ])
+       where org_id = ${orgId} order by document_kind`)
+  const features = await orgFeatureState(orgId, executor)
 
   const options = new Map<string, NumberSequenceKindOption>()
   for (const option of BUILT_IN_NUMBER_SEQUENCE_KINDS) {

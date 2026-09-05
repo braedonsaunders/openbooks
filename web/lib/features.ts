@@ -173,18 +173,18 @@ export async function isFeatureEnabled(orgId: string, key: string, executor: Sql
  * the flag was never explicitly set, and lets a single-entity org opt in to add
  * its first extra subsidiary. An explicit stored boolean always wins.
  */
-async function resolveMultiSubsidiary(orgId: string, state: FeatureState): Promise<boolean> {
+async function resolveMultiSubsidiary(orgId: string, state: FeatureState, executor: SqlExecutor = db): Promise<boolean> {
   const v = state?.multiSubsidiary
   if (typeof v === 'boolean') return v
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = (await executor.execute<{ n: number }>(sql`
     select count(*)::int as n from subsidiaries
      where org_id = ${orgId} and is_active and not is_elimination`))
   return (r.rows[0]?.n ?? 0) > 1
 }
 
 /** Is multi-subsidiary on for this org (with the data-dependent default)? */
-export async function subsidiaryFeatureEnabled(orgId: string): Promise<boolean> {
-  return resolveMultiSubsidiary(orgId, await orgFeatureState(orgId))
+export async function subsidiaryFeatureEnabled(orgId: string, executor: SqlExecutor = db): Promise<boolean> {
+  return resolveMultiSubsidiary(orgId, await orgFeatureState(orgId, executor), executor)
 }
 
 /**
@@ -193,10 +193,10 @@ export async function subsidiaryFeatureEnabled(orgId: string): Promise<boolean> 
  * Keeps existing multi-currency orgs working when the flag was never set; an
  * explicit stored boolean always wins.
  */
-async function resolveMultiCurrency(orgId: string, state: FeatureState): Promise<boolean> {
+async function resolveMultiCurrency(orgId: string, state: FeatureState, executor: SqlExecutor = db): Promise<boolean> {
   const v = state?.multiCurrency
   if (typeof v === 'boolean') return v
-  const r = (await db.execute<{ on: boolean }>(sql`
+  const r = (await executor.execute<{ on: boolean }>(sql`
     select (
       exists(select 1 from journal_lines where org_id = ${orgId} and fx_rate <> 1)
       or exists(select 1 from fx_rates where org_id = ${orgId})
@@ -209,11 +209,11 @@ async function resolveMultiCurrency(orgId: string, state: FeatureState): Promise
  * (currently just `multiSubsidiary`). Use this for the Features page and the
  * setup-rail gating so `featureEnabled` returns the correct value.
  */
-export async function resolvedFeatureState(orgId: string): Promise<FeatureState> {
-  const state = await orgFeatureState(orgId)
+export async function resolvedFeatureState(orgId: string, executor: SqlExecutor = db): Promise<FeatureState> {
+  const state = await orgFeatureState(orgId, executor)
   const [multiSubsidiary, multiCurrency] = await sequential([
-    () => resolveMultiSubsidiary(orgId, state),
-    () => resolveMultiCurrency(orgId, state),
+    () => resolveMultiSubsidiary(orgId, state, executor),
+    () => resolveMultiCurrency(orgId, state, executor),
   ])
   return { ...state, multiSubsidiary, multiCurrency }
 }
