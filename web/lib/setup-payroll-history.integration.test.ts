@@ -21,7 +21,7 @@ const {PATCH, DELETE} = await import('../app/api/admin/setup/[entity]/route');
 const {setupResource} = await import('./data-io/setup-resources');
 const {SETUP_ENTITY_BY_KEY} = await import('./setup/registry');
 
-for (const channel of ['PATCH', 'DELETE', 'import'] as const) {
+for (const channel of ['PATCH', 'DELETE', 'import', 'preview'] as const) {
   test(`setup ${channel} preserves historical component policy and audit evidence`,
     {skip: !process.env.OPENBOOKS_DB_URL}, async () => {
       const org = await createScratchOrg();
@@ -49,9 +49,9 @@ for (const channel of ['PATCH', 'DELETE', 'import'] as const) {
         const before = (await db.execute(sql`select * from pay_components where org_id=${org.orgId} and id=${componentId}`)).rows;
         const auditBefore = (await db.execute(sql`select * from audit_log where org_id=${org.orgId} order by id`)).rows;
         const body = {id: componentId, code: 'HISTORY', name: 'Changed earning', kind: 'earning', taxable: false};
-        if (channel === 'import') {
+        if (channel === 'import' || channel === 'preview') {
           const outcome = await setupResource(SETUP_ENTITY_BY_KEY.get('pay-components')!,org.orgId)
-            .write([body],'upsert',{orgId: org.orgId,actorId,dryRun: false});
+            .write([body],'upsert',{orgId: org.orgId,actorId,dryRun: channel === 'preview'});
           assert.equal(outcome.updated,0); assert.equal(outcome.failed,1);
           assert.match(outcome.errors[0]!.message,/fixed after committed payroll/);
         } else {
