@@ -728,3 +728,47 @@ and the locked production build passed. The 13 browser tests and dedicated
 costing interaction receipts belong to the preceding costing batch; this
 backend validation change was verified directly through its HTTP handler.
 Receipts are in thread storage under `audit-item-input-2026-09-05`.
+
+## Project billing authority, source claims and backup precision — continuation from 3304f2c1
+
+Creation scoped billing requests to their project, but cancellation, invoice
+generation and backup retrieval omitted that boundary. Six real role/database
+cases reproduced hidden and empty-scope actors successfully cancelling requests,
+generating invoices or receiving cached PDF bytes. Cancellation and generation
+now carry subsidiary scope into their services and lock both the request and its
+project. A controlled project-reassignment case verifies that a waiting generator
+rechecks the new owner before consuming work. Request lists also hide linked
+invoice details when the invoice belongs outside the reader's scope.
+
+Backup assembly and cached reads require access to the invoice, its project and
+supporting cost documents/Field Tickets. Cached packets additionally check their
+retained source-document manifest; refused existing artifacts are distinguished
+from cache misses so a reader cannot silently regenerate a packet with narrower
+source access. Domain refusal maps to 404 at both backup HTTP methods. Regression
+cases cover a hidden invoice, hidden current source and hidden manifest source,
+plus allowed restricted and unrestricted retrieval.
+
+The deeper source audit reproduced two requests committing invoices for one
+approved time entry. Selected time is now row-locked in stable date/id order, and
+the final conditional source claim must return its row. Losing the claim rolls
+back the whole invoice. A separate case showed a visible project consuming a
+vendor cost owned by a hidden entity; the generator now refuses that source set
+before invoice creation instead of silently consuming or omitting hidden work.
+
+The costed-timesheet backup footer also accumulated costs as JavaScript numbers.
+A valid numeric(19,4) example, 999999999999999.9000 plus 0.0400, printed .90 instead
+of .94. PostgreSQL now supplies the exact numeric sum directly to the money
+formatter, retaining precision beyond ledger scale until presentation. The
+regression checks the HTML passed to the real PDF boundary using real database
+rows; PDF rendering is substituted only to capture that input without writing a
+file. The focused suite passes 31 cases across these controls, billing currency
+rounding, project dimension inheritance and existing backup allocation behavior.
+
+The final checkpoint passed all 3,040 unit tests, web typechecking, the locked
+production build and the 398/732 explicit-any/lint ceilings. The first unit run
+caught one unused import in the new contention fixture through the lint-ceiling
+check; removing that import restored the ceiling and the complete rerun passed.
+These backend changes were verified through the real service/HTTP boundaries;
+the preceding 13-case browser run is separate evidence. Detailed baselines,
+source snapshots and results are retained under `audit-billing-scope-2026-09-05`
+in thread storage. A full integration run will target this frozen checkpoint.

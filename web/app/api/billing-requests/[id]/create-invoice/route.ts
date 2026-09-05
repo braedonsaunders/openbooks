@@ -15,9 +15,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   try {
-    const result = await generateInvoiceFromBillingRequest(gate.user.orgId, gate.user.id, id)
+    const result = await generateInvoiceFromBillingRequest(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds)
     return NextResponse.json({ documentId: result.id, documentNumber: result.documentNumber })
   } catch (e) {
+    if (e instanceof BillingError && e.message === 'Billing request not found') return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (e instanceof BillingError && e.message === 'Inventory is disabled') {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }

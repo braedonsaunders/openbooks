@@ -19,9 +19,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = ((parsedBody.data))
   if (body?.action === 'cancel') {
     try {
-      await cancelBillingRequest(gate.user.orgId, gate.user.id, id)
+      await cancelBillingRequest(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds)
       return NextResponse.json({ ok: true })
     } catch (e) {
+      if ((e as Error).message === 'Billing request not found') return NextResponse.json({ error: 'not found' }, { status: 404 })
       return NextResponse.json({ error: (e as Error).message }, { status: 422 })
     }
   }
