@@ -1,8 +1,9 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from "@/lib/api/json";
+import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
+import { toUnits } from '@openbooks/engine/src/money.ts'
 import {
   adjustInventory,
   buildAssembly,
@@ -19,38 +20,28 @@ import {
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
-import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { INVENTORY_ACTION_PERMISSIONS, type CataloguePermission } from '@openbooks/engine/src/permissions.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 export const runtime = 'nodejs'
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-
-interface Body {
-  action?: 'receive' | 'issue' | 'adjust' | 'transfer' | 'build' | 'landed' | 'reverse'
-  /** Stable retry identity; required — replay safety is enforced by the engine. */
-  idempotencyKey?: string
-  movementId?: string
-  itemId?: string
-  stockLocationId?: string
-  toStockLocationId?: string
-  quantity?: string
-  unitCost?: string
-  offsetAccountId?: string
-  basis?: 'value' | 'quantity'
-  subsidiaryId?: string
-  date?: string
-  memo?: string
-  lotId?: string
-  serialId?: string
-}
-
-function num(v: unknown): string | null {
-  const exact = canonicalDecimal(v, 4)
-  if (exact === null) return null
-  return normalizeMoney(exact)
-}
+const inventoryActionBody = z.looseObject({
+  action: z.enum(['receive', 'issue', 'adjust', 'transfer', 'build', 'landed', 'reverse']),
+  idempotencyKey: z.string().optional(),
+  movementId: uuidId.optional(),
+  itemId: uuidId.optional(),
+  stockLocationId: uuidId.optional(),
+  toStockLocationId: uuidId.optional(),
+  subsidiaryId: uuidId.optional(),
+  offsetAccountId: nullableUuidId.optional(),
+  lotId: nullableUuidId.optional(),
+  serialId: nullableUuidId.optional(),
+  date: isoDate().optional(),
+  quantity: exactMoney().optional(),
+  unitCost: exactMoney().optional(),
+  basis: z.enum(['value', 'quantity']).optional(),
+  memo: z.string().nullable().optional(),
+})
 
 /**
  * Post an inventory movement through the kernel: receive (DR inventory / CR
@@ -68,9 +59,9 @@ function num(v: unknown): string | null {
  * demands items.reverse, so catalog maintenance never confers ledger power.
  */
 export async function POST(req: Request) {
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, inventoryActionBody, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Body
+  const body = parsedBody.data
   const permission: CataloguePermission | undefined = (
     INVENTORY_ACTION_PERMISSIONS as Record<string, CataloguePermission | undefined>
   )[body?.action as string]
@@ -88,7 +79,7 @@ export async function POST(req: Request) {
     if (!body.movementId || !isUuid(body.movementId)) {
       return NextResponse.json({ error: 'movement required' }, { status: 422 })
     }
-    if (!body.date || !DATE_RE.test(body.date)) {
+    if (!body.date) {
       return NextResponse.json({ error: 'reversal date required' }, { status: 422 })
     }
     if (typeof body.memo !== 'string' || body.memo.trim().length < 5 || body.memo.trim().length > 500) {
@@ -140,17 +131,17 @@ export async function POST(req: Request) {
   if (!body.stockLocationId || !isUuid(body.stockLocationId)) {
     return NextResponse.json({ error: 'stock location required' }, { status: 422 })
   }
-  const quantity = num(body.quantity)
-  if (quantity === null || toUnits(quantity) === 0n) {
+  const quantity = body.quantity
+  if (quantity === undefined || toUnits(quantity) === 0n) {
     return NextResponse.json({ error: 'quantity required' }, { status: 422 })
   }
-  const date = body.date && DATE_RE.test(body.date) ? body.date : await businessToday(user.orgId)
+  const date = body.date ?? await businessToday(user.orgId)
 
   // Default to the org's primary/first subsidiary when the caller didn't scope one.
   let subsidiaryId = body.subsidiaryId
-  if (!subsidiaryId || !isUuid(subsidiaryId)) {
+  if (subsidiaryId === undefined) {
     const r = (await db.execute<{ id: string }>(
-      sql`select id from subsidiaries where org_id = ${user.orgId} order by created_at limit 1`,
+      sql`select id from subsidiaries where org_id = ${user.orgId} order by created_at, id limit 1`,
     ))
     subsidiaryId = r.rows[0]?.id
     if (!subsidiaryId) return NextResponse.json({ error: 'no subsidiary configured' }, { status: 422 })
@@ -161,8 +152,8 @@ export async function POST(req: Request) {
 
   try {
     if (body.action === 'receive') {
-      const unitCost = num(body.unitCost)
-      if (unitCost === null) return NextResponse.json({ error: 'unit cost required' }, { status: 422 })
+      const unitCost = body.unitCost
+      if (unitCost === undefined) return NextResponse.json({ error: 'unit cost required' }, { status: 422 })
       if (!body.offsetAccountId || !isUuid(body.offsetAccountId)) {
         return NextResponse.json({ error: 'offset account required' }, { status: 422 })
       }
@@ -174,8 +165,8 @@ export async function POST(req: Request) {
         subsidiaryId,
         offsetAccountId: body.offsetAccountId,
         date,
-        lotId: body.lotId && isUuid(body.lotId) ? body.lotId : undefined,
-        serialId: body.serialId && isUuid(body.serialId) ? body.serialId : undefined,
+        lotId: body.lotId ?? undefined,
+        serialId: body.serialId ?? undefined,
         memo: body.memo ?? null,
       }
       const { value: res, replayed } = await executeIdempotentInventoryAction(
@@ -215,7 +206,7 @@ export async function POST(req: Request) {
       if (!body.offsetAccountId || !isUuid(body.offsetAccountId)) {
         return NextResponse.json({ error: 'freight account required' }, { status: 422 })
       }
-      const basis = body.basis === 'quantity' ? ('quantity' as const) : ('value' as const)
+      const basis = body.basis ?? 'value'
       const { value: res, replayed } = await executeIdempotentInventoryAction(
         user.orgId,
         user.id,
@@ -261,8 +252,8 @@ export async function POST(req: Request) {
         fromStockLocationId: body.stockLocationId,
         toStockLocationId: body.toStockLocationId,
         quantity,
-        lotId: body.lotId && isUuid(body.lotId) ? body.lotId : undefined,
-        serialId: body.serialId && isUuid(body.serialId) ? body.serialId : undefined,
+        lotId: body.lotId ?? undefined,
+        serialId: body.serialId ?? undefined,
         subsidiaryId,
         date,
         memo: body.memo ?? null,
@@ -285,11 +276,10 @@ export async function POST(req: Request) {
         stockLocationId: body.stockLocationId,
         quantity,
         subsidiaryId,
-        offsetAccountId:
-          body.offsetAccountId && isUuid(body.offsetAccountId) ? body.offsetAccountId : undefined,
+        offsetAccountId: body.offsetAccountId ?? undefined,
         date,
-        lotId: body.lotId && isUuid(body.lotId) ? body.lotId : undefined,
-        serialId: body.serialId && isUuid(body.serialId) ? body.serialId : undefined,
+        lotId: body.lotId ?? undefined,
+        serialId: body.serialId ?? undefined,
         memo: body.memo ?? null,
       }
       const { value: res, replayed } = await executeIdempotentInventoryAction(
@@ -309,11 +299,11 @@ export async function POST(req: Request) {
       itemId: body.itemId,
       stockLocationId: body.stockLocationId,
       quantityDelta: quantity,
-      lotId: body.lotId && isUuid(body.lotId) ? body.lotId : undefined,
-      serialId: body.serialId && isUuid(body.serialId) ? body.serialId : undefined,
+      lotId: body.lotId ?? undefined,
+      serialId: body.serialId ?? undefined,
       subsidiaryId,
       date,
-      unitCost: num(body.unitCost) ?? undefined,
+      unitCost: body.unitCost,
       memo: body.memo ?? null,
     }
     const { value: res, replayed } = await executeIdempotentInventoryAction(

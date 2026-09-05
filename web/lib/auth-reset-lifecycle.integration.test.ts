@@ -17,7 +17,7 @@ for (const scenario of ['pending login', 'pending enrollment', 'revoked enrollme
   test(`password reset invalidates ${scenario} from the previous credential`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const org = await createScratchOrg();
     const priorSecret = env.SESSION_SECRET;
-    env.SESSION_SECRET = 'openbooks-isolated-auth-regression-secret-2026-09-05';
+    env.SESSION_SECRET = randomBytes(32).toString('hex');
     try {
       const auth = await import('./auth');
       const { completePasswordReset } = await import('./auth-reset');

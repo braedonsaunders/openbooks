@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -16,7 +17,7 @@ for (const method of ["password", "new OIDC identity", "mapped OIDC identity"] a
   test(`${method} observes MFA enabled while its user lock is pending`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const org = await createScratchOrg();
     const priorSecret = env.SESSION_SECRET;
-    env.SESSION_SECRET = "isolated-mfa-concurrency-regression-2026-09-05";
+    env.SESSION_SECRET = randomBytes(32).toString("hex");
     let release = () => {};
     let held: Promise<unknown> | undefined;
     let contender: Promise<import("./auth").LoginResult> | undefined;

@@ -1,4 +1,5 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from "@/lib/api/json";
+import { z } from "zod";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -18,14 +19,37 @@ import {
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
-import { normalizeMoney } from "@openbooks/engine/src/money.ts";
-import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import {
   INVENTORY_ADVANCED_ACTION_PERMISSIONS,
   type CataloguePermission,
 } from "@openbooks/engine/src/permissions.ts";
 
 export const runtime = "nodejs";
+
+const advancedInventoryBody = z.looseObject({
+  action: z.string().optional(),
+  idempotencyKey: z.string().optional(),
+  id: uuidId.optional(),
+  itemId: uuidId.optional(),
+  subsidiaryId: uuidId.optional(),
+  fromStockLocationId: uuidId.optional(),
+  toStockLocationId: uuidId.optional(),
+  stockLocationId: nullableUuidId.optional(),
+  inTransitAccountId: nullableUuidId.optional(),
+  freightAccountId: uuidId.optional(),
+  sourceDocumentLineId: nullableUuidId.optional(),
+  orderedOn: isoDate().optional(),
+  voucherDate: isoDate().optional(),
+  date: isoDate().optional(),
+  expiresOn: isoDate().nullable().optional(),
+  amount: exactMoney().optional(),
+  basis: z.enum(["value", "quantity", "weight", "manual"]).optional(),
+  memo: z.string().nullable().optional(),
+  lotNumber: z.string().optional(),
+  serialNumber: z.string().optional(),
+  lines: z.array(z.looseObject({ itemId: uuidId, quantity: exactMoney(), lotId: nullableUuidId.optional(), serialId: nullableUuidId.optional() })).optional(),
+  targets: z.array(z.looseObject({ itemId: uuidId, stockLocationId: uuidId, manualAmount: exactMoney().nullable().optional() })).optional(),
+});
 
 export async function GET(req: Request) {
   const gate = await guardPermission("items.read");
@@ -109,7 +133,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, advancedInventoryBody, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
   const body = ((parsedBody.data));
   const action = typeof body?.action === "string" ? body.action : undefined;
@@ -157,10 +181,13 @@ export async function POST(req: Request) {
   try {
     switch (body.action) {
       case "createTransfer": {
+        if (!body.fromStockLocationId || !body.toStockLocationId || !body.lines?.length) {
+          return NextResponse.json({ error: "source, destination and transfer lines required" }, { status: 422 });
+        }
         let subsidiaryId = body.subsidiaryId;
-        if (!subsidiaryId || !isUuid(subsidiaryId)) {
+        if (subsidiaryId === undefined) {
           const r = (await db.execute<{ id: string }>(
-            sql`select id from subsidiaries where org_id = ${orgId} order by created_at limit 1`,
+            sql`select id from subsidiaries where org_id = ${orgId} order by created_at, id limit 1`,
           ));
           subsidiaryId = r.rows[0]?.id;
         }
@@ -168,22 +195,17 @@ export async function POST(req: Request) {
         if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
           return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
         }
-        const lines: { itemId: string; quantity: string; lotId?: string | null; serialId?: string | null }[] = [];
-        for (const line of Array.isArray(body.lines) ? body.lines : []) {
-          const quantityRaw = canonicalDecimal(line?.quantity, 4);
-          if (quantityRaw === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
-          lines.push({
-            itemId: line.itemId,
-            quantity: normalizeMoney(quantityRaw),
-            lotId: line.lotId ?? null,
-            serialId: line.serialId ?? null,
-          });
-        }
+        const lines = body.lines.map((line) => ({
+          itemId: line.itemId,
+          quantity: line.quantity,
+          lotId: line.lotId ?? null,
+          serialId: line.serialId ?? null,
+        }));
         const input = {
           fromStockLocationId: body.fromStockLocationId,
           toStockLocationId: body.toStockLocationId,
           subsidiaryId,
-          orderedOn: body.orderedOn || (await businessToday(orgId)),
+          orderedOn: body.orderedOn ?? (await businessToday(orgId)),
           inTransitAccountId: body.inTransitAccountId ?? null,
           memo: body.memo ?? null,
           lines,
@@ -196,32 +218,38 @@ export async function POST(req: Request) {
         return NextResponse.json({ replayed, ...res }, { status: 201 });
       }
       case "shipTransfer": {
+        if (!body.id) return NextResponse.json({ error: "transfer order required" }, { status: 422 });
         if (!(await orderSubsidiaryInScope(body.id))) {
           return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
         }
         const { value: res, replayed } = await idempotent(
           "inventory.transfer-order.ship",
           { id: body.id, date: body.date },
-          () => shipTransferOrder(orgId, userId, body.id, body.date),
+          () => shipTransferOrder(orgId, userId, body.id!, body.date),
         );
         return NextResponse.json({ replayed, ...res });
       }
       case "receiveTransfer": {
+        if (!body.id) return NextResponse.json({ error: "transfer order required" }, { status: 422 });
         if (!(await orderSubsidiaryInScope(body.id))) {
           return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
         }
         const { value: res, replayed } = await idempotent(
           "inventory.transfer-order.receive",
           { id: body.id, date: body.date },
-          () => receiveTransferOrder(orgId, userId, body.id, body.date),
+          () => receiveTransferOrder(orgId, userId, body.id!, body.date),
         );
         return NextResponse.json({ replayed, ...res });
       }
       case "postLandedVoucher": {
+        if (!body.freightAccountId) return NextResponse.json({ error: "freight account required" }, { status: 422 });
+        if (body.amount === undefined || !body.targets?.length) {
+          return NextResponse.json({ error: "amount and landed-cost targets required" }, { status: 422 });
+        }
         let subsidiaryId = body.subsidiaryId;
-        if (!subsidiaryId || !isUuid(subsidiaryId)) {
+        if (subsidiaryId === undefined) {
           const r = (await db.execute<{ id: string }>(
-            sql`select id from subsidiaries where org_id = ${orgId} order by created_at limit 1`,
+            sql`select id from subsidiaries where org_id = ${orgId} order by created_at, id limit 1`,
           ));
           subsidiaryId = r.rows[0]?.id;
         }
@@ -229,29 +257,17 @@ export async function POST(req: Request) {
         if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
           return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
         }
-        const amount = canonicalDecimal(body.amount, 4);
-        if (amount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
-        const targets: { itemId: string; stockLocationId: string; manualAmount?: string | null }[] = [];
-        for (const target of Array.isArray(body.targets) ? body.targets : []) {
-          const manualRaw =
-            target?.manualAmount == null || target.manualAmount === ""
-              ? null
-              : canonicalDecimal(target.manualAmount, 4);
-          if (target?.manualAmount != null && target.manualAmount !== "" && manualRaw === null) {
-            return NextResponse.json({ error: "invalid amount" }, { status: 422 });
-          }
-          targets.push({
-            itemId: target.itemId,
-            stockLocationId: target.stockLocationId,
-            manualAmount: manualRaw === null ? null : normalizeMoney(manualRaw),
-          });
-        }
+        const targets = body.targets.map((target) => ({
+          itemId: target.itemId,
+          stockLocationId: target.stockLocationId,
+          manualAmount: target.manualAmount ?? null,
+        }));
         const input = {
-          amount: normalizeMoney(amount),
+          amount: body.amount,
           basis: body.basis ?? "value",
           freightAccountId: body.freightAccountId,
           subsidiaryId,
-          voucherDate: body.voucherDate || (await businessToday(orgId)),
+          voucherDate: body.voucherDate ?? (await businessToday(orgId)),
           sourceDocumentLineId: body.sourceDocumentLineId ?? null,
           memo: body.memo ?? null,
           targets,
@@ -264,10 +280,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ replayed, ...res }, { status: 201 });
       }
       case "ensureLot": {
+        if (!body.itemId || !body.lotNumber) return NextResponse.json({ error: "item and lot number required" }, { status: 422 });
         const id = await ensureLot(orgId, body.itemId, body.lotNumber, body.expiresOn ?? null, userId);
         return NextResponse.json({ id });
       }
       case "ensureSerial": {
+        if (!body.itemId || !body.serialNumber) return NextResponse.json({ error: "item and serial number required" }, { status: 422 });
         const id = await ensureSerial(orgId, body.itemId, body.serialNumber, body.stockLocationId ?? null, userId);
         return NextResponse.json({ id });
       }

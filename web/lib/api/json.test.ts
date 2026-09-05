@@ -127,9 +127,12 @@ test("nullableUuidId allows null but rejects junk strings", () => {
 test("isoDate accepts only real YYYY-MM-DD calendar dates", () => {
   assert.equal(isoDate().parse("2026-02-28"), "2026-02-28");
   assert.equal(isoDate().parse("2024-02-29"), "2024-02-29");
+  assert.equal(isoDate().parse("0001-01-01"), "0001-01-01");
+  assert.equal(isoDate().parse("9999-12-31"), "9999-12-31");
 
   for (const invalid of [
     "2026-02-29",
+    "0000-01-01",
     "2100-02-29",
     "2026-04-31",
     "2026-01-32",
