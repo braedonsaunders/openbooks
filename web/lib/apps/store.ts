@@ -25,6 +25,7 @@ import { parseObjectSpecs, type ParsedObjects } from './objects'
 import { createAppPlatformAdapter, AppPlatformError } from './platform'
 import type { SessionUser } from '@/lib/auth'
 import { permissionSetCovers } from '@/lib/permissions'
+import { lockCustomFieldKeys } from '../custom-field-write-lock'
 
 /**
  * Apps server store — every function is org-scoped: the caller passes the
@@ -191,6 +192,7 @@ async function provisionObjects(
 ): Promise<{ recordTypes: string[]; customFields: string[] }> {
   const recordTypes = new Set(owned.recordTypes)
   const customFields = new Set(owned.customFields)
+  await lockCustomFieldKeys(tx, orgId, objects.customFields)
 
   for (const rt of objects.recordTypes) {
     const existing = (await tx.execute(
@@ -232,10 +234,12 @@ async function provisionObjects(
                is_active = true, updated_at = now(), updated_by = ${userId}
          where id = ${existing.rows[0].id} and org_id = ${orgId}`)
     } else {
-      await tx.execute(sql`
+      const created = await tx.execute(sql`
         insert into custom_field_defs (org_id, target_table, target_kind, key, label, field_type, config, is_required, created_by, updated_by)
         values (${orgId}, ${cf.targetTable}, ${cf.targetKind}, ${cf.key}, ${cf.label}, ${cf.fieldType},
-                ${JSON.stringify(cf.config)}::jsonb, ${cf.isRequired}, ${userId}, ${userId})`)
+                ${JSON.stringify(cf.config)}::jsonb, ${cf.isRequired}, ${userId}, ${userId})
+        on conflict do nothing returning id`)
+      if (!created.rows.length) throw new AppError(`custom field "${scoped}" already exists`, 409)
     }
     customFields.add(scoped)
   }

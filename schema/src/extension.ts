@@ -53,6 +53,7 @@ export const customFieldDefs = pgTable(
   },
   (t) => [
     index("custom_field_defs_target").on(t.orgId, t.targetTable, t.targetKind),
+    uniqueIndex("custom_field_defs_scope_key_unique").on(t.orgId, t.targetTable, sql`coalesce(${t.targetKind}, '')`, t.key),
   ],
 );
 

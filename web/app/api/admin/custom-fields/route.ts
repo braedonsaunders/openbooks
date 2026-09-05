@@ -7,6 +7,7 @@ import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/
 import { isUuid } from '../../../../lib/list-params'
 import { validateCustomFieldConfig, normalizeCustomFieldConfig } from '../../../../lib/custom-field-config'
 import type { CustomFieldDef } from '../../../../lib/custom-fields'
+import { lockCustomFieldKeys } from '../../../../lib/custom-field-write-lock'
 // Server-only route: importing the engine adapter is fine, and the reserved
 // set must come from there so validation cannot drift from what headerValues
 // actually exposes at flow runtime.
@@ -106,6 +107,7 @@ export async function POST(req: Request) {
   }
 
   return db.transaction(async (tx) => {
+    await lockCustomFieldKeys(tx, user.orgId, [{ targetTable: String(body.targetTable), key: String(body.key) }])
     const dup = await tx.execute(sql`
       select 1 from custom_field_defs
        where org_id = ${user.orgId} and target_table = ${body.targetTable}
@@ -118,9 +120,11 @@ export async function POST(req: Request) {
       insert into custom_field_defs (org_id, target_table, target_kind, key, label, field_type, config, is_required, sort_order, created_by, updated_by)
       values (${user.orgId}, ${body.targetTable}, ${body.targetKind ?? null}, ${body.key}, ${body.label},
               ${body.fieldType}, ${JSON.stringify(normalizeCustomFieldConfig(body.config))}::jsonb, ${body.isRequired === true}, ${Number(body.sortOrder ?? 0)}, ${user.id}, ${user.id})
+      on conflict do nothing
       returning custom_field_defs.*, ${documentRevisionSql(sql`created_at`)} as created_at,
                 ${documentRevisionSql(sql`updated_at`)} as updated_at
-    `)).rows[0]!
+    `)).rows[0]
+    if (!created) return NextResponse.json({ error: 'a field with that key already exists on that target' }, { status: 409 })
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
       values (${user.orgId}, 'custom_field_defs', ${created.id}, 'insert',
