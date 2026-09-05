@@ -21,6 +21,7 @@ export function FadeInHeader({
   const reduce = useReducedMotion()
   return (
     <motion.div
+      data-page-motion
       initial={reduce ? false : { opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: [0.22, 0.61, 0.36, 1] }}
@@ -41,6 +42,7 @@ export function FadeInBody({
   const reduce = useReducedMotion()
   return (
     <motion.div
+      data-page-motion
       initial={reduce ? false : { opacity: 0, y: 2 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, delay: 0.05, ease: [0.22, 0.61, 0.36, 1] }}

@@ -1,8 +1,9 @@
 // The Insights executor. Runs a compiled query through the shared pool inside a
-// READ ONLY transaction as the SELECT-only role (`openbooks_read`) — the same
-// defense-in-depth boundary as engine/src/sqlapi.ts. Even though the compiler
-// only emits parameterized SELECTs against whitelisted identifiers, Postgres
-// itself refuses any write and caps runtime.
+// READ ONLY transaction under the application's tenant-scoped runtime role.
+// These are catalog-authored, parameterized queries over application tables.
+// The SQL console's openbooks_read role can only read its narrower governed
+// views, so it cannot execute this catalog. PostgreSQL still enforces RLS,
+// refuses writes, and caps runtime independently of the compiler.
 //
 // SERVER ONLY — imports node-postgres. Never import from a client bundle; the
 // client renderer takes a QueryResult, not the pool.
@@ -32,11 +33,13 @@ export async function runInsightQuery(
   pool: QueryPool,
   query: InsightQuery,
   orgId: string,
+  allowedSubsidiaryIds: readonly string[] | null,
   labels?: InsightLabelResolver,
   asOf?: string,
 ): Promise<QueryResult> {
+  if (allowedSubsidiaryIds === undefined) throw new Error('Insights requires an explicit subsidiary authorization scope')
   const validatedQuery = validateInsightQuery(query)
-  const compiled = compileInsightQuery(validatedQuery, orgId, labels, asOf)
+  const compiled = compileInsightQuery(validatedQuery, orgId, labels, asOf, allowedSubsidiaryIds)
   // Fetch one extra row to detect truncation at the cap.
   const capped = Math.min(compiled.limit, INSIGHT_MAX_ROWS)
   const sentinelLimit = capped + 1
@@ -53,7 +56,7 @@ export async function runInsightQuery(
   const started = Date.now()
   try {
     await client.query('begin transaction read only')
-    await client.query('set local role openbooks_read')
+    await client.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)", [orgId])
     await client.query(`set local statement_timeout = ${STATEMENT_TIMEOUT_MS}`)
     const res = await client.query(wrapped, compiled.params)
     await client.query('rollback')

@@ -441,7 +441,16 @@ test("NRV reversal apportions heterogeneous FIFO headroom without crossing any s
       date: org.date,
       nrvPerUnit: "5",
     });
-    // FIFO consumes two units from the $6 layer, leaving 3 @ $5 and 5 @ $5.
+    // Force the rounding fragment's UUID ahead of both original layers. FIFO
+    // must follow receipt/fragment chronology, not the random residual id.
+    const earlyFragmentId = `00000000-${randomUUID().slice(9)}`;
+    const fragment = await db.execute(sql`
+      update cost_layers set id = ${earlyFragmentId}
+       where org_id = ${org.orgId} and source_movement_id = ${low.movementId}
+         and original_quantity = '1.0000' and remaining_quantity = '1.0000'
+       returning id`);
+    assert.equal(fragment.rows.length, 1, "the write-down produced the rounding fragment under test");
+    // FIFO consumes two units from the main fragment of the earlier $6 receipt.
     await issueInventory(org.orgId, null, {
       itemId: org.items.fifo,
       stockLocationId: org.stockLocationId,

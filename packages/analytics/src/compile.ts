@@ -8,7 +8,7 @@
 // no query can escape its org. Output is a single SELECT ready for the read-only
 // executor.
 
-import { REPORT_ENTITY_MAP, SqlParams, bindReportFromAsOf, compileRuleGroup } from '@openbooks/reports'
+import { REPORT_ENTITY_MAP, SqlParams, compileSubsidiaryScope, bindReportFromAsOf, compileRuleGroup } from '@openbooks/reports'
 import { getSource } from './catalog'
 import { fieldRef, sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
 import type {
@@ -235,6 +235,7 @@ export function compileInsightQuery(
   orgId: string,
   labels: InsightLabelResolver = {},
   asOf = '1970-01-01',
+  allowedSubsidiaryIds: readonly string[] | null = null,
 ): CompiledQuery {
   const source = getSource(query.source)
   if (!source)
@@ -243,6 +244,8 @@ export function compileInsightQuery(
 
   const ctx: Ctx = { source, params: [orgId], asOf }
   const wheres: string[] = [`${source.orgColumn} = $1`]
+  const subsidiary = compileSubsidiaryScope(REPORT_ENTITY_MAP[source.key]!, allowedSubsidiaryIds, (value) => bind(ctx, value))
+  if (subsidiary) wheres.push(subsidiary)
   const base = compileBaseFilter(ctx)
   if (base) wheres.push(base)
   for (const f of query.filters ?? []) wheres.push(compileFilter(ctx, f))

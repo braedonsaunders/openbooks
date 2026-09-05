@@ -1,3 +1,4 @@
+import { insightVisibilitySql } from '@/lib/insight-access'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -50,7 +51,8 @@ export default async function InsightsDashboards({
   const statusParam = pickString(sp.status)
   const status = statusParam === 'draft' || statusParam === 'published' ? statusParam : undefined
 
-  const where = sql`org_id = ${orgId}
+  const visibility = insightVisibilitySql(authz)
+  const where = sql`org_id = ${orgId} and ${visibility}
     ${params.q ? sql` and name ilike ${'%' + params.q + '%'}` : sql``}
     ${status ? sql` and status = ${status}` : sql``}`
 
@@ -67,7 +69,7 @@ export default async function InsightsDashboards({
       select count(*) as total,
              count(*) filter (where status = 'draft') as drafts,
              count(*) filter (where status = 'published') as published
-        from insight_dashboards where org_id = ${orgId}
+        from insight_dashboards where org_id = ${orgId} and ${visibility}
     `) as any,
   ])
   const c = counts.rows[0]

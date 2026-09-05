@@ -63,6 +63,12 @@ function sqlText(query: unknown): string {
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextCard = sqlText
 
 const mockSources = new Map<string, string>([
+  ['mock:mutations', `
+    import { db } from '@openbooks/engine/src/db.ts'
+    export async function mutateInsight(_authz, _table, _id, _action, work) {
+      return db.transaction ? db.transaction(tx => work(tx, null)) : work(db, null)
+    }
+  `],
   [
     'mock:db',
     `
@@ -72,7 +78,7 @@ const mockSources = new Map<string, string>([
         execute: async (query) => {
           const text = sqlText(query)
           state.calls.push({ text })
-          if (text.includes('update insight_cards')) return { rows: state.updateSucceeds ? [{ id: state.card.id }] : [] }
+          if (text.includes('update insight_cards')) return { rows: state.updateSucceeds ? [{ ...state.card, updated_at: state.currentRevision }] : [] }
           if (text.includes('updatedAt')) return { rows: [{ updatedAt: state.currentRevision }] }
           return { rows: [] }
         },
@@ -122,6 +128,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
+  ['@/lib/insight-mutations', 'mock:mutations'],
   ['@openbooks/engine/src/db.ts', 'mock:db'],
   ['@openbooks/engine/src/money.ts', 'mock:money'],
   ['@/lib/api/json', 'mock:json'],

@@ -200,19 +200,25 @@ export function DashboardBuilder({
 
   async function setPublished(next: boolean) {
     setBusy(true)
-    const res = await fetch(`/api/insights/dashboards/${dashboard.id}/publish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publish: next }),
-    })
-    const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? t('errors.updateFailed'))
-    else {
-      setStatus(next ? 'published' : 'draft')
-      toast.success(next ? t('builder.publishedToast') : t('builder.draftToast'))
+    try {
+      const res = await fetch(`/api/insights/dashboards/${dashboard.id}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publish: next, expectedUpdatedAt: revisionRef.current }),
+      })
+      const data = await res.json()
+      if (!res.ok) toast.error(data.error ?? t('errors.updateFailed'))
+      else {
+        revisionRef.current = typeof data.updated_at === 'string' ? data.updated_at : null
+        setStatus(next ? 'published' : 'draft')
+        toast.success(next ? t('builder.publishedToast') : t('builder.draftToast'))
+      }
+      router.refresh()
+    } catch {
+      toast.error(t('errors.updateFailed'))
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
-    router.refresh()
   }
 
   async function togglePin() {
@@ -276,11 +282,11 @@ export function DashboardBuilder({
                 ) : null}
                 {canPublish ? (
                   status === 'published' ? (
-                    <Button variant="outline" disabled={busy} onClick={() => setPublished(false)}>
+                    <Button variant="outline" disabled={busy || saveState !== 'saved'} onClick={() => setPublished(false)}>
                       {t('actions.unpublish')}
                     </Button>
                   ) : (
-                    <Button disabled={busy || !nameValid} onClick={() => setPublished(true)}>
+                    <Button disabled={busy || !nameValid || saveState !== 'saved'} onClick={() => setPublished(true)}>
                       {t('actions.publish')}
                     </Button>
                   )

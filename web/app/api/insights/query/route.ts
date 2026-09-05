@@ -1,6 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
+import { REPORT_ENTITY_MAP } from '@openbooks/reports'
+import { isFeatureEnabled } from '@/lib/features'
 import { pool } from '@openbooks/engine/src/db.ts'
 import { runInsightQuery } from '@openbooks/analytics/server'
 import { InsightCompileError, InsightValidationError, sourcePermission } from '@openbooks/analytics'
@@ -14,13 +16,13 @@ export const runtime = 'nodejs'
 /**
  * Compile + execute an insight query and return the typed result — the card
  * studio's live preview and (server-side) card tiles both call this. Guarded by
- * insights.read; runs read-only as openbooks_read, 10k rows / 8s cap.
+ * insights.read; runs read-only with tenant RLS and subsidiary scope, 10k rows / 8s cap.
  */
 export async function POST(req: Request) {
   const gate = await guardPermission('insights.read')
   if (gate instanceof NextResponse) return gate
 
-  let body: unknown
+  let body: Record<string, unknown>
   try {
     const parsedBody = await parseJsonBody(req, jsonObject);
     if (!parsedBody.ok) return parsedBody.response;
@@ -31,7 +33,7 @@ export async function POST(req: Request) {
 
   let query
   try {
-    query = normalizeQuery((body as any)?.query)
+    query = normalizeQuery(body.query)
   } catch (e) {
     // Catalog-referencing validation failures carry a code — translate them;
     // structural corruption stays technical detail verbatim.
@@ -53,10 +55,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `missing permission: ${needed}` }, { status: 403 })
   }
 
+  const feature = REPORT_ENTITY_MAP[query.source]?.featureKey
+  if (feature && !(await isFeatureEnabled(gate.user.orgId, feature))) {
+    return NextResponse.json({ error: `${feature} feature is disabled` }, { status: 403 })
+  }
+
   try {
     // Column labels compile in the caller's locale (results are never persisted).
     const result = await runInsightQuery(
-      pool, query, gate.user.orgId, await insightLabelResolver(), await businessToday(gate.user.orgId),
+      pool, query, gate.user.orgId,
+      gate.allowedSubsidiaryIds === null ? null : [...gate.allowedSubsidiaryIds],
+      await insightLabelResolver(), await businessToday(gate.user.orgId),
     )
     return NextResponse.json(result)
   } catch (e) {

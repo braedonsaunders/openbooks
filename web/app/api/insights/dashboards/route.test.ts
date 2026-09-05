@@ -55,6 +55,12 @@ function sqlText(query: unknown): string {
 ;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksSqlTextDashboard?: unknown }).openbooksSqlTextDashboard = sqlText
 
 const mockSources = new Map<string, string>([
+  ['mock:mutations', `
+    import { db } from '@openbooks/engine/src/db.ts'
+    export async function mutateInsight(_authz, _table, _id, _action, work) {
+      return db.transaction ? db.transaction(tx => work(tx, null)) : work(db, null)
+    }
+  `],
   [
     'mock:db',
     `
@@ -108,6 +114,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
+  ['@/lib/insight-mutations', 'mock:mutations'],
   ['@openbooks/engine/src/db.ts', 'mock:db'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../_lib', 'mock:dashboard-lib'],
@@ -118,11 +125,11 @@ const hooks = registerHooks({
     if (specifier === 'server-only') {
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     }
+    const mocked = mockUrls.get(specifier)
+    if (mocked) return { url: mocked, shortCircuit: true }
     if (specifier.startsWith('@/lib/') && context.parentURL) {
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context)
     }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
@@ -162,7 +169,7 @@ function reset(): void {
         routeState.dashboard = { ...routeState.dashboard, updated_at: routeState.revision }
       }
     }
-    return { rows: [] }
+    return { rows: text.includes('update insight_dashboards') && routeState.dashboard ? [routeState.dashboard] : [] }
   }
 }
 
@@ -215,7 +222,7 @@ test('overlapping saves commit the fresh request and reject the delayed stale re
         routeState.dashboard = { ...routeState.dashboard, name: 'Newest edit', updated_at: routeState.revision }
       }
     }
-    return { rows: [] }
+    return { rows: text.includes('update insight_dashboards') && routeState.dashboard ? [routeState.dashboard] : [] }
   }
 
   const stale = patch({ name: 'Stale edit', expectedUpdatedAt: storedRevision })

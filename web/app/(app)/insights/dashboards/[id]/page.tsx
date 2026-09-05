@@ -1,3 +1,4 @@
+import { insightVisibilitySql } from '@/lib/insight-access'
 import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -26,7 +27,7 @@ export default async function DashboardDetail({ params }: { params: Promise<{ id
   const available = (await db.execute(sql`
     select id, name, description, viz_type
       from insight_cards
-     where org_id = ${orgId} and status = 'published'
+     where org_id = ${orgId} and status = 'published' and ${insightVisibilitySql(authz)}
      order by name asc
   `)) as any
 
@@ -42,6 +43,7 @@ export default async function DashboardDetail({ params }: { params: Promise<{ id
         name: embed.dashboard.name,
         description: embed.dashboard.description,
         status: embed.dashboard.status,
+        updated_at: embed.dashboard.updated_at,
         layout: embed.layout,
       }}
       cards={embed.cards}

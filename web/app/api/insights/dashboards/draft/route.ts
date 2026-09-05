@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { db } from '@openbooks/engine/src/db.ts'
+import { randomUUID } from 'node:crypto'
+import { mutateInsight } from '@/lib/insight-mutations'
 import { insightDashboards } from '@openbooks/schema/src/insights.ts'
 import { guardPermission } from '../../../../../lib/authz'
 
@@ -11,17 +12,21 @@ export async function POST() {
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 
-  const [dashboard] = await db
-    .insert(insightDashboards)
-    .values({
-      orgId: user.orgId,
-      name: 'Untitled dashboard',
-      layout: [],
-      status: 'draft',
-      createdBy: user.id,
-      updatedBy: user.id,
-    })
-    .returning({ id: insightDashboards.id })
+  const id = randomUUID()
+  return mutateInsight(gate, 'insight_dashboards', id, 'insert', async (tx) => {
+    const [dashboard] = await tx
+      .insert(insightDashboards)
+      .values({
+        id,
+        orgId: user.orgId,
+        name: 'Untitled dashboard',
+        layout: [],
+        status: 'draft',
+        createdBy: user.id,
+        updatedBy: user.id,
+      })
+      .returning({ id: insightDashboards.id })
 
-  return NextResponse.json(dashboard)
+    return NextResponse.json(dashboard)
+  })
 }
