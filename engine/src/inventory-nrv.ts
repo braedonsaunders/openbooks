@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { isIsoCalendarDate } from "./business-date.ts";
 import { fromUnits, mul, roundDiv, toUnits } from "./money.ts";
-import { getOnHandForEntity, postInventoryEntry } from "./inventory.ts";
+import { getOnHandForEntity, lockInventoryPosition, postInventoryEntry } from "./inventory.ts";
 import { orgReportingFramework, type ReportingFramework } from "./reporting-framework.ts";
 
 /**
@@ -230,10 +230,10 @@ async function remainingLayers(
   return r.rows;
 }
 
-async function itemAccounts(orgId: string, itemId: string): Promise<{ asset: string; adjustment: string }> {
-  const r = (await db.execute<{ asset_account_id: string; adjustment_account_id: string }>(sql`
+async function itemAccounts(tx: Pick<typeof db, "execute">, orgId: string, itemId: string): Promise<{ asset: string; adjustment: string }> {
+  const r = (await tx.execute<{ asset_account_id: string; adjustment_account_id: string }>(sql`
     select asset_account_id, coalesce(adjustment_account_id, cogs_account_id) as adjustment_account_id
-      from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}`));
+      from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId} for share`));
   const row = r.rows[0];
   if (!row) throw new InventoryNrvError("item has no inventory profile");
   return { asset: row.asset_account_id, adjustment: row.adjustment_account_id };
@@ -309,9 +309,10 @@ export async function writeDownInventoryToNrv(
   input: NrvWritedownInput,
 ): Promise<NrvResult> {
   const framework = await orgReportingFramework(orgId);
-  const accounts = await itemAccounts(orgId, input.itemId);
 
   return await db.transaction(async (tx) => {
+    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+    const accounts = await itemAccounts(tx, orgId, input.itemId);
     const layers = await remainingLayers(tx, orgId, input.itemId, input.stockLocationId);
     if (layers.length === 0) throw new InventoryNrvError("nothing on hand to write down");
 
@@ -383,6 +384,7 @@ export async function writeDownInventoryToNrv(
       const memo = input.memo ?? `NRV write-down — carrying value to ${fromUnits(plan.targetUnits)}`;
       const entryId = await postInventoryEntry(tx, {
         orgId,
+        actorId,
         bookId: ctx.bookId,
         subsidiaryId: plan.subsidiaryId,
         currency: ctx.currency,
@@ -471,10 +473,11 @@ export async function reverseInventoryWritedown(
       "write-down reversal is prohibited under US GAAP (ASC 330-10-35-14): the written-down amount is the new cost basis",
     );
   }
-  const accounts = await itemAccounts(orgId, input.itemId);
   const ctx = await postingContext(orgId, input.subsidiaryId, input.date);
 
   return await db.transaction(async (tx) => {
+    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+    const accounts = await itemAccounts(tx, orgId, input.itemId);
     const layers = await remainingLayers(
       tx,
       orgId,
@@ -605,6 +608,7 @@ export async function reverseInventoryWritedown(
     const memo = input.memo ?? `NRV write-down reversal — carrying value to ${fromUnits(targetUnits)}`;
     const entryId = await postInventoryEntry(tx, {
       orgId,
+      actorId,
       bookId: ctx.bookId,
       subsidiaryId: input.subsidiaryId,
       currency: ctx.currency,
