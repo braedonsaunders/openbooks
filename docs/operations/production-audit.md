@@ -1377,3 +1377,28 @@ for the next correction.
 All 3,089 canonical unit tests pass. Explicit-any and lint ceilings remain 391
 and 725. The extra same-thread root build attempt is not release evidence;
 the successful locked build is recorded in `build-final.log`.
+
+## Asset editor history and scope — continuation from cf95750d
+
+Asset PATCH allowed moving records outside the caller's subsidiary scope,
+reactivating disposed/written-off assets without reversal, and changing posting
+accounts/category/entity after depreciation. Its basis guard also overlooked
+impairment and disposal journals when no depreciation had posted. The save now
+checks the target scope and locked source scope, includes posted/reversed
+lifecycle evidence, and requires controlled corrections for those changes.
+Unchanged effective account resaves remain valid for the existing drawer.
+
+A name-only edit additionally rebuilt unposted depreciation from original cost,
+undoing controlled impairment schedules. Saves with financial history now retain
+those schedules. A two-period regression confirms an impaired 400/400 plan
+remains byte-for-byte unchanged instead of returning to 500/500 on rename.
+
+The initial 46-case matrix reproduced 29 failures; the schedule regression
+failed independently. All 73 expanded editor/posting checks and 12 adjacent
+lifecycle/depreciation checks pass, including the original posted-basis race
+and a concurrent move outside subsidiary scope. Web types and the locked
+production build pass. Evidence is retained under
+`audit-asset-edit-controls-2026-09-05`. Asset detail valuation still ignores
+lifecycle events; that separate confirmed defect is the next correction.
+All 3,089 canonical unit tests pass. Explicit-any and lint ceilings remain 391
+and 725.

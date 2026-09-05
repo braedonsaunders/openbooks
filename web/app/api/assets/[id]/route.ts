@@ -140,8 +140,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   let subsidiaryId: string | undefined
   if (body.subsidiaryId !== undefined) {
-    const value = strOrNull(body.subsidiaryId)
-    if (!value || !isUuid(value)) return bad('invalid_subsidiary')
+    const value = strOrNull(body.subsidiaryId)?.toLowerCase()
+    if (!value || !isUuid(value) || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(value))) return bad('invalid_subsidiary')
     const valid = (await db.execute(sql`
       select 1 from subsidiaries
        where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`))
@@ -158,7 +158,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       sql`select 1 from asset_categories where id = ${c} and org_id = ${user.orgId}`,
     ))
     if (!r.rows[0]) return bad('Category not found')
-    categoryId = c
+    categoryId = c.toLowerCase()
   }
 
   // -- money --------------------------------------------------------------
@@ -183,7 +183,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const s = strOrNull(v)
     if (s === null) return null
     if (!isUuid(s) || !(await acctExists(s, user.orgId))) return 'invalid'
-    return s
+    return s.toLowerCase()
   }
   const assetAccountId = body.assetAccountId === undefined ? undefined : await accountOverride(body.assetAccountId)
   const accumulatedAccountId = body.accumulatedDepreciationAccountId === undefined ? undefined : await accountOverride(body.accumulatedDepreciationAccountId)
@@ -376,11 +376,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // posting that commits while this request is preparing cannot be
       // followed by a stale basis update or stale audit before-image.
       const lockedRes = (await tx.execute<ExistingAsset>(sql`
-        select id, status, custom, acquisition_cost, salvage_value, in_service_on,
-               depreciation_method, depreciation_method_id, useful_life_months,
-               depreciation_rate_percent, depreciation_units_total, depreciation_convention
-          from fixed_assets
+        select * from fixed_assets
          where id = ${id} and org_id = ${user.orgId}
+           ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
          for update`))
       const lockedExisting = lockedRes.rows[0]
       if (!lockedExisting) throw new Error('asset not found')
@@ -390,8 +388,45 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
          where s.asset_id = ${id} and s.org_id = ${user.orgId} and l.posted_amount is not null
          limit 1`))
-      const lockedBasisConflict = postedAssetBasisEditRefusal(!!lockedPostedRes.rows[0], lockedExisting, requestedBasis)
+      const lifecycleHistory = (await tx.execute(sql`
+        select 1 from asset_events event
+        join journal_entries entry on entry.id = event.journal_entry_id and entry.org_id = event.org_id
+        where event.org_id = ${user.orgId} and event.asset_id = ${id}
+          and entry.status in ('posted', 'reversed') limit 1
+      `))
+      const hasHistory = !!lockedPostedRes.rows[0] || !!lifecycleHistory.rows[0]
+      const lockedBasisConflict = postedAssetBasisEditRefusal(hasHistory, lockedExisting, requestedBasis)
       if (lockedBasisConflict) throw new PostedBasisEditConflict(lockedBasisConflict)
+      if (status !== undefined && status !== lockedExisting.status &&
+          (!['draft', 'in_service'].includes(lockedExisting.status) || (hasHistory && status === 'draft'))) {
+        throw new PostedBasisEditConflict('Use a controlled lifecycle reversal to restore an asset with financial history.')
+      }
+      if (hasHistory) {
+        const protectedSettings: Record<string, string | null | undefined> = {
+          category_id: categoryId,
+          subsidiary_id: subsidiaryId,
+          acquired_on: body.acquiredOn !== undefined ? strOrNull(body.acquiredOn) : undefined,
+        }
+        const defaults = (await tx.execute<Record<string, unknown>>(sql`
+          select asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id
+            from asset_categories where id = ${lockedExisting.category_id} and org_id = ${user.orgId}
+            for share
+        `)).rows[0]
+        const accountChanges: Record<string, string | null | undefined> = {
+          asset_account_id: assetAccountId,
+          accumulated_depreciation_account_id: accumulatedAccountId,
+          depreciation_expense_account_id: expenseAccountId,
+        }
+        const changedSetting = Object.entries(protectedSettings).some(([column, value]) =>
+          value !== undefined && value !== lockedExisting[column])
+        // The existing drawer resends resolved accounts. A resave that merely
+        // repeats the inherited account must remain valid on a posted asset.
+        const changedAccount = Object.entries(accountChanges).some(([column, value]) =>
+          value !== undefined && (value ?? defaults?.[column]) !== (lockedExisting[column] ?? defaults?.[column]))
+        if (changedSetting || changedAccount) {
+          throw new PostedBasisEditConflict('Posting accounts, category and legal entity are fixed once asset financial history exists. Use a controlled adjustment instead.')
+        }
+      }
 
       // A basis change that IS allowed (nothing has posted) is still audited.
       const basisChanges = assetBasisChanges(lockedExisting, requestedBasis)
@@ -431,7 +466,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                   })}::jsonb, ${user.id})`)
       }
       try {
-        await buildAllSchedulesWithRunner(tx, id, user.orgId, user.id)
+        // Metadata and unchanged-account saves must retain controlled valuation
+        // schedules. Financial-history assets cannot change basis through PATCH.
+        if (!hasHistory) await buildAllSchedulesWithRunner(tx, id, user.orgId, user.id)
       } catch (error) {
         if (effectiveStatus === 'in_service') throw error
         // Partial drafts legitimately have no category/date/life yet.
