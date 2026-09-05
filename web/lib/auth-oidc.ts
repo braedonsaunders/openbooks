@@ -83,6 +83,31 @@ function oidcFetch(url: string | URL, init: RequestInit): Promise<Response> {
   return fetch(url, { ...init, redirect: "error" });
 }
 
+/** Bound decoded response bytes while reading, including chunked/compressed bodies. */
+async function readOidcResponse(response: Response, label: string): Promise<string> {
+  const limit = 1_000_000;
+  const reader = response.body?.getReader();
+  try {
+    if (Number(response.headers.get("content-length")) > limit) throw new Error(`${label} is too large`);
+    if (!reader) return "";
+    const decoder = new TextDecoder();
+    let bytes = 0;
+    let text = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return text + decoder.decode();
+      bytes += value.byteLength;
+      if (bytes > limit) throw new Error(`${label} is too large`);
+      text += decoder.decode(value, { stream: true });
+    }
+  } catch (error) {
+    if (reader) await reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader?.releaseLock();
+  }
+}
+
 async function fetchJson(url: string): Promise<Record<string, unknown>> {
   assertSecureEndpoint(url, "OIDC endpoint");
   const response = await oidcFetch(url, {
@@ -91,10 +116,7 @@ async function fetchJson(url: string): Promise<Record<string, unknown>> {
     signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`OIDC endpoint returned ${response.status}`);
-  const length = Number(response.headers.get("content-length") ?? 0);
-  if (length > 1_000_000) throw new Error("OIDC response is too large");
-  const text = await response.text();
-  if (Buffer.byteLength(text) > 1_000_000) throw new Error("OIDC response is too large");
+  const text = await readOidcResponse(response, "OIDC response");
   const result = JSON.parse(text);
   if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("OIDC response is invalid");
   return result as Record<string, unknown>;
@@ -241,8 +263,7 @@ export async function completeOidcAuthorization(input: {
     signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`OIDC token exchange returned ${response.status}`);
-  const tokenText = await response.text();
-  if (Buffer.byteLength(tokenText) > 1_000_000) throw new Error("OIDC token response is too large");
+  const tokenText = await readOidcResponse(response, "OIDC token response");
   const tokens = JSON.parse(tokenText) as { id_token?: unknown };
   if (typeof tokens.id_token !== "string" || tokens.id_token.length > 64_000) throw new Error("OIDC response has no valid ID token");
   let keys = await jwks(metadata.jwks_uri);

@@ -1267,3 +1267,18 @@ correction. All 59 combined inventory, NRV, chronology and concurrency checks
 now pass, as do all 3,076 unit tests, every workspace typecheck and the locked
 production build. Explicit-any and lint ceilings remain 391 and 725. Receipts
 are retained under `audit-nrv-controls-2026-09-05` in thread storage.
+
+## OIDC response memory bounds — continuation from bcbb6454
+
+Discovery, token and signing-key responses enforced their one-megabyte limit
+only after buffering the complete body. All three now share a streaming reader
+that counts decoded response bytes, stops and cancels on overflow, and releases
+the reader lock on success or failure. Declared oversized bodies are canceled
+before reading; absent or understated length headers cannot bypass the limit.
+
+All nine overflow/cancellation regressions failed before correction. All 27
+focused OIDC and route-contract checks now pass, including exactly one million
+bytes, one byte over the limit, split UTF-8, ordinary signed login responses
+and redirect refusal. All 3,087 unit tests, web typechecking and the locked
+production build passed. Explicit-any and lint ceilings remain 391 and 725.
+Receipts are retained under `audit-oidc-response-limit-2026-09-05` in thread storage.
