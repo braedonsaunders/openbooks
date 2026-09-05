@@ -2143,7 +2143,7 @@ async function insertPayStubRow(
   tx: Pick<typeof db, "execute">,
   stub: {
     orgId: string; actorId: string; documentId: string; employeePartyId: string;
-    province: string; periodsPerYear: number; payDate: string; taxYear: number;
+    country: string; province: string; periodsPerYear: number; payDate: string; taxYear: number;
     federalClaim: string; provincialClaim: string; currency: string | null;
     gross: string; pensionable: string; insurable: string; net: string;
     employerCost: string; vacationAccrued: string;
@@ -2151,12 +2151,12 @@ async function insertPayStubRow(
   },
 ): Promise<string> {
   const inserted = (await tx.execute<{ id: string }>(sql`
-    insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
+    insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, country, country_source, province,
                            periods_per_year, pay_date, tax_year, federal_claim, provincial_claim,
                            currency_code, gross, pensionable_earnings, insurable_earnings,
                            net_pay, employer_cost, vacation_accrued, factors, payment_method,
                            created_by, updated_by)
-    values (${stub.orgId}, ${stub.documentId}, ${stub.employeePartyId}, ${stub.province}, ${stub.periodsPerYear},
+    values (${stub.orgId}, ${stub.documentId}, ${stub.employeePartyId}, ${stub.country}, 'calculation', ${stub.province}, ${stub.periodsPerYear},
             ${stub.payDate}, ${stub.taxYear}, ${stub.federalClaim}, ${stub.provincialClaim},
             ${stub.currency}, ${stub.gross}, ${stub.pensionable}, ${stub.insurable},
             ${stub.net}, ${stub.employerCost}, ${stub.vacationAccrued}, ${JSON.stringify(stub.factors)}::jsonb,
@@ -3454,7 +3454,7 @@ async function calculateStub(
 
   const stubId = await insertPayStubRow(tx, {
     orgId, actorId, documentId, employeePartyId,
-    province, periodsPerYear: P, payDate: run.pay_date!, taxYear,
+    country, province, periodsPerYear: P, payDate: run.pay_date!, taxYear,
     federalClaim: factors.TC ?? "0", provincialClaim: factors.TCP ?? "0",
     currency: run.doc_currency!, gross, pensionable, insurable, net,
     employerCost, vacationAccrued, factors, paymentMethod,

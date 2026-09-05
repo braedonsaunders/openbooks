@@ -1,3 +1,4 @@
+import { assertPayrollCountryKnown } from "./payroll-country.ts";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, neg, normalizeMoney } from "./money.ts";
@@ -319,16 +320,17 @@ export interface T4SummaryTotals {
  * is also the only shape in which the data is not a lie.
  */
 export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]> {
+  await assertPayrollCountryKnown(db, orgId, taxYear);
   const caps = caYearCaps(taxYear);
   const rows = (await db.execute<Record<string, unknown>>(sql`
     with committed as (
       select s.*, ${effectiveFilingAccountSql("prof")} as filing_account_id
         from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-      join employee_payroll_profiles prof
+      left join employee_payroll_profiles prof
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
-       and coalesce(prof.country, 'CA') = 'CA'
+       and s.country = 'CA'
     )
     select c.employee_party_id, p.display_name, c.filing_account_id,
            c.province as province,
@@ -810,6 +812,7 @@ export interface Form941Quarter {
  * `form941Returns` below is the same per-account assembly `t4Returns` does.
  */
 export async function form941Worksheet(orgId: string, taxYear: number): Promise<Form941Quarter[]> {
+  await assertPayrollCountryKnown(db, orgId, taxYear);
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select extract(quarter from s.pay_date)::int as quarter,
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
@@ -829,9 +832,9 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
                 where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-      join employee_payroll_profiles prof
-        on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id and prof.country = 'US'
-     where s.org_id = ${orgId} and s.tax_year = ${taxYear}
+      left join employee_payroll_profiles prof
+        on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
      group by 1, 2 order by 2 nulls first, 1
   `));
   return rows.rows.map((row) => ({
@@ -912,6 +915,7 @@ export function openingYtdIntoW2Slip(slip: W2Slip, opening: OpeningYearEndYtd): 
 }
 
 export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]> {
+  await assertPayrollCountryKnown(db, orgId, taxYear);
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select s.employee_party_id, p.display_name,
            array_agg(distinct s.province order by s.province) as states,
@@ -933,10 +937,10 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
                   and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-      join employee_payroll_profiles prof
-        on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id and prof.country = 'US'
+      left join employee_payroll_profiles prof
+        on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
       join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
-     where s.org_id = ${orgId} and s.tax_year = ${taxYear}
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
       group by s.employee_party_id, p.display_name, ${effectiveFilingAccountSql("prof")}
       -- The carry-in lands on the employee's FIRST slip, so an employee filed
       -- under more than one EIN needs a deterministic order, not just name.

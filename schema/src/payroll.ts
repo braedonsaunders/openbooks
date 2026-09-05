@@ -429,6 +429,11 @@ export const payStubs = pgTable(
     orgId: orgRef(),
     payRunDocumentId: uuid("pay_run_document_id").notNull(),
     employeePartyId: uuid("employee_party_id").notNull(),
+    /** Statutory pack identity captured at calculation, not the live profile. */
+    country: text("country"),
+    countrySource: text("country_source", {
+      enum: ["calculation", "legacy_region", "unknown"],
+    }).notNull().default("unknown"),
     /** Snapshot: recalculation never depends on the live profile. */
     province: text("province").notNull(),
     periodsPerYear: integer("periods_per_year").notNull(),
@@ -457,6 +462,11 @@ export const payStubs = pgTable(
     ...auditColumns,
   },
   (t) => [
+    check("pay_stubs_country_evidence", sql`
+      (${t.country} is null and ${t.countrySource} = 'unknown') or
+      (${t.country} is not null and ${t.country} ~ '^[A-Z]{2}$'
+        and ${t.countrySource} in ('calculation', 'legacy_region'))
+    `),
     uniqueIndex("pay_stubs_run_employee").on(t.payRunDocumentId, t.employeePartyId),
     index("pay_stubs_employee_year").on(t.orgId, t.employeePartyId, t.taxYear, t.payDate),
     uniqueIndex("pay_stubs_cheque_number").on(t.orgId, t.chequeNumber)

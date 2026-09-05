@@ -1,3 +1,4 @@
+import { assertPayrollCountryKnown } from "./payroll-country.ts";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { pool, type SqlExecutor } from "./db.ts";
@@ -169,16 +170,15 @@ async function rl1SlipsInSnapshot(
   orgId: string,
   taxYear: number,
 ): Promise<Rl1Slip[]> {
+  await assertPayrollCountryKnown(runner, orgId, taxYear);
   const caps = rl1YearCaps(taxYear);
   const rows = (await runner.execute<Record<string, unknown>>(sql`
     with committed as (
       select s.*
         from pay_stubs s
         join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-        join employee_payroll_profiles prof
-          on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
        where s.org_id = ${orgId} and s.tax_year = ${taxYear}
-         and coalesce(prof.country, 'CA') = 'CA' and s.province = 'QC'
+         and s.country = 'CA' and s.province = 'QC'
     )
     select c.employee_party_id, p.display_name,
            count(*)::int as stub_count,
