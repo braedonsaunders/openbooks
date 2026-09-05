@@ -1,3 +1,4 @@
+import { guardCloseScope } from "@/lib/close-scope";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { CloseError, updateCloseTask } from "@openbooks/engine/src/close.ts";
@@ -40,6 +41,8 @@ export async function POST(
     : "close.run";
   const gate = await guardPermission(permission);
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardCloseScope(gate);
+  if (scopeDenied) return scopeDenied;
   try {
     await updateCloseTask({
       orgId: gate.user.orgId,

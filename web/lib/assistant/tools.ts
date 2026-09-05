@@ -785,7 +785,9 @@ const financialPeriods: AssistantToolDef = {
         from accounting_periods p
         join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
         left join close_runs r on r.period_id = p.id and r.org_id = p.org_id
+          ${authz.allowedSubsidiaryIds === null ? sql`` : sql`and false`}
         left join period_locks l on l.period_id = p.id and l.org_id = p.org_id and l.state <> 'open'
+          ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, authz.allowedSubsidiaryIds)}
        where p.org_id = ${authz.user.orgId} and fc.is_default and fc.is_active
          ${a.completedOnly === false ? sql`` : sql`and p.ends_on < ${today}`}
        group by p.id, r.id

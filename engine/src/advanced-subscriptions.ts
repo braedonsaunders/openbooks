@@ -142,9 +142,11 @@ interface BillingLifecycleRow extends Record<string, unknown> {
   nextBillOn: string; interval: Interval; intervalCount: number;
 }
 
-function validDate(value: string | null | undefined, label: string): string | null {
-  if (value == null || value === "") return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+function validDate(value: string | null | undefined, label: string, required = false): string | null {
+  if (!required && (value == null || value === "")) return null;
+  const parsed = typeof value === "string" ? new Date(`${value}T00:00:00Z`) : null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)
+      || !parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
     throw new AdvancedSubscriptionError(`${label} must be an ISO date`);
   }
   return value;
@@ -332,7 +334,7 @@ export async function createPlanVersion(orgId: string, actorId: string, input: C
   return withOrg(orgId, async () => {
     await assertEnabled(orgId);
     const plan = await ownedPlan(orgId, input.planId);
-    const effectiveFrom = validDate(input.effectiveFrom, "effective date")!;
+    const effectiveFrom = validDate(input.effectiveFrom, "effective date", true)!;
     if (!input.components.length) throw new AdvancedSubscriptionError("at least one component is required");
     const seen = new Set<string>();
     const components = input.components.map((component) => {
@@ -418,7 +420,7 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
     const version = versionResult.rows[0];
     if (!version || version.status !== "published") throw new AdvancedSubscriptionError("a published plan version is required");
     if (version.planId !== sub.planId) throw new AdvancedSubscriptionError("plan version does not belong to the subscription plan");
-    const termStartsOn = validDate(input.termStartsOn, "term start")!;
+    const termStartsOn = validDate(input.termStartsOn, "term start", true)!;
     const termEndsOn = validDate(input.termEndsOn, "term end");
     const trialEndsOn = validDate(input.trialEndsOn, "trial end");
     if (termEndsOn && termEndsOn < termStartsOn) throw new AdvancedSubscriptionError("term end cannot precede term start");
@@ -517,7 +519,10 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
       assertIdempotentReplay(replay.rows[0].subscriptionId, request.subscriptionId, replay.rows[0].request, requestSnapshot);
       return { id: replay.rows[0].id, replayed: true };
     }
-    const effectiveOn = validDate(request.effectiveOn, "effective date")!;
+    if (!["add_component", "remove_component", "change_component", "change_term", "change_timing", "renew", "coterm"].includes(request.type)) {
+      throw new AdvancedSubscriptionError("invalid amendment type");
+    }
+    const effectiveOn = validDate(request.effectiveOn, "effective date", true)!;
     const before = await snapshot(orgId, request.subscriptionId);
     if (before.lifecycle.status === "canceled") throw new AdvancedSubscriptionError("a canceled subscription cannot be amended");
     const currentComponent = request.componentKey
@@ -539,7 +544,10 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
       : null;
     if (request.type === "add_component") {
       if (!request.componentKey?.trim() || !request.name?.trim()) throw new AdvancedSubscriptionError("component key and name are required");
-      if (currentComponent) throw new AdvancedSubscriptionError("component key is already active");
+      if (before.components.some((component) => component.componentKey === request.componentKey
+          && (!component.effectiveTo || component.effectiveTo >= effectiveOn))) {
+        throw new AdvancedSubscriptionError("component key overlaps an existing or scheduled component");
+      }
       await assertCommercialRefs(orgId, request);
     }
     if (request.type === "change_component") {
@@ -562,13 +570,13 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
       await db.execute(sql`
         insert into subscription_components
           (org_id, subscription_id, component_key, name, description, quantity, unit_price,
-           income_account_id, item_id, tax_code_id, effective_from, sort_order, created_by, updated_by)
+           income_account_id, item_id, tax_code_id, effective_from, effective_to, sort_order, created_by, updated_by)
         values (${orgId}, ${request.subscriptionId}, ${request.componentKey!}, ${request.name ?? source.name},
                 ${request.description !== undefined ? request.description : source.description ?? null},
                 ${quantity ?? source.quantity ?? "1"}, ${unitPrice ?? source.unitPrice ?? "0"},
                 ${request.incomeAccountId !== undefined ? request.incomeAccountId : source.incomeAccountId ?? null},
                 ${request.itemId !== undefined ? request.itemId : source.itemId ?? null}, ${request.taxCodeId !== undefined ? request.taxCodeId : source.taxCodeId ?? null},
-                ${effectiveOn}, ${before.components.length}, ${attributedBy}, ${attributedBy})
+                ${effectiveOn}, ${source.effectiveTo ?? null}, ${before.components.length}, ${attributedBy}, ${attributedBy})
       `);
     }
     if (request.type === "change_term") {

@@ -15,7 +15,7 @@ import {
 } from "@openbooks/engine/src/close.ts";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
-import { ApplicationError, forbidden, notFound } from "./errors";
+import { ApplicationError, notFound } from "./errors";
 import { isFeatureEnabled } from "../features";
 import { executeIdempotent } from "./idempotency";
 type CloseRunRow = {
@@ -32,14 +32,6 @@ type CloseRunRow = {
   lastValidatedAt: Date | null;
 };
 
-function assertCloseSubsidiaries(context: ApplicationContext, subsidiaryIds: string[]): void {
-  const allowed = context.authz.allowedSubsidiaryIds;
-  if (allowed === null) return;
-  if (subsidiaryIds.length === 0 || subsidiaryIds.some((id) => !allowed.has(id))) {
-    throw forbidden("close.subsidiary_scope");
-  }
-}
-
 function mapCloseError(error: unknown): never {
   if (error instanceof CloseError) {
     throw new ApplicationError("invalid_input", error.message, 422);
@@ -48,6 +40,7 @@ function mapCloseError(error: unknown): never {
 }
 
 async function closeRun(context: ApplicationContext, runId: string): Promise<CloseRunRow> {
+  assertSubsidiaryAccess(context, null);
   const result = (await db.execute<CloseRunRow>(sql`
     select r.id, r.period_id as "periodId", p.name as "periodName",
            r.book_id as "bookId", b.code as "bookCode", r.status,
@@ -61,7 +54,6 @@ async function closeRun(context: ApplicationContext, runId: string): Promise<Clo
   `));
   const row = result.rows[0];
   if (!row) throw notFound("close run");
-  assertCloseSubsidiaries(context, row.scope?.subsidiaryIds ?? []);
   return row;
 }
 
@@ -70,6 +62,8 @@ export async function listCloseRuns(
   input: { status?: string; limit?: number },
 ): Promise<CloseRunRow[]> {
   assertApplicationPermission(context, "close.run");
+  // Declared lock targets do not narrow the organization-wide diagnostics.
+  if (context.authz.allowedSubsidiaryIds !== null) return [];
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
   const result = (await db.execute<CloseRunRow>(sql`
     select r.id, r.period_id as "periodId", p.name as "periodName",
@@ -84,13 +78,7 @@ export async function listCloseRuns(
      order by p.ends_on desc, r.started_at desc
      limit ${limit}
   `));
-  const allowed = context.authz.allowedSubsidiaryIds;
-  return allowed === null
-    ? result.rows
-    : result.rows.filter((row) => {
-      const subsidiaries = row.scope?.subsidiaryIds ?? [];
-      return subsidiaries.length > 0 && subsidiaries.every((id) => allowed.has(id));
-    });
+  return result.rows;
 }
 
 export async function getCloseRun(context: ApplicationContext, runId: string): Promise<CloseRunRow> {
@@ -108,7 +96,7 @@ export async function startApplicationCloseRun(context: ApplicationContext, inpu
   idempotencyKey: string;
 }): Promise<{ replayed: boolean; result: { runId: string } }> {
   assertApplicationPermission(context, "close.run");
-  assertCloseSubsidiaries(context, input.subsidiaryIds ?? []);
+  assertSubsidiaryAccess(context, null);
   const outcome = await executeIdempotent({
     context,
     operation: "close.start",
@@ -185,6 +173,7 @@ export async function createReopenRequest(context: ApplicationContext, input: {
   idempotencyKey: string;
 }): Promise<{ replayed: boolean; result: { requestId: string } }> {
   assertApplicationPermission(context, "close.reopen");
+  assertSubsidiaryAccess(context, null);
   assertSubsidiaryAccess(context, input.subsidiaryId);
   const outcome = await executeIdempotent({
     context, operation: "close.reopen.request", idempotencyKey: input.idempotencyKey, request: input,
@@ -212,6 +201,7 @@ export async function decideReopenRequest(context: ApplicationContext, input: {
   idempotencyKey: string;
 }): Promise<{ replayed: boolean; result: { requestId: string; approved: boolean } }> {
   assertApplicationPermission(context, "close.reopen");
+  assertSubsidiaryAccess(context, null);
   const scope = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from close_reopen_requests
      where id = ${input.requestId} and org_id = ${context.authz.user.orgId}

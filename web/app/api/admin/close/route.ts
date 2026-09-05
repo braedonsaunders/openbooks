@@ -1,3 +1,4 @@
+import { guardCloseScope } from "@/lib/close-scope";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -12,7 +13,7 @@ import {
   setPeriodLockState,
   type CloseModule,
 } from "@openbooks/engine/src/close.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardPermission, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { isFeatureEnabled } from "../../../../lib/features";
 
@@ -406,6 +407,12 @@ export async function POST(req: Request) {
     : "periods.manage";
   const gate = await guardPermission(permission);
   if (gate instanceof NextResponse) return gate;
+  // Only a direct lock has entity-local effects. Reopen invalidates the
+  // organization-wide close review and configuration/delivery is shared.
+  if (action !== "set-lock") {
+    const denied = guardCloseScope(gate);
+    if (denied) return denied;
+  }
   const { orgId, id: actorId } = gate.user;
   try {
     const advancedActions = new Set(["save-blueprint", "save-policy", "save-automation", "save-package", "send-package"]);
@@ -479,6 +486,8 @@ export async function POST(req: Request) {
         !["open", "soft_closed", "closed"].includes(state)
       )
         throw new CloseError("invalid lock scope or state");
+      const denied = guardSubsidiaryScope(gate, subsidiaryId);
+      if (denied) return denied;
       await setPeriodLockState({
         orgId,
         periodId,

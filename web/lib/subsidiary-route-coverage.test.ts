@@ -354,7 +354,8 @@ test('Accounting home scopes close and ledger metrics by the authz allowlist', (
   assert.match(home, /allowedSubsidiaryIds\?: AccountingSubsidiaryScope/)
   assert.match(home, /subsidiaryVisibleFilter\(sql`je\.subsidiary_id`, scope\)/)
   assert.match(home, /subsidiaryVisibleFilter\(sql`f\.subsidiary_id`, scope\)/)
-  assert.match(home, /jsonb_array_elements_text\(coalesce\(r\.scope->'subsidiaryIds'/)
+  // Run visibility is exercised against real roles and PostgreSQL in
+  // close-lifecycle-authz.integration.test.ts; declared targets do not narrow evidence.
   assert.match(home, /from budget_lines bl/)
   assert.match(home, /from ai_work_items w/)
   assert.match(home, /allowed === null\) return sql``/)

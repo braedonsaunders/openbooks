@@ -115,15 +115,15 @@ test(
 
       const validBody = { periodId: org.periodId, bookId: org.bookId };
 
-      // A restricted omission is narrowed to the caller's allowed set rather
-      // than becoming the engine's org-wide [] scope.
+      // A concrete target cannot grant access to the engine's organization-wide
+      // diagnostics and evidence. Refuse before any run is persisted.
       setAuthz(org.orgId, actors.adminId, new Set([org.subsidiaryId]));
       const omitted = await post(validBody);
-      assert.equal(omitted.status, 200);
+      assert.equal(omitted.status, 404);
       const omittedRun = (await db.execute<{ scope: { subsidiaryIds?: string[] } }>(sql`
         select scope from close_runs where org_id = ${org.orgId}
           and period_id = ${org.periodId} and book_id = ${org.bookId}`)).rows[0];
-      assert.deepEqual(omittedRun?.scope?.subsidiaryIds, [org.subsidiaryId]);
+      assert.equal(omittedRun, undefined);
 
       // Invalid UUIDs are rejected instead of silently filtered to an empty,
       // org-wide request, and an active but unauthorized entity is rejected.

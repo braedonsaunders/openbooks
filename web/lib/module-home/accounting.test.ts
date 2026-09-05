@@ -103,7 +103,7 @@ test('restricted Accounting home scopes legal-entity metrics and fails closed fo
   assert.match(all, /je\.subsidiary_id = any/)
   assert.match(all, /f\.subsidiary_id = any/)
   assert.match(all, /a\.subsidiary_id is null or a\.subsidiary_id = any/)
-  assert.match(all, /jsonb_array_elements_text/)
+  assert.ok(state.calls.find((query) => query.includes('from close_runs'))?.includes('and false'))
   assert.match(all, /from budget_scenarios[\s\S]*budget_lines[\s\S]*not exists/)
   assert.match(all, /from ai_work_items[\s\S]*subject_type[\s\S]*subsidiary_id/)
 })

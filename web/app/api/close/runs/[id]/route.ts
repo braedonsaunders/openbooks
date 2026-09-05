@@ -1,3 +1,4 @@
+import { guardCloseScope } from "@/lib/close-scope";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
@@ -33,6 +34,8 @@ export async function POST(
       : "close.run";
   const gate = await guardPermission(permission);
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardCloseScope(gate);
+  if (scopeDenied) return scopeDenied;
   if (body.action === "publish" && !(await isFeatureEnabled(gate.user.orgId, "advancedClose"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
