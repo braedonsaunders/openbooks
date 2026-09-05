@@ -19,6 +19,7 @@ interface ResetHarnessState {
   sentMarks: Array<Record<string, unknown>>;
   failedMarks: Array<Record<string, unknown>>;
   uncertainMarks: Array<Record<string, unknown>>;
+  passwordHashes: number;
   execute(query: Query): Promise<{ rows: unknown[] }>;
 }
 
@@ -33,6 +34,7 @@ const state: ResetHarnessState = {
   sentMarks: [],
   failedMarks: [],
   uncertainMarks: [],
+  passwordHashes: 0,
   async execute(query) {
     this.queries.push(query);
     if (query.text.includes("from users u")) {
@@ -113,7 +115,10 @@ const mockSources = new Map<string, string>([
       export function authContextHashes() {
         return { networkHash: 'network-hash', userAgentHash: 'user-agent-hash' }
       }
-      export async function hashPassword() { return 'password-hash' }
+      export async function hashPassword() {
+        globalThis[Symbol.for('openbooks.auth-reset-test')].passwordHashes++
+        return 'password-hash'
+      }
     `,
   ],
   [
@@ -152,7 +157,7 @@ registerHooks({
 });
 
 const authResetModuleUrl = "./auth-reset.ts?auth-reset-test";
-const { requestPasswordReset } = await import(authResetModuleUrl) as typeof import("./auth-reset");
+const { requestPasswordReset, completePasswordReset } = await import(authResetModuleUrl) as typeof import("./auth-reset");
 
 function resetState(): void {
   state.user = {
@@ -170,7 +175,15 @@ function resetState(): void {
   state.sentMarks.length = 0;
   state.failedMarks.length = 0;
   state.uncertainMarks.length = 0;
+  state.passwordHashes = 0;
 }
+
+test("unknown reset credentials do not consume the shared password KDF", async () => {
+  resetState();
+  const outcome = await completePasswordReset("unknown-credential-with-valid-length", "Valid password 8914");
+  assert.deepEqual(outcome, { ok: false, reason: "invalid_token" });
+  assert.equal(state.passwordHashes, 0);
+});
 
 function resetMutations(): Query[] {
   return state.queries.filter(({ text }) => (

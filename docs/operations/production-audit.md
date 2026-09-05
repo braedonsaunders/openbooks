@@ -772,3 +772,20 @@ These backend changes were verified through the real service/HTTP boundaries;
 the preceding 13-case browser run is separate evidence. Detailed baselines,
 source snapshots and results are retained under `audit-billing-scope-2026-09-05`
 in thread storage. A full integration run will target this frozen checkpoint.
+
+## Password-reset KDF admission — continuation from f7f87fbb
+
+Reset completion previously invoked scrypt before checking whether the supplied
+token existed. Random correctly sized strings therefore consumed the bounded
+password KDF queue shared with login. A regression reproduced the unnecessary
+hash invocation. Completion now checks the hashed token, expiry, consumption
+state and active identity before hashing, then rechecks authority under the
+existing user-then-token locks before changing credentials. No locks span the
+KDF operation.
+
+Twelve PostgreSQL cases passed, covering invalid-token admission, valid password
+verification, token consumption/user deactivation during hashing, concurrent
+issuance/completion, and session/MFA revocation. The 3,041-test unit suite, web
+typecheck and locked production build also passed. Receipts are retained in
+thread storage under `audit-reset-kdf-2026-09-05`. The independent full integration
+run remains attributed to its frozen f7f87fbb billing revision.

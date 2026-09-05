@@ -145,18 +145,22 @@ export async function completePasswordReset(
     return { ok: false, reason: "invalid_token" };
   }
 
-  // Scrypt before the row lock — never hold a lock across the KDF.
+  // Reject unrecognized, spent or inactive credentials before competing with
+  // login for the shared KDF capacity. This read grants no reset authority:
+  // the credential and active identity are rechecked under locks below.
+  const hashedToken = tokenHash(rawToken);
+  const candidate = await withBypass(async () => (await db.execute<{ user_id: string }>(sql`
+    select r.user_id from auth_password_resets r
+      join users u on u.id = r.user_id and u.is_active
+     where r.token_hash = ${hashedToken} and r.used_at is null and r.expires_at > now()
+  `)).rows[0]);
+  if (!candidate) return { ok: false, reason: "invalid_token" };
+
+  // Scrypt outside the transaction — never hold a lock across the KDF.
   const newHash = await hashPassword(newPassword);
 
   return withBypass(async () => {
-    // Resolve the identity without holding a token lock, then serialize with
-    // issuance and login before locking/rechecking the credential. This keeps
-    // the same user → credential lock order across recovery flows.
-    const candidate = (await db.execute<{ user_id: string }>(sql`
-      select user_id from auth_password_resets
-       where token_hash = ${tokenHash(rawToken)} and used_at is null and expires_at > now()
-    `)).rows[0];
-    if (!candidate) return { ok: false, reason: "invalid_token" as const };
+    // Keep the user → credential lock order shared by issuance and login.
     const user = (await db.execute<{ id: string }>(sql`
       select id from users where id = ${candidate.user_id} and is_active for update
     `)).rows[0];
@@ -165,7 +169,7 @@ export async function completePasswordReset(
       select r.id, r.user_id
         from auth_password_resets r
         join users u on u.id = r.user_id and u.is_active
-       where r.token_hash = ${tokenHash(rawToken)}
+       where r.token_hash = ${hashedToken}
          and r.user_id = ${user.id}
          and r.used_at is null and r.expires_at > now()
        for update of r
