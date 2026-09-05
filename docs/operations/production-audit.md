@@ -669,3 +669,45 @@ first run was corrected before the successful run. Lint/type ceilings remain
 732/398. The temporary browser server and Redis were stopped after testing.
 Receipts are retained under `audit-party-task-lifecycle-2026-09-05` in thread
 storage; the separate full integration run targets frozen commit `3a03e34e`.
+
+## Inventory costing revisions and ownership — continuation from 3e52c500
+
+The costing editor previously omitted its revision, while the API made the
+fence optional and compared timestamps at millisecond precision. PostgreSQL
+regressions reproduced stale saves and two simultaneous creation requests both
+succeeding. The editor now sends the exact six-digit token; explicit null asserts
+that no profile exists. The API serializes creation on the item, checks the
+locked profile revision, and predicates its upsert on that revision. Accepted
+writes advance the token even when the stored timestamp is ahead of transaction
+time. Profile reads and committed responses use the same lossless formatter.
+
+Malformed negative-stock flags, valuation bases and optional account IDs now
+produce validation errors. They previously selected another policy or cleared
+an account while returning success. The editor also resets its load state and
+cancels obsolete reads when switching items, prevents editing before loading,
+and releases its busy state after a failed network request.
+
+A real restricted-role case also posted an inventory revaluation despite having
+no subsidiary access. The route now passes current subsidiary authority into
+the domain revaluation helper, which checks every locked layer owner before
+rewriting costs or posting journals. Permitted subsidiary and unrestricted
+revaluations remain supported. The focused database and boundary suite passes
+53 cases, including unchanged state and audit counts for refused commands.
+
+The separate full integration run of frozen `3a03e34e` completed 1,408 tests:
+1,406 passed and two Redis-dependent cases skipped, with no failures. Its fixture
+receipt records 943 leases/releases/resets, four bootstraps/teardowns/schema
+verifications, zero active leases and zero leaks. The 19-case Redis outbox suite
+had passed separately at `3e52c500`. These are distinct snapshots, not a claim
+that the complete suite exercised subsequent source changes.
+
+Verification also passed all 3,040 unit tests, engine/web typechecks, the locked
+production build and explicit-any/lint ceilings (398/732). A dedicated browser
+session exercised a successful costing save, a competing one-microsecond edit,
+409 refusal with the original form token, and successful reload/retry with the
+new token. Fresh bootstrap exposed a browser-fixture assumption: deferring the
+setup wizard navigates to readiness. The discard test now waits for that
+navigation and reopens its draft before exercising the drawer. All 13 browser
+tests and the E2E typecheck passed after that correction. The database and
+browser services use disposable local data only. Receipts are retained in
+thread storage under `audit-costing-2026-09-05`.

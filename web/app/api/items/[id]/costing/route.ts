@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import {
   InventoryError,
@@ -36,8 +37,8 @@ export const runtime = 'nodejs'
  * Evidence contract: the policy mutation and its audit row commit or roll back
  * together (one transaction), and the audit row records the exact before and
  * after rows, the actor, the re-costing reason whenever one was given, and the
- * revision tokens (updated_at) on both sides of the change. Callers may fence
- * their save by echoing GET's updated_at as expectedUpdatedAt — a stale token
+ * revision tokens (updated_at) on both sides of the change. Callers must fence
+ * their save by echoing GET's updated_at as expectedUpdatedAt (null for creation) — a stale token
  * is a 409 conflict that writes nothing.
  */
 
@@ -61,7 +62,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     select costing_method, tracking, asset_account_id, cogs_account_id,
            adjustment_account_id, variance_account_id, received_not_billed_account_id,
            standard_cost, base_unit, reorder_point, preferred_stock_level,
-           allow_negative_inventory, negative_cost_basis, provisional_unit_cost, updated_at
+           allow_negative_inventory, negative_cost_basis, provisional_unit_cost, ${documentRevisionSql(sql`updated_at`)} as updated_at
       from item_inventory_profiles
      where org_id = ${gate.user.orgId} and item_id = ${id}`)))
   return NextResponse.json({ profile: profile.rows[0] ?? null })
@@ -111,19 +112,19 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
     recostingAuthorization = body.recostingAuthorization
   }
-  // Optional optimistic-concurrency fence: echo GET's updated_at verbatim.
-  let expectedRevision: string | null = null
-  if (body.expectedUpdatedAt !== undefined && body.expectedUpdatedAt !== null) {
-    if (
-      typeof body.expectedUpdatedAt !== 'string'
-      || Number.isNaN(new Date(body.expectedUpdatedAt).getTime())
-    ) {
-      return NextResponse.json(
-        { error: 'expectedUpdatedAt must be the exact updatedAt revision previously read for this profile' },
-        { status: 422 },
-      )
+  // Explicit null asserts absence; omission must never bypass the review fence.
+  if (body.expectedUpdatedAt !== null && !isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    return NextResponse.json(
+      { error: 'Reload and provide the exact costing profile revision (null only for a new profile)' },
+      { status: 409 },
+    )
+  }
+  const expectedRevision = body.expectedUpdatedAt
+  for (const key of ['assetAccountId', 'cogsAccountId', 'adjustmentAccountId', 'varianceAccountId', 'receivedNotBilledAccountId']) {
+    const value = body[key]
+    if (value !== undefined && value !== null && value !== '' && (typeof value !== 'string' || !isUuid(value))) {
+      return NextResponse.json({ error: `${key} must be a valid account identifier` }, { status: 422 })
     }
-    expectedRevision = body.expectedUpdatedAt
   }
   const assetAccountId = accountRef(body.assetAccountId)
   const cogsAccountId = accountRef(body.cogsAccountId)
@@ -137,10 +138,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const standardCost = moneyOrNull(body.standardCost)
   const reorderPoint = moneyOrNull(body.reorderPoint)
   const preferredStockLevel = moneyOrNull(body.preferredStockLevel)
+  if (body.allowNegativeInventory !== undefined && typeof body.allowNegativeInventory !== 'boolean') {
+    return NextResponse.json({ error: 'allowNegativeInventory must be a boolean' }, { status: 422 })
+  }
+  if (body.negativeCostBasis !== undefined && (typeof body.negativeCostBasis !== 'string' || !['last_receipt', 'standard', 'configured'].includes(body.negativeCostBasis))) {
+    return NextResponse.json({ error: 'negativeCostBasis must be last_receipt, standard, or configured' }, { status: 422 })
+  }
   const allowNegativeInventory = body.allowNegativeInventory === true
-  const negativeCostBasis = ['last_receipt', 'standard', 'configured'].includes(String(body.negativeCostBasis))
-    ? String(body.negativeCostBasis)
-    : 'last_receipt'
+  const negativeCostBasis = body.negativeCostBasis ?? 'last_receipt'
   const provisionalUnitCost = moneyOrNull(body.provisionalUnitCost)
   if (
     standardCost === 'invalid'
@@ -159,18 +164,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   try {
     const result = await db.transaction(async (tx) => {
+      // A missing profile cannot be row-locked. Serialize creation on its parent;
+      // NO KEY UPDATE remains compatible with inventory's foreign-key checks.
+      const parent = await tx.execute(sql`select id from items where id = ${id} and org_id = ${orgId} for no key update`)
+      if (!parent.rows[0]) throw new ProfileRevisionConflictError()
       const before = await lockItemInventoryProfile(tx, orgId, id)
       // The row is locked, so this revision read cannot race with a concurrent
       // writer: compare it against the caller's token to fence the save.
-      const storedRevision = ((await tx.execute<{ updated_at: Date | string }>(sql`
-        select updated_at from item_inventory_profiles
+      const storedRevision = ((await tx.execute<{ updated_at: string }>(sql`
+        select ${documentRevisionSql(sql`updated_at`)} as updated_at from item_inventory_profiles
          where org_id = ${orgId} and item_id = ${id}`))).rows[0]?.updated_at ?? null
-      if (expectedRevision !== null) {
-        const storedMs = storedRevision == null ? null : new Date(storedRevision as string).getTime()
-        if (storedMs === null || Number.isNaN(storedMs) || storedMs !== new Date(expectedRevision).getTime()) {
-          throw new ProfileRevisionConflictError()
-        }
-      }
+      if (storedRevision !== expectedRevision) throw new ProfileRevisionConflictError()
       const assessment = await assertCostingPolicyChangeAllowed(
         tx,
         orgId,
@@ -199,6 +203,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         switchingToStandard || revisingStandardCost
           ? await revalueOpenLayersToStandardCost(tx, orgId, actorId, id, {
               standardCost,
+              allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
               assetAccountId,
               varianceAccountId,
               ...(revisingStandardCost
@@ -233,10 +238,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           allow_negative_inventory = excluded.allow_negative_inventory,
           negative_cost_basis = excluded.negative_cost_basis,
           provisional_unit_cost = excluded.provisional_unit_cost,
-          updated_at = now(), updated_by = ${actorId}
+          updated_at = greatest(clock_timestamp(), item_inventory_profiles.updated_at + interval '1 microsecond'), updated_by = ${actorId}
         where item_inventory_profiles.org_id = ${orgId}
-        returning *`)))
-      const after = afterRows.rows[0] ?? null
+          and item_inventory_profiles.updated_at = ${expectedRevision}::timestamptz
+        returning *, ${documentRevisionSql(sql`updated_at`)} as updated_at`)))
+      const after = afterRows.rows[0]
+      if (!after) throw new ProfileRevisionConflictError()
       // Full mutation evidence in the same transaction as the mutation: exact
       // before/after rows, requested policy, actor (audit_log.actor_id), the
       // reason whenever one was supplied, and the revision on both sides.

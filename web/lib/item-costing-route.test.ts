@@ -132,7 +132,7 @@ const mockSources = new Map<string, string>([
         if (text.includes('from cost_layers') && text.includes('inventory_movements')) {
           return { rows: [{ has_history: state.historyExists }] }
         }
-        if (text.includes('select updated_at from item_inventory_profiles')) {
+        if (text.includes('as updated_at from item_inventory_profiles')) {
           const profile = currentProfile()
           return { rows: profile ? [{ updated_at: profile.updated_at }] : [] }
         }
@@ -317,6 +317,7 @@ function get(): Promise<Response> {
 
 function validBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    expectedUpdatedAt: STORED_REVISION,
     costingMethod: 'standard',
     tracking: 'none',
     assetAccountId: ASSET_ACCOUNT,
@@ -344,7 +345,7 @@ test('GET exposes the persisted revision token so callers can fence their save',
   assert.equal(payload.profile.updated_at, STORED_REVISION)
 })
 
-test('a legacy save without a revision token persists and audits the full policy change', async () => {
+test('a reviewed save persists and audits the full policy change', async () => {
   reset()
   routeState.nextProfileAfterUpsert = NEXT_PROFILE
   const response = await put(validBody({ recostingAuthorization: 'REV-2026-087 controller approval' }))
@@ -420,7 +421,7 @@ test('a fenced save under an exactly matching revision succeeds atomically', asy
   const lock = routeState.calls.find((call) => call.text.includes('for update'))
   assert.ok(lock, 'the fenced save locks the profile row first')
   const fenceReads = routeState.calls.filter((call) =>
-    call.text.includes('select updated_at from item_inventory_profiles'),
+    call.text.includes('as updated_at from item_inventory_profiles'),
   )
   assert.equal(fenceReads.length, 1, 'the revision check happens once, under the lock')
 })
