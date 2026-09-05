@@ -1865,7 +1865,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('lib/data-io/setup-resources.ts'),
-    /showOnFieldTicket is not available/,
+    /unavailableFields\.find/,
     'time-type import must refuse showOnFieldTicket when Field Tickets is off — existing flags stay',
   )
   assert.match(

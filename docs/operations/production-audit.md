@@ -2055,3 +2055,44 @@ not a passing full run or fresh-bootstrap verification. All 1,820 fixture leases
 were released/reset, with four bootstrap/teardown/verification cycles and zero
 leaks. The next full run must first execute the deployment bootstrap and verify
 the migration ledger and live category trigger.
+
+
+### 2026-09-05 — Bulk setup import feature controls
+
+A loaded setup import resource could continue writing after its parent feature
+was disabled. Imports also discarded an explicitly supplied disabled subsidiary
+scope and created an unscoped record, accepted foreign rate-book currency with
+Multi-Currency off, and advertised import support for read-only reference data.
+Four initial regressions reproduced those failures. The read-only currency probe
+reached SQL but rolled back on an audit UUID error; no persisted global-currency
+change was observed or claimed.
+
+Bulk setup writes now bind their tenant transaction, join the authoritative
+feature fence, and re-resolve entity/field availability before processing rows.
+Unavailable fields reject their row instead of changing its meaning. With
+Multi-Currency off, an omitted book currency uses the organization's recorded
+base currency on creation and preserves the existing currency on update.
+Read-only resources advertise no import support and refuse writes before SQL.
+Per-row savepoints and the import job's outer evidence transaction are retained.
+
+All 39 focused checks passed (11,940.936666 ms; zero skips), including 13 new
+checks for stale resources, insert/upsert races, unavailable fields, previews,
+tenant binding, base currency, row-level failure continuation and whole-import
+rollback when job evidence fails. Workspace types, an additional final web
+typecheck, changed-file lint, the locked production build and all 3,149 unit
+tests passed (159,943.019625 ms; zero skips). Production dependency audit
+reported zero known vulnerabilities; warning/explicit-any ceilings remain
+725/391. Five built
+browser HTTP checks ran under the non-bypass runtime role: mixed valid/invalid
+rows, unavailable currency, base-currency creation, read-only preview, and a
+feature disable committed while an import waited. Stored rows and import-job
+counts matched every result. The isolated browser, server and tenant were
+cleaned up. Evidence is under `audit-setup-import-controls-2026-09-05`.
+
+The ongoing independent full run at `df56ab44` first applied deployment
+bootstrap and verified the ledger through 0089 plus the live category guard.
+Its formerly failing category cases now pass; the full run remains pending
+and does not include this later import repair. A separate follow-on probe has
+confirmed that book imports bypass first-default selection and allow direct
+demotion of the current primary/default book. That book-policy path remains
+open at this checkpoint and is the next repair.
