@@ -1402,3 +1402,35 @@ production build pass. Evidence is retained under
 lifecycle events; that separate confirmed defect is the next correction.
 All 3,089 canonical unit tests pass. Explicit-any and lint ceilings remain 391
 and 725.
+
+## Full integration checkpoint — b09d0914
+
+The frozen `b09d0914` suite passed all 1,850 tests, with zero failures or skips,
+in 1,248,351 ms. Four fixture slots completed 1,425 leases/releases/resets,
+four bootstraps/teardowns/schema verifications, zero active leases and zero
+leaks. This includes the OIDC, mapped-user and workflow corrections; subsequent
+asset corrections have separate focused checks. The log and fixture receipt
+are retained under `audit-flow-controls-2026-09-05`.
+
+## Asset detail valuation — continuation from 26d5e731
+
+The detail payload showed acquisition cost less depreciation regardless of
+impairment, revaluation or disposal. It now includes posted lifecycle movements
+and their controlled reversals, scoped to the primary book for current totals
+and each schedule row's own book/effective date for projections. Retired assets
+show zero current carrying and accumulated balances; historical posted
+depreciation remains separately available. Lifecycle journals count as
+accounting evidence even when no depreciation exists.
+
+The detail read holds a shared parent lock and uses one transaction so lifecycle
+writers cannot change the asset/journal/schedule population mid-read. Queries
+on that connection run sequentially. Eleven regressions failed before correction
+with two passing controls. The expanded 98-case check passed; after serializing
+the connection queries, the 86 valuation/editor/posting cases pass again without
+the concurrent-query driver warning. Web typechecking and the locked build pass.
+Receipts are under `audit-asset-valuation-display-2026-09-05` in thread storage.
+
+The next confirmed gap is lifecycle posting chronology: current carrying-value
+inputs may include financial activity after the requested posting date.
+All 3,089 canonical unit tests pass after serializing the read queries.
+Explicit-any and lint ceilings remain 391 and 725.
