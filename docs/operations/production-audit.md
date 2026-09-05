@@ -1859,3 +1859,33 @@ Its lifecycle receipt reports 1,754 leases but 1,755 releases/resets and -1 acti
 leases. Inspection confirmed overlapping releases can both reset and decrement the
 same slot; this harness defect remains to be repaired before the next full run.
 Both the failure log and exact receipt are retained with the creation-slice evidence.
+
+## Fixture concurrency and owner disconnections
+
+Continuation from `61d9b950` repaired the harness defects exposed by that full run.
+Concurrent initialization could exceed the configured pool size, concurrent
+borrowers could receive the same tenant, and overlapping releases could reset and
+count the same lease twice. Partial initialization failures skipped cleanup;
+concurrent closes could finish before teardown; and losing every healthy slot
+could leave queued requests pending. A separate socket reproduction showed that
+an owner closing without a complete reply left its request unresolved.
+
+Initialization, reset and close operations now share their in-flight promises.
+Slots are reserved before yielding or waking a borrower. Close waits for pending
+resets and cleans successfully created tenants even after partial initialization
+failure. Lifecycle verification rejects any nonzero active count or mismatch
+between leases and releases. An exhausted pool rejects queued borrowers, and
+incomplete owner replies reject promptly on connection end or close.
+
+Ten regression tests cover these cases. The final real owner/worker probe passed
+all 34 checks, including all 12 item-costing revision cases, with 16 leases,
+16 releases/resets, four bootstrap/teardown/verification cycles, zero active leases
+and zero leaks (36,415.554959 ms). All 3,149 canonical unit tests passed with zero
+skips (151,697.324541 ms); engine types and changed-file lint passed. The warning
+and explicit-any ceilings remain 725 and 391. Evidence is under
+`audit-fixture-concurrency-2026-09-05`.
+
+These are test-harness changes; the preceding production build remains the latest
+product build checkpoint. The failed full integration result above remains a
+failure until a fresh complete run establishes a new checkpoint. Passing targeted
+reruns does not certify the entire codebase or establish production readiness.
