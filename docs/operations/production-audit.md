@@ -1099,3 +1099,19 @@ passed; all 11 now pass. Receipts are retained under
 `audit-utilization-scope-2026-09-05` in thread storage.
 All 3,056 unit tests, web typechecking and the locked production build passed;
 explicit-any and lint ceilings remain 391 and 725.
+
+## True Cost primary-ledger reconciliation — continuation from e28ad13d
+
+The burden-rate dashboard read draft and secondary-book journal activity in
+current overhead, monthly history, prior-period comparison, applied burden
+and revenue/direct-cost/labor-dollar allocation bases. The shared ledger
+predicate now selects posted and reversed history in the primary statement
+book while preserving subsidiary grants. The allocation-base query now joins
+entries so it can enforce the same predicate.
+
+Seven database regressions failed before this correction; seven posted-only
+controls passed. All 14 now pass, checking rates and underlying monetary bases
+against the seeded ledger. Receipts are retained under
+`audit-true-cost-ledger-2026-09-05` in thread storage.
+All 3,056 unit tests, web typechecking and the locked production build passed;
+explicit-any and lint ceilings remain 391 and 725.
