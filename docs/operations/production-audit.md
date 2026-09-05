@@ -1532,3 +1532,40 @@ Browser inspection also confirmed unnamed asset controls, and tracing their
 shared custom-field component found a lossy Number conversion for currency
 defaults. Those are retained for the next correction, not treated as covered
 by the passing save-flow checks.
+
+## Asset form accessibility and shared exact defaults — continuation from c396defc
+
+Native asset fields and tax-election controls now associate their existing
+labels with stable per-instance control IDs. Shared custom-field controls use
+the same association, name hidden-label controls and reference pickers, and
+label multi-select groups. Existing shared components and layouts are retained.
+
+Custom currency/number defaults previously crossed Number(), losing precision.
+They now retain decimal strings. Defaults initialize only when a field becomes
+editable; passive viewing no longer consumes them. Cancel/reopen can initialize
+an unsaved default again, while an explicit clearing during editing stays clear.
+
+Thirty-four real-browser checks pass: named native/custom/tax controls, label
+focus, exact default hydration, clearing, cancel/reopen and successful persisted
+values of `900000000000000.1234` and `123456789012345.1234`. An initial fixture used
+an unsupported eight-decimal numeric default and was correctly refused; the
+final fixture uses the validator's four-decimal domain. All 3,118 unit tests,
+web typechecking and the locked production build pass. Evidence:
+`audit-asset-form-accessibility-2026-09-05`. Explicit-any/lint ceilings remain
+391/725. This is targeted form coverage, not a site-wide accessibility claim.
+
+## Broader integration checkpoint at 30e5eb01
+
+The isolated full suite passed all 1,976 tests with zero skips/failures in
+1,167,019.820166 ms. Four fixture slots completed four bootstraps, teardowns and
+schema verifications; all 1,551 leases were released/reset, with zero active
+leases or leak detections. Redis-dependent checks ran against the local test
+service without mail workers. Both the suite and fixture-owner processes have
+exited. Log and lifecycle receipt are retained under
+`audit-asset-lifecycle-date-2026-09-05`.
+
+That exact revision includes the asset lifecycle chronology, scope, historical
+edit controls and valuation display corrections. It precedes the subsequently
+verified depreciation bounds, complete asset-edit evidence, revision protection
+and form corrections above; those have their own focused/build/unit/browser
+receipts and require the next broader integration checkpoint.
