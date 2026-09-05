@@ -955,6 +955,8 @@ export function DocumentDrawer({
     setBusy(true)
     const res = await fetch(`/api/documents/${doc.id}`, {
       method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expectedUpdatedAt: documentRevision }),
     })
     if (res.ok) {
       toast.success(t('toasts.deleted'))
@@ -978,7 +980,7 @@ export function DocumentDrawer({
     const res = await fetch(`/api/documents/${doc.id}/void`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, expectedUpdatedAt: documentRevision }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))

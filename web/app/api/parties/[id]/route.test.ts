@@ -7,7 +7,7 @@ const stateKey = Symbol.for('openbooks.party-route-hold-test')
 interface ExistingParty {
   display_name: string
   is_active: boolean
-  updated_at: Date
+  updated_at: string
   customer_hold: boolean
   customer_hold_reason: string | null
   vendor_hold: boolean
@@ -33,7 +33,7 @@ const routeState: RouteState = {
   existing: {
     display_name: 'Test party',
     is_active: true,
-    updated_at: new Date(REVISION),
+    updated_at: REVISION,
     customer_hold: false,
     customer_hold_reason: null,
     vendor_hold: false,
@@ -83,6 +83,7 @@ const mockSources = new Map<string, string>([
       export const pool = {}
       export const env = {}
       export function registerRequestOrgResolver() {}
+      export async function withBypassContext(fn) { return fn() }
     `,
   ],
   [
@@ -177,7 +178,7 @@ function reset(existing: Partial<ExistingParty> = {}): void {
   routeState.existing = {
     display_name: 'Test party',
     is_active: true,
-    updated_at: new Date(REVISION),
+    updated_at: REVISION,
     customer_hold: false,
     customer_hold_reason: null,
     vendor_hold: false,

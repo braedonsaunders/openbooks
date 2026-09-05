@@ -6,7 +6,7 @@ import { isFeatureEnabled } from '../../../../../lib/features'
 import { loadFieldDefs } from '../../../../../lib/custom-fields'
 import { resolveFormLayout } from '../../../../../lib/customization/resolve'
 import { isUuid } from '../../../../../lib/list-params'
-import { subsidiaryUiOptions } from '../../../../../lib/subsidiaries'
+import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { loadParty } from '../../_lib'
 
 export const runtime = 'nodejs'
@@ -26,7 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (scopeDenied) return scopeDenied
 
   const [payload, paymentTerms, departments, trades, workerCompGroups, fieldDefs, subsidiaries, accounts, taxCodes, salesReps, payrollEnabled, multiCurrency] = await Promise.all([
-    loadParty(id, gate.user.orgId),
+    loadParty(id, gate.user.orgId, gate.allowedSubsidiaryIds),
     (db.execute(sql`select id, name from payment_terms where org_id = ${gate.user.orgId} and is_active order by name`)),
     (db.execute(sql`select id, name from departments where org_id = ${gate.user.orgId} and is_active order by name`)),
     (db.execute(sql`select id, name from trades where org_id = ${gate.user.orgId} and is_active order by name`)),
@@ -39,7 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       : options),
     (db.execute(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${gate.user.orgId} and is_active and not is_summary order by number nulls last, name`)),
     (db.execute(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${gate.user.orgId} and is_active order by code`)),
-    (db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${gate.user.orgId} and p.is_active order by p.display_name`)),
+    (db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${gate.user.orgId} and p.is_active ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name`)),
     isFeatureEnabled(gate.user.orgId, 'payroll'),
     isFeatureEnabled(gate.user.orgId, 'multiCurrency'),
   ])

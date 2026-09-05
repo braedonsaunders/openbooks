@@ -213,14 +213,18 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   try {
     const parsedBody2 = await parseJsonBody(req, jsonObject);
     if (!parsedBody2.ok) return parsedBody2.response;
-    const body = (parsedBody2.data) as { reason?: string }
+    const body = (parsedBody2.data) as { reason?: string; expectedUpdatedAt?: string }
+    if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+      return NextResponse.json({ error: DOCUMENT_EDIT_VERSION_REQUIRED }, { status: 409 })
+    }
     await deleteDocument(id, authz.user.id, authz.user.orgId, {
       source: 'ui',
       reason: body.reason,
+      expectedUpdatedAt: body.expectedUpdatedAt,
     })
     return NextResponse.json({ ok: true })
   } catch (e) {
-    if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: 422 })
+    if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: e.status })
     throw e
   }
 }

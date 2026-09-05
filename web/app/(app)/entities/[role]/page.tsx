@@ -9,7 +9,7 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { loadParty } from '../../../api/parties/_lib'
-import { subsidiaryUiOptions } from '../../../../lib/subsidiaries'
+import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { NewPartyButton } from '../../parties/NewPartyButton'
 import { NewPartyRedirect } from '../../parties/NewPartyRedirect'
@@ -68,17 +68,20 @@ export default async function EntityRole({
     ? requestedPartyTab
     : 'overview'
   const [openParty, pickers] = await Promise.all([
-    partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId) : null,
+    partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds) : null,
     partyId
       ? Promise.all([
           db.execute<ElementOf<PartyDrawerProps['paymentTerms']>>(sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`),
           db.execute<ElementOf<PartyDrawerProps['departments']>>(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`),
           db.execute<ElementOf<PartyDrawerProps['trades']>>(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`),
           loadFieldDefs('parties'),
-          subsidiaryUiOptions(orgId),
+          subsidiaryUiOptions(orgId).then((options) => authz.allowedSubsidiaryIds
+            ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
+            : options),
           db.execute<ElementOf<PartyDrawerProps['accounts']>>(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`),
           db.execute<ElementOf<PartyDrawerProps['taxCodes']>>(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`),
-          db.execute<ElementOf<PartyDrawerProps['salesReps']>>(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${orgId} and p.is_active order by p.display_name`),
+          db.execute<ElementOf<PartyDrawerProps['salesReps']>>(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${orgId} and p.is_active
+            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name`),
           loadWorkerCompGroups(orgId, payrollEnabled),
         ])
       : null,

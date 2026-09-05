@@ -1,6 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 /**
  * Full party payload for the directory flyout: the party row plus its role
@@ -40,9 +42,10 @@ function withoutPartyRoleSecrets(
   return safe
 }
 
-export async function loadParty(id: string, orgId: string): Promise<PartyPayload | null> {
+export async function loadParty(id: string, orgId: string, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<PartyPayload | null> {
   const party = (await db.execute<Record<string, unknown>>(sql`
-    select * from parties where id = ${id} and org_id = ${orgId}
+    select *, ${documentRevisionSql(sql`updated_at`)} as updated_at from parties where id = ${id} and org_id = ${orgId}
+      ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
   `))
   if (!party.rows[0]) return null
 
@@ -103,17 +106,20 @@ export async function loadParty(id: string, orgId: string): Promise<PartyPayload
         from party_bank_accounts where party_id = ${id} and org_id = ${orgId} order by created_at
     `),
     db.execute<Record<string, unknown>>(sql`
-      select subsidiary_id from party_subsidiaries where party_id = ${id} and org_id = ${orgId} order by created_at
+      select subsidiary_id from party_subsidiaries where party_id = ${id} and org_id = ${orgId}
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by created_at
     `),
     db.execute<Record<string, unknown>>(sql`
       select count(*)::int as count,
              count(*) filter (where coalesce(open_balance, 0) <> 0)::int as open_count,
              max(document_date)::text as last_date
-        from documents where party_id = ${id} and org_id = ${orgId}`),
+        from documents where party_id = ${id} and org_id = ${orgId}
+          ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}`),
     db.execute<Record<string, unknown>>(sql`
       select currency, coalesce(sum(abs(total)), 0)::text as total,
              coalesce(sum(abs(open_balance)), 0)::text as open_balance
         from documents where party_id = ${id} and org_id = ${orgId}
+          ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
        group by currency order by currency`),
   ]))
 
