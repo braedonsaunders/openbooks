@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { CurrencyError, updateFxRate } from '@openbooks/engine/src/currencies.ts'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import { toUnits } from '@openbooks/engine/src/money.ts'
 import { compileFormula } from '@openbooks/engine/src/depreciation-formula.ts'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll-filing-registry.ts'
@@ -21,7 +21,7 @@ import {
 } from '../../../../../lib/setup/coerce'
 import { normalizeTaxReturnFormInput } from '../../../../../lib/setup/tax-return-form'
 import { auditSetupChange as audit, loadSetupAuditRow } from '../../../../../lib/setup/audit'
-import { featureEnabled, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../../../../../lib/features'
+import { featureEnabled, featureGateLockKey, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { loadNumberSequenceKindOptions } from '../../../../../lib/setup/number-sequence-kinds'
 
 export const runtime = 'nodejs'
@@ -41,6 +41,32 @@ export const runtime = 'nodejs'
  */
 
 const PERMISSION = 'admin.setup.manage'
+
+class SetupWriteRefusal extends Error {
+  constructor(message: string, readonly status: number) { super(message) }
+}
+type SetupTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/** Recheck authoritative entity and field gates on the same transaction/connection
+ * that writes configuration. Take this fence before any row or book locks. */
+async function setupWriteTransaction<T>(
+  entity: SetupEntity, orgId: string, body: Record<string, unknown> | undefined,
+  rowId: string | undefined, write: (tx: SetupTransaction) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
+    if (!(await setupEntityEnabled(entity, orgId, tx))) throw new SetupWriteRefusal('unknown setup entity', 404)
+    if (body) {
+      const problem = await validateEntityIntegrity(entity, body, orgId, rowId, tx)
+      if (problem) throw new SetupWriteRefusal(problem, problem === 'not found' ? 404 : 400)
+      if (entity.key === 'item-rate-books' && body.currency !== undefined
+        && !(await isFeatureEnabled(orgId, 'multiCurrency', tx))) {
+        throw new SetupWriteRefusal('not found', 404)
+      }
+    }
+    return write(tx)
+  })
+}
 
 /** Reassign the one default book under the caller's tenant advisory lock,
  * retaining the locked state of every demoted row in the same transaction. */
@@ -142,9 +168,9 @@ function resolveEntity(entityKey: string): SetupEntity | null {
   return SETUP_ENTITY_BY_KEY.get(entityKey) ?? null
 }
 
-async function setupEntityEnabled(entity: SetupEntity, orgId: string): Promise<boolean> {
+async function setupEntityEnabled(entity: SetupEntity, orgId: string, executor: Pick<typeof db, 'execute'> = db): Promise<boolean> {
   if (!entity.featureKey) return true
-  return featureEnabled(await resolvedFeatureState(orgId), entity.featureKey)
+  return featureEnabled(await resolvedFeatureState(orgId, executor), entity.featureKey)
 }
 
 /** Hide Equipment-gated controls for writes, but keep an existing
@@ -172,11 +198,12 @@ async function validateEntityIntegrity(
   body: Record<string, unknown>,
   orgId: string,
   rowId?: string,
+  executor: SqlExecutor = db,
 ): Promise<string | null> {
   const submittedSubsidiaryScope = entity.fields
     .filter((field) => field.ref === 'subsidiaries')
     .some((field) => Boolean(body[field.key]))
-  if (submittedSubsidiaryScope && !(await subsidiaryFeatureEnabled(orgId))) {
+  if (submittedSubsidiaryScope && !(await subsidiaryFeatureEnabled(orgId, executor))) {
     return 'Subsidiaries are not enabled for this organization'
   }
   if (entity.key === 'pay-derived-rules') {
@@ -184,7 +211,7 @@ async function validateEntityIntegrity(
     // must stop a new unit link or equipment_charge trigger without wiping
     // rules that already carry one.
     const current = rowId
-      ? (((await db.execute(sql`
+      ? (((await executor.execute(sql`
           select trigger, equipment_unit_id from pay_derived_rules
            where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
@@ -194,30 +221,30 @@ async function validateEntityIntegrity(
     const changingUnit = submittedUnit && body.equipmentUnitId !== current?.equipment_unit_id
     const changingTrigger = submittedChargeTrigger && current?.trigger !== 'equipment_charge'
     if ((changingUnit || changingTrigger || (!rowId && (submittedUnit || submittedChargeTrigger)))
-      && !(await isFeatureEnabled(orgId, 'equipment'))) {
+      && !(await isFeatureEnabled(orgId, 'equipment', executor))) {
       return 'not found'
     }
   }
   if (entity.key === 'time-types' && body.showOnFieldTicket !== undefined
-    && !(await isFeatureEnabled(orgId, 'fieldTickets'))) {
+    && !(await isFeatureEnabled(orgId, 'fieldTickets', executor))) {
     return 'not found'
   }
   if (entity.key === 'number-sequences') {
     const current = rowId
-      ? (((await db.execute(sql`
+      ? (((await executor.execute(sql`
           select document_kind, subsidiary_id from number_sequences
            where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const documentKind = String(body.documentKind ?? current?.document_kind ?? '')
-    const allowedKinds = new Set((await loadNumberSequenceKindOptions(orgId)).map((option) => option.value))
+    const allowedKinds = new Set((await loadNumberSequenceKindOptions(orgId, executor)).map((option) => option.value))
     if (!allowedKinds.has(documentKind)) return 'Choose a valid document or custom record type'
 
     const submittedSubsidiaryId = body.subsidiaryId || null
     if (submittedSubsidiaryId) {
-      if (!(await subsidiaryFeatureEnabled(orgId))) return 'Subsidiaries are not enabled for this organization'
+      if (!(await subsidiaryFeatureEnabled(orgId, executor))) return 'Subsidiaries are not enabled for this organization'
       if (!UUID_RE.test(String(submittedSubsidiaryId))) return 'Choose a valid subsidiary'
-      const subsidiary = ((await db.execute(sql`
+      const subsidiary = ((await executor.execute(sql`
         select 1 from subsidiaries
          where id = ${String(submittedSubsidiaryId)} and org_id = ${orgId}
            and is_active and not is_elimination`)))
@@ -226,7 +253,7 @@ async function validateEntityIntegrity(
   }
   if (entity.key === 'depreciation-methods') {
     const current = rowId
-      ? (((await db.execute(sql`select formula from depreciation_methods where id=${rowId} and org_id=${orgId}`)))).rows[0]
+      ? (((await executor.execute(sql`select formula from depreciation_methods where id=${rowId} and org_id=${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const formula = String(body.formula ?? current?.formula ?? '').trim()
@@ -253,7 +280,7 @@ async function validateEntityIntegrity(
     // negative rate saves "successfully" only to fail every later document at
     // calculation time. A statutory 0% rate stays legal.
     const current = rowId
-      ? (((await db.execute(sql`
+      ? (((await executor.execute(sql`
           select rate_percent::text as rate_percent from tax_rates
            where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
@@ -266,7 +293,7 @@ async function validateEntityIntegrity(
   }
   if (entity.key === 'tax-codes') {
     const current = rowId
-      ? (((await db.execute(sql`select * from tax_codes where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+      ? (((await executor.execute(sql`select * from tax_codes where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const value = (camel: string, snake: string, fallback: unknown) =>
@@ -291,7 +318,7 @@ async function validateEntityIntegrity(
     if (calculationType === 'reverse_charge' && (!collectedAccountId || !paidAccountId)) return 'reverse-charge-accounts-required'
     const accountIds = [withholdingAccountId, collectedAccountId, paidAccountId].filter(Boolean).map(String)
     if (accountIds.length > 0) {
-      const accounts = ((await db.execute(sql`
+      const accounts = ((await executor.execute(sql`
         select id from accounts where org_id = ${orgId} and id = any(${`{${accountIds.join(',')}}`}::uuid[])
           and is_active and not is_summary
       `)))
@@ -301,14 +328,14 @@ async function validateEntityIntegrity(
   }
   if (entity.key === 'tax-groups') {
     const current = rowId
-      ? (((await db.execute(sql`
+      ? (((await executor.execute(sql`
           select price_includes_tax from tax_groups where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const members = Array.isArray(body.members)
       ? body.members.map(String)
       : rowId
-        ? (((await db.execute(sql`
+        ? (((await executor.execute(sql`
             select tgm.tax_code_id
               from tax_group_members tgm
               join tax_groups tg on tg.id = tgm.tax_group_id and tg.org_id = ${orgId}
@@ -317,7 +344,7 @@ async function validateEntityIntegrity(
         : []
     if (members.length === 0) return 'tax-group-members-required'
     if (new Set(members).size !== members.length || members.some((id: string) => !UUID_RE.test(id))) return 'invalid-tax-group-members'
-    const rows = ((await db.execute(sql`
+    const rows = ((await executor.execute(sql`
       select id, calculation_type from tax_codes
        where org_id = ${orgId} and is_active and id = any(${`{${members.join(',')}}`}::uuid[])
     `)))
@@ -331,12 +358,12 @@ async function validateEntityIntegrity(
   }
   if (entity.key === 'tax-pool-classes') {
     const current = rowId
-      ? (((await db.execute(sql`select * from tax_pool_classes where id=${rowId} and org_id=${orgId}`)))).rows[0]
+      ? (((await executor.execute(sql`select * from tax_pool_classes where id=${rowId} and org_id=${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const value = (camel: string, snake: string) => body[camel] !== undefined ? body[camel] : current?.[snake]
     const regimeCode = String(value('regime', 'regime') ?? '')
-    const regime = ((await db.execute(sql`
+    const regime = ((await executor.execute(sql`
       select calculation_model from tax_regimes where org_id=${orgId} and code=${regimeCode} and is_active limit 1`)))
     if (!regime.rows[0]) return 'install-or-create-tax-depreciation-regime-first'
     const recovery = Number(value('recoveryPeriodYears', 'recovery_period_years'))
@@ -354,7 +381,7 @@ async function validateEntityIntegrity(
       return 'primary-active-required'
     }
     if (rowId) {
-      const existing = ((await db.execute(sql`
+      const existing = ((await executor.execute(sql`
         select is_primary from accounting_books where id = ${rowId} and org_id = ${orgId}`)))
       if (!existing.rows[0]) return 'not found'
       if (existing.rows[0].is_primary && !coerceBoolean(body.isPrimary)) return 'primary-required'
@@ -369,7 +396,7 @@ async function validateEntityIntegrity(
     // the declaration (engine/src/payroll-filing-registry.ts) is asked here,
     // at the API boundary, for creates and edits alike.
     const current = rowId
-      ? (((await db.execute(sql`
+      ? (((await executor.execute(sql`
           select country, program_type, state_code from payroll_filing_accounts
            where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
@@ -395,7 +422,7 @@ async function validateEntityIntegrity(
     // date, the periods-per-year assumption the statutory engines annualize
     // with, and the period-overlap guard.
     const current = rowId
-      ? (((await db.execute(sql`
+      ? (((await executor.execute(sql`
           select frequency, periods_per_year, anchor_period_end::text as anchor_period_end
             from pay_schedules
            where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
@@ -424,7 +451,7 @@ async function validateEntityIntegrity(
       return 'The key must start with a lowercase letter and contain only lowercase letters, numbers, and underscores'
     }
     if (rowId) {
-      const existing = ((await db.execute(sql`
+      const existing = ((await executor.execute(sql`
         select source_kind from segment_definitions where id = ${rowId} and org_id = ${orgId}`)))
       if (!existing.rows[0]) return 'not found'
     }
@@ -432,13 +459,13 @@ async function validateEntityIntegrity(
 
   if (entity.key === 'segment-values') {
     const existing = rowId
-      ? (((await db.execute(sql`
+      ? (((await executor.execute(sql`
           select segment_id, parent_id from segment_values where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !existing) return 'not found'
     const segmentId = String(body.segmentId ?? existing?.segment_id ?? '')
     if (!UUID_RE.test(segmentId)) return 'Values can only be created for a custom segment'
-    const segment = ((await db.execute(sql`
+    const segment = ((await executor.execute(sql`
       select id, is_hierarchical from segment_definitions
        where id = ${segmentId} and org_id = ${orgId} and source_kind = 'custom'`)))
     if (!segment.rows[0]) return 'Values can only be created for a custom segment'
@@ -446,7 +473,7 @@ async function validateEntityIntegrity(
     if (parentId) {
       if (!segment.rows[0].is_hierarchical) return 'This segment is not hierarchical'
       if (!UUID_RE.test(String(parentId))) return 'Choose a parent value from the same segment'
-      const parent = ((await db.execute(sql`
+      const parent = ((await executor.execute(sql`
         select id from segment_values where id = ${String(parentId)} and org_id = ${orgId}
          and segment_id = ${segmentId}`)))
       if (!parent.rows[0]) return 'Choose a parent value from the same segment'
@@ -455,7 +482,7 @@ async function validateEntityIntegrity(
         // after taking the per-tenant/per-segment storage fence, which closes
         // the concurrent cross-reparent window for this route and every other
         // writer (bulk import and direct SQL included).
-        const cycle = ((await db.execute(sql`
+        const cycle = ((await executor.execute(sql`
           with recursive descendants as (
             select id from segment_values
              where id = ${rowId} and org_id = ${orgId} and segment_id = ${segmentId}
@@ -471,7 +498,7 @@ async function validateEntityIntegrity(
 
   if (entity.key === 'subsidiaries') {
     const existing = rowId
-      ? ((await db.execute(sql`
+      ? ((await executor.execute(sql`
           select id, parent_id, is_active, is_elimination from subsidiaries
            where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
       : null
@@ -482,12 +509,12 @@ async function validateEntityIntegrity(
     if (existing?.parent_id === null && body.isActive === false) return 'The root subsidiary cannot be archived'
     if (parentId) {
       if (!UUID_RE.test(String(parentId))) return 'Invalid parent subsidiary'
-      const parent = ((await db.execute(sql`
+      const parent = ((await executor.execute(sql`
         select id from subsidiaries
          where id = ${String(parentId)} and org_id = ${orgId} and is_active`)))
       if (!parent.rows[0]) return 'Parent subsidiary not found'
       if (rowId) {
-        const cycle = ((await db.execute(sql`
+        const cycle = ((await executor.execute(sql`
           with recursive descendants as (
             select id from subsidiaries where id = ${rowId} and org_id = ${orgId}
             union all
@@ -498,7 +525,7 @@ async function validateEntityIntegrity(
       }
     }
     if (rowId && body.isElimination !== undefined && body.isElimination !== existing.is_elimination) {
-      const used = ((await db.execute(sql`
+      const used = ((await executor.execute(sql`
         select 1 from journal_entries where org_id = ${orgId} and subsidiary_id = ${rowId} limit 1`)))
       if (used.rows.length) return 'Elimination status cannot change after the subsidiary has ledger activity'
     }
@@ -506,7 +533,7 @@ async function validateEntityIntegrity(
 
   if (entity.key === 'intercompany-pairs') {
     const current = rowId
-      ? (((await db.execute(sql`
+      ? (((await executor.execute(sql`
           select * from intercompany_pairs where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     const fromId = String(body.fromSubsidiaryId ?? current?.from_subsidiary_id ?? '')
@@ -514,11 +541,11 @@ async function validateEntityIntegrity(
     const dueFromId = String(body.dueFromAccountId ?? current?.due_from_account_id ?? '')
     const dueToId = String(body.dueToAccountId ?? current?.due_to_account_id ?? '')
     if (fromId === toId) return 'Intercompany subsidiaries must be different'
-    const subsidiaries = ((await db.execute(sql`
+    const subsidiaries = ((await executor.execute(sql`
       select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination
        and id = any(${`{${[fromId, toId].join(',')}}`}::uuid[])`)))
     if (subsidiaries.rows.length !== 2) return 'Choose two active, non-elimination subsidiaries'
-    const accounts = ((await db.execute(sql`
+    const accounts = ((await executor.execute(sql`
       select id, type, eliminate from accounts where org_id = ${orgId} and is_active and not is_summary
        and id = any(${`{${[dueFromId, dueToId].join(',')}}`}::uuid[])`)))
     const byId = new Map<string, { id: string; type: string; eliminate: boolean }>(
@@ -530,7 +557,7 @@ async function validateEntityIntegrity(
     if (!String(dueFrom.type).startsWith('asset_')) return 'The due-from account must be an asset'
     if (!String(dueTo.type).startsWith('liability_')) return 'The due-to account must be a liability'
     if (!dueFrom.eliminate || !dueTo.eliminate) return 'Both intercompany accounts must be marked for elimination'
-    const duplicate = ((await db.execute(sql`
+    const duplicate = ((await executor.execute(sql`
       select 1 from intercompany_pairs where org_id = ${orgId}
        and id is distinct from ${rowId ?? null}
        and ((from_subsidiary_id = ${fromId} and to_subsidiary_id = ${toId})
@@ -539,7 +566,7 @@ async function validateEntityIntegrity(
   }
   if (entity.key === 'subsidiary-ownership-interests') {
     const current = rowId
-      ? (((await db.execute(sql`select * from subsidiary_ownership_interests where id=${rowId} and org_id=${orgId}`)))).rows[0]
+      ? (((await executor.execute(sql`select * from subsidiary_ownership_interests where id=${rowId} and org_id=${orgId}`)))).rows[0]
       : null
     const value = (key: string, column: string) => body[key] ?? current?.[column] ?? null
     const method = String(value('method', 'method') ?? 'full')
@@ -561,7 +588,7 @@ async function validateEntityIntegrity(
     const ids = [...new Set(accountRules.map(([key, column]) => value(key, column)).filter(Boolean).map(String))]
     if (hasNonUuidEntry(ids)) return 'Ownership accounts must be valid accounts from this organization'
     const rows = ids.length
-      ? (((await db.execute(sql`
+      ? (((await executor.execute(sql`
           select id,type from accounts where org_id=${orgId} and is_active and not is_summary
             and id=any(${uuidArrayParam(ids)}::uuid[])
         `)))).rows as { id: string; type: string }[]
@@ -583,7 +610,7 @@ async function validateEntityIntegrity(
     if (!/^[A-Z]{3}$/.test(from) || !/^[A-Z]{3}$/.test(to) || from === to) {
       return 'Choose two different ISO currency codes'
     }
-    const currencies = ((await db.execute(sql`
+    const currencies = ((await executor.execute(sql`
       select code from currencies where code = any(${`{${[from, to].join(',')}}`}::text[])`)))
     if (currencies.rows.length !== 2) return 'Unknown currency code'
     const rateFields = entity.key === 'fx-rates'
@@ -599,7 +626,7 @@ async function validateEntityIntegrity(
     if (entity.key === 'consolidated-fx-rates') {
       const periodId = String(body.periodId ?? '')
       if (!rowId) {
-        const period = ((await db.execute(sql`
+        const period = ((await executor.execute(sql`
           select 1 from accounting_periods where id = ${periodId} and org_id = ${orgId}`)))
         if (!period.rows.length) return 'Choose an accounting period from this organization'
       }
@@ -611,7 +638,7 @@ async function validateEntityIntegrity(
   if (entity.key === 'item-rate-book-assignments') {
     let values = body
     if (rowId) {
-      const current = ((await db.execute(sql`
+      const current = ((await executor.execute(sql`
         select rate_book_id as "rateBookId", customer_id as "customerId", project_id as "projectId",
                effective_from as "effectiveFrom", effective_to as "effectiveTo", date_basis as "dateBasis"
           from item_rate_book_assignments where id = ${rowId} and org_id = ${orgId}
@@ -629,22 +656,20 @@ async function validateEntityIntegrity(
       : values.customerId
         ? sql`customer_id = ${values.customerId}`
         : sql`project_id is null and customer_id is null`
-    const [refs, overlap] = await Promise.all([
-      (db.execute(sql`
+    const refs = await executor.execute(sql`
         select
           exists(select 1 from item_rate_books where id = ${values.rateBookId} and org_id = ${orgId}) as book_ok,
           ${values.customerId ? sql`exists(select 1 from customer_roles where party_id = ${values.customerId} and org_id = ${orgId} and is_active)` : sql`true`} as customer_ok,
           ${values.projectId ? sql`exists(select 1 from projects where id = ${values.projectId} and org_id = ${orgId})` : sql`true`} as project_ok
-      `)),
-      (db.execute(sql`
+      `)
+    const overlap = await executor.execute(sql`
         select 1 from item_rate_book_assignments
          where org_id = ${orgId} and id is distinct from ${rowId ?? null} and is_active
            and ${scope}
            and daterange(effective_from, effective_to, '[]') &&
                daterange(${values.effectiveFrom ?? null}::date, ${values.effectiveTo ?? null}::date, '[]')
          limit 1
-      `)),
-    ])
+      `)
     if (!refs.rows[0]?.book_ok || !refs.rows[0]?.customer_ok || !refs.rows[0]?.project_ok) {
       return 'Choose records from this organization'
     }
@@ -687,7 +712,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
 
   if (entity.key === 'accounting-books') {
     try {
-      const id = await db.transaction(async (tx) => {
+      const id = await setupWriteTransaction(entity, orgId, body, undefined, async (tx) => {
         // Serializes primary-book changes for this tenant, including two admins
         // creating or promoting books at the same time.
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`accounting-books:${orgId}`}, 0))`)
@@ -711,6 +736,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
       })
       return NextResponse.json({ id })
     } catch (e) {
+      if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
       return NextResponse.json({ error: describeDbError(e) }, { status: 400 })
     }
   }
@@ -723,7 +749,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
     try {
-      const id = await db.transaction(async (tx) => {
+      const id = await setupWriteTransaction(entity, orgId, body, undefined, async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
         const current = ((await tx.execute(sql`
           select exists(select 1 from item_rate_books where org_id = ${orgId} and is_default and is_active) as has_default
@@ -749,6 +775,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
       })
       return NextResponse.json({ id })
     } catch (e) {
+      if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
       return NextResponse.json({ error: describeDbError(e) }, { status: 400 })
     }
   }
@@ -800,7 +827,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
     // as an edit: close the currently-effective active row before inserting the
     // successor, and keep both operations plus their evidence atomic.
     try {
-      const newId = await db.transaction(async (tx) => {
+      const newId = await setupWriteTransaction(entity, orgId, body, undefined, async (tx) => {
         const effectiveFrom = String(body.effectiveFrom)
         const prior = coerceBoolean(body.isActive)
           ? ((await tx.execute(sql`
@@ -843,6 +870,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
       })
       return NextResponse.json({ id: newId })
     } catch (e) {
+      if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
       if (pgErrorCode(e) === '23505' || pgErrorCode(e) === '23P01') {
         return NextResponse.json({ error: 'duplicate', code: 'duplicate' }, { status: 409 })
       }
@@ -851,7 +879,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   }
 
   try {
-    const newId = await db.transaction(async (tx) => {
+    const newId = await setupWriteTransaction(entity, orgId, body, undefined, async (tx) => {
       const inserted = ((await tx.execute(sql`
         insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
         returning ${sql.raw(idColumn(entity))} as id`)))
@@ -872,6 +900,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
     })
     return NextResponse.json({ id: newId })
   } catch (e) {
+    if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
     // The natural-key preflight above is an autocommit read, so two concurrent
     // creates can both pass it; the storage UNIQUE constraint is the authority
     // and surfaces here as a deterministic 409, with no partial row or audit
@@ -920,7 +949,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
 
   if (entity.key === 'accounting-books') {
     try {
-      await db.transaction(async (tx) => {
+      await setupWriteTransaction(entity, orgId, body, id, async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`accounting-books:${orgId}`}, 0))`)
         const existing = ((await tx.execute(sql`
           select * from accounting_books
@@ -943,6 +972,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
       })
       return NextResponse.json({ id })
     } catch (e) {
+      if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
       const message = (e as Error).message
       const error = message === 'primary-required' || message === 'primary-active-required' || message === 'not found'
         ? message
@@ -959,7 +989,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
     try {
-      await db.transaction(async (tx) => {
+      await setupWriteTransaction(entity, orgId, body, id, async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
         const existing = ((await tx.execute(sql`
           select * from item_rate_books where id = ${id} and org_id = ${orgId} for update
@@ -981,6 +1011,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
       })
       return NextResponse.json({ id })
     } catch (e) {
+      if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
       const message = (e as Error).message
       const error = ['not found', 'default-required'].includes(message) ? message : describeDbError(e)
       return NextResponse.json({ error }, { status: error === 'not found' ? 404 : 400 })
@@ -1002,7 +1033,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
     ]
     const builtByColumn = new Map(built.cols.map((column) => [column.column, column.value]))
     try {
-      const versionId = await db.transaction(async (tx) => {
+      const versionId = await setupWriteTransaction(entity, orgId, body, id, async (tx) => {
         const currentRes = ((await tx.execute(sql`
           select * from pay_derived_rules
            where id = ${id} and org_id = ${orgId}
@@ -1100,6 +1131,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
       })
       return NextResponse.json({ id: versionId })
     } catch (e) {
+      if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
       const code = pgErrorCode(e)
       if (code === '23505' || code === '23P01') {
         return NextResponse.json({ error: 'duplicate', code: 'duplicate' }, { status: 409 })
@@ -1144,7 +1176,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {
-    const found = await db.transaction(async (tx) => {
+    const found = await setupWriteTransaction(entity, orgId, body, id, async (tx) => {
       const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
       if (!before) return false
       const updated = ((await tx.execute(sql`
@@ -1170,6 +1202,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
     if (!found) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json({ id })
   } catch (e) {
+    if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
     const databaseError = e as { constraint?: string; cause?: { constraint?: string; message?: string }; message?: string }
     if ((databaseError.cause?.constraint ?? databaseError.constraint) === 'asset_category_posted_policy') {
       return NextResponse.json({ error: databaseError.cause?.message ?? databaseError.message }, { status: 409 })
@@ -1202,7 +1235,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {
-    const found = await db.transaction(async (tx) => {
+    const found = await setupWriteTransaction(entity, orgId, undefined, id, async (tx) => {
       if (entity.key === 'item-rate-books') {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
       }
@@ -1233,6 +1266,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
     if (!found) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json({ ok: true })
   } catch (e) {
+    if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
     if (e instanceof Error && e.message === 'default-required') {
       return NextResponse.json({ error: 'default-required' }, { status: 409 })
     }

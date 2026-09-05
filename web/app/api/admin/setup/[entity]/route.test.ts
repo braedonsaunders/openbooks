@@ -182,9 +182,9 @@ test("the setup route states the tax-rate domain before every write and maps sto
   // The domain check rides validateEntityIntegrity, which must run before the
   // create and update transactions alike.
   const postValidation = source.indexOf("const integrityError = await validateEntityIntegrity");
-  const postWrite = source.indexOf("const newId = await db.transaction");
+  const postWrite = source.indexOf("const newId = await setupWriteTransaction");
   const patchValidation = source.lastIndexOf("const integrityError = await validateEntityIntegrity");
-  const patchWrite = source.indexOf("const found = await db.transaction");
+  const patchWrite = source.indexOf("const found = await setupWriteTransaction");
   assert.ok(postValidation >= 0 && postValidation < postWrite, "create validation must precede the write");
   assert.ok(
     patchValidation > postWrite && patchValidation < patchWrite,

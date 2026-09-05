@@ -75,6 +75,7 @@ const mockSources = new Map<string, string>([
     'mock:features',
     `
       export function featureEnabled() { return true }
+      export function featureGateLockKey() { throw new Error('read-only currency route must not request a feature lock') }
       export async function isFeatureEnabled() { return true }
       export async function resolvedFeatureState() { return {} }
       export async function subsidiaryFeatureEnabled() { return true }

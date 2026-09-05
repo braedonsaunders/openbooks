@@ -2011,3 +2011,47 @@ Evidence is under `audit-rate-book-default-2026-09-05`. The full integration run
 `af29d59e` is independent and predates this race repair. A separate investigation
 has reproduced setup writes committing after a feature disable; that issue remains
 open at this checkpoint.
+
+
+### 2026-09-05 — Setup feature-disable serialization
+
+Real PostgreSQL races reproduced six interactive setup mutations committing after
+a concurrent feature disable. The request passed its initial feature check,
+waited behind another writer, then inserted, updated or deleted configuration
+after the disable committed. Additional probes reproduced equipment-trigger and
+subsidiary-scoped writes escaping their subordinate feature gates.
+
+All nine interactive setup mutation branches now join the authoritative tenant
+feature fence before any book or row locks. Entity gates and submitted-field
+integrity are checked again using that transaction's connection. Feature-default
+resolution and sequence-kind validation accept the same executor, including
+uncommitted tenant configuration. Rejections retain the existing rollback
+boundary and return the normal unavailable/invalid-input response.
+
+The 105 focused checks passed (91,394.642334 ms; zero skips), including 18 new
+checks covering parent-gate create/update/delete races, equipment triggers,
+subsidiary scope, currency and Field Ticket controls on create/update, and
+transaction-local feature defaults. Adjacent audit rollback, book-default and
+asset-category history controls also passed. Workspace types, the locked
+production build and all 3,149 unit tests passed (166,500.532 ms; zero skips).
+Warning and explicit-any ceilings remain 725/391. A built HTTP probe of the parent-gate fix observed a
+waiting request, committed a Projects disable, and received 404 with no new
+rate book; that probe preceded the subsequent field-validation extension.
+
+A scoped initialization-order scan examined 849 engine/API source files and
+found no additional candidates for the specific earlier-if/return pattern. Its
+positive control identified the previously fixed derived-rule declaration bug.
+This is pattern coverage, not a claim that all initialization defects are absent.
+
+Evidence is under `audit-setup-feature-fence-2026-09-05`. A separate real-database
+probe confirmed that a cached bulk setup import resource still writes after its
+parent feature is disabled; that import path remains open at this checkpoint
+and is the next repair. The independent full integration run at `af29d59e`
+predates this interactive repair and finished with 2,209/2,216 passing
+(2,681,872.425791 ms), seven asset-category guard failures and zero skips.
+Its reused database was still migrated only through 0087: the category policy
+trigger from 0089 was absent. This was a test-environment preparation error,
+not a passing full run or fresh-bootstrap verification. All 1,820 fixture leases
+were released/reset, with four bootstrap/teardown/verification cycles and zero
+leaks. The next full run must first execute the deployment bootstrap and verify
+the migration ledger and live category trigger.

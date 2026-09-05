@@ -78,7 +78,7 @@ test("segment hierarchy API validation walks scoped descendants before the write
   );
   assert.match(source, /A segment value cannot be parented beneath itself/);
   const preflight = source.lastIndexOf("const integrityError = await validateEntityIntegrity");
-  const write = source.lastIndexOf("const found = await db.transaction");
+  const write = source.lastIndexOf("const found = await setupWriteTransaction");
   assert.ok(preflight >= 0 && preflight < write, "PATCH integrity validation must precede its write transaction");
 });
 
