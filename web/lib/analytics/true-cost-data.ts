@@ -1,4 +1,5 @@
 import "server-only";
+import { statementBookExpr } from "../gl-summary";
 import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
@@ -277,7 +278,8 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   if (!(await isFeatureEnabled(orgId, "projects"))) throw new Error("projects feature is disabled")
   const ids = allowedSubsidiaryIds === null ? null : [...allowedSubsidiaryIds]
   const allowed = ids?.length ? sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `) : sql`null`
-  const ledgerScope = ids === null ? sql`` : sql`and l.subsidiary_id in (${allowed})`
+  const ledgerScope = sql`and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+    ${ids === null ? sql`` : sql`and l.subsidiary_id in (${allowed})`}`
   const timeScope = ids === null ? sql`` : sql`and exists (
     select 1 from parties scope_employee
     left join projects scope_project on scope_project.id = t.project_id and scope_project.org_id = t.org_id
@@ -400,6 +402,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
                coalesce(sum(l.amount) filter (where l.account_id in (
                  select id from accounts where org_id = ${orgId} and type = 'cogs')), 0) as direct_cost
           from journal_lines l
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
          where l.org_id = ${orgId} ${ledgerScope} and l.department_id is not null
            and l.posting_date >= ${from} and l.posting_date <= ${to}
          group by l.department_id
