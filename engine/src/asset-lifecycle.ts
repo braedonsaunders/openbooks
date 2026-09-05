@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
+import { isIsoCalendarDate } from "./business-date.ts";
 import { buildScheduleWithRunner } from "./depreciation.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
 import { orgReportingFramework } from "./reporting-framework.ts";
@@ -341,8 +342,8 @@ export async function reverseAssetLifecycleEvent(
       "a reversal reason between 8 and 500 characters is required",
     );
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
-    throw new AssetLifecycleError("reversal date must be YYYY-MM-DD");
+  if (!isIsoCalendarDate(opts.date)) {
+    throw new AssetLifecycleError("reversal date must be a valid calendar date in YYYY-MM-DD format");
   }
   if (!opts.actorId) {
     throw new AssetLifecycleError("an attributable reversal actor is required");
@@ -364,11 +365,14 @@ export async function reverseAssetLifecycleEvent(
         entry_number: string;
         origin: "disposal" | "revaluation";
         entry_status: string;
+        occurred_on: string;
+        posting_date: string;
       }>(sql`
       select event.id, event.asset_id, event.kind, event.journal_entry_id,
              event.created_at::text as created_at, asset.asset_number, asset.status,
              asset.subsidiary_id, asset.acquisition_cost, asset.salvage_value,
-             entry.book_id, entry.entry_number, entry.origin, entry.status as entry_status
+             entry.book_id, entry.entry_number, entry.origin, entry.status as entry_status,
+             event.occurred_on::text as occurred_on, entry.posting_date::text as posting_date
         from asset_events event
         join fixed_assets asset
           on asset.id = event.asset_id and asset.org_id = event.org_id
@@ -420,6 +424,11 @@ export async function reverseAssetLifecycleEvent(
     if (source.entry_status !== "posted") {
       throw new AssetLifecycleError(
         "the source asset journal is not an unreversed posted entry",
+      );
+    }
+    if (opts.date < source.occurred_on || opts.date < source.posting_date) {
+      throw new AssetLifecycleError(
+        "the reversal date cannot be before the source asset event or journal date",
       );
     }
     // Preserve full PostgreSQL timestamp precision. Legacy equal-time sources
