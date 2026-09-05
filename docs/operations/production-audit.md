@@ -873,3 +873,22 @@ with chained before-images, built-in pack behavior and third-pack extensibility.
 All 3,042 unit tests, workspace typechecks and the locked production build passed;
 the explicit-any/lint ceilings remain unchanged. Baselines, source snapshots and
 receipts are retained under `audit-payroll-profile-2026-09-05` in thread storage.
+
+## Company audit viewer authorization — continuation from 5ad0e8ee
+
+The company audit viewer checked its permission but ignored subsidiary scope
+in lists, aggregate filters and selected snapshots. Restricted and empty-scope
+roles could open another entity's deleted-document evidence. The whole-company
+viewer now requires an unrestricted grant before reading audit data; existing
+record-specific audit routes retain their scoped access. Invalid actor UUIDs
+and nonexistent calendar dates are also refused before PostgreSQL casts can
+turn malformed filters into server errors.
+
+Seven database page cases passed, including unrestricted and valid-date
+controls. Typed query results removed six explicit `any` casts. The enforced
+ceilings were lowered with the measured counts to 392 explicit-any nodes and
+726 lint warnings; the initial unit run correctly refused the stale higher
+ceilings. The final 3,042-test unit suite, web typecheck and locked production
+build passed. Receipts are retained under `audit-viewer-scope-2026-09-05` in
+thread storage. The next full integration run targets frozen 5ad0e8ee, which
+includes the preceding authentication, account and payroll corrections.
