@@ -1191,3 +1191,17 @@ and subsidiary regressions now pass, including reconciliation of each displayed
 subtotal against posted entries. All 3,076 unit tests, web typechecking and the
 locked production build passed. Explicit-any and lint ceilings remain 391 and
 725. Receipts are retained under `audit-margin-flow-2026-09-05` in thread storage.
+
+## Historical headcount — continuation from cbd37d7f
+
+Financial Health counted future hires and excluded employees whose termination
+occurred after the selected reporting period. Its productivity ratios now use
+employment dates at period end, including the final employment day. Undated
+legacy hires retain their existing eligibility; subsidiary scope is unchanged.
+The ratio reference formulas explicitly identify the period-end denominator.
+
+Three date-boundary regressions failed before correction and three controls
+passed. All 36 combined employment-date, ledger, waterfall and authorization
+checks now pass, as do all 3,076 unit tests, web typechecking and the locked
+production build. Explicit-any and lint ceilings remain 391 and 725. Receipts
+are retained under `audit-health-headcount-2026-09-05` in thread storage.
