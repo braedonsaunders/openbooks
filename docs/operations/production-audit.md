@@ -1177,3 +1177,17 @@ settlement, installment, period and authorization regressions now pass.
 Receipts are retained under `audit-vendor-settlement-2026-09-05` in thread storage.
 All 3,073 unit tests, web typechecking and the locked production build passed;
 explicit-any and lint ceilings remain 391 and 725.
+
+## Margin waterfall reconciliation — continuation from 11159882
+
+The Financial Health waterfall skipped the adjustments between total revenue,
+operating income and net income when other income was present. It now explicitly
+excludes other income before the operating subtotal and adds it back afterward,
+preserving the report's existing total-revenue and gross-profit definitions.
+
+Positive and negative other-income regressions failed before correction; the
+zero-income control passed. All 30 combined waterfall, primary-ledger, query-failure
+and subsidiary regressions now pass, including reconciliation of each displayed
+subtotal against posted entries. All 3,076 unit tests, web typechecking and the
+locked production build passed. Explicit-any and lint ceilings remain 391 and
+725. Receipts are retained under `audit-margin-flow-2026-09-05` in thread storage.

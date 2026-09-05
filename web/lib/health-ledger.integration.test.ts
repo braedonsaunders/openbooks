@@ -46,6 +46,12 @@ for (const view of ["current month", "completed month", "segments", "drivers", "
         const result = await healthData({ from: "2026-07-01", to, label: "Ledger review" }, org.orgId, null);
         assert.equal(result.figures.revenue, 150, "primary-book headline control");
         assert.equal(result.figures.operatingIncome, 100, "nonoperating income excluded in headline");
+        let running = 0;
+        for (const stage of result.marginFlow) {
+          if (stage.kind === "start") running = stage.amount;
+          else if (stage.kind === "deduct") running += stage.amount;
+          else assert.equal(stage.amount, running, `${stage.label} reconciles to posted history`);
+        }
         const month = result.monthly.find(row => row.month === '2026-07');
         assert.ok(month);
         if (view === "current month" || view === "completed month") assert.equal(month.revenue, result.figures.revenue);
