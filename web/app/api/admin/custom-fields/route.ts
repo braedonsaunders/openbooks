@@ -1,6 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { CUSTOM_FIELD_TARGETS } from '@openbooks/customization'
 import { db } from '@openbooks/engine/src/db.ts'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { isUuid } from '../../../../lib/list-params'
@@ -12,38 +13,6 @@ import { guardPermission } from '../../../../lib/authz'
 import { isCustomFieldTargetEnabled } from '../../../../lib/customization/gates'
 
 export const runtime = 'nodejs'
-
-/** Targets a custom field can extend, with the kinds that narrow them. The
- *  transaction document kinds mirror the customization registry's RECORD_TYPES
- *  so the Forms designer can create header/line fields for any transaction
- *  form (bills, credits, card charges/refunds, checks) inline. */
-const FIELD_TARGETS = [
-  {
-    table: 'documents',
-    kinds: [
-      'vendor_bill', 'vendor_credit', 'customer_invoice', 'customer_credit',
-      'card_charge', 'card_refund', 'check',
-      'vendor_payment', 'customer_payment', 'expense_report', 'journal',
-    ],
-  },
-  {
-    table: 'document_lines',
-    kinds: [
-      'vendor_bill', 'vendor_credit', 'customer_invoice', 'customer_credit',
-      'card_charge', 'card_refund', 'check',
-      'expense_report', 'journal',
-    ],
-  },
-  { table: 'parties', kinds: [] },
-  { table: 'projects', kinds: [] },
-  { table: 'managed_properties', kinds: [] },
-  { table: 'item_rate_versions', kinds: [] },
-  { table: 'accounts', kinds: [] },
-  { table: 'items', kinds: [] },
-  { table: 'crm_account_profiles', kinds: [] },
-  { table: 'crm_activities', kinds: [] },
-  { table: 'crm_opportunities', kinds: [] },
-] as const
 
 const FIELD_TYPES = ['text', 'long_text', 'number', 'currency', 'date', 'boolean', 'select', 'multi_select', 'reference']
 
@@ -83,9 +52,9 @@ function validateDef(body: Record<string, unknown>, existing?: ExistingFieldDef)
     }
   }
 
-  const target = FIELD_TARGETS.find((t) => t.table === targetTable)
+  const target = CUSTOM_FIELD_TARGETS.find((t) => t.table === targetTable)
   if (!target) return 'invalid target table'
-  if (targetKind && !(target.kinds as readonly string[]).includes(String(targetKind))) {
+  if (targetKind && !target.kinds.some((kind) => kind.value === targetKind)) {
     return 'invalid target kind for that table'
   }
   if (!/^[a-z][a-z0-9_]{1,60}$/.test(String(key ?? ''))) {
