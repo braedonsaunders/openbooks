@@ -2085,7 +2085,7 @@
       "disable": "Desativar",
       "delete": "Excluir",
       "deleteConfirmTitle": "Excluir flow",
-      "deleteConfirm": "Excluir “{name}”? Seu histórico de execuções também será removido.",
+      "deleteConfirm": "Excluir “{name}”? Apenas flows sem histórico de execuções ou aprovações podem ser excluídos. Desative um flow utilizado para preservar seu histórico.",
       "deleted": "Flow excluído",
       "deleteFailed": "Não foi possível excluir o flow",
       "updateFailed": "Não foi possível atualizar o flow"

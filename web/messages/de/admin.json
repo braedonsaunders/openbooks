@@ -2085,7 +2085,7 @@
       "disable": "Deaktivieren",
       "delete": "Löschen",
       "deleteConfirmTitle": "Flow löschen",
-      "deleteConfirm": "„{name}“ löschen? Der Laufverlauf wird ebenfalls entfernt.",
+      "deleteConfirm": "„{name}“ löschen? Nur Flows ohne Ausführungs- oder Genehmigungsverlauf können gelöscht werden. Deaktivieren Sie einen verwendeten Flow, um seinen Verlauf zu erhalten.",
       "deleted": "Flow gelöscht",
       "deleteFailed": "Der Flow konnte nicht gelöscht werden",
       "updateFailed": "Der Flow konnte nicht aktualisiert werden"

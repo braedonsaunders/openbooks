@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -76,7 +76,7 @@ export default function FlowBuilder({
   roles,
   permissions,
 }: {
-  flow: { id: string; name: string; enabled: boolean; graph: AutomationGraph }
+  flow: { id: string; name: string; enabled: boolean; updatedAt: string; graph: AutomationGraph }
   runs: FlowRunRow[]
   profile: FlowSubjectProfile
   users: OrgUser[]
@@ -104,6 +104,10 @@ export default function FlowBuilder({
   const [enabled, setEnabled] = useState(flow.enabled)
   const [tab, setTab] = useState<'canvas' | 'runs'>('canvas')
   const [dirty, setDirty] = useState(false)
+  const [revision, setRevision] = useState(flow.updatedAt)
+  const editVersion = useRef(0)
+  const saving = useRef(false)
+  const markDirty = useCallback(() => { editVersion.current += 1; setDirty(true) }, [])
   const [busy, setBusy] = useState(false)
   const [saveErrors, setSaveErrors] = useState<string[]>([])
   // Follow the app's dark theme so the canvas / minimap / controls match.
@@ -125,17 +129,17 @@ export default function FlowBuilder({
 
   const markDirtyOnNodesChange = useCallback(
     (changes: NodeChange<FlowNode>[]) => {
-      if (changes.some((c) => c.type !== 'select' && c.type !== 'dimensions')) setDirty(true)
+      if (changes.some((c) => c.type !== 'select' && c.type !== 'dimensions')) markDirty()
       onNodesChange(changes)
     },
-    [onNodesChange],
+    [onNodesChange, markDirty],
   )
   const markDirtyOnEdgesChange = useCallback(
     (changes: EdgeChange<Edge>[]) => {
-      if (changes.some((c) => c.type !== 'select')) setDirty(true)
+      if (changes.some((c) => c.type !== 'select')) markDirty()
       onEdgesChange(changes)
     },
-    [onEdgesChange],
+    [onEdgesChange, markDirty],
   )
 
   const onConnect = useCallback(
@@ -143,9 +147,9 @@ export default function FlowBuilder({
       setEdges((eds) =>
         addEdge({ ...c, id: newId('e'), label: edgeLabel(c.sourceHandle, edgeLabels) }, eds),
       )
-      setDirty(true)
+      markDirty()
     },
-    [setEdges, edgeLabels],
+    [setEdges, edgeLabels, markDirty],
   )
 
   const addNode = (kind: NodeKind) => {
@@ -155,28 +159,31 @@ export default function FlowBuilder({
       { id, type: kind, position: nextPosition(kind, ns), data: defaultNodeData(kind, profile), selected: true },
     ])
     setSelectedNodeId(id)
-    setDirty(true)
+    markDirty()
   }
 
   const patchNodeData = (id: string, data: NodeData) => {
     setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data } : n)))
-    setDirty(true)
+    markDirty()
   }
 
   const removeNode = (id: string) => {
     setNodes((ns) => ns.filter((n) => n.id !== id))
     setEdges((es) => es.filter((e) => e.source !== id && e.target !== id))
     setSelectedNodeId(null)
-    setDirty(true)
+    markDirty()
   }
 
   async function save() {
+    if (saving.current) return
+    saving.current = true
+    const submittedVersion = editVersion.current
     setBusy(true)
     try {
       const res = await fetch(`/api/admin/flows/${flow.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() || flow.name, graph: fromFlow(nodes, edges) }),
+        body: JSON.stringify({ expectedUpdatedAt: revision, name: name.trim() || flow.name, graph: fromFlow(nodes, edges) }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -185,17 +192,22 @@ export default function FlowBuilder({
         return
       }
       setSaveErrors([])
-      setDirty(false)
+      setRevision(data.updatedAt)
+      if (editVersion.current === submittedVersion) setDirty(false)
       toast.success(t('builder.saved'))
       router.refresh()
     } catch {
       toast.error(t('builder.saveFailed'))
     } finally {
+      saving.current = false
       setBusy(false)
     }
   }
 
   async function toggleEnabled() {
+    if (saving.current) return
+    saving.current = true
+    const submittedVersion = editVersion.current
     const next = !enabled
     setBusy(true)
     try {
@@ -203,6 +215,7 @@ export default function FlowBuilder({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          expectedUpdatedAt: revision,
           enabled: next,
           ...(next && dirty
             ? { name: name.trim() || flow.name, graph: fromFlow(nodes, edges) }
@@ -217,11 +230,13 @@ export default function FlowBuilder({
       }
       setEnabled(next)
       setSaveErrors([])
-      if (next && dirty) setDirty(false)
+      setRevision(data.updatedAt)
+      if (next && dirty && editVersion.current === submittedVersion) setDirty(false)
       router.refresh()
     } catch {
       toast.error(t('actions.updateFailed'))
     } finally {
+      saving.current = false
       setBusy(false)
     }
   }
@@ -242,7 +257,7 @@ export default function FlowBuilder({
           value={name}
           onChange={(e) => {
             setName(e.target.value)
-            setDirty(true)
+            markDirty()
           }}
           placeholder={t('builder.namePlaceholder')}
           className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-lg font-semibold text-slate-900 outline-none hover:border-slate-200 focus:border-teal-500 dark:text-slate-100 dark:hover:border-slate-700"

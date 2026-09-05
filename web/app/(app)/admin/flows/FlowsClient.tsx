@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Plus, Trash2 } from 'lucide-react'
@@ -111,49 +111,77 @@ export function FlowRowActions({
   id,
   name,
   enabled,
+  updatedAt,
 }: {
   id: string
   name: string
   enabled: boolean
+  updatedAt: string
 }) {
   const t = useTranslations('admin.flows')
   const router = useRouter()
   const [isEnabled, setIsEnabled] = useState(enabled)
+  const [revision, setRevision] = useState(updatedAt)
   const [busy, setBusy] = useState(false)
+  const saving = useRef(false)
 
   async function toggle() {
+    if (saving.current) return
+    saving.current = true
+    setBusy(true)
     const next = !isEnabled
-    setIsEnabled(next)
-    const res = await fetch(`/api/admin/flows/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: next }),
-    }).catch(() => null)
-    if (!res?.ok) {
-      setIsEnabled(!next)
+    try {
+      const res = await fetch(`/api/admin/flows/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next, expectedUpdatedAt: revision }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? data.errors?.join('; ') ?? t('actions.updateFailed'))
+        return
+      }
+      setIsEnabled(next)
+      setRevision(data.updatedAt)
+      router.refresh()
+    } catch {
       toast.error(t('actions.updateFailed'))
-      return
+    } finally {
+      saving.current = false
+      setBusy(false)
     }
-    router.refresh()
   }
 
   async function remove() {
-    const ok = await confirmDialog({
-      title: t('actions.deleteConfirmTitle'),
-      message: t('actions.deleteConfirm', { name }),
-      confirmLabel: t('actions.delete'),
-      tone: 'danger',
-    })
-    if (!ok) return
+    if (saving.current) return
+    saving.current = true
     setBusy(true)
-    const res = await fetch(`/api/admin/flows/${id}`, { method: 'DELETE' }).catch(() => null)
-    setBusy(false)
-    if (!res?.ok) {
+    try {
+      const ok = await confirmDialog({
+        title: t('actions.deleteConfirmTitle'),
+        message: t('actions.deleteConfirm', { name }),
+        confirmLabel: t('actions.delete'),
+        tone: 'danger',
+      })
+      if (!ok) return
+      const res = await fetch(`/api/admin/flows/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expectedUpdatedAt: revision }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? t('actions.deleteFailed'))
+        return
+      }
+      toast.success(t('actions.deleted'))
+      router.refresh()
+    } catch {
       toast.error(t('actions.deleteFailed'))
-      return
+    } finally {
+      saving.current = false
+      setBusy(false)
     }
-    toast.success(t('actions.deleted'))
-    router.refresh()
   }
 
   return (
@@ -161,6 +189,7 @@ export function FlowRowActions({
       <button
         type="button"
         role="switch"
+        disabled={busy}
         aria-checked={isEnabled}
         title={isEnabled ? t('actions.disable') : t('actions.enable')}
         onClick={toggle}

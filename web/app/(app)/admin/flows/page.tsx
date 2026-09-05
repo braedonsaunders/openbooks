@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { Workflow } from 'lucide-react'
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
 import {
@@ -58,7 +59,7 @@ export default async function Flows({
 
   const [flows, subjects, totalRow] = await Promise.all([
     (db.execute(sql`
-      select f.id, f.name, f.subject_kind, f.enabled, f.updated_at,
+      select f.id, f.name, f.subject_kind, f.enabled, ${documentRevisionSql(sql`f.updated_at`)} as updated_at,
              jsonb_array_length(f.graph->'nodes') as node_count,
              lr.status as last_run_status, lr.started_at as last_run_at
         from flows f
@@ -169,6 +170,8 @@ export default async function Flows({
                       id={String(f.id)}
                       name={String(f.name)}
                       enabled={Boolean(f.enabled)}
+                      updatedAt={String(f.updated_at)}
+                      key={String(f.updated_at)}
                     />
                   </TableCell>
                 </TableRow>

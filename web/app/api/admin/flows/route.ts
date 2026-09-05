@@ -1,6 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { emptyAutomationGraph } from '@openbooks/forms-core'
 import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
@@ -17,7 +18,7 @@ export async function GET() {
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   const r = (await db.execute<Record<string, unknown>>(sql`
-    select f.id, f.name, f.description, f.subject_kind, f.enabled, f.updated_at,
+    select f.id, f.name, f.description, f.subject_kind, f.enabled, ${documentRevisionSql(sql`f.updated_at`)} as updated_at,
            jsonb_array_length(f.graph->'nodes') as node_count,
            (select count(*) from flow_runs r where r.flow_id = f.id and r.org_id = f.org_id) as run_count,
            lr.status as last_run_status, lr.started_at as last_run_at
