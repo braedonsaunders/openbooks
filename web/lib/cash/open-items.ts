@@ -4,7 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { normalizeMoneyValue, parseISO, type OpenItem, type Side } from './core'
 
 function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
-  return subIds && subIds.length > 0
+  return subIds !== undefined
     ? sql` and ${col} = any(${`{${subIds.join(',')}}`}::uuid[])`
     : sql``
 }

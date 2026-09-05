@@ -6,6 +6,7 @@ import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mul
 import { evaluateFormula } from "./formula";
 import { getMoneyFormatter } from '../money-server'
 import { resolveOrgId } from '../org-scope'
+import { statementBookExpr } from '../gl-summary'
 
 export { openItems } from './open-items'
 
@@ -260,11 +261,11 @@ export async function resolveAsOf(orgId: string, asOfDate?: string): Promise<str
 
 /**
  * Optional subsidiary scope — ` and <col> = any(ids)` when a subsidiary view
- * is active (the statement-matrix filter pattern), empty otherwise so
- * single-subsidiary orgs and unscoped callers run byte-identical SQL.
+ * is active (the statement-matrix filter pattern). An omitted selection is
+ * unrestricted; an explicit empty selection matches no subsidiary.
  */
 function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
-  return subIds && subIds.length > 0 ? sql` and ${col} = any(${`{${subIds.join(",")}}`}::uuid[])` : sql``;
+  return subIds !== undefined ? sql` and ${col} = any(${`{${subIds.join(",")}}`}::uuid[])` : sql``;
 }
 
 /**
@@ -498,6 +499,7 @@ export async function categoryWeekly(
              sum(l.amount) as net, sum(abs(l.amount)) as gross
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+        and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and l.account_id in (${ids})
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${toISO(tEnd)}${subScope(sql`l.subsidiary_id`, context.subIds)}
@@ -586,6 +588,7 @@ export async function categoryWeekly(
              sum(case when l.amount > 0 then l.amount else 0 end) as paid
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+        and e.book_id = ${statementBookExpr(orgId)}
       where l.org_id = ${orgId} and l.account_id in (${ids})
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1
@@ -594,6 +597,7 @@ export async function categoryWeekly(
       select coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+        and e.book_id = ${statementBookExpr(orgId)}
       where l.org_id = ${orgId} and l.account_id in (${ids}) and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
     `));
     const totalCurrentBalance = absMoney(normalizeMoneyValue(String(balR.rows[0]?.bal ?? ZERO_MONEY)));
@@ -873,6 +877,7 @@ export async function categoryWeekly(
              coalesce(d.memo, e.memo, '') as memo, -l.amount as amount
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+        and e.book_id = ${statementBookExpr(orgId)}
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where l.org_id = ${orgId} and l.account_id in (${ids}) and l.amount < 0
@@ -945,6 +950,7 @@ export async function categoryWeekly(
 }
 
 export async function bankBalances(asOf: string, subIds?: string[]) {
+  if (subIds?.length === 0) return [];
   // Inception-to-date cash per bank account: whole months from the
   // gl_month_activity summary, the as-of month from the lines. Summing every
   // bank line ever posted cost seconds once a tenant had a real ledger.
@@ -965,6 +971,7 @@ export async function bankBalances(asOf: string, subIds?: string[]) {
     sliver_entries as materialized (
       select id from journal_entries
        where org_id = ${orgId} and status in ('posted', 'reversed')
+         and book_id = ${statementBookExpr(orgId)}
          and posting_date >= date_trunc('month', ${asOf}::date)::date
          and posting_date <= ${asOf}
     ),
@@ -972,6 +979,7 @@ export async function bankBalances(asOf: string, subIds?: string[]) {
       select g.account_id, (g.debit_total - g.credit_total) as amt
         from gl_month_activity g
        where g.org_id = ${orgId}
+         and g.book_id = ${statementBookExpr(orgId)}
          and g.account_id in (select id from bank_accounts)
          and g.month < date_trunc('month', ${asOf}::date)::date
          ${subScope(sql`g.subsidiary_id`, subIds)}
@@ -985,7 +993,7 @@ export async function bankBalances(asOf: string, subIds?: string[]) {
     select a.id, a.name, a.number, coalesce(sum(m.amt), 0) as balance
     from accounts a
     left join movement m on m.account_id = a.id
-    where a.type = 'asset_bank' and a.is_summary = false and a.is_active
+    where a.org_id = ${orgId} and a.type = 'asset_bank' and a.is_summary = false and a.is_active
       ${subIds && subIds.length > 0 ? sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${subIds.join(",")}}`}::uuid[]))` : sql``}
     group by a.id, a.name, a.number
     order by coalesce(sum(m.amt), 0) desc

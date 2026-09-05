@@ -967,3 +967,24 @@ failure-propagation and accounting scope regressions. All 3,056 unit tests,
 workspace typechecks and the locked production build passed. The explicit-any
 and lint ceilings remain 392 and 726. Baselines and receipts are retained under
 `audit-health-scope-2026-09-05` in thread storage.
+
+## Cash ledger selection and empty scopes — continuation from 677b924d
+
+Cash starting balances combined primary and secondary books in both summary
+and partial-month paths. The final account list also omitted its tenant
+predicate, exposing other tenants' zero-balance account metadata to a trusted
+caller. The bank query now selects the primary book and explicitly pins its
+account list to the resolved organization. Empty subsidiary arrays now match
+no ledger rows/open items instead of becoming unrestricted reads; the empty
+bank-account result is explicit.
+
+The same accounting-book omission affected GL-average, card-cycle and
+bank-register forecast history. GL averages also counted drafts. All four
+history queries now use the posted primary ledger. Database regressions cover
+both bank query paths, a second tenant, secondary-book copies, draft activity,
+restricted/empty scopes, posted receivables/payables, and each history strategy.
+Eight bank/open-item cases and six history cases failed against their prior
+implementations; the valid controls passed. The corrected focused run passed
+34 tests. All 3,056 unit tests, web typechecking and the locked production
+build passed, with unchanged 392/726 explicit-any and lint ceilings. Receipts
+are retained under `audit-cash-ledger-2026-09-05` in thread storage. The full integration run in progress remains frozen at 677b924d.
