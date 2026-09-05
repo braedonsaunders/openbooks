@@ -1026,3 +1026,28 @@ ordinary March control. Receipts are retained under
 `audit-analytics-calendar-2026-09-05` in thread storage.
 All 3,056 unit tests, web typechecking and the locked production build passed;
 the explicit-any check remains at 391 and the lint ceiling remains at 725.
+
+## Analytics primary-ledger reconciliation — continuation from d3f4de01
+
+Vendor Intelligence spend totals and monthly history, Spend Velocity's account,
+vendor, category, comparison and revenue queries, and customer project
+profitability included draft entries and secondary accounting books. Their
+actuals now select the organization's primary statement book and posted or
+reversed history. Reversed originals remain included alongside the correcting
+entries, preserving the ledger's net effect.
+
+The new database suite isolates posted controls, secondary books, drafts and
+reversal pairs across eight outputs. Sixteen cases failed before the query
+correction; all sixteen posted/reversal controls passed. All 32 now pass,
+along with the 15 calendar regressions. Evidence is retained under
+`audit-analytics-ledger-2026-09-05` in thread storage. All 3,056 unit tests,
+web typechecking and the locked production build passed. The explicit-any
+and lint ceilings remain 391 and 725.
+
+The separately frozen full integration run at **677b924d** completed with
+1,575 tests: 1,573 passed, two Redis-dependent cases skipped, no failures.
+Its four fixture slots completed 1,110 leases, releases and resets, four full
+bootstraps, teardowns and schema verifications, with zero active leases or
+leak detections. Runtime was 1,081,609 ms. The log and lifecycle receipt are
+under `audit-health-scope-2026-09-05`; this full-run result applies to that
+revision, before the subsequent cash, calendar and analytics-ledger fixes.
