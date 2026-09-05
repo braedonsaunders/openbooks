@@ -27,7 +27,7 @@ import {
   type SubsidiaryContext,
 } from "./subsidiaries.ts";
 import { SYSTEM_ACTOR_ID } from "./banking.ts";
-import { businessToday } from "./business-date.ts";
+import { businessToday, isIsoCalendarDate } from "./business-date.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import type { AssemblyBomRevisionEvidence } from "@openbooks/schema";
 
@@ -2321,8 +2321,9 @@ async function reverseInventoryJournal(
       entry_number: string;
       origin: string;
       status: string;
+      posting_date: string;
     }>(sql`
-    select id, book_id, subsidiary_id, entry_number, origin, status
+    select id, book_id, subsidiary_id, entry_number, origin, status, posting_date::text
       from journal_entries
      where id = ${sourceEntryId} and org_id = ${orgId}
      for update
@@ -2332,6 +2333,9 @@ async function reverseInventoryJournal(
     throw new InventoryError(
       "the movement is not backed by a reversible posted inventory journal",
     );
+  }
+  if (reversalDate < source.posting_date) {
+    throw new InventoryError("reversal date cannot precede the source inventory journal");
   }
   const period = (await tx.execute<{ id: string }>(sql`
     select id
@@ -2422,9 +2426,7 @@ export async function reverseInventoryMovement(
       "reversal reason must be between 5 and 500 characters",
     );
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.reversalDate)) {
-    throw new InventoryError("reversal date must be YYYY-MM-DD");
-  }
+  assertInventoryDate(input.reversalDate, "reversal date");
 
   return db.transaction(async (tx) => {
     const sourceResult = (await tx.execute<ReversibleMovement>(sql`
@@ -2507,6 +2509,10 @@ export async function reverseInventoryMovement(
       throw new InventoryError(
         `${requested.kind} requires its operation-specific controlled reversal`,
       );
+    }
+
+    if (sources.some((source) => input.reversalDate < source.moved_at.slice(0, 10))) {
+      throw new InventoryError("reversal date cannot precede the source inventory movement");
     }
 
     const sourceIds = sources.map((source) => source.id);
@@ -2996,9 +3002,7 @@ export async function reverseAssemblyBuild(
       "reversal reason must be between 5 and 500 characters",
     );
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.reversalDate)) {
-    throw new InventoryError("reversal date must be YYYY-MM-DD");
-  }
+  assertInventoryDate(input.reversalDate, "reversal date");
 
   return db.transaction(async (tx) => {
     const requested = (await tx.execute<ReversibleMovement>(sql`
@@ -3039,6 +3043,10 @@ export async function reverseAssemblyBuild(
       throw new InventoryError(
         "the assembly journal does not contain one complete posted build operation",
       );
+    }
+
+    if (sources.rows.some((source) => input.reversalDate < source.moved_at.slice(0, 10))) {
+      throw new InventoryError("reversal date cannot precede the source assembly movement");
     }
 
     const sourceIds = sources.rows.map((row) => row.id);
@@ -4581,10 +4589,8 @@ type TransferOrderRow = {
   document_number: string;
 };
 
-function assertTransferDate(value: string, label: string): void {
-  const date = typeof value === "string" ? new Date(`${value}T00:00:00Z`) : null;
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(date.getTime())
-      || date.toISOString().slice(0, 10) !== value) {
+function assertInventoryDate(value: string, label: string): void {
+  if (!isIsoCalendarDate(value)) {
     throw new InventoryError(`${label} must be a valid YYYY-MM-DD date`);
   }
 }
@@ -4594,7 +4600,7 @@ export async function createTransferOrder(
   actorId: string | null,
   input: CreateTransferOrderInput,
 ): Promise<{ id: string; documentNumber: string }> {
-  assertTransferDate(input.orderedOn, "order date");
+  assertInventoryDate(input.orderedOn, "order date");
   if (input.fromStockLocationId === input.toStockLocationId) {
     throw new InventoryError("transfer order needs two different locations");
   }
@@ -4757,7 +4763,7 @@ export async function shipTransferOrder(
   date?: string,
 ): Promise<{ id: string; status: string; entryId: string | null }> {
   const shipDate = date ?? await businessToday(orgId);
-  assertTransferDate(shipDate, "ship date");
+  assertInventoryDate(shipDate, "ship date");
   return await db.transaction(async (tx) => {
     const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
     if (order.status !== "draft")
@@ -4824,7 +4830,7 @@ export async function receiveTransferOrder(
   date?: string,
 ): Promise<{ id: string; status: string; entryId: string | null }> {
   const receiveDate = date ?? await businessToday(orgId);
-  assertTransferDate(receiveDate, "receive date");
+  assertInventoryDate(receiveDate, "receive date");
   return await db.transaction(async (tx) => {
     const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
     if (order.status !== "in_transit")
@@ -5231,9 +5237,7 @@ export async function reverseLandedCostVoucher(
       "reversal reason must be between 5 and 500 characters",
     );
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.reversalDate)) {
-    throw new InventoryError("reversal date must be YYYY-MM-DD");
-  }
+  assertInventoryDate(input.reversalDate, "reversal date");
 
   return db.transaction(async (tx) => {
     const voucherResult = (await tx.execute<{
