@@ -20,7 +20,7 @@ import {
   UUID_RE,
 } from '../../../../../lib/setup/coerce'
 import { normalizeTaxReturnFormInput } from '../../../../../lib/setup/tax-return-form'
-import { auditSetupChange as audit } from '../../../../../lib/setup/audit'
+import { auditSetupChange as audit, loadSetupAuditRow } from '../../../../../lib/setup/audit'
 import { featureEnabled, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { loadNumberSequenceKindOptions } from '../../../../../lib/setup/number-sequence-kinds'
 
@@ -863,10 +863,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
         table: entity.table,
         rowId: id,
         action: 'insert',
-        changes: {
-          ...Object.fromEntries(built.cols.map((c) => [c.column, c.value])),
-          ...(entity.key === 'fx-rates' ? { source: 'manual' } : {}),
-        },
+        changes: { after: await loadSetupAuditRow(entity, orgId, id, tx) },
         actorId,
       }, tx)
       return id
@@ -1173,20 +1170,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {
-    if (entity.key === 'subsidiaries') {
-      const root = ((await db.execute(sql`
-        select parent_id from subsidiaries where id = ${id} and org_id = ${orgId}`)))
-      if (!root.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-      if (root.rows[0].parent_id === null) {
-        return NextResponse.json({ error: 'The root subsidiary cannot be deleted' }, { status: 400 })
-      }
-    }
     const found = await db.transaction(async (tx) => {
-      // The locked before-image and committed after-image belong to the same
-      // category edit, including concurrent metadata saves.
-      const before = entity.key === 'asset-categories'
-        ? (await tx.execute(sql`select * from asset_categories where id=${id} and org_id=${orgId} for update`)).rows[0]
-        : undefined
+      const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
+      if (!before) return false
       const updated = ((await tx.execute(sql`
         update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
          where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
@@ -1196,18 +1182,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
       if (members && Array.isArray(body[members.key])) {
         await syncMembers(orgId, id, (body[members.key] as unknown[]).map(String), tx)
       }
-      const after = entity.key === 'asset-categories'
-        ? (await tx.execute(sql`select * from asset_categories where id=${id} and org_id=${orgId}`)).rows[0]
-        : undefined
+      const after = await loadSetupAuditRow(entity, orgId, id, tx)
       await audit({
         orgId: entity.orgScoped ? orgId : null,
         table: entity.table,
         rowId: id,
         action: 'update',
-        changes: before && after ? { before, after } : {
-          ...Object.fromEntries(built.cols.map((c) => [c.column, c.value])),
-          ...(entity.key === 'fx-rates' ? { source: 'manual', provider_config_id: null, imported_at: null } : {}),
-        },
+        changes: { before, after },
         actorId,
       }, tx)
       return true
@@ -1252,6 +1233,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {
     const found = await db.transaction(async (tx) => {
+      const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
+      if (!before) return false
+      // Memberships belong to this group. External references still refuse the
+      // parent deletion and roll these removals back with the audit transaction.
+      if (entity.key === 'tax-groups') await syncMembers(orgId, id, [], tx)
       const deleted = ((await tx.execute(sql`
         delete from ${sql.raw(entity.table)}
          where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
@@ -1265,7 +1251,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
         table: entity.table,
         rowId: id,
         action: 'delete',
-        changes: {},
+        changes: { before },
         actorId,
       }, tx)
       return true
