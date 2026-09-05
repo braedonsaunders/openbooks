@@ -36,23 +36,9 @@ export interface AccountingHome {
 
 type AccountingSubsidiaryScope = ReadonlySet<string> | null
 
-/**
- * Close runs persist their legal-entity scope as JSON because one run may
- * cover several subsidiaries. A restricted reader may see a run only when
- * every entity in that run is inside the reader's allowlist. An empty scope
- * means the run is org-wide and therefore fails closed for restricted users.
- */
+/** A run's targets do not narrow its organization-wide diagnostic population. */
 function closeRunScope(allowed: AccountingSubsidiaryScope) {
-  if (allowed === null) return sql``
-  const ids = [...allowed]
-  if (ids.length === 0) return sql` and false`
-  const idArray = sql`${`{${ids.join(',')}}`}::text[]`
-  return sql` and jsonb_array_length(coalesce(r.scope->'subsidiaryIds', '[]'::jsonb)) > 0
-    and not exists (
-      select 1
-        from jsonb_array_elements_text(coalesce(r.scope->'subsidiaryIds', '[]'::jsonb)) scoped(value)
-       where scoped.value <> all(${idArray})
-    )`
+  return allowed === null ? sql`` : sql` and false`
 }
 
 /**

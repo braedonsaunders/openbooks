@@ -5,16 +5,8 @@ import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, ro
 import { canonicalDecimal } from './exact-decimal'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
 import { applyRollup, resolveInvoicingProfile } from './invoice-rollup'
+import { roundCurrencyMoney } from '@openbooks/engine/src/currencies.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-
-/** Round money to the currency's minor unit, half away from zero. */
-function toCents(amount: string): string {
-  const units = toUnits(amount)
-  const negative = units < 0n
-  const magnitude = negative ? -units : units
-  const rounded = roundDiv(magnitude, 100n) * 100n
-  return fromUnits(negative ? -rounded : rounded)
-}
 
 /** The day the invoice is cut, or the period it closes. */
 async function invoiceDateOf(orgId: string, req: { cutoff_date?: string | null }): Promise<string> {
@@ -166,6 +158,13 @@ export async function generateInvoiceFromBillingRequest(
 
     const currency = project.billing_currency
     if (!currency) throw new BillingError('The project subsidiary has no functional currency')
+    const currencyRow = (await tx.execute<{ minor_units: number }>(sql`
+      select minor_units from currencies where code = ${currency}
+    `)).rows[0]
+    const minorUnits = currencyRow?.minor_units
+    if (minorUnits == null || !Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
+      throw new BillingError('The billing currency has unsupported minor-unit precision')
+    }
 
     // A deterministic fallback income account (lowest number) for lines whose
     // item has no income account, and for draw-amount invoices.
@@ -712,14 +711,11 @@ export async function generateInvoiceFromBillingRequest(
     `)).rows as unknown as [any]
     const invoiceId = created.id
 
-    // An invoice is payable in the currency's minor unit, so every billed line
-    // is rounded to the cent. Rate and markup arithmetic runs at four decimals
-    // and legitimately lands on fractions of a cent; carrying those through to
-    // the customer leaves an invoice that cannot actually be paid, and summing
-    // them drifts the total against the same invoice cut anywhere else.
+    // Keep rate arithmetic at ledger precision; round each payable line using
+    // the registered currency exponent before summing the document total.
     for (const l of presentedLines) {
-      l.amount = toCents(l.amount)
-      if (l.baseAmount != null) l.baseAmount = toCents(l.baseAmount)
+      l.amount = roundCurrencyMoney(l.amount, minorUnits)
+      if (l.baseAmount != null) l.baseAmount = roundCurrencyMoney(l.baseAmount, minorUnits)
       if (l.quantity === '1') l.unitPrice = l.amount
     }
 

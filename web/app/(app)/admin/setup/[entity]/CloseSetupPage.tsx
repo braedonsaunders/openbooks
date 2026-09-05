@@ -1,3 +1,6 @@
+import { notFound } from "next/navigation";
+import { requirePermission } from "../../../../../lib/authz";
+import { guardCloseScope } from "../../../../../lib/close-scope";
 import { sql } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -41,6 +44,8 @@ export async function CloseSetupPage({
   searchParams: Record<string, string | string[] | undefined>;
   canReopen: boolean;
 }) {
+  const authz = await requirePermission("periods.manage");
+  if (authz.user.orgId !== orgId || guardCloseScope(authz)) notFound();
   const advancedClose = await isFeatureEnabled(orgId, "advancedClose");
   const q = pickString(searchParams.periodQ)?.trim();
   const fiscalYear = Number(

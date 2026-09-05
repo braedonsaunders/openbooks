@@ -4563,6 +4563,8 @@ export interface CreateTransferOrderInput {
   lines: TransferOrderLineInput[];
 }
 type TransferOrderRow = {
+  ordered_on: string;
+  shipped_on: string | null;
   id: string;
   status: string;
   from_stock_location_id: string;
@@ -4573,11 +4575,20 @@ type TransferOrderRow = {
   document_number: string;
 };
 
+function assertTransferDate(value: string, label: string): void {
+  const date = typeof value === "string" ? new Date(`${value}T00:00:00Z`) : null;
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(date.getTime())
+      || date.toISOString().slice(0, 10) !== value) {
+    throw new InventoryError(`${label} must be a valid YYYY-MM-DD date`);
+  }
+}
+
 export async function createTransferOrder(
   orgId: string,
   actorId: string | null,
   input: CreateTransferOrderInput,
 ): Promise<{ id: string; documentNumber: string }> {
+  assertTransferDate(input.orderedOn, "order date");
   if (input.fromStockLocationId === input.toStockLocationId) {
     throw new InventoryError("transfer order needs two different locations");
   }
@@ -4622,7 +4633,7 @@ async function loadTransferOrderForUpdate(
 ): Promise<TransferOrderRow> {
   const r = (await tx.execute<TransferOrderRow>(sql`
     select id, status, from_stock_location_id, to_stock_location_id, transit_stock_location_id,
-           in_transit_account_id, subsidiary_id, document_number
+           in_transit_account_id, subsidiary_id, document_number, ordered_on, shipped_on
       from transfer_orders where org_id = ${orgId} and id = ${orderId} for update`));
   if (!r.rows[0]) throw new InventoryError("transfer order not found");
   return r.rows[0];
@@ -4634,6 +4645,25 @@ async function resolveTransitLocation(
   order: TransferOrderRow,
 ): Promise<string> {
   if (order.transit_stock_location_id) return order.transit_stock_location_id;
+  if (order.status === "in_transit") {
+    // Older shipments did not retain the resolved default. Recover their
+    // actual destination from immutable paired movements, never today's default.
+    const result = (await tx.execute<{
+      line_count: number; linked_count: number; locations: number; id: string | null;
+    }>(sql`
+      select count(*)::int as line_count, count(m.id)::int as linked_count,
+             count(distinct m.stock_location_id)::int as locations,
+             min(m.stock_location_id::text) as id
+        from transfer_order_lines l
+        left join inventory_movements m on m.paired_movement_id=l.ship_movement_id
+          and m.org_id=l.org_id and m.kind='transfer_in' and m.status='posted'
+       where l.org_id=${orgId} and l.transfer_order_id=${order.id}
+    `)).rows[0];
+    if (!result?.id || result.line_count === 0 || result.linked_count !== result.line_count || result.locations !== 1) {
+      throw new InventoryError("transfer shipment evidence does not identify a single transit location");
+    }
+    return result.id;
+  }
   const r = (await tx.execute<{ id: string }>(sql`
     select id from stock_locations where org_id = ${orgId} and kind = 'transit' and is_active
      order by created_at limit 1`));
@@ -4721,12 +4751,14 @@ export async function shipTransferOrder(
   date?: string,
 ): Promise<{ id: string; status: string; entryId: string | null }> {
   const shipDate = date ?? await businessToday(orgId);
+  assertTransferDate(shipDate, "ship date");
   return await db.transaction(async (tx) => {
     const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
     if (order.status !== "draft")
       throw new InventoryError(
         `transfer order ${order.document_number} is ${order.status}`,
       );
+    if (shipDate < order.ordered_on) throw new InventoryError("ship date cannot precede order date");
     const transitId = await resolveTransitLocation(tx, orgId, order);
     const lines = (await tx.execute<{
         id: string;
@@ -4772,7 +4804,7 @@ export async function shipTransferOrder(
     });
     await tx.execute(sql`
       update transfer_orders
-         set status = 'in_transit', shipped_on = ${shipDate}, ship_journal_entry_id = ${entryId}, updated_at = now(), updated_by = ${actorId}
+         set status = 'in_transit', transit_stock_location_id = ${transitId}, shipped_on = ${shipDate}, ship_journal_entry_id = ${entryId}, updated_at = now(), updated_by = ${actorId}
        where id = ${orderId} and org_id = ${orgId}`);
     return { id: orderId, status: "in_transit", entryId };
   });
@@ -4786,12 +4818,16 @@ export async function receiveTransferOrder(
   date?: string,
 ): Promise<{ id: string; status: string; entryId: string | null }> {
   const receiveDate = date ?? await businessToday(orgId);
+  assertTransferDate(receiveDate, "receive date");
   return await db.transaction(async (tx) => {
     const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
     if (order.status !== "in_transit")
       throw new InventoryError(
         `transfer order ${order.document_number} is ${order.status}`,
       );
+    if (!order.shipped_on || receiveDate < order.shipped_on) {
+      throw new InventoryError("receive date cannot precede shipment");
+    }
     const transitId = await resolveTransitLocation(tx, orgId, order);
     const lines = (await tx.execute<{
         id: string;
@@ -4838,7 +4874,7 @@ export async function receiveTransferOrder(
     });
     await tx.execute(sql`
       update transfer_orders
-         set status = 'received', received_on = ${receiveDate}, receive_journal_entry_id = ${entryId}, updated_at = now(), updated_by = ${actorId}
+         set status = 'received', transit_stock_location_id = ${transitId}, received_on = ${receiveDate}, receive_journal_entry_id = ${entryId}, updated_at = now(), updated_by = ${actorId}
        where id = ${orderId} and org_id = ${orgId}`);
     return { id: orderId, status: "received", entryId };
   });

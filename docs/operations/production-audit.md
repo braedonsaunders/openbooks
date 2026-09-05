@@ -169,3 +169,76 @@ counting passing tests does not substitute for those outcomes.
 
 An unrestricted production-readiness claim remains unsupported while confirmed
 control defects or unverified critical operational journeys remain open.
+
+## Lifecycle review — continuation from 404697ee
+
+This pass follows period-close operations across their HTTP, page, shared
+application/MCP, assistant and cockpit entry points, then traces project invoice
+rounding, subscription effective windows, and inventory transfer shipment/receipt.
+
+Confirmed corrections:
+
+- **Close authorization reflects actual effects.** A run's `scope.subsidiaryIds`
+  targets locks; its readiness checks, fingerprint, retained evidence, reporting
+  package and reopen invalidation are organization-wide. Previously, HTTP actions
+  discarded caller scope and application/cockpit readers treated the target list
+  as proof of isolated evidence. Those operations now require unrestricted
+  organization visibility. Restricted list readers omit the run. Direct
+  subsidiary lock changes remain available for an authorized entity, with global
+  or hidden-entity changes refused. The setup page and assistant summaries enforce
+  the same distinction. Published binders remain immutable, but downloads use
+  `private, no-store` so subsequent requests recheck current access. The period
+  list's journal count also respects its selected accounting book.
+- **Project invoice currency precision.** The generator used a fixed two-decimal
+  rounding quantum for every currency. It now reads the authoritative currency
+  exponent, uses shared bigint rounding, and refuses unsupported precision.
+  Positive and negative JPY draws of 100.5000 become 101.0000 and -101.0000;
+  CAD retains two-decimal behavior. Rates retain their existing calculation
+  precision; payable lines and document totals agree.
+- **Subscription contract windows.** Replacing a bounded earlier component
+  previously inserted an open-ended row, colliding with the already scheduled
+  component. The replacement inherits the old end date. New open-ended additions
+  cannot overlap existing or future components. Nonexistent calendar dates,
+  missing required dates and unknown amendment types now produce domain errors
+  before SQL writes. Accepted amendments retain before/after evidence and
+  idempotent replay.
+- **Transfer lifecycle and transit identity.** Shipment and receipt could precede
+  their prerequisite dates. A default transit location was also selected again
+  at receipt, potentially consuming a different stock position. Dates are now
+  validated and ordered under the transfer lock. Shipment persists its actual
+  transit location. Older unpinned shipments recover their location from immutable
+  paired movements, refusing missing or ambiguous evidence. Receipt retains this
+  recovered identity; no historical movement is rewritten.
+
+New live-database regressions are in
+`web/lib/close-lifecycle-authz.integration.test.ts`,
+`web/lib/billing-currency.integration.test.ts`,
+`engine/src/subscription-amendment-windows.integration.test.ts`, and
+`engine/src/inventory-transfer-lifecycle.integration.test.ts`.
+The initial baseline reproduction failed ten close/currency cases (CAD control
+passed), all four subscription cases and all three transfer cases. The expanded
+close tests also exercise the application adapter, assistant, cockpit and setup
+page, unrestricted access and permission revocation. All targeted cases pass with
+the corrections; verification logs are retained in thread storage.
+
+A genuine subsidiary-scoped close package remains an explicit capability gap:
+its diagnostic population, fingerprints, evidence, reporting and reopen effects
+must all become entity-scoped together. This security correction does not claim
+that the existing target list already provides that isolation. No migrations,
+production data, deployment scripts or protected synchronization/posting files
+were changed in this pass.
+
+Final verification for this continuation passed:
+
+- 3,021 unit tests, workspace typechecks, and the production build.
+- 1,289 integration tests, zero failures/cancellations/skips; all 825 fixture
+  leases were released and reset, with four bootstraps/teardowns and zero leaks.
+- Three additional transfer regressions passed alongside all twelve existing
+  inventory integration cases; these ran separately after the suite selected
+  its file list.
+- All 11 browser tests against the final build and a disposable runtime-role
+  database. Build-source hashes match all sixteen changed production files.
+- Lint passes its existing 733-warning ceiling; explicit-any stays at 399.
+
+The preceding commit's restore drill is documented above; this pass did not
+repeat restore or perform a production rollout. The wider audit remains open.

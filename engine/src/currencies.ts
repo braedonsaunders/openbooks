@@ -1,5 +1,5 @@
 import { canonicalDecimal } from "./exact-decimal.ts";
-import { normalizeDecimal } from "./money.ts";
+import { normalizeDecimal, fromUnits, roundDiv, toUnits } from "./money.ts";
 
 /**
  * Supported ISO 4217 currencies for a self-hosted OpenBooks installation.
@@ -11,6 +11,17 @@ import { normalizeDecimal } from "./money.ts";
 
 export class CurrencyError extends Error {
   readonly name = "CurrencyError";
+}
+
+/** Round a payable amount to its registered currency exponent, half away from zero. */
+export function roundCurrencyMoney(amount: string, minorUnits: number): string {
+  if (!Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
+    throw new CurrencyError("Currency minor units must be an integer between zero and four");
+  }
+  const quantum = 10n ** BigInt(4 - minorUnits);
+  const units = toUnits(amount);
+  const rounded = roundDiv(units < 0n ? -units : units, quantum) * quantum;
+  return fromUnits(units < 0n ? -rounded : rounded);
 }
 
 /**

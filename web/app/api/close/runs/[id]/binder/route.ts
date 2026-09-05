@@ -1,3 +1,4 @@
+import { guardCloseScope } from "@/lib/close-scope";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -16,6 +17,8 @@ export async function GET(
     return NextResponse.json({ error: "invalid run id" }, { status: 400 });
   const gate = await guardPermission("close.read");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardCloseScope(gate);
+  if (scopeDenied) return scopeDenied;
   const result = (await db.execute<{ binder_snapshot: unknown; binder_hash: string | null }>(sql`
     select binder_snapshot, binder_hash
       from close_runs
@@ -45,7 +48,7 @@ export async function GET(
         "Content-Disposition": `attachment; filename="close-binder-${id}.json"`,
         "X-Content-SHA256": binder.binder_hash,
         "X-Content-Canonicalization": "openbooks.canonical-json.v1",
-        "Cache-Control": "private, immutable, max-age=31536000",
+        "Cache-Control": "private, no-store",
       },
     },
   );
