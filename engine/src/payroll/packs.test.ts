@@ -11,10 +11,20 @@ import {
   jurisdictionKey,
   labourJurisdictionProblem,
   packStatutoryComponents,
+  payrollPack,
   payrollJurisdictionDeclared,
   statutoryAssessment,
   type PayrollAssessedOn,
 } from "./packs.ts";
+
+test("inherited object names are never installed payroll country packs", () => {
+  for (const country of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+    assert.throws(() => payrollPack(country), PayrollPackError, country);
+    assert.equal(country in PAYROLL_COUNTRY_PACKS, false, country);
+  }
+  assert.equal(payrollPack("CA"), PAYROLL_COUNTRY_PACKS.CA);
+  assert.equal(payrollPack("US"), PAYROLL_COUNTRY_PACKS.US);
+});
 
 /**
  * The country packs' `assessedOn` declaration — what each statutory amount is

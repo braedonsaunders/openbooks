@@ -1,7 +1,8 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { z } from 'zod'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { sealSecret } from '@openbooks/engine/src/secrets.ts'
 import { listFilingAccounts } from '@openbooks/engine/src/payroll-filing.ts'
 import {
@@ -38,6 +39,49 @@ const STUB_DELIVERIES = new Set(['email', 'print', 'both'])
  * (engine/src/payroll-payment-method.ts) decides from there.
  */
 const PAYMENT_METHODS = new Set(['eft', 'cheque'])
+
+const optionalCount = z.union([z.number().int(), z.string().trim().regex(/^\d*$/)]).nullable().optional()
+const profileBodySchema = z.looseObject({
+  employeePartyId: z.string(),
+  payScheduleId: z.string(),
+  country: z.string().optional(),
+  province: z.string().optional(),
+  labourJurisdiction: z.string().nullable().optional(),
+  payBasis: z.enum(['hourly', 'salary']).optional(),
+  vacationMethod: z.enum(['accrue', 'pay_each_period']).optional(),
+  filingStatus: z.string().nullable().optional(),
+  filingAccountId: z.string().nullable().optional(),
+  stubDelivery: z.string().optional(),
+  paymentMethod: z.string().nullable().optional(),
+  federalClaimCode: optionalCount,
+  provincialClaimCode: optionalCount,
+  w4Allowances: optionalCount,
+  multipleJobs: z.boolean().optional(),
+  w4Pre2020: z.boolean().optional(),
+  ficaExempt: z.boolean().optional(),
+  futaExempt: z.boolean().optional(),
+  cppExempt: z.boolean().optional(),
+  eiExempt: z.boolean().optional(),
+  taxExempt: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  sin: z.string().nullable().optional(),
+})
+
+// Match the compliance editor's explicit, non-secret audit projection. A
+// sealed taxpayer identifier is sensitive too; retain only presence/last3.
+const PROFILE_AUDIT_COLUMNS = sql`
+  id, org_id, employee_party_id, pay_schedule_id, country, province,
+  residence_region, labour_jurisdiction, pay_basis,
+  federal_claim_code, federal_claim_amount, provincial_claim_code, provincial_claim_amount,
+  additional_tax_per_period, prescribed_zone_deduction, authorized_annual_deductions,
+  authorized_federal_credits, authorized_provincial_credits,
+  cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
+  union_agreement_id, union_classification_id,
+  filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
+  w4_pre_2020, w4_allowances, fica_exempt, futa_exempt,
+  (sin_encrypted is not null) as sin_present, sin_last3,
+  filing_account_id, stub_delivery, payment_method,
+  created_at, created_by, updated_at, updated_by`
 
 const MONEY_KEYS = [
   'federalClaimAmount',
@@ -211,7 +255,7 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
   const userId = gate.user.id
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, profileBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
 
@@ -326,123 +370,141 @@ export async function POST(req: Request) {
     vacationPercent = normalizeMoney(vacationRaw)
   }
 
-  const refs = (await Promise.all([
-    db.execute(sql`
-      select p.subsidiary_id as "subsidiaryId" from parties p
-       join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
-       where p.org_id = ${orgId} and p.id = ${body.employeePartyId} and p.is_active`),
-    db.execute(sql`
-      select subsidiary_id as "subsidiaryId"
-        from pay_schedules where org_id = ${orgId} and id = ${body.payScheduleId} and is_active`),
-  ]))
-  if (refs.some((result) => result.rows.length !== 1)) {
-    return NextResponse.json({ error: 'employee or pay schedule is not available' }, { status: 422 })
-  }
-  // The employee and schedule are both payroll records. Resolve their legal
-  // entities before the upsert so a restricted operator cannot re-home a
-  // profile or edit another subsidiary by guessing an employee id.
-  const employeeSubsidiaryId = (refs[0].rows[0] as { subsidiaryId: string | null }).subsidiaryId
-  const scheduleSubsidiaryId = (refs[1].rows[0] as { subsidiaryId: string | null }).subsidiaryId
-  const employeeDenied = guardSubsidiaryScope(gate, employeeSubsidiaryId)
-  if (employeeDenied) return employeeDenied
-  const scheduleDenied = guardSubsidiaryScope(gate, scheduleSubsidiaryId)
-  if (scheduleDenied) return scheduleDenied
-  // A scoped schedule pins the run's legal entity, currency, and employee
-  // population. An org-wide NULL schedule deliberately remains a wildcard;
-  // a non-NULL schedule may only be assigned to an employee of that entity.
-  if (scheduleSubsidiaryId !== null && employeeSubsidiaryId !== scheduleSubsidiaryId) {
-    return NextResponse.json(
-      { error: 'employee and pay schedule must belong to the same subsidiary' },
-      { status: 422 },
-    )
-  }
-  const filingDenied = await guardPayrollFilingAccounts(gate, [filingAccountId])
-  if (filingDenied) return filingDenied
-  if (filingAccountId !== null) {
-    // The account must exist, be active, and file under the same country pack
-    // as the employee — a CA employee can never be filed on a US EIN.
-    const account = (await db.execute(sql`
-      select 1 from payroll_filing_accounts
-       where org_id = ${orgId} and id = ${filingAccountId} and is_active and country = ${country}`,
-    ))
-    if (account.rows.length !== 1) {
-      return NextResponse.json({ error: 'filing account is not available for this country' }, { status: 422 })
+  return withOrgTransaction(orgId, async () => {
+    const refs = (await Promise.all([
+      db.execute(sql`
+        select p.subsidiary_id as "subsidiaryId" from parties p
+         join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
+         where p.org_id = ${orgId} and p.id = ${body.employeePartyId} and p.is_active
+         for no key update of p for share of er`),
+      db.execute(sql`
+        select subsidiary_id as "subsidiaryId"
+          from pay_schedules where org_id = ${orgId} and id = ${body.payScheduleId} and is_active
+          for share`),
+    ]))
+    if (refs.some((result) => result.rows.length !== 1)) {
+      return NextResponse.json({ error: 'employee or pay schedule is not available' }, { status: 422 })
     }
-  }
-
-  // Sealed SIN/SSN: write-only from the client (send `sin` to set/replace;
-  // omit to keep). Never echoed back — GET exposes sin_last3 only.
-  let sinEncrypted: string | null | undefined
-  let sinLast3: string | null | undefined
-  if ('sin' in body) {
-    const sin = String(body.sin ?? '').replace(/\D/g, '')
-    if (sin === '') {
-      sinEncrypted = null
-      sinLast3 = null
-    } else if (!/^\d{9}$/.test(sin)) {
-      return NextResponse.json({ error: 'SIN/SSN must be 9 digits' }, { status: 422 })
-    } else {
-      sinEncrypted = sealSecret(sin)
-      sinLast3 = sin.slice(-3)
+    // The employee and schedule are both payroll records. Resolve their legal
+    // entities before the upsert so a restricted operator cannot re-home a
+    // profile or edit another subsidiary by guessing an employee id.
+    const employeeSubsidiaryId = (refs[0].rows[0] as { subsidiaryId: string | null }).subsidiaryId
+    const scheduleSubsidiaryId = (refs[1].rows[0] as { subsidiaryId: string | null }).subsidiaryId
+    const employeeDenied = guardSubsidiaryScope(gate, employeeSubsidiaryId)
+    if (employeeDenied) return employeeDenied
+    const scheduleDenied = guardSubsidiaryScope(gate, scheduleSubsidiaryId)
+    if (scheduleDenied) return scheduleDenied
+    // A scoped schedule pins the run's legal entity, currency, and employee
+    // population. An org-wide NULL schedule deliberately remains a wildcard;
+    // a non-NULL schedule may only be assigned to an employee of that entity.
+    if (scheduleSubsidiaryId !== null && employeeSubsidiaryId !== scheduleSubsidiaryId) {
+      return NextResponse.json(
+        { error: 'employee and pay schedule must belong to the same subsidiary' },
+        { status: 422 },
+      )
     }
-  }
+    const filingDenied = await guardPayrollFilingAccounts(gate, [filingAccountId])
+    if (filingDenied) return filingDenied
+    if (filingAccountId !== null) {
+      // The account must exist, be active, and file under the same country pack
+      // as the employee — a CA employee can never be filed on a US EIN.
+      const account = (await db.execute(sql`
+        select 1 from payroll_filing_accounts
+         where org_id = ${orgId} and id = ${filingAccountId} and is_active and country = ${country}`,
+      ))
+      if (account.rows.length !== 1) {
+        return NextResponse.json({ error: 'filing account is not available for this country' }, { status: 422 })
+      }
+    }
 
-  await db.execute(sql`
-    insert into employee_payroll_profiles
-      (org_id, employee_party_id, pay_schedule_id, country, province, labour_jurisdiction, pay_basis,
-       federal_claim_code, federal_claim_amount, provincial_claim_code, provincial_claim_amount,
-       additional_tax_per_period, prescribed_zone_deduction, authorized_annual_deductions,
-       authorized_federal_credits, authorized_provincial_credits,
-       filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
-       w4_pre_2020, w4_allowances, fica_exempt, futa_exempt,
-       cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
-       sin_encrypted, sin_last3, filing_account_id, stub_delivery, payment_method,
-       created_by, updated_by)
-    values (${orgId}, ${body.employeePartyId}, ${body.payScheduleId}, ${country}, ${province},
-            ${labourJurisdiction}, ${payBasis},
-            ${federalClaimCode}, ${money.federalClaimAmount}, ${provincialClaimCode}, ${money.provincialClaimAmount},
-            ${money.additionalTaxPerPeriod}, ${money.prescribedZoneDeduction}, ${money.authorizedAnnualDeductions},
-            ${money.authorizedFederalCredits}, ${money.authorizedProvincialCredits},
-            ${filingStatus}, ${body.multipleJobs === true}, ${money.dependentCredits},
-            ${money.otherIncomeAnnual}, ${money.deductionsAnnual},
-            ${body.w4Pre2020 === true}, ${w4Allowances},
-            ${body.ficaExempt === true}, ${body.futaExempt === true},
-            ${body.cppExempt === true}, ${body.eiExempt === true}, ${body.taxExempt === true},
-            ${vacationPercent}, ${vacationMethod}, ${body.isActive !== false},
-            ${sinEncrypted ?? null}, ${sinLast3 ?? null}, ${filingAccountId}, ${stubDelivery},
-            ${paymentMethod},
-            ${userId}, ${userId})
-    on conflict (org_id, employee_party_id)
-    do update set pay_schedule_id = excluded.pay_schedule_id, country = excluded.country,
-                  province = excluded.province,
-                  labour_jurisdiction = excluded.labour_jurisdiction,
-                  pay_basis = excluded.pay_basis,
-                  federal_claim_code = excluded.federal_claim_code,
-                  federal_claim_amount = excluded.federal_claim_amount,
-                  provincial_claim_code = excluded.provincial_claim_code,
-                  provincial_claim_amount = excluded.provincial_claim_amount,
-                  additional_tax_per_period = excluded.additional_tax_per_period,
-                  prescribed_zone_deduction = excluded.prescribed_zone_deduction,
-                  authorized_annual_deductions = excluded.authorized_annual_deductions,
-                  authorized_federal_credits = excluded.authorized_federal_credits,
-                  authorized_provincial_credits = excluded.authorized_provincial_credits,
-                  filing_status = excluded.filing_status, multiple_jobs = excluded.multiple_jobs,
-                  dependent_credits = excluded.dependent_credits,
-                  other_income_annual = excluded.other_income_annual,
-                  deductions_annual = excluded.deductions_annual,
-                  w4_pre_2020 = excluded.w4_pre_2020, w4_allowances = excluded.w4_allowances,
-                  fica_exempt = excluded.fica_exempt, futa_exempt = excluded.futa_exempt,
-                  cpp_exempt = excluded.cpp_exempt, ei_exempt = excluded.ei_exempt,
-                  tax_exempt = excluded.tax_exempt, vacation_percent = excluded.vacation_percent,
-                  vacation_method = excluded.vacation_method, is_active = excluded.is_active,
-                  filing_account_id = excluded.filing_account_id,
-                  stub_delivery = excluded.stub_delivery,
-                  payment_method = excluded.payment_method,
-                  sin_encrypted = case when ${sinEncrypted !== undefined} then excluded.sin_encrypted
-                                       else employee_payroll_profiles.sin_encrypted end,
-                  sin_last3 = case when ${sinLast3 !== undefined} then excluded.sin_last3
-                                   else employee_payroll_profiles.sin_last3 end,
-                  updated_at = now(), updated_by = ${userId}
-    where employee_payroll_profiles.org_id = ${orgId}`)
-  return NextResponse.json({ ok: true })
+    // Sealed SIN/SSN: write-only from the client (send `sin` to set/replace;
+    // omit to keep). Never echoed back — GET exposes sin_last3 only.
+    let sinEncrypted: string | null | undefined
+    let sinLast3: string | null | undefined
+    if ('sin' in body) {
+      const sin = String(body.sin ?? '').replace(/\D/g, '')
+      if (sin === '') {
+        sinEncrypted = null
+        sinLast3 = null
+      } else if (!/^\d{9}$/.test(sin)) {
+        return NextResponse.json({ error: 'SIN/SSN must be 9 digits' }, { status: 422 })
+      } else {
+        sinEncrypted = sealSecret(sin)
+        sinLast3 = sin.slice(-3)
+      }
+    }
+
+    // The employee lock also serializes first creation, when no profile row
+    // exists yet. Capture the committed predecessor before changing any field.
+    const before = (await db.execute<Record<string, unknown>>(sql`
+      select ${PROFILE_AUDIT_COLUMNS} from employee_payroll_profiles
+       where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
+       for update
+    `)).rows[0]
+    const after = (await db.execute<Record<string, unknown>>(sql`
+      insert into employee_payroll_profiles
+        (org_id, employee_party_id, pay_schedule_id, country, province, labour_jurisdiction, pay_basis,
+         federal_claim_code, federal_claim_amount, provincial_claim_code, provincial_claim_amount,
+         additional_tax_per_period, prescribed_zone_deduction, authorized_annual_deductions,
+         authorized_federal_credits, authorized_provincial_credits,
+         filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
+         w4_pre_2020, w4_allowances, fica_exempt, futa_exempt,
+         cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
+         sin_encrypted, sin_last3, filing_account_id, stub_delivery, payment_method,
+         created_by, updated_by)
+      values (${orgId}, ${body.employeePartyId}, ${body.payScheduleId}, ${country}, ${province},
+              ${labourJurisdiction}, ${payBasis},
+              ${federalClaimCode}, ${money.federalClaimAmount}, ${provincialClaimCode}, ${money.provincialClaimAmount},
+              ${money.additionalTaxPerPeriod}, ${money.prescribedZoneDeduction}, ${money.authorizedAnnualDeductions},
+              ${money.authorizedFederalCredits}, ${money.authorizedProvincialCredits},
+              ${filingStatus}, ${body.multipleJobs === true}, ${money.dependentCredits},
+              ${money.otherIncomeAnnual}, ${money.deductionsAnnual},
+              ${body.w4Pre2020 === true}, ${w4Allowances},
+              ${body.ficaExempt === true}, ${body.futaExempt === true},
+              ${body.cppExempt === true}, ${body.eiExempt === true}, ${body.taxExempt === true},
+              ${vacationPercent}, ${vacationMethod}, ${body.isActive !== false},
+              ${sinEncrypted ?? null}, ${sinLast3 ?? null}, ${filingAccountId}, ${stubDelivery},
+              ${paymentMethod},
+              ${userId}, ${userId})
+      on conflict (org_id, employee_party_id)
+      do update set pay_schedule_id = excluded.pay_schedule_id, country = excluded.country,
+                    province = excluded.province,
+                    labour_jurisdiction = excluded.labour_jurisdiction,
+                    pay_basis = excluded.pay_basis,
+                    federal_claim_code = excluded.federal_claim_code,
+                    federal_claim_amount = excluded.federal_claim_amount,
+                    provincial_claim_code = excluded.provincial_claim_code,
+                    provincial_claim_amount = excluded.provincial_claim_amount,
+                    additional_tax_per_period = excluded.additional_tax_per_period,
+                    prescribed_zone_deduction = excluded.prescribed_zone_deduction,
+                    authorized_annual_deductions = excluded.authorized_annual_deductions,
+                    authorized_federal_credits = excluded.authorized_federal_credits,
+                    authorized_provincial_credits = excluded.authorized_provincial_credits,
+                    filing_status = excluded.filing_status, multiple_jobs = excluded.multiple_jobs,
+                    dependent_credits = excluded.dependent_credits,
+                    other_income_annual = excluded.other_income_annual,
+                    deductions_annual = excluded.deductions_annual,
+                    w4_pre_2020 = excluded.w4_pre_2020, w4_allowances = excluded.w4_allowances,
+                    fica_exempt = excluded.fica_exempt, futa_exempt = excluded.futa_exempt,
+                    cpp_exempt = excluded.cpp_exempt, ei_exempt = excluded.ei_exempt,
+                    tax_exempt = excluded.tax_exempt, vacation_percent = excluded.vacation_percent,
+                    vacation_method = excluded.vacation_method, is_active = excluded.is_active,
+                    filing_account_id = excluded.filing_account_id,
+                    stub_delivery = excluded.stub_delivery,
+                    payment_method = excluded.payment_method,
+                    sin_encrypted = case when ${sinEncrypted !== undefined} then excluded.sin_encrypted
+                                         else employee_payroll_profiles.sin_encrypted end,
+                    sin_last3 = case when ${sinLast3 !== undefined} then excluded.sin_last3
+                                     else employee_payroll_profiles.sin_last3 end,
+                    updated_at = greatest(clock_timestamp(), employee_payroll_profiles.updated_at + interval '1 microsecond'), updated_by = ${userId}
+      where employee_payroll_profiles.org_id = ${orgId}
+      returning ${PROFILE_AUDIT_COLUMNS}`)).rows[0]
+    if (!after) throw new Error('payroll profile save returned no row')
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id, at)
+      values (${orgId}, 'employee_payroll_profiles', ${after.id}, ${before ? 'update' : 'insert'},
+        ${JSON.stringify({ ...(before ? { before } : {}), after })}::jsonb,
+        ${userId}, ${req.headers.get('X-Request-Id')}, clock_timestamp())`)
+    return NextResponse.json({ ok: true })
+  })
 }

@@ -1057,6 +1057,10 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
   },
 };
 
+// This is a country-key dictionary: inherited Object names must not pass a
+// registry lookup or an API's `country in PAYROLL_COUNTRY_PACKS` validation.
+Object.setPrototypeOf(PAYROLL_COUNTRY_PACKS, null);
+
 /**
  * The packs' certificate, withholding and reciprocity declarations, published
  * to the registries that read them.
