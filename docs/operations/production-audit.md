@@ -1115,3 +1115,18 @@ against the seeded ledger. Receipts are retained under
 `audit-true-cost-ledger-2026-09-05` in thread storage.
 All 3,056 unit tests, web typechecking and the locked production build passed;
 explicit-any and lint ceilings remain 391 and 725.
+
+## Cash drill request validation — continuation from 1a6ec534
+
+The weekly cash drill accepted nonexistent calendar dates, unvalidated as-of
+values, fractional or silently clamped/defaulted horizons, and malformed
+subsidiary identifiers. It now applies the shared calendar-date and UUID
+validators and requires an explicit horizon to be an integer from 1 to 52.
+Malformed inputs return 400 before invoking the forecast reader; valid
+out-of-scope selections retain the existing authorization response.
+
+Fifteen malformed-input tests failed before this correction, while seven
+valid/scope controls passed. All 22 route tests now pass. Receipts are retained
+under `audit-cash-drill-input-2026-09-05` in thread storage.
+All 3,073 unit tests, web typechecking and the locked production build passed;
+explicit-any and lint ceilings remain 391 and 725.

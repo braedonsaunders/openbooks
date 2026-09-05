@@ -139,12 +139,12 @@ function get(query = "week=2026-08-23"): Promise<Response> {
 }
 
 const restrictedDefault = async () => {
-  reset(new Set(["sub-a", "sub-a-child"]));
+  reset(new Set(["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000003"]));
 
   const response = await get();
 
   assert.equal(response.status, 200);
-  assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, ["sub-a", "sub-a-child"]);
+  assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000003"]);
   assert.deepEqual(await response.json(), {
     weekStart: "2026-08-23",
     arEntries: [{ id: "ar-1" }],
@@ -153,9 +153,9 @@ const restrictedDefault = async () => {
 };
 
 const restrictedDenied = async () => {
-  reset(new Set(["sub-a"]));
+  reset(new Set(["00000000-0000-4000-8000-000000000001"]));
 
-  const response = await get("week=2026-08-23&sub=sub-b");
+  const response = await get("week=2026-08-23&sub=00000000-0000-4000-8000-000000000002");
 
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: "not found" });
@@ -172,12 +172,12 @@ const emptyScopeDenied = async () => {
 };
 
 const restrictedAllowed = async () => {
-  reset(new Set(["sub-a", "sub-b"]));
+  reset(new Set(["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]));
 
-  const response = await get("week=2026-08-23&sub=sub-b");
+  const response = await get("week=2026-08-23&sub=00000000-0000-4000-8000-000000000002");
 
   assert.equal(response.status, 200);
-  assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, ["sub-b"]);
+  assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, ["00000000-0000-4000-8000-000000000002"]);
 };
 
 const unrestricted = async () => {
@@ -188,9 +188,9 @@ const unrestricted = async () => {
   assert.equal(routeState.cashPositionCalls[0]?.subIds, undefined);
 
   routeState.cashPositionCalls.length = 0;
-  const selected = await get("week=2026-08-23&sub=sub-b");
+  const selected = await get("week=2026-08-23&sub=00000000-0000-4000-8000-000000000002");
   assert.equal(selected.status, 200);
-  assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, ["sub-b"]);
+  assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, ["00000000-0000-4000-8000-000000000002"]);
 };
 
 if (process.env.VITEST) {
@@ -208,4 +208,39 @@ if (process.env.VITEST) {
   test("empty subsidiary scopes fail closed", emptyScopeDenied);
   test("restricted callers may explicitly drill into an allowed subsidiary", restrictedAllowed);
   test("unrestricted callers retain whole-company and explicit subsidiary behavior", unrestricted);
+}
+
+const invalidQueries = [
+  'week=2026-02-29', 'week=2026-04-31', 'week=0000-01-01',
+  'week=2026-08-23&asOf=not-a-date', 'week=2026-08-23&asOf=2026-02-29',
+  'week=2026-08-23&asOf=', 'week=2026-08-23&horizon=1.5',
+  'week=2026-08-23&horizon=Infinity', 'week=2026-08-23&horizon=0',
+  'week=2026-08-23&horizon=53', 'week=2026-08-23&horizon=oops',
+  'week=2026-08-23&horizon=', 'week=2026-08-23&sub=not-a-uuid',
+  'week=2026-08-23&sub=,', 'week=2026-08-23&sub=',
+];
+for (const query of invalidQueries) {
+  const check = async () => {
+    reset(null);
+    const response = await get(query);
+    assert.equal(response.status,400);
+    assert.deepEqual(routeState.cashPositionCalls,[],'invalid input must not query the forecast');
+  };
+  if (process.env.VITEST) {
+    const { it } = await import(vitestModuleName);
+    it(`cash drill rejects ${query}`,check);
+  } else test(`cash drill rejects ${query}`,check);
+}
+for (const horizon of [1,52]) {
+  const check = async () => {
+    reset(null);
+    const response = await get(`week=2026-08-23&horizon=${horizon}&asOf=2024-02-29`);
+    assert.equal(response.status,200);
+    assert.equal(routeState.cashPositionCalls[0]?.horizonWeeks,horizon);
+    assert.equal(routeState.cashPositionCalls[0]?.asOfDate,'2024-02-29');
+  };
+  if (process.env.VITEST) {
+    const { it } = await import(vitestModuleName);
+    it(`cash drill accepts horizon boundary ${horizon}`,check);
+  } else test(`cash drill accepts horizon boundary ${horizon}`,check);
 }

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
+import { isUuid } from "../../../../lib/list-params";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { cashPosition } from "../../../../lib/cash/cash-position";
 import { normalizeMoneyValue } from "../../../../lib/cash/core";
@@ -22,15 +24,26 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const weekStart = url.searchParams.get("week");
-  if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
+  if (!isIsoCalendarDate(weekStart)) {
     return NextResponse.json({ error: "week must be an ISO date" }, { status: 400 });
   }
-  const horizonWeeks = Math.min(Math.max(Number(url.searchParams.get("horizon")) || 13, 1), 52);
+  const horizonParam = url.searchParams.get("horizon");
+  const horizonWeeks = horizonParam === null ? 13 : Number(horizonParam);
+  if ((horizonParam !== null && !/^\d+$/.test(horizonParam)) ||
+      !Number.isInteger(horizonWeeks) || horizonWeeks < 1 || horizonWeeks > 52) {
+    return NextResponse.json({ error: "horizon must be a whole number from 1 to 52" }, { status: 400 });
+  }
   const asOf = url.searchParams.get("asOf") ?? undefined;
+  if (asOf !== undefined && !isIsoCalendarDate(asOf)) {
+    return NextResponse.json({ error: "asOf must be an ISO date" }, { status: 400 });
+  }
   // The cockpit's subsidiary view must be reproduced or the drill would show
   // transactions the page's own totals excluded.
   const subParam = url.searchParams.get("sub");
-  const requestedSubIds = subParam ? subParam.split(",").filter(Boolean) : undefined;
+  const requestedSubIds = subParam === null ? undefined : subParam.split(",");
+  if (requestedSubIds?.some((id) => !isUuid(id))) {
+    return NextResponse.json({ error: "sub must contain comma-separated UUIDs" }, { status: 400 });
+  }
   if (gate.allowedSubsidiaryIds) {
     // A restricted caller's drill must never widen the page's subsidiary
     // scope. An explicit out-of-scope (or empty) selection is indistinguishable
