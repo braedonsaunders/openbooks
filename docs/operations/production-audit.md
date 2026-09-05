@@ -1324,3 +1324,31 @@ enabling, disabling and deleting unused definitions. All 3,087 unit tests,
 web typechecking and the locked build passed; the final five-locale copy change
 also passes 13 catalogue/view tests. Explicit-any and lint ceilings remain 391
 and 725. Receipts are in `audit-flow-controls-2026-09-05` in thread storage.
+
+## Full integration checkpoint — bcbb6454
+
+The frozen `bcbb6454` suite passed all 1,802 tests with zero failures or skips
+in 1,078,723 ms. Its four fixture slots completed 1,345 leases, releases and
+resets, four bootstraps/teardowns/schema verifications, zero active leases and
+zero detected leaks. Redis was available for queue checks; no email worker or
+external delivery was started. This checkpoint precedes the OIDC, mapped-user
+and workflow fixes, which have separate focused verification. The log and
+fixture receipt are retained under `audit-nrv-controls-2026-09-05`.
+
+## Asset reversal chronology — continuation from b09d0914
+
+Disposal, write-off, impairment and revaluation reversals previously accepted a
+date before the original entry. Calendar-shaped but impossible dates reached
+PostgreSQL as unhandled database errors. Reversal now validates the actual
+calendar date and compares against both event and journal dates read under the
+existing source locks. Earlier dates are refused before any financial write;
+same-day/later corrections and idempotent replay remain supported.
+
+Eight regressions failed before correction and eight valid controls passed.
+All 35 focused lifecycle tests now pass, including unchanged asset, event,
+journal and schedule snapshots after refusals. All-workspace typechecking and
+the locked production build pass. Evidence is retained under
+`audit-asset-reversal-date-2026-09-05` in thread storage.
+All 3,087 canonical unit tests pass; explicit-any and lint ceilings remain 391
+and 725. The adjacent audit has confirmed separate account-override and
+subsidiary-scope defects in disposal/remeasurement; their remediation is next.
