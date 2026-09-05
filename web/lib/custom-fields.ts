@@ -34,8 +34,8 @@ export type CustomFieldDef = {
     helpText?: string
     placeholder?: string
     defaultValue?: unknown
-    min?: number
-    max?: number
+    min?: number | string
+    max?: number | string
     showInList?: boolean
     displayMode?: string
     allowedRoles?: string[]

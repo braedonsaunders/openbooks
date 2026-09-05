@@ -1,12 +1,15 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { GripVertical, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
-import { CUSTOM_FIELD_TARGETS as TARGETS } from '@openbooks/customization'
+import { CUSTOM_FIELD_TARGETS as TARGETS, CUSTOM_FIELD_REFERENCE_TABLES } from '@openbooks/customization'
+import { CustomFieldInput } from '@/components/custom-field-input'
+import type { CustomFieldDefClient } from '@/components/custom-field-inputs'
+import { customFieldEditorConfig } from '@/lib/custom-field-editor-config'
 import { BUILT_IN_ROLE_KEYS, BUILT_IN_ROLES } from '@/lib/permissions'
 
 const DISPLAY_MODES = [
@@ -29,6 +32,7 @@ const TYPES: { value: string; labelKey: string; helpKey: string }[] = [
   { value: 'boolean', labelKey: 'types.boolean.label', helpKey: 'types.boolean.help' },
   { value: 'select', labelKey: 'types.select.label', helpKey: 'types.select.help' },
   { value: 'multi_select', labelKey: 'types.multiSelect.label', helpKey: 'types.multiSelect.help' },
+  { value: 'reference', labelKey: 'types.reference.label', helpKey: 'types.reference.help' },
 ]
 
 export function NewFieldButton() {
@@ -59,6 +63,7 @@ export function FieldDrawer({
   const t = useTranslations('admin.customFields')
   const tCommon = useTranslations('common')
   const tTarget = useTranslations()
+  const formId = useId()
   const creating = !def
   const router = useRouter()
   const config = ((def?.config ?? {}))
@@ -72,12 +77,13 @@ export function FieldDrawer({
   const [optionDraft, setOptionDraft] = useState('')
   const [helpText, setHelpText] = useState<string>(config.helpText ?? '')
   const [placeholder, setPlaceholder] = useState<string>(config.placeholder ?? '')
-  const [defaultValue, setDefaultValue] = useState<string>(config.defaultValue ?? '')
+  const [defaultValue, setDefaultValue] = useState<unknown>(config.defaultValue ?? '')
+  const [referenceTable, setReferenceTable] = useState<string>(config.referenceTable ?? '')
   const [minValue, setMinValue] = useState<string>(config.min != null ? String(config.min) : '')
   const [maxValue, setMaxValue] = useState<string>(config.max != null ? String(config.max) : '')
   const [isRequired, setIsRequired] = useState<boolean>(def?.is_required ?? false)
   const [showInList, setShowInList] = useState<boolean>(config.showInList ?? false)
-  const [displayMode, setDisplayMode] = useState<string>(config.displayMode ?? 'always')
+  const [displayMode, setDisplayMode] = useState<string>(config.displayMode === 'disabled' ? 'readonly' : config.displayMode === 'normal' ? 'always' : config.displayMode ?? 'always')
   const [allowedRoles, setAllowedRoles] = useState<string[]>(config.allowedRoles ?? [])
   const [isActive, setIsActive] = useState<boolean>(def?.is_active ?? true)
   // Pin the revision to the values loaded for this editor. A background refresh
@@ -103,17 +109,8 @@ export function FieldDrawer({
   }
 
   function buildConfig() {
-    const c: Record<string, unknown> = {}
-    if (needsOptions) c.options = options
-    if (helpText) c.helpText = helpText
-    if (placeholder && !needsOptions && fieldType !== 'boolean') c.placeholder = placeholder
-    if (defaultValue) c.defaultValue = defaultValue
-    if (isNumeric && minValue !== '') c.min = Number(minValue)
-    if (isNumeric && maxValue !== '') c.max = Number(maxValue)
-    if (showInList) c.showInList = true
-    if (displayMode !== 'always') c.displayMode = displayMode
-    if (allowedRoles.length > 0) c.allowedRoles = allowedRoles
-    return c
+    return customFieldEditorConfig(config, { fieldType, options, helpText, placeholder,
+      defaultValue, minValue, maxValue, showInList, displayMode, allowedRoles, referenceTable })
   }
 
   async function save() {
@@ -156,7 +153,7 @@ export function FieldDrawer({
       description={creating ? t('drawer.newDescription') : undefined}
       headerActions={
         <>
-          <Button disabled={busy || !label || (needsOptions && options.length === 0)} onClick={save}>
+          <Button disabled={busy || !label || (needsOptions && options.length === 0) || (fieldType === 'reference' && !referenceTable)} onClick={save}>
             {busy
               ? tCommon('actions.saving')
               : creating
@@ -171,6 +168,7 @@ export function FieldDrawer({
             <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
               <input
                 type="checkbox"
+                disabled={busy}
                 checked={isActive}
                 onChange={(e) => setIsActive(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
@@ -183,7 +181,7 @@ export function FieldDrawer({
         </div>
       }
     >
-      <div className="space-y-5 p-1">
+      <fieldset disabled={busy} className="min-w-0 space-y-5 p-1">
         {/* Applies to — editable on create, shown clearly (locked) on edit */}
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
           <div className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
@@ -192,8 +190,9 @@ export function FieldDrawer({
           {creating ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className={section}>
-                <Label>{t('drawer.recordType')}</Label>
+                <Label htmlFor={`${formId}-target`}>{t('drawer.recordType')}</Label>
                 <Select
+                  id={`${formId}-target`}
                   value={targetTable}
                   onChange={(e) => {
                     setTargetTable(e.target.value)
@@ -212,8 +211,8 @@ export function FieldDrawer({
               </div>
               {target && target.kinds.length > 0 ? (
                 <div className={section}>
-                  <Label>{t('drawer.whichTransactions')}</Label>
-                  <Select value={targetKind} onChange={(e) => setTargetKind(e.target.value)}>
+                  <Label htmlFor={`${formId}-kind`}>{t('drawer.whichTransactions')}</Label>
+                  <Select id={`${formId}-kind`} value={targetKind} onChange={(e) => setTargetKind(e.target.value)}>
                     <option value="">{t('drawer.allTypes')}</option>
                     {target.kinds.map((k) => (
                       <option key={k.value} value={k.value}>
@@ -239,8 +238,9 @@ export function FieldDrawer({
         {/* Identity */}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className={section}>
-            <Label>{t('drawer.label')}</Label>
+            <Label htmlFor={`${formId}-label`}>{t('drawer.label')}</Label>
             <Input
+              id={`${formId}-label`}
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder={t('drawer.labelPlaceholder')}
@@ -248,11 +248,12 @@ export function FieldDrawer({
           </div>
           {creating ? (
             <div className={section}>
-              <Label>
+              <Label htmlFor={`${formId}-key`}>
                 {t('drawer.fieldKey')}{' '}
                 <span className="font-normal text-slate-400">{t('drawer.permanent')}</span>
               </Label>
               <Input
+                id={`${formId}-key`}
                 value={key}
                 onChange={(e) => setKey(slug(e.target.value))}
                 placeholder={label ? slug(label) : t('drawer.keyPlaceholder')}
@@ -265,8 +266,8 @@ export function FieldDrawer({
 
         {/* Type */}
         <div className={section}>
-          <Label>{t('drawer.type')}</Label>
-          <Select value={fieldType} onChange={(e) => setFieldType(e.target.value)}>
+          <Label htmlFor={`${formId}-type`}>{t('drawer.type')}</Label>
+          <Select id={`${formId}-type`} value={fieldType} onChange={(e) => { setFieldType(e.target.value); setDefaultValue('') }}>
             {TYPES.map((ty) => (
               <option key={ty.value} value={ty.value}>
                 {t(ty.labelKey)}
@@ -281,10 +282,23 @@ export function FieldDrawer({
           </p>
         </div>
 
+        {fieldType === 'reference' ? (
+          <div className={section}>
+            <Label htmlFor={`${formId}-reference`}>{t('drawer.referenceTable')}</Label>
+            <Select id={`${formId}-reference`} value={referenceTable} onChange={(e) => { setReferenceTable(e.target.value); setDefaultValue('') }}>
+              <option value="">{tCommon('labels.none')}</option>
+              {TARGETS.filter(target => (CUSTOM_FIELD_REFERENCE_TABLES as readonly string[]).includes(target.table)).map(target => (
+                <option key={target.table} value={target.table}>{tTarget(target.labelKey)}</option>
+              ))}
+            </Select>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.referenceTableHint')}</p>
+          </div>
+        ) : null}
+
         {/* Options editor */}
         {needsOptions ? (
           <div className={section}>
-            <Label>{t('drawer.options')}</Label>
+            <Label htmlFor={`${formId}-option`}>{t('drawer.options')}</Label>
             {options.length > 0 ? (
               <ul className="divide-y divide-slate-100 rounded-md border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                 {options.map((o) => (
@@ -307,6 +321,7 @@ export function FieldDrawer({
             )}
             <div className="flex gap-2">
               <Input
+                id={`${formId}-option`}
                 value={optionDraft}
                 onChange={(e) => setOptionDraft(e.target.value)}
                 placeholder={t('drawer.addOptionPlaceholder')}
@@ -336,11 +351,12 @@ export function FieldDrawer({
         {/* Behaviour */}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className={section}>
-            <Label>
+            <Label htmlFor={`${formId}-help`}>
               {t('drawer.helpText')}{' '}
               <span className="font-normal text-slate-400">{t('drawer.optionalSuffix')}</span>
             </Label>
             <Input
+              id={`${formId}-help`}
               value={helpText}
               onChange={(e) => setHelpText(e.target.value)}
               placeholder={t('drawer.helpTextPlaceholder')}
@@ -348,45 +364,31 @@ export function FieldDrawer({
           </div>
           {!needsOptions && fieldType !== 'boolean' ? (
             <div className={section}>
-              <Label>
+              <Label htmlFor={`${formId}-placeholder`}>
                 {t('drawer.placeholder')}{' '}
                 <span className="font-normal text-slate-400">{t('drawer.optionalSuffix')}</span>
               </Label>
-              <Input value={placeholder} onChange={(e) => setPlaceholder(e.target.value)} />
+              <Input id={`${formId}-placeholder`} value={placeholder} onChange={(e) => setPlaceholder(e.target.value)} />
             </div>
           ) : null}
           <div className={section}>
-            <Label>
-              {t('drawer.defaultValue')}{' '}
-              <span className="font-normal text-slate-400">{t('drawer.optionalSuffix')}</span>
-            </Label>
-            {needsOptions ? (
-              <Select value={defaultValue} onChange={(e) => setDefaultValue(e.target.value)}>
-                <option value="">{tCommon('labels.none')}</option>
-                {options.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </Select>
-            ) : (
-              <Input
-                type={fieldType === 'date' ? 'date' : 'text'}
-                inputMode={isNumeric ? 'decimal' : undefined}
-                value={defaultValue}
-                onChange={(e) => setDefaultValue(e.target.value)}
-              />
-            )}
+            <CustomFieldInput
+              def={{ key: 'default_value', label: `${t('drawer.defaultValue')} ${t('drawer.optionalSuffix')}`,
+                fieldType: fieldType as CustomFieldDefClient['fieldType'], isRequired: false,
+                config: { options, referenceTable } }}
+              value={defaultValue}
+              onChange={setDefaultValue}
+            />
           </div>
           {isNumeric ? (
             <div className="grid grid-cols-2 gap-2">
               <div className={section}>
-                <Label>{t('drawer.min')}</Label>
-                <Input inputMode="decimal" value={minValue} onChange={(e) => setMinValue(e.target.value)} />
+                <Label htmlFor={`${formId}-min`}>{t('drawer.min')}</Label>
+                <Input id={`${formId}-min`} inputMode="decimal" value={minValue} onChange={(e) => setMinValue(e.target.value)} />
               </div>
               <div className={section}>
-                <Label>{t('drawer.max')}</Label>
-                <Input inputMode="decimal" value={maxValue} onChange={(e) => setMaxValue(e.target.value)} />
+                <Label htmlFor={`${formId}-max`}>{t('drawer.max')}</Label>
+                <Input id={`${formId}-max`} inputMode="decimal" value={maxValue} onChange={(e) => setMaxValue(e.target.value)} />
               </div>
             </div>
           ) : null}
@@ -417,8 +419,8 @@ export function FieldDrawer({
         {/* Display mode & role access */}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className={section}>
-            <Label>{t('drawer.displayMode')}</Label>
-            <Select value={displayMode} onChange={(e) => setDisplayMode(e.target.value)}>
+            <Label htmlFor={`${formId}-display`}>{t('drawer.displayMode')}</Label>
+            <Select id={`${formId}-display`} value={displayMode} onChange={(e) => setDisplayMode(e.target.value)}>
               {DISPLAY_MODES.map((dm) => (
                 <option key={dm.value} value={dm.value}>
                   {t(dm.labelKey)}
@@ -456,7 +458,7 @@ export function FieldDrawer({
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.allowedRolesHint')}</p>
           </div>
         </div>
-      </div>
+      </fieldset>
     </UrlDrawer>
   )
 }

@@ -6,7 +6,7 @@ import { FieldLabel, Input, Select, Textarea } from '@openbooks/ui'
 import { SearchSelect } from '@openbooks/ui'
 import type { CustomFieldDefClient } from './custom-field-inputs'
 
-const REFERENCE_TABLES = ['parties', 'projects', 'accounts', 'items'] as const
+import { CUSTOM_FIELD_REFERENCE_TABLES as REFERENCE_TABLES } from '@openbooks/customization'
 
 /**
  * One custom field's control (edit) or display (view). Extracted from
@@ -99,7 +99,7 @@ export function CustomFieldInput({
           id={inputId}
           aria-label={hideLabel ? def.label : undefined}
           value={value === true || value === 'true' ? 'true' : value === false || value === 'false' ? 'false' : ''}
-          onChange={(e) => onChange(e.target.value === 'true')}
+          onChange={(e) => onChange(e.target.value === '' ? '' : e.target.value === 'true')}
         >
           <option value="">—</option>
           <option value="true">{tLabels('yes')}</option>

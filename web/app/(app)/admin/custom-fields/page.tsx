@@ -27,6 +27,7 @@ const TYPE_KEYS: Record<string, string> = {
   boolean: 'boolean',
   select: 'select',
   multi_select: 'multiSelect',
+  reference: 'reference',
 }
 
 export default async function CustomFields({
