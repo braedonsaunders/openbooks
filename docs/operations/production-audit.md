@@ -910,3 +910,34 @@ unit tests passed. A test-fixture union type initially failed compilation;
 after its annotation was corrected, web typechecking and the locked production
 build passed. Baselines and receipts are retained under
 `audit-sentinel-access-2026-09-05` in thread storage.
+
+## Frozen integration checkpoint — 5ad0e8ee
+
+The full suite at frozen 5ad0e8ee completed with 1,531 tests: 1,529 passed,
+two Redis-dependent flow-email cases skipped, and zero failures. The fixture
+receipt records 1,066 leases/releases/resets, four bootstraps/teardowns/schema
+verifications, zero active leases and zero leaks. The log and receipt are
+retained under `audit-payroll-profile-2026-09-05`. Later audit-viewer, Sentinel
+and Financial Health changes have separate focused and release-check evidence.
+
+## Financial Health ledger reconciliation — continuation from 7860d314
+
+Monthly charts combined primary and secondary books. Segment, account-driver
+and item-analysis queries also included draft journal lines. A real database
+fixture reproduced 1,700 of account revenue against 100 in the primary posted
+ledger. These queries now use the shared primary-book selector and posted or
+reversed entry status, preserving selective line-date predicates. Monthly and
+segment operating income now excludes nonoperating income, matching the
+headline; the affected monetary subtotals use exact money helpers before
+conversion for presentation ratios.
+
+Segment, item and enabled-budget query failures previously became apparently
+valid empty datasets. They now propagate; truly absent data and disabled
+budgets retain their explicit empty states. Eleven regression cases failed
+against the prior implementation, while the empty-data control passed.
+The corrected 15-case focused run includes current/completed-month paths,
+segments, drivers, items, operating income, injected query failures and the
+existing financial-health ratio cases. All 3,056 unit tests, web typechecking
+and the locked production build passed, with unchanged 392/726 explicit-any
+and lint ceilings. Receipts are retained under `audit-health-ledger-2026-09-05`
+in thread storage.
