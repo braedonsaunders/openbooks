@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from './exact-decimal'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
 import { applyRollup, resolveInvoicingProfile } from './invoice-rollup'
@@ -58,15 +58,9 @@ function negate(v: string): string {
   return fromUnits(-toUnits(String(v ?? '0')))
 }
 
-/** Month/percent → multiplier string. markupPercent 15 → '1.15'. */
-function markupMultiplier(markupPercent: unknown): string {
-  try {
-    const percentUnits = toUnits(String(markupPercent ?? '0'))
-    if (percentUnits <= 0n) return '1.0000'
-    return fromUnits(10_000n + roundDiv(percentUnits, 100n))
-  } catch {
-    return '1.0000'
-  }
+/** Apply the percentage directly so a rounded multiplier cannot lose precision. */
+function applyMarkup(amount: string, percent: string): string {
+  return add(amount, mulPercent(amount, percent, 4))
 }
 
 /** Exact numeric(19,4) for an invoice line — never String() a money/qty column. */
@@ -140,7 +134,7 @@ export async function generateInvoiceFromBillingRequest(
     if (!project) throw new BillingError('Project not found')
     if (!project.customer_id) throw new BillingError('The project has no customer to invoice')
 
-    const markup = markupMultiplier((project.custom ?? {}).markupPercent)
+    const markup = persistInvoiceDecimal((project.custom ?? {}).markupPercent ?? '0', 'The project markup percentage is invalid')
     // The project type governs line building, the credit account, and the coarse
     // billing-method label snapshotted onto the invoice document.
     const ptype = await loadProjectType(orgId, project.id)
@@ -328,7 +322,7 @@ export async function generateInvoiceFromBillingRequest(
         const hours = persistInvoiceDecimal(te.hours ?? '0', 'A time entry hours value is invalid')
         const rate =
           invoicing.lineBuilder === 'cost_plus'
-            ? mulDecimal(persistInvoiceDecimal(te.cost_rate ?? '0', 'A time entry rate is invalid'), markup)
+            ? applyMarkup(persistInvoiceDecimal(te.cost_rate ?? '0', 'A time entry rate is invalid'), markup)
             : persistInvoiceDecimal(te.bill_rate ?? te.default_rate ?? '0', 'A time entry rate is invalid')
         const amount = mulDecimal(hours, rate)
         built.push({
@@ -431,13 +425,13 @@ export async function generateInvoiceFromBillingRequest(
         const isProjectCharge = cl.kind === 'project_charge'
         // A markup recorded ON THE LINE is the deal struck for that line and
         // wins outright — including an explicit zero, which bills at cost. Only
-        // a line that says nothing falls back to the project type's markup.
+        // a line that says nothing falls back to the project's configured markup.
         const base = persistInvoiceDecimal(cl.amount ?? '0', 'A cost line amount is invalid')
         const amount = isProjectCharge
           ? persistInvoiceDecimal(cl.bill_amount ?? '0', 'A cost line billed amount is invalid')
           : cl.markup_percent != null
             ? add(base, mulPercent(base, String(cl.markup_percent), 4))
-            : mulDecimal(base, markup)
+            : applyMarkup(base, markup)
         const components = isProjectCharge && cl.rate_presentation === 'rate_components' && Array.isArray(cl.bill_components)
           ? cl.bill_components
           : []

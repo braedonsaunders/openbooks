@@ -2429,7 +2429,8 @@ export async function decidePeriodReopen(args: {
        where org_id = ${args.orgId}
          and period_id = ${row.period_id}
          and book_id = ${row.book_id}
-         and subsidiary_id is not distinct from ${row.subsidiary_id}
+         and (subsidiary_id is null or ${row.subsidiary_id}::uuid is null
+           or subsidiary_id = ${row.subsidiary_id}::uuid)
          and id <> ${args.requestId}
          and status = 'approved'
          and expires_at > now()
@@ -2443,14 +2444,19 @@ export async function decidePeriodReopen(args: {
       );
     }
     if (modules.some((module) => module !== "gl") && !modules.includes("gl")) {
-      const gl = (await tx.execute<{ state: string }>(sql`
-        select state from period_locks where org_id = ${args.orgId} and period_id = ${row.period_id}
-          and book_id = ${row.book_id} and subsidiary_id is not distinct from ${row.subsidiary_id}
-          and module = 'gl'`));
-      if (gl.rows[0]?.state === "closed")
-        throw new CloseError(
-          "GL must be included before a closed subledger can be reopened",
-        );
+      const gl = (await tx.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
+        select state, reopen_expires_at from period_locks
+         where org_id = ${args.orgId} and period_id = ${row.period_id}
+           and book_id = ${row.book_id}
+           and (subsidiary_id = ${row.subsidiary_id}::uuid or subsidiary_id is null)
+           and module = 'gl'
+         order by (subsidiary_id is not null) desc limit 1`));
+      const governing = gl.rows[0];
+      if (periodLockBlocksPosting(governing && {
+        state: governing.state, reopenExpiresAt: governing.reopen_expires_at, reason: null,
+      }, false)) {
+        throw new CloseError("GL must be included before a closed subledger can be reopened");
+      }
     }
     for (const module of modules) {
       await upsertLock({

@@ -88,3 +88,21 @@ test("scheduled renewals stamp system provenance onto the amendment row", () => 
   assert.match(applyBody, /SYSTEM_ACTOR_ID/, "system amendments carry the documented engine actor");
   assert.notEqual(SYSTEM_ACTOR_ID, "00000000-0000-0000-0000-000000000000", "the zero UUID means 'no actor at all' and is never persisted");
 });
+
+test('subscription date arithmetic rejects malformed dates, intervals, and fractional terms', async () => {
+  const { advanceLifecycleDate } = await import('./advanced-subscriptions.ts');
+  for (const count of [0, -1, 1.5, NaN, Infinity, 2147483648]) {
+    assert.throws(() => advanceLifecycleDate('2026-01-31', 'monthly', count), AdvancedSubscriptionError);
+    assert.throws(() => addMonths('2026-01-31', count), AdvancedSubscriptionError);
+  }
+  for (const date of ['2026-02-30', '2026-13-01', '0000-01-01', '2026-1-1', '']) {
+    assert.throws(() => advanceLifecycleDate(date, 'monthly'), AdvancedSubscriptionError);
+    assert.throws(() => addMonths(date, 1), AdvancedSubscriptionError);
+  }
+  assert.throws(() => advanceLifecycleDate('2026-01-01', 'typo' as 'monthly'), AdvancedSubscriptionError);
+  assert.throws(() => addMonths('9999-12-31', 1), AdvancedSubscriptionError);
+  assert.equal(advanceLifecycleDate('2026-01-31', 'monthly', 2), '2026-03-31');
+  assert.equal(advanceLifecycleDate('2028-02-29', 'annually'), '2029-02-28');
+  assert.equal(advanceLifecycleDate('0096-02-28', 'weekly'), '0096-03-06');
+  assert.equal(addMonths('0096-01-31', 1), '0096-02-29');
+});

@@ -38,20 +38,45 @@ async function assertEnabled(orgId: string): Promise<void> {
 
 function pad(n: number): string { return String(n).padStart(2, "0"); }
 
+/** Exact positive integer at the persisted PostgreSQL integer boundary. */
+export function subscriptionPeriodCount(value: unknown, label = "interval count"): number {
+  const count = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
+  if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 1 || count > 2147483647) {
+    throw new AdvancedSubscriptionError(`${label} must be a positive whole number`);
+  }
+  return count;
+}
+
+function assertBillingTiming(value: unknown): asserts value is BillingTiming {
+  if (value !== "advance" && value !== "arrears") throw new AdvancedSubscriptionError("billing timing must be advance or arrears");
+}
+
+function assertRenewalPolicy(value: unknown): asserts value is RenewalPolicy {
+  if (value !== "auto" && value !== "manual" && value !== "none") throw new AdvancedSubscriptionError("invalid renewal policy");
+}
+
 export function advanceLifecycleDate(isoDate: string, interval: Interval, intervalCount = 1): string {
-  const n = Math.max(1, Math.trunc(intervalCount));
-  const [y, m, d] = isoDate.split("-").map(Number);
-  if (!y || !m || !d) throw new AdvancedSubscriptionError("invalid billing date");
+  validDate(isoDate, "billing date", true);
+  const n = subscriptionPeriodCount(intervalCount);
+  if (!["weekly", "monthly", "quarterly", "annually"].includes(interval)) {
+    throw new AdvancedSubscriptionError("invalid billing interval");
+  }
+  const date = new Date(`${isoDate}T00:00:00Z`);
   if (interval === "weekly") {
-    const result = new Date(Date.UTC(y, m - 1, d + 7 * n));
-    return `${result.getUTCFullYear()}-${pad(result.getUTCMonth() + 1)}-${pad(result.getUTCDate())}`;
+    date.setUTCDate(date.getUTCDate() + 7 * n);
+    if (Number.isNaN(date.getTime()) || date.getUTCFullYear() > 9999) {
+      throw new AdvancedSubscriptionError("billing date exceeds the supported calendar");
+    }
+    return date.toISOString().slice(0, 10);
   }
   const monthStep = (interval === "monthly" ? 1 : interval === "quarterly" ? 3 : 12) * n;
-  const idx = m - 1 + monthStep;
-  const targetYear = y + Math.floor(idx / 12);
-  const targetMonth = ((idx % 12) + 12) % 12;
-  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
-  return `${targetYear}-${pad(targetMonth + 1)}-${pad(Math.min(d, lastDay))}`;
+  const idx = date.getUTCMonth() + monthStep;
+  const targetYear = date.getUTCFullYear() + Math.floor(idx / 12);
+  if (targetYear > 9999) throw new AdvancedSubscriptionError("billing date exceeds the supported calendar");
+  const targetMonth = idx % 12;
+  const lastDay = new Date(0);
+  lastDay.setUTCFullYear(targetYear, targetMonth + 1, 0);
+  return `${String(targetYear).padStart(4, "0")}-${pad(targetMonth + 1)}-${pad(Math.min(date.getUTCDate(), lastDay.getUTCDate()))}`;
 }
 
 export interface CatalogComponentInput {
@@ -146,7 +171,7 @@ function validDate(value: string | null | undefined, label: string, required = f
   if (!required && (value == null || value === "")) return null;
   const parsed = typeof value === "string" ? new Date(`${value}T00:00:00Z`) : null;
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)
-      || !parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+      || value.startsWith("0000-") || !parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
     throw new AdvancedSubscriptionError(`${label} must be an ISO date`);
   }
   return value;
@@ -177,13 +202,7 @@ function nonNegativeMoney(value: string | undefined, label: string): string {
 }
 
 export function addMonths(isoDate: string, months: number): string {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  if (!year || !month || !day || months < 1) throw new AdvancedSubscriptionError("invalid renewal date or term");
-  const idx = month - 1 + months;
-  const y = year + Math.floor(idx / 12);
-  const m = ((idx % 12) + 12) % 12;
-  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
-  return `${y}-${String(m + 1).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`;
+  return advanceLifecycleDate(isoDate, "monthly", months);
 }
 
 /** First invoice date for a trial-aware advance/arrears contract. */
@@ -194,10 +213,12 @@ export function firstLifecycleBillOn(input: {
   interval: Interval;
   intervalCount: number;
 }): string {
+  validDate(input.termStartsOn, "term start", true);
+  validDate(input.trialEndsOn, "trial end");
+  assertBillingTiming(input.billingTiming);
   const serviceStartsOn = input.trialEndsOn && input.trialEndsOn > input.termStartsOn ? input.trialEndsOn : input.termStartsOn;
-  return input.billingTiming === "advance"
-    ? serviceStartsOn
-    : advanceLifecycleDate(serviceStartsOn, input.interval, input.intervalCount);
+  const nextDate = advanceLifecycleDate(serviceStartsOn, input.interval, input.intervalCount);
+  return input.billingTiming === "advance" ? serviceStartsOn : nextDate;
 }
 
 export function assertPlanVersionMutable(status: string): void {
@@ -335,6 +356,11 @@ export async function createPlanVersion(orgId: string, actorId: string, input: C
     await assertEnabled(orgId);
     const plan = await ownedPlan(orgId, input.planId);
     const effectiveFrom = validDate(input.effectiveFrom, "effective date", true)!;
+    const interval = input.interval ?? plan.interval;
+    const intervalCount = subscriptionPeriodCount(input.intervalCount ?? plan.intervalCount);
+    const billingTiming = input.billingTiming ?? "advance";
+    assertBillingTiming(billingTiming);
+    advanceLifecycleDate(effectiveFrom, interval, intervalCount);
     if (!input.components.length) throw new AdvancedSubscriptionError("at least one component is required");
     const seen = new Set<string>();
     const components = input.components.map((component) => {
@@ -355,8 +381,8 @@ export async function createPlanVersion(orgId: string, actorId: string, input: C
          interval, interval_count, billing_timing, change_summary, created_by, updated_by)
       select ${orgId}, ${input.planId}, coalesce(max(version_number), 0) + 1, ${effectiveFrom},
              ${input.name?.trim() || plan.name}, ${input.description ?? plan.description}, ${input.currency ?? plan.currency},
-             ${input.interval ?? plan.interval}, ${Math.max(1, Math.trunc(input.intervalCount ?? plan.intervalCount))},
-             ${input.billingTiming ?? "advance"}, ${input.changeSummary ?? null}, ${actorId}, ${actorId}
+             ${interval}, ${intervalCount},
+             ${billingTiming}, ${input.changeSummary ?? null}, ${actorId}, ${actorId}
         from subscription_plan_versions where org_id = ${orgId} and plan_id = ${input.planId}
       returning id
     `));
@@ -430,15 +456,16 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
     if (version.effectiveFrom > termStartsOn || (version.effectiveTo && version.effectiveTo < termStartsOn)) {
       throw new AdvancedSubscriptionError("plan version is not effective on the contract start date");
     }
-    const renewalTermMonths = input.renewalTermMonths == null ? null : Math.trunc(input.renewalTermMonths);
-    if (renewalTermMonths != null && renewalTermMonths < 1) throw new AdvancedSubscriptionError("renewal term must be positive");
+    const renewalTermMonths = input.renewalTermMonths == null ? null : subscriptionPeriodCount(input.renewalTermMonths, "renewal term");
+    const renewalPolicy = input.renewalPolicy ?? "auto";
+    assertRenewalPolicy(renewalPolicy);
     const firstBillOn = firstLifecycleBillOn({ termStartsOn, trialEndsOn, billingTiming: version.billingTiming, interval: version.interval, intervalCount: version.intervalCount });
     await db.execute(sql`
       insert into subscription_lifecycles
         (org_id, subscription_id, plan_version_id, term_starts_on, term_ends_on, trial_ends_on,
          billing_timing, renewal_policy, renewal_term_months, renewal_on, created_by, updated_by)
       values (${orgId}, ${input.subscriptionId}, ${input.planVersionId}, ${termStartsOn}, ${termEndsOn}, ${trialEndsOn},
-              ${version.billingTiming}, ${input.renewalPolicy ?? "auto"}, ${renewalTermMonths}, ${termEndsOn}, ${actorId}, ${actorId})
+              ${version.billingTiming}, ${renewalPolicy}, ${renewalTermMonths}, ${termEndsOn}, ${actorId}, ${actorId})
     `);
     await db.execute(sql`
       insert into subscription_components
@@ -590,7 +617,7 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
       await db.execute(sql`update subscription_lifecycles set billing_timing = ${request.billingTiming!}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
     }
     if (request.type === "renew") {
-      const months = Math.trunc(request.renewalTermMonths ?? before.lifecycle.renewalTermMonths ?? 12);
+      const months = subscriptionPeriodCount(request.renewalTermMonths ?? before.lifecycle.renewalTermMonths ?? 12, "renewal term");
       if (months < 1 || !before.lifecycle.termEndsOn) throw new AdvancedSubscriptionError("renewal requires a current term end and positive renewal term");
       const nextEnd = addMonths(before.lifecycle.termEndsOn, months);
       await db.execute(sql`update subscription_lifecycles set term_starts_on = ${before.lifecycle.termEndsOn}, term_ends_on = ${nextEnd}, renewal_on = ${nextEnd}, renewal_term_months = ${months}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
