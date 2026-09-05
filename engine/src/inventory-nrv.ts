@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { isIsoCalendarDate } from "./business-date.ts";
 import { fromUnits, mul, roundDiv, toUnits } from "./money.ts";
 import { getOnHandForEntity, postInventoryEntry } from "./inventory.ts";
 import { orgReportingFramework, type ReportingFramework } from "./reporting-framework.ts";
@@ -463,6 +464,7 @@ export async function reverseInventoryWritedown(
   actorId: string | null,
   input: NrvReversalInput,
 ): Promise<NrvResult> {
+  if (!isIsoCalendarDate(input.date)) throw new InventoryNrvError("reversal date must be a valid YYYY-MM-DD date");
   const framework = await orgReportingFramework(orgId);
   if (framework !== "ifrs") {
     throw new InventoryNrvError(
@@ -482,8 +484,8 @@ export async function reverseInventoryWritedown(
     );
     if (layers.length === 0) throw new InventoryNrvError("nothing on hand to remeasure");
 
-    const open = (await tx.execute<{ id: string; quantity: string; remaining: string }>(sql`
-      select id, quantity::text as quantity, (amount - reversed_amount)::text as remaining
+    const open = (await tx.execute<{ id: string; date: string; quantity: string; remaining: string }>(sql`
+      select id, date::text, quantity::text as quantity, (amount - reversed_amount)::text as remaining
         from inventory_writedowns
        where org_id = ${orgId} and item_id = ${input.itemId}
          and stock_location_id = ${input.stockLocationId}
@@ -491,6 +493,11 @@ export async function reverseInventoryWritedown(
          and kind = 'writedown' and amount > reversed_amount
        order by date, created_at
        for update`));
+    // These rows explain the current carrying amount. Applying only older
+    // rows would still revalue layers that already include later write-downs.
+    if (open.rows.some((row) => row.date > input.date)) {
+      throw new InventoryNrvError("reversal date cannot precede an open inventory write-down");
+    }
     const totalReversible = open.rows.reduce((a, r) => a + toUnits(r.remaining), 0n);
     if (totalReversible <= 0n) {
       throw new InventoryNrvError(

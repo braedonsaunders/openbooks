@@ -1233,3 +1233,17 @@ journal and allocation snapshots; successful operations reconcile GL to layers.
 All 3,076 unit tests, every workspace typecheck and the locked production build
 passed. Explicit-any and lint ceilings remain 391 and 725. Receipts are retained
 under `audit-inventory-reversal-date-2026-09-05` in thread storage.
+
+## Inventory write-down reversal chronology — continuation from ef2b6a3e
+
+An NRV reversal could consume write-down evidence dated after the requested
+reversal, including a mix of older and future write-downs. It now validates the
+calendar date before SQL and refuses a reversal preceding any locked open
+write-down. Filtering out future evidence would still revalue layers already
+affected by it, so the operation is rejected atomically instead.
+
+Three chronology/calendar cases failed before correction; same-day and later
+controls passed. All 36 combined NRV, inventory-reversal and accounting checks
+now pass, along with all 3,076 unit tests, every workspace typecheck and the
+locked production build. Explicit-any and lint ceilings remain 391 and 725.
+Receipts are retained under `audit-nrv-reversal-date-2026-09-05` in thread storage.
