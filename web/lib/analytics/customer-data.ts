@@ -1,4 +1,5 @@
 import "server-only";
+import { addMonthsIso } from "@openbooks/reports";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
@@ -426,8 +427,7 @@ function monthLabel(ym: string): string {
 }
 
 function priorYearIso(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return `${y! - 1}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return addMonthsIso(iso, -12);
 }
 
 /* ------------------------------------------------------------------- main */

@@ -1,4 +1,5 @@
 import "server-only";
+import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -93,8 +94,7 @@ interface VendorPaymentRow extends Record<string, unknown> {
 }
 
 function priorYear(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return `${y! - 1}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return addMonthsIso(iso, -12);
 }
 function daysBetween(a: string, b: string): number {
   return Math.round((new Date(b + "T00:00:00Z").getTime() - new Date(a + "T00:00:00Z").getTime()) / 86_400_000);
