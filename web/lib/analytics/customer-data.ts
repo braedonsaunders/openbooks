@@ -1,4 +1,5 @@
 import "server-only";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { addMonthsIso } from "@openbooks/reports";
 import { getMoneyFormatter } from '../money-server'
@@ -321,7 +322,7 @@ function emptyProfitability(): Profitability {
   };
 }
 
-export async function customerProfitability(period: { from: string; to: string }, orgId?: string): Promise<Profitability> {
+export async function customerProfitability(period: { from: string; to: string }, orgId: string, allowed: ReadonlySet<string> | null): Promise<Profitability> {
   // Job-costed margins join `projects`. When Projects is off that register is
   // not a live module — an empty result is not "no jobs this period".
   if (!orgId || !(await isFeatureEnabled(orgId, "projects"))) return emptyProfitability();
@@ -352,6 +353,8 @@ export async function customerProfitability(period: { from: string; to: string }
     where a.type in ('income','income_other','cogs','expense','expense_deferred')
       and l.project_id is not null and pr.customer_id is not null
       ${orgFilter}
+      ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+      ${subsidiaryVisibleFilter(sql`pr.subsidiary_id`, allowed)}
     group by pr.customer_id, cp.display_name, pr.id, pr.name
   `)));
 
@@ -433,7 +436,7 @@ function priorYearIso(iso: string): string {
 }
 
 /* ------------------------------------------------------------------- main */
-export async function customerData(period: { from: string; to: string; label: string }, orgId: string): Promise<CustomerData> {
+export async function customerData(period: { from: string; to: string; label: string }, orgId: string, allowed: ReadonlySet<string> | null): Promise<CustomerData> {
   const { moneyCompact } = await getMoneyFormatter(orgId)
   const { from, to } = period;
   const pFrom = priorYearIso(from);
@@ -468,6 +471,7 @@ export async function customerData(period: { from: string; to: string; label: st
       join parties p on p.id = d.party_id and p.org_id = d.org_id
       where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
         and d.voided_at is null and d.party_id is not null
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
         and d.posting_date >= ${pFrom} and d.posting_date <= ${to}
       group by d.party_id, p.display_name
       having sum(abs(d.total)) filter (where d.posting_date >= ${from}) > 0
@@ -482,6 +486,7 @@ export async function customerData(period: { from: string; to: string; label: st
       from documents d
       where d.org_id = ${orgId} and d.kind in ('customer_credit', 'customer_invoice')
         and d.status = 'posted' and d.voided_at is null and d.party_id is not null
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
         and d.posting_date >= ${from} and d.posting_date <= ${to}
       group by d.party_id
       having count(*) filter (where d.kind = 'customer_invoice') > 0
@@ -503,10 +508,15 @@ export async function customerData(period: { from: string; to: string; label: st
         join journal_lines il on il.entry_id = ie.id and il.org_id = ie.org_id
         join accounts ia on ia.id = il.account_id and ia.org_id = il.org_id and ia.type = 'asset_receivable'
         left join applications ap on ap.to_line_id = il.id and ap.org_id = il.org_id and ap.unapplied_at is null
+          and exists (select 1 from journal_lines source_line
+            where source_line.id = ap.from_line_id and source_line.org_id = ap.org_id
+              ${subsidiaryVisibleFilter(sql`source_line.subsidiary_id`, allowed)})
         left join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ap.org_id
         left join journal_entries pe on pe.id = pl.entry_id and pe.org_id = pl.org_id
         where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
+          ${subsidiaryVisibleFilter(sql`il.subsidiary_id`, allowed)}
           and d.voided_at is null and d.party_id is not null
+          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
           and d.posting_date >= ${from} and d.posting_date <= ${to}
         group by d.id, d.party_id, d.posting_date, d.due_date, d.total
       )
@@ -531,6 +541,7 @@ export async function customerData(period: { from: string; to: string; label: st
           from documents
          where org_id = ${orgId} and kind in ('customer_invoice', 'sales_order')
            and voided_at is null and party_id is not null
+           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
          group by party_id
       )
       select to_char(d.posting_date, 'YYYY-MM') as month,
@@ -543,6 +554,7 @@ export async function customerData(period: { from: string; to: string; label: st
       join first_doc f on f.party_id = d.party_id
       where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
         and d.voided_at is null and d.party_id is not null
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
         and d.posting_date >= ${from} and d.posting_date <= ${to}
       group by 1 order by 1
     `)),
@@ -554,9 +566,10 @@ export async function customerData(period: { from: string; to: string; label: st
       from documents
       where org_id = ${orgId} and kind = 'customer_invoice' and status = 'posted'
         and voided_at is null and party_id is not null
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
       group by party_id
     `)),
-    customerProfitability(period, orgId),
+    customerProfitability(period, orgId, allowed),
   ]);
 
   /* ---- base metrics ---- */

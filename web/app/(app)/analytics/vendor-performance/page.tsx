@@ -27,7 +27,7 @@ export default async function VendorPerformancePage({
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
 
-  const data = await vendorData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId)
+  const data = await vendorData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds)
 
   return (
     <ListPageLayout

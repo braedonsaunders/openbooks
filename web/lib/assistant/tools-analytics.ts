@@ -187,8 +187,8 @@ const customerIntelligenceTool: AssistantToolDef = {
     const projectsOn = await isFeatureEnabled(orgId, "projects");
     const [r, prof] = await withOrg(orgId, () =>
       Promise.all([
-        customerData(period, orgId),
-        projectsOn ? customerProfitability(period, orgId) : Promise.resolve(null),
+        customerData(period, orgId, authz.allowedSubsidiaryIds),
+        projectsOn ? customerProfitability(period, orgId, authz.allowedSubsidiaryIds) : Promise.resolve(null),
       ]),
     );
     return {
@@ -275,8 +275,7 @@ const vendorPerformanceTool: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
-    // vendorData takes no orgId — it is scoped purely by the RLS GUC set here.
-    const r = await withOrg(authz.user.orgId, () => vendorData(period, authz.user.orgId));
+    const r = await withOrg(authz.user.orgId, () => vendorData(period, authz.user.orgId, authz.allowedSubsidiaryIds));
     return {
       ok: true,
       data: {
@@ -506,7 +505,7 @@ const spendVelocityTool: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
-    const r = await withOrg(authz.user.orgId, () => spendVelocityData(authz.user.orgId, period));
+    const r = await withOrg(authz.user.orgId, () => spendVelocityData(authz.user.orgId, period, authz.allowedSubsidiaryIds));
     const slimVelocity = (v: (typeof r.accountVelocity)[number]) => ({
       id: v.id,
       name: v.name,

@@ -93,6 +93,7 @@ test("vendor payment analytics counts an installment bill once and uses final se
     const data = await withOrgContext(org.orgId, () => vendorData(
       { from: "2026-07-01", to: "2026-07-31", label: "July 2026" },
       org.orgId,
+      null,
     ));
     const row = data.rows.find((candidate) => candidate.id === org.vendorId);
     assert.ok(row, "vendor payment row should be present in the spend window");

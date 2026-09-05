@@ -1,4 +1,5 @@
 import "server-only";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
@@ -263,7 +264,7 @@ interface ComparisonRow extends Record<string, unknown> {
 
 // ---- main -------------------------------------------------------------------
 
-export async function spendVelocityData(orgId: string, period: { from: string; to: string; label: string }): Promise<SpendVelocityData> {
+export async function spendVelocityData(orgId: string, period: { from: string; to: string; label: string }, allowed: ReadonlySet<string> | null): Promise<SpendVelocityData> {
   const { money } = await getMoneyFormatter(orgId)
   const { from, to } = period;
   const C = { ...CFG, ...(await analyticsConfig(orgId, "spendVelocity")) };
@@ -282,6 +283,8 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     join documents d on d.id = e.source_document_id and d.org_id = e.org_id
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     where l.org_id = ${orgId} and d.voided_at is null
+      ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+      ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
       and d.kind in (${spendKindsIn})
       and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
@@ -318,7 +321,9 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where l.org_id = ${orgId} and d.voided_at is null
-      and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
+        and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
         and d.kind in (${spendKindsIn})
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
         and e.posting_date >= ${from} and e.posting_date <= ${to}
@@ -337,6 +342,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       select kind, to_char(document_date, 'YYYY-MM') as month, sum(total) as amount
       from documents
       where org_id = ${orgId} and kind in ('purchase_order', 'sales_order') and voided_at is null
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
         and document_date >= ${from} and document_date <= ${to}
       group by 1, 2
     `),
@@ -347,6 +353,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       where l.org_id = ${orgId} and a.type in ('income', 'income_other')
+        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
         and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
         and e.posting_date >= ${from} and e.posting_date <= ${to}
     `),
@@ -360,6 +367,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where d.org_id = ${orgId} and d.kind = 'expense_report' and d.voided_at is null
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
         and d.posting_date >= ${priorFrom} and d.posting_date <= ${to}
       group by 1, 2
       having sum(d.total) > 0
@@ -376,7 +384,9 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       join documents d on d.id = e.source_document_id and d.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and d.voided_at is null
-      and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
+        and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
         and d.kind in ('expense_report', 'vendor_bill')
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
         and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
@@ -687,27 +697,23 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   }
   const cliffSeries = [...cliffMonths.entries()].sort((a, b) => a[0].localeCompare(b[0]))
     .map(([month, v]) => ({ month, poAmount: v.po, soAmount: v.so }));
-  let commitmentCliff: SpendVelocityData["commitmentCliff"];
-  if (cliffSeries.length < 2) {
-    commitmentCliff = { summary: { poVelocity: 0, soVelocity: 0, velocityGap: 0, ratio: 0, status: "healthy", monthsToCliff: null, totalPO: 0, totalSO: 0 }, months: cliffSeries };
-  } else {
-    const poVelocity = Math.round(velocityCAGR(cliffSeries.map((m) => m.poAmount), 1000));
-    const soVelocity = Math.round(velocityCAGR(cliffSeries.map((m) => m.soAmount), 1000));
-    const velocityGap = poVelocity - soVelocity;
-    const totalPO = cliffSeries.reduce((s, m) => s + m.poAmount, 0);
-    const totalSO = cliffSeries.reduce((s, m) => s + m.soAmount, 0);
-    const ratio = totalSO > 0 ? Math.round((totalPO / totalSO) * 100) / 100 : 0;
-    let status: "healthy" | "warning" | "critical" = "healthy";
-    let monthsToCliff: number | null = null;
-    if (velocityGap > 20 || ratio > 1.5) {
-      status = "critical";
-      if (velocityGap > 0 && totalSO > 0) monthsToCliff = Math.max(1, Math.round(12 / (velocityGap / 10)));
-    } else if (velocityGap > 10 || ratio > 1.2) {
-      status = "warning";
-      if (velocityGap > 0 && totalSO > 0) monthsToCliff = Math.max(1, Math.round(18 / (velocityGap / 10)));
-    }
-    commitmentCliff = { summary: { poVelocity, soVelocity, velocityGap, ratio, status, monthsToCliff, totalPO: Math.round(totalPO), totalSO: Math.round(totalSO) }, months: cliffSeries };
+  // A short history suppresses growth estimates, not the observed commitments.
+  const poVelocity = Math.round(velocityCAGR(cliffSeries.map((m) => m.poAmount), 1000));
+  const soVelocity = Math.round(velocityCAGR(cliffSeries.map((m) => m.soAmount), 1000));
+  const velocityGap = poVelocity - soVelocity;
+  const totalPO = cliffSeries.reduce((s, m) => s + m.poAmount, 0);
+  const totalSO = cliffSeries.reduce((s, m) => s + m.soAmount, 0);
+  const ratio = totalSO > 0 ? Math.round((totalPO / totalSO) * 100) / 100 : 0;
+  let status: "healthy" | "warning" | "critical" = "healthy";
+  let monthsToCliff: number | null = null;
+  if (velocityGap > 20 || ratio > 1.5) {
+    status = "critical";
+    if (velocityGap > 0 && totalSO > 0) monthsToCliff = Math.max(1, Math.round(12 / (velocityGap / 10)));
+  } else if (velocityGap > 10 || ratio > 1.2) {
+    status = "warning";
+    if (velocityGap > 0 && totalSO > 0) monthsToCliff = Math.max(1, Math.round(18 / (velocityGap / 10)));
   }
+  const commitmentCliff: SpendVelocityData["commitmentCliff"] = { summary: { poVelocity, soVelocity, velocityGap, ratio, status, monthsToCliff, totalPO: Math.round(totalPO), totalSO: Math.round(totalSO) }, months: cliffSeries };
 
   // ---- revenue normalisation ---------------------------------------------------------------------
   const totalRevenue = Number(revRows.rows[0]?.revenue ?? 0);

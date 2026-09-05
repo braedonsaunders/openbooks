@@ -22,9 +22,9 @@ for(const name of ['health dashboard','health score','customer','vendor','spend'
           const period={...range,label:'Calendar review'};
           const result=name === 'health dashboard' ? await healthData(period,org.orgId,null)
             : name === 'health score' ? await financialHealth(period,undefined,org.orgId,null)
-            : name === 'customer' ? await customerData(period,org.orgId)
-            : name === 'vendor' ? await vendorData(period,org.orgId)
-            : await spendVelocityData(org.orgId,period);
+            : name === 'customer' ? await customerData(period,org.orgId,null)
+            : name === 'vendor' ? await vendorData(period,org.orgId,null)
+            : await spendVelocityData(org.orgId,period,null);
           assert.ok(result && typeof result === 'object');
         });
       }finally{await dropScratchOrg(org.orgId);}
