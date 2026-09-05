@@ -1,4 +1,5 @@
 import "server-only";
+import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
@@ -267,12 +268,10 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   const C = { ...CFG, ...(await analyticsConfig(orgId, "spendVelocity")) };
 
   // Period windows for comparison (inclusive current and back-to-back prior).
-  const start = new Date(from + "T00:00:00Z");
-  const end = new Date(to + "T00:00:00Z");
   const { priorFrom, priorTo, twoBackFrom, twoBackTo } = getSpendVelocityComparisonWindows(from, to);
   // Prior YEAR window for YoY trends.
-  const pyFrom = `${start.getUTCFullYear() - 1}${from.slice(4)}`;
-  const pyTo = `${end.getUTCFullYear() - 1}${to.slice(4)}`;
+  const pyFrom = addMonthsIso(from, -12);
+  const pyTo = addMonthsIso(to, -12);
 
   const spendKindsIn = sql.join(SPEND_KINDS.map((k) => sql`${k}`), sql`, `);
   // The spend base: expense/COGS journal lines sourced from spend documents.

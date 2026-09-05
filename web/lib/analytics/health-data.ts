@@ -1,4 +1,5 @@
 import "server-only";
+import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { neg, sum } from "@openbooks/engine/src/money.ts";
@@ -175,8 +176,7 @@ interface BudgetAccountSqlRow {
 const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_other", "expense_deferred"] as const;
 
 function priorYear(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return `${y! - 1}-${String(m!).padStart(2, "0")}-${String(d!).padStart(2, "0")}`;
+  return addMonthsIso(iso, -12);
 }
 
 function monthLabel(ym: string): string {

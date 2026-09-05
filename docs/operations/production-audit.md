@@ -1010,3 +1010,19 @@ the unrestricted controls passed. The corrected combined focused run passed
 ceilings were lowered to 391 explicit-any nodes and 725 lint warnings. All
 3,056 unit tests, web typechecking and the locked production build passed.
 Receipts are retained under `audit-cash-scope-2026-09-05` in thread storage.
+
+## Analytics leap-day comparisons — continuation from 5b70695b
+
+Financial Health (dashboard and score), Customer Intelligence, Vendor
+Intelligence and Spend Velocity constructed prior-year dates by replacing
+only the year. A period beginning or ending on February 29 produced an invalid
+February 29 in the prior year and failed in PostgreSQL. All five resolvers now
+use the report engine's shared month-shift helper, which clamps the day to the
+target month's last valid day. Its existing calendar tests cover that rule.
+
+Ten real database cases failed before this correction and five ordinary-date
+controls passed. All 15 now pass across leap-day starts, leap-day ends and the
+ordinary March control. Receipts are retained under
+`audit-analytics-calendar-2026-09-05` in thread storage.
+All 3,056 unit tests, web typechecking and the locked production build passed;
+the explicit-any check remains at 391 and the lint ceiling remains at 725.
