@@ -6,6 +6,7 @@ import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { buildSchedule, runDepreciation } from '@openbooks/engine/src/depreciation.ts';
 import { sql } from 'drizzle-orm';
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts';
 import { db, env } from '@openbooks/engine/src/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/test-fixtures.ts';
 
@@ -69,7 +70,7 @@ for (const history of ['none', 'depreciation', 'impairment', 'disposal', 'write-
           'unchanged accounts':{assetAccountId:org.accounts.invAsset,accumulatedDepreciationAccountId:org.accounts.clearing,depreciationExpenseAccountId:org.accounts.adjustment},
         };
         const response = await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{
-          method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(bodies[change]),
+          method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({...bodies[change],expectedUpdatedAt:await revision(assetId)}),
         }),{params:Promise.resolve({id:assetId})});
         const allowed = history==='none' || change==='name' || change==='unchanged accounts' || (change==='active status' && history!=='disposal' && history!=='write-off');
         assert.equal(response.status,allowed?200:409,JSON.stringify(await response.json()));
@@ -86,7 +87,7 @@ test('asset edit refuses a target subsidiary outside the caller scope', {skip:!p
   const target=randomUUID();
   await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active) values (${target},${org.orgId},${org.subsidiaryId},'Outside','CAD','CA',true)`);
   state.gate={user:{orgId:org.orgId,id:actorId},allowedSubsidiaryIds:new Set([org.subsidiaryId])};
-  const response=await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({subsidiaryId:target})}),{params:Promise.resolve({id:assetId})});
+  const response=await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({subsidiaryId:target,expectedUpdatedAt:await revision(assetId)})}),{params:Promise.resolve({id:assetId})});
   assert.equal(response.status,422);
   assert.equal((await db.execute<{subsidiary_id:string}>(sql`select subsidiary_id from fixed_assets where id=${assetId}`)).rows[0]!.subsidiary_id,org.subsidiaryId);
  } finally {state.gate=null;await dropScratchOrg(org.orgId)}
@@ -105,7 +106,7 @@ test('metadata save preserves the controlled impairment schedule', {skip:!proces
   const schedule=()=>db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} order by sequence`);
   const before=(await schedule()).rows;
   assert.deepEqual(before.map(line=>line.planned_amount),['400.0000','400.0000']);
-  const response=await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Updated asset label'})}),{params:Promise.resolve({id:assetId})});
+  const response=await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Updated asset label',expectedUpdatedAt:await revision(assetId)})}),{params:Promise.resolve({id:assetId})});
   assert.equal(response.status,200,JSON.stringify(await response.json()));
   assert.deepEqual((await schedule()).rows,before,'metadata edit cannot rebuild controlled valuation amounts');
  }finally{state.gate=null;await dropScratchOrg(org.orgId)}
@@ -128,7 +129,7 @@ test('metadata save preserves the controlled impairment schedule', {skip:!proces
       const pid = (await writer.query<{ pid:number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
       pending = PATCH(new Request(`http://audit.local/api/assets/${assetId}`, {
         method:'PATCH', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({name:'Outside scope edit'}),
+        body:JSON.stringify({name:'Outside scope edit',expectedUpdatedAt:await revision(assetId)}),
       }), {params:Promise.resolve({id:assetId})});
       void pending.catch(() => {});
       let blocked = false;
@@ -156,3 +157,5 @@ test('metadata save preserves the controlled impairment schedule', {skip:!proces
       await dropScratchOrg(org.orgId);
     }
   });
+
+async function revision(assetId:string):Promise<string>{return (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`)).rows[0]!.revision;}

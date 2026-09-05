@@ -4,6 +4,7 @@ import test from 'node:test';
 import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { sql } from 'drizzle-orm';
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts';
 import { db } from '@openbooks/engine/src/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/test-fixtures.ts';
 
@@ -41,7 +42,7 @@ for(const value of [0,-1,1.5,1_000_000_000,true,[12],{},'Infinity','1e9',1,'12',
    state.gate={user:{orgId:org.orgId,id:actorId},allowedSubsidiaryIds:null};state.builds=0;
    const snapshot=async()=>(await db.execute(sql`select (select to_jsonb(a) from fixed_assets a where id=${assetId}) as asset,(select jsonb_agg(to_jsonb(l)) from audit_log l where row_id=${assetId}) as audit`)).rows;
    const before=await snapshot();
-   const response=await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({lifeMonths:value})}),{params:Promise.resolve({id:assetId})});
+   const response=await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({lifeMonths:value,expectedUpdatedAt:await revision(assetId)})}),{params:Promise.resolve({id:assetId})});
    const valid=value===1||value==='12'||value===12000||value===null;
    assert.equal(response.status,valid?200:422,JSON.stringify(await response.json()));
    assert.equal(state.builds,valid?1:0,'invalid input never starts schedule calculation');
@@ -50,3 +51,5 @@ for(const value of [0,-1,1.5,1_000_000_000,true,[12],{},'Infinity','1e9',1,'12',
   }finally{state.gate=null;await dropScratchOrg(org.orgId)}
  });
 }
+
+async function revision(assetId:string):Promise<string>{return (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`)).rows[0]!.revision;}

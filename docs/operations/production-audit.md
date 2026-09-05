@@ -1505,3 +1505,30 @@ Evidence: `audit-asset-edit-evidence-2026-09-05`.
 A separate confirmed gap remains: the asset drawer submits full forms without
 a client revision precondition, allowing sequential stale editors to overwrite
 one another. That API/UI correction and adversarial tests follow next.
+
+## Asset editor revision integrity — continuation from 5d8bb3fa
+
+Asset PATCH now requires the exact loaded PostgreSQL revision and compares it
+after acquiring the asset lock. Missing, malformed, rounded and stale tokens
+return a conflict without changing the record or its evidence. Reads preserve
+all six timestamp digits. The saved payload is assembled under the same
+transaction lock, so its revision belongs to that save.
+
+The existing drawer pins its editing revision, sends it with each save, adopts
+the successful revision and preserves edits made while a response is pending.
+Conflicts retain local input. Explicitly reopening the editor resets fields
+and revision together; a background refresh cannot silently refresh a dirty
+form's token. Placing an asset in service sends only the status and revision.
+
+Seven new regressions failed before correction. All 88 expanded integration
+checks plus 13 adjacent valuation checks pass. All 3,118 unit tests, web types
+and the locked production build pass. Thirteen real-browser checks exercise
+lossless tokens, pending-response edits, subsequent saves, competing editors,
+conflict preservation, reload/retry and status-only activation. The expected
+409 is the only browser console error in that journey. Evidence:
+`audit-asset-revision-2026-09-05`. Explicit-any/lint ceilings remain 391/725.
+
+Browser inspection also confirmed unnamed asset controls, and tracing their
+shared custom-field component found a lossy Number conversion for currency
+defaults. Those are retained for the next correction, not treated as covered
+by the passing save-flow checks.

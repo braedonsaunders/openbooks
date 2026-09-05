@@ -36,7 +36,7 @@ const { PATCH } = await import('../app/api/assets/[id]/route');
 
 
 async function patch(assetId:string, body:Record<string,unknown>) {
- return PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({id:assetId})});
+ return PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,expectedUpdatedAt:await revision(assetId)})}),{params:Promise.resolve({id:assetId})});
 }
 for(const change of ['name','asset account','accumulated account','expense account','status','serial','description','tax'] as const){
  test(`asset editor audits ${change}`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
@@ -106,3 +106,5 @@ test('asset edit rolls back when its audit record cannot be stored',{skip:!proce
   assert.equal(response.status,422);assert.deepEqual(await snapshot(),before,'asset and schedule writes roll back with failed evidence');
  }finally{if(cleanup)await cleanup();state.gate=null;await dropScratchOrg(org.orgId)}
 });
+
+async function revision(assetId:string):Promise<string>{return (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`)).rows[0]!.revision;}
