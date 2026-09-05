@@ -1130,3 +1130,19 @@ valid/scope controls passed. All 22 route tests now pass. Receipts are retained
 under `audit-cash-drill-input-2026-09-05` in thread storage.
 All 3,073 unit tests, web typechecking and the locked production build passed;
 explicit-any and lint ceilings remain 391 and 725.
+
+## Customer payment cutoff — continuation from 206a31ec
+
+Customer payment metrics could mark an invoice paid using a settlement after
+the report's reference date, a future-effective application, or a payment on
+a secondary-book copy. The payment CTE now constrains invoice and payment
+entries to posted/reversed primary-book history and requires application and
+payment dates on or before the reference date. Existing subsidiary filters
+and transaction-currency settlement comparisons remain in the query.
+
+Three cutoff/book cases failed before this correction and the in-period
+control passed. The combined cutoff, subsidiary, transport and currency-query
+regressions passed 39 tests. Receipts are retained under
+`audit-customer-payment-cutoff-2026-09-05` in thread storage.
+All 3,073 unit tests, web typechecking and the locked production build passed;
+explicit-any and lint ceilings remain 391 and 725.
