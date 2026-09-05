@@ -505,11 +505,17 @@ export async function customerData(period: { from: string; to: string; label: st
           max(pe.posting_date) as last_payment
         from documents d
         join journal_entries ie on ie.source_document_id = d.id and ie.org_id = d.org_id
+          and ie.status in ('posted', 'reversed') and ie.book_id = ${statementBookExpr(orgId)}
         join journal_lines il on il.entry_id = ie.id and il.org_id = ie.org_id
         join accounts ia on ia.id = il.account_id and ia.org_id = il.org_id and ia.type = 'asset_receivable'
         left join applications ap on ap.to_line_id = il.id and ap.org_id = il.org_id and ap.unapplied_at is null
+          and ap.applied_on <= ${ref}
           and exists (select 1 from journal_lines source_line
+            join journal_entries source_entry on source_entry.id = source_line.entry_id and source_entry.org_id = source_line.org_id
             where source_line.id = ap.from_line_id and source_line.org_id = ap.org_id
+              and source_entry.status in ('posted', 'reversed')
+              and source_entry.book_id = ${statementBookExpr(orgId)}
+              and source_entry.posting_date <= ${ref}
               ${subsidiaryVisibleFilter(sql`source_line.subsidiary_id`, allowed)})
         left join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ap.org_id
         left join journal_entries pe on pe.id = pl.entry_id and pe.org_id = pl.org_id
