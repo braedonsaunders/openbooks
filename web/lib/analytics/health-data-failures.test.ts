@@ -16,7 +16,7 @@ const mocks: Record<string, string> = {
   "../money-server": "export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}",
   "../features": "export async function isFeatureEnabled(){return globalThis.__healthFailures.budgets}",
   "./financial-health": `export async function financialHealth(){return {figures:{
-    revenue:0,cogs:0,grossProfit:0,opex:0,operatingIncome:0,otherExpense:0,netIncome:0,
+    revenue:0,cogs:0,grossProfit:0,opex:0,operatingIncome:0,otherIncome:0,otherExpense:0,netIncome:0,
     revenueGrowth:0,breakevenMonthly:null,operatingLeverage:0,rule40:0}}}`,
 };
 registerHooks({ resolve(specifier, context, next) {

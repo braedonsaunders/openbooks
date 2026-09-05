@@ -451,7 +451,11 @@ function buildMarginFlow(f: FinancialHealth["figures"]): MarginStage[] {
     { key: "cogs", label: "COGS", amount: -f.cogs, pctOfRevenue: pct(-f.cogs), kind: "deduct" },
     { key: "grossProfit", label: "Gross Profit", amount: f.grossProfit, pctOfRevenue: pct(f.grossProfit), kind: "subtotal" },
     { key: "opex", label: "Operating Expenses", amount: -f.opex, pctOfRevenue: pct(-f.opex), kind: "deduct" },
+    // Revenue and gross profit include other income, but operating income
+    // excludes it. Show both adjustments so each subtotal reconciles.
+    { key: "excludeOtherIncome", label: "Exclude Other Income", amount: -f.otherIncome, pctOfRevenue: pct(-f.otherIncome), kind: "deduct" },
     { key: "operatingIncome", label: "Operating Income", amount: f.operatingIncome, pctOfRevenue: pct(f.operatingIncome), kind: "subtotal" },
+    { key: "otherIncome", label: "Other Income", amount: f.otherIncome, pctOfRevenue: pct(f.otherIncome), kind: "deduct" },
     { key: "otherExpense", label: "Other Expense", amount: -f.otherExpense, pctOfRevenue: pct(-f.otherExpense), kind: "deduct" },
     { key: "netIncome", label: "Net Income", amount: f.netIncome, pctOfRevenue: pct(f.netIncome), kind: "total" },
   ];
