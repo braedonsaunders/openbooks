@@ -884,8 +884,29 @@ export async function confirmMfaSetup(
       update auth_sessions set revoked_at = now(), revocation_reason = 'mfa_enabled'
        where user_id = ${userId} and id <> ${currentSessionId} and revoked_at is null
     `);
+    await auditMfaChange(userId, "mfa_enabled",
+      { mfaEnabled: false, recoveryCodesRemaining: 0 },
+      { mfaEnabled: true, recoveryCodesRemaining: recoveryCodes.length });
     return recoveryCodes;
   });
+}
+
+type MfaAuditState = { mfaEnabled: boolean; recoveryCodesRemaining: number };
+
+/** Material security evidence belongs in the same transaction as the change.
+ * Never serialize the factor row: it contains secrets and credential hashes. */
+async function auditMfaChange(
+  userId: string,
+  securityChange: "mfa_enabled" | "mfa_disabled" | "mfa_recovery_rotated",
+  before: MfaAuditState,
+  after: MfaAuditState,
+): Promise<void> {
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, at)
+    select org_id, 'users', id, 'update',
+           ${JSON.stringify({ securityChange, before, after })}::jsonb, id, clock_timestamp()
+      from users where id = ${userId}
+  `);
 }
 
 async function verifyEnabledMfaFactor(userId: string, suppliedCode: string) {
@@ -897,13 +918,15 @@ async function verifyEnabledMfaFactor(userId: string, suppliedCode: string) {
   const factor = result.rows[0];
   const secret = factor ? unsealSecret(factor.secretEncrypted) : null;
   if (!factor || !secret) return null;
-  return consumeMfaCredential({
+  const recoveryCodeHashes = Array.isArray(factor.recoveryCodeHashes) ? factor.recoveryCodeHashes : [];
+  const consumed = consumeMfaCredential({
     userId,
     secret,
-    recoveryCodeHashes: Array.isArray(factor.recoveryCodeHashes) ? factor.recoveryCodeHashes : [],
+    recoveryCodeHashes,
     lastUsedStep: factor.lastUsedStep,
     supplied: suppliedCode,
   });
+  return consumed ? { ...consumed, recoveryCodesBefore: recoveryCodeHashes.length } : null;
 }
 
 async function reauthenticateMfaSecurityChange(
@@ -975,6 +998,9 @@ export async function disableMfa(
       update auth_sessions set revoked_at = now(), revocation_reason = 'mfa_disabled'
        where user_id = ${userId} and id <> ${keepSessionId} and revoked_at is null
     `);
+    await auditMfaChange(userId, "mfa_disabled",
+      { mfaEnabled: true, recoveryCodesRemaining: verified.recoveryCodesBefore },
+      { mfaEnabled: false, recoveryCodesRemaining: 0 });
     return true;
   });
 }
@@ -994,8 +1020,11 @@ export async function rotateRecoveryCodes(
       update auth_mfa_factors
          set last_used_step = ${verified.lastUsedStep},
              recovery_code_hashes = ${JSON.stringify(hashes)}::jsonb, updated_at = now()
-       where user_id = ${userId}
+      where user_id = ${userId}
     `);
+    await auditMfaChange(userId, "mfa_recovery_rotated",
+      { mfaEnabled: true, recoveryCodesRemaining: verified.recoveryCodesBefore },
+      { mfaEnabled: true, recoveryCodesRemaining: recoveryCodes.length });
     return recoveryCodes;
   });
 }
