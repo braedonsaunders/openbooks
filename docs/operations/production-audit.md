@@ -711,3 +711,20 @@ navigation and reopens its draft before exercising the drawer. All 13 browser
 tests and the E2E typecheck passed after that correction. The database and
 browser services use disposable local data only. Receipts are retained in
 thread storage under `audit-costing-2026-09-05`.
+
+## Item edit request shapes — continuation from 227588fd
+
+The main item PATCH route normalized non-string monetary values and identifiers
+into null, accepted PostgreSQL boolean coercion, and called `.trim()` on a null
+name. Real database tests reproduced nine malformed-input failures, alongside
+passing valid edit/clear controls. The route now validates the complete patch
+shape and uses the shared exact-money boundary: safe integer JSON amounts become
+exact monetary text, fractional JSON numbers are refused, and decimal strings
+remain supported. Explicit null/blank clears and omitted fields retain their
+existing meaning. Refused patches leave both the item and audit log unchanged.
+
+All 15 focused route/database cases, 3,040 unit tests, the web typecheck, lint
+and the locked production build passed. The 13 browser tests and dedicated
+costing interaction receipts belong to the preceding costing batch; this
+backend validation change was verified directly through its HTTP handler.
+Receipts are in thread storage under `audit-item-input-2026-09-05`.
