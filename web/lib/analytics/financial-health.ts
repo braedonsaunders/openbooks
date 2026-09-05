@@ -164,13 +164,13 @@ export const RATIO_DEFS: Record<
   },
   rev_per_employee: {
     label: "Revenue per Employee",
-    formula: "Revenue / Headcount",
+    formula: "Revenue / Period-end Headcount",
     desc: "Top-line productivity of the workforce.",
     interpret: "Benchmarks vary materially by industry, geography, and reporting currency.",
   },
   gp_per_employee: {
     label: "Gross Profit per Employee",
-    formula: "Gross Profit / Headcount",
+    formula: "Gross Profit / Period-end Headcount",
     desc: "Value each employee contributes after direct costs.",
     interpret: "A cleaner productivity signal than revenue per head.",
   },
@@ -283,11 +283,15 @@ async function depreciationAmortization(orgId: string, from: string, to: string,
   return Number(r.rows[0]?.s ?? 0);
 }
 
-async function activeHeadcount(orgId: string, allowed: ReadonlySet<string> | null): Promise<number> {
+// Employment dates govern the selected period, including an employee
+// through their final employment day. Undated legacy hires remain eligible.
+async function activeHeadcount(orgId: string, asOf: string, allowed: ReadonlySet<string> | null): Promise<number> {
   const r = ((await db.execute(sql`
     select count(*)::int as c from employee_roles er
     join parties p on p.id = er.party_id and p.org_id = er.org_id
-    where er.org_id = ${orgId} and er.terminated_on is null
+    where er.org_id = ${orgId}
+      and (er.hired_on is null or er.hired_on <= ${asOf})
+      and (er.terminated_on is null or er.terminated_on >= ${asOf})
       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed)}
   `)));
   return Number(r.rows[0]?.c ?? 0);
@@ -316,7 +320,7 @@ export async function financialHealth(
     profitAndLoss(pFrom, pTo, dims, resolvedOrgId),
     balanceSheet(to, resolvedOrgId, undefined, dims),
     depreciationAmortization(resolvedOrgId, from, to, allowedSubsidiaryIds),
-    activeHeadcount(resolvedOrgId, allowedSubsidiaryIds),
+    activeHeadcount(resolvedOrgId, to, allowedSubsidiaryIds),
   ]);
 
   // Operating vs non-operating split, straight off account types.
