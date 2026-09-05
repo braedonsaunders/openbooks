@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { neg, sum } from "@openbooks/engine/src/money.ts";
 import { statementBookExpr } from "../gl-summary";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { financialHealth, type FinancialHealth, type HealthBenchmarks } from "./financial-health";
 import { analyticsConfig } from "./config";
 import { isFeatureEnabled } from "../features";
@@ -185,7 +186,7 @@ function monthLabel(ym: string): string {
 }
 
 /** 12-month P&L series ending at the period end (fills gaps with zero). */
-async function monthlySeries(orgId: string, to: string, months = 12): Promise<MonthPoint[]> {
+async function monthlySeries(orgId: string, to: string, allowed: ReadonlySet<string> | null, months = 12): Promise<MonthPoint[]> {
   const end = new Date(to + "T00:00:00Z");
   const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - (months - 1), 1));
   const startIso = start.toISOString().slice(0, 10);
@@ -199,6 +200,7 @@ async function monthlySeries(orgId: string, to: string, months = 12): Promise<Mo
         from gl_month_activity g
        where g.org_id = ${orgId}
          and g.book_id = ${statementBookExpr(orgId)}
+         ${subsidiaryVisibleFilter(sql`g.subsidiary_id`, allowed)}
          and g.month >= ${startIso}::date
          and g.month < date_trunc('month', ${to}::date)::date
       union all
@@ -210,6 +212,7 @@ async function monthlySeries(orgId: string, to: string, months = 12): Promise<Mo
          and e.posting_date >= date_trunc('month', ${to}::date)::date
          and e.posting_date <= ${to}
        where l.org_id = ${orgId}
+         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
     )
     select m.month,
       -sum(case when a.type in ('income','income_other') then m.amt else 0 end) as revenue,
@@ -258,6 +261,7 @@ async function segmentsBy(
   dimTable: "departments" | "classes" | "locations",
   from: string,
   to: string,
+  allowed: ReadonlySet<string> | null,
 ): Promise<SegmentRow[]> {
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
@@ -281,6 +285,7 @@ async function segmentsBy(
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     left join ${tbl} d on d.id = ${col} and d.org_id = l.org_id
     where l.org_id = ${orgId}
+      ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       and a.type in ('income','income_other','cogs','expense','expense_deferred')
       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
     group by 1, 2
@@ -319,7 +324,7 @@ async function segmentsBy(
 }
 
 /** Top account-level movers vs prior year, split into revenue and cost. */
-async function drivers(orgId: string, from: string, to: string): Promise<{ revenue: DriverRow[]; cost: DriverRow[] }> {
+async function drivers(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<{ revenue: DriverRow[]; cost: DriverRow[] }> {
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
   // Retain the selective line-date predicate while enforcing ledger status/book.
@@ -332,6 +337,7 @@ async function drivers(orgId: string, from: string, to: string): Promise<{ reven
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     where l.org_id = ${orgId}
+      ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
     group by a.id, a.name, a.type
@@ -370,7 +376,7 @@ async function drivers(orgId: string, from: string, to: string): Promise<{ reven
  * invoice lines, so the GL-native equivalent is revenue by income/service
  * account — each revenue account is the "line item". Current vs prior year.
  */
-async function itemAnalysis(orgId: string, from: string, to: string): Promise<HealthData["items"]> {
+async function itemAnalysis(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<HealthData["items"]> {
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
   const r = ((await db.execute(sql`
@@ -382,6 +388,7 @@ async function itemAnalysis(orgId: string, from: string, to: string): Promise<He
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     where l.org_id = ${orgId}
+      ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       and a.type in ('income','income_other')
       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
     group by a.id, a.name
@@ -517,7 +524,7 @@ function buildInsights(base: FinancialHealth, monthly: MonthPoint[], benchmarks:
   return out;
 }
 
-export async function healthData(period: { from: string; to: string; label: string }, orgId: string): Promise<HealthData> {
+export async function healthData(period: { from: string; to: string; label: string }, orgId: string, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<HealthData> {
   const { money: formatMoney } = await getMoneyFormatter(orgId)
   const money = (value: number) => formatMoney(value, { maximumFractionDigits: 0 })
   const { from, to } = period;
@@ -543,16 +550,16 @@ export async function healthData(period: { from: string; to: string; label: stri
   const budgetsOn = await isFeatureEnabled(orgId, "budgets");
 
   const [base, priorBase, monthly, dept, cls, loc, drv, items, budget] = await Promise.all([
-    financialHealth(period, benchmarks, orgId),
-    financialHealth({ from: pFrom, to: pTo, label: "prior" }, benchmarks, orgId),
-    monthlySeries(orgId, to),
-    segmentsBy(orgId, "department_id", "departments", from, to),
-    segmentsBy(orgId, "class_id", "classes", from, to),
-    segmentsBy(orgId, "location_id", "locations", from, to),
-    drivers(orgId, from, to),
-    itemAnalysis(orgId, from, to),
+    financialHealth(period, benchmarks, orgId, allowedSubsidiaryIds),
+    financialHealth({ from: pFrom, to: pTo, label: "prior" }, benchmarks, orgId, allowedSubsidiaryIds),
+    monthlySeries(orgId, to, allowedSubsidiaryIds),
+    segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds),
+    segmentsBy(orgId, "class_id", "classes", from, to, allowedSubsidiaryIds),
+    segmentsBy(orgId, "location_id", "locations", from, to, allowedSubsidiaryIds),
+    drivers(orgId, from, to, allowedSubsidiaryIds),
+    itemAnalysis(orgId, from, to, allowedSubsidiaryIds),
     budgetsOn
-      ? budgetVariance(orgId, from, to)
+      ? budgetVariance(orgId, from, to, allowedSubsidiaryIds)
       : Promise.resolve(emptyBudget()),
   ]);
 
@@ -579,7 +586,7 @@ export async function healthData(period: { from: string; to: string; label: stri
  * 10%, watch to 25%, over beyond; income favours actual ≥ budget, cost
  * accounts the reverse.
  */
-async function budgetVariance(orgId: string, from: string, to: string): Promise<BudgetVariance> {
+async function budgetVariance(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<BudgetVariance> {
   const scen = (await db.execute(sql`
     select bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.status
     from budget_scenarios bs
@@ -588,6 +595,7 @@ async function budgetVariance(orgId: string, from: string, to: string): Promise<
         select 1 from budget_lines bl
         join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
         where bl.org_id = ${orgId} and bl.scenario_id = bs.id and p.starts_on <= ${to} and p.ends_on >= ${from}
+          ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowed)}
       )
     order by bs.fiscal_year desc, bs.updated_at desc nulls last
     limit 1
@@ -602,6 +610,7 @@ async function budgetVariance(orgId: string, from: string, to: string): Promise<
       join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
       join accounts acc on acc.id = bl.account_id and acc.org_id = bl.org_id
       where bl.org_id = ${orgId} and bl.scenario_id = ${s.id} and p.starts_on <= ${to} and p.ends_on >= ${from}
+        ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowed)}
       group by 1
     ), a as (
       select l.account_id,
@@ -610,6 +619,7 @@ async function budgetVariance(orgId: string, from: string, to: string): Promise<
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
       where l.org_id = ${orgId} and e.book_id = ${s.book_id}
+        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
         and acc.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
         and l.posting_date >= ${from} and l.posting_date <= ${to}
       group by 1

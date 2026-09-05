@@ -41,7 +41,7 @@ export default async function AccountingHomePage() {
   const period = await resolvePeriod(null, { orgId: authz.user.orgId })
   const [data, health, navGroups] = await Promise.all([
     accountingHome(authz.user.orgId),
-    financialHealth({ from: period.from, to: period.to, label: period.label }, undefined, authz.user.orgId),
+    financialHealth({ from: period.from, to: period.to, label: period.label }, undefined, authz.user.orgId, authz.allowedSubsidiaryIds),
     resolveNav(
       authz.user.orgId,
       (permission) => permission === undefined || can(authz, permission),

@@ -106,7 +106,7 @@ const financialHealthTool: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
-    const r = await withOrg(authz.user.orgId, () => healthData(period, authz.user.orgId));
+    const r = await withOrg(authz.user.orgId, () => healthData(period, authz.user.orgId, authz.allowedSubsidiaryIds));
     const budgetsOn = await isFeatureEnabled(authz.user.orgId, "budgets");
     const ratios = Object.fromEntries(
       Object.entries(r.ratios).map(([cat, list]) => [

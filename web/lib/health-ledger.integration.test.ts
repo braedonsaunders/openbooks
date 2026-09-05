@@ -43,7 +43,7 @@ for (const view of ["current month", "completed month", "segments", "drivers", "
       }
       await withOrgContext(org.orgId, async () => {
         const to = view === "completed month" ? "2026-08-15" : org.date;
-        const result = await healthData({ from: "2026-07-01", to, label: "Ledger review" }, org.orgId);
+        const result = await healthData({ from: "2026-07-01", to, label: "Ledger review" }, org.orgId, null);
         assert.equal(result.figures.revenue, 150, "primary-book headline control");
         assert.equal(result.figures.operatingIncome, 100, "nonoperating income excluded in headline");
         const month = result.monthly.find(row => row.month === '2026-07');

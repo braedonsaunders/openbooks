@@ -30,7 +30,7 @@ export default async function FinancialHealthPage({
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
   const [data, budgetsEnabled] = await Promise.all([
-    healthData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId),
+    healthData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds),
     isFeatureEnabled(authz.user.orgId, 'budgets'),
   ])
 

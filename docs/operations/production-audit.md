@@ -941,3 +941,29 @@ existing financial-health ratio cases. All 3,056 unit tests, web typechecking
 and the locked production build passed, with unchanged 392/726 explicit-any
 and lint ceilings. Receipts are retained under `audit-health-ledger-2026-09-05`
 in thread storage.
+
+## Financial Health subsidiary scope — continuation from cedc0152
+
+The Financial Health page, accounting-home score and assistant discarded the
+caller's subsidiary restrictions. The data functions now require an explicit
+scope, carried through primary-book statements, monthly summaries, line-level
+segments/drivers/items, depreciation and employee headcount. Budget selection
+requires a visible cell, and both plan and actual amounts use the same entity
+scope. A later hidden-only plan no longer displaces the caller's visible plan.
+The accounting budget badge also checks the mandatory budget-line entity,
+alongside its existing account/project restrictions.
+
+The new database cases cover restricted, empty and unrestricted roles across
+the service, page, assistant, completed-month summaries and accounting badge.
+They verify visible values remain usable while hidden names, headcount,
+depreciation and budget amounts do not escape. The first run exposed a fixture
+teardown defect: approved-budget guards were missing from its guarded-evidence
+list. The fixture owner now deletes budget cells before headers using its
+existing scoped, transactional trigger handling. No production guard changed;
+all 12 fixtures left by the failed run were subsequently removed.
+
+The corrected focused run passed all 33 tests, including prior ledger, ratio,
+failure-propagation and accounting scope regressions. All 3,056 unit tests,
+workspace typechecks and the locked production build passed. The explicit-any
+and lint ceilings remain 392 and 726. Baselines and receipts are retained under
+`audit-health-scope-2026-09-05` in thread storage.
