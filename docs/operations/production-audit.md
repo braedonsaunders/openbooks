@@ -506,3 +506,41 @@ its implementation in a mock. The browser server and disposable Redis stopped
 after verification. No schema, deployment or protected sync/posting files were
 changed. Receipts and source hashes are retained in thread storage under
 `audit-recurring-calendar-2026-09-05`.
+
+## Recurring template source facts — continuation from 7cf7602e
+
+Real database regressions confirmed that recurring invoices dropped their tax
+group, gross input and override flag, and standing journals dropped subsidiary
+and custom-segment assignments. Header custom segments were also omitted.
+Generation now preserves those source facts, locks the template while reading
+its header and lines, and writes tax components with the shared exact tax
+calculator and evidence persistence helper before approval/posting. Tax rates
+resolve on the occurrence document date; explicit overrides remain explicit.
+An inactive/missing group member or missing inclusive input refuses generation
+and rolls back the new document rather than inventing a tax result.
+
+The new positive cases post both tax-code and grouped invoices and compare
+exact AR, revenue and tax-control legs, including a rate changing from 13% to
+15%. Standing journals retain their entity and segment overrides.
+
+The execution-scope review also found that a visible journal header could
+carry hidden intercompany lines. A shared recurring template predicate now
+checks every affected line entity as well as the header across collection,
+create, edit, delete and run paths. Eight HTTP regressions fail against the
+preceding commit, including three real lock races. Mutations acquire template
+locks before rechecking line scope in a fresh statement, so a predicate using
+an earlier snapshot cannot authorize an entity introduced by a concurrent edit.
+
+Focused verification passed 177 tests with one runtime-role case skipped; both
+country-tax-pack tests then passed with the restricted runtime connection.
+The next tax review independently reproduced two interactive billing defects:
+a group silently loses disabled components, and an unrelated unrated active
+code prevents use of valid codes. Those findings remain open for the next repair.
+
+All 3,040 canonical unit tests, engine/web typechecks and the production build
+passed for this correction. Lint and explicit-any ceilings remain at 732 and
+398. Browser and full integration receipts from the preceding continuation
+remain separate; this batch exercised the affected routes and accounting writes
+through the real-database suites above. No migration, deployment or protected
+sync/posting files changed. Evidence is retained in thread storage under
+`audit-recurring-template-2026-09-05`.

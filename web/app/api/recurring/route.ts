@@ -1,7 +1,6 @@
 import { isoDate, uuidId, parseJsonBody } from "@/lib/api/json";
 import { z } from "zod";
-import { advanceCadence } from "@openbooks/engine/src/recurring.ts";
-import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
+import { advanceCadence, recurringTemplateScopeFilter } from "@openbooks/engine/src/recurring.ts";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -46,7 +45,7 @@ export async function GET() {
       join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
       left join parties p on p.id = d.party_id and p.org_id = rs.org_id
      where rs.org_id = ${authz.user.orgId}
-       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
+       ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
      order by rs.is_active desc, rs.next_run_on
   `));
   return NextResponse.json({
@@ -81,11 +80,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "endsOn must not precede nextRunOn" }, { status: 400 });
   }
   const created = await db.transaction(async (tx) => {
-    const tpl = await tx.execute<{ id: string; kind: string }>(sql`
+    const candidates = await tx.execute<{ id: string; kind: string }>(sql`
       select d.id, d.kind from documents d where d.org_id = ${authz.user.orgId}
         and ${body.templateDocumentId ? sql`d.id = ${body.templateDocumentId}` : sql`d.document_number = ${body.templateDocumentNumber}`}
-        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
+        ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
       order by d.id limit 2 for share of d
+    `);
+    // Recheck line scope after the template locks: a concurrent line edit
+    // may have committed while the candidate statement waited for its parent.
+    if (!candidates.rows.length) return null;
+    const tpl = await tx.execute<{ id: string; kind: string }>(sql`
+      select d.id, d.kind from documents d where d.org_id = ${authz.user.orgId}
+        and d.id = any(${`{${candidates.rows.map(row => row.id).join(",")}}`}::uuid[])
+        ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
+      order by d.id
     `);
     if (!tpl.rows.length || !(await isDocKindEnabled(authz.user.orgId, tpl.rows[0]!.kind))) return null;
     if (tpl.rows.length > 1) return "ambiguous" as const;
