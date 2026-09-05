@@ -430,7 +430,7 @@ export function ItemDrawer({
         ) : null}
 
         {inventoryCosting ? (
-          <ItemCostingEditor itemId={String(it.id)} kind={kind} accounts={accounts} canManage={editable} />
+          <ItemCostingEditor key={String(it.id)} itemId={String(it.id)} kind={kind} accounts={accounts} canManage={editable} />
         ) : null}
 
         {/* -- accounting ---------------------------------------------- */}

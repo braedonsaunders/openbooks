@@ -20,6 +20,8 @@ test('document drawer discards the reviewed draft with a JSON revision token', a
     if (await wizard.isVisible()) {
       await wizard.getByRole('button', { name: 'Skip for now', exact: true }).click()
       await expect(wizard).toBeHidden()
+      await page.waitForURL('**/admin/setup/readiness')
+      await page.goto(`/ar/invoices?doc=${id}`)
     }
     await page.getByRole('button', { name: 'Actions', exact: true }).last().click()
     await page.getByRole('button', { name: 'Delete', exact: true }).click()

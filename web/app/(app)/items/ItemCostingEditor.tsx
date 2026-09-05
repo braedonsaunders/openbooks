@@ -11,6 +11,7 @@ interface AccountOpt {
   name?: string | null
 }
 interface Profile {
+  updated_at: string
   costing_method: string
   tracking: string
   asset_account_id: string | null
@@ -97,39 +98,53 @@ export function ItemCostingEditor({
     setProvisionalUnitCost(p?.provisional_unit_cost ?? '')
   }
 
-  async function load() {
-    const res = await fetch(`/api/items/${itemId}/costing`)
-    if (!res.ok) return
+  async function load(signal?: AbortSignal) {
+    const res = await fetch(`/api/items/${itemId}/costing`, { signal })
+    if (!res.ok) throw new Error(common('feedback.loadFailed'))
     const next = (await res.json()) as { profile: Profile | null }
+    if (signal?.aborted) return
     setProfile(next.profile)
     hydrate(next.profile)
     setLoaded(true)
   }
   useEffect(() => {
-    void load()
+    const controller = new AbortController()
+    setLoaded(false)
+    setEditing(false)
+    setProfile(null)
+    void load(controller.signal).catch(() => {
+      if (!controller.signal.aborted) toast.error(common('feedback.loadFailed'))
+    })
+    return () => controller.abort()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId])
 
   async function save() {
     setBusy(true)
-    const res = await fetch(`/api/items/${itemId}/costing`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        costingMethod, tracking, assetAccountId, cogsAccountId,
-        adjustmentAccountId, varianceAccountId, receivedNotBilledAccountId,
-        standardCost, baseUnit, reorderPoint, preferredStockLevel,
-        allowNegativeInventory, negativeCostBasis, provisionalUnitCost,
-      }),
-    })
-    const result = await res.json().catch(() => ({}))
-    if (!res.ok) toast.error(result.error ?? common('feedback.saveFailed'))
-    else {
-      toast.success(common('feedback.saved'))
-      setEditing(false)
-      await load()
+    try {
+      const res = await fetch(`/api/items/${itemId}/costing`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          expectedUpdatedAt: profile?.updated_at ?? null,
+          costingMethod, tracking, assetAccountId, cogsAccountId,
+          adjustmentAccountId, varianceAccountId, receivedNotBilledAccountId,
+          standardCost, baseUnit, reorderPoint, preferredStockLevel,
+          allowNegativeInventory, negativeCostBasis, provisionalUnitCost,
+        }),
+      })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok) toast.error(result.error ?? common('feedback.saveFailed'))
+      else {
+        toast.success(common('feedback.saved'))
+        setEditing(false)
+        await load()
+      }
+    } catch {
+      toast.error(common('feedback.saveFailed'))
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   function cancel() {
@@ -148,7 +163,7 @@ export function ItemCostingEditor({
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('description')}</p>
         </div>
         {canManage && !editing ? (
-          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+          <Button variant="outline" size="sm" disabled={!loaded || busy} onClick={() => setEditing(true)}>
             {profile ? common('actions.edit') : t('configure')}
           </Button>
         ) : null}

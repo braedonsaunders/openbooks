@@ -624,6 +624,8 @@ export async function revalueOpenLayersToStandardCost(
     assetAccountId: string;
     varianceAccountId: string | null;
     memo?: string;
+    /** Interactive callers must supply their complete current subsidiary scope. */
+    allowedSubsidiaryIds?: ReadonlySet<string> | null;
   },
 ): Promise<string[] | null> {
   if (p.standardCost == null) {
@@ -642,6 +644,10 @@ export async function revalueOpenLayersToStandardCost(
      where org_id = ${orgId} and item_id = ${itemId} and remaining_quantity > 0
      order by received_at, id
      for update`));
+  const allowedSubsidiaryIds = p.allowedSubsidiaryIds;
+  if (allowedSubsidiaryIds != null && layers.rows.some(layer => !allowedSubsidiaryIds.has(layer.subsidiary_id))) {
+    throw new InventoryError("revaluation requires access to every subsidiary holding this item");
+  }
   // Measure per owner while rewriting every layer onto standard cost.
   const deltasByOwner = new Map<string, bigint>();
   for (const layer of layers.rows) {
