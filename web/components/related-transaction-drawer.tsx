@@ -1,4 +1,5 @@
 import 'server-only'
+import { paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -124,7 +125,7 @@ export async function loadRelatedTransactionDrawerData({
     const permission = kind === 'vendor_payment' ? 'ap.read' : 'ar.read'
     if (!can(authz, permission)) return null
     const paymentKind = kind as PaymentKind
-    const payment = await loadPaymentDocument(id, paymentKind, authz.user.orgId)
+    const payment = await loadPaymentDocument(id, paymentKind, authz.user.orgId, authz.allowedSubsidiaryIds)
     if (!payment || !canSeeDocument((payment.doc), partyId, authz)) return null
 
     const side = PAYMENT_KIND_SIDE[paymentKind]
@@ -134,7 +135,7 @@ export async function loadRelatedTransactionDrawerData({
     const [parties, banks, resolvedForm] = await Promise.all([
       db.execute<ElementOf<PaymentProps['parties']>>(sql`
         select id, display_name from parties p
-         where p.org_id = ${authz.user.orgId} and ${partyFilter} and p.is_active
+         where p.org_id = ${authz.user.orgId} and ${partyFilter} and p.is_active ${paymentSharedSubsidiaryFilter(sql`p.subsidiary_id`, authz)}
          order by display_name limit 2000`),
       db.execute<ElementOf<PaymentProps['bankAccounts']>>(sql`
         select id, number, name from accounts
@@ -151,7 +152,7 @@ export async function loadRelatedTransactionDrawerData({
       }),
     ])
     const openItems: OpenItemClient[] = payment.doc.status === 'draft'
-      ? await openItemsForParty(String(payment.doc.party_id), side, authz.user.orgId)
+      ? await openItemsForParty(String(payment.doc.party_id), side, authz.user.orgId, authz.allowedSubsidiaryIds)
       : []
     return {
       type: 'payment',

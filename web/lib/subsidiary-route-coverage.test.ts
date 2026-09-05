@@ -199,15 +199,12 @@ test('payment boundary resolves subsidiary once for GET, PATCH and DELETE', () =
 })
 
 test('open-item allocation targets are record boundaries of their own', () => {
-  const single = source('app/api/payments/[id]/route.ts')
-  assert.match(single, /assertAllocationTargetsInScope/)
-  assert.ok(
-    single.indexOf('assertAllocationTargetsInScope(') > single.indexOf('async function assertAllocationTargetsInScope'),
-    'PATCH must invoke the shared target check',
-  )
-  const batched = source('app/api/payments/post-with-applications/route.ts')
-  assert.match(batched, /select dl\.id, d\.subsidiary_id as "subsidiaryId"/)
-  assert.match(batched, /guardSubsidiaryScope\(authz, byId\.get\(lineId\)\)/)
+  for (const path of ['app/api/payments/[id]/route.ts', 'app/api/payments/post-with-applications/route.ts']) {
+    assert.match(source(path), /await assertAllocationTargetsInScope\(/)
+  }
+  const shared = source('app/api/payments/lib.ts')
+  assert.match(shared, /from journal_lines jl/)
+  assert.match(shared, /guardSubsidiaryScope\(authz, byId\.get\(lineId\)\)/)
 })
 
 test('post-with-applications gates the payment document itself', () => {
@@ -230,10 +227,10 @@ for (const route of ['app/api/payments/suggest/route.ts', 'app/api/payments/open
 
 test('every run-scoped verb inherits the source-bill scope gate', () => {
   const lib = source('app/api/payments/lib.ts')
-  assert.match(lib, /from payment_run_items ri/)
-  assert.match(lib, /join documents d on d\.id = ri\.source_document_id and d\.org_id = ri\.org_id/)
-  assert.match(lib, /ri\.status <> 'cancelled'/)
-  assert.match(lib, /d0?\.?subsidiary_id is null/)
+  assert.match(lib, /paymentRunScopeSql\(authz\)/)
+  const shared = source('lib/payment-run-access.ts')
+  assert.match(shared, /from payment_run_items scope_item/)
+  assert.match(shared, /scope_doc\.subsidiary_id is null/)
   for (const route of [
     'app/api/payments/runs/[id]/route.ts',
     'app/api/payments/runs/[id]/decision/route.ts',
@@ -254,9 +251,7 @@ test('every run-scoped verb inherits the source-bill scope gate', () => {
 
 test('the run list hides runs that pay out-of-scope bills', () => {
   const src = source('app/api/payments/runs/route.ts')
-  assert.match(src, /if \(gate\.allowedSubsidiaryIds\) \{/)
-  assert.match(src, /not exists \(/)
-  assert.match(src, /d0\.subsidiary_id is null or not \(d0\.subsidiary_id = any\(/)
+  assert.match(src, /paymentRunScopeSql\(gate\)/)
 })
 
 test('run creation validates every selected bill against the caller scope', () => {

@@ -341,154 +341,157 @@ export async function updateDraftPayment(
   userId: string | null,
   orgId: string,
   options: { expectedRevision?: string } = {},
-): Promise<void> {
-  const [doc] = await db.select().from(schema.documents).where(and(eq(schema.documents.id, id), eq(schema.documents.orgId, orgId)));
-  if (!doc || !isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
-  if (doc.status !== "draft") throw new PaymentError("only draft payments can be edited");
+): Promise<Awaited<ReturnType<typeof loadPaymentDocument>>> {
+  return withOrgTransaction(orgId, async () => {
+    const [doc] = await db.select().from(schema.documents).where(and(eq(schema.documents.id, id), eq(schema.documents.orgId, orgId))).for("update");
+    if (!doc || !isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
+    if (doc.status !== "draft") throw new PaymentError("only draft payments can be edited");
 
-  const custom = (doc.custom ?? {}) as {
-    bankAccountId?: string;
-    allocations?: AllocationInput[];
-    creditAllocations?: CreditAllocationInput[];
-    discountAmount?: string;
-    discountAccountId?: string;
-    controlAccountId?: string;
-    feeAmount?: string;
-    feeIncomeAccountId?: string;
-  };
-  const partyId = patch.partyId !== undefined ? patch.partyId : doc.partyId;
-  const bankAccountId =
-    patch.bankAccountId !== undefined ? patch.bankAccountId : (custom.bankAccountId ?? null);
-  const allocations = patch.allocations ?? custom.allocations ?? [];
-  // Read the PATCH first, exactly like `allocations` above. Reading only the
-  // stored value silently discarded every credit a caller supplied: a payment
-  // run computes vendor credits, passes them here, and they never reached the
-  // document — the run item and the remittance advice both claimed a credit the
-  // bill was never actually reduced by.
-  const creditAllocations = patch.creditAllocations ?? custom.creditAllocations ?? [];
-  const discountAmount = patch.discountAmount ?? custom.discountAmount ?? "0";
-  const discountAccountId = patch.discountAccountId !== undefined ? patch.discountAccountId : (custom.discountAccountId ?? null);
-  const controlAccountId = patch.controlAccountId !== undefined ? patch.controlAccountId : (custom.controlAccountId ?? null);
-  const feeAmount = patch.feeAmount ?? custom.feeAmount ?? "0";
-  const feeIncomeAccountId = patch.feeIncomeAccountId !== undefined ? patch.feeIncomeAccountId : (custom.feeIncomeAccountId ?? null);
+    const custom = (doc.custom ?? {}) as {
+      bankAccountId?: string;
+      allocations?: AllocationInput[];
+      creditAllocations?: CreditAllocationInput[];
+      discountAmount?: string;
+      discountAccountId?: string;
+      controlAccountId?: string;
+      feeAmount?: string;
+      feeIncomeAccountId?: string;
+    };
+    const partyId = patch.partyId !== undefined ? patch.partyId : doc.partyId;
+    const bankAccountId =
+      patch.bankAccountId !== undefined ? patch.bankAccountId : (custom.bankAccountId ?? null);
+    const allocations = patch.allocations ?? custom.allocations ?? [];
+    // Read the PATCH first, exactly like `allocations` above. Reading only the
+    // stored value silently discarded every credit a caller supplied: a payment
+    // run computes vendor credits, passes them here, and they never reached the
+    // document — the run item and the remittance advice both claimed a credit the
+    // bill was never actually reduced by.
+    const creditAllocations = patch.creditAllocations ?? custom.creditAllocations ?? [];
+    const discountAmount = patch.discountAmount ?? custom.discountAmount ?? "0";
+    const discountAccountId = patch.discountAccountId !== undefined ? patch.discountAccountId : (custom.discountAccountId ?? null);
+    const controlAccountId = patch.controlAccountId !== undefined ? patch.controlAccountId : (custom.controlAccountId ?? null);
+    const feeAmount = patch.feeAmount ?? custom.feeAmount ?? "0";
+    const feeIncomeAccountId = patch.feeIncomeAccountId !== undefined ? patch.feeIncomeAccountId : (custom.feeIncomeAccountId ?? null);
 
-  const paymentReferenceIds = [
-    bankAccountId,
-    discountAccountId,
-    controlAccountId,
-    feeIncomeAccountId,
-  ].filter((value): value is string => value !== null && value !== undefined);
-  const uuidPattern =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (paymentReferenceIds.some((value) => !uuidPattern.test(value))) {
-    throw new PaymentError("payment accounting account must be a valid UUID");
-  }
+    const paymentReferenceIds = [
+      bankAccountId,
+      discountAccountId,
+      controlAccountId,
+      feeIncomeAccountId,
+    ].filter((value): value is string => value !== null && value !== undefined);
+    const uuidPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (paymentReferenceIds.some((value) => !uuidPattern.test(value))) {
+      throw new PaymentError("payment accounting account must be a valid UUID");
+    }
 
-  validateAllocationInputs(allocations);
-  validateAllocationInputs(creditAllocations.map((a) => sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount)));
-  const discountUnits = toUnits(discountAmount);
-  if (discountUnits < 0n) throw new PaymentError("discount amount cannot be negative");
-  if (discountUnits > 0n && !discountAccountId) throw new PaymentError("select a discount account before applying a discount");
-  const feeUnits = toUnits(feeAmount);
-  if (feeUnits < 0n) throw new PaymentError("fee amount cannot be negative");
-  if (feeUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("fees only apply to customer receipts");
-  if (feeUnits > 0n && !feeIncomeAccountId) throw new PaymentError("a fee income account is required for a surcharge");
+    validateAllocationInputs(allocations);
+    validateAllocationInputs(creditAllocations.map((a) => sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount)));
+    const discountUnits = toUnits(discountAmount);
+    if (discountUnits < 0n) throw new PaymentError("discount amount cannot be negative");
+    if (discountUnits > 0n && !discountAccountId) throw new PaymentError("select a discount account before applying a discount");
+    const feeUnits = toUnits(feeAmount);
+    if (feeUnits < 0n) throw new PaymentError("fee amount cannot be negative");
+    if (feeUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("fees only apply to customer receipts");
+    if (feeUnits > 0n && !feeIncomeAccountId) throw new PaymentError("a fee income account is required for a surcharge");
 
-  if (bankAccountId) {
-    const bank = (await db.execute<{ id: string }>(sql`
-      select id from accounts
-       where id = ${bankAccountId} and org_id = ${doc.orgId}
-         and type = 'asset_bank' and is_active and not is_summary
-    `));
-    if (!bank.rows[0]) throw new PaymentError("bank account must be an active bank-type account");
-  }
-  if (discountAccountId || controlAccountId || feeIncomeAccountId) {
-    const refs = [discountAccountId, controlAccountId, feeIncomeAccountId].filter(Boolean) as string[];
-    const uniqueRefs = [...new Set(refs)];
-    const validRefs = (await db.execute<{ id: string; type: string }>(sql`
-      select id, type from accounts where org_id = ${doc.orgId} and id in ${uniqueRefs} and is_active and not is_summary
-    `));
-    if (validRefs.rows.length !== uniqueRefs.length) throw new PaymentError("payment accounting account is invalid or inactive");
-    if (feeIncomeAccountId) {
-      const feeAccount = validRefs.rows.find((row) => row.id === feeIncomeAccountId);
-      if (!feeAccount || !["income", "income_other"].includes(feeAccount.type)) {
-        throw new PaymentError("fee income account must be an active income account");
+    if (bankAccountId) {
+      const bank = (await db.execute<{ id: string }>(sql`
+        select id from accounts
+         where id = ${bankAccountId} and org_id = ${doc.orgId}
+           and type = 'asset_bank' and is_active and not is_summary
+      `));
+      if (!bank.rows[0]) throw new PaymentError("bank account must be an active bank-type account");
+    }
+    if (discountAccountId || controlAccountId || feeIncomeAccountId) {
+      const refs = [discountAccountId, controlAccountId, feeIncomeAccountId].filter(Boolean) as string[];
+      const uniqueRefs = [...new Set(refs)];
+      const validRefs = (await db.execute<{ id: string; type: string }>(sql`
+        select id, type from accounts where org_id = ${doc.orgId} and id in ${uniqueRefs} and is_active and not is_summary
+      `));
+      if (validRefs.rows.length !== uniqueRefs.length) throw new PaymentError("payment accounting account is invalid or inactive");
+      if (feeIncomeAccountId) {
+        const feeAccount = validRefs.rows.find((row) => row.id === feeIncomeAccountId);
+        if (!feeAccount || !["income", "income_other"].includes(feeAccount.type)) {
+          throw new PaymentError("fee income account must be an active income account");
+        }
       }
     }
-  }
-  if (partyId && partyId !== doc.partyId) {
-    const party = (await db.execute<{ id: string }>(
-      sql`select id from parties where id = ${partyId} and org_id = ${doc.orgId} and is_active`,
-    ));
-    if (!party.rows[0]) throw new PaymentError("party not found");
-  }
+    if (partyId && partyId !== doc.partyId) {
+      const party = (await db.execute<{ id: string }>(
+        sql`select id from parties where id = ${partyId} and org_id = ${doc.orgId} and is_active`,
+      ));
+      if (!party.rows[0]) throw new PaymentError("party not found");
+    }
 
-  // Allocations must target real open items of this party, within open balance.
-  if (allocations.length > 0) {
-    if (!partyId) throw new PaymentError("select a party before applying open items");
-    const openItems = await openItemsForParty(partyId, PAYMENT_KIND_SIDE[doc.kind], doc.orgId);
-    const byLine = new Map(openItems.map((i) => [i.lineId, i]));
-    for (const a of allocations) {
-      const item = byLine.get(a.openLineId);
-      if (!item) throw new PaymentError("an allocated item is not an open item for this party");
-      validateSettlementEvidence(a, doc.currency, item.currency);
-      if (cmp(a.targetTransactionAmount, item.transactionOpen) > 0) {
-        throw new PaymentError(
-          `applying ${a.targetTransactionAmount} ${item.currency} exceeds the open transaction balance ${item.transactionOpen} on ${item.documentNumber ?? item.entryNumber}`,
-        );
+    // Allocations must target real open items of this party, within open balance.
+    if (allocations.length > 0) {
+      if (!partyId) throw new PaymentError("select a party before applying open items");
+      const openItems = await openItemsForParty(partyId, PAYMENT_KIND_SIDE[doc.kind], doc.orgId, new Set(doc.subsidiaryId ? [doc.subsidiaryId] : []));
+      const byLine = new Map(openItems.map((i) => [i.lineId, i]));
+      for (const a of allocations) {
+        const item = byLine.get(a.openLineId);
+        if (!item) throw new PaymentError("an allocated item is not an open item for this party");
+        validateSettlementEvidence(a, doc.currency, item.currency);
+        if (cmp(a.targetTransactionAmount, item.transactionOpen) > 0) {
+          throw new PaymentError(
+            `applying ${a.targetTransactionAmount} ${item.currency} exceeds the open transaction balance ${item.transactionOpen} on ${item.documentNumber ?? item.entryNumber}`,
+          );
+        }
       }
     }
-  }
 
-  const grossApplied = sum(allocations.map((a) => a.sourceTransactionAmount));
-  if (cmp(discountAmount, grossApplied) > 0) throw new PaymentError("discount cannot exceed the payment applications");
-  // Collected = applications − discount + surcharge fee; the bank line carries
-  // the full collected amount, AR settles the applications, fee income clears
-  // the surcharge leg (see the customer_payment posting rule).
-  const total = fromUnits(toUnits(grossApplied) - discountUnits + feeUnits);
+    const grossApplied = sum(allocations.map((a) => a.sourceTransactionAmount));
+    if (cmp(discountAmount, grossApplied) > 0) throw new PaymentError("discount cannot exceed the payment applications");
+    // Collected = applications − discount + surcharge fee; the bank line carries
+    // the full collected amount, AR settles the applications, fee income clears
+    // the surcharge leg (see the customer_payment posting rule).
+    const total = fromUnits(toUnits(grossApplied) - discountUnits + feeUnits);
 
-  await db.transaction(async (tx) => {
-    // The exact-revision fence is the first operation under the row lock: a
-    // concurrent saver either committed before this lock (token mismatch →
-    // conflict, nothing written) or waits for this whole save to commit.
-    // Same lossless wire form as web/lib/documents documentRevisionSql —
-    // node-postgres maps timestamptz to Date and would discard microseconds.
-    const locked = (await tx.execute<{ status: string; updatedAt: string }>(sql`
-      select status,
-             to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
-        from documents
-       where id = ${id} and org_id = ${orgId}
-       for update
-    `)).rows[0];
-    if (!locked) throw new PaymentError("payment document not found");
-    if (locked.status !== "draft") throw new PaymentError("only draft payments can be edited");
-    if (options.expectedRevision !== undefined && options.expectedRevision !== locked.updatedAt) {
-      throw new PaymentRevisionConflictError();
-    }
-    await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`);
-    if (bankAccountId && !isZero(total)) {
-      await tx.insert(schema.documentLines).values({
-        orgId: doc.orgId,
-        documentId: id,
-        lineNumber: 1,
-        accountId: bankAccountId,
-        quantity: "1",
-        unitPrice: total,
-        amount: total,
-        taxAmount: "0",
-      });
-    }
-    await tx.execute(sql`
-      update documents set
-        party_id = ${partyId ?? null},
-        document_date = coalesce(${patch.documentDate ?? null}, document_date),
-        reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
-        memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
-        custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId })}::jsonb,
-        subtotal = ${total}, tax_total = '0', total = ${total},
-        updated_at = now(), updated_by = ${userId}
-      where id = ${id} and org_id = ${orgId}
-    `);
+    await db.transaction(async (tx) => {
+      // The header was locked before reading the fields merged above. Check
+      // the exact revision before writing; concurrent savers either committed
+      // before that lock or wait for this whole save to commit.
+      // Same lossless wire form as web/lib/documents documentRevisionSql —
+      // node-postgres maps timestamptz to Date and would discard microseconds.
+      const locked = (await tx.execute<{ status: string; updatedAt: string }>(sql`
+        select status,
+               to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
+          from documents
+         where id = ${id} and org_id = ${orgId}
+         for update
+      `)).rows[0];
+      if (!locked) throw new PaymentError("payment document not found");
+      if (locked.status !== "draft") throw new PaymentError("only draft payments can be edited");
+      if (options.expectedRevision !== undefined && options.expectedRevision !== locked.updatedAt) {
+        throw new PaymentRevisionConflictError();
+      }
+      await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`);
+      if (bankAccountId && !isZero(total)) {
+        await tx.insert(schema.documentLines).values({
+          orgId: doc.orgId,
+          documentId: id,
+          lineNumber: 1,
+          accountId: bankAccountId,
+          quantity: "1",
+          unitPrice: total,
+          amount: total,
+          taxAmount: "0",
+        });
+      }
+      await tx.execute(sql`
+        update documents set
+          party_id = ${partyId ?? null},
+          document_date = coalesce(${patch.documentDate ?? null}, document_date),
+          reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
+          memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
+          custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId })}::jsonb,
+          subtotal = ${total}, tax_total = '0', total = ${total},
+          updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${userId}
+        where id = ${id} and org_id = ${orgId}
+      `);
+    });
+    return loadPaymentDocument(id, doc.kind, orgId);
   });
 }
 
@@ -540,13 +543,13 @@ export async function suggestApplications(
   partyId: string,
   amount: string,
   side: OpenItemSide = "ar",
-  opts?: { reference?: string | null; sourceCurrency: string },
+  opts?: { reference?: string | null; sourceCurrency: string; orgId?: string; allowedSubsidiaryIds?: ReadonlySet<string> | null },
 ): Promise<SuggestedApplication> {
   if (!opts?.sourceCurrency) throw new PaymentError("payment currency is required for automatic application");
   // Automated allocation is intentionally limited to open items already in the
   // payment currency. Cross-currency rows require explicit rate evidence and
   // source/target amounts from the accountant or bank advice.
-  const items = (await openItemsForParty(partyId, side)).filter((item) => item.currency === opts.sourceCurrency);
+  const items = (await openItemsForParty(partyId, side, opts.orgId, opts.allowedSubsidiaryIds)).filter((item) => item.currency === opts.sourceCurrency);
   const target = toUnits(amount);
   if (target <= 0n || items.length === 0) {
     return { allocations: [], applied: "0", remaining: fromUnits(target < 0n ? 0n : target), strategy: "none" };
@@ -588,7 +591,13 @@ export async function suggestApplications(
  * Open AP (credit) or AR (debit) journal lines for a party: is_open_item
  * lines on posted entries, with applied-to-date sums and remaining balance.
  */
-export async function openItemsForParty(partyId: string, side: OpenItemSide, orgId?: string): Promise<OpenItem[]> {
+function paymentSubsidiaryScope(column: ReturnType<typeof sql>, allowed?: ReadonlySet<string> | null) {
+  if (allowed == null) return sql``;
+  if (allowed.size === 0) return sql` and false`;
+  return sql` and ${column} = any(${`{${[...allowed].join(',')}}`}::uuid[])`;
+}
+
+export async function openItemsForParty(partyId: string, side: OpenItemSide, orgId?: string, allowedSubsidiaryIds?: ReadonlySet<string> | null): Promise<OpenItem[]> {
   const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
   const orgFilter = orgId ? sql`jl.org_id = ${orgId} and` : sql``;
   const r = (await db.execute<{
@@ -624,6 +633,7 @@ export async function openItemsForParty(partyId: string, side: OpenItemSide, org
          where a.to_line_id = jl.id and a.org_id = jl.org_id and a.unapplied_at is null
       ) ap on true
      where ${orgFilter} jl.party_id = ${partyId} and jl.is_open_item and ${signFilter}
+       ${paymentSubsidiaryScope(sql`jl.subsidiary_id`, allowedSubsidiaryIds)}
      order by jl.due_date nulls last, je.posting_date, je.entry_number
   `));
   return r.rows
@@ -658,9 +668,10 @@ function negStr(a: string): string {
  * Full drawer payload for a payment document: header, stored draft
  * allocations, and (once posted) the live applications with their targets.
  */
-export async function loadPaymentDocument(id: string, kind: PaymentKind, orgId: string) {
+export async function loadPaymentDocument(id: string, kind: PaymentKind, orgId: string, allowedSubsidiaryIds?: ReadonlySet<string> | null) {
   const doc = (await db.execute<Record<string, unknown>>(sql`
-    select d.*, p.display_name as party_name, e.id as entry_id, e.entry_number,
+    select d.*, to_char(d.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at,
+           p.display_name as party_name, e.id as entry_id, e.entry_number,
            ba.id as bank_account_id_line, ba.number as bank_account_number, ba.name as bank_account_name
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
@@ -668,6 +679,7 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind, orgId: 
       left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id and dl.line_number = 1
       left join accounts ba on ba.id = coalesce((d.custom->>'bankAccountId')::uuid, dl.account_id) and ba.org_id = d.org_id
      where d.id = ${id} and d.kind = ${kind} and d.org_id = ${orgId}
+       ${paymentSubsidiaryScope(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
   `));
   const row = doc.rows[0];
   if (!row) return null;

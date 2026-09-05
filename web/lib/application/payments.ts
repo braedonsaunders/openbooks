@@ -116,7 +116,7 @@ export async function updatePayment(
     idempotencyKey: string;
   },
 ): Promise<{ replayed: boolean; result: unknown }> {
-  const header = await paymentHeader(context, input.documentId);
+  await paymentHeader(context, input.documentId);
   const outcome = await executeIdempotent({
     context,
     operation: "payments.update",
@@ -124,8 +124,7 @@ export async function updatePayment(
     request: { documentId: input.documentId, patch: input.patch },
     execute: async () => {
       try {
-        await updateDraftPayment(input.documentId, input.patch, context.authz.user.id, context.authz.user.orgId);
-        return await loadPaymentDocument(input.documentId, header.kind, context.authz.user.orgId);
+        return await updateDraftPayment(input.documentId, input.patch, context.authz.user.id, context.authz.user.orgId);
       } catch (error) {
         paymentFailure(error);
       }

@@ -12,12 +12,11 @@ import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-dele
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import {
-  documentRevisionSql,
   DocumentEditError,
   requireDocumentEditRevision,
 } from '../../../../lib/documents'
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody } from '../../../../lib/api/json'
-import { paymentErrorResponse, paymentPermission } from '../lib'
+import { paymentErrorResponse, assertAllocationTargetsInScope, paymentPermission } from '../lib'
 
 export const runtime = 'nodejs'
 
@@ -75,55 +74,12 @@ async function gateForDocument(
   return { authz, kind }
 }
 
-/**
- * Open-item allocations write against OTHER parties' documents — the targets
- * are record boundaries of their own. Every referenced open line must belong
- * to a document inside the caller's subsidiary scope (and exist in the org).
- */
-async function assertAllocationTargetsInScope(
-  authz: Authz,
-  openLineIds: readonly string[],
-): Promise<NextResponse | null> {
-  if (!authz.allowedSubsidiaryIds || openLineIds.length === 0) return null
-  const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
-    select dl.id, d.subsidiary_id as "subsidiaryId"
-      from document_lines dl
-      join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-     where dl.id = any(${`{${openLineIds.join(',')}}`}::uuid[]) and dl.org_id = ${authz.user.orgId}
-  `))
-  const byId = new Map(rows.rows.map((row) => [row.id, row.subsidiaryId]))
-  for (const lineId of openLineIds) {
-    // An id that does not resolve in this org fails closed the same way —
-    // it is indistinguishable from one outside the caller's scope.
-    if (!byId.has(lineId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    const denied = guardSubsidiaryScope(authz, byId.get(lineId))
-    if (denied) return denied
-  }
-  return null
-}
-
-/**
- * Replace the lossy JavaScript Date `updated_at` with the exact canonical OCC
- * token, mirroring loadDocument: node-postgres maps timestamptz to Date, which
- * discards the microseconds PostgreSQL retains, so a caller that echoes the
- * raw value back as its expected revision could never match under lock.
- */
-async function loadExactPaymentRevision(id: string, orgId: string): Promise<string | null> {
-  const row = (await db.execute<{ updatedAt: string }>(sql`
-    select ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
-      from documents where id = ${id} and org_id = ${orgId}
-  `))
-  return row.rows[0]?.updatedAt ?? null
-}
-
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const gate = await gateForDocument(id, null)
   if (gate instanceof NextResponse) return gate
   const payment = await loadPaymentDocument(id, gate.kind, gate.authz.user.orgId)
   if (!payment) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const revision = await loadExactPaymentRevision(id, gate.authz.user.orgId)
-  if (revision) payment.doc = { ...payment.doc, updated_at: revision }
   return NextResponse.json(payment)
 }
 
@@ -158,7 +114,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (allocationTargetsDenied) return allocationTargetsDenied
 
   try {
-    await updateDraftPayment(
+    const payment = await updateDraftPayment(
       id,
       {
         partyId: body.partyId,
@@ -174,9 +130,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // financial patch shape.
       { expectedRevision },
     )
-    const payment = await loadPaymentDocument(id, gate.kind, gate.authz.user.orgId)
-    const revision = await loadExactPaymentRevision(id, gate.authz.user.orgId)
-    if (payment && revision) payment.doc = { ...payment.doc, updated_at: revision }
     return NextResponse.json(payment)
   } catch (e) {
     // The engine fence fired under the row lock: someone saved first.

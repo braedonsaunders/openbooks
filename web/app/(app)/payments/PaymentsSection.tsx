@@ -1,3 +1,5 @@
+import { can, type Authz } from '@/lib/authz'
+import { paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -22,6 +24,7 @@ import { pickString } from '../../../lib/list-params'
  */
 export async function PaymentsSection({
   sp,
+  authz,
   basePath,
   kind,
   orgId,
@@ -30,6 +33,7 @@ export async function PaymentsSection({
   userRoles,
 }: {
   sp: Record<string, string | string[] | undefined>
+  authz: Authz
   basePath: string
   kind: PaymentKind
   orgId: string
@@ -37,13 +41,14 @@ export async function PaymentsSection({
   canManage: boolean
   userRoles: readonly string[]
 }) {
+  if (authz.user.orgId !== orgId || !can(authz, kind === 'vendor_payment' ? 'ap.pay' : 'ar.pay')) return null
   const t = await getTranslations('payments')
   const side = PAYMENT_KIND_SIDE[kind]
   const newLabel = t('list.newLabel', { side })
 
   // -- flyout ---------------------------------------------------------------
   const paymentId = typeof sp.payment === 'string' && isUuid(sp.payment) ? sp.payment : undefined
-  const loaded = paymentId ? await loadPaymentDocument(paymentId, kind, orgId) : null
+  const loaded = paymentId ? await loadPaymentDocument(paymentId, kind, orgId, authz.allowedSubsidiaryIds) : null
   const openPayment = loaded ?? null
   let drawer: React.ReactNode = null
   if (openPayment) {
@@ -54,7 +59,7 @@ export async function PaymentsSection({
     const [parties, banks] = await Promise.all([
       db.execute(sql`
         select id, display_name from parties p
-         where p.org_id = ${orgId} and ${partyFilter} and is_active
+         where p.org_id = ${orgId} and ${partyFilter} and is_active ${paymentSharedSubsidiaryFilter(sql`p.subsidiary_id`, authz)}
          order by display_name limit 2000`) as any,
       db.execute(sql`
         select id, number, name from accounts
@@ -63,7 +68,7 @@ export async function PaymentsSection({
     ])
     const openItems: OpenItemClient[] =
       openPayment.doc.status === 'draft' && openPayment.doc.party_id
-        ? await openItemsForParty(openPayment.doc.party_id as string, side, orgId)
+        ? await openItemsForParty(openPayment.doc.party_id as string, side, orgId, authz.allowedSubsidiaryIds)
         : []
     const resolvedForm = await resolveFormLayout({
       orgId,

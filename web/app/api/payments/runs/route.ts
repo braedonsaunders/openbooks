@@ -1,3 +1,4 @@
+import { paymentRunScopeSql } from '@/lib/payment-run-access'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -24,24 +25,6 @@ export async function GET() {
   const gate = await guardPermission('ap.pay')
   if (gate instanceof NextResponse) return gate
 
-  // A run is visible only when every bill it pays is inside the caller's
-  // subsidiary scope — the same boundary guardPaymentRunPermission enforces
-  // per run. Null-subsidiary sources fail closed.
-  let scopeFilter = sql``
-  if (gate.allowedSubsidiaryIds) {
-    const ids = [...gate.allowedSubsidiaryIds]
-    scopeFilter = ids.length === 0
-      ? sql` and not exists (
-              select 1 from payment_run_items ri0
-               where ri0.payment_run_id = r.id and ri0.org_id = r.org_id and ri0.status <> 'cancelled')`
-      : sql` and not exists (
-              select 1
-                from payment_run_items ri0
-                join documents d0 on d0.id = ri0.source_document_id and d0.org_id = ri0.org_id
-               where ri0.payment_run_id = r.id and ri0.org_id = r.org_id and ri0.status <> 'cancelled'
-                 and (d0.subsidiary_id is null or not (d0.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))))`
-  }
-
   const runs = (await db.execute<Record<string, unknown>>(sql`
     select r.id, r.run_number, r.status, r.method, r.scheduled_for, r.exported_at, r.created_at,
            a.number as bank_number, a.name as bank_name,
@@ -50,7 +33,7 @@ export async function GET() {
       from payment_runs r
       left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
       left join payment_instructions i on i.payment_run_id = r.id and i.org_id = r.org_id
-     where r.org_id = ${gate.user.orgId}${scopeFilter}
+     where ${paymentRunScopeSql(gate)} and r.direction = 'outbound'
      group by r.id, a.number, a.name
      order by r.created_at desc
      limit 200

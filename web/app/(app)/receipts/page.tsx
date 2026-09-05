@@ -38,6 +38,7 @@ export default async function Receipts({
       }
     >
       {view === 'receipts' ? <PaymentsSection
+        authz={authz}
         sp={sp}
         basePath="/receipts"
         kind="customer_payment"
@@ -45,7 +46,7 @@ export default async function Receipts({
         userId={authz.user.id}
         canManage={can(authz, 'admin.customization.manage')}
         userRoles={authz.user.roles.map(({ key }) => key)}
-      /> : <RunsSection sp={sp} orgId={authz.user.orgId} canApprove={can(authz, 'ar.approve')} direction="inbound" basePath="/receipts" />}
+      /> : <RunsSection sp={sp} authz={authz} canApprove={can(authz, 'ar.approve')} direction="inbound" basePath="/receipts" />}
     </ListPageLayout>
   )
 }

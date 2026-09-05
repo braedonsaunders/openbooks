@@ -30,7 +30,7 @@ export async function GET(req: Request) {
   if (scopeDenied) return scopeDenied
 
   try {
-    const items = await openItemsForParty(partyId, side, gate.user.orgId)
+    const items = await openItemsForParty(partyId, side, gate.user.orgId, gate.allowedSubsidiaryIds)
     return NextResponse.json({ items })
   } catch (e) {
     return paymentErrorResponse(e)
