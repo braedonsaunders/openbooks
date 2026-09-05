@@ -1,3 +1,4 @@
+import { crmSharedScope } from '../../../../../lib/crm-scope'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -12,12 +13,13 @@ export async function POST(req: NextRequest) {
   const gate = await guardFeaturePermission('crm.opportunities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
+  if (gate.allowedSubsidiaryIds?.size === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as { partyId?: string }
   if (body.partyId && !isUuid(body.partyId)) return NextResponse.json({ error: 'invalid account' }, { status: 422 })
   if (body.partyId) {
-    const exists = (await db.execute(sql`select 1 from parties where id = ${body.partyId} and org_id = ${user.orgId}`))
+    const exists = (await db.execute(sql`select 1 from parties where id = ${body.partyId} and org_id = ${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)}`))
     if (!exists.rows[0]) return NextResponse.json({ error: 'account not found' }, { status: 404 })
   }
   await ensureCrmDefaults(user.orgId, user.id)
@@ -26,6 +28,10 @@ export async function POST(req: NextRequest) {
     (db.execute(sql`select base_currency from orgs where id = ${user.orgId}`)),
   ])
   const opportunity = await db.transaction(async (tx) => {
+    if (body.partyId) {
+      const visible = await tx.execute(sql`select id from parties where id=${body.partyId} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)} for update`)
+      if (!visible.rows.length) return NextResponse.json({error:'not found'},{status:404})
+    }
     const status = (await tx.execute(sql`
       select id, probability, default_forecast_category from crm_opportunity_statuses
        where org_id = ${user.orgId} and is_default and is_active order by sequence limit 1`))
@@ -45,5 +51,6 @@ export async function POST(req: NextRequest) {
               'Opportunity created', ${user.id}, ${user.id})`)
     return inserted.rows[0]!
   })
+  if (opportunity instanceof NextResponse) return opportunity
   return NextResponse.json(opportunity)
 }

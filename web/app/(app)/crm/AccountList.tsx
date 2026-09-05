@@ -39,7 +39,7 @@ export async function AccountList({
   if (openId && isUuid(openId)) {
     const [party, account, statuses, owners, territories, sources] = await Promise.all([
       loadParty(openId, authz.user.orgId),
-      loadCrmAccount(openId, authz.user.orgId),
+      loadCrmAccount(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
       db.execute(sql`select id,name,lifecycle_stage from crm_account_statuses where org_id=${authz.user.orgId} and is_active order by lifecycle_stage,sequence`) as any,
       db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`) as any,
       db.execute(sql`select id,name from crm_sales_territories where org_id=${authz.user.orgId} and is_active order by priority,name`) as any,

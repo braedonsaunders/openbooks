@@ -498,7 +498,10 @@
         "label": "Registros de tiempo",
         "description": "Registros de hojas de horas: empleado, fecha, horas, facturable, proyecto y estado de aprobación."
       },
-      "timesheet_weeks": "Semanas de hoja de horas",
+      "timesheet_weeks": {
+        "label": "Semanas de hoja de horas",
+        "description": "Hojas de horas semanales, fechas de envío y aprobación y total de horas."
+      },
       "fixed_assets": {
         "label": "Activos fijos",
         "description": "El registro de activos fijos: estado, adquisición, costo, custodio y dimensiones."

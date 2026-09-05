@@ -1,19 +1,13 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from 'zod'
+import { isoDate, parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { runDepreciation } from '@openbooks/engine/src/depreciation.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
-import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-
-interface Body {
-  asOfDate?: string
-  assetId?: string
-  bookId?: string
-}
+const runBody = z.object({ asOfDate: isoDate().optional(), assetId: uuidId.optional(), bookId: uuidId.optional() })
 
 /**
  * Run depreciation: post every due, unposted period entry through the kernel
@@ -25,16 +19,10 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, runBody, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Body
-  const asOfDate = body.asOfDate && DATE_RE.test(body.asOfDate) ? body.asOfDate : await businessToday(user.orgId)
-  if (body.assetId !== undefined && !isUuid(body.assetId)) {
-    return NextResponse.json({ error: 'invalid asset' }, { status: 422 })
-  }
-  if (body.bookId !== undefined && !isUuid(body.bookId)) {
-    return NextResponse.json({ error: 'invalid accounting book' }, { status: 422 })
-  }
+  const body = parsedBody.data
+  const asOfDate = body.asOfDate ?? await businessToday(user.orgId)
 
   try {
     const result = await runDepreciation(

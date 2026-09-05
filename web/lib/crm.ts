@@ -1,18 +1,21 @@
 import 'server-only'
+import { crmOpportunityScope, crmSharedScope, crmActivityScope } from './crm-scope'
 import { sql } from 'drizzle-orm'
+import { subsidiaryVisibleFilter } from './subsidiaries'
 import { db } from '@openbooks/engine/src/db.ts'
 import { isDocKindEnabled } from './documents'
 
-export async function loadCrmAccount(partyId: string, orgId: string) {
+export async function loadCrmAccount(partyId: string, orgId: string, allowed?: ReadonlySet<string> | null) {
   const profile = (await db.execute<Record<string, unknown>>(sql`
     select cp.*, s.name as status_name, s.is_qualified, u.name as owner_name,
            t.name as territory_name, ls.name as lead_source_name
       from crm_account_profiles cp
+      join parties scope_party on scope_party.id=cp.party_id and scope_party.org_id=cp.org_id
       left join crm_account_statuses s on s.id = cp.status_id and s.org_id = cp.org_id
       left join users u on u.id = cp.owner_user_id
       left join crm_sales_territories t on t.id = cp.territory_id and t.org_id = cp.org_id
       left join crm_lead_sources ls on ls.id = cp.lead_source_id and ls.org_id = cp.org_id
-     where cp.party_id = ${partyId} and cp.org_id = ${orgId}
+     where cp.party_id = ${partyId} and cp.org_id = ${orgId}${crmSharedScope(sql`scope_party.subsidiary_id`,allowed)}
   `))
   if (!profile.rows[0]) return null
   const [activities, opportunities, stageEvents, assignments] = await Promise.all([
@@ -22,7 +25,7 @@ export async function loadCrmAccount(partyId: string, orgId: string) {
         from crm_activities a
         join crm_activity_links l on l.activity_id = a.id and l.org_id = a.org_id
         left join users u on u.id = a.assigned_user_id
-       where l.org_id = ${orgId} and l.subject_kind = 'account' and l.subject_id = ${partyId}
+       where l.org_id = ${orgId} and l.subject_kind = 'account' and l.subject_id = ${partyId}${crmActivityScope(allowed)}
        order by coalesce(a.starts_at, a.due_at, a.created_at) desc limit 50`),
     db.execute(sql`
       select o.id, o.opportunity_number, o.title, o.expected_close_date, o.forecast_category,
@@ -31,7 +34,7 @@ export async function loadCrmAccount(partyId: string, orgId: string) {
         from crm_opportunities o
         join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
         left join users u on u.id = o.owner_user_id
-       where o.org_id = ${orgId} and o.party_id = ${partyId}
+       where o.org_id = ${orgId} and o.party_id = ${partyId}${crmOpportunityScope(allowed)}
        order by s.is_closed, o.expected_close_date nulls last, o.created_at desc limit 50`),
     db.execute(sql`
       select e.*, u.name as actor_name from crm_account_stage_events e
@@ -58,7 +61,7 @@ export async function loadCrmAccount(partyId: string, orgId: string) {
   }
 }
 
-export async function loadOpportunity(id: string, orgId: string) {
+export async function loadOpportunity(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
   const opportunity = (await db.execute<Record<string, unknown>>(sql`
     select o.*, p.display_name as party_name, c.name as contact_name,
            s.name as status_name, s.is_closed, s.is_won,
@@ -70,7 +73,7 @@ export async function loadOpportunity(id: string, orgId: string) {
       left join users u on u.id = o.owner_user_id
       left join crm_sales_teams st on st.id = o.sales_team_id and st.org_id = o.org_id
       left join crm_lead_sources ls on ls.id = o.lead_source_id and ls.org_id = o.org_id
-     where o.id = ${id} and o.org_id = ${orgId}
+     where o.id = ${id} and o.org_id = ${orgId}${crmOpportunityScope(allowed)}
   `))
   if (!opportunity.rows[0]) return null
   const [lines, team, documents, activities, history] = await Promise.all([
@@ -82,12 +85,12 @@ export async function loadOpportunity(id: string, orgId: string) {
     db.execute(sql`
       select d.id, d.kind, d.document_number, d.document_date, d.status, d.currency, d.total
         from crm_opportunity_documents od join documents d on d.id = od.document_id and d.org_id = od.org_id
-       where od.opportunity_id = ${id} and od.org_id = ${orgId} and d.org_id = ${orgId}
+       where od.opportunity_id = ${id} and od.org_id = ${orgId} and d.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`,allowed ?? null)}
        order by d.document_date desc, d.created_at desc`),
     db.execute(sql`
       select a.id, a.kind, a.status, a.subject, a.starts_at, a.due_at, a.completed_at
         from crm_activities a join crm_activity_links l on l.activity_id = a.id and l.org_id = a.org_id
-       where l.subject_kind = 'opportunity' and l.subject_id = ${id} and l.org_id = ${orgId}
+       where l.subject_kind = 'opportunity' and l.subject_id = ${id} and l.org_id = ${orgId}${crmActivityScope(allowed)}
        order by coalesce(a.starts_at, a.due_at, a.created_at) desc`),
     db.execute(sql`
       select e.*, fs.name as from_status_name, ts.name as to_status_name, u.name as actor_name
@@ -106,13 +109,13 @@ export async function loadOpportunity(id: string, orgId: string) {
   return { opportunity: opportunity.rows[0], lines: lines.rows, team: team.rows, documents: visibleDocuments, activities: activities.rows, history: history.rows }
 }
 
-export async function loadActivity(id: string, orgId: string) {
+export async function loadActivity(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
   const activity = (await db.execute<Record<string, unknown>>(sql`
     select a.*, ou.name as owner_name, au.name as assigned_name
       from crm_activities a
       left join users ou on ou.id = a.owner_user_id
       left join users au on au.id = a.assigned_user_id
-     where a.id = ${id} and a.org_id = ${orgId}`))
+     where a.id = ${id} and a.org_id = ${orgId}${crmActivityScope(allowed)}`))
   if (!activity.rows[0]) return null
   const [links, participants] = await Promise.all([
     db.execute(sql`select * from crm_activity_links where activity_id = ${id} and org_id = ${orgId} order by created_at`),
@@ -132,6 +135,7 @@ export interface ForecastScope {
   periodEnd: string
   ownerUserId?: string | null
   salesTeamId?: string | null
+  allowedSubsidiaryIds?: ReadonlySet<string> | null
 }
 
 /** Exact forecast rollup performed by PostgreSQL numeric arithmetic. */
@@ -159,6 +163,7 @@ export async function calculateForecast(scope: ForecastScope) {
         from crm_opportunities o
        where o.org_id = ${scope.orgId}
          ${teamScopeFilter}
+         ${crmOpportunityScope(scope.allowedSubsidiaryIds)}
     ), opportunity_base as (
       select o.currency, o.projected_amount, o.weighted_amount, o.forecast_category, s.is_closed, s.is_won
         from crm_opportunities o
@@ -171,6 +176,7 @@ export async function calculateForecast(scope: ForecastScope) {
       select d.currency, coalesce(sum(d.total), 0)::numeric(19,4) as closed_amount
         from documents d
        where d.org_id = ${scope.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope.allowedSubsidiaryIds == null ? null : new Set(scope.allowedSubsidiaryIds))}
          and d.document_date between ${scope.periodStart}::date and ${scope.periodEnd}::date
          ${scope.ownerUserId ? sql`and exists (select 1 from crm_account_profiles cp where cp.org_id = ${scope.orgId} and cp.party_id = d.party_id and cp.owner_user_id = ${scope.ownerUserId})` : sql``}
          ${teamActualsFilter}

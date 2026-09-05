@@ -1,3 +1,4 @@
+import { crmOpportunityScope } from '../../../../../../lib/crm-scope'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
@@ -81,8 +82,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const today = await businessToday(user.orgId)
   const result = await db.transaction(async (tx) => {
     const opportunity = (await tx.execute(sql`
-      select * from crm_opportunities where id = ${id} and org_id = ${user.orgId} and is_active for update`))
+      select o.* from crm_opportunities o where o.id = ${id} and o.org_id = ${user.orgId} and o.is_active${crmOpportunityScope(gate.allowedSubsidiaryIds)} for update of o`))
     const op = opportunity.rows[0]
+    if (!op) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (!op?.party_id) throw new Error('The opportunity needs an account before an estimate can be created')
     const sequence = (await tx.execute<any>(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
@@ -117,6 +119,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       values (${user.orgId}, ${id}, ${docId}, ${user.id}, ${user.id})`)
     return { id: docId, documentNumber: number }
   }).catch((error: unknown) => ({ error: error instanceof Error ? error.message : 'Could not create estimate' }))
+  if (result instanceof NextResponse) return result
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: 422 })
   return NextResponse.json(result)
 }

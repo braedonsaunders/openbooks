@@ -50,8 +50,15 @@ function longname(name: string, isDir: boolean, size: number): string {
 
 /** Generate a fresh ed25519 host key PEM (persist it so the fingerprint is stable). */
 export function generateHostKey(): string {
-  const { private: priv } = utils.generateKeyPairSync("ed25519");
-  return priv;
+  // ssh2's DER conversion strips leading zero bytes from Ed25519 public keys.
+  // Rare generated keys therefore fail its own OpenSSH parser. Validate before
+  // persisting a daemon identity; do not store a key that cannot start a server.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { private: priv } = utils.generateKeyPairSync("ed25519");
+    const parsed = utils.parseKey(priv);
+    if (!(parsed instanceof Error) && parsed.type === "ssh-ed25519") return priv;
+  }
+  throw new Error("Could not generate a valid SFTP host key");
 }
 
 export interface SftpServerHandle {

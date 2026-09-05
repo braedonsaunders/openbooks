@@ -65,6 +65,10 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.tax-filing-route-test')]
       const NextResponse = globalThis.openbooksTaxFilingNextResponse
+      export function guardSubsidiaryScope(authz) {
+        if (authz.allowedSubsidiaryIds !== null) throw new Error('unexpected scoped fixture')
+        return null
+      }
       export async function guardPermission(permission) {
         state.permissionChecks.push(permission)
         if (!state.permissions.has(permission)) {

@@ -6,7 +6,7 @@ import { computeTaxReturn } from '@openbooks/engine/src/tax-return.ts'
 import { buildTaxFilingSnapshot } from '@openbooks/engine/src/tax-filing.ts'
 import { loadOrgFilingCalendar } from '@openbooks/engine/src/tax-nexus-ledger.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
 
@@ -22,6 +22,8 @@ function isIsoDate(value: string): boolean {
 export async function GET(req: Request) {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardSubsidiaryScope(gate, null)
+  if (scopeDenied) return scopeDenied
   const p = new URL(req.url).searchParams
   const today = await businessToday(gate.user.orgId)
   const from = p.get('from') && DATE_RE.test(p.get('from')!) ? p.get('from')! : `${today.slice(0, 4)}-01-01`
@@ -35,6 +37,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const gate = await guardPermission('compliance.file')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardSubsidiaryScope(gate, null)
+  if (scopeDenied) return scopeDenied
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {

@@ -498,7 +498,10 @@
         "label": "Saisies de temps",
         "description": "Saisies de feuilles de temps — employé, date, heures, facturable, projet et statut d’approbation."
       },
-      "timesheet_weeks": "Semaines de feuille de temps",
+      "timesheet_weeks": {
+        "label": "Semaines de feuille de temps",
+        "description": "Feuilles de temps hebdomadaires, dates de soumission et d’approbation, et total des heures."
+      },
       "fixed_assets": {
         "label": "Immobilisations",
         "description": "Le registre des immobilisations — statut, acquisition, coût, dépositaire et dimensions."

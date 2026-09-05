@@ -1,3 +1,4 @@
+import { crmSubjectVisible } from '../../../../../lib/crm-scope'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -11,6 +12,7 @@ export async function POST(req: NextRequest) {
   const gate = await guardFeaturePermission('crm.activities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
+  if (gate.allowedSubsidiaryIds?.size === 0) return NextResponse.json({error:'not found'},{status:404})
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as { subjectKind?: string; subjectId?: string; kind?: string }
@@ -19,6 +21,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'subjectKind and a valid subjectId are required together' }, { status: 422 })
   }
   const activity = await db.transaction(async (tx) => {
+    if (body.subjectKind && body.subjectId) {
+      const valid=await tx.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`${body.subjectKind}`,sql`${body.subjectId}`,gate.allowedSubsidiaryIds)}`)
+      if (!valid.rows.length) return NextResponse.json({error:'not found'},{status:404})
+    }
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into crm_activities
         (org_id, kind, subject, status, owner_user_id, assigned_user_id, created_by, updated_by)
@@ -31,5 +37,6 @@ export async function POST(req: NextRequest) {
     }
     return inserted.rows[0]!
   })
+  if (activity instanceof NextResponse) return activity
   return NextResponse.json(activity)
 }

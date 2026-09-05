@@ -48,7 +48,7 @@ async function gate(permission: "ar.read" | "ar.create") {
 export async function GET() {
   const authz = await gate("ar.read");
   if (authz instanceof NextResponse) return authz;
-  return NextResponse.json(await advancedSubscriptionWorkspace(authz.user.orgId));
+  return NextResponse.json(await advancedSubscriptionWorkspace(authz.user.orgId, authz.allowedSubsidiaryIds));
 }
 
 export async function POST(req: Request) {
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
           trialEndsOn: body.trialEndsOn || null,
           renewalPolicy: (body.renewalPolicy ?? "auto") as RenewalPolicy,
           renewalTermMonths: body.renewalTermMonths == null || body.renewalTermMonths === "" ? null : Number(body.renewalTermMonths),
-        });
+        }, authz.allowedSubsidiaryIds);
         return NextResponse.json({ ok: true });
       case "amend": {
         if (!body.subscriptionId || !body.type || !body.effectiveOn || !body.idempotencyKey) {
@@ -144,7 +144,7 @@ export async function POST(req: Request) {
           if (unitPrice === null) return invalidDecimal("unit price");
           amendment.unitPrice = unitPrice;
         }
-        const result = await applyAmendment(authz.user.orgId, authz.user.id, amendment);
+        const result = await applyAmendment(authz.user.orgId, authz.user.id, amendment, { allowedSubsidiaryIds: authz.allowedSubsidiaryIds });
         return NextResponse.json(result, { status: result.replayed ? 200 : 201 });
       }
       default:

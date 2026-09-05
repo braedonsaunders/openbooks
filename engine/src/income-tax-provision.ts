@@ -773,16 +773,23 @@ export type ProvisionRunRow = {
 
 export async function listProvisionRuns(
   orgId: string,
+  allowedSubsidiaryIds?: ProvisionSubsidiaryScope,
 ): Promise<ProvisionRunRow[]> {
-  const r = (await db.execute<ProvisionRunRow>(sql`
-    select id, fiscal_year as "fiscalYear", period_from::text as "periodFrom", period_to::text as "periodTo",
+  const r = (await db.execute<ProvisionRunRow & { payload: Record<string, unknown> }>(sql`
+    select payload, id, fiscal_year as "fiscalYear", period_from::text as "periodFrom", period_to::text as "periodTo",
            status, version, payload->>'totalExpense' as "totalExpense",
            payload->>'effectiveRatePercent' as "effectiveRatePercent",
            journal_entry_id as "journalEntryId", created_at as "createdAt"
       from tax_provision_runs where org_id = ${orgId}
      order by fiscal_year desc, version desc
   `));
-  return r.rows;
+  return r.rows.flatMap(({ payload, ...row }) => {
+    if (allowedSubsidiaryIds == null) return [row];
+    const projected = projectProvisionPayload(payload, allowedSubsidiaryIds);
+    if (!projected) return [];
+    return [{ ...row, totalExpense: String(projected.totalExpense),
+      effectiveRatePercent: projected.effectiveRatePercent == null ? null : String(projected.effectiveRatePercent) }];
+  });
 }
 
 export type ProvisionRunDetail = ProvisionRunRow & {
@@ -1264,6 +1271,8 @@ export async function computeProvisionRun(
         (autoByEntity.get(id)?.length ?? 0) > 0 ||
         (manualByEntity.get(id)?.length ?? 0) > 0 ||
         (permanentByEntity.get(id)?.length ?? 0) > 0 ||
+        (override?.permanentDifferences?.length ?? 0) > 0 ||
+        (override?.additionalDifferences?.length ?? 0) > 0 ||
         hasPriorDeferredTaxMeasurement(prior) ||
         !isZero(override?.lossCarryforwardUsed ?? (id === root?.id ? opts.lossCarryforwardUsed ?? "0" : "0")) ||
         !isZero(override?.valuationAllowance ?? (id === root?.id ? opts.valuationAllowance ?? "0" : "0"))

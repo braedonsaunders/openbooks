@@ -1,3 +1,4 @@
+import { crmActivityScope, crmSubjectVisible } from '../../../../../lib/crm-scope'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -16,27 +17,17 @@ function textOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-async function subjectExists(orgId: string, kind: string, id: string): Promise<boolean> {
+async function subjectExists(orgId: string, kind: string, id: string, allowed?: ReadonlySet<string> | null): Promise<boolean> {
   if (!isUuid(id)) return false
-  const result = kind === 'account'
-    ? await db.execute(sql`select 1 from crm_account_profiles where org_id = ${orgId} and party_id = ${id}`)
-    : kind === 'contact'
-      ? await db.execute(sql`select 1 from contacts where org_id = ${orgId} and id = ${id}`)
-      : kind === 'opportunity'
-        ? await db.execute(sql`select 1 from crm_opportunities where org_id = ${orgId} and id = ${id}`)
-        : kind === 'document'
-          ? await db.execute(sql`select 1 from documents where org_id = ${orgId} and id = ${id}`)
-          : kind === 'project'
-            ? await db.execute(sql`select 1 from projects where org_id = ${orgId} and id = ${id}`)
-            : { rows: [] }
-  return (result as unknown as { rows: unknown[] }).rows.length === 1
+  const result=await db.execute(sql`select 1 where ${crmSubjectVisible(sql`${orgId}`,sql`${kind}`,sql`${id}`,allowed)}`)
+  return result.rows.length===1
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('crm.activities.read', 'crm')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  const activity = isUuid(id) ? await loadActivity(id, gate.user.orgId) : null
+  const activity = isUuid(id) ? await loadActivity(id, gate.user.orgId, gate.allowedSubsidiaryIds) : null
   return activity ? NextResponse.json(activity) : NextResponse.json({ error: 'not found' }, { status: 404 })
 }
 
@@ -46,7 +37,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const current = (await db.execute(sql`select * from crm_activities where id = ${id} and org_id = ${user.orgId}`))
+  const current = (await db.execute(sql`select a.* from crm_activities a where a.id = ${id} and a.org_id = ${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)}`))
   if (!current.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -67,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const links = body.links as Array<{ subjectKind: string; subjectId: string }> | undefined
   if (links) {
     if (!Array.isArray(links)) return NextResponse.json({ error: 'links must be an array' }, { status: 422 })
-    for (const link of links) if (!await subjectExists(user.orgId, link.subjectKind, link.subjectId)) return NextResponse.json({ error: 'invalid related record' }, { status: 422 })
+    for (const link of links) if (!await subjectExists(user.orgId, link.subjectKind, link.subjectId, gate.allowedSubsidiaryIds)) return NextResponse.json({ error: 'invalid related record' }, { status: 422 })
   }
   const participants = body.participants as Array<{ userId?: string; contactId?: string; email?: string; response?: string }> | undefined
   if (participants && !Array.isArray(participants)) return NextResponse.json({ error: 'participants must be an array' }, { status: 422 })
@@ -75,10 +66,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const targets = [participant.userId, participant.contactId, textOrNull(participant.email)].filter(Boolean)
     if (targets.length !== 1) return NextResponse.json({ error: 'each participant must have exactly one target' }, { status: 422 })
     if (participant.userId && (!isUuid(participant.userId) || !((await db.execute(sql`select 1 from users where id = ${participant.userId} and org_id = ${user.orgId}`))).rows[0])) return NextResponse.json({ error: 'invalid participant user' }, { status: 422 })
-    if (participant.contactId && (!isUuid(participant.contactId) || !((await db.execute(sql`select 1 from contacts where id = ${participant.contactId} and org_id = ${user.orgId}`))).rows[0])) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
+    if (participant.contactId && (!isUuid(participant.contactId) || !((await db.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`'contact'`,sql`${participant.contactId}`,gate.allowedSubsidiaryIds)}`))).rows[0])) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
   }
 
-    await db.transaction(async (tx) => {
+    const denied = await db.transaction(async (tx) => {
+    const visible=await tx.execute(sql`select a.id from crm_activities a where a.id=${id} and a.org_id=${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)} for update of a`)
+    if (!visible.rows.length) return NextResponse.json({error:'not found'},{status:404})
+    if (links) for (const link of links) {
+      const valid=await tx.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`${link.subjectKind}`,sql`${link.subjectId}`,gate.allowedSubsidiaryIds)}`)
+      if (!valid.rows.length) return NextResponse.json({error:'invalid related record'},{status:422})
+    }
     await tx.execute(sql`
       update crm_activities set
         kind = ${body.kind ?? sql`kind`}, status = ${body.status ?? sql`status`},
@@ -121,7 +118,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${user.orgId}, 'crm_activities', ${id}, 'update', ${JSON.stringify({ before: current.rows[0], requested: body })}::jsonb, ${user.id})`)
   })
-  return NextResponse.json(await loadActivity(id, user.orgId))
+  if (denied) return denied
+  return NextResponse.json(await loadActivity(id, user.orgId, gate.allowedSubsidiaryIds))
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -130,6 +128,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const deleted = await db.transaction(async (tx) => {
+    const visible=await tx.execute(sql`select a.id from crm_activities a where a.id=${id} and a.org_id=${gate.user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)} for update of a`)
+    if (!visible.rows.length) return {rows:[]}
     await tx.execute(sql`delete from crm_activity_participants where activity_id = ${id} and org_id = ${gate.user.orgId}`)
     await tx.execute(sql`delete from crm_activity_links where activity_id = ${id} and org_id = ${gate.user.orgId}`)
     return tx.execute(sql`delete from crm_activities where id = ${id} and org_id = ${gate.user.orgId} returning id`)

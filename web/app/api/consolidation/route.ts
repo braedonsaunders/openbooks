@@ -1,3 +1,4 @@
+import { guardSubsidiaryScope } from '@/lib/authz'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
@@ -26,6 +27,8 @@ export const runtime = 'nodejs'
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('close.run', 'multiSubsidiary')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardSubsidiaryScope(gate, null)
+  if (scopeDenied) return scopeDenied
   const user = gate.user
 
   const parsedBody = await parseJsonBody(req, jsonObject);

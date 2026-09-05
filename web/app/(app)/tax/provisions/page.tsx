@@ -1,7 +1,7 @@
 import { getTranslations } from 'next-intl/server'
 import { PageHeader, Badge } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
-import { requirePermission } from '../../../../lib/authz'
+import { requirePermission, can } from '../../../../lib/authz'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { orgInfo } from '../../../../lib/data'
 import { listProvisionRuns } from '@openbooks/engine/src/income-tax-provision.ts'
@@ -20,7 +20,7 @@ export default async function TaxProvisions() {
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('tax.provisions')
   const org = await orgInfo()
-  const runs = await listProvisionRuns(authz.user.orgId)
+  const runs = await listProvisionRuns(authz.user.orgId, authz.allowedSubsidiaryIds)
   const m = (v: string) => money(v, { currency: org?.base_currency })
 
   return (
@@ -29,7 +29,7 @@ export default async function TaxProvisions() {
         <PageHeader
           title={t('title')}
           description={t('description')}
-          actions={<ProvisionComputeButton />}
+          actions={authz.allowedSubsidiaryIds === null && can(authz, 'reports.create') ? <ProvisionComputeButton /> : undefined}
         />
       }
     >

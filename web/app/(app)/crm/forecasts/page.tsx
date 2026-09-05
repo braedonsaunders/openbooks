@@ -92,6 +92,7 @@ export default async function Forecasts({
       periodEnd: end,
       ownerUserId,
       salesTeamId,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     }),
     db.execute(sql`
       select q.*, u.name owner_name, st.name team_name
@@ -110,7 +111,7 @@ export default async function Forecasts({
         from crm_forecast_snapshots s
         left join users u on u.id = s.owner_user_id
         left join crm_sales_teams st on st.id = s.sales_team_id and st.org_id = s.org_id
-       where s.org_id = ${authz.user.orgId}
+       where s.org_id = ${authz.user.orgId} and ${authz.allowedSubsidiaryIds === null}
          and s.period_start = ${start}::date
          and s.period_end = ${end}::date
          ${ownerUserId ? sql`and s.owner_user_id = ${ownerUserId}` : sql``}
@@ -132,7 +133,7 @@ export default async function Forecasts({
 
   const quotas = quotasResult.rows as QuotaRow[]
   const snapshots = snapshotsResult.rows as SnapshotRow[]
-  const canManageForecasts = can(authz, 'crm.forecasts.manage')
+  const canManageForecasts = authz.allowedSubsidiaryIds === null && can(authz, 'crm.forecasts.manage')
   const canConfigureQuotas = can(authz, 'crm.setup.manage')
   const snapshotAction = canManageForecasts ? (
     <ForecastSnapshotButton periodStart={start} periodEnd={end} ownerUserId={ownerUserId} salesTeamId={salesTeamId} />

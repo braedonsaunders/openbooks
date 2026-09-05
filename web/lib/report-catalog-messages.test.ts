@@ -39,8 +39,11 @@ test('every report entity has a catalog label', () => {
   const missing: string[] = []
   for (const locale of LOCALES) {
     for (const entity of REPORT_ENTITIES) {
-      if (!catalogs[locale].catalog.entities[entity.key]) {
-        missing.push(`${locale}:catalog.entities.${entity.key}`)
+      const entry = catalogs[locale].catalog.entities[entity.key] as { label?: unknown; description?: unknown } | undefined
+      for (const field of ['label', 'description'] as const) {
+        if (typeof entry?.[field] !== 'string' || !(entry[field] as string).trim()) {
+          missing.push(`${locale}:catalog.entities.${entity.key}.${field}`)
+        }
       }
     }
   }

@@ -498,7 +498,10 @@
         "label": "Zeiterfassungen",
         "description": "Zeiterfassungseinträge – Mitarbeiter, Datum, Stunden, Abrechenbarkeitsstatus, Projekt und Genehmigungsstatus."
       },
-      "timesheet_weeks": "Stundenzettel-Wochen",
+      "timesheet_weeks": {
+        "label": "Stundenzettel-Wochen",
+        "description": "Wöchentliche Stundenzettel, Einreichungs- und Genehmigungsdaten sowie Gesamtstunden."
+      },
       "fixed_assets": {
         "label": "Anlagevermögen",
         "description": "Das Anlagenverzeichnis – Status, Anschaffung, Kosten, Verantwortlicher und Dimensionen."

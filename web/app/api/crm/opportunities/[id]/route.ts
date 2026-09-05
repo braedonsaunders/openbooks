@@ -1,3 +1,4 @@
+import { crmOpportunityScope, crmSharedScope } from '../../../../../lib/crm-scope'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -49,12 +50,12 @@ type LockedOpportunityRow = {
   weighted_amount: string | number
 }
 
-async function orgUuidExistsWith(executor: QueryExecutor, table: 'parties' | 'contacts' | 'users' | 'crm_sales_teams' | 'crm_lead_sources', id: string | null, orgId: string, lock = false): Promise<boolean> {
+async function orgUuidExistsWith(executor: QueryExecutor, table: 'parties' | 'contacts' | 'users' | 'crm_sales_teams' | 'crm_lead_sources', id: string | null, orgId: string, lock = false, allowed?: ReadonlySet<string> | null): Promise<boolean> {
   if (!id) return true
   if (!isUuid(id)) return false
   const lockClause = lock ? sql` for update` : sql``
   const result = table === 'parties'
-    ? await executor.execute(sql`select 1 from parties where id = ${id} and org_id = ${orgId}${lockClause}`)
+    ? await executor.execute(sql`select 1 from parties where id = ${id} and org_id = ${orgId}${crmSharedScope(sql`subsidiary_id`,allowed)}${lockClause}`)
     : table === 'contacts'
       ? await executor.execute(sql`select 1 from contacts where id = ${id} and org_id = ${orgId}${lockClause}`)
       : table === 'users'
@@ -73,7 +74,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('crm.opportunities.read', 'crm')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  const opportunity = isUuid(id) ? await loadOpportunity(id, gate.user.orgId) : null
+  const opportunity = isUuid(id) ? await loadOpportunity(id, gate.user.orgId, gate.allowedSubsidiaryIds) : null
   return opportunity ? NextResponse.json(opportunity) : NextResponse.json({ error: 'not found' }, { status: 404 })
 }
 
@@ -86,7 +87,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const existing = (await db.execute<any>(sql`
     select o.*, s.is_closed, s.is_won from crm_opportunities o
     join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
-    where o.id = ${id} and o.org_id = ${user.orgId}`))
+    where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}`))
   let current = existing.rows[0]
   if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody = await parseJsonBody(req, jsonObject);
@@ -97,7 +98,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let ownerUserId = body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId)
   let salesTeamId = body.salesTeamId === undefined ? current.sales_team_id : textOrNull(body.salesTeamId)
   let leadSourceId = body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId)
-  if (!await orgUuidExists('parties', partyId, user.orgId)) return NextResponse.json({ error: 'invalid account' }, { status: 422 })
+  if (!await orgUuidExistsWith(db, 'parties', partyId, user.orgId, false, gate.allowedSubsidiaryIds)) return NextResponse.json({ error: 'invalid account' }, { status: 422 })
   if (!await orgUuidExists('contacts', contactId, user.orgId)) return NextResponse.json({ error: 'invalid contact' }, { status: 422 })
   if (contactId && !((await db.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId}`))).rows[0]) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
   if (!await orgUuidExists('users', ownerUserId, user.orgId)) return NextResponse.json({ error: 'invalid owner' }, { status: 422 })
@@ -220,7 +221,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
              s.default_forecast_category as status_default_forecast_category
         from crm_opportunities o
         join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
-       where o.id = ${id} and o.org_id = ${user.orgId}
+       where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}
        for update of o`))
     current = lockedResult.rows[0]
     if (!current) throw new OpportunityDisappeared()
@@ -235,7 +236,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // the opportunity lock.  The preflight checks intentionally remain for a
     // fast response, but their unlocked snapshot may be stale by this point.
     const lockedDb = tx as unknown as QueryExecutor
-    if (!await orgUuidExistsWith(lockedDb, 'parties', partyId, user.orgId, true)) {
+    if (!await orgUuidExistsWith(lockedDb, 'parties', partyId, user.orgId, true, gate.allowedSubsidiaryIds)) {
       throw new OpportunityValidationError('invalid account')
     }
     if (!await orgUuidExistsWith(lockedDb, 'contacts', contactId, user.orgId, true)) {
@@ -401,7 +402,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (error instanceof OpportunityPermissionDenied) return error.response
     throw error
   }
-  return NextResponse.json(await loadOpportunity(id, user.orgId))
+  return NextResponse.json(await loadOpportunity(id, user.orgId, gate.allowedSubsidiaryIds))
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {

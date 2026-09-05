@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db, withOrg } from "./db.ts";
 import { SYSTEM_ACTOR_ID } from "./banking.ts";
 import { inventoryFeatureEnabled } from "./inventory.ts";
@@ -298,7 +298,19 @@ async function assertCommercialRefs(
   }
 }
 
-async function subscriptionContext(orgId: string, subscriptionId: string) {
+/** Shared customer identities remain usable; empty visibility grants nothing. */
+function subscriptionScopeSql(orgId: string, subscriptionId: SQL, allowed?: ReadonlySet<string> | null): SQL {
+  if (allowed == null) return sql``;
+  if (allowed.size === 0) return sql`and false`;
+  return sql`and exists (
+    select 1 from subscriptions scoped_subscription
+    join parties scoped_customer on scoped_customer.id = scoped_subscription.customer_id and scoped_customer.org_id = scoped_subscription.org_id
+    where scoped_subscription.id = ${subscriptionId} and scoped_subscription.org_id = ${orgId}
+      and (scoped_customer.subsidiary_id is null or scoped_customer.subsidiary_id = any(${`{${[...allowed].join(',')}}`}::uuid[]))
+  )`;
+}
+
+async function subscriptionContext(orgId: string, subscriptionId: string, allowed?: ReadonlySet<string> | null) {
   const result = (await db.execute<SubscriptionContextRow>(sql`
     select s.id, s.customer_id as "customerId", s.plan_id as "planId", s.status,
            l.id as "lifecycleId", l.plan_version_id as "planVersionId",
@@ -309,9 +321,10 @@ async function subscriptionContext(orgId: string, subscriptionId: string) {
       from subscriptions s
       left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
      where s.id = ${subscriptionId} and s.org_id = ${orgId}
+       ${subscriptionScopeSql(orgId, sql`s.id`, allowed)}
   `));
   const row = result.rows[0];
-  if (!row) throw new AdvancedSubscriptionError("subscription not found");
+  if (!row) throw new AdvancedSubscriptionError("subscription not found", 404);
   return row;
 }
 
@@ -390,11 +403,11 @@ export async function publishPlanVersion(orgId: string, actorId: string, version
   });
 }
 
-export async function activateLifecycle(orgId: string, actorId: string, input: ActivateLifecycleInput): Promise<void> {
+export async function activateLifecycle(orgId: string, actorId: string, input: ActivateLifecycleInput, allowed?: ReadonlySet<string> | null): Promise<void> {
   await withOrg(orgId, async () => {
     await assertEnabled(orgId);
     await db.execute(sql`select id from subscriptions where id = ${input.subscriptionId} and org_id = ${orgId} for update`);
-    const sub = await subscriptionContext(orgId, input.subscriptionId);
+    const sub = await subscriptionContext(orgId, input.subscriptionId, allowed);
     if (sub.status === "canceled") throw new AdvancedSubscriptionError("a canceled subscription cannot be activated");
     if (sub.lifecycleId) throw new AdvancedSubscriptionError("advanced lifecycle is already active");
     const versionResult = (await db.execute<PlanVersionRow>(sql`
@@ -469,7 +482,7 @@ export interface SystemAmendmentSource {
   detail?: Record<string, unknown>;
 }
 
-interface AmendmentCallOptions { system?: SystemAmendmentSource }
+interface AmendmentCallOptions { system?: SystemAmendmentSource; allowedSubsidiaryIds?: ReadonlySet<string> | null }
 
 export async function applyAmendment(orgId: string, actorId: string | null, request: AmendmentRequest, opts?: AmendmentCallOptions) {
   return withOrg(orgId, async () => { await assertEnabled(orgId);
@@ -495,6 +508,7 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
       : request;
     const lock = (await db.execute(sql`select id from subscriptions where id = ${request.subscriptionId} and org_id = ${orgId} for update`));
     if (!lock.rows.length) throw new AdvancedSubscriptionError("subscription not found");
+    await subscriptionContext(orgId, request.subscriptionId, opts?.allowedSubsidiaryIds);
     const replay = (await db.execute<AmendmentReplayRow>(sql`
       select id, subscription_id as "subscriptionId", request from subscription_amendments
        where org_id = ${orgId} and idempotency_key = ${request.idempotencyKey}
@@ -511,6 +525,11 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
       : null;
     if (["remove_component", "change_component"].includes(request.type) && !currentComponent) {
       throw new AdvancedSubscriptionError("active component not found");
+    }
+    // Inclusive windows cannot end before their first day. Preserve the original
+    // contract history and reject an amendment that would create an empty window.
+    if (["remove_component", "change_component"].includes(request.type) && currentComponent?.effectiveFrom === effectiveOn) {
+      throw new AdvancedSubscriptionError("component changes must take effect after the current component start date");
     }
     const quantity = request.type === "add_component" || (request.type === "change_component" && request.quantity != null)
       ? positiveMoney(request.quantity ?? "1", "component quantity")
@@ -570,7 +589,7 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
     }
     if (request.type === "coterm") {
       if (!request.anchorSubscriptionId) throw new AdvancedSubscriptionError("an anchor subscription is required");
-      const anchor = await subscriptionContext(orgId, request.anchorSubscriptionId);
+      const anchor = await subscriptionContext(orgId, request.anchorSubscriptionId, opts?.allowedSubsidiaryIds);
       if (!anchor.lifecycleId || !anchor.termEndsOn) throw new AdvancedSubscriptionError("anchor subscription needs an advanced term end");
       assertCotermAllowed({ subscriptionId: request.subscriptionId, anchorSubscriptionId: request.anchorSubscriptionId, customerId: before.lifecycle.customerId, anchorCustomerId: anchor.customerId });
       await db.execute(sql`update subscription_lifecycles set term_ends_on = ${anchor.termEndsOn}, renewal_on = ${anchor.termEndsOn}, coterm_anchor_subscription_id = ${request.anchorSubscriptionId}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
@@ -591,7 +610,7 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
   });
 }
 
-export async function advancedSubscriptionWorkspace(orgId: string) {
+export async function advancedSubscriptionWorkspace(orgId: string, allowed?: ReadonlySet<string> | null) {
   const [versions, lifecycles, amendments] = await Promise.all([
     db.execute(sql`
       select v.id, v.plan_id as "planId", v.version_number as "versionNumber", v.status, v.effective_from as "effectiveFrom",
@@ -611,12 +630,12 @@ export async function advancedSubscriptionWorkspace(orgId: string) {
                'unitPrice', c.unit_price, 'effectiveFrom', c.effective_from, 'effectiveTo', c.effective_to) order by c.sort_order)
                filter (where c.id is not null), '[]'::jsonb) as components
         from subscription_lifecycles l left join subscription_components c on c.subscription_id = l.subscription_id and c.org_id = l.org_id
-       where l.org_id = ${orgId} group by l.id order by l.created_at desc
+       where l.org_id = ${orgId} ${subscriptionScopeSql(orgId, sql`l.subscription_id`, allowed)} group by l.id order by l.created_at desc
     `),
     db.execute(sql`
       select id, subscription_id as "subscriptionId", amendment_number as "amendmentNumber", amendment_type as "amendmentType",
              effective_on as "effectiveOn", status, reason, applied_at as "appliedAt", request
-        from subscription_amendments where org_id = ${orgId} order by applied_at desc, amendment_number desc
+        from subscription_amendments where org_id = ${orgId} ${subscriptionScopeSql(orgId, sql`subscription_amendments.subscription_id`, allowed)} order by applied_at desc, amendment_number desc
     `),
   ]);
   return { versions: versions.rows, lifecycles: lifecycles.rows, amendments: amendments.rows };
