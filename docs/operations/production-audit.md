@@ -1081,3 +1081,21 @@ The two Redis-dependent scheduler cases previously skipped in full runs also
 passed against an isolated local Redis instance: crash/retry deduplication and
 deterministic recipient fanout. That focused receipt is under
 `audit-redis-queue-2026-09-05`; it is separate from the full-run receipt above.
+
+## Utilization access and feature controls — continuation from f72136e6
+
+Utilization ignored subsidiary grants in its current, prior and rolling
+history scans. It now follows the existing time-report ownership policy:
+project subsidiary takes precedence, with employee subsidiary for internal
+work. The page and assistant pass the caller's required scope; the service
+also enforces Time Tracking and its Projects parent before reading data.
+
+The regression matrix covers services, rendered pages and assistant dispatch
+for unrestricted, restricted and empty grants. Cross-company project work,
+internal time, employee names, cost, prior ranges and rolling history are
+checked. Two additional cases disable the child and parent feature gates.
+Eight tests failed before the correction and three unrestricted controls
+passed; all 11 now pass. Receipts are retained under
+`audit-utilization-scope-2026-09-05` in thread storage.
+All 3,056 unit tests, web typechecking and the locked production build passed;
+explicit-any and lint ceilings remain 391 and 725.

@@ -1,4 +1,6 @@
 import "server-only";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
+import { isFeatureEnabled } from "../features";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
@@ -106,7 +108,7 @@ interface RawStatRow extends Record<string, unknown> {
 
 /** One grouped scan per range.
  *  org filter is EXPLICIT (defense in depth — do not rely on ambient RLS). */
-async function fetchTimeStats(orgId: string, from: string, to: string): Promise<StatRow[]> {
+async function fetchTimeStats(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<StatRow[]> {
   const res = await db.execute<RawStatRow>(sql`
     select
       t.employee_party_id as employee,
@@ -120,9 +122,11 @@ async function fetchTimeStats(orgId: string, from: string, to: string): Promise<
       coalesce(sum(coalesce(t.cost_rate, 0) * t.hours) filter (where not t.is_billable), 0) as non_billable_cost
     from time_entries t
     left join parties p on p.id = t.employee_party_id and p.org_id = t.org_id
+    left join projects project on project.id = t.project_id and project.org_id = t.org_id
     left join departments d on d.id = t.department_id and d.org_id = t.org_id
     left join items i on i.id = t.item_id and i.org_id = t.org_id
     where t.org_id = ${orgId} and t.worked_on >= ${from} and t.worked_on <= ${to}
+      ${subsidiaryVisibleFilter(sql`coalesce(project.subsidiary_id, p.subsidiary_id)`, allowed)}
     group by 1, 2, 3, 4, 5, 6
   `);
   return res.rows.map((r) => ({
@@ -219,7 +223,8 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
   return rows.sort((a, b) => b.range.nonBillableCost - a.range.nonBillableCost);
 }
 
-export async function utilizationData(orgId: string, period: { from: string; to: string; label: string }): Promise<UtilizationData> {
+export async function utilizationData(orgId: string, period: { from: string; to: string; label: string }, allowed: ReadonlySet<string> | null): Promise<UtilizationData> {
+  if (!(await isFeatureEnabled(orgId, "timeTracking"))) throw new Error("time tracking feature is disabled");
   const { money } = await getMoneyFormatter(orgId)
   const cfg = await analyticsConfig(orgId, "utilization");
   // mergeConfig always materializes every default key for the dashboard.
@@ -251,9 +256,9 @@ export async function utilizationData(orgId: string, period: { from: string; to:
   }
 
   const [curr, prior, ...histStats] = await Promise.all([
-    fetchTimeStats(orgId, period.from, period.to),
-    fetchTimeStats(orgId, priorFrom, priorTo),
-    ...histPlans.map((p) => fetchTimeStats(orgId, p.start, p.end)),
+    fetchTimeStats(orgId, period.from, period.to, allowed),
+    fetchTimeStats(orgId, priorFrom, priorTo, allowed),
+    ...histPlans.map((p) => fetchTimeStats(orgId, p.start, p.end, allowed)),
   ]);
 
   // noBillable departments: zero billable hours across current + prior.

@@ -462,7 +462,7 @@ const utilizationTool: AssistantToolDef = {
     }
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
-    const r = await withOrg(authz.user.orgId, () => utilizationData(authz.user.orgId, period));
+    const r = await withOrg(authz.user.orgId, () => utilizationData(authz.user.orgId, period, authz.allowedSubsidiaryIds));
     const slimGroup = (g: (typeof r.departments)[number]) => ({
       id: g.id,
       name: g.name,
