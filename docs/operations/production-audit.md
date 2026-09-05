@@ -1282,3 +1282,20 @@ bytes, one byte over the limit, split UTF-8, ordinary signed login responses
 and redirect refusal. All 3,087 unit tests, web typechecking and the locked
 production build passed. Explicit-any and lint ceilings remain 391 and 725.
 Receipts are retained under `audit-oidc-response-limit-2026-09-05` in thread storage.
+
+## Mapped tenant user activation — continuation from 07188839
+
+An active home session and access grant could continue using a deactivated
+mapped user, including retained role assignments. Environment resolution and
+workspace listings now require an active acting user belonging to the target
+organization. Sandbox resolution separately verifies the cloned user exists
+and is active. Unavailable selections follow the existing home-workspace
+fallback; explicit platform-administrator production access uses the platform
+identity rather than a deactivated mapped identity.
+
+Eight inactive-user regressions failed before correction and eight active
+controls passed. The expanded member/platform-admin matrix plus MFA concurrency
+checks passes all 35 tests, covering resolver, picker and signed browser-session
+paths. All 3,087 unit tests, web typechecking and the locked production build
+passed. Explicit-any and lint ceilings remain 391 and 725. Receipts are retained
+under `audit-org-user-activation-2026-09-05` in thread storage.

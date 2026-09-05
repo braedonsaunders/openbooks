@@ -69,8 +69,9 @@ async function actingUserIn(
 ): Promise<string | null> {
   if (targetOrgId === home.orgId) return home.id;
   const r = (await db.execute(sql`
-    select acting_user_id from user_org_access
-     where member_user_id = ${home.id} and org_id = ${targetOrgId} and is_active`)) as unknown as { rows: ActingUserSqlRow[] };
+    select a.acting_user_id from user_org_access a
+    join users u on u.id = a.acting_user_id and u.org_id = a.org_id and u.is_active
+     where a.member_user_id = ${home.id} and a.org_id = ${targetOrgId} and a.is_active`)) as unknown as { rows: ActingUserSqlRow[] };
   if (r.rows[0]?.acting_user_id) return r.rows[0].acting_user_id;
   // A super administrator may inspect any production tenant using the platform
   // identity. Preview/sample companies still require an explicit mapped user:
@@ -96,6 +97,7 @@ export async function accessibleProductionOrgs(home: HomeUser): Promise<Accessib
       const previews = (await db.execute(sql`
         select a.org_id as "orgId", a.acting_user_id as "actingUserId", o.name
           from user_org_access a join orgs o on o.id = a.org_id
+          join users u on u.id = a.acting_user_id and u.org_id = a.org_id and u.is_active
          where a.member_user_id = ${home.id} and a.is_active and o.env_kind = 'preview'
          order by o.name`)) as unknown as { rows: AccessibleOrgSqlRow[] };
       for (const preview of previews.rows) {
@@ -116,6 +118,7 @@ export async function accessibleProductionOrgs(home: HomeUser): Promise<Accessib
       select a.org_id as "orgId", a.acting_user_id as "actingUserId", o.name,
              o.env_kind as "envKind"
         from user_org_access a join orgs o on o.id = a.org_id
+          join users u on u.id = a.acting_user_id and u.org_id = a.org_id and u.is_active
        where a.member_user_id = ${home.id} and a.is_active
          and o.env_kind in ('production', 'preview')
        order by o.name`)) as unknown as { rows: AccessibleOrgSqlRow[] };
@@ -161,9 +164,15 @@ export async function resolveActiveEnv(
       const sb = (await db.execute(sql`
         select name, status from sandboxes where org_id = ${activeOrgId}`)) as unknown as { rows: SandboxSqlRow[] };
       if (!sb.rows[0] || sb.rows[0].status !== "ready") return null;
+      const actingUserId = rebaseUuid(acting, org.sandboxSeed);
+      const member = await db.execute(sql`
+        select id from users
+         where id = ${actingUserId} and org_id = ${activeOrgId} and is_active
+      `);
+      if (!member.rows.length) return null;
       return {
         orgId: activeOrgId,
-        actingUserId: rebaseUuid(acting, org.sandboxSeed),
+        actingUserId,
         envKind: "sandbox",
         productionOrgId: prodId,
         name: org.name,
