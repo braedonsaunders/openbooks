@@ -1,6 +1,8 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { neg, sum } from "@openbooks/engine/src/money.ts";
+import { statementBookExpr } from "../gl-summary";
 import { financialHealth, type FinancialHealth, type HealthBenchmarks } from "./financial-health";
 import { analyticsConfig } from "./config";
 import { isFeatureEnabled } from "../features";
@@ -122,6 +124,7 @@ type SqlNumeric = string | number | null;
 interface HealthMonthSqlRow {
   month: string;
   revenue: SqlNumeric;
+  operating_revenue: SqlNumeric;
   cogs: SqlNumeric;
   opex: SqlNumeric;
   other_exp: SqlNumeric;
@@ -131,6 +134,7 @@ interface HealthSegmentSqlRow {
   id: string;
   name: string;
   revenue: SqlNumeric;
+  operating_revenue: SqlNumeric;
   cogs: SqlNumeric;
   opex: SqlNumeric;
   prior_revenue: SqlNumeric;
@@ -194,6 +198,7 @@ async function monthlySeries(orgId: string, to: string, months = 12): Promise<Mo
              (g.debit_total - g.credit_total) as amt
         from gl_month_activity g
        where g.org_id = ${orgId}
+         and g.book_id = ${statementBookExpr(orgId)}
          and g.month >= ${startIso}::date
          and g.month < date_trunc('month', ${to}::date)::date
       union all
@@ -201,12 +206,14 @@ async function monthlySeries(orgId: string, to: string, months = 12): Promise<Mo
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
          and e.status in ('posted', 'reversed')
+         and e.book_id = ${statementBookExpr(orgId)}
          and e.posting_date >= date_trunc('month', ${to}::date)::date
          and e.posting_date <= ${to}
        where l.org_id = ${orgId}
     )
     select m.month,
       -sum(case when a.type in ('income','income_other') then m.amt else 0 end) as revenue,
+      -sum(case when a.type = 'income' then m.amt else 0 end) as operating_revenue,
       sum(case when a.type = 'cogs' then m.amt else 0 end) as cogs,
       sum(case when a.type in ('expense','expense_deferred') then m.amt else 0 end) as opex,
       sum(case when a.type = 'expense_other' then m.amt else 0 end) as other_exp
@@ -225,10 +232,9 @@ async function monthlySeries(orgId: string, to: string, months = 12): Promise<Mo
     const revenue = Number(row?.revenue ?? 0);
     const cogs = Number(row?.cogs ?? 0);
     const opex = Number(row?.opex ?? 0);
-    const otherExp = Number(row?.other_exp ?? 0);
-    const grossProfit = revenue - cogs;
-    const operatingIncome = revenue - cogs - opex;
-    const netIncome = operatingIncome - otherExp;
+    const grossProfit = Number(sum([String(row?.revenue ?? 0), neg(String(row?.cogs ?? 0))]));
+    const operatingIncome = Number(sum([String(row?.operating_revenue ?? 0), neg(String(row?.cogs ?? 0)), neg(String(row?.opex ?? 0))]));
+    const netIncome = Number(sum([String(row?.revenue ?? 0), neg(String(row?.cogs ?? 0)), neg(String(row?.opex ?? 0)), neg(String(row?.other_exp ?? 0))]));
     out.push({
       month: ym,
       label: monthLabel(ym),
@@ -260,16 +266,18 @@ async function segmentsBy(
   // LEFT JOIN so untagged GL activity lands in an "Unassigned" bucket (the
   // parity) — segment totals then tie out to the P&L instead of silently
   // dropping lines with no dimension.
-  // No entry join: the line carries its own posting date, so the window is a
-  // plain predicate on journal_lines instead of a join whose date filter the
-  // planner applied only after walking every P&L line ever posted.
+  // Keep the date predicate on the line for selectivity; the entry controls
+  // posted status and the primary accounting book, just as the headline does.
   const r = ((await db.execute(sql`
     select coalesce(d.id::text, 'unassigned') as id, coalesce(d.name, 'Unassigned') as name,
       -sum(case when a.type in ('income','income_other') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as revenue,
+      -sum(case when a.type = 'income' and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as operating_revenue,
       sum(case when a.type = 'cogs' and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as cogs,
       sum(case when a.type in ('expense','expense_deferred') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as opex,
       -sum(case when a.type in ('income','income_other') and l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.amount else 0 end) as prior_revenue
     from journal_lines l
+    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     left join ${tbl} d on d.id = ${col} and d.org_id = l.org_id
     where l.org_id = ${orgId}
@@ -287,11 +295,9 @@ async function segmentsBy(
   return rows
     .map((x): SegmentRow => {
       const revenue = Number(x.revenue);
-      const cogs = Number(x.cogs);
-      const opex = Number(x.opex);
       const priorRev = Number(x.prior_revenue);
-      const grossProfit = revenue - cogs;
-      const operatingIncome = revenue - cogs - opex;
+      const grossProfit = Number(sum([String(x.revenue ?? 0), neg(String(x.cogs ?? 0))]));
+      const operatingIncome = Number(sum([String(x.operating_revenue ?? 0), neg(String(x.cogs ?? 0)), neg(String(x.opex ?? 0))]));
       const gmPct = revenue > 0 ? grossProfit / revenue : 0;
       const opPct = revenue > 0 ? operatingIncome / revenue : 0;
       const yoyPct = priorRev > 0 ? (revenue - priorRev) / priorRev : null;
@@ -316,12 +322,14 @@ async function segmentsBy(
 async function drivers(orgId: string, from: string, to: string): Promise<{ revenue: DriverRow[]; cost: DriverRow[] }> {
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
-  // No entry join: the line carries its own posting date.
+  // Retain the selective line-date predicate while enforcing ledger status/book.
   const r = ((await db.execute(sql`
     select a.id, a.name, a.type,
       sum(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as cur_raw,
       sum(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.amount else 0 end) as prior_raw
     from journal_lines l
+    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     where l.org_id = ${orgId}
       and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
@@ -365,40 +373,37 @@ async function drivers(orgId: string, from: string, to: string): Promise<{ reven
 async function itemAnalysis(orgId: string, from: string, to: string): Promise<HealthData["items"]> {
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
-  let rows: ItemRow[] = [];
-  try {
-    const r = ((await db.execute(sql`
-      select a.id, a.name,
-        -sum(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as current,
-        -sum(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.amount else 0 end) as prior
-      from journal_lines l
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      where l.org_id = ${orgId}
-        and a.type in ('income','income_other')
-        and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
-      group by a.id, a.name
-    `)));
-    const totalChangeAbs =
-      ((r.rows)).reduce((a, x) => a + Math.abs(Number(x.current) - Number(x.prior)), 0) || 1;
-    rows = (r.rows as unknown as HealthItemSqlRow[])
-      .map((x): ItemRow => {
-        const current = Number(x.current);
-        const prior = Number(x.prior);
-        return {
-          id: x.id,
-          name: x.name,
-          prior,
-          current,
-          change: current - prior,
-          changePct: Math.abs(prior) > 0 ? (current - prior) / Math.abs(prior) : null,
-          contribution: Math.abs(current - prior) / totalChangeAbs,
-        };
-      })
-      .filter((x) => Math.abs(x.current) > 0 || Math.abs(x.prior) > 0)
-      .sort((a, b) => b.current - a.current);
-  } catch {
-    rows = [];
-  }
+  const r = ((await db.execute(sql`
+    select a.id, a.name,
+      -sum(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as current,
+      -sum(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.amount else 0 end) as prior
+    from journal_lines l
+    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+    join accounts a on a.id = l.account_id and a.org_id = l.org_id
+    where l.org_id = ${orgId}
+      and a.type in ('income','income_other')
+      and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
+    group by a.id, a.name
+  `)));
+  const totalChangeAbs =
+    ((r.rows)).reduce((a, x) => a + Math.abs(Number(x.current) - Number(x.prior)), 0) || 1;
+  const rows = (r.rows as unknown as HealthItemSqlRow[])
+    .map((x): ItemRow => {
+      const current = Number(x.current);
+      const prior = Number(x.prior);
+      return {
+        id: x.id,
+        name: x.name,
+        prior,
+        current,
+        change: current - prior,
+        changePct: Math.abs(prior) > 0 ? (current - prior) / Math.abs(prior) : null,
+        contribution: Math.abs(current - prior) / totalChangeAbs,
+      };
+    })
+    .filter((x) => Math.abs(x.current) > 0 || Math.abs(x.prior) > 0)
+    .sort((a, b) => b.current - a.current);
   const gainers = [...rows].filter((x) => x.change > 0).sort((a, b) => b.change - a.change).slice(0, 5);
   const decliners = [...rows].filter((x) => x.change < 0).sort((a, b) => a.change - b.change).slice(0, 5);
   return {
@@ -541,13 +546,13 @@ export async function healthData(period: { from: string; to: string; label: stri
     financialHealth(period, benchmarks, orgId),
     financialHealth({ from: pFrom, to: pTo, label: "prior" }, benchmarks, orgId),
     monthlySeries(orgId, to),
-    segmentsBy(orgId, "department_id", "departments", from, to).catch(() => []),
-    segmentsBy(orgId, "class_id", "classes", from, to).catch(() => []),
-    segmentsBy(orgId, "location_id", "locations", from, to).catch(() => []),
+    segmentsBy(orgId, "department_id", "departments", from, to),
+    segmentsBy(orgId, "class_id", "classes", from, to),
+    segmentsBy(orgId, "location_id", "locations", from, to),
     drivers(orgId, from, to),
     itemAnalysis(orgId, from, to),
     budgetsOn
-      ? budgetVariance(orgId, from, to).catch(emptyBudget)
+      ? budgetVariance(orgId, from, to)
       : Promise.resolve(emptyBudget()),
   ]);
 
