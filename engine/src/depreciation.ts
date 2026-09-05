@@ -1,3 +1,4 @@
+import { depreciationPeriodCount } from "./depreciation-limits.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
@@ -190,7 +191,7 @@ function conventionFraction(
  * total lifetime depreciation is exactly (cost − salvage).
  */
 export function computeSchedule(input: ScheduleInput): ScheduleLinePlan[] {
-  const life = Math.max(1, Math.trunc(input.lifeMonths));
+  const life = depreciationPeriodCount(input.lifeMonths);
   const { formula, rateTable } = formulaForMethod(input.method, input.ratePercent, life);
   const { firstPeriodFraction, firstFractionPeriods } = conventionFraction(input.convention);
   const rows = computeScheduleByFormula({
@@ -365,7 +366,7 @@ export async function buildScheduleWithRunner(
     plan = computeScheduleByFormula({
       cost: asset.acquisition_cost,
       salvage: asset.salvage_value,
-      lifePeriods: Math.max(1, Math.trunc(lifeMonths)),
+      lifePeriods: lifeMonths,
       formula: custom2.rows[0].formula,
       endOfLife: custom2.rows[0].end_of_life,
       firstPeriodFraction,

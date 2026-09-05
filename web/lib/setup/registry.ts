@@ -15,6 +15,7 @@
  * what makes the generic API safe — see api/admin/setup/[entity]/route.ts.
  */
 
+import { MAX_DEPRECIATION_PERIODS } from '@openbooks/engine/src/depreciation-limits.ts'
 import { PAY_DERIVED_RULE_ENTITIES } from './payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from './payroll-holidays'
 
@@ -92,6 +93,9 @@ export interface SetupField {
   key: string
   kind: SetupFieldKind
   required?: boolean
+  /** Inclusive resource/domain bounds for integer fields. */
+  min?: number
+  max?: number
   /** select options; labelKey is under `admin.setup.options.*`. */
   options?: SetupOption[]
   /** Replace `options` from a runtime registry on server surfaces. */
@@ -1912,7 +1916,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'defaultMethod', kind: 'select', options: DEPRECIATION_METHODS },
       { key: 'defaultDepreciationMethodId', kind: 'ref', ref: 'depreciation-methods' },
       { key: 'defaultConvention', kind: 'select', options: DEPRECIATION_CONVENTIONS, keepDefault: true },
-      { key: 'defaultLifeMonths', kind: 'integer' },
+      { key: 'defaultLifeMonths', kind: 'integer', min: 1, max: MAX_DEPRECIATION_PERIODS },
       { key: 'taxAttributes', kind: 'json', keepDefault: true },
       { key: 'isActive', kind: 'boolean' },
     ],
@@ -2073,7 +2077,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'categoryId', kind: 'ref', ref: 'asset-categories', required: true },
       { key: 'method', kind: 'select', options: DEPRECIATION_METHODS, keepDefault: true },
       { key: 'depreciationMethodId', kind: 'ref', ref: 'depreciation-methods' },
-      { key: 'lifeMonths', kind: 'integer' },
+      { key: 'lifeMonths', kind: 'integer', min: 1, max: MAX_DEPRECIATION_PERIODS },
       { key: 'ratePercent', kind: 'percent' },
       { key: 'unitsTotal', kind: 'decimal' },
       { key: 'convention', kind: 'select', options: DEPRECIATION_CONVENTIONS, keepDefault: true },

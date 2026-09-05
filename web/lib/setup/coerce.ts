@@ -68,8 +68,10 @@ export function coerceField(field: SetupField, raw: unknown): Coerced | { error:
       return { column, value: coerceBoolean(raw) }
     case 'integer': {
       if (!present) return { column, value: null }
-      const n = Number(raw)
-      if (!Number.isFinite(n) || !Number.isInteger(n)) return { error: `${field.key} must be a whole number` }
+      const n = typeof raw === 'number' || typeof raw === 'string' ? Number(raw) : NaN
+      if (!Number.isSafeInteger(n)) return { error: `${field.key} must be a whole number` }
+      if (field.min !== undefined && n < field.min) return { error: `${field.key} must be at least ${field.min}` }
+      if (field.max !== undefined && n > field.max) return { error: `${field.key} must be at most ${field.max}` }
       return { column, value: n }
     }
     case 'decimal':

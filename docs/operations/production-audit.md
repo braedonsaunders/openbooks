@@ -1458,3 +1458,26 @@ The continuing review has confirmed two separate asset-editor issues—missing
 audit evidence for non-basis configuration and stale custom-data overwrites—and
 unbounded depreciation work for enormous useful-life inputs. These remain open
 for the next corrections; this checkpoint is not a production-readiness claim.
+
+## Bounded depreciation calculations — continuation from 30e5eb01
+
+Useful lives and convention windows were truncated/coerced and could request
+billions of materialized schedule rows before fiscal-calendar filtering. The
+shared engine now requires an exact positive integer, capped at 12,000 periods
+(1,000 monthly years); convention windows have the same independent bound, so
+no schedule can exceed 24,000 rows. This is a calculation resource limit, not a
+category-specific accounting policy. Existing category/book inheritance remains
+available. The asset API refuses invalid inputs before writes or schedule work;
+the setup registry applies bounds to both category and book-policy life fields
+through the shared API/import coercer. Integer setup fields no longer turn
+booleans/arrays into numbers or accept unsafe integers.
+
+Twenty-two safe regressions failed before correction. All 68 focused pure tests
+and 71 database checks pass, including invalid-input rollback, unchanged audit
+history on refusal and exact lifetime totals at the supported upper boundary.
+The API workload is substituted in its dedicated boundary test to prevent a
+regression from executing a billion-row loop; adjacent real schedule-building
+and asset-control tests pass. All 3,118 unit tests, workspace type checks and
+the locked production build pass. Explicit-any/lint ceilings remain 391/725.
+Evidence: `audit-depreciation-bounds-2026-09-05`. Asset-edit audit coverage and
+concurrent custom-data preservation are still open and are the next correction.
