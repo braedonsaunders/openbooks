@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { FieldLabel, Input, Select, Textarea } from '@openbooks/ui'
 import { SearchSelect } from '@openbooks/ui'
@@ -30,6 +30,7 @@ export function CustomFieldInput({
   hideLabel?: boolean
 }) {
   const tLabels = useTranslations('common.labels')
+  const inputId = useId()
 
   const displayMode = def.config.displayMode ?? 'normal'
   const isHidden = displayMode === 'hidden'
@@ -38,6 +39,7 @@ export function CustomFieldInput({
   // Apply default value on first render if the field has no value yet.
   const appliedDefault = useRef(false)
   useEffect(() => {
+    if (isHidden || isDisabled) { appliedDefault.current = false; return }
     if (appliedDefault.current) return
     if (value === undefined || value === null || value === '') {
       const dv = def.config.defaultValue
@@ -47,21 +49,21 @@ export function CustomFieldInput({
         } else if (def.fieldType === 'multi_select') {
           onChange(Array.isArray(dv) ? dv : [String(dv)])
         } else if (def.fieldType === 'number' || def.fieldType === 'currency') {
-          onChange(Number(dv))
+          onChange(String(dv))
         } else {
           onChange(dv)
         }
       }
     }
     appliedDefault.current = true
-  }, [def, value, onChange])
+  }, [def, value, onChange, isHidden, isDisabled])
 
   if (isHidden) return null
 
   if (isDisabled) {
     return (
       <div className={hideLabel ? undefined : 'space-y-1.5'}>
-        {hideLabel ? null : <FieldLabel help={def.config.helpText}>{def.label}</FieldLabel>}
+        {hideLabel ? null : <FieldLabel htmlFor={inputId} help={def.config.helpText}>{def.label}</FieldLabel>}
         <p className="text-sm text-slate-600 dark:text-slate-400">
           {def.fieldType === 'boolean'
             ? value
@@ -78,13 +80,15 @@ export function CustomFieldInput({
   return (
     <div className={hideLabel ? undefined : 'space-y-1.5'}>
       {hideLabel ? null : (
-        <FieldLabel help={def.config.helpText}>
+        <FieldLabel htmlFor={inputId} help={def.config.helpText}>
           {def.label}
           {def.isRequired ? <span className="text-red-500"> *</span> : null}
         </FieldLabel>
       )}
       {def.fieldType === 'long_text' ? (
         <Textarea
+          id={inputId}
+          aria-label={hideLabel ? def.label : undefined}
           value={(value as string) ?? ''}
           placeholder={def.config.placeholder}
           onChange={(e) => onChange(e.target.value)}
@@ -92,6 +96,8 @@ export function CustomFieldInput({
         />
       ) : def.fieldType === 'boolean' ? (
         <Select
+          id={inputId}
+          aria-label={hideLabel ? def.label : undefined}
           value={value === true || value === 'true' ? 'true' : value === false || value === 'false' ? 'false' : ''}
           onChange={(e) => onChange(e.target.value === 'true')}
         >
@@ -100,7 +106,7 @@ export function CustomFieldInput({
           <option value="false">{tLabels('no')}</option>
         </Select>
       ) : def.fieldType === 'select' ? (
-        <Select value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)}>
+        <Select id={inputId} aria-label={hideLabel ? def.label : undefined} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)}>
           <option value="">—</option>
           {(def.config.options ?? []).map((o) => (
             <option key={o} value={o}>
@@ -110,18 +116,22 @@ export function CustomFieldInput({
         </Select>
       ) : def.fieldType === 'multi_select' ? (
         <MultiSelectInput
+          label={def.label}
           options={def.config.options ?? []}
           value={Array.isArray(value) ? value.map(String) : []}
           onChange={(arr) => onChange(arr)}
         />
       ) : def.fieldType === 'reference' ? (
         <ReferenceInput
+          id={inputId}
           def={def}
           value={(value as string) ?? ''}
           onChange={onChange}
         />
       ) : (
         <Input
+          id={inputId}
+          aria-label={hideLabel ? def.label : undefined}
           type={def.fieldType === 'date' ? 'date' : 'text'}
           inputMode={def.fieldType === 'number' || def.fieldType === 'currency' ? 'decimal' : undefined}
           className={def.fieldType === 'number' || def.fieldType === 'currency' ? 'text-right tabular-nums' : undefined}
@@ -136,10 +146,12 @@ export function CustomFieldInput({
 
 /** Multi-select with checkboxes — replaces the text-input fallback. */
 function MultiSelectInput({
+  label,
   options,
   value,
   onChange,
 }: {
+  label: string
   options: string[]
   value: string[]
   onChange: (arr: string[]) => void
@@ -149,7 +161,7 @@ function MultiSelectInput({
     else onChange([...value, opt])
   }
   return (
-    <div className="flex flex-wrap gap-2 rounded-md border border-slate-200 p-2 dark:border-slate-800">
+    <div role="group" aria-label={label} className="flex flex-wrap gap-2 rounded-md border border-slate-200 p-2 dark:border-slate-800">
       {options.length === 0 ? (
         <span className="text-xs text-slate-400">No options defined</span>
       ) : (
@@ -174,10 +186,12 @@ function MultiSelectInput({
 
 /** Reference field — a SearchSelect that fetches options from /api/forms/options. */
 function ReferenceInput({
+  id,
   def,
   value,
   onChange,
 }: {
+  id: string
   def: CustomFieldDefClient
   value: string
   onChange: (v: unknown) => void
@@ -203,6 +217,8 @@ function ReferenceInput({
 
   return (
     <SearchSelect
+      id={id}
+      ariaLabel={def.label}
       value={value}
       onChange={(v) => onChange(v)}
       options={options}
