@@ -285,3 +285,74 @@ were not repeated for this batch. No migrations, production data, deployment
 scripts or protected synchronization/posting files changed. The earlier
 capability gaps and broader audit remain open; this is evidence for these
 corrections, not certification that the entire repository has no defects.
+
+## Revenue, asset reversals, deposits and identity — continuation from 6d38737a
+
+The next review traced recognition events through scheduling, multi-book posting
+and cancellation, then asset reversal chains, property deposits and password
+reset/MFA lifecycles. Reproduced defects and corrections:
+
+- **Previously posted event periods dropped subsequent revenue.** Milestone and
+  usage events now plan the period's total less its posted amount, appending
+  new sequences for additions and negative corrections. Posted lines remain
+  unchanged. Event recording, rebuilding and posting share the obligation lock;
+  the public multi-book builder is transactional.
+- **Recognition scope was applied only to the initial posting scan.** A shared
+  subsidiary predicate now also governs diagnostics, locked posting claims,
+  obligation completion and schedule status updates. Hidden contract names and
+  hidden lifecycle changes are refused even with an explicitly supplied ID or
+  an empty authorization set.
+- **Forecast rules posted actual journals.** Both the scan and the locked claim
+  now exclude forecast rules; their schedules and obligations remain forecasts.
+- **Partial event recognition marked obligations satisfied.** Event-driven
+  obligations require the allocated amount to be recognized on every schedule.
+  Additional planned work reopens the obligation; cancelled obligations refuse
+  new events and rebuilds.
+- **Financial scheduling accepted silent coercion.** Unknown methods, malformed
+  dates, invalid month starts, fractional terms/offsets, calendar overflow and
+  out-of-range percentages now produce domain errors. Calendar arithmetic
+  preserves early Gregorian leap years. Event amounts, unit rates and quantities
+  require exact `numeric(19,4)` precision before persistence, preventing rounding
+  from changing the amount or breaking an otherwise identical retry.
+- **Restored assets could not be disposed again.** Disposal journals receive a
+  unique identity while retaining their asset reference. The reversal-order check
+  excludes source events already reversed, allowing newest-to-oldest correction
+  without altering original journals. New event timestamps reflect the actual
+  write time instead of a shared transaction-start time, and comparisons retain
+  PostgreSQL precision. Ambiguous equal-time legacy sources fail closed.
+- **Deposit reversals raced refunds.** Reversals now acquire the lease lock
+  before reading the balance, matching receipts, refunds and applications. The
+  regression holds a 150 refund uncommitted against a 200 balance while reversing
+  a 100 receipt: the reversal must wait, see the remaining 50, and be refused.
+- **Password reset left prior MFA authorization usable.** Reset now consumes
+  pending login challenges and removes unfinished enrollment while preserving
+  established factors. MFA completion follows the same user-lock order as login
+  and reset; enrollment confirmation requires an active, unrevoked session.
+  Tests prove old challenges and revoked enrollment sessions fail, while a fresh
+  login using the new password and existing factor succeeds.
+
+Before-change reproductions and passing focused runs are retained in thread
+storage under `audit-revenue-assets-identity-2026-09-05`. Focused verification
+passed 67 recognition/posting tests, 19 asset tests, 25 property tests and 23
+authentication tests. These runs include pure helper tests and database
+regressions using disposable PostgreSQL records and real domain functions. The
+new authentication regressions substitute only the `server-only` import marker
+and seed reset tokens directly, without sending email.
+
+Broader verification passed 3,026 unit tests and 1,309 integration cases with
+zero failures. The integration command skipped two Redis-dependent cases;
+their entire 19-test outbox file subsequently passed with disposable Redis,
+including both skipped cases. All 845 fixture leases were released and reset;
+four fixture bootstraps and teardowns completed with zero leaks. The new asset,
+deposit and authentication files were added after integration discovery and
+passed separately as described above.
+
+Workspace typechecks, the production build and all 11 browser tests passed.
+Build-source hashes match all five changed production files. Production
+dependency auditing reported zero vulnerabilities; container security checks
+passed. Lint retains its existing 733 warnings and explicit-any remains at 399.
+
+This continuation changes no schema, production data or deployment. The protected
+synchronization, posting kernel, entry-number and swarm-release files remain
+untouched. Broader provider acceptance, failover, load and remaining domain
+journeys in the coverage table are still open.

@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { db, type SqlExecutor, withOrg } from "./db.ts";
 import { add, cmp, fromUnits, isZero, mul, mulPercent, neg, roundDiv, sum, toUnits } from "./money.ts";
 import {
@@ -43,6 +44,35 @@ export type RecognitionMethod =
 // Date helpers (UTC, no wall-clock dependency)
 // ---------------------------------------------------------------------------
 
+function recognitionDate(value: string, label = "recognition date"): Date {
+  const date = typeof value === "string" ? new Date(`${value}T00:00:00Z`) : new Date(NaN);
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)
+      || value.startsWith("0000-") || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+    throw new RevenueRecognitionError(`${label} must be a valid ISO calendar date`);
+  }
+  return date;
+}
+
+function recognitionInteger(value: number, label: string, minimum: number): number {
+  if (!Number.isSafeInteger(value) || value < minimum || value > 2147483647) {
+    throw new RevenueRecognitionError(`${label} must be a whole number from ${minimum} through 2147483647`);
+  }
+  return value;
+}
+
+function recognitionEventDecimal(value: string, label: string): string {
+  const decimal = typeof value === "string" ? canonicalDecimal(value, 4) : null;
+  if (decimal === null || decimal.replace(/^-/, "").split(".")[0]!.length > 15) {
+    throw new RevenueRecognitionError(`${label} must be an exact decimal within numeric(19,4) precision`);
+  }
+  return decimal;
+}
+
+function eventMonth(value: string): void {
+  recognitionDate(value, "event month");
+  if (!value.endsWith("-01")) throw new RevenueRecognitionError("event month must be the first day of a calendar month");
+}
+
 /** First day of the month for a YYYY-MM-DD date, as YYYY-MM-01. */
 function monthStart(date: string): string {
   return `${date.slice(0, 7)}-01`;
@@ -53,6 +83,7 @@ function addMonths(monthStartDate: string, n: number): string {
   const [y, m] = monthStartDate.split("-").map(Number);
   const total = y! * 12 + (m! - 1) + n;
   const ny = Math.floor(total / 12);
+  if (ny < 1 || ny > 9999) throw new RevenueRecognitionError("recognition date exceeds the supported calendar");
   const nm = (total % 12) + 1;
   return `${String(ny).padStart(4, "0")}-${String(nm).padStart(2, "0")}-01`;
 }
@@ -60,7 +91,9 @@ function addMonths(monthStartDate: string, n: number): string {
 /** Days in the calendar month containing a YYYY-MM-DD date. */
 function daysInMonth(date: string): number {
   const [y, m] = date.split("-").map(Number);
-  return new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+  const end = new Date(0);
+  end.setUTCFullYear(y!, m!, 0);
+  return end.getUTCDate();
 }
 
 /** Last day of the month for a YYYY-MM-DD date, as YYYY-MM-DD. */
@@ -71,8 +104,7 @@ function monthEnd(date: string): string {
 
 /** Parse YYYY-MM-DD to a UTC epoch-day integer. */
 function epochDay(date: string): number {
-  const [y, m, d] = date.slice(0, 10).split("-").map(Number);
-  return Math.floor(Date.UTC(y!, m! - 1, d) / 86_400_000);
+  return Math.floor(recognitionDate(date).getTime() / 86_400_000);
 }
 
 /** Inclusive day count between two YYYY-MM-DD dates (end − start + 1). */
@@ -82,9 +114,12 @@ function inclusiveDays(startOn: string, endOn: string): number {
 
 /** Shift a YYYY-MM-DD date by n days, returning YYYY-MM-DD. */
 export function addDays(date: string, n: number): string {
-  const t = (epochDay(date) + n) * 86_400_000;
-  const dt = new Date(t);
-  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+  recognitionInteger(n, "day offset", -2147483648);
+  const dt = new Date((epochDay(date) + n) * 86_400_000);
+  if (Number.isNaN(dt.getTime()) || dt.getUTCFullYear() < 1 || dt.getUTCFullYear() > 9999) {
+    throw new RevenueRecognitionError("recognition date exceeds the supported calendar");
+  }
+  return dt.toISOString().slice(0, 10);
 }
 
 // ---------------------------------------------------------------------------
@@ -466,14 +501,18 @@ export interface RecognitionLinePlan {
 
 /** Cumulative-percent × total, exact to 4dp. */
 function pctOf(totalUnits: bigint, pct: string): bigint {
-  const clamped = cmp(pct, "0") < 0 ? "0" : cmp(pct, "100") > 0 ? "100" : pct;
-  return toUnits(mulPercent(fromUnits(totalUnits), clamped, 4));
+  try {
+    if (cmp(pct, "0") < 0 || cmp(pct, "100") > 0) throw new Error("out of range");
+    return toUnits(mulPercent(fromUnits(totalUnits), pct, 4));
+  } catch {
+    throw new RevenueRecognitionError("recognition percentage must be a decimal from 0 through 100");
+  }
 }
 
 /** Resolve the term end from an explicit endOn, else start + termPeriods. */
 function resolveEnd(startOn: string, input: RecognitionInput): string {
   if (input.endOn) return input.endOn;
-  const term = Math.max(1, Math.trunc(input.termPeriods ?? 1));
+  const term = recognitionInteger(input.termPeriods ?? 1, "recognition term", 1);
   return monthEnd(addMonths(monthStart(startOn), term - 1));
 }
 
@@ -503,8 +542,11 @@ function spreadWithInitial(input: RecognitionInput, start: string, weights: numb
  * the recognizable amount — the apportionment never loses or invents a cent.
  */
 export function computeRecognitionSchedule(input: RecognitionInput): RecognitionLinePlan[] {
-  const periodOffset = Math.max(0, Math.trunc(input.periodOffset ?? 0));
-  const rawStart = input.startOffsetDays ? addDays(input.startOn, Math.trunc(input.startOffsetDays)) : input.startOn;
+  recognitionDate(input.startOn, "recognition start");
+  if (input.endOn != null) recognitionDate(input.endOn, "recognition end");
+  if (input.termPeriods != null) recognitionInteger(input.termPeriods, "recognition term", 1);
+  const periodOffset = recognitionInteger(input.periodOffset ?? 0, "period offset", 0);
+  const rawStart = addDays(input.startOn, input.startOffsetDays ?? 0);
   const start = monthStart(rawStart);
 
   // Fail closed on an inverted term: end-before-start clamps every weight to
@@ -536,7 +578,10 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
 
       case "milestone":
       case "usage":
-        return (input.events ?? []).map((e) => ({ month: monthStart(e.periodMonth), units: toUnits(e.amount) }));
+        return (input.events ?? []).map((e) => {
+          eventMonth(e.periodMonth);
+          return { month: e.periodMonth, units: toUnits(e.amount) };
+        });
 
       case "straight_line_even": {
         const end = resolveEnd(rawStart, input);
@@ -572,7 +617,7 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
       }
 
       default:
-        return [];
+        throw new RevenueRecognitionError("invalid recognition method");
     }
   })();
 
@@ -639,6 +684,7 @@ async function buildRecognitionScheduleOn(
   const oblRes = (await runner.execute<{
       id: string;
       allocated_price: string;
+      status: string;
       recognition_starts_on: string | null;
       recognition_ends_on: string | null;
       percent_complete: string | null;
@@ -652,16 +698,18 @@ async function buildRecognitionScheduleOn(
       start_date_source: string;
       end_date_source: string;
     }>(sql`
-    select o.id, o.allocated_price, o.recognition_starts_on, o.recognition_ends_on,
+    select o.id, o.allocated_price, o.status, o.recognition_starts_on, o.recognition_ends_on,
            o.percent_complete, c.starts_on as contract_starts, c.ends_on as contract_ends,
            r.method, r.recognition_periods, r.period_offset, r.start_offset_days,
            r.initial_amount_percent, r.start_date_source, r.end_date_source
       from performance_obligations o
       join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
       join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
-     where o.id = ${obligationId} and o.org_id = ${orgId}`));
+     where o.id = ${obligationId} and o.org_id = ${orgId}
+     for update of o`));
   const o = oblRes.rows[0];
   if (!o) throw new Error("obligation not found");
+  if (o.status === "cancelled") throw new RevenueRecognitionError("cancelled obligations cannot be rebuilt");
 
   const startOn = o.recognition_starts_on ?? o.contract_starts;
   if (!startOn) throw new Error("obligation has no recognition start date");
@@ -697,12 +745,16 @@ async function buildRecognitionScheduleOn(
     select period_id, planned_amount, sequence from recognition_schedule_lines
      where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is not null`));
   const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
+  const postedByPeriod = new Map<string, string>();
+  for (const row of posted.rows) {
+    postedByPeriod.set(row.period_id, add(postedByPeriod.get(row.period_id) ?? "0", row.planned_amount));
+  }
   const postedToDate = sum(posted.rows.map((r) => r.planned_amount));
   const nextSequence = posted.rows.reduce((a, r) => Math.max(a, r.sequence + 1), 0);
 
   // Milestone and usage methods recognize from recorded events rather than
   // a term. Load the obligation's persisted events so computeRecognitionSchedule
-  // produces one line per event instead of a zero-line schedule.
+  // produces period targets that can be compared with posted recognition.
   const isMilestoneOrUsage = o.method === "milestone" || o.method === "usage";
   let events: { periodMonth: string; amount: string }[] | undefined;
   if (isMilestoneOrUsage) {
@@ -732,31 +784,56 @@ async function buildRecognitionScheduleOn(
   await runner.execute(sql`
     delete from recognition_schedule_lines where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is null`);
 
-  const skippedMonths: string[] = [];
-  let lineCount = 0;
+  // Events are immutable evidence; a period can receive more events after its
+  // first posting. Plan the period's current total less its posted amount as
+  // an additional line, preserving every prior posting and its sequence.
+  const periodPlans: { periodId: string; planned: string; sequence: number }[] = [];
+  const eventPlans = new Map<string, (typeof periodPlans)[number]>();
+  const periodIds = new Map<string, string>();
   for (const p of plan) {
-    const periodId = await periodForDate(runner, orgId, p.periodMonth);
+    const periodId = periodIds.get(p.periodMonth) ?? await periodForDate(runner, orgId, p.periodMonth);
     if (!periodId) {
       throw new RevenueRecognitionError(
         `no accounting period covers ${p.periodMonth} — provision all periods spanning the recognition term before building a schedule`,
       );
     }
-    // A period that already recognized is closed to re-planning — EXCEPT for
-    // percent_complete, where later catch-ups legitimately post additional
-    // lines into the current period (distinct sequence numbers).
-    if (!isPercentComplete && postedPeriods.has(periodId)) continue;
-    if (isPercentComplete && isZero(p.planned)) continue;
-    // Keep the rule's sequence for term/event schedules.  Their unposted
-    // lines represent fixed periods in the plan, so offsetting them by the
-    // count of posted lines would shift every line after the first posted
-    // period on a replay.  Percent-complete is different: each rebuild is a
-    // new catch-up entry, so it deliberately appends after posted sequences.
-    const sequence = isPercentComplete ? nextSequence + p.sequence : p.sequence;
+    periodIds.set(p.periodMonth, periodId);
+    if (isMilestoneOrUsage) {
+      const prior = eventPlans.get(periodId);
+      if (prior) prior.planned = add(prior.planned, p.planned);
+      else {
+        const pending = { periodId, planned: p.planned, sequence: p.sequence };
+        periodPlans.push(pending);
+        eventPlans.set(periodId, pending);
+      }
+    } else {
+      periodPlans.push({ periodId, planned: p.planned, sequence: p.sequence });
+    }
+  }
+
+  const skippedMonths: string[] = [];
+  let lineCount = 0;
+  for (const p of periodPlans) {
+    const { periodId } = p;
+    if (!isPercentComplete && !isMilestoneOrUsage && postedPeriods.has(periodId)) continue;
+    const planned = isMilestoneOrUsage
+      ? add(p.planned, neg(postedByPeriod.get(periodId) ?? "0"))
+      : p.planned;
+    if ((isPercentComplete || isMilestoneOrUsage) && isZero(planned)) continue;
+    const sequence = isPercentComplete || isMilestoneOrUsage ? nextSequence + lineCount : p.sequence;
     await runner.execute(sql`
       insert into recognition_schedule_lines
         (org_id, schedule_id, period_id, sequence, planned_amount, created_by, updated_by)
-      values (${orgId}, ${scheduleId}, ${periodId}, ${sequence}, ${p.planned}, ${actorId}, ${actorId})`);
+      values (${orgId}, ${scheduleId}, ${periodId}, ${sequence}, ${planned}, ${actorId}, ${actorId})`);
     lineCount++;
+  }
+  if (lineCount > 0) {
+    await runner.execute(sql`
+      update recognition_schedules set status = ${posted.rows.length ? "in_progress" : "planned"},
+        updated_at = now(), updated_by = ${actorId} where id = ${scheduleId} and org_id = ${orgId}`);
+    await runner.execute(sql`
+      update performance_obligations set status = 'open', updated_at = now(), updated_by = ${actorId}
+       where id = ${obligationId} and org_id = ${orgId} and status = 'satisfied'`);
   }
   return { scheduleId, lineCount, skippedMonths };
 }
@@ -803,7 +880,7 @@ export async function buildAllRecognitionSchedules(
   actorId: string | null,
   asOfDate?: string,
 ): Promise<BuildRecognitionResult[]> {
-  return buildAllRecognitionSchedulesOn(db, obligationId, orgId, actorId, asOfDate);
+  return db.transaction(tx => buildAllRecognitionSchedulesOn(tx, obligationId, orgId, actorId, asOfDate));
 }
 
 /**
@@ -848,7 +925,7 @@ export interface RecordRecognitionEventResult {
  * Record a milestone achievement or metered-usage occurrence for a performance
  * obligation. The event is persisted as subledger evidence and drives the next
  * schedule rebuild: the next call to buildRecognitionSchedule on the obligation
- * will load these events and produce one schedule line per event.
+ * will load these events and plan each period's unrecognized balance.
  *
  * Corrections and amendments are additive — posting history is never rewritten.
  * A correction event with a negative amount reverses the prior recognition in
@@ -857,6 +934,10 @@ export interface RecordRecognitionEventResult {
 export async function recordRecognitionEvent(
   input: RecordRecognitionEventInput,
 ): Promise<RecordRecognitionEventResult> {
+  eventMonth(input.periodMonth);
+  const amount = recognitionEventDecimal(input.amount, "event amount");
+  const unitRate = input.unitRate == null ? null : recognitionEventDecimal(input.unitRate, "event unit rate");
+  const quantity = input.quantity == null ? null : recognitionEventDecimal(input.quantity, "event quantity");
   const sourceReference = typeof input.sourceReference === "string"
     ? input.sourceReference.trim()
     : "";
@@ -874,14 +955,16 @@ export async function recordRecognitionEvent(
     await assertEnabled(tx, input.orgId);
 
     // Validate the obligation exists and uses a milestone or usage method.
-    const oblRes = (await tx.execute<{ id: string; method: string }>(sql`
-      select o.id, r.method
+    const oblRes = (await tx.execute<{ id: string; method: string; status: string }>(sql`
+      select o.id, r.method, o.status
         from performance_obligations o
         join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
-       where o.id = ${input.obligationId} and o.org_id = ${input.orgId}`));
+       where o.id = ${input.obligationId} and o.org_id = ${input.orgId}
+       for update of o`));
     if (!oblRes.rows[0]) {
       throw new RevenueRecognitionError("obligation not found");
     }
+    if (oblRes.rows[0].status === "cancelled") throw new RevenueRecognitionError("cancelled obligations cannot accept recognition events");
     if (oblRes.rows[0].method !== "milestone" && oblRes.rows[0].method !== "usage") {
       throw new RevenueRecognitionError(
         `recognition method '${oblRes.rows[0].method}' does not accept events; only milestone and usage methods are supported`,
@@ -896,8 +979,8 @@ export async function recordRecognitionEvent(
         (org_id, obligation_id, period_month, amount, description, source_reference,
          unit_rate, quantity, created_by, updated_by)
       values (${input.orgId}, ${input.obligationId}, ${input.periodMonth},
-              ${input.amount}, ${input.description ?? null}, ${sourceReference},
-              ${input.unitRate ?? null}, ${input.quantity ?? null},
+              ${amount}, ${input.description ?? null}, ${sourceReference},
+              ${unitRate}, ${quantity},
               ${input.actorId}, ${input.actorId})
       on conflict (org_id, obligation_id, source_reference)
         where source_reference is not null
@@ -920,11 +1003,11 @@ export async function recordRecognitionEvent(
       select id,
              (
                period_month = ${input.periodMonth}
-               and amount = ${input.amount}::numeric
+               and amount = ${amount}::numeric
                and description is not distinct from ${input.description ?? null}
                and source_reference = ${sourceReference}
-               and unit_rate is not distinct from ${input.unitRate ?? null}::numeric
-               and quantity is not distinct from ${input.quantity ?? null}::numeric
+               and unit_rate is not distinct from ${unitRate}::numeric
+               and quantity is not distinct from ${quantity}::numeric
              ) as payload_matches
         from recognition_events
        where org_id = ${input.orgId}
@@ -1204,6 +1287,20 @@ export interface RunRecognitionResult {
   problems: string[];
 }
 
+function recognitionObligationScope(orgId: string, allowedSubsidiaryIds?: readonly string[]) {
+  if (allowedSubsidiaryIds === undefined) return sql`true`;
+  return sql`exists (
+    select 1 from revenue_contracts scoped_contract
+      left join document_lines scoped_line on scoped_line.id = o.document_line_id and scoped_line.org_id = o.org_id
+      left join documents scoped_document on scoped_document.id = scoped_line.document_id and scoped_document.org_id = o.org_id
+      left join projects scoped_project on scoped_project.id = scoped_contract.project_id and scoped_project.org_id = o.org_id
+     where scoped_contract.id = o.contract_id and scoped_contract.org_id = o.org_id
+       and coalesce(scoped_line.subsidiary_id, scoped_document.subsidiary_id, scoped_project.subsidiary_id,
+         (select id from subsidiaries where org_id = ${orgId} order by created_at, id limit 1))
+         = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])
+  )`;
+}
+
 /**
  * Post every due, unposted recognition line whose period ends on or before
  * `asOfDate`. Each line becomes one balanced journal entry (DR deferred / CR
@@ -1218,8 +1315,10 @@ export async function runRevenueRecognition(
   obligationId?: string,
   allowedSubsidiaryIds?: string[],
 ): Promise<RunRecognitionResult> {
+  recognitionDate(asOfDate, "recognition as-of date");
   await assertEnabled(db, orgId);
   const subsidiaryContext = await loadSubsidiaryContext(db, orgId);
+  const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds);
 
   const due = (await db.execute<any>(sql`
     select l.id             as line_id,
@@ -1267,18 +1366,19 @@ export async function runRevenueRecognition(
       left join subsidiaries sub on sub.id = coalesce(dl.subsidiary_id, doc.subsidiary_id) and sub.org_id = o.org_id
       left join subsidiaries psub on psub.id = prj.subsidiary_id and psub.org_id = prj.org_id
       left join lateral (
-        select id, base_currency from subsidiaries where org_id = ${orgId} order by created_at limit 1
+        select id, base_currency from subsidiaries where org_id = ${orgId} order by created_at, id limit 1
       ) sub0 on true
      where l.org_id = ${orgId}
        and l.journal_entry_id is null
        and o.status <> 'cancelled'
+       and not r.is_forecast
        -- Scheduled methods recognize a period once it has ENDED; percent_complete
        -- is a measurement AS OF the date, so its catch-up in the current period
        -- is due as soon as the period has started.
        and (p.ends_on <= ${asOfDate}
             or (r.method = 'percent_complete' and p.starts_on <= ${asOfDate}))
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
-       ${allowedSubsidiaryIds ? sql`and coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, sub0.id) = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
+       and ${obligationScope}
      order by c.contract_number, o.description, l.sequence`));
 
   const result: RunRecognitionResult = { posted: 0, skipped: 0, totalAmount: "0", entries: [], problems: [] };
@@ -1341,6 +1441,17 @@ export async function runRevenueRecognition(
       row.method === "percent_complete" && asOfDate < row.period_ends_on ? asOfDate : row.period_ends_on;
     try {
       const posted = await db.transaction(async (tx) => {
+        // Rebuilding, event recording and cancellation all lock this obligation
+        // before touching schedule lines. Recheck mutable eligibility after the
+        // preliminary scan and before claiming any line.
+        const obligation = await tx.execute<{ id: string }>(sql`
+          select o.id from performance_obligations o
+            join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
+           where o.org_id = ${orgId} and o.id = ${row.obligation_id}
+             and o.status <> 'cancelled' and not r.is_forecast
+             and ${obligationScope}
+           for update of o`);
+        if (!obligation.rows[0]) return { status: "already_posted" as const };
         // Claim the schedule line at the aggregate root. Concurrent runners
         // serialize here; after the winner commits, the loser no longer
         // satisfies journal_entry_id is null and cannot create a second entry.
@@ -1435,6 +1546,7 @@ export async function runRevenueRecognition(
       join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
       join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
      where o.org_id = ${orgId} and o.status = 'open'
+       and not r.is_forecast and ${obligationScope}
        and r.method in ('milestone', 'usage')
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
        and (
@@ -1467,8 +1579,17 @@ export async function runRevenueRecognition(
      where r.id = o.recognition_rule_id
        and r.org_id = o.org_id
        and o.org_id = ${orgId} and o.status = 'open'
+       and not r.is_forecast and ${obligationScope}
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
        and (r.method <> 'percent_complete' or coalesce(o.percent_complete, '0')::numeric >= 100)
+       and (r.method not in ('milestone', 'usage') or not exists (
+         select 1 from recognition_schedules event_schedule
+          where event_schedule.org_id = o.org_id and event_schedule.obligation_id = o.id
+            and coalesce((select sum(event_line.recognized_amount)
+              from recognition_schedule_lines event_line
+              where event_line.org_id = o.org_id and event_line.schedule_id = event_schedule.id
+                and event_line.journal_entry_id is not null), 0) <> o.allocated_price
+       ))
        and exists (
          select 1 from recognition_schedule_lines l
            join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
@@ -1485,7 +1606,10 @@ export async function runRevenueRecognition(
         when exists (select 1 from recognition_schedule_lines l where l.schedule_id = s.id and l.org_id = s.org_id and l.journal_entry_id is not null) then 'in_progress'
         else 'planned' end,
       updated_at = now()
-    where s.org_id = ${orgId}
+    from performance_obligations o
+      join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
+    where s.org_id = ${orgId} and s.obligation_id = o.id and s.org_id = o.org_id
+      and o.status <> 'cancelled' and not r.is_forecast and ${obligationScope}
       ${obligationId ? sql`and s.obligation_id = ${obligationId}` : sql``}`);
 
   return result;

@@ -1303,6 +1303,16 @@ export async function reverseSecurityDepositTransaction(input: {
   if (!reason) throw new PropertyManagementError("Reversal reason is required");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
+    // Use the same aggregate lock as receipts, refunds and applications before
+    // reading the balance. A source-transaction lock alone cannot serialize a
+    // reversal against activity on another deposit transaction for this lease.
+    const lease = await tx.execute<{ id: string }>(sql`
+      select l.id from property_leases l
+        join security_deposit_transactions t on t.lease_id=l.id and t.org_id=l.org_id
+       where t.org_id=${input.orgId} and t.id=${input.transactionId}
+       for update of l
+    `);
+    if (!lease.rows[0]) throw new PropertyManagementError("Deposit transaction not found");
     const context = (await tx.execute<DepositReversalRow>(sql`
       select t.*,p.subsidiary_id,p.currency,s.base_currency,je.book_id,
         exists(select 1 from security_deposit_transactions r where r.org_id=t.org_id and r.reversal_of_id=t.id) as already_reversed,

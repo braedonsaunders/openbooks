@@ -612,6 +612,20 @@ export async function completeMfaLogin(
   const { networkHash, userAgentHash } = contextHashes(context);
 
   return withBypass(async () => {
+    // Match password/OIDC login's lock order: rate-limit locks, user, then
+    // challenge/factor. A password reset locks the user before invalidating
+    // challenges, so completion cannot mint a session from the old password
+    // after the reset's session-revocation scan.
+    const identity = (await db.execute<{ emailHash: string }>(sql`
+      select email_hash as "emailHash" from auth_login_challenges
+       where id = ${challengeToken.challengeId} and user_id = ${challengeToken.userId}
+    `)).rows[0];
+    if (!identity) return { kind: "invalid", retryAfter: 0 };
+    await acquireAuthLocks(identity.emailHash, networkHash);
+    const activeUser = await db.execute<{ id: string }>(sql`
+      select id from users where id = ${challengeToken.userId} and is_active for update
+    `);
+    if (!activeUser.rows[0]) return { kind: "invalid", retryAfter: 0 };
     const challengeResult = (await db.execute<{ userId: string; emailHash: string; authMethod: AuthMethod; expiresAt: Date; consumedAt: Date | null }>(sql`
       select c.user_id as "userId", c.email_hash as "emailHash", c.auth_method as "authMethod",
              c.expires_at as "expiresAt", c.consumed_at as "consumedAt"
@@ -623,7 +637,6 @@ export async function completeMfaLogin(
     if (!challenge || challenge.consumedAt || (dateValue(challenge.expiresAt)?.getTime() ?? 0) <= Date.now()) {
       return { kind: "invalid", retryAfter: 0 };
     }
-    await acquireAuthLocks(challenge.emailHash, networkHash);
     const state = await ensureLoginState(challenge.emailHash, challenge.userId);
     const counts = await recentAttemptCounts(challenge.emailHash, networkHash, challenge.userId);
     const limit = attemptRateLimit(counts, true);
@@ -790,6 +803,15 @@ export async function confirmMfaSetup(
   suppliedCode: string,
 ): Promise<string[] | null> {
   return withBypass(async () => {
+    const user = await db.execute<{ id: string }>(sql`
+      select id from users where id = ${userId} and is_active for update
+    `);
+    if (!user.rows[0]) return null;
+    const session = await db.execute<{ id: string }>(sql`
+      select id from auth_sessions where id = ${currentSessionId} and user_id = ${userId}
+        and revoked_at is null and expires_at > now() for update
+    `);
+    if (!session.rows[0]) return null;
     const result = (await db.execute<{
       secretEncrypted: string;
       enabledAt: Date | null;
