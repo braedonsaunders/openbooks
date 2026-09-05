@@ -1,4 +1,5 @@
 import "server-only";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
@@ -119,6 +120,7 @@ function gradeOf(score: number): Grade {
 export async function vendorData(
   period: { from: string; to: string; label: string },
   orgId: string,
+  allowed: ReadonlySet<string> | null,
 ): Promise<VendorData> {
   const { from, to } = period;
   const pFrom = priorYear(from);
@@ -146,6 +148,7 @@ export async function vendorData(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join parties p on p.id = l.party_id and p.org_id = l.org_id
       where l.org_id = ${orgId} and a.org_id = ${orgId} and p.org_id = ${orgId}
+        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
         and a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
       group by p.id, p.display_name
     `),
@@ -154,6 +157,7 @@ export async function vendorData(
       from documents
       where org_id = ${orgId} and kind = 'vendor_bill' and party_id is not null and status = 'posted'
         and posting_date >= ${from} and posting_date <= ${ref}
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
       group by party_id
     `),
     db.execute<MonthSpendRow>(sql`
@@ -167,6 +171,7 @@ export async function vendorData(
       join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and a.org_id = ${orgId}
+        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
         and a.type in ('cogs','expense','expense_deferred')
       group by 1
     `),
@@ -189,6 +194,8 @@ export async function vendorData(
         join accounts ba on ba.id = bl.account_id and ba.org_id = bl.org_id
         where a.org_id = ${orgId} and bl.org_id = ${orgId} and be.org_id = ${orgId}
           and pl.org_id = ${orgId} and pe.org_id = ${orgId} and ba.org_id = ${orgId}
+          ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowed)}
+          ${subsidiaryVisibleFilter(sql`pl.subsidiary_id`, allowed)}
           and ba.type = 'liability_payable' and a.unapplied_at is null and bl.party_id is not null
           and be.posting_date >= ${from} and be.posting_date <= ${to}
       ), bill_payments as (

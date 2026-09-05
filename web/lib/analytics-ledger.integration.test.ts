@@ -56,16 +56,16 @@ for (const view of ['vendor total', 'vendor months', 'spend accounts', 'spend ve
         await withOrgContext(org.orgId, async () => {
           const period = { from: '2026-07-01', to: '2026-07-31', label: 'Ledger review' };
           if (view === 'vendor total' || view === 'vendor months') {
-            const data = await vendorData(period, org.orgId);
+            const data = await vendorData(period, org.orgId, null);
             if (view === 'vendor total') assert.equal(data.totals.spend, 100);
             else assert.equal(data.monthly.find(row => row.month === '2026-07')?.spend, 100);
           } else if (view === 'customer profitability') {
-            const data = await customerProfitability(period, org.orgId);
+            const data = await customerProfitability(period, org.orgId, null);
             assert.equal(data.summary.totalRevenue, 200);
             assert.equal(data.summary.totalCost, 100);
             assert.equal(data.summary.totalGrossProfit, 100);
           } else {
-            const data = await spendVelocityData(org.orgId, period);
+            const data = await spendVelocityData(org.orgId, period, null);
             if (view === 'spend accounts') assert.equal(data.summary.totalSpend, 100);
             if (view === 'spend vendors') assert.equal(data.vendorVelocity.find(row => row.id === org.vendorId)?.totalSpend, 100);
             if (view === 'spend revenue') assert.equal(data.revenue.totalRevenue, 200);

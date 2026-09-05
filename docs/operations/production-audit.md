@@ -1051,3 +1051,33 @@ bootstraps, teardowns and schema verifications, with zero active leases or
 leak detections. Runtime was 1,081,609 ms. The log and lifecycle receipt are
 under `audit-health-scope-2026-09-05`; this full-run result applies to that
 revision, before the subsequent cash, calendar and analytics-ledger fixes.
+
+## Analytics subsidiary controls — continuation from cb915e0d
+
+Customer Intelligence (including project profitability), Vendor Intelligence
+and Spend Velocity accepted only an organization and period. Their pages and
+assistant tools had the caller's subsidiary grants but did not pass them to
+the data services, so restricted users received other legal entities' amounts
+and names. Required scope parameters now reach ledger lines, source documents,
+project ownership, invoice/payment history, customer cohorts, commitment
+orders and expense reports. Empty grants produce no transactional data.
+
+The initial database authorization matrix reproduced 18 failures across
+service, rendered page and public assistant dispatch; all nine unrestricted
+controls passed. Expanded coverage also checks shared counterparties' payment
+history and the independent purchase/sales-order and expense-report queries.
+Receipts are retained under `audit-analytics-scope-2026-09-05` in thread storage.
+
+The expanded tests also exposed a separate commitment-summary defect: a
+single populated month was returned as zero PO/SO totals, a zero ratio and
+healthy status. Totals and ratio-based classification now use the observed
+orders for every history length; only growth estimates require multiple
+months. Empty, balanced and excessive-purchase cases verify that distinction.
+The combined focused database run passed 85 tests.
+
+All 3,056 unit tests, web typechecking and the locked production build passed
+on the final correction; explicit-any and lint ceilings remain 391 and 725.
+The two Redis-dependent scheduler cases previously skipped in full runs also
+passed against an isolated local Redis instance: crash/retry deduplication and
+deterministic recipient fanout. That focused receipt is under
+`audit-redis-queue-2026-09-05`; it is separate from the full-run receipt above.

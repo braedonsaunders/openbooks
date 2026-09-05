@@ -27,7 +27,7 @@ export default async function SpendVelocityPage({
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
-  const data = await spendVelocityData(authz.user.orgId, { from: period.from, to: period.to, label: period.label })
+  const data = await spendVelocityData(authz.user.orgId, { from: period.from, to: period.to, label: period.label }, authz.allowedSubsidiaryIds)
 
   return (
     <ListPageLayout

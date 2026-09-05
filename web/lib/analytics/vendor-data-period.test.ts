@@ -43,6 +43,7 @@ const mockSources = new Map<string, string>([
     "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.vendor-data-period-test')]
+      export async function withBypassContext(fn) { return fn() }
 
       function billRows(query) {
         const values = query.values
@@ -120,6 +121,7 @@ test("vendor performance counts only bills inside the selected period", async ()
   const result = await vendorData(
     { from: "2024-01-01", to: "2024-03-31", label: "Q1 2024" },
     "org-1",
+    null,
   );
 
   const withBills = result.rows.find((row) => row.id === "vendor-with-bills");

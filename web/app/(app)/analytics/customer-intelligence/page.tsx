@@ -29,8 +29,8 @@ export default async function CustomerIntelligencePage({
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
   const [data, profitability, projectsEnabled] = await Promise.all([
-    customerData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId),
-    customerProfitability({ from: period.from, to: period.to }, authz.user.orgId),
+    customerData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds),
+    customerProfitability({ from: period.from, to: period.to }, authz.user.orgId, authz.allowedSubsidiaryIds),
     isFeatureEnabled(authz.user.orgId, 'projects'),
   ])
 
