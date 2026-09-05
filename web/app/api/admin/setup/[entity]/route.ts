@@ -42,6 +42,30 @@ export const runtime = 'nodejs'
 
 const PERMISSION = 'admin.setup.manage'
 
+/** Reassign the one default book under the caller's tenant advisory lock,
+ * retaining the locked state of every demoted row in the same transaction. */
+async function demoteSetupBooks(
+  entity: SetupEntity, orgId: string, actorId: string,
+  flag: 'is_primary' | 'is_default', reason: string,
+  tx: Pick<typeof db, 'execute'>, exceptId: string | null = null,
+): Promise<void> {
+  const scope = sql`org_id = ${orgId} and ${sql.identifier(flag)}
+    ${exceptId ? sql`and id <> ${exceptId}` : sql``}`
+  const before = (await tx.execute(sql`
+    select * from ${sql.raw(entity.table)} where ${scope} order by id for update`)).rows
+  if (!before.length) return
+  const prior = new Map(before.map(row => [String(row.id), row]))
+  const demoted = (await tx.execute(sql`
+    update ${sql.raw(entity.table)} set ${sql.identifier(flag)} = false,
+      updated_at = now(), updated_by = ${actorId} where ${scope} returning *`)).rows
+  for (const after of demoted) {
+    const previous = prior.get(String(after.id))
+    if (!previous) throw new Error('book reassignment is missing its prior state')
+    await audit({ orgId, table: entity.table, rowId: String(after.id), action: 'update',
+      changes: { before: previous, after, reason }, actorId }, tx)
+  }
+}
+
 const FX_RATE_COLUMNS = new Set(['rate', 'current_rate', 'average_rate', 'historical_rate'])
 
 /** Compare values read from PostgreSQL with the normalized values produced by
@@ -673,19 +697,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
           ) as has_primary`)))
         const isPrimary = coerceBoolean(body.isPrimary) || !current.rows[0]?.has_primary
         const isActive = isPrimary || body.isActive === undefined || coerceBoolean(body.isActive)
-        if (isPrimary) {
-          const demoted = ((await tx.execute(sql`
-            update accounting_books
-               set is_primary = false, updated_at = now(), updated_by = ${actorId}
-             where org_id = ${orgId} and is_primary
-            returning id`)))
-          for (const book of demoted.rows) {
-            await tx.execute(sql`
-              insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-              values (${orgId}, 'accounting_books', ${String(book.id)}, 'update',
-                      ${JSON.stringify({ is_primary: false, reason: 'primary-book-reassigned' })}, ${actorId})`)
-          }
-        }
+        if (isPrimary) await demoteSetupBooks(entity, orgId, actorId, 'is_primary', 'primary-book-reassigned', tx)
         const inserted = (await tx.execute(sql`
           insert into accounting_books
             (org_id, code, name, is_primary, is_active, created_by, updated_by)
@@ -693,11 +705,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
             (${orgId}, ${String(body.code)}, ${String(body.name)}, ${isPrimary}, ${isActive}, ${actorId}, ${actorId})
           returning id`)) as any
         const id = String(inserted.rows[0].id)
-        await tx.execute(sql`
-          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'accounting_books', ${id}, 'insert',
-                  ${JSON.stringify({ code: body.code, name: body.name, is_primary: isPrimary, is_active: isActive })},
-                  ${actorId})`)
+        await audit({ orgId, table: entity.table, rowId: id, action: 'insert',
+          changes: { after: await loadSetupAuditRow(entity, orgId, id, tx) }, actorId }, tx)
         return id
       })
       return NextResponse.json({ id })
@@ -721,15 +730,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
         `)))
         const isDefault = coerceBoolean(body.isDefault) || !current.rows[0]?.has_default
         const isActive = isDefault || body.isActive === undefined || coerceBoolean(body.isActive)
-        if (isDefault) {
-          const demoted = ((await tx.execute(sql`
-            update item_rate_books set is_default = false, updated_at = now(), updated_by = ${actorId}
-             where org_id = ${orgId} and is_default returning id
-          `)))
-          for (const book of demoted.rows) {
-            await audit({ orgId, table: 'item_rate_books', rowId: String(book.id), action: 'update', changes: { is_default: false, reason: 'default-rate-book-reassigned' }, actorId }, tx)
-          }
-        }
+        if (isDefault) await demoteSetupBooks(entity, orgId, actorId, 'is_default', 'default-rate-book-reassigned', tx)
         const org = ((await tx.execute(sql`
           select base_currency from orgs where id = ${orgId}
         `)))
@@ -742,7 +743,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
                   ${isDefault}, ${isActive}, ${actorId}, ${actorId}) returning id
         `)) as any
         const id = String(inserted.rows[0].id)
-        await audit({ orgId, table: 'item_rate_books', rowId: id, action: 'insert', changes: { ...body, isDefault, isActive }, actorId }, tx)
+        await audit({ orgId, table: entity.table, rowId: id, action: 'insert',
+          changes: { after: await loadSetupAuditRow(entity, orgId, id, tx) }, actorId }, tx)
         return id
       })
       return NextResponse.json({ id })
@@ -802,7 +804,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
         const effectiveFrom = String(body.effectiveFrom)
         const prior = coerceBoolean(body.isActive)
           ? ((await tx.execute(sql`
-              select id from pay_derived_rules
+              select * from pay_derived_rules
                where org_id = ${orgId} and code = ${String(body.code)}
                  and is_active
                  and effective_from < ${effectiveFrom}::date
@@ -815,13 +817,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
                set effective_to = (${effectiveFrom}::date - 1),
                    updated_at = now(), updated_by = ${actorId}
              where id = ${String(row.id)} and org_id = ${orgId}
-            returning effective_to`)))
+            returning *`)))
           await audit({
             orgId,
             table: entity.table,
             rowId: String(row.id),
             action: 'update',
-            changes: { effective_to: String(closed.rows[0]?.effective_to ?? '') },
+            changes: { before: row, after: closed.rows[0] },
             actorId,
           }, tx)
         }
@@ -834,7 +836,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
           table: entity.table,
           rowId: id,
           action: 'insert',
-          changes: Object.fromEntries(built.cols.map((column) => [column.column, column.value])),
+          changes: { after: await loadSetupAuditRow(entity, orgId, id, tx) },
           actorId,
         }, tx)
         return id
@@ -921,26 +923,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
       await db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`accounting-books:${orgId}`}, 0))`)
         const existing = ((await tx.execute(sql`
-          select id, is_primary from accounting_books
+          select * from accounting_books
            where id = ${id} and org_id = ${orgId} for update`)))
         if (!existing.rows[0]) throw new Error('not found')
         const isPrimary = coerceBoolean(body.isPrimary)
         const isActive = coerceBoolean(body.isActive)
         if (existing.rows[0].is_primary && !isPrimary) throw new Error('primary-required')
         if (isPrimary && !isActive) throw new Error('primary-active-required')
-        if (isPrimary) {
-          const demoted = ((await tx.execute(sql`
-            update accounting_books
-               set is_primary = false, updated_at = now(), updated_by = ${actorId}
-             where org_id = ${orgId} and id <> ${id} and is_primary
-            returning id`)))
-          for (const book of demoted.rows) {
-            await tx.execute(sql`
-              insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-              values (${orgId}, 'accounting_books', ${String(book.id)}, 'update',
-                      ${JSON.stringify({ is_primary: false, reason: 'primary-book-reassigned' })}, ${actorId})`)
-          }
-        }
+        if (isPrimary) await demoteSetupBooks(entity, orgId, actorId, 'is_primary', 'primary-book-reassigned', tx, id)
         const updated = ((await tx.execute(sql`
           update accounting_books
              set name = ${String(body.name)}, is_primary = ${isPrimary}, is_active = ${isActive},
@@ -948,11 +938,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
            where id = ${id} and org_id = ${orgId}
           returning id`)))
         if (!updated.rows.length) throw new Error('not found')
-        await tx.execute(sql`
-          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'accounting_books', ${id}, 'update',
-                  ${JSON.stringify({ name: body.name, is_primary: isPrimary, is_active: isActive })},
-                  ${actorId})`)
+        await audit({ orgId, table: entity.table, rowId: id, action: 'update',
+          changes: { before: existing.rows[0], after: await loadSetupAuditRow(entity, orgId, id, tx) }, actorId }, tx)
       })
       return NextResponse.json({ id })
     } catch (e) {
@@ -975,21 +962,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
       await db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
         const existing = ((await tx.execute(sql`
-          select id, is_default from item_rate_books where id = ${id} and org_id = ${orgId} for update
+          select * from item_rate_books where id = ${id} and org_id = ${orgId} for update
         `)))
         if (!existing.rows[0]) throw new Error('not found')
         const isDefault = coerceBoolean(body.isDefault)
         const isActive = coerceBoolean(body.isActive)
         if (existing.rows[0].is_default && (!isDefault || !isActive)) throw new Error('default-required')
-        if (isDefault) {
-          const demoted = ((await tx.execute(sql`
-            update item_rate_books set is_default = false, updated_at = now(), updated_by = ${actorId}
-             where org_id = ${orgId} and id <> ${id} and is_default returning id
-          `)))
-          for (const book of demoted.rows) {
-            await audit({ orgId, table: 'item_rate_books', rowId: String(book.id), action: 'update', changes: { is_default: false, reason: 'default-rate-book-reassigned' }, actorId }, tx)
-          }
-        }
+        if (isDefault) await demoteSetupBooks(entity, orgId, actorId, 'is_default', 'default-rate-book-reassigned', tx, id)
         const updated = ((await tx.execute(sql`
           update item_rate_books set name = ${String(body.name)},
                  currency = case when ${body.currency === undefined} then currency else ${String(body.currency)} end,
@@ -997,7 +976,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
            where id = ${id} and org_id = ${orgId} returning id
         `)))
         if (!updated.rows.length) throw new Error('not found')
-        await audit({ orgId, table: 'item_rate_books', rowId: id, action: 'update', changes: body, actorId }, tx)
+        await audit({ orgId, table: entity.table, rowId: id, action: 'update',
+          changes: { before: existing.rows[0], after: await loadSetupAuditRow(entity, orgId, id, tx) }, actorId }, tx)
       })
       return NextResponse.json({ id })
     } catch (e) {
@@ -1038,7 +1018,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
 
         if (!changedPolicy) {
           const updated = ((await tx.execute(sql`
-            update pay_derived_rules set ${sql.join(setParts, sql`, `)}
+            update pay_derived_rules set
+              ${sql.join(built.cols.map(column => sql`${sql.raw(column.column)} = ${column.value}`), sql`, `)},
+              updated_at = now(), updated_by = ${actorId}
              where id = ${id} and org_id = ${orgId}
             returning id`)))
           if (!updated.rows.length) throw new Error('not found')
@@ -1047,7 +1029,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
             table: entity.table,
             rowId: id,
             action: 'update',
-            changes: Object.fromEntries(built.cols.map((column) => [column.column, column.value])),
+            changes: { before: current, after: await loadSetupAuditRow(entity, orgId, id, tx) },
             actorId,
           }, tx)
           return id
@@ -1069,17 +1051,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
         // exact record of what was configured.
         const priorEffectiveTo = current.effective_to == null ? null : String(current.effective_to)
         const closesPrior = priorEffectiveTo == null || priorEffectiveTo >= effectiveFrom
-        let closedEffectiveTo: string | null = null
         if (closesPrior) {
-          const closed = ((await tx.execute(sql`
+          await tx.execute(sql`
             update pay_derived_rules
                set effective_to = (${effectiveFrom}::date - 1),
                    updated_at = now(), updated_by = ${actorId}
              where id = ${id} and org_id = ${orgId}
-            returning effective_to`)))
-          closedEffectiveTo = closed.rows[0]?.effective_to == null
-            ? null
-            : String(closed.rows[0].effective_to)
+          `)
         }
 
         const successorColumns = [
@@ -1106,7 +1084,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
             table: entity.table,
             rowId: id,
             action: 'update',
-            changes: { effective_to: closedEffectiveTo },
+            changes: { before: current, after: await loadSetupAuditRow(entity, orgId, id, tx) },
             actorId,
           }, tx)
         }
@@ -1115,11 +1093,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
           table: entity.table,
           rowId: successorId,
           action: 'insert',
-          changes: Object.fromEntries(
-            successorColumns
-              .filter((column) => !['org_id', 'created_by', 'updated_by'].includes(column))
-              .map((column) => [column, column === 'code' ? current.code : valueFor(column)]),
-          ),
+          changes: { after: await loadSetupAuditRow(entity, orgId, successorId, tx) },
           actorId,
         }, tx)
         return successorId

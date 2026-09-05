@@ -1957,3 +1957,36 @@ passed, and the warning/explicit-any ceilings remain 725/391. Evidence is under
 This repair covers the generic setup mutation path. Specialized book-promotion and
 effective-versioning branches still need their own complete snapshot audit; this
 checkpoint does not certify those branches or the entire configuration surface.
+
+## Specialized setup evidence and derived-rule lifecycle
+
+Continuation from `516a0cdb` reproduced eight failures in the specialized setup
+branches. Book creation, promotion and default reassignment omitted complete
+stored snapshots; derived-rule creation and effective-date closure did the same.
+Archiving a rule or closing its window without changing pricing also accessed
+`setParts` before initialization and returned a runtime error instead of saving.
+
+Book promotions now share a transaction helper that locks every row being demoted
+and records its actual before/after state plus the reassignment reason. Both
+creation and promotion record the new/current book's complete stored state.
+Derived-rule creation, successor insertion and prior-window closure likewise use
+actual snapshots. The unchanged-policy path builds its own validated assignments,
+preserves the rule identity and records the successful lifecycle change.
+
+All 57 focused checks passed (14,605.8535 ms; zero skips), including 20 new cases
+covering both book types and entry points, rule creation/versioning/archive/window
+edits, and rollback when either stage of a compound operation cannot append its
+evidence. Eight authenticated production-browser checks passed, with retained
+actor/snapshot receipts. The browser fixture initially omitted the Payroll feature
+and correctly received 404; the final run enabled it explicitly. Workspace types,
+the locked production build and all 3,149 unit tests passed (162,058.127334 ms;
+zero skips). Warning and explicit-any ceilings remain 725 and 391. Evidence is
+under `audit-setup-specialized-evidence-2026-09-05`.
+
+The fresh full integration run at `49b17c21` passed all 2,172 tests with zero skips
+(1,189,243.166 ms). Its lifecycle receipt balances 1,773 leases/releases/resets,
+four bootstrap/teardown/verification cycles, zero active leases and zero leaks.
+This establishes a passing checkpoint after the earlier failed run; it does not
+retroactively change that failure. The checkpoint includes the fixture and app
+definition fixes, but predates the category and setup changes above. Their full
+integration checkpoint remains to be established.
