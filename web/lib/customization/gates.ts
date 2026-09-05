@@ -2,6 +2,8 @@ import 'server-only'
 import { NextResponse } from 'next/server'
 import {
   RECORD_TYPE_BY_KEY,
+  CUSTOM_FIELD_TARGETS,
+  customFieldTargetFor,
   RECORD_TYPES,
   recordTypeFeatureKey,
 } from '@openbooks/customization'
@@ -32,7 +34,10 @@ export function customFieldTargetFeatureKey(table: string, kind?: string | null)
   if (kind) return recordTypeFeatureKey(kind)
   const keys = new Set(
     RECORD_TYPES
-      .filter((rt) => (rt.customFieldTable ?? 'documents') === table)
+      .filter((rt) => {
+        const target = customFieldTargetFor(rt.key)
+        return target.table === table || target.lineTable === table
+      })
       .map((rt) => rt.featureKey ?? null),
   )
   if (keys.size === 1) {
@@ -53,15 +58,6 @@ export async function isCustomFieldTargetEnabled(
   return isFeatureEnabled(orgId, feature)
 }
 
-const OPTIONAL_CUSTOM_FIELD_TABLES = [
-  'projects',
-  'managed_properties',
-  'item_rate_versions',
-  'crm_account_profiles',
-  'crm_activities',
-  'crm_opportunities',
-] as const
-
 /** Tables / kinds whose Features switch is off. Historical defs stay. */
 export async function disabledCustomFieldTargets(orgId: string): Promise<{ kinds: string[]; tables: string[] }> {
   const state = await orgFeatureState(orgId)
@@ -69,7 +65,7 @@ export async function disabledCustomFieldTargets(orgId: string): Promise<{ kinds
     kinds: RECORD_TYPES.flatMap((rt) =>
       rt.featureKey && !featureEnabled(state, rt.featureKey) ? [rt.key] : [],
     ),
-    tables: OPTIONAL_CUSTOM_FIELD_TABLES.filter((table) => {
+    tables: CUSTOM_FIELD_TARGETS.map((target) => target.table).filter((table) => {
       const key = customFieldTargetFeatureKey(table)
       return Boolean(key && !featureEnabled(state, key))
     }),

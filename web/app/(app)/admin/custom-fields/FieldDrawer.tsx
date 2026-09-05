@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { GripVertical, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
+import { CUSTOM_FIELD_TARGETS as TARGETS } from '@openbooks/customization'
 import { BUILT_IN_ROLE_KEYS, BUILT_IN_ROLES } from '@/lib/permissions'
 
 const DISPLAY_MODES = [
@@ -18,59 +19,6 @@ const ROLE_OPTIONS = BUILT_IN_ROLE_KEYS.map((k) => ({
   value: k,
   label: BUILT_IN_ROLES[k]?.name ?? k,
 }))
-
-// The record types a custom field can extend, and the per-kind narrowing each
-// one supports. Header = the document itself; lines = each transaction line.
-// Labels are message keys under admin.customFields, translated at render time.
-const TARGETS: {
-  table: string
-  labelKey: string
-  descriptionKey: string
-  kinds: { value: string; labelKey: string }[]
-}[] = [
-  {
-    table: 'documents',
-    labelKey: 'targets.documents.label',
-    descriptionKey: 'targets.documents.description',
-    kinds: [
-      { value: 'vendor_bill', labelKey: 'kinds.header.vendorBill' },
-      { value: 'vendor_credit', labelKey: 'kinds.header.vendorCredit' },
-      { value: 'customer_invoice', labelKey: 'kinds.header.customerInvoice' },
-      { value: 'customer_credit', labelKey: 'kinds.header.customerCredit' },
-      { value: 'card_charge', labelKey: 'kinds.header.cardCharge' },
-      { value: 'card_refund', labelKey: 'kinds.header.cardRefund' },
-      { value: 'check', labelKey: 'kinds.header.check' },
-      { value: 'vendor_payment', labelKey: 'kinds.header.vendorPayment' },
-      { value: 'customer_payment', labelKey: 'kinds.header.customerPayment' },
-      { value: 'expense_report', labelKey: 'kinds.header.expenseReport' },
-      { value: 'journal', labelKey: 'kinds.header.journal' },
-    ],
-  },
-  {
-    table: 'document_lines',
-    labelKey: 'targets.documentLines.label',
-    descriptionKey: 'targets.documentLines.description',
-    kinds: [
-      { value: 'vendor_bill', labelKey: 'kinds.lines.vendorBill' },
-      { value: 'vendor_credit', labelKey: 'kinds.lines.vendorCredit' },
-      { value: 'customer_invoice', labelKey: 'kinds.lines.customerInvoice' },
-      { value: 'customer_credit', labelKey: 'kinds.lines.customerCredit' },
-      { value: 'card_charge', labelKey: 'kinds.lines.cardCharge' },
-      { value: 'card_refund', labelKey: 'kinds.lines.cardRefund' },
-      { value: 'check', labelKey: 'kinds.lines.check' },
-      { value: 'expense_report', labelKey: 'kinds.lines.expenseReport' },
-      { value: 'journal', labelKey: 'kinds.lines.journal' },
-    ],
-  },
-  { table: 'parties', labelKey: 'targets.parties.label', descriptionKey: 'targets.parties.description', kinds: [] },
-  { table: 'projects', labelKey: 'targets.projects.label', descriptionKey: 'targets.projects.description', kinds: [] },
-  { table: 'managed_properties', labelKey: 'targets.managedProperties.label', descriptionKey: 'targets.managedProperties.description', kinds: [] },
-  { table: 'accounts', labelKey: 'targets.accounts.label', descriptionKey: 'targets.accounts.description', kinds: [] },
-  { table: 'items', labelKey: 'targets.items.label', descriptionKey: 'targets.items.description', kinds: [] },
-  { table: 'crm_account_profiles', labelKey: 'targets.crmAccounts.label', descriptionKey: 'targets.crmAccounts.description', kinds: [] },
-  { table: 'crm_activities', labelKey: 'targets.crmActivities.label', descriptionKey: 'targets.crmActivities.description', kinds: [] },
-  { table: 'crm_opportunities', labelKey: 'targets.crmOpportunities.label', descriptionKey: 'targets.crmOpportunities.description', kinds: [] },
-]
 
 const TYPES: { value: string; labelKey: string; helpKey: string }[] = [
   { value: 'text', labelKey: 'types.text.label', helpKey: 'types.text.help' },
@@ -110,6 +58,7 @@ export function FieldDrawer({
     }))
   const t = useTranslations('admin.customFields')
   const tCommon = useTranslations('common')
+  const tTarget = useTranslations()
   const creating = !def
   const router = useRouter()
   const config = ((def?.config ?? {}))
@@ -147,8 +96,8 @@ export function FieldDrawer({
   function targetLabel(table: string, kind: string | null): string {
     const tgt = TARGETS.find((x) => x.table === table)
     const k = tgt?.kinds.find((x) => x.value === kind)
-    const base = tgt ? t(tgt.labelKey) : table
-    if (k) return `${base} · ${t(k.labelKey)}`
+    const base = tgt ? tTarget(tgt.labelKey) : table
+    if (k) return `${base} · ${tTarget(k.labelKey)}`
     if (tgt?.kinds.length) return `${base} · ${t('drawer.allKindsSuffix')}`
     return base
   }
@@ -253,12 +202,12 @@ export function FieldDrawer({
                 >
                   {targets.map((tgt) => (
                     <option key={tgt.table} value={tgt.table}>
-                      {t(tgt.labelKey)}
+                      {tTarget(tgt.labelKey)}
                     </option>
                   ))}
                 </Select>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {target ? t(target.descriptionKey) : null}
+                  {target?.descriptionKey ? tTarget(target.descriptionKey) : null}
                 </p>
               </div>
               {target && target.kinds.length > 0 ? (
@@ -268,7 +217,7 @@ export function FieldDrawer({
                     <option value="">{t('drawer.allTypes')}</option>
                     {target.kinds.map((k) => (
                       <option key={k.value} value={k.value}>
-                        {t(k.labelKey)}
+                        {tTarget(k.labelKey)}
                       </option>
                     ))}
                   </Select>

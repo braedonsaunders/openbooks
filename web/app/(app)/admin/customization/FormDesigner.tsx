@@ -8,6 +8,7 @@ import { ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, Plus, Trash2, X } fr
 import { Badge, Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import {
   customFieldDefKey,
+  customFieldCreationTargetFor,
   defaultFormLayout,
   fieldMetaFor,
   getRecordType,
@@ -761,6 +762,7 @@ function AddFieldPanel({ level, recordType, usedKeys, onCreated }: {
   const [options, setOptions] = useState('')
   const [busy, setBusy] = useState(false)
 
+  const target = customFieldCreationTargetFor(recordType, level)
   const needsOptions = fieldType === 'select' || fieldType === 'multi_select'
 
   const reset = () => {
@@ -782,11 +784,13 @@ function AddFieldPanel({ level, recordType, usedKeys, onCreated }: {
     const usedDefKeys = new Set(Array.from(usedKeys).filter((k) => k.startsWith('cf_')).map((k) => k.slice(3)))
     const key = slugifyKey(trimmed, usedDefKeys)
     const config = needsOptions ? { options: opts } : {}
-    const targetTable = level === 'header' ? 'documents' : 'document_lines'
+    if (!target) { setBusy(false); return }
+    const targetTable = target.table
+    const targetKind = target.kind
     const res = await fetch('/api/admin/custom-fields', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetTable, targetKind: recordType, key, label: trimmed, fieldType, config, isRequired: false, sortOrder: 0 }),
+      body: JSON.stringify({ targetTable, targetKind, key, label: trimmed, fieldType, config, isRequired: false, sortOrder: 0 }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
@@ -794,11 +798,13 @@ function AddFieldPanel({ level, recordType, usedKeys, onCreated }: {
       setBusy(false)
       return
     }
-    onCreated({ id: data.id, targetTable, targetKind: recordType, key, label: trimmed, fieldType, config, isRequired: false, sortOrder: 0 })
+    onCreated({ id: data.id, targetTable, targetKind, key, label: trimmed, fieldType, config, isRequired: false, sortOrder: 0 })
     toast.success(t('designer.forms.addFieldDone', { label: trimmed }))
     setBusy(false)
     reset()
   }
+
+  if (!target) return null
 
   if (!open) {
     return (

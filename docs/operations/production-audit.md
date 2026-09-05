@@ -1650,3 +1650,49 @@ Open custom-field traces remain: registry/creation target divergence, read-only
 mode handling, configuration precision/validation, duplicate creation concurrency,
 and app-provisioned definition controls. This checkpoint does not certify those
 remaining paths or replace the broader integration checkpoint.
+
+## Native custom-field targets and feature visibility
+
+Continuation from `e91e4e54` repaired the designer's reader/writer disagreement:
+entity forms loaded definitions from their native tables but created new fields
+under document targets. A shared storage-capability catalog now supplies the
+API and settings picker, with transaction kinds derived from the record registry.
+Inline creation resolves the same table and kind used by the reader and appears
+only where a supported header or line store exists. Fixed assets and time entries
+join the existing writable targets; the missing transaction kinds include deposit,
+transfer, project charge, quote, sales order, purchase order and field ticket.
+
+Feature visibility now derives tables from that catalog and recognizes line-table
+ownership, so fixed-asset and time-entry definitions are hidden and creation is
+refused while their parent features are disabled. Stored definitions are retained.
+The definition audit and revision controls from the preceding slice remain in force.
+
+The focused set passed 50 cases: 35 database cases, six adjacent route cases and
+nine catalog cases. The browser created fields through all seven native entity
+form designers, reloaded each definition, created a deposit line field and found
+the new asset field in the native asset editor (31 assertions). Initial browser
+setup required the disposable tenant's normal onboarding deferral. A missing
+rate-card target translation discovered during settings inspection was corrected
+by reading its existing registry label key instead of constructing one.
+
+Discovery also identified list profiles for budget scenarios, revenue contracts
+and equipment units without corresponding custom-value storage columns. Those
+profiles require a separate end-to-end capability repair; adding them to the
+creation picker alone would not make them functional. No existing writable target
+was removed. The initial discovery log includes those six out-of-scope checks and
+an owner-role fixture-count assumption; the final focused set tests the supported
+storage paths and identifies its newly created definitions explicitly. Browser
+journeys use the restricted runtime role to exercise actual tenant isolation.
+
+The full integration checkpoint at `77705be3` completed with all 2,009 tests
+passing, zero failures and zero skips (1,145,213.853458 ms). Its four fixture slots
+recorded 1,584 leases, releases and resets, four bootstrap/teardown/schema cycles,
+zero active leases and zero leaks. This exact checkpoint precedes the picker and
+custom-field corrections; it must not be described as covering their later commits.
+
+Final target-slice verification also passed seven settings-picker browser checks
+(38 browser assertions total), all workspace type checks, the rebuilt locked
+production bundle and all 3,127 canonical unit tests (102,299.969625 ms; zero skips).
+The new labels use the record registry's actual translation keys. The lint and
+explicit-any limits remain 725 and 391. Evidence is retained under
+`audit-custom-field-targets-2026-09-05`.
