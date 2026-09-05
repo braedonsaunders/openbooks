@@ -1,15 +1,13 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { remeasureAsset } from '@openbooks/engine/src/asset-lifecycle.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 /** Revalue or impair an asset to a new carrying value: posts the adjustment and
  *  rebuilds the remaining depreciation schedule on the new basis. */
@@ -27,10 +25,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'enter the new carrying value' }, { status: 422 })
   }
   const newCarryingValue = normalizeMoney(carryingRaw)
-  const date = body.date && DATE_RE.test(body.date) ? body.date : await businessToday(gate.user.orgId)
+  if (body.date !== undefined && !isIsoCalendarDate(body.date)) {
+    return NextResponse.json({ error: 'date must be a valid calendar date (YYYY-MM-DD)' }, { status: 422 })
+  }
+  const date = body.date === undefined ? await businessToday(gate.user.orgId) : body.date
 
   try {
-    const result = await remeasureAsset(gate.user.orgId, id, { newCarryingValue, date, actorId: gate.user.id })
+    const result = await remeasureAsset(gate.user.orgId, id, { newCarryingValue, date, actorId: gate.user.id,
+      ...(gate.allowedSubsidiaryIds ? { allowedSubsidiaryIds: [...gate.allowedSubsidiaryIds] } : {}),
+    })
     return NextResponse.json(result)
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'remeasurement failed' }, { status: 422 })
