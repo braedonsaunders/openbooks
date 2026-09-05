@@ -8,6 +8,7 @@ interface RouteState {
     target_table: string
     target_kind: string | null
     key: string
+    updated_at: string
   } | null
   executed: string[]
 }
@@ -17,6 +18,7 @@ const state: RouteState = {
     target_table: 'documents',
     target_kind: 'vendor_bill',
     key: 'shipping_method',
+    updated_at: '2026-09-05T00:00:00.123456Z',
   },
   executed: [],
 }
@@ -46,13 +48,14 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.custom-fields-route-test')]
       const sqlText = globalThis.openbooksSqlTextCustomFields
       export const db = {
+        async transaction(run) { return run(db) },
         async execute(query) {
           const text = sqlText(query)
           state.executed.push(text)
-          if (text.includes('select target_table')) {
+          if (text.includes('from custom_field_defs')) {
             return { rows: state.existing ? [state.existing] : [] }
           }
-          return { rows: [] }
+          return { rows: text.includes('update custom_field_defs') ? [state.existing] : [] }
         },
       }
     `,
@@ -130,6 +133,7 @@ function reset(): void {
     target_table: 'documents',
     target_kind: 'vendor_bill',
     key: 'shipping_method',
+    updated_at: '2026-09-05T00:00:00.123456Z',
   }
   state.executed = []
 }
@@ -139,7 +143,7 @@ function patch(body: Record<string, unknown>): Promise<Response> {
     new Request('http://openbooks.test/api/admin/custom-fields', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: '00000000-0000-4000-8000-00000000a003', ...body }),
+      body: JSON.stringify({ id: '00000000-0000-4000-8000-00000000a003', expectedUpdatedAt: '2026-09-05T00:00:00.123456Z', ...body }),
     }),
   )
 }
@@ -181,7 +185,7 @@ test('PATCH accepts valid option updates and keeps the write organization-scoped
   })
 
   assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { ok: true })
+  assert.deepEqual(await response.json(), { ok: true, updatedAt: '2026-09-05T00:00:00.123456Z' })
   const update = state.executed.find((text) => text.includes('update custom_field_defs'))
   assert.ok(update, 'the valid update was issued')
   assert.match(update, /org_id/)
@@ -199,6 +203,6 @@ test('PATCH reuses reference-table validation and accepts valid reference update
   reset()
   const valid = await patch({ label: 'Owner', fieldType: 'reference', config: { referenceTable: 'parties' } })
   assert.equal(valid.status, 200)
-  assert.deepEqual(await valid.json(), { ok: true })
+  assert.deepEqual(await valid.json(), { ok: true, updatedAt: '2026-09-05T00:00:00.123456Z' })
   assert.ok(state.executed.some((text) => text.includes('update custom_field_defs')), 'the valid update was issued')
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { GripVertical, Plus, X } from 'lucide-react'
@@ -131,6 +131,10 @@ export function FieldDrawer({
   const [displayMode, setDisplayMode] = useState<string>(config.displayMode ?? 'always')
   const [allowedRoles, setAllowedRoles] = useState<string[]>(config.allowedRoles ?? [])
   const [isActive, setIsActive] = useState<boolean>(def?.is_active ?? true)
+  // Pin the revision to the values loaded for this editor. A background refresh
+  // must not upgrade a stale draft to another administrator's revision.
+  const [expectedUpdatedAt] = useState<string | undefined>(def?.updated_at)
+  const saving = useRef(false)
   const [busy, setBusy] = useState(false)
 
   const target = targets.find((x) => x.table === targetTable)
@@ -164,24 +168,32 @@ export function FieldDrawer({
   }
 
   async function save() {
+    if (saving.current) return
+    saving.current = true
     setBusy(true)
-    const body = creating
-      ? { targetTable, targetKind: targetKind || null, key: key || slug(label), label, fieldType, config: buildConfig(), isRequired }
-      : { id: def!.id, label, fieldType, config: buildConfig(), isRequired, isActive }
-    const res = await fetch('/api/admin/custom-fields', {
-      method: creating ? 'POST' : 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? t('drawer.saveFailed'))
+    try {
+      const body = creating
+        ? { targetTable, targetKind: targetKind || null, key: key || slug(label), label, fieldType, config: buildConfig(), isRequired }
+        : { id: def!.id, expectedUpdatedAt, label, fieldType, config: buildConfig(), isRequired, isActive }
+      const res = await fetch('/api/admin/custom-fields', {
+        method: creating ? 'POST' : 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? t('drawer.saveFailed'))
+        return
+      }
+      toast.success(creating ? t('drawer.created') : t('drawer.updated'))
+      router.push('/admin/custom-fields')
+      router.refresh()
+    } catch {
+      toast.error(t('drawer.saveFailed'))
+    } finally {
+      saving.current = false
       setBusy(false)
-      return
     }
-    toast.success(creating ? t('drawer.created') : t('drawer.updated'))
-    router.push('/admin/custom-fields')
-    router.refresh()
   }
 
   const section = 'space-y-1.5'
