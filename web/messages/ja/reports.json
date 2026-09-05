@@ -498,7 +498,10 @@
         "label": "作業時間入力",
         "description": "タイムシート入力 — 従業員、日付、時間、請求可否、プロジェクト、承認ステータス。"
       },
-      "timesheet_weeks": "タイムシート週",
+      "timesheet_weeks": {
+        "label": "タイムシート週",
+        "description": "週次タイムシート、提出日と承認日、および合計時間。"
+      },
       "fixed_assets": {
         "label": "固定資産",
         "description": "固定資産台帳 — ステータス、取得、原価、管理者、ディメンション。"

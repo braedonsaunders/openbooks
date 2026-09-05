@@ -1,3 +1,4 @@
+import { crmOpportunityScope } from '../../crm-scope'
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
@@ -89,10 +90,7 @@ export function opportunityWhere(
 ): SQL {
   const parts: SQL[] = [sql`o.org_id = ${orgId}`]
   if (!adhoc.showInactive) parts.push(sql`and o.is_active`)
-  if (allowedSubsidiaryIds) {
-    const ids = [...allowedSubsidiaryIds]
-    parts.push(ids.length ? sql`and (o.subsidiary_id is null or o.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))` : sql`and false`)
-  }
+  parts.push(crmOpportunityScope(allowedSubsidiaryIds))
   for (const filter of view.filters) {
     const predicate = opportunityFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)

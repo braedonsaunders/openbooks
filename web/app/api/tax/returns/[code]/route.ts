@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-return.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { parseAdjustments } from './tax-return-params'
 
 export const runtime = 'nodejs'
@@ -10,6 +10,8 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 export async function GET(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardSubsidiaryScope(gate, null)
+  if (scopeDenied) return scopeDenied
   const { code } = await params
   const p = new URL(req.url).searchParams
   const from = p.get('from')

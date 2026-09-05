@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   if (ownerUserId && !isUuid(ownerUserId)) return NextResponse.json({ error: 'invalid owner' }, { status: 422 })
   if (salesTeamId && !isUuid(salesTeamId)) return NextResponse.json({ error: 'invalid sales team' }, { status: 422 })
   const [forecast, quotas, snapshots] = (await Promise.all([
-    calculateForecast({ orgId: gate.user.orgId, periodStart, periodEnd, ownerUserId, salesTeamId }),
+    calculateForecast({ orgId: gate.user.orgId, periodStart, periodEnd, ownerUserId, salesTeamId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }),
     db.execute(sql`
       select q.*, u.name as owner_name, t.name as sales_team_name from crm_sales_quotas q
       left join users u on u.id = q.owner_user_id left join crm_sales_teams t on t.id = q.sales_team_id and t.org_id = q.org_id
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     db.execute(sql`
       select s.*, u.name as owner_name, t.name as sales_team_name from crm_forecast_snapshots s
       left join users u on u.id = s.owner_user_id left join crm_sales_teams t on t.id = s.sales_team_id and t.org_id = s.org_id
-      where s.org_id = ${gate.user.orgId} and s.period_start = ${periodStart}::date and s.period_end = ${periodEnd}::date
+      where s.org_id = ${gate.user.orgId} and ${gate.allowedSubsidiaryIds === null} and s.period_start = ${periodStart}::date and s.period_end = ${periodEnd}::date
         ${ownerUserId ? sql`and s.owner_user_id = ${ownerUserId}` : sql``}
         ${salesTeamId ? sql`and s.sales_team_id = ${salesTeamId}` : sql``}
       order by s.as_of desc limit 50`),
@@ -51,6 +51,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const gate = await guardFeaturePermission('crm.forecasts.manage', 'crm')
   if (gate instanceof NextResponse) return gate
+  // Stored forecasts aggregate the whole organization and lack entity lineage.
+  if (gate.allowedSubsidiaryIds !== null) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const { user } = gate
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;

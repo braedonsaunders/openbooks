@@ -14,9 +14,9 @@ env.OPENBOOKS_DATA_DIR = scratchDataDir;
 
 const { generateHostKey, startSftpServer } = await import("./server.ts");
 
-const keyPair = ssh2.utils.generateKeyPairSync("ed25519");
+const keyPair = { private: generateHostKey() };
 const parsedPublic = (() => {
-  const parsed = ssh2.utils.parseKey(keyPair.public);
+  const parsed = ssh2.utils.parseKey(keyPair.private);
   if (parsed instanceof Error) throw parsed;
   return parsed;
 })();
@@ -152,4 +152,28 @@ test("SFTP writes honor offsets and preserve bytes when opening without truncati
 
 test.after(() => {
   rmSync(scratchDataDir, { recursive: true, force: true });
+});
+
+
+test("host-key generation refuses malformed dependency output before persistence", (t) => {
+  const valid = generateHostKey();
+  let attempts = 0;
+  t.mock.method(ssh2.utils, "generateKeyPairSync", () => ({
+    private: ++attempts === 1 ? "malformed generated key" : valid,
+    public: "unused",
+  }));
+  const recovered = generateHostKey();
+  assert.equal(attempts, 2);
+  assert.equal(recovered, valid);
+  assert.ok(!(ssh2.utils.parseKey(recovered) instanceof Error));
+});
+
+test("host-key generation has a bounded failure and never returns an invalid identity", (t) => {
+  let attempts = 0;
+  t.mock.method(ssh2.utils, "generateKeyPairSync", () => {
+    attempts++;
+    return { private: "malformed generated key", public: "unused" };
+  });
+  assert.throws(() => generateHostKey(), /Could not generate a valid SFTP host key/);
+  assert.equal(attempts, 8);
 });

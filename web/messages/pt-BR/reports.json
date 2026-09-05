@@ -498,7 +498,10 @@
         "label": "Apontamentos de horas",
         "description": "Registros de apontamento de horas — funcionário, data, horas, estado faturável, projeto e status de aprovação."
       },
-      "timesheet_weeks": "Semanas de folha de ponto",
+      "timesheet_weeks": {
+        "label": "Semanas de folha de ponto",
+        "description": "Folhas de ponto semanais, datas de envio e aprovação e total de horas."
+      },
       "fixed_assets": {
         "label": "Ativos imobilizados",
         "description": "O registro de ativos imobilizados — status, aquisição, custo, responsável e dimensões."

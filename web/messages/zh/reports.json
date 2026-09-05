@@ -498,7 +498,10 @@
         "label": "工时记录",
         "description": "工时表条目——员工、日期、工时、可计费状态、项目和审批状态。"
       },
-      "timesheet_weeks": "工时表周",
+      "timesheet_weeks": {
+        "label": "工时表周",
+        "description": "每周工时表、提交和审批日期，以及总工时。"
+      },
       "fixed_assets": {
         "label": "固定资产",
         "description": "固定资产台账——状态、购置、成本、保管人和维度。"

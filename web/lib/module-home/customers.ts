@@ -5,6 +5,7 @@ import {
 } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { calculateForecast } from '../crm'
+import { crmOpportunityScope } from '../crm-scope'
 import { isFeatureEnabled } from '../features'
 
 /**
@@ -64,9 +65,9 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
   const ago365 = addCalendarDays(today, -365)
   const weekStarts = weekStartsEndingOn(today, TREND_WEEKS)
   const trendFrom = weekStarts[0]!
-  const subArr = subIds && subIds.length > 0 ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
+  const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
-  const docScope = subArr ? sql` and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))` : sql``
+  const docScope = subArr ? sql` and d.subsidiary_id = any(${subArr})` : sql``
   const q = calendarQuarterBounds(today)
 
   const [arRes, dsoRes, topRes, trendRes, badgeRes, forecast] = (await Promise.all([
@@ -141,7 +142,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           select count(*) as n
             from crm_opportunities o
             join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
-           where o.org_id = ${orgId} and o.is_active and not s.is_closed
+           where o.org_id = ${orgId} ${crmOpportunityScope(subIds === undefined ? null : new Set(subIds))} and o.is_active and not s.is_closed
              and o.party_id = oi.party_id) opp on true` : sql``}
        where oi.remaining > 0
        group by oi.party_id, p.display_name${crmOn ? sql`, opp.n` : sql``}
@@ -164,7 +165,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
     db.execute(sql`
       select
         ${crmOn ? sql`(select count(*) from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
-          where o.org_id = ${orgId} and o.is_active and not s.is_closed)` : sql`0`} as open_opps,
+          where o.org_id = ${orgId} ${crmOpportunityScope(subIds === undefined ? null : new Set(subIds))} and o.is_active and not s.is_closed)` : sql`0`} as open_opps,
         ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'quote'
           and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_quotes,
         ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'sales_order'
@@ -179,7 +180,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           and exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as customers
     `),
-    crmOn ? calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end }) : Promise.resolve([]),
+    crmOn ? calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end, allowedSubsidiaryIds: subIds === undefined ? null : new Set(subIds) }) : Promise.resolve([]),
   ]))
 
   const byWeek = new Map(trendRes.rows.map((r) => [String(r.wk).slice(0, 10), Number(r.collected)]))

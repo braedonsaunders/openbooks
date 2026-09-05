@@ -1,3 +1,4 @@
+import { crmSharedScope, crmOpportunityScope } from '../../../../lib/crm-scope'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -35,10 +36,10 @@ export default async function Activities({
   let drawer: React.ReactNode = null
   if (openId && isUuid(openId)) {
     const [open, owners, accounts, opportunities] = await Promise.all([
-      loadActivity(openId, authz.user.orgId),
+      loadActivity(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
       (db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`)),
-      (db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active order by p.display_name limit 2000`)),
-      (db.execute(sql`select id,opportunity_number,title from crm_opportunities where org_id=${authz.user.orgId} and is_active order by created_at desc limit 2000`)),
+      (db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name limit 2000`)),
+      (db.execute(sql`select o.id,o.opportunity_number,o.title from crm_opportunities o where o.org_id=${authz.user.orgId} and o.is_active${crmOpportunityScope(authz.allowedSubsidiaryIds)} order by o.created_at desc limit 2000`)),
     ])
     if (open) {
       const requestedReturn = pickString(sp.drawerReturn)

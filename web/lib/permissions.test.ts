@@ -586,10 +586,10 @@ test('the provision post route denies reports-only and out-of-scope principals b
   assert.deepEqual(provisionPostState.engineCalls, [], 'neither denial reached the kernel')
 })
 
-test('an authorized gl.post holder in scope posts through the real handler', async () => {
+test('an unrestricted gl.post holder posts the organization-wide provision through the real handler', async () => {
   resetProvisionPost()
-  // Restricted to exactly the root subsidiary the kernel posts into.
-  provisionPostState.allowedSubsidiaryIds = new Set([PROVISION_POST_ROOT_ID])
+  // Posting changes every entity represented in the consolidated run.
+  provisionPostState.allowedSubsidiaryIds = null
 
   const response = await postProvision(PROVISION_POST_RUN_ID)
 

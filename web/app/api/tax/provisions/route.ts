@@ -11,7 +11,7 @@ import {
   type PermanentDifference,
 } from "@openbooks/engine/src/income-tax-provision.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardPermission, guardSubsidiaryScope } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ export async function GET() {
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
   const [runs, years, rates, framework] = await Promise.all([
-    listProvisionRuns(orgId),
+    listProvisionRuns(orgId, gate.allowedSubsidiaryIds),
     db.execute<{ fiscal_year: number }>(sql`
       select distinct fiscal_year from accounting_periods where org_id = ${orgId} order by fiscal_year desc
     `),
@@ -31,6 +31,7 @@ export async function GET() {
       select jurisdiction, rate_percent as "ratePercent", effective_from::text as "effectiveFrom",
              effective_to::text as "effectiveTo", subsidiary_id as "subsidiaryId"
         from income_tax_rates where org_id = ${orgId} and is_active
+        ${gate.allowedSubsidiaryIds === null ? sql`` : gate.allowedSubsidiaryIds.size === 0 ? sql`and false` : sql`and (subsidiary_id is null or subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[]))`}
        order by effective_from desc
     `),
     orgTaxFramework(orgId),
@@ -46,6 +47,8 @@ export async function GET() {
 export async function POST(req: Request) {
   const gate = await guardPermission("reports.create");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardSubsidiaryScope(gate, null);
+  if (scopeDenied) return scopeDenied;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;

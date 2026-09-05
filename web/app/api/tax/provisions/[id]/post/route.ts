@@ -7,16 +7,8 @@ import { isUuid } from "../../../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
-/**
- * Posting a provision creates posted GL entries and reverses prior ones, so it
- * demands journal posting authority (`gl.post`) at the same boundary as every
- * other ledger write — report authorship (`reports.create`) is deliberately
- * not enough. The run is loaded under org scope first, then the ROOT
- * subsidiary — the entity the kernel always posts into — is fenced with the
- * shared direct-record gate, so an out-of-scope target denies identically to a
- * missing run. Every refusal returns before postProvisionRun: a denied caller
- * writes nothing.
- */
+/** A provision posts and reverses the complete organization-wide entity set.
+ * Root-entity access alone cannot authorize journals in its siblings/children. */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission("gl.post");
   if (gate instanceof NextResponse) return gate;
@@ -28,12 +20,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     `))
   ).rows[0];
   if (!owned) return NextResponse.json({ error: "not found" }, { status: 404 });
-  const rootSubsidiaryId = (
-    (await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${gate.user.orgId} and parent_id is null limit 1
-    `))
-  ).rows[0]?.id;
-  const denied = guardSubsidiaryScope(gate, rootSubsidiaryId ?? null);
+  const denied = guardSubsidiaryScope(gate, null);
   if (denied) return denied;
   try {
     const result = await postProvisionRun(gate.user.orgId, id, gate.user.id);

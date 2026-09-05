@@ -503,7 +503,10 @@
         "label": "Time entries",
         "description": "Timesheet entries — employee, date, hours, billable state, project and approval status."
       },
-      "timesheet_weeks": "Timesheet weeks",
+      "timesheet_weeks": {
+        "label": "Timesheet weeks",
+        "description": "Weekly timesheets, submission and approval dates, and total hours."
+      },
       "fixed_assets": {
         "label": "Fixed assets",
         "description": "The fixed-asset register — status, acquisition, cost, custodian and dimensions."

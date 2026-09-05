@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-return.ts'
-import { guardPermission } from '../../../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '../../../../../../lib/authz'
 import {
   exportDataToCsv,
   exportDataToPdf,
@@ -29,6 +29,8 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 export async function GET(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardSubsidiaryScope(gate, null)
+  if (scopeDenied) return scopeDenied
   const { code } = await params
   const p = new URL(req.url).searchParams
   const from = p.get('from')

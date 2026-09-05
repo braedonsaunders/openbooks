@@ -10,6 +10,7 @@ export async function POST() {
   const gate = await guardFeaturePermission('crm.accounts.create', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
+  if (gate.allowedSubsidiaryIds?.size === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
   await ensureCrmDefaults(user.orgId, user.id)
   const result = await db.transaction(async (tx) => {
     const party = (await tx.execute<{ id: string }>(sql`

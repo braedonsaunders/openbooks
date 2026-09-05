@@ -1,3 +1,4 @@
+import { crmActivityScope } from '../../crm-scope'
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
@@ -142,8 +143,8 @@ function activityFilterPredicate(clause: FilterClause): SQL | null {
   return null
 }
 
-export function activityWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string): SQL {
-  const parts: SQL[] = [sql`a.org_id = ${orgId}`]
+export function activityWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, allowed?: ReadonlySet<string> | null): SQL {
+  const parts: SQL[] = [sql`a.org_id = ${orgId}`,crmActivityScope(allowed)]
   for (const filter of view.filters) {
     const predicate = activityFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)

@@ -1,3 +1,4 @@
+import { crmSharedScope } from '../../../../../lib/crm-scope'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -28,7 +29,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const account = await loadCrmAccount(id, gate.user.orgId)
+  const account = await loadCrmAccount(id, gate.user.orgId, gate.allowedSubsidiaryIds)
   return account ? NextResponse.json(account) : NextResponse.json({ error: 'not found' }, { status: 404 })
 }
 
@@ -44,7 +45,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const current = (await db.execute<any>(sql`
     select cp.*, p.display_name, p.is_active as party_active
       from crm_account_profiles cp join parties p on p.id = cp.party_id and p.org_id = cp.org_id
-     where cp.party_id = ${id} and cp.org_id = ${user.orgId}`))
+     where cp.party_id = ${id} and cp.org_id = ${user.orgId}${crmSharedScope(sql`p.subsidiary_id`,gate.allowedSubsidiaryIds)}`))
   const row = current.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
@@ -92,7 +93,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'a reason is required to move an account backward' }, { status: 422 })
   }
 
-  await db.transaction(async (tx) => {
+  const denied = await db.transaction(async (tx) => {
+    const visible = await tx.execute(sql`select id from parties where id=${id} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)} for update`)
+    if (!visible.rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (stage && stage !== row.lifecycle_stage) {
       const rank = { lead: 0, prospect: 1, customer: 2 }
       if (rank[stage] > rank[row.lifecycle_stage as Stage]) {
@@ -139,7 +142,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       values (${user.orgId}, 'crm_account_profiles', ${row.id}, 'update',
               ${JSON.stringify({ before: row, requested: body })}::jsonb, ${user.id})`)
   })
+  if (denied) return denied
   if (body.route === true) await routeCrmAccount(user.orgId, row.id, user.id)
-  const result = await loadCrmAccount(id, user.orgId)
+  const result = await loadCrmAccount(id, user.orgId, gate.allowedSubsidiaryIds)
   return NextResponse.json(result)
 }
