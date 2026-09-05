@@ -358,19 +358,18 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
         and e.posting_date >= ${from} and e.posting_date <= ${to}
     `),
     // (Drill-down detail is fetched per entity on click via /api/analytics/drill.)
-    // 7. Top spenders — expense reports by employee, current vs prior window.
+    // 7. Top spenders use the same primary-book base-currency actuals as
+    // the expense summary; draft headers and transaction totals are not GL spend.
     db.execute<SpenderRow>(sql`
-      select d.party_id as employee_id, coalesce(p.display_name, 'Unknown') as employee_name,
-        sum(d.total) filter (where d.posting_date >= ${from}) as current_spend,
-        sum(d.total) filter (where d.posting_date < ${from}) as prior_spend,
-        count(*) filter (where d.posting_date >= ${from}) as report_count
-      from documents d
-      left join parties p on p.id = d.party_id and p.org_id = d.org_id
-      where d.org_id = ${orgId} and d.kind = 'expense_report' and d.voided_at is null
-        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
-        and d.posting_date >= ${priorFrom} and d.posting_date <= ${to}
+      select d.party_id as employee_id,
+        coalesce((select p.display_name from parties p where p.id = d.party_id and p.org_id = d.org_id), 'Unknown') as employee_name,
+        sum(l.amount) filter (where e.posting_date >= ${from}) as current_spend,
+        sum(l.amount) filter (where e.posting_date < ${from}) as prior_spend,
+        count(distinct d.id) filter (where e.posting_date >= ${from}) as report_count
+      ${spendBase(priorFrom, to)}
+        and d.kind = 'expense_report'
       group by 1, 2
-      having sum(d.total) > 0
+      having sum(l.amount) > 0
       order by 3 desc nulls last
       limit 50
     `),

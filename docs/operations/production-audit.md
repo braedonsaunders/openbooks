@@ -1146,3 +1146,18 @@ regressions passed 39 tests. Receipts are retained under
 `audit-customer-payment-cutoff-2026-09-05` in thread storage.
 All 3,073 unit tests, web typechecking and the locked production build passed;
 explicit-any and lint ceilings remain 391 and 725.
+
+## Employee spend actuals — continuation from f3819e6e
+
+Spend Velocity's employee breakdown summed expense-report headers while its
+account totals used posted ledger lines. That included unposted draft reports
+and mixed transaction-currency totals with base-currency actuals. Employee
+spend now composes the same primary-book ledger query as the expense summary,
+including subsidiary and date predicates, and counts distinct source reports.
+
+The draft and foreign-currency cases failed before correction; posted and
+secondary-projection controls passed. All 31 combined ledger and authorization
+regressions now pass. Receipts are retained under
+`audit-spender-ledger-2026-09-05` in thread storage.
+All 3,073 unit tests, web typechecking and the locked production build passed;
+explicit-any and lint ceilings remain 391 and 725.
