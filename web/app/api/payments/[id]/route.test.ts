@@ -81,6 +81,7 @@ const mockSources = new Map<string, string>([
       export async function updateDraftPayment(id, patch, _userId, _orgId, options) {
         state.updates.push({ id, patch, options })
         if (state.failUpdateWith) throw state.failUpdateWith
+        return state.report
       }
     `,
   ],
@@ -121,6 +122,8 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === '@/lib/payment-run-access') return { shortCircuit: true, url: 'data:text/javascript,export function paymentRunScopeSql(){throw new Error("run scope is outside this document-route unit test")}' }
+
     // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as documents.test.ts).
     if (specifier === 'server-only') {
@@ -184,7 +187,7 @@ test('PATCH refuses a save without a revision token before reaching the engine',
 
 test('PATCH saves under an exact matching revision and hands the token to the engine', async () => {
   reset()
-  routeState.report = { doc: { id: PAYMENT_ID }, bankAccountId: null, allocations: [], applied: [] }
+  routeState.report = { doc: { id: PAYMENT_ID, updated_at: STORED_REVISION }, bankAccountId: null, allocations: [], applied: [] }
 
   const response = await patch({
     expectedUpdatedAt: STORED_REVISION,
@@ -218,7 +221,7 @@ test('PATCH saves under an exact matching revision and hands the token to the en
 
 test('PATCH maps a lost revision race to a 409 conflict without masking the cause', async () => {
   reset()
-  routeState.report = { doc: { id: PAYMENT_ID }, bankAccountId: null, allocations: [], applied: [] }
+  routeState.report = { doc: { id: PAYMENT_ID, updated_at: STORED_REVISION }, bankAccountId: null, allocations: [], applied: [] }
   routeState.failUpdateWith = new routeState.conflictError!()
 
   const response = await patch({
@@ -235,7 +238,7 @@ test('PATCH maps a lost revision race to a 409 conflict without masking the caus
 test('GET exposes the exact persisted revision so callers can fence their next save', async () => {
   reset()
   routeState.report = {
-    doc: { id: PAYMENT_ID, updated_at: new Date('2026-08-24T12:00:00.300001Z') },
+    doc: { id: PAYMENT_ID, updated_at: STORED_REVISION },
     bankAccountId: null,
     allocations: [],
     applied: [],
@@ -248,6 +251,6 @@ test('GET exposes the exact persisted revision so callers can fence their next s
 
   assert.equal(response.status, 200)
   const payload = (await response.json()) as { doc: { updated_at: string } }
-  // The lossy Date from the driver is replaced by the canonical wire form.
+  // Values and the exact revision arrive from the same service snapshot.
   assert.equal(payload.doc.updated_at, STORED_REVISION)
 })

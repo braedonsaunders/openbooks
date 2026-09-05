@@ -11,7 +11,7 @@ import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
 import { exactMoney, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
-import { paymentErrorResponse, paymentPermission } from '../lib'
+import { assertAllocationTargetsInScope, paymentErrorResponse, paymentPermission } from '../lib'
 
 export const runtime = 'nodejs'
 
@@ -57,25 +57,8 @@ export async function POST(req: Request) {
   if (!r.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const scopeDenied = guardSubsidiaryScope(authz, r.rows[0].subsidiaryId)
   if (scopeDenied) return scopeDenied
-  // Applied open items are record boundaries of their own — every referenced
-  // line must resolve to a document inside the caller's subsidiary scope.
-  {
-    const openLineIds = (allocations ?? []).map((a) => a.openLineId)
-    if (authz.allowedSubsidiaryIds && openLineIds.length) {
-      const targets = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
-        select dl.id, d.subsidiary_id as "subsidiaryId"
-          from document_lines dl
-          join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-         where dl.id = any(${`{${openLineIds.join(',')}}`}::uuid[]) and dl.org_id = ${authz.user.orgId}
-      `))
-      const byId = new Map(targets.rows.map((row) => [row.id, row.subsidiaryId]))
-      for (const lineId of openLineIds) {
-        if (!byId.has(lineId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-        const denied = guardSubsidiaryScope(authz, byId.get(lineId))
-        if (denied) return denied
-      }
-    }
-  }
+  const targetsDenied = await assertAllocationTargetsInScope(authz, (allocations ?? []).map(item => item.openLineId))
+  if (targetsDenied) return targetsDenied
   const perm = paymentPermission(r.rows[0].kind)
   if (!can(authz, perm)) {
     return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })

@@ -40,6 +40,8 @@ export async function POST(req: Request) {
   try {
     const suggestion = await suggestApplications(body.partyId, body.amount, body.side, {
       reference: body.reference ?? null,
+      orgId: gate.user.orgId,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       sourceCurrency: body.currency,
     })
     return NextResponse.json(suggestion)

@@ -1,3 +1,6 @@
+import { can, type Authz } from '@/lib/authz'
+import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
+import { paymentRunScopeSql, paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
 import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
@@ -57,17 +60,22 @@ const RUN_SORTS = {
 
 export async function RunsSection({
   sp,
-  orgId,
+  authz,
   canApprove,
   direction = 'outbound',
   basePath = '/payments',
 }: {
   sp: Record<string, string | string[] | undefined>
-  orgId: string
+  authz: Authz
   canApprove: boolean
   direction?: 'outbound' | 'inbound'
   basePath?: '/payments' | '/receipts'
 }) {
+  if (!can(authz, direction === 'inbound' ? 'ar.pay' : 'ap.pay')) return null
+  const orgId = authz.user.orgId
+  const runScope = paymentRunScopeSql(authz)
+  const sourceScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)
+  const profileScope = paymentSharedSubsidiaryFilter(sql`p.subsidiary_id`, authz)
   const { money } = await getMoneyFormatter()
   const today = await businessToday(orgId)
   const t = await getTranslations('payments')
@@ -81,7 +89,7 @@ export async function RunsSection({
   }
   const profileCount = ((await db.execute(sql`
     select count(*)::int as n from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
-     where p.org_id = ${orgId} and p.is_active
+     where p.org_id = ${orgId} and p.is_active ${profileScope}
        and (${collections} = false or (f.direction <> 'credit' and f.rail in ('nacha_debit', 'sepa_debit', 'custom')))
        and (${collections} = true or f.direction <> 'debit')
   `)))
@@ -117,7 +125,7 @@ export async function RunsSection({
       join parties p on p.id = d.party_id and p.org_id = d.org_id
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount > 0
-     where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'` : sql`
+     where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted' ${sourceScope}` : sql`
     select d.id, d.document_number, d.document_date, d.due_date, d.reference_number, d.currency,
            p.display_name as vendor,
            abs(jl.amount) - coalesce((
@@ -132,7 +140,7 @@ export async function RunsSection({
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount < 0
      where d.org_id = ${orgId} and d.kind in ('vendor_bill', 'expense_report') and d.status = 'posted'
-       and d.payment_hold_reason is null`
+       and d.payment_hold_reason is null ${sourceScope}`
 
   const [bills, billCount, runs, runCounts, runFilteredCount, bankProfiles] = await Promise.all([
     building ? (db.execute(sql`
@@ -153,19 +161,19 @@ export async function RunsSection({
         from payment_runs r
         left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
         left join payment_instructions i on i.payment_run_id = r.id and i.org_id = r.org_id
-       where r.org_id = ${orgId} and r.direction = ${direction} ${runStatusWhere} ${runSearchWhere}
+       where ${runScope} and r.direction = ${direction} ${runStatusWhere} ${runSearchWhere}
        group by r.id, a.number, a.name
        order by ${RUN_SORTS[runParams.sort]} ${runParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, r.run_number
        limit ${runParams.perPage} offset ${(runParams.page - 1) * runParams.perPage}
     `)),
     (db.execute(sql`
-      select status, count(*) as n from payment_runs where org_id = ${orgId} and direction = ${direction} group by status
+      select r.status, count(*) as n from payment_runs r where ${runScope} and r.direction = ${direction} group by r.status
     `)),
     (db.execute(sql`
       select count(*) as n
         from payment_runs r
         left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
-       where r.org_id = ${orgId} and r.direction = ${direction} ${runStatusWhere} ${runSearchWhere}
+       where ${runScope} and r.direction = ${direction} ${runStatusWhere} ${runSearchWhere}
     `)),
     building ? db.execute(sql`
       select p.id, p.name, p.currency, f.name as format_name,
@@ -174,7 +182,7 @@ export async function RunsSection({
         join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
         join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
                            and a.type = 'asset_bank' and a.is_active and not a.is_summary
-       where p.org_id = ${orgId} and p.is_active and f.direction <> ${collections ? 'credit' : 'debit'}
+       where p.org_id = ${orgId} and p.is_active ${profileScope} and f.direction <> ${collections ? 'credit' : 'debit'}
          and (${collections} = false or f.rail in ('nacha_debit', 'sepa_debit', 'custom'))
        order by p.name
     `) as any : Promise.resolve({ rows: [] }),
@@ -214,7 +222,7 @@ export async function RunsSection({
         left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
         left join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
         left join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
-       where r.id = ${runId} and r.org_id = ${orgId} and r.direction = ${direction}
+       where r.id = ${runId} and ${runScope} and r.direction = ${direction}
     `)))
     if (run.rows[0]) {
       const [instructions, readiness, files, events, items] = await Promise.all([

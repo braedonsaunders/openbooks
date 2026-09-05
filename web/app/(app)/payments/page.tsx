@@ -55,6 +55,7 @@ export default async function Payments({
     >
       {view === 'payments' ? (
         <PaymentsSection
+        authz={authz}
           sp={sp}
           basePath="/payments"
           kind="vendor_payment"
@@ -64,7 +65,7 @@ export default async function Payments({
           userRoles={authz.user.roles.map(({ key }) => key)}
         />
       ) : (
-        <RunsSection sp={sp} orgId={authz.user.orgId} canApprove={can(authz, 'ap.approve')} />
+        <RunsSection sp={sp} authz={authz} canApprove={can(authz, 'ap.approve')} />
       )}
     </ListPageLayout>
   )

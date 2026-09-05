@@ -63,6 +63,8 @@ const mocks = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === '@/lib/payment-run-access') return { shortCircuit: true, url: 'data:text/javascript,export function paymentRunScopeSql(){throw new Error("run scope is outside this document-route unit test")}' }
+
     if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     const mocked = new Map<string, string>([
       ['@openbooks/engine/src/db.ts', 'mock:db'],
