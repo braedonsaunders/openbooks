@@ -6,6 +6,7 @@ import { canonicalDecimal } from './exact-decimal'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
 import { applyRollup, resolveInvoicingProfile } from './invoice-rollup'
 import { roundCurrencyMoney } from '@openbooks/engine/src/currencies.ts'
+import { subsidiaryVisibleFilter } from './subsidiaries'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 /** The day the invoice is cut, or the period it closes. */
@@ -90,6 +91,7 @@ export async function generateInvoiceFromBillingRequest(
   orgId: string,
   userId: string,
   requestId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<GenerateResult> {
   return db.transaction(async (tx) => {
     const projectGate = (await tx.execute<{ features: FeatureState | null }>(sql`
@@ -100,7 +102,11 @@ export async function generateInvoiceFromBillingRequest(
     if (!featureEnabled(featureState, 'projects')) throw new BillingError('Projects feature is disabled')
     // Lock the request; only an open request can be invoiced.
     const reqRes = (await tx.execute<any>(sql`
-      select * from billing_requests where id = ${requestId} and org_id = ${orgId} for update
+      select br.* from billing_requests br
+        join projects p on p.id = br.project_id and p.org_id = br.org_id
+       where br.id = ${requestId} and br.org_id = ${orgId}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
+       for update of br for share of p
     `))
     const req = reqRes.rows[0]
     if (!req) throw new BillingError('Billing request not found')
@@ -315,7 +321,8 @@ export async function generateInvoiceFromBillingRequest(
            and te.status = 'approved' and te.is_billable
            and te.billing_status = 'unbilled'
            ${isFinal && ticketIds.length === 0 ? sql`` : sql`${dateFilter}${ticketFilter}`}${selFilter}
-         order by te.worked_on
+         order by te.worked_on, te.id
+         for update of te
       `))
 
       for (const te of timeRows.rows) {
@@ -394,6 +401,7 @@ export async function generateInvoiceFromBillingRequest(
                dl.cost_multiplier, dl.markup_percent, dl.description, dl.item_id, dl.quantity, dl.unit,
                dl.bill_rate, dl.bill_amount, dl.equipment_unit_id, dl.rate_version_id, d.kind,
                coalesce(dl.department_id, d.department_id) as department_id, d.document_date,
+               coalesce(dl.subsidiary_id, d.subsidiary_id) as subsidiary_id,
                dl.rate_presentation, i.income_account_id, i.tax_code_id, i.name as item_name,
                i.kind as item_kind, i.category as item_category,
                coalesce(rc.components, '[]'::jsonb) as bill_components
@@ -421,6 +429,9 @@ export async function generateInvoiceFromBillingRequest(
              or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
       `))
 
+      if (allowedSubsidiaryIds !== null && costRows.rows.some(row => !allowedSubsidiaryIds.has(row.subsidiary_id))) {
+        throw new BillingError('Selected costs include subsidiaries outside your access')
+      }
       for (const cl of costRows.rows) {
         const isProjectCharge = cl.kind === 'project_charge'
         // A markup recorded ON THE LINE is the deal struck for that line and
@@ -739,11 +750,13 @@ export async function generateInvoiceFromBillingRequest(
       const billedBy = presentedLineIds[rolled.presentedIndexOf[index] ?? index]
       if (!billedBy) continue
       if (l.timeEntryId) {
-        await tx.execute(sql`
+        const claimed = await tx.execute<{ id: string }>(sql`
           update time_entries
              set invoiced_by_line_id = ${billedBy}, billing_status = 'billed'
            where id = ${l.timeEntryId} and org_id = ${orgId}
-             and billing_status = 'unbilled'`)
+             and billing_status = 'unbilled'
+           returning id`)
+        if (!claimed.rows[0]) throw new BillingError('A time entry is no longer available for billing')
       }
       const sourceCostLineIds = l.sourceCostLineIds ?? (l.sourceCostLineId ? [l.sourceCostLineId] : [])
       for (const sourceCostLineId of sourceCostLineIds) {

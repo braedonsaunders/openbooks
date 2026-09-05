@@ -3,6 +3,7 @@ import { PDFDocument } from 'pdf-lib'
 import { sql } from 'drizzle-orm'
 import { db, inDbTransaction } from '@openbooks/engine/src/db.ts'
 import { allocateProportionally } from '@openbooks/engine/src/information-returns.ts'
+import { subsidiaryVisibleFilter } from './subsidiaries'
 import { add, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { renderHtmlDocumentPdf } from '@openbooks/pdf'
 import { deleteS3Blobs, getS3Blob } from './file-storage'
@@ -58,7 +59,54 @@ export interface AssembleResult {
   manifest: BackupManifestEntry[]
 }
 
+export class InvoiceBackupNotFoundError extends Error {
+  constructor() { super('Invoice not found') }
+}
+
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!))
+
+/** Backup packets retain the ownership of every underlying financial record. */
+function backupScopeFilter(allowedSubsidiaryIds: ReadonlySet<string> | null) {
+  if (allowedSubsidiaryIds === null) return sql``
+  return sql`${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+    and (d.project_id is null or exists (
+      select 1 from projects visible_project
+       where visible_project.id = d.project_id and visible_project.org_id = d.org_id
+         ${subsidiaryVisibleFilter(sql`visible_project.subsidiary_id`, allowedSubsidiaryIds)}
+    ))
+    and not exists (
+      select 1 from document_lines invoice_line
+        join document_lines source_line on source_line.billed_by_line_id = invoice_line.id and source_line.org_id = invoice_line.org_id
+        join documents source_document on source_document.id = source_line.document_id and source_document.org_id = source_line.org_id
+       where invoice_line.document_id = d.id and invoice_line.org_id = d.org_id
+         and not exists (select 1 where true
+           ${subsidiaryVisibleFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
+           ${subsidiaryVisibleFilter(sql`coalesce(source_line.subsidiary_id, source_document.subsidiary_id)`, allowedSubsidiaryIds)}
+         )
+    )
+    and not exists (
+      select 1 from document_lines invoice_line
+        join time_entries entry on entry.invoiced_by_line_id = invoice_line.id and entry.org_id = invoice_line.org_id
+        join documents ticket on ticket.id = entry.field_ticket_id and ticket.org_id = entry.org_id
+       where invoice_line.document_id = d.id and invoice_line.org_id = d.org_id
+         and not exists (select 1 where true
+           ${subsidiaryVisibleFilter(sql`ticket.subsidiary_id`, allowedSubsidiaryIds)}
+         )
+    )`
+}
+
+function backupManifestScopeFilter(allowedSubsidiaryIds: ReadonlySet<string> | null) {
+  if (allowedSubsidiaryIds === null) return sql``
+  return sql`and not exists (
+    select 1 from jsonb_array_elements(ib.component_manifest) component
+     where component->>'sourceDocumentId' is not null
+       and not exists (
+         select 1 from documents manifest_source
+          where manifest_source.id::text = component->>'sourceDocumentId' and manifest_source.org_id = ib.org_id
+            ${subsidiaryVisibleFilter(sql`manifest_source.subsidiary_id`, allowedSubsidiaryIds)}
+       )
+  )`
+}
 
 /** Read a stored file's bytes (db blob or S3), by file id. */
 async function readFileBytes(orgId: string, fileId: string): Promise<{ bytes: Buffer; contentType: string } | null> {
@@ -112,6 +160,7 @@ interface CostedTimesheetRow extends Record<string, unknown> {
   cost_rate: MoneyInput
   bill_rate: MoneyInput
   cost_amount: MoneyInput
+  total_cost: MoneyInput
   line_amount: MoneyInput
   native_bill_amount: MoneyInput
   item: string
@@ -151,6 +200,7 @@ async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumb
            te.worked_on, coalesce(pty.display_name, '') as employee, te.hours,
            te.cost_rate, te.bill_rate,
            te.hours * coalesce(te.cost_rate, 0) as cost_amount,
+           sum(te.hours * coalesce(te.cost_rate, 0)) over () as total_cost,
            dl.amount as line_amount,
            round(te.hours * coalesce(te.bill_rate, 0), 4) as native_bill_amount,
            coalesce(i.name, '') as item
@@ -182,8 +232,8 @@ async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumb
   }
 
   const totals = entries.reduce(
-    (a, r) => ({ hours: a.hours + Number(r.hours ?? 0), cost: a.cost + Number(r.cost_amount ?? 0), bill: add(a.bill, r.bill_amount) }),
-    { hours: 0, cost: 0, bill: '0.0000' },
+    (a, r) => ({ hours: a.hours + Number(r.hours ?? 0), bill: add(a.bill, r.bill_amount) }),
+    { hours: 0, bill: '0.0000' },
   )
   const body = entries
     .map(
@@ -212,7 +262,7 @@ async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumb
         <th class="n">Cost rate</th><th class="n">Cost</th><th class="n">Bill rate</th><th class="n">Amount</th></tr></thead>
       <tbody>${body}</tbody>
       <tfoot><tr><td colspan="3">Total</td><td class="n">${new Intl.NumberFormat(format.locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totals.hours)}</td><td></td>
-        <td class="n">${money(totals.cost)}</td><td></td><td class="n">${money(totals.bill)}</td></tr></tfoot>
+        <td class="n">${money(rows.rows[0]!.total_cost)}</td><td></td><td class="n">${money(totals.bill)}</td></tr></tfoot>
     </table>`
   return renderHtmlDocumentPdf({ bodyHtml: html, paperSize: 'letter', orientation: 'landscape', marginMm: 12, headerHtml: null, footerHtml: null })
 }
@@ -228,14 +278,16 @@ export async function assembleInvoiceBackup(
   userId: string,
   documentId: string,
   backupType: BackupType = 'costed_timesheets',
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<AssembleResult> {
   const invRes = (await db.execute<{ document_number: string; currency: string; project_name: string }>(sql`
     select d.document_number, d.currency, coalesce(p.name, '') as project_name
       from documents d left join projects p on p.id = d.project_id and p.org_id = d.org_id
      where d.id = ${documentId} and d.org_id = ${orgId} and d.kind = 'customer_invoice'
+      ${backupScopeFilter(allowedSubsidiaryIds)}
   `))
   const inv = invRes.rows[0]
-  if (!inv) throw new Error('Invoice not found')
+  if (!inv) throw new InvoiceBackupNotFoundError()
   const format = await getMoneyFormatter(orgId, inv.currency)
 
   const recipe = BACKUP_RECIPES[backupType] ?? BACKUP_RECIPES.costed_timesheets
@@ -312,12 +364,20 @@ export async function assembleInvoiceBackup(
   const persisted = await inDbTransaction(async (tx) => {
     // Lock the invoice row even when no invoice_backups row exists yet. This
     // serializes concurrent generators without relying on a process-local lock.
-    const invoice = (await tx.execute<{ id: string }>(sql`
-      select id from documents
-       where id = ${documentId} and org_id = ${orgId} and kind = 'customer_invoice'
-       for update
+    const invoice = (await tx.execute<{ id: string; project_id: string | null }>(sql`
+      select d.id, d.project_id from documents d
+       where d.id = ${documentId} and d.org_id = ${orgId} and d.kind = 'customer_invoice'
+         ${backupScopeFilter(allowedSubsidiaryIds)}
+       for update of d
     `)).rows[0]
-    if (!invoice) throw new Error('Invoice not found')
+    if (!invoice) throw new InvoiceBackupNotFoundError()
+    if (invoice.project_id) {
+      const project = await tx.execute(sql`select id from projects
+        where id = ${invoice.project_id} and org_id = ${orgId}
+          ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
+        for share`)
+      if (!project.rows[0]) throw new InvoiceBackupNotFoundError()
+    }
 
     const prior = (await tx.execute<{
       file_id: string
@@ -409,13 +469,21 @@ export async function assembleInvoiceBackup(
 }
 
 /** The stored backup (file id + bytes) for an invoice, if assembled. */
-export async function loadInvoiceBackup(orgId: string, documentId: string): Promise<{ fileId: string; filename: string; bytes: Buffer } | null> {
-  const r = (await db.execute<{ file_id: string; name: string }>(sql`
-    select ib.file_id, fi.name from invoice_backups ib join files fi on fi.id = ib.file_id and fi.org_id = ib.org_id
+export async function loadInvoiceBackup(orgId: string, documentId: string, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<{ fileId: string; filename: string; bytes: Buffer } | null> {
+  const r = (await db.execute<{ file_id: string; name: string; can_read: boolean }>(sql`
+    select ib.file_id, fi.name, exists (
+      select 1 from documents d where d.id = ib.document_id and d.org_id = ib.org_id
+        ${backupScopeFilter(allowedSubsidiaryIds)}
+        ${backupManifestScopeFilter(allowedSubsidiaryIds)}
+    ) as can_read
+      from invoice_backups ib join files fi on fi.id = ib.file_id and fi.org_id = ib.org_id
      where ib.org_id = ${orgId} and ib.document_id = ${documentId}
   `))
   const row = r.rows[0]
   if (!row) return null
+  // Refused existing artifacts must not be mistaken for a cache miss and
+  // regenerated by a reader with narrower access to their original sources.
+  if (!row.can_read) throw new InvoiceBackupNotFoundError()
   const file = await readFileBytes(orgId, row.file_id)
   if (!file) return null
   return { fileId: row.file_id, filename: row.name, bytes: file.bytes }

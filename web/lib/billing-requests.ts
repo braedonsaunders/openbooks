@@ -298,7 +298,7 @@ export async function listBillingRequests(
     select br.id, br.request_number as "requestNumber", br.invoice_type as "invoiceType",
            br.basis, br.draw_amount as "drawAmount", br.start_date as "startDate",
            br.cutoff_date as "cutoffDate", br.backup_required as "backupRequired",
-           br.backup_type as "backupType", br.status, br.invoice_document_id as "invoiceDocumentId",
+           br.backup_type as "backupType", br.status, d.id as "invoiceDocumentId",
            d.document_number as "invoiceNumber", d.status as "invoiceStatus", d.total as "invoiceTotal",
            (select count(*)::int
               from billing_request_field_tickets selected
@@ -308,6 +308,7 @@ export async function listBillingRequests(
       from billing_requests br
       join projects p on p.id = br.project_id and p.org_id = br.org_id
       left join documents d on d.id = br.invoice_document_id and d.org_id = br.org_id
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
      where br.org_id = ${orgId}
        and br.project_id = ${projectId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null)}
@@ -403,8 +404,17 @@ export async function cancelBillingRequest(
   orgId: string,
   userId: string,
   id: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   return db.transaction(async (tx) => {
+    const visible = await tx.execute(sql`
+      select br.id from billing_requests br
+        join projects p on p.id = br.project_id and p.org_id = br.org_id
+       where br.id = ${id} and br.org_id = ${orgId}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
+       for update of br for share of p
+    `);
+    if (!visible.rows[0]) throw new Error("Billing request not found");
     const r = await tx.execute<{ id: string }>(sql`
       update billing_requests
          set status = 'cancelled', updated_at = now(), updated_by = ${userId}
