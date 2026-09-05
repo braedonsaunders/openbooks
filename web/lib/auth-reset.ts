@@ -177,6 +177,16 @@ export async function completePasswordReset(
     const reset = rows.rows[0];
     if (!reset) return { ok: false, reason: "invalid_token" as const };
 
+    // now() is the transaction start, which may precede a long lock wait.
+    // Claim the locked credential against the live database clock before
+    // invalidating its siblings or changing any account state.
+    const claimed = await db.execute<{ id: string }>(sql`
+      update auth_password_resets set used_at = clock_timestamp()
+       where id = ${reset.id} and used_at is null and expires_at > clock_timestamp()
+       returning id
+    `);
+    if (!claimed.rows[0]) return { ok: false, reason: "invalid_token" as const };
+
     await db.execute(sql`
       update auth_password_resets set used_at = now()
        where user_id = ${reset.user_id} and used_at is null

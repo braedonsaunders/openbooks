@@ -716,7 +716,7 @@ async function reauthenticateMfaEnrollment(
   currentSessionId: string,
   password: string,
   context: AuthRequestContext,
-): Promise<{ email: string } | null> {
+): Promise<{ email: string; sessionExpiresAt: Date } | null> {
   const identityResult = (await db.execute<{ email: string }>(sql`
     select email from users where id = ${userId} and is_active
   `));
@@ -729,16 +729,21 @@ async function reauthenticateMfaEnrollment(
   const userResult = (await db.execute<{ email: string; passwordHash: string }>(sql`
     select u.email, u.password_hash as "passwordHash"
       from users u
-      join auth_sessions session
-        on session.user_id = u.id
-       and session.id = ${currentSessionId}
-       and session.revoked_at is null
-       and session.expires_at > now()
      where u.id = ${userId} and u.is_active
      for update of u
   `));
   const user = userResult.rows[0];
   if (!user || normalizeLoginEmail(user.email) !== email) return null;
+  // Lock identity before session, then read session authority from a fresh
+  // statement snapshot. A join evaluated before the user lock can retain a
+  // stale session, and transaction-start now() does not advance while waiting.
+  const session = (await db.execute<{ expiresAt: Date | string }>(sql`
+    select expires_at as "expiresAt" from auth_sessions
+     where id = ${currentSessionId} and user_id = ${userId} and revoked_at is null
+     for update
+  `)).rows[0];
+  const sessionExpiresAt = dateValue(session?.expiresAt);
+  if (!sessionExpiresAt || sessionExpiresAt.getTime() <= Date.now()) return null;
   const state = await ensureLoginState(emailHash, userId);
   const counts = await recentAttemptCounts(emailHash, networkHash, userId);
   const limit = attemptRateLimit(counts, true);
@@ -767,7 +772,7 @@ async function reauthenticateMfaEnrollment(
   );
   await resetFailures(emailHash, userId);
   await recordLoginEvent({ userId, emailHash, outcome: "success", authMethod: "password", networkHash, userAgentHash });
-  return { email };
+  return { email, sessionExpiresAt };
 }
 
 export async function beginMfaSetup(
@@ -785,6 +790,8 @@ export async function beginMfaSetup(
     );
     if (!reauthenticated) return null;
     const existing = (await db.execute<{ enabledAt: Date | null }>(sql`select enabled_at as "enabledAt" from auth_mfa_factors where user_id = ${userId} for update`));
+    // Password verification and the factor lock may themselves take time.
+    if (reauthenticated.sessionExpiresAt.getTime() <= Date.now()) return null;
     if (existing.rows[0]?.enabledAt) throw new Error("MFA is already enabled");
     const secret = generateTotpSecret();
     const setupExpiresAt = new Date(Date.now() + MFA_SETUP_TTL_S * 1000);
@@ -816,11 +823,12 @@ export async function confirmMfaSetup(
       select id from users where id = ${userId} and is_active for update
     `);
     if (!user.rows[0]) return null;
-    const session = await db.execute<{ id: string }>(sql`
-      select id from auth_sessions where id = ${currentSessionId} and user_id = ${userId}
-        and revoked_at is null and expires_at > now() for update
+    const session = await db.execute<{ id: string; expiresAt: Date | string }>(sql`
+      select id, expires_at as "expiresAt" from auth_sessions where id = ${currentSessionId} and user_id = ${userId}
+        and revoked_at is null for update
     `);
-    if (!session.rows[0]) return null;
+    const sessionExpiresAt = dateValue(session.rows[0]?.expiresAt);
+    if (!sessionExpiresAt || sessionExpiresAt.getTime() <= Date.now()) return null;
     const result = (await db.execute<{
       secretEncrypted: string;
       enabledAt: Date | null;
@@ -834,6 +842,7 @@ export async function confirmMfaSetup(
         from auth_mfa_factors where user_id = ${userId} for update
     `));
     const factor = result.rows[0];
+    if (sessionExpiresAt.getTime() <= Date.now()) return null;
     if (!factor || factor.enabledAt) return null;
     const setupExpiresAt = dateValue(factor.setupExpiresAt);
     if (!setupExpiresAt || setupExpiresAt.getTime() <= Date.now()) {
