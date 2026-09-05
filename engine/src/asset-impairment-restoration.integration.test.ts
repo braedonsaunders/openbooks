@@ -99,7 +99,7 @@ test(
       await setFramework(org.orgId, "us_gaap");
       const impairment = await remeasureAsset(org.orgId, assetId, {
         newCarryingValue: "750",
-        date: org.date,
+        date: "2026-07-31",
         actorId,
       });
       assert.equal(impairment.kind, "impaired");
@@ -107,13 +107,13 @@ test(
 
       // Fair value recovers: ANY write-up is a prohibited restoration.
       await assert.rejects(
-        remeasureAsset(org.orgId, assetId, { newCarryingValue: "820", date: org.date, actorId }),
+        remeasureAsset(org.orgId, assetId, { newCarryingValue: "820", date: "2026-07-31", actorId }),
         /US GAAP prohibits restoring/,
       );
       // Further impairment remains permitted.
       const deeper = await remeasureAsset(org.orgId, assetId, {
         newCarryingValue: "700",
-        date: org.date,
+        date: "2026-07-31",
         actorId,
       });
       assert.equal(deeper.delta, "-50.0000");
@@ -125,14 +125,14 @@ test(
       // carrying may return to at most 900). 700 → 850 releases 150.
       const reversal = await remeasureAsset(org.orgId, assetId, {
         newCarryingValue: "850",
-        date: org.date,
+        date: "2026-07-31",
         actorId,
       });
       assert.equal(reversal.delta, "150.0000");
       // Beyond depreciated historical cost (900) is refused: 850 → 950 asks
       // for 100 against the remaining 50 of unreversed impairment.
       await assert.rejects(
-        remeasureAsset(org.orgId, assetId, { newCarryingValue: "950", date: org.date, actorId }),
+        remeasureAsset(org.orgId, assetId, { newCarryingValue: "950", date: "2026-07-31", actorId }),
         /IAS 36 caps an impairment reversal/,
       );
     } finally {
@@ -152,7 +152,7 @@ test(
 
       // Impair 900 → 750: accumulated-depreciation account now carries
       // 100 (schedule) + 150 (impairment) = 250 credit.
-      await remeasureAsset(org.orgId, assetId, { newCarryingValue: "750", date: org.date, actorId });
+      await remeasureAsset(org.orgId, assetId, { newCarryingValue: "750", date: "2026-07-31", actorId });
       assert.equal(await glBalance(org.orgId, org.accounts.clearing), -toUnits("250"));
 
       // Sell for 800: NBV must be 750 (not 900), gain 50, and derecognition
@@ -160,7 +160,7 @@ test(
       const disposal = await disposeAsset(org.orgId, assetId, {
         proceeds: "800",
         proceedsAccountId: org.accounts.bank,
-        date: org.date,
+        date: "2026-07-31",
         actorId,
       });
       assert.equal(disposal.nbv, "750.0000");
@@ -207,7 +207,7 @@ test(
       await setFramework(org.orgId, "us_gaap");
       const impairment = await remeasureAsset(org.orgId, assetId, {
         newCarryingValue: "750",
-        date: org.date,
+        date: "2026-07-31",
         actorId,
       });
       assert.equal(impairment.kind, "impaired");
@@ -225,7 +225,7 @@ test(
 
       // A prohibited US GAAP restoration must not touch ANYTHING.
       await assert.rejects(
-        remeasureAsset(org.orgId, assetId, { newCarryingValue: "820", date: org.date, actorId }),
+        remeasureAsset(org.orgId, assetId, { newCarryingValue: "820", date: "2026-07-31", actorId }),
         /US GAAP prohibits restoring/,
       );
       assert.deepEqual(await evidence(), snapshot, "a refused remeasurement writes nothing");
@@ -233,7 +233,7 @@ test(
       // Further impairment remains permitted and rebases the future lines again.
       const deeper = await remeasureAsset(org.orgId, assetId, {
         newCarryingValue: "700",
-        date: org.date,
+        date: "2026-07-31",
         actorId,
       });
       assert.equal(deeper.delta, "-50.0000");
