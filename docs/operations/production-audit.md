@@ -597,3 +597,36 @@ explicit anys). Evidence is retained in thread storage under
 The next settings review found that the email configuration HTTP writer ignores
 the engine's optional revision fence. Its reader and engine comparison also
 truncate revisions. Those remain open until the settings continuation lands.
+
+## Email configuration concurrency — continuation from d8393c67
+
+Three PostgreSQL regressions reproduced a lost-update window in outbound email
+configuration: the engine rounded revision tokens, the HTTP endpoint ignored
+them, and saves inside one transaction reused its timestamp. The form now
+echoes the exact revision; the endpoint requires and forwards it; the service
+compares all six digits under the organization lock and advances its revision
+on every save. Conflicts return 409 with no configuration or audit write. The
+HTTP response uses the committed save result, avoiding a second read that could
+return a different administrator's revision. Secret redaction and atomic audit
+evidence remain covered by the existing database tests.
+
+The next continuation has concrete party and project-task failures. The initial
+party source inspection assumed raw timestamps were JavaScript Dates; the real
+driver returns strings, and a valid party save succeeds. The actual reproduced
+defect is a stale one-microsecond token overwriting a newer party name because
+the precheck rounds both tokens and the SQL predicate uses the latest read.
+WBS task reads and input parsing also discard microseconds, and repeated task
+saves in one transaction reuse a revision. Those findings remain open.
+
+Verification passed 17 focused email cases, all 3,040 canonical unit cases,
+engine/web and E2E typechecks, the production build and all 12 browser tests.
+The new browser case exercises successful save, a competing administrator,
+stale refusal and reload/retry. The existing permission fake now matches the
+service's committed-result contract. No outbound message was sent.
+
+A stalled macOS unit worker was sampled at shutdown: Maglev waited for GC
+while the main thread joined its compiler thread. The existing Darwin-only
+test workaround now disables concurrent optimizing compilation as well as
+Sparkplug. The restarted full suite finished normally. Linux CI and production
+runtime flags are unchanged. Lint/type ceilings remain 732/398. Receipts live
+in thread storage under `audit-email-revision-2026-09-05`.

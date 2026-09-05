@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { documentRevisionSql, isDocumentRevisionToken } from "./document-revision.ts";
 import type { EmailActor } from "@openbooks/schema";
 import {
   resolveEmailTransport,
@@ -51,13 +52,13 @@ export type OrgEmailConfigView = RedactedEmailConfig & {
 };
 
 export async function readOrgEmailConfigView(orgId: string): Promise<OrgEmailConfigView> {
-  const r = (await db.execute<{ email: RawEmailConfig | null; updatedAt: Date | null }>(sql`
-    select settings -> 'email' as email, updated_at as "updatedAt" from orgs where id = ${orgId}
+  const r = (await db.execute<{ email: RawEmailConfig | null; updatedAt: string | null }>(sql`
+    select settings -> 'email' as email, ${documentRevisionSql(sql`updated_at`)} as "updatedAt" from orgs where id = ${orgId}
   `));
   const row = r.rows[0];
   return {
     ...redactEmailConfig(row?.email),
-    updatedAt: row?.updatedAt ? new Date(row.updatedAt).toISOString() : null,
+    updatedAt: row?.updatedAt ?? null,
   };
 }
 
@@ -140,17 +141,17 @@ export async function saveOrgEmailConfig(
     // earlier revision — is rejected by the fence below. The silent
     // last-writer-wins overwrite of another admin's credential or settings is
     // impossible in either path.
-    const locked = await db.execute<{ email: RawEmailConfig | null; updatedAt: Date | null }>(sql`
-      select settings -> 'email' as email, updated_at as "updatedAt"
+    const locked = await db.execute<{ email: RawEmailConfig | null; updatedAt: string | null }>(sql`
+      select settings -> 'email' as email, ${documentRevisionSql(sql`updated_at`)} as "updatedAt"
         from orgs where id = ${orgId} for update
     `);
     const current = locked.rows[0];
     if (!current) throw new Error(`organization ${orgId} does not exist`);
-    const persistedRevision = current.updatedAt ? new Date(current.updatedAt).toISOString() : null;
+    const persistedRevision = current.updatedAt;
     if (
       options.expectedUpdatedAt !== undefined &&
       (persistedRevision === null ||
-        new Date(options.expectedUpdatedAt).getTime() !== new Date(persistedRevision).getTime())
+        !isDocumentRevisionToken(options.expectedUpdatedAt) || options.expectedUpdatedAt !== persistedRevision)
     ) {
       throw new OrgEmailConfigConflictError(options.expectedUpdatedAt, persistedRevision ?? "");
     }
@@ -179,7 +180,7 @@ export async function saveOrgEmailConfig(
     await db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{email}', ${JSON.stringify(next)}::jsonb),
-             updated_at = now(),
+             updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
              updated_by = ${updatedBy}
        where id = ${orgId}
     `);
@@ -198,12 +199,12 @@ export async function saveOrgEmailConfig(
       })}::jsonb, ${updatedBy})
     `);
 
-    const saved = await db.execute<{ updatedAt: Date | null }>(sql`
-      select updated_at as "updatedAt" from orgs where id = ${orgId}
+    const saved = await db.execute<{ updatedAt: string | null }>(sql`
+      select ${documentRevisionSql(sql`updated_at`)} as "updatedAt" from orgs where id = ${orgId}
     `);
     return {
       ...after,
-      updatedAt: saved.rows[0]?.updatedAt ? new Date(saved.rows[0].updatedAt).toISOString() : null,
+      updatedAt: saved.rows[0]?.updatedAt ?? null,
     };
   });
 }

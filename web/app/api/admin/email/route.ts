@@ -1,7 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
-import { readOrgEmailConfigView, saveOrgEmailConfig } from '@openbooks/engine/src/email-config.ts'
+import { OrgEmailConfigConflictError, readOrgEmailConfigView, saveOrgEmailConfig } from '@openbooks/engine/src/email-config.ts'
+import { isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { isEmailProvider } from '@openbooks/emails'
 
 export const runtime = 'nodejs'
@@ -31,6 +32,9 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: 'invalid JSON' }, { status: 400 })
   }
 
+  if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    return NextResponse.json({ error: 'Reload the email settings and supply their exact revision before saving' }, { status: 409 })
+  }
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
   const provider = body.provider
   if (provider !== undefined && provider !== null && !isEmailProvider(provider)) {
@@ -38,7 +42,7 @@ export async function PUT(req: Request) {
   }
 
   try {
-    await saveOrgEmailConfig(gate.user.orgId, {
+    const saved = await saveOrgEmailConfig(gate.user.orgId, {
       enabled: body.enabled === true,
       provider: isEmailProvider(provider) ? provider : undefined,
       fromName: str(body.fromName),
@@ -52,9 +56,9 @@ export async function PUT(req: Request) {
       smtpUsername: str(body.smtpUsername),
       // secret: string ⇒ seal; null ⇒ clear; undefined ⇒ keep existing.
       secret: body.secret === null ? null : str(body.secret),
-    }, { kind: "user", userId: gate.user.id })
+    }, { kind: "user", userId: gate.user.id }, { expectedUpdatedAt: body.expectedUpdatedAt })
+    return NextResponse.json(saved)
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'save failed' }, { status: 422 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'save failed' }, { status: err instanceof OrgEmailConfigConflictError ? 409 : 422 })
   }
-  return NextResponse.json(await readOrgEmailConfigView(gate.user.orgId))
 }
