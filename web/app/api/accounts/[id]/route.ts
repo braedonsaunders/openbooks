@@ -9,32 +9,15 @@ import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/feat
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
 import { loadAccount } from '../_lib'
+import { accountInputFields } from '../_input'
 
 export const runtime = 'nodejs'
 
 const CURRENCY_RE = /^[A-Z]{3}$/
 
-interface PatchBody {
-  number?: string | null
-  name?: string
-  type?: string
-  description?: string | null
-  parentId?: string | null
-  isSummary?: boolean
-  isActive?: boolean
-  currencyRestriction?: string | null
-  eliminate?: boolean
-  subsidiaryId?: string | null
-  subsidiaryIncludeChildren?: boolean
-  reconcilable?: boolean
-  monetary?: boolean | null
-  requiredDimensions?: string[]
-  custom?: Record<string, unknown>
-}
-
-// Keep name validation at the shared JSON boundary so malformed field types
-// receive the parser's 400 response before any string methods are called.
+// Validate the complete input before normalization or financial policy checks.
 const patchBodySchema = z.looseObject({
+  ...accountInputFields,
   name: z.string().optional(),
 })
 
@@ -84,8 +67,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const existing = (existingPayload.account)
   const parsedBody = await parseJsonBody(request, patchBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const parsed = parsedBody.data
-  const body = parsed as PatchBody
+  const body = parsedBody.data
   if (body.currencyRestriction !== undefined && !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
   }

@@ -789,3 +789,19 @@ issuance/completion, and session/MFA revocation. The 3,041-test unit suite, web
 typecheck and locked production build also passed. Receipts are retained in
 thread storage under `audit-reset-kdf-2026-09-05`. The independent full integration
 run remains attributed to its frozen f7f87fbb billing revision.
+
+## Chart-of-accounts input integrity — continuation from ed793046
+
+Both account creation and editing accepted malformed policy fields. Objects
+could clear currency/entity bindings, string booleans could be coerced or
+silently defaulted, and malformed names/null flags could escape as exceptions.
+The PostgreSQL baseline reproduced 27 failing cases with five passing controls.
+Both endpoints now share typed policy fields at the existing JSON boundary,
+preserving explicit nullable clears, omitted values and valid create replay.
+
+All 40 focused tests passed: the input matrix checks unchanged rows and zero
+audit writes for refusals, while existing tests cover hierarchy/posting
+contention and idempotent creation. All 3,041 unit tests, web typechecking, the
+locked production build and explicit-any check passed without raising lint or
+type-safety ceilings. Receipts are retained in thread storage under
+`audit-account-input-2026-09-05`.
