@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { canonicalDecimal } from "./exact-decimal.ts";
+import { canonicalDecimal, fixedDecimal } from "./exact-decimal.ts";
 import { db, type SqlExecutor, withOrg } from "./db.ts";
-import { add, cmp, fromUnits, isZero, mul, mulPercent, neg, roundDiv, sum, toUnits } from "./money.ts";
+import { add, cmp, fromUnits, isZero, mulPercent, neg, roundDiv, sum, toUnits } from "./money.ts";
 import {
   periodInterest,
   periodRateFromAnnualPercent,
@@ -166,14 +166,38 @@ export function apportion(totalUnits: bigint, weights: readonly (number | string
  * Allocate a bundle's transaction price across obligations in proportion to
  * their standalone selling price (relative-SSP method, ASC 606-10-32-31).
  * Returns allocated amounts (decimal strings) that sum EXACTLY to `total`.
- * Obligations with no SSP fall back to their booked amount as the weight.
+ * SSP is per unit; quantities retain the document's eight decimal places.
+ * Obligations with no SSP use their already-extended booked amount as weight.
  */
 export function allocateByRelativeSSP(
   total: string,
-  obligations: { ssp?: string | null; booked?: string | null }[],
+  obligations: { ssp?: string | null; booked?: string | null; quantity?: string | null }[],
 ): string[] {
-  const weights = obligations.map((o) => o.ssp != null && o.ssp !== "" ? o.ssp : (o.booked ?? "0"));
-  return apportion(toUnits(total), weights).map(fromUnits);
+  const weights = obligations.map((o) => {
+    if (o.ssp != null && o.ssp !== "" && toUnits(o.ssp) < 0n) {
+      throw new RevenueRecognitionError("Revenue allocation requires non-negative selling prices");
+    }
+    // Keep the unrounded product at scale 12, including sub-money-unit SSPs.
+    // Rounding each extended SSP first can erase a valid allocation weight.
+    const weight = o.ssp != null && o.ssp !== ""
+      ? toUnits(o.ssp) * recognitionQuantityUnits(o.quantity ?? "1")
+      : toUnits(o.booked ?? "0") * 100_000_000n;
+    if (weight < 0n) throw new RevenueRecognitionError("Revenue allocation requires non-negative selling prices and weights");
+    return weight;
+  });
+  const totalUnits = toUnits(total);
+  if (totalUnits !== 0n && weights.every((weight) => weight === 0n)) {
+    throw new RevenueRecognitionError("Revenue allocation requires a positive selling price weight for a nonzero total");
+  }
+  return apportion(totalUnits, weights).map(fromUnits);
+}
+
+function recognitionQuantityUnits(quantity: string): bigint {
+  const value = typeof quantity === "string" ? canonicalDecimal(quantity, 8) : null;
+  if (value === null || value.startsWith("-") || value.split(".")[0]!.length > 20) {
+    throw new RevenueRecognitionError("Revenue quantity must be a non-negative exact numeric(28,8) decimal");
+  }
+  return BigInt(fixedDecimal(value, 8).replace(".", ""));
 }
 
 /**
@@ -190,9 +214,11 @@ export function fairValueRangeFlag(
   high: string | null,
 ): "below_range" | "above_range" | null {
   if (low == null && high == null) return null;
-  const qty = quantity != null && cmp(quantity, "0") > 0 ? quantity : "1";
-  if (low != null && cmp(allocated, mul(low, qty)) < 0) return "below_range";
-  if (high != null && cmp(allocated, mul(high, qty)) > 0) return "above_range";
+  const quantityUnits = recognitionQuantityUnits(quantity ?? "1");
+  const qty = quantityUnits > 0n ? quantityUnits : 100_000_000n;
+  const amount = toUnits(allocated) * 100_000_000n;
+  if (low != null && amount < toUnits(low) * qty) return "below_range";
+  if (high != null && amount > toUnits(high) * qty) return "above_range";
   return null;
 }
 
@@ -1113,24 +1139,32 @@ export async function createObligationsFromInvoice(
   if (lineRes.rows.length === 0) return { created: 0, contractId: null, obligationIds: [] };
 
   // Lines that already produced an obligation (idempotent replay).
-  const existing = (await db.execute<{ id: string; document_line_id: string }>(sql`
-    select id, document_line_id from performance_obligations
+  const existing = (await db.execute<{ id: string; document_line_id: string; allocated_price: string }>(sql`
+    select id, document_line_id, allocated_price from performance_obligations
      where org_id = ${orgId} and document_line_id = any(${`{${lineRes.rows.map((l) => l.line_id).join(",")}}`}::uuid[])`));
   const already = new Set(existing.rows.map((r) => r.document_line_id));
   const existingObligationIds = existing.rows.map((r) => r.id);
   const lines = lineRes.rows.filter((l) => !already.has(l.line_id));
 
-  // Relative-SSP allocation over the bundle of new rev-rec lines. Lines flagged
+  // A partial legacy replay still allocates against the WHOLE invoice bundle.
+  // Existing allocations are immutable here; configuration drift must be
+  // reconciled explicitly rather than silently repricing surviving obligations.
+  // A complete replay skips pricing and only repairs missing schedules.
+  // Lines flagged
   // 'exclude' from allocation keep their booked amount and don't dilute others.
-  const included = lines.filter((l) => l.revenue_allocation !== "exclude");
+  const included = lines.length > 0 ? lineRes.rows.filter((l) => l.revenue_allocation !== "exclude") : [];
   const bundleTotal = sum(included.map((l) => l.amount));
   const alloc = allocateByRelativeSSP(
     bundleTotal,
-    included.map((l) => ({ ssp: l.item_ssp ?? l.fair_value, booked: l.amount })),
+    included.map((l) => ({ ssp: l.item_ssp ?? l.fair_value, booked: l.amount, quantity: l.quantity })),
   );
   const allocByLine = new Map<string, string>();
   included.forEach((l, i) => allocByLine.set(l.line_id, alloc[i]!));
-  for (const l of lines) if (l.revenue_allocation === "exclude") allocByLine.set(l.line_id, l.amount);
+  for (const l of lineRes.rows) if (l.revenue_allocation === "exclude") allocByLine.set(l.line_id, l.amount);
+  if (lines.length > 0 && existing.rows.some((row) => cmp(row.allocated_price, allocByLine.get(row.document_line_id)!) !== 0)) {
+    throw new RevenueRecognitionError("Partial revenue allocation conflicts with existing obligations; reconcile the contract before retrying");
+  }
+  const contractTotal = sum(lineRes.rows.map((l) => l.amount));
 
   const obligationIds: string[] = [];
   const contractId = await db.transaction(async (tx) => {
@@ -1144,18 +1178,21 @@ export async function createObligationsFromInvoice(
           (org_id, customer_id, contract_number, idempotency_key, status, starts_on,
            currency, total_transaction_price, created_by, updated_by)
         values (${orgId}, ${doc.party_id}, ${doc.document_number}, ${contractKey}, 'active',
-                ${doc.document_date}, ${doc.currency}, ${bundleTotal}, ${actorId}, ${actorId})
+                ${doc.document_date}, ${doc.currency}, ${contractTotal}, ${actorId}, ${actorId})
         on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
         returning id
       `);
       const existingContract = insertedContract.rows[0]
         ? null
-        : await tx.execute<{ id: string }>(sql`
-            select id from revenue_contracts
+        : await tx.execute<{ id: string; total_transaction_price: string }>(sql`
+            select id, total_transaction_price from revenue_contracts
              where org_id=${orgId} and idempotency_key=${contractKey}
           `);
       cId = insertedContract.rows[0]?.id ?? existingContract?.rows[0]?.id ?? null;
       if (!cId) throw new Error("revenue contract idempotency winner was not visible");
+      if (existingContract?.rows[0] && cmp(existingContract.rows[0].total_transaction_price, contractTotal) !== 0) {
+        throw new RevenueRecognitionError("Partial revenue allocation conflicts with the existing contract total; reconcile the contract before retrying");
+      }
 
       for (const l of lines) {
         const startsOn = (l.line_custom?.recognitionStartsOn as string) ?? doc.document_date;
