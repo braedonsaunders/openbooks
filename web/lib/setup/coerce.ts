@@ -64,8 +64,15 @@ export function coerceField(field: SetupField, raw: unknown): Coerced | { error:
   const column = toSnake(field.key)
 
   switch (field.kind) {
-    case 'boolean':
+    case 'boolean': {
+      if (present) {
+        const valid = typeof raw === 'boolean'
+          || (typeof raw === 'number' && (raw === 0 || raw === 1))
+          || (typeof raw === 'string' && /^(true|false|yes|no|y|n|1|0|t|f)?$/i.test(raw.trim()))
+        if (!valid) return { error: `${field.key} must be a boolean` }
+      }
       return { column, value: coerceBoolean(raw) }
+    }
     case 'integer': {
       if (!present) return { column, value: null }
       const n = typeof raw === 'number' || typeof raw === 'string' ? Number(raw) : NaN
@@ -185,7 +192,13 @@ export function buildRow(
   for (const field of scalarFields(entity)) {
     // On edit, natural-key / immutable columns are never rewritten.
     if (!opts.forCreate && field.lockedOnEdit) continue
-    const res = coerceField(field, body[field.key])
+    // Omission is not a negative policy choice. Apply declared defaults only
+    // on creation; an update without a boolean leaves its stored value alone.
+    if (!opts.forCreate && field.kind === 'boolean' && body[field.key] === undefined) continue
+    const raw = opts.forCreate && body[field.key] === undefined
+      ? field.defaultValue
+      : body[field.key]
+    const res = coerceField(field, raw)
     if ('error' in res) return { error: res.error }
     if (res.value === undefined) continue // required select left unset on edit → skip
     // Never write null to a NOT-NULL-with-default column: on create, omit it so
