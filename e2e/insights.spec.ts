@@ -25,6 +25,20 @@ test('Insight cards and dashboards remain editable after publishing', async ({
   const created: string[] = []
   try {
     await page.goto('/insights')
+    // A fresh CI company still has its first-run overlay. Defer setup through
+    // the real UI before exercising controls underneath it.
+    const wizard = page.getByTestId('setup-wizard')
+    if (await wizard.isVisible()) {
+      const [deferred] = await Promise.all([
+        page.waitForResponse((response) =>
+          response.url().endsWith('/api/admin/setup/wizard') &&
+          response.request().method() === 'POST',
+        ),
+        wizard.getByRole('button', { name: 'Skip for now', exact: true }).click(),
+      ])
+      expect(deferred.status(), await deferred.text()).toBe(200)
+      await expect(wizard).toBeHidden()
+    }
     const cardResponse = await mutate('/api/insights/cards/draft', 'POST')
     expect(cardResponse.ok(), await cardResponse.text()).toBe(true)
     const card = await cardResponse.json()
