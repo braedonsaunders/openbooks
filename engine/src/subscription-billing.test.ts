@@ -314,3 +314,8 @@ test("success bookkeeping can never roll the claim back after an invoice exists"
   assert.doesNotMatch(bookkeepingFailurePath, /next_bill_on/,
     "a bookkeeping failure never restores next_bill_on once an invoice was produced");
 });
+
+test("billing intervals preserve four-digit early calendar years", () => {
+  assert.equal(advanceSubscription("0001-02-15", "monthly"), "0001-03-15");
+  assert.equal(advanceSubscription("0099-12-31", "annually"), "0100-12-31");
+});

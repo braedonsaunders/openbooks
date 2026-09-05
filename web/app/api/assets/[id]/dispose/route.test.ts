@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 
 interface DisposalCall {
   orgId: string
@@ -9,12 +10,14 @@ interface DisposalCall {
 }
 
 interface RouteState {
+  isIsoCalendarDate: typeof isIsoCalendarDate
   businessTodayCalls: string[]
   disposeCalls: DisposalCall[]
 }
 
 const stateKey = Symbol.for('openbooks.asset-disposal-route-test')
 const routeState: RouteState = {
+  isIsoCalendarDate,
   businessTodayCalls: [],
   disposeCalls: [],
 }
@@ -71,10 +74,7 @@ const mockSources = new Map<string, string>([
         state.businessTodayCalls.push(orgId)
         return '2026-08-31'
       }
-      export function parseIsoDate(iso) {
-        const [year, month, day] = iso.split('-').map(Number)
-        return new Date(Date.UTC(year, month - 1, day))
-      }
+      export const isIsoCalendarDate = state.isIsoCalendarDate
     `,
   ],
   [

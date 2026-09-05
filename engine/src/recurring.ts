@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
 import { allocateDocumentNumber } from "./document-numbering.ts";
-import { businessToday } from "./business-date.ts";
+import { actorHasPermission } from "./actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "./actor-subsidiaries.ts";
+import { addCalendarDays, parseIsoDate, businessToday } from "./business-date.ts";
 import { now } from "./clock.ts";
 import { loadRequiredControlAccounts } from "./control-accounts.ts";
 import { inventoryFeatureEnabled } from "./inventory.ts";
@@ -81,67 +83,52 @@ export async function isRecurringKindEnabled(orgId: string, kind: string): Promi
   return typeof stored === "boolean" ? stored : feature.defaultEnabled;
 }
 
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
 function toIso(d: Date): string {
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  const value = d.toISOString().slice(0, 10);
+  parseIsoDate(value);
+  return value;
 }
 
-/**
- * Advance an ISO date by one cadence step. Month/quarter/year steps clamp to the
- * end of a shorter target month (Jan 31 + 1 month → Feb 28/29), the convention
- * every billing system uses so month-end anchors don't drift onto the 1st.
- * Pure and deterministic (custom_cron aside) so it is unit-tested directly.
- */
+/** Advance one occurrence, clamping month-end anchors and rejecting invalid
+ * configuration rather than silently substituting a different billing rule. */
 export function advanceCadence(
-  isoDate: string,
-  cadence: Cadence,
-  cron?: string | null,
-  now?: Date,
+  isoDate: string, cadence: Cadence, cron?: string | null, from?: Date,
 ): string {
-  const [y, m, d] = isoDate.split("-").map(Number);
-  if (cadence === "weekly" || cadence === "biweekly") {
-    const base = new Date(Date.UTC(y!, m! - 1, d!));
-    base.setUTCDate(base.getUTCDate() + (cadence === "weekly" ? 7 : 14));
+  try {
+    const base = parseIsoDate(isoDate);
+    if (cadence === "weekly" || cadence === "biweekly") {
+      return addCalendarDays(isoDate, cadence === "weekly" ? 7 : 14);
+    }
+    if (cadence === "custom_cron") {
+      // Start just before the next calendar day so midnight crons do not skip
+      // tomorrow. Every occurrence must advance strictly beyond this date.
+      const nextDay = parseIsoDate(addCalendarDays(isoDate, 1));
+      const next = computeNextRunAt(cron ?? "", from ?? new Date(nextDay.getTime() - 1));
+      if (!next || toIso(next) <= isoDate) throw new RecurringError("invalid recurring cron or non-advancing occurrence");
+      return toIso(next);
+    }
+    if (!["monthly", "quarterly", "annually"].includes(cadence)) {
+      throw new RecurringError("invalid recurring cadence");
+    }
+    const day = base.getUTCDate();
+    base.setUTCDate(1);
+    base.setUTCMonth(base.getUTCMonth() + (cadence === "monthly" ? 1 : cadence === "quarterly" ? 3 : 12));
+    const last = new Date(base);
+    last.setUTCMonth(last.getUTCMonth() + 1, 0);
+    base.setUTCDate(Math.min(day, last.getUTCDate()));
     return toIso(base);
+  } catch (error) {
+    if (error instanceof RecurringError) throw error;
+    throw new RecurringError("invalid recurring calendar date or cadence outside the supported date range");
   }
-  if (cadence === "custom_cron") {
-    // Cron recurrence is clock-based; advance from the day AFTER the occurrence
-    // (so a daily cron doesn't return the same day) using the shared
-    // evaluator. A malformed cron falls back to a monthly step so a bad row can
-    // never wedge the runner in a zero-length loop.
-    const from = new Date(Date.UTC(y!, m! - 1, d! + 1));
-    const next = computeNextRunAt(cron ?? "", now ?? from);
-    if (!next) return advanceCadence(isoDate, "monthly");
-    return toIso(next);
-  }
-  const monthStep = cadence === "monthly" ? 1 : cadence === "quarterly" ? 3 : 12;
-  const targetMonthIndex = m! - 1 + monthStep;
-  const targetYear = y! + Math.floor(targetMonthIndex / 12);
-  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
-  // Clamp the day to the last day of the target month.
-  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
-  const day = Math.min(d!, lastDay);
-  return `${targetYear}-${pad(targetMonth + 1)}-${pad(day)}`;
 }
 
 /** Whole-day difference b − a (both ISO), used to carry the payment term. */
 function dayDiff(a: string, b: string): number {
-  const [ay, am, ad] = a.split("-").map(Number);
-  const [by, bm, bd] = b.split("-").map(Number);
-  const t0 = Date.UTC(ay!, am! - 1, ad!);
-  const t1 = Date.UTC(by!, bm! - 1, bd!);
-  return Math.round((t1 - t0) / 86_400_000);
+  return (parseIsoDate(b).getTime() - parseIsoDate(a).getTime()) / 86_400_000;
 }
 
-function addDays(isoDate: string, days: number): string {
-  const [y, m, d] = isoDate.split("-").map(Number);
-  const base = new Date(Date.UTC(y!, m! - 1, d!));
-  base.setUTCDate(base.getUTCDate() + days);
-  return toIso(base);
-}
+const addDays = addCalendarDays;
 
 async function nextNumber(orgId: string, kind: string): Promise<string> {
   return allocateDocumentNumber(db, orgId, kind, defaultPrefix(kind));
@@ -282,9 +269,6 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     if (s.nextRunOn > today) continue;
 
     const occurrenceDate = s.nextRunOn;
-    const advanced = advanceCadence(occurrenceDate, s.cadence, s.cron);
-    // Deactivate once we pass ends_on rather than looping forever.
-    const stillActive = !s.endsOn || advanced <= s.endsOn;
 
     // Claim the occurrence INSIDE the generation transaction: the tick that
     // flips next_run_on off its current value and the cloned document commit
@@ -298,6 +282,20 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     let gen: { documentId: string; documentNumber: string; posted: boolean } | null = null;
     try {
       gen = await withOrg(s.orgId, async () => {
+        const current = (await db.execute<{
+          templateId: string; autoPost: boolean; isActive: boolean; nextRunOn: string;
+          cadence: Cadence; cron: string | null; endsOn: string | null;
+        }>(sql`
+          select template_document_id as "templateId", auto_post as "autoPost", is_active as "isActive",
+                 next_run_on::text as "nextRunOn", cadence, cron, ends_on::text as "endsOn"
+            from recurring_schedules where id = ${s.id} and org_id = ${s.orgId} for update
+        `)).rows[0];
+        if (!current?.isActive || current.nextRunOn !== occurrenceDate) return null;
+        if (current.endsOn && occurrenceDate > current.endsOn) {
+          throw new RecurringError("recurring occurrence is after the schedule end date");
+        }
+        const advanced = advanceCadence(occurrenceDate, current.cadence, current.cron);
+        const stillActive = !current.endsOn || advanced <= current.endsOn;
         const claimed = (await db.execute<{ id: string }>(sql`
           update recurring_schedules
              set next_run_on = ${advanced},
@@ -307,7 +305,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
           returning id
         `));
         if (!claimed.rows.length) return null; // another tick won it
-        return generateFromTemplate(s.orgId, s.templateId, today, s.autoPost, {
+        return generateFromTemplate(s.orgId, current.templateId, today, current.autoPost, {
           scheduleId: s.id,
           occurrenceOn: occurrenceDate,
           actorId: null,
@@ -374,6 +372,7 @@ export async function runScheduleNow(
   scheduleId: string,
   actorId: string,
   asOf?: string,
+  authority?: { orgId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; canPost: boolean },
 ): Promise<{ documentId: string; documentNumber: string; posted: boolean }> {
   const s = await withBypass(async () => {
     return (await db.execute<{ orgId: string; templateId: string; autoPost: boolean }>(sql`
@@ -382,16 +381,38 @@ export async function runScheduleNow(
     `));
   });
   const row = s.rows[0];
-  if (!row) throw new Error("recurring schedule not found");
+  if (!row || (authority && authority.orgId !== row.orgId)) throw new RecurringError("recurring schedule not found", 404);
   const today = asOf ?? (await businessToday(row.orgId));
-  const gen = await withOrg(row.orgId, () =>
-    generateFromTemplate(row.orgId, row.templateId, today, row.autoPost, {
-      scheduleId,
-      occurrenceOn: today,
-      actorId,
-      runSource: "run_now",
-    }),
-  );
+  const gen = await withOrg(row.orgId, async () => {
+    const current = (await db.execute<{ templateId: string; autoPost: boolean }>(sql`
+      select template_document_id as "templateId", auto_post as "autoPost"
+        from recurring_schedules where id = ${scheduleId} and org_id = ${row.orgId} for update
+    `)).rows[0];
+    if (!current) throw new RecurringError("recurring schedule not found", 404);
+    if (!(await actorHasPermission(db, row.orgId, actorId, "documents.manage"))) {
+      throw new RecurringError("missing permission: documents.manage", 403);
+    }
+    const scope = await actorAllowedSubsidiaryIds(db, row.orgId, actorId);
+    const template = (await db.execute<{ subsidiaryId: string | null; kind: string }>(sql`
+      select subsidiary_id as "subsidiaryId", kind from documents
+       where id = ${current.templateId} and org_id = ${row.orgId} for share
+    `)).rows[0];
+    const visible = (allowed: ReadonlySet<string> | null) => allowed === null
+      || (template?.subsidiaryId != null && allowed.has(template.subsidiaryId));
+    if (!template || !visible(scope) || (authority && !visible(authority.allowedSubsidiaryIds))) {
+      throw new RecurringError("recurring schedule not found", 404);
+    }
+    if (!(await isRecurringKindEnabled(row.orgId, template.kind))) {
+      throw new RecurringError("template document kind is disabled", 404);
+    }
+    if (current.autoPost && ((authority && !authority.canPost)
+        || !(await actorHasPermission(db, row.orgId, actorId, "gl.post")))) {
+      throw new RecurringError("missing permission: gl.post", 403);
+    }
+    return generateFromTemplate(row.orgId, current.templateId, today, current.autoPost, {
+      scheduleId, occurrenceOn: today, actorId, runSource: "run_now",
+    });
+  });
   await withBypass(async () => {
     await db.execute(sql`
       update recurring_schedules

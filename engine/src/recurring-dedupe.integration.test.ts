@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withOrg } from "./db.ts";
 import { runDueRecurringSchedules, runScheduleNow } from "./recurring.ts";
 import {
   createScratchOrg,
@@ -25,6 +25,8 @@ async function seedInvoiceSchedule(
   actorId: string,
   opts: { templateCreatedBy?: string | null; autoPost?: boolean } = {},
 ): Promise<string> {
+  await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post"]'::jsonb
+    where org_id=${org.orgId} and key='admin'`);
   const templateId = randomUUID();
   await db.execute(sql`
     insert into documents
@@ -508,3 +510,76 @@ test(
     }
   },
 );
+
+for (const changed of ["is_active", "auto_post"] as const) {
+  test(`scheduler rechecks ${changed} after waiting for a concurrent schedule edit`, { skip: !DB }, async () => {
+    const org = await createScratchOrg();
+    let release = () => {};
+    let edit: Promise<unknown> | undefined;
+    let tick: ReturnType<typeof runDueRecurringSchedules> | undefined;
+    try {
+      const actor = await createScratchUser(org.orgId, "Scheduler", "admin");
+      const scheduleId = await seedInvoiceSchedule(org, actor);
+      let staged!: () => void;
+      const ready = new Promise<void>(resolve => { staged = resolve; });
+      const hold = new Promise<void>(resolve => { release = resolve; });
+      let editorPid = 0;
+      edit = withOrg(org.orgId, async () => {
+        editorPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+        await db.execute(sql`update recurring_schedules set ${sql.identifier(changed)} = false
+          where id = ${scheduleId} and org_id = ${org.orgId}`);
+        staged();
+        await hold;
+      });
+      await Promise.race([ready, edit]);
+      tick = runDueRecurringSchedules(org.date);
+      let settled = false;
+      void tick.then(() => { settled = true; }, () => { settled = true; });
+      const deadline = Date.now() + 10_000;
+      let blocked = false;
+      while (!settled && Date.now() < deadline) {
+        blocked = (await db.execute<{ blocked: boolean }>(sql`select exists (
+          select 1 from pg_stat_activity where datname = current_database()
+            and ${editorPid} = any(pg_blocking_pids(pid))
+        ) as blocked`)).rows[0]!.blocked;
+        if (blocked) break;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      assert.ok(blocked, "candidate must wait on the schedule edit after reading its old state");
+      release();
+      await edit;
+      const result = await tick;
+      assert.equal(result.failed, 0);
+      assert.equal(result.generated, changed === "is_active" ? 0 : 1);
+      assert.equal(result.posted, 0);
+      assert.equal(await journalEntryCount(org.orgId), 0);
+      const stored = (await db.execute<{ nextRunOn: string }>(sql`
+        select next_run_on as "nextRunOn" from recurring_schedules where id = ${scheduleId}
+      `)).rows[0]!;
+      if (changed === "is_active") assert.equal(stored.nextRunOn, org.date);
+    } finally {
+      release();
+      await Promise.allSettled([edit, tick]);
+      await dropScratchOrgReporting(org.orgId);
+    }
+  });
+}
+
+test("malformed recurring cron records a failure without changing cadence or aborting other schedules", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Scheduler", "admin");
+    const bad = await seedInvoiceSchedule(org, actor);
+    const good = await seedInvoiceSchedule(org, actor);
+    await db.execute(sql`update recurring_schedules set cadence='custom_cron', cron='not a cron' where id=${bad}`);
+    const result = await runDueRecurringSchedules(org.date);
+    assert.equal(result.failed, 1);
+    assert.deepEqual(result.documents.map(row => row.scheduleId), [good]);
+    const stored = (await db.execute<{ nextRunOn: string; error: string }>(sql`
+      select next_run_on as "nextRunOn", last_error as error from recurring_schedules where id=${bad}
+    `)).rows[0]!;
+    assert.equal(stored.nextRunOn, org.date);
+    assert.match(stored.error, /cron/);
+    assert.equal(await journalEntryCount(org.orgId), 1);
+  } finally { await dropScratchOrgReporting(org.orgId); }
+});

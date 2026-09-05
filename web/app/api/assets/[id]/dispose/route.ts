@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { disposeAsset } from "@openbooks/engine/src/asset-lifecycle.ts";
 import {
   businessToday,
-  parseIsoDate,
+  isIsoCalendarDate,
 } from "@openbooks/engine/src/business-date.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
@@ -14,13 +14,6 @@ import {
 } from "../../../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-function isIsoCalendarDate(value: unknown): value is string {
-  if (typeof value !== "string" || !DATE_RE.test(value)) return false;
-  return parseIsoDate(value).toISOString().slice(0, 10) === value;
-}
 
 interface Body {
   date?: string;

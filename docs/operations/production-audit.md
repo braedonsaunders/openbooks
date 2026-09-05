@@ -454,3 +454,55 @@ were not repeated for this batch; their earlier receipts remain separate.
 Before-change failures, passing results and source
 hashes are retained in `audit-inventory-boundaries-2026-09-05` in thread storage.
 No schema, deployment or protected synchronization/posting files changed.
+
+## Recurring authorization and calendar integrity — continuation from 8c933465
+
+The completed integration run of the preceding pushed commit passed 1,336 tests
+with no failures and two Redis-dependent skips. Its disposable fixture owner
+released all 872 leases, verified all four databases after teardown and reported
+no leaks. This is separate evidence from the current corrections.
+
+Nine live recurring API regressions reproduced subsidiary disclosure/mutation,
+auto-post activation without `gl.post`, truthy-string posting coercion and
+manual execution that posted despite the caller lacking posting authority.
+Collection and detail routes now apply the shared subsidiary policy, validate
+identifiers/dates/booleans, lock schedules and templates before mutation, and
+retain atomic audit evidence. Enabling, reactivating or rescheduling automatic
+posting requires posting authority. Manual execution also checks live engine
+permissions and scope under the schedule lock, including deny overrides and
+any narrower authority supplied by the HTTP entry point.
+
+The web and engine now share one subsidiary restriction resolver. It preserves
+unrestricted, list and subtree semantics and refuses inactive or absent users.
+Engine permission checks resolve the identity from its home organization while
+reading grants from the active organization; a platform administrator switching
+organizations no longer loses permission solely because the home user row is
+outside the tenant transaction.
+
+Three additional PostgreSQL regressions failed against the old scheduler:
+disabling a schedule or disabling auto-post while its candidate waited for a
+lock still allowed the old policy to execute, and an invalid cron silently
+became monthly billing. Claims now lock and re-read current configuration;
+invalid recurrence records an error without advancing or creating a document,
+and other schedules continue. Midnight daily cron no longer skips tomorrow.
+
+Shared calendar arithmetic rejects impossible dates, fractional/unsafe offsets,
+and overflow outside years 0001–9999. Early calendar years retain four digits
+without JavaScript's year-1900 offset. Subscription month/year advancement also
+preserves that canonical representation. Boolean validation callers in custom
+fields, asset disposal and surcharge setup use the shared non-throwing predicate.
+
+The next confirmed issue is independent: recurring template cloning omits tax
+profiles and entity/custom-segment overrides. That remains open until its
+regressions and correction land; this entry does not declare the audit complete.
+
+Verification passed all 3,040 canonical unit tests, 110 focused domain/calendar/
+authorization cases, and 29 identity/recurring cases after the final identity
+resolver adjustment. Engine/web typechecks, the final production build, all 11
+browser tests and all 19 Redis-backed outbox tests passed. The measured ceilings
+fell to 398 explicit anys and 732 lint warnings (zero lint errors). The disposal
+route test now exercises the real shared date predicate rather than reproducing
+its implementation in a mock. The browser server and disposable Redis stopped
+after verification. No schema, deployment or protected sync/posting files were
+changed. Receipts and source hashes are retained in thread storage under
+`audit-recurring-calendar-2026-09-05`.

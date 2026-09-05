@@ -162,7 +162,7 @@ export function advanceSubscription(isoDate: string, interval: Interval, interva
   lastDayDate.setUTCHours(0, 0, 0, 0);
   lastDayDate.setUTCFullYear(targetYear, targetMonth + 1, 0);
   const lastDay = lastDayDate.getUTCDate();
-  return `${targetYear}-${pad(targetMonth + 1)}-${pad(Math.min(d!, lastDay))}`;
+  return `${String(targetYear).padStart(4, "0")}-${pad(targetMonth + 1)}-${pad(Math.min(d!, lastDay))}`;
 }
 
 /** Normalize a subscription's charge to a monthly figure (analytics only). */

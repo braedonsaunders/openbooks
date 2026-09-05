@@ -21,12 +21,22 @@ test("monthly rolls the year over at December", () => {
 test("quarterly and annually advance by 3 and 12 months", () => {
   assert.equal(advanceCadence("2026-07-21", "quarterly"), "2026-10-21");
   assert.equal(advanceCadence("2026-11-30", "quarterly"), "2027-02-28");
-  assert.equal(advanceCadence("2026-02-29" /* not real, still clamps */, "annually"), "2027-02-28");
+  assert.equal(advanceCadence("2028-02-29", "annually"), "2029-02-28");
   assert.equal(advanceCadence("2026-07-21", "annually"), "2027-07-21");
 });
 
-test("a malformed custom cron falls back to a monthly step instead of looping", () => {
-  assert.equal(advanceCadence("2026-07-21", "custom_cron", "not a cron"), "2026-08-21");
+test("invalid dates, cadences, and cron rules fail closed", () => {
+  assert.throws(() => advanceCadence("2026-07-21", "custom_cron", "not a cron"));
+  assert.throws(() => advanceCadence("2026-02-29", "annually"));
+  assert.throws(() => advanceCadence("9999-12-31", "monthly"));
+  assert.throws(() => advanceCadence("2026-07-21", "unknown" as never));
+  assert.equal(advanceCadence("0001-02-28", "monthly"), "0001-03-28");
+  assert.equal(advanceCadence("0099-12-28", "weekly"), "0100-01-04");
+});
+
+test("midnight cron includes tomorrow and never skips an extra day", () => {
+  assert.equal(advanceCadence("2026-07-21", "custom_cron", "0 0 * * *"), "2026-07-22");
+  assert.equal(advanceCadence("2026-07-21", "custom_cron", "0 12 * * *"), "2026-07-22");
 });
 
 test("the claim and the generation share one transaction, closing the crash-skip window", () => {
@@ -40,7 +50,7 @@ test("the claim and the generation share one transaction, closing the crash-skip
   const loopStart = source.indexOf("for (const s of due.rows)", run);
   const orgTxn = source.indexOf("gen = await withOrg(s.orgId, async () => {", run);
   const claim = source.indexOf("set next_run_on = ${advanced}", orgTxn);
-  const generateCall = source.indexOf("generateFromTemplate(s.orgId, s.templateId", claim);
+  const generateCall = source.indexOf("generateFromTemplate(s.orgId, current.templateId", claim);
   assert.ok(orgTxn > loopStart, "generation runs in one pinned org transaction");
   assert.ok(claim > orgTxn, "the occurrence is claimed inside that same transaction");
   assert.ok(generateCall > claim, "generation follows the claim within it");
