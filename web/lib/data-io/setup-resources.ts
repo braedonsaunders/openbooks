@@ -7,6 +7,7 @@ import { COUNTRY_CODES } from '../countries'
 import { featureEnabled, featureGateLockKey, resolvedFeatureState } from '../features'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity, type SetupField } from '../setup/registry'
 import { buildRow, idColumn } from '../setup/coerce'
+import { isSetupBookEntity, saveSetupBook } from '../setup/books'
 import { auditSetupChange as audit } from '../setup/audit'
 import {
   exportCell,
@@ -213,6 +214,33 @@ async function writeSetup(
         continue
       }
 
+      if (isSetupBookEntity(entity)) {
+        const built = buildRow(entity, src, { forCreate: !existingId })
+        if ('error' in built) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: built.error })
+          continue
+        }
+        const bookInput = { ...src }
+        for (const key of unavailableFields) delete bookInput[key]
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`savepoint setup_import_row`)
+          try {
+            await saveSetupBook(entity, ctx.orgId, ctx.actorId, bookInput, tx, {
+              id: existingId ?? undefined, source: 'import', dryRun: ctx.dryRun,
+            })
+            await tx.execute(sql`release savepoint setup_import_row`)
+          } catch (error) {
+            await tx.execute(sql`rollback to savepoint setup_import_row`)
+            await tx.execute(sql`release savepoint setup_import_row`)
+            throw error
+          }
+        })
+        if (existingId) outcome.updated++
+        else outcome.created++
+        continue
+      }
+
       if (existingId) {
         const built = buildRow(entity, src, { forCreate: false })
         if ('error' in built) {
@@ -285,11 +313,6 @@ async function writeSetup(
             await tx.execute(sql`savepoint setup_import_row`)
             try {
               const cols = [...built.cols]
-              if (entity.key === 'item-rate-books' && unavailableFields.includes('currency')) {
-                const org = (await tx.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${ctx.orgId}`)).rows[0]
-                if (!org) throw new Error('organization not found')
-                cols.push({ column: 'currency', value: org.base_currency })
-              }
               if (entity.orgScoped) cols.push({ column: 'org_id', value: ctx.orgId })
               if (entity.actorCols) {
                 cols.push({ column: 'created_by', value: ctx.actorId })

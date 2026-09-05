@@ -20,6 +20,7 @@ import {
   UUID_RE,
 } from '../../../../../lib/setup/coerce'
 import { normalizeTaxReturnFormInput } from '../../../../../lib/setup/tax-return-form'
+import { saveSetupBook } from '../../../../../lib/setup/books'
 import { auditSetupChange as audit, loadSetupAuditRow } from '../../../../../lib/setup/audit'
 import { featureEnabled, featureGateLockKey, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { loadNumberSequenceKindOptions } from '../../../../../lib/setup/number-sequence-kinds'
@@ -66,30 +67,6 @@ async function setupWriteTransaction<T>(
     }
     return write(tx)
   })
-}
-
-/** Reassign the one default book under the caller's tenant advisory lock,
- * retaining the locked state of every demoted row in the same transaction. */
-async function demoteSetupBooks(
-  entity: SetupEntity, orgId: string, actorId: string,
-  flag: 'is_primary' | 'is_default', reason: string,
-  tx: Pick<typeof db, 'execute'>, exceptId: string | null = null,
-): Promise<void> {
-  const scope = sql`org_id = ${orgId} and ${sql.identifier(flag)}
-    ${exceptId ? sql`and id <> ${exceptId}` : sql``}`
-  const before = (await tx.execute(sql`
-    select * from ${sql.raw(entity.table)} where ${scope} order by id for update`)).rows
-  if (!before.length) return
-  const prior = new Map(before.map(row => [String(row.id), row]))
-  const demoted = (await tx.execute(sql`
-    update ${sql.raw(entity.table)} set ${sql.identifier(flag)} = false,
-      updated_at = now(), updated_by = ${actorId} where ${scope} returning *`)).rows
-  for (const after of demoted) {
-    const previous = prior.get(String(after.id))
-    if (!previous) throw new Error('book reassignment is missing its prior state')
-    await audit({ orgId, table: entity.table, rowId: String(after.id), action: 'update',
-      changes: { before: previous, after, reason }, actorId }, tx)
-  }
 }
 
 const FX_RATE_COLUMNS = new Set(['rate', 'current_rate', 'average_rate', 'historical_rate'])
@@ -712,28 +689,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
 
   if (entity.key === 'accounting-books') {
     try {
-      const id = await setupWriteTransaction(entity, orgId, body, undefined, async (tx) => {
-        // Serializes primary-book changes for this tenant, including two admins
-        // creating or promoting books at the same time.
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`accounting-books:${orgId}`}, 0))`)
-        const current = ((await tx.execute(sql`
-          select exists(
-            select 1 from accounting_books where org_id = ${orgId} and is_primary
-          ) as has_primary`)))
-        const isPrimary = coerceBoolean(body.isPrimary) || !current.rows[0]?.has_primary
-        const isActive = isPrimary || body.isActive === undefined || coerceBoolean(body.isActive)
-        if (isPrimary) await demoteSetupBooks(entity, orgId, actorId, 'is_primary', 'primary-book-reassigned', tx)
-        const inserted = (await tx.execute(sql`
-          insert into accounting_books
-            (org_id, code, name, is_primary, is_active, created_by, updated_by)
-          values
-            (${orgId}, ${String(body.code)}, ${String(body.name)}, ${isPrimary}, ${isActive}, ${actorId}, ${actorId})
-          returning id`)) as any
-        const id = String(inserted.rows[0].id)
-        await audit({ orgId, table: entity.table, rowId: id, action: 'insert',
-          changes: { after: await loadSetupAuditRow(entity, orgId, id, tx) }, actorId }, tx)
-        return id
-      })
+      const id = await setupWriteTransaction(entity, orgId, body, undefined, (tx) =>
+        saveSetupBook(entity, orgId, actorId, body, tx))
       return NextResponse.json({ id })
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
@@ -749,30 +706,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
     try {
-      const id = await setupWriteTransaction(entity, orgId, body, undefined, async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
-        const current = ((await tx.execute(sql`
-          select exists(select 1 from item_rate_books where org_id = ${orgId} and is_default and is_active) as has_default
-        `)))
-        const isDefault = coerceBoolean(body.isDefault) || !current.rows[0]?.has_default
-        const isActive = isDefault || body.isActive === undefined || coerceBoolean(body.isActive)
-        if (isDefault) await demoteSetupBooks(entity, orgId, actorId, 'is_default', 'default-rate-book-reassigned', tx)
-        const org = ((await tx.execute(sql`
-          select base_currency from orgs where id = ${orgId}
-        `)))
-        const currency = body.currency !== undefined
-          ? String(body.currency)
-          : String(org.rows[0]?.base_currency ?? '')
-        const inserted = (await tx.execute(sql`
-          insert into item_rate_books (org_id, code, name, currency, is_default, is_active, created_by, updated_by)
-          values (${orgId}, ${String(body.code)}, ${String(body.name)}, ${currency},
-                  ${isDefault}, ${isActive}, ${actorId}, ${actorId}) returning id
-        `)) as any
-        const id = String(inserted.rows[0].id)
-        await audit({ orgId, table: entity.table, rowId: id, action: 'insert',
-          changes: { after: await loadSetupAuditRow(entity, orgId, id, tx) }, actorId }, tx)
-        return id
-      })
+      const id = await setupWriteTransaction(entity, orgId, body, undefined, (tx) =>
+        saveSetupBook(entity, orgId, actorId, body, tx))
       return NextResponse.json({ id })
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
@@ -949,27 +884,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
 
   if (entity.key === 'accounting-books') {
     try {
-      await setupWriteTransaction(entity, orgId, body, id, async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`accounting-books:${orgId}`}, 0))`)
-        const existing = ((await tx.execute(sql`
-          select * from accounting_books
-           where id = ${id} and org_id = ${orgId} for update`)))
-        if (!existing.rows[0]) throw new Error('not found')
-        const isPrimary = coerceBoolean(body.isPrimary)
-        const isActive = coerceBoolean(body.isActive)
-        if (existing.rows[0].is_primary && !isPrimary) throw new Error('primary-required')
-        if (isPrimary && !isActive) throw new Error('primary-active-required')
-        if (isPrimary) await demoteSetupBooks(entity, orgId, actorId, 'is_primary', 'primary-book-reassigned', tx, id)
-        const updated = ((await tx.execute(sql`
-          update accounting_books
-             set name = ${String(body.name)}, is_primary = ${isPrimary}, is_active = ${isActive},
-                 updated_at = now(), updated_by = ${actorId}
-           where id = ${id} and org_id = ${orgId}
-          returning id`)))
-        if (!updated.rows.length) throw new Error('not found')
-        await audit({ orgId, table: entity.table, rowId: id, action: 'update',
-          changes: { before: existing.rows[0], after: await loadSetupAuditRow(entity, orgId, id, tx) }, actorId }, tx)
-      })
+      await setupWriteTransaction(entity, orgId, body, id, (tx) =>
+        saveSetupBook(entity, orgId, actorId, body, tx, { id }))
       return NextResponse.json({ id })
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
@@ -989,26 +905,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
     try {
-      await setupWriteTransaction(entity, orgId, body, id, async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
-        const existing = ((await tx.execute(sql`
-          select * from item_rate_books where id = ${id} and org_id = ${orgId} for update
-        `)))
-        if (!existing.rows[0]) throw new Error('not found')
-        const isDefault = coerceBoolean(body.isDefault)
-        const isActive = coerceBoolean(body.isActive)
-        if (existing.rows[0].is_default && (!isDefault || !isActive)) throw new Error('default-required')
-        if (isDefault) await demoteSetupBooks(entity, orgId, actorId, 'is_default', 'default-rate-book-reassigned', tx, id)
-        const updated = ((await tx.execute(sql`
-          update item_rate_books set name = ${String(body.name)},
-                 currency = case when ${body.currency === undefined} then currency else ${String(body.currency)} end,
-                 is_default = ${isDefault}, is_active = ${isActive}, updated_at = now(), updated_by = ${actorId}
-           where id = ${id} and org_id = ${orgId} returning id
-        `)))
-        if (!updated.rows.length) throw new Error('not found')
-        await audit({ orgId, table: entity.table, rowId: id, action: 'update',
-          changes: { before: existing.rows[0], after: await loadSetupAuditRow(entity, orgId, id, tx) }, actorId }, tx)
-      })
+      await setupWriteTransaction(entity, orgId, body, id, (tx) =>
+        saveSetupBook(entity, orgId, actorId, body, tx, { id }))
       return NextResponse.json({ id })
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
