@@ -1990,3 +1990,24 @@ This establishes a passing checkpoint after the earlier failed run; it does not
 retroactively change that failure. The checkpoint includes the fixture and app
 definition fixes, but predates the category and setup changes above. Their full
 integration checkpoint remains to be established.
+
+## Rate-book deletion versus default promotion
+
+Continuation from `af29d59e` reproduced a delete request that passed its default
+check, waited behind a concurrent promotion, then deleted the newly selected
+default. The response was successful and the intended default no longer existed.
+
+Deletion now joins the same tenant advisory lock as creation and promotion, then
+checks the default flag on the locked row. If promotion commits first, deletion
+returns a conflict and retains the book. If deletion commits first, a waiting
+promotion refuses the missing record and preserves the prior default. Unused
+nondefault deletion still records its retained before-image.
+
+All 45 focused checks passed (12,690.546292 ms; zero skips), including five new
+default/deletion cases and adjacent compound audit rollback controls. Workspace
+types, the locked production build and all 3,149 unit tests passed
+(172,319.421334 ms; zero skips). Warning and explicit-any ceilings remain 725/391.
+Evidence is under `audit-rate-book-default-2026-09-05`. The full integration run at
+`af29d59e` is independent and predates this race repair. A separate investigation
+has reproduced setup writes committing after a feature disable; that issue remains
+open at this checkpoint.

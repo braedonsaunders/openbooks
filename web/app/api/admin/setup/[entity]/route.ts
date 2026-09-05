@@ -1199,16 +1199,16 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
   const url = new URL(req.url)
   const id = url.searchParams.get('id') ?? ''
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
-  if (entity.key === 'item-rate-books') {
-    const current = ((await db.execute(sql`select is_default from item_rate_books where id = ${id} and org_id = ${orgId}`)))
-    if (current.rows[0]?.is_default) return NextResponse.json({ error: 'default-required' }, { status: 409 })
-  }
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {
     const found = await db.transaction(async (tx) => {
+      if (entity.key === 'item-rate-books') {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
+      }
       const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
       if (!before) return false
+      if (entity.key === 'item-rate-books' && before.is_default) throw new Error('default-required')
       // Memberships belong to this group. External references still refuse the
       // parent deletion and roll these removals back with the audit transaction.
       if (entity.key === 'tax-groups') await syncMembers(orgId, id, [], tx)
@@ -1233,6 +1233,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
     if (!found) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json({ ok: true })
   } catch (e) {
+    if (e instanceof Error && e.message === 'default-required') {
+      return NextResponse.json({ error: 'default-required' }, { status: 409 })
+    }
     // Foreign-key violation → the record is referenced elsewhere.
     if (pgErrorCode(e) === '23503') {
       return NextResponse.json({ error: 'in-use', code: 'in-use' }, { status: 409 })
