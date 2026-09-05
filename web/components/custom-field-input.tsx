@@ -34,7 +34,7 @@ export function CustomFieldInput({
 
   const displayMode = def.config.displayMode ?? 'normal'
   const isHidden = displayMode === 'hidden'
-  const isDisabled = displayMode === 'disabled' || readOnly
+  const isDisabled = displayMode === 'disabled' || displayMode === 'readonly' || readOnly
 
   // Apply default value on first render if the field has no value yet.
   const appliedDefault = useRef(false)

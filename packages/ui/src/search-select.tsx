@@ -9,12 +9,13 @@
 // This is the single dropdown implementation behind both the people picker and
 // the generic <Select> — there are no native <select> dropdowns in the app.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { cn } from './utils'
+import { anchoredMenuPosition } from './anchored-menu-position'
 
 export type SelectOption = {
   value: string
@@ -93,14 +94,11 @@ export function SearchSelect({
   const searchRef = useRef<HTMLInputElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   // Desktop dropdown is portaled to <body> and positioned from the trigger, so
   // it floats above any `overflow` container (e.g. the line-grid table) instead
   // of being clipped or expanding the row.
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
-  function place() {
-    const r = triggerRef.current?.getBoundingClientRect()
-    if (r) setPos({ top: r.bottom + 6, left: r.left, width: r.width })
-  }
+  const [pos, setPos] = useState<ReturnType<typeof anchoredMenuPosition> | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -122,6 +120,20 @@ export function SearchSelect({
   const isPlaceholder = !selected && !showEmpty
 
   const showSearch = searchable ?? (allOptions.length > 7 || allOptions.some((o) => o.group))
+  const place = useCallback(() => {
+    const anchor = triggerRef.current?.getBoundingClientRect()
+    if (!anchor) return
+    const drop = dropRef.current
+    const list = listRef.current
+    // Measure unconstrained list content, so a growing result set can flip
+    // above even when its current below-trigger container is constrained.
+    const desiredHeight = drop && list
+      ? Math.min(list.scrollHeight, 256) + drop.offsetHeight - list.offsetHeight
+      : 258 + (showSearch ? 56 : 0)
+    const next = anchoredMenuPosition(anchor, { width: window.innerWidth, height: window.innerHeight }, desiredHeight)
+    setPos(previous => previous && Object.keys(next).every(key => next[key as keyof typeof next] === previous[key as keyof typeof next]) ? previous : next)
+  }, [showSearch])
+
 
   const filtered = useMemo(() => {
     if (remote) return allOptions
@@ -169,18 +181,21 @@ export function SearchSelect({
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open, isDesktop])
 
-  // Keep the portaled dropdown anchored to the trigger while open (scroll/resize).
-  useEffect(() => {
+  // Reposition on content changes, nested drawer scrolls, and viewport resize.
+  useLayoutEffect(() => {
     if (!open || !isDesktop) return
     place()
-    const onMove = () => place()
-    window.addEventListener('scroll', onMove, true)
-    window.addEventListener('resize', onMove)
+    const observer = new ResizeObserver(place)
+    if (dropRef.current) observer.observe(dropRef.current)
+    if (triggerRef.current) observer.observe(triggerRef.current)
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
     return () => {
-      window.removeEventListener('scroll', onMove, true)
-      window.removeEventListener('resize', onMove)
+      observer.disconnect()
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
     }
-  }, [open, isDesktop])
+  }, [open, isDesktop, place, filtered])
 
   // Keyboard nav + scroll-lock on the mobile sheet.
   useEffect(() => {
@@ -373,11 +388,11 @@ export function SearchSelect({
             <div
               ref={dropRef}
               data-ui-overlay
-              style={{ position: 'fixed', top: pos.top, left: pos.left, width: Math.max(pos.width, 208) }}
-              className="z-[60] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900"
+              style={{ position: 'fixed', ...pos }}
+              className="z-[60] flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900"
             >
               {showSearch ? searchBox(false) : null}
-              <div className={cn('max-h-64 overflow-y-auto', showSearch && 'mt-1')}>{optionList}</div>
+              <div ref={listRef} className={cn('min-h-0 max-h-64 overflow-y-auto', showSearch && 'mt-1')}>{optionList}</div>
             </div>,
             document.body,
           )

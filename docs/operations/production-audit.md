@@ -1696,3 +1696,30 @@ production bundle and all 3,127 canonical unit tests (102,299.969625 ms; zero sk
 The new labels use the record registry's actual translation keys. The lint and
 explicit-any limits remain 725 and 391. Evidence is retained under
 `audit-custom-field-targets-2026-09-05`.
+
+## Shared select placement and custom-field read-only display
+
+Continuation from `22a40e4a` reproduced two visible defects. The settings editor
+saved `displayMode: readonly`, but the asset header still exposed an editable
+input because the shared renderer recognized only the legacy `disabled` spelling.
+Generated line columns ignored both read-only spellings. Header and line controls
+now recognize both modes, retain displayed values, and keep read-only defaults
+from mutating the editor. Hidden fields remain absent and normal fields editable.
+These are display controls; this change does not claim to establish field-level
+API authorization or historical definition versioning.
+
+The shared desktop select also always placed its menu below the trigger without
+checking viewport space. In a drawer the read-only option was visible in the DOM
+but outside the viewport and could not be clicked. Placement now chooses a side
+with sufficient space, clamps width and height to the viewport, scrolls oversized
+option lists, and remeasures after content changes, drawer scrolls and resizing.
+The existing mobile sheet is preserved.
+
+Verification passed eight focused cases, including a viewport-boundary matrix and
+both display modes across all custom line types, plus 16 real-browser assertions
+covering retained values, suppressed defaults, pointer selection at 768/420/260px
+heights, live resizing and filtered search menus. All 3,135 canonical unit tests
+passed (148,990.359917 ms; zero skips). Workspace type checks passed after adding
+an explicit Node type reference to the new UI-package test; the locked production
+build passed. The 725-warning and 391-explicit-any limits were retained.
+Evidence is under `audit-custom-field-display-2026-09-05`.
