@@ -81,7 +81,7 @@ test(
 
       const impairment = await remeasureAsset(org.orgId, assetId, {
         newCarryingValue: "800",
-        date: org.date,
+        date: "2026-07-31",
         actorId,
       });
       assert.equal(impairment.kind, "impaired");
@@ -102,7 +102,7 @@ test(
         org.orgId,
         impairmentEvent.rows[0]!.id,
         {
-          date: org.date,
+          date: "2026-07-31",
           actorId,
           reason: "Controller reversed the impairment test",
         },
@@ -123,7 +123,7 @@ test(
 
       const disposal = await disposeAsset(org.orgId, assetId, {
         writeOff: true,
-        date: org.date,
+        date: "2026-07-31",
         actorId,
       });
       assert.equal(disposal.status, "written_off");
@@ -136,12 +136,12 @@ test(
       `));
       const disposalRuns = await Promise.all([
         reverseAssetLifecycleEvent(org.orgId, disposalEvent.rows[0]!.id, {
-          date: org.date,
+          date: "2026-07-31",
           actorId,
           reason: "Controller restored the scrapped asset",
         }),
         reverseAssetLifecycleEvent(org.orgId, disposalEvent.rows[0]!.id, {
-          date: org.date,
+          date: "2026-07-31",
           actorId,
           reason: "Controller restored the scrapped asset",
         }),
@@ -208,7 +208,7 @@ test(
         org.orgId,
         impairmentEvent.rows[0]!.id,
         {
-          date: org.date,
+          date: "2026-07-31",
           actorId,
           reason: "Controller reversed the impairment test",
         },
@@ -330,7 +330,7 @@ test(
       await assert.rejects(
         remeasureAsset(org.orgId, assetId, {
           newCarryingValue: "800",
-          date: org.date,
+          date: "2026-07-31",
           actorId,
         }),
         (error: unknown) => errorChainMatches(error, /forced mid-rebuild failure/),
@@ -362,7 +362,7 @@ test(
       await quietly(`drop sequence if exists "${guard}_seq"`);
       const recovery = await remeasureAsset(org.orgId, assetId, {
         newCarryingValue: "800",
-        date: org.date,
+        date: "2026-07-31",
         actorId,
       });
       assert.equal(recovery.kind, "impaired");

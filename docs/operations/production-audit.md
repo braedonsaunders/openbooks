@@ -1434,3 +1434,27 @@ The next confirmed gap is lifecycle posting chronology: current carrying-value
 inputs may include financial activity after the requested posting date.
 All 3,089 canonical unit tests pass after serializing the read queries.
 Explicit-any and lint ceilings remain 391 and 725.
+
+## Asset lifecycle posting chronology — continuation from 6196a6da
+
+Disposal and remeasurement used current carrying value even when the requested
+posting date preceded acquisition, already-posted depreciation, or a retained
+lifecycle entry/reversal. Both now inspect those date boundaries after acquiring
+the asset lock and refuse an earlier date before writing a journal. Imported
+posted schedule evidence uses its period end when no journal date is available.
+Reversals remain part of the boundary because their effects are already included
+in current carrying value. Same-day and later entries remain supported.
+
+Eight regressions failed before correction; sixteen valid controls passed.
+The corrected 24-case matrix and all 141 expanded asset integration checks now
+pass. Five older tests had valued on July 15 after posting July 31 depreciation;
+their operation dates were corrected to July 31, preserving their original
+restoration, balancing and rollback assertions. All 3,089 unit tests,
+all-workspace typechecking and the locked production build pass. Explicit-any
+and lint ceilings remain 391 and 725. Receipts are retained under
+`audit-asset-lifecycle-date-2026-09-05`.
+
+The continuing review has confirmed two separate asset-editor issues—missing
+audit evidence for non-basis configuration and stale custom-data overwrites—and
+unbounded depreciation work for enormous useful-life inputs. These remain open
+for the next corrections; this checkpoint is not a production-readiness claim.

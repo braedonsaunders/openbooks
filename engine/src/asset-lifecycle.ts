@@ -237,6 +237,42 @@ function assertLifecycleDate(date: string): void {
   }
 }
 
+/** Current carrying value cannot be used to post before the history it includes. */
+async function assertAssetPostingDate(
+  tx: SqlExecutor,
+  orgId: string,
+  assetId: string,
+  bookId: string,
+  date: string,
+): Promise<void> {
+  const history = (await tx.execute<{
+    acquired_on: string | null;
+    depreciation_date: string | null;
+    lifecycle_date: string | null;
+  }>(sql`
+    select asset.acquired_on::text,
+           (select max(coalesce(entry.posting_date, period.ends_on))::text
+              from depreciation_schedule_lines line
+              join depreciation_schedules schedule on schedule.id = line.schedule_id and schedule.org_id = line.org_id
+              join accounting_periods period on period.id = line.period_id and period.org_id = line.org_id
+              left join journal_entries entry on entry.id = line.journal_entry_id and entry.org_id = line.org_id
+             where schedule.asset_id = asset.id and schedule.org_id = asset.org_id
+               and schedule.book_id = ${bookId} and line.posted_amount is not null) as depreciation_date,
+           (select max(greatest(event.occurred_on, entry.posting_date))::text
+              from asset_events event
+              join journal_entries entry on entry.id = event.journal_entry_id and entry.org_id = event.org_id
+             where event.asset_id = asset.id and event.org_id = asset.org_id
+               and entry.status in ('posted', 'reversed')) as lifecycle_date
+      from fixed_assets asset where asset.id = ${assetId} and asset.org_id = ${orgId}
+  `)).rows[0];
+  if (!history) throw new AssetLifecycleError("asset not found");
+  for (const [source, boundary] of Object.entries(history)) {
+    if (boundary !== null && date < boundary) {
+      throw new AssetLifecycleError(`posting date cannot precede ${source.replaceAll("_", " ")} (${boundary})`);
+    }
+  }
+}
+
 export interface DisposeResult {
   assetId: string;
   entryId: string;
@@ -263,6 +299,7 @@ export async function disposeAsset(
     // prior mutation and then sees its committed schedule/event state.
     await lockAssetRow(tx, orgId, assetId, opts.allowedSubsidiaryIds);
     const bookId = await primaryBookId(orgId, tx);
+    await assertAssetPostingDate(tx, orgId, assetId, bookId, opts.date);
 
     const assetRes = (await tx.execute<AssetAccountRow & {
         id: string; asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string;
@@ -612,12 +649,13 @@ export async function remeasureAsset(
   opts: { newCarryingValue: string; date: string; actorId: string | null; allowedSubsidiaryIds?: readonly string[] | null },
 ): Promise<RemeasureResult> {
   assertLifecycleDate(opts.date);
-  const bookId = await primaryBookId(orgId);
   return db.transaction(async (tx) => {
     // Lock before reading any carrying-value input. A concurrent
     // remeasurement waits here, then its following SELECT sees the committed
     // event and schedule state from the transaction ahead of it.
     await lockAssetRow(tx, orgId, assetId, opts.allowedSubsidiaryIds);
+    const bookId = await primaryBookId(orgId, tx);
+    await assertAssetPostingDate(tx, orgId, assetId, bookId, opts.date);
 
     const res = (await tx.execute<AssetAccountRow & {
         asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string; salvage_value: string;
