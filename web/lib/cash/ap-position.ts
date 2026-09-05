@@ -116,18 +116,20 @@ export async function apPosition(
   orgId: string,
   horizonWeeks: number,
   apSettings: ApSettings,
-  asOfDate?: string,
+  asOfDate: string | undefined,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ApPosition> {
+  const subIds = allowedSubsidiaryIds === null ? undefined : [...allowedSubsidiaryIds];
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
   const exactApSettings: ApSettings = { ...apSettings, weeklyCap: normalizeMoneyValue(String(apSettings.weeklyCap)) };
 
   const [apItems, arItems, apStats, arStats, banks, catConfigs] = await Promise.all([
-    openItems(orgId, "ap", asOfIso),
-    openItems(orgId, "ar", asOfIso),
-    paymentStats("ap", asOfIso),
-    paymentStats("ar", asOfIso),
-    bankBalances(asOfIso),
+    openItems(orgId, "ap", asOfIso, subIds),
+    openItems(orgId, "ar", asOfIso, subIds),
+    paymentStats("ap", asOfIso, subIds),
+    paymentStats("ar", asOfIso, subIds),
+    bankBalances(asOfIso, subIds),
     loadCategories(orgId),
   ]);
 
@@ -136,7 +138,7 @@ export async function apPosition(
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash };
+  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, subIds };
   const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,

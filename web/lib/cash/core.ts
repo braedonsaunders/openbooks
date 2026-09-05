@@ -274,7 +274,7 @@ function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
  * global average weighted by data point (globalSum/globalCount over all payments,
  * not an average of per-party averages), and 45-day default when no history exists.
  */
-export async function paymentStats(side: Side, asOfIso: string): Promise<PaymentStats> {
+export async function paymentStats(side: Side, asOfIso: string, subIds?: string[]): Promise<PaymentStats> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
   // Settlement behaviour comes from party_payment_stats, the rollup maintained
   // at the settlement event (see 0001_baseline.sql). It stores sufficient
@@ -284,24 +284,48 @@ export async function paymentStats(side: Side, asOfIso: string): Promise<Payment
   // ledger. Deriving them from applications meant four joins over every
   // settlement in the tenant on every cockpit render.
   const orgId = await resolveOrgId();
-  const r = (await db.execute(sql`
+  // The company rollup intentionally has no entity dimension. Restricted
+  // readers reconstruct the same sufficient statistics from visible source
+  // and target lines, so another entity cannot influence their forecast.
+  const source = subIds === undefined ? sql`
+    select party_id, settled_on, n, sum_days, sum_days_sq
+      from party_payment_stats
+     where org_id = ${orgId} and account_type = ${acctType}
+       and settled_on >= ${asOfIso}::date - 365
+       and settled_on <= ${asOfIso}::date
+  ` : sql`
+    select bl.party_id, pl.posting_date as settled_on, count(*) as n,
+           sum((pl.posting_date - bl.posting_date)::numeric) as sum_days,
+           sum(((pl.posting_date - bl.posting_date)::numeric)^2) as sum_days_sq
+      from applications x
+      join journal_lines bl on bl.id = x.to_line_id and bl.org_id = ${orgId}
+      join journal_lines pl on pl.id = x.from_line_id and pl.org_id = ${orgId}
+      join accounts a on a.id = bl.account_id and a.org_id = ${orgId}
+     where x.org_id = ${orgId} and x.unapplied_at is null
+       and bl.party_id is not null and bl.posting_date is not null
+       and a.type = ${acctType}
+       and pl.posting_date >= ${asOfIso}::date - 365
+       and pl.posting_date <= ${asOfIso}::date
+       ${subScope(sql`bl.subsidiary_id`, subIds)}
+       ${subScope(sql`pl.subsidiary_id`, subIds)}
+     group by bl.party_id, pl.posting_date
+  `;
+  const r = await db.execute<{ id: string; avg_days: string; sd_days: string; n: string }>(sql`
+    with stats as (${source})
     select party_id as id,
            sum(sum_days) / sum(n) as avg_days,
            sqrt(greatest(
              sum(sum_days_sq) / sum(n) - (sum(sum_days) / sum(n)) * (sum(sum_days) / sum(n)),
              0)) as sd_days,
            sum(n) as n
-      from party_payment_stats
-     where org_id = ${orgId} and account_type = ${acctType}
-       and settled_on >= ${asOfIso}::date - 365
-       and settled_on <= ${asOfIso}::date
+      from stats
      group by party_id
     having sum(n) > 0
-  `));
+  `);
   const map = new Map<string, { avg: number; sd: number }>();
   let sum = 0;
   let count = 0;
-  for (const x of r.rows as any[]) {
+  for (const x of r.rows) {
     const avg = Number(x.avg_days);
     const n = Number(x.n);
     map.set(x.id, { avg, sd: Number(x.sd_days) });

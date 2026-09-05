@@ -56,7 +56,7 @@ export async function GET(req: Request) {
       weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
       restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
     };
-    const position = await cashPosition(user.orgId, horizonWeeks, apSettings, asOf, subIds);
+    const position = await cashPosition(user.orgId, horizonWeeks, apSettings, asOf, subIds, gate.allowedSubsidiaryIds);
     const week = position.weeks.find((w) => w.weekStart === weekStart);
     if (!week) return NextResponse.json({ error: "week not in horizon" }, { status: 404 });
     return NextResponse.json({

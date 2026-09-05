@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
   addDays,
   addMoney,
@@ -187,24 +188,30 @@ export async function cashPosition(
   orgId: string,
   horizonWeeks: number,
   apSettings: ApSettings,
-  asOfDate?: string,
+  asOfDate: string | undefined,
   /** Active subsidiary view (subtree ids) — scopes cash, open items, and
-   * SQL-backed forecast categories. Omitted = whole company, unchanged SQL. */
-  subIds?: string[],
+   * SQL-backed categories. Omission inherits the caller's full allowed set. */
+  requestedSubIds: string[] | undefined,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<CashPosition> {
+  const subIds = allowedSubsidiaryIds === null ? requestedSubIds
+    : requestedSubIds === undefined ? [...allowedSubsidiaryIds]
+    : requestedSubIds.filter(id => allowedSubsidiaryIds.has(id));
+  const visible = subIds === undefined ? null : new Set(subIds);
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
   const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows] = await Promise.all([
     openItems(orgId, "ar", asOfIso, subIds),
     openItems(orgId, "ap", asOfIso, subIds),
-    paymentStats("ar", asOfIso),
-    paymentStats("ap", asOfIso),
+    paymentStats("ar", asOfIso, subIds),
+    paymentStats("ap", asOfIso, subIds),
     bankBalances(asOfIso, subIds),
     loadCategories(orgId),
     db.execute(sql`
       select id, number, name, type from accounts
       where org_id = ${orgId} and is_summary = false
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, visible, { orgWideNull: true })}
       order by number nulls last, name
     `),
     // "Parties with any payable document" is a semi-join: joining every
@@ -219,7 +226,7 @@ export async function cashPosition(
            select 1 from documents d
            where d.org_id = ${orgId} and d.party_id = p.id and d.voided_at is null
              and d.kind in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')
-             ${subIds && subIds.length > 0 ? sql`and (d.subsidiary_id is null or d.subsidiary_id = any(${`{${subIds.join(",")}}`}::uuid[]))` : sql``}
+             ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, visible)}
         )
       order by 2
     `),
