@@ -356,3 +356,62 @@ This continuation changes no schema, production data or deployment. The protecte
 synchronization, posting kernel, entry-number and swarm-release files remain
 untouched. Broader provider acceptance, failover, load and remaining domain
 journeys in the coverage table are still open.
+
+## Revenue allocation and identity concurrency — continuation from 26306a79
+
+This pass reproduced and corrected eight further defects:
+
+- **Relative selling-price allocation ignored quantities.** Nine units and one
+  unit at the same unit selling price incorrectly split a 1,000 contract into
+  500 and 500. Allocation now uses exact extended selling-price weights and
+  produces 900 and 100. It retains all eight document-quantity decimal places
+  and does not round intermediate weights, including sub-money-unit products.
+- **Contract totals omitted allocation-excluded lines.** Those obligations keep
+  their booked amounts and now participate in the contract's transaction price.
+  Mixed and entirely excluded bundles both retain the full contract total.
+- **Zero allocation weights silently lost revenue.** A nonzero transaction
+  price now requires a positive weight. Invalid negative weights are refused;
+  negative total corrections with valid weights still allocate exactly.
+- **Fair-value review rounded away violations.** Range comparisons now use
+  exact cross-products, accept eight-decimal quantities, and detect violations
+  smaller than one money unit instead of rounding them onto the boundary.
+- **Partial legacy retries changed the allocation basis.** Restoring one missing
+  obligation could turn a 500 + 500 allocation into 500 + 100. Repairs now use
+  the whole bundle and refuse conflicts with surviving allocations or the
+  stored contract total. Complete retries preserve their original pricing.
+- **Concurrent reset requests bypassed issuance controls.** Eight requests with
+  two recent tokens produced six total tokens and four usable links in the
+  reproduction. Requests now lock the user before checking the hourly cap and
+  superseding links. The same case leaves three total tokens and one usable
+  link. Credentials and queued email evidence commit before provider I/O,
+  releasing the identity lock before any potentially slow delivery.
+- **A completed reset left other reset credentials usable.** Completion now
+  locks the user before rechecking its token and consumes all outstanding reset
+  links. Concurrent legacy links produce exactly one password change and one
+  audit event; the other completion receives an invalid-token result.
+- **Concurrent MFA enrollment could be bypassed.** Password login and both new
+  and mapped OIDC login read MFA in the same statement that acquired the user
+  lock. A blocked statement retained its pre-enrollment join result. All three
+  paths now read MFA in a fresh statement after the user lock is acquired.
+  Deterministic tests confirm the contender is waiting in PostgreSQL, commit
+  enrollment, then require MFA before any session exists. The new factor can
+  subsequently complete authentication successfully.
+
+Focused verification passed 76 recognition/posting/allocation tests and 51
+identity tests. Identity regressions use real PostgreSQL transactions; delivery
+is replaced with an in-process recorder, so no email is sent. Before-change
+failures and final receipts are retained under the thread-storage artifact
+`audit-allocation-identity-concurrency-2026-09-05`.
+
+The final canonical unit run passed all 3,034 tests. Engine and web typechecks,
+the production build and all 11 browser tests passed; all three changed
+production files match the build's sources. Lint remains at 733 warnings with
+zero errors, and explicit-any remains at 399. The full integration suite from
+the preceding continuation was not repeated; this batch's database cases ran
+in the focused suites above. The temporary browser server and Redis stopped
+after verification.
+
+Existing revenue history is not rewritten automatically. An inconsistent legacy
+contract needs controlled reconciliation rather than a silent repricing during
+retry. This continuation changes no migrations, deployment or protected posting
+and synchronization files. Remaining coverage in the domain table stays open.

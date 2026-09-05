@@ -41,7 +41,7 @@ export async function requestPasswordReset(
   if (!email) return;
   const { networkHash, userAgentHash } = authContextHashes(context);
 
-  await withBypass(async () => {
+  const delivery = await withBypass(async () => {
     // Same single-identity rule as login: never guess between two active
     // home identities for one address.
     const users = (await db.execute<{ id: string; org_id: string; name: string | null; email: string }>(sql`
@@ -49,8 +49,9 @@ export async function requestPasswordReset(
         from users u
         join orgs o on o.id = u.org_id and o.env_kind = 'production'
        where lower(u.email) = ${email} and u.is_active
-       order by u.created_at
+       order by u.created_at, u.id
        limit 2
+       for update of u
     `));
     const user = users.rows.length === 1 ? users.rows[0]! : null;
     if (!user) return;
@@ -97,6 +98,14 @@ export async function requestPasswordReset(
       status: "queued",
       categoryKey: "password_reset",
     });
+    return { user, transport, message, logId };
+  });
+  if (!delivery) return;
+
+  // Commit the credential and release the user lock before provider I/O. A
+  // slow mail server must not hold password login or reset completion hostage.
+  const { user, transport, message, logId } = delivery;
+  await withBypass(async () => {
     try {
       const outcome = await sendVia(transport, {
         to: user.email,
@@ -140,11 +149,24 @@ export async function completePasswordReset(
   const newHash = await hashPassword(newPassword);
 
   return withBypass(async () => {
+    // Resolve the identity without holding a token lock, then serialize with
+    // issuance and login before locking/rechecking the credential. This keeps
+    // the same user → credential lock order across recovery flows.
+    const candidate = (await db.execute<{ user_id: string }>(sql`
+      select user_id from auth_password_resets
+       where token_hash = ${tokenHash(rawToken)} and used_at is null and expires_at > now()
+    `)).rows[0];
+    if (!candidate) return { ok: false, reason: "invalid_token" as const };
+    const user = (await db.execute<{ id: string }>(sql`
+      select id from users where id = ${candidate.user_id} and is_active for update
+    `)).rows[0];
+    if (!user) return { ok: false, reason: "invalid_token" as const };
     const rows = (await db.execute<{ id: string; user_id: string }>(sql`
       select r.id, r.user_id
         from auth_password_resets r
         join users u on u.id = r.user_id and u.is_active
        where r.token_hash = ${tokenHash(rawToken)}
+         and r.user_id = ${user.id}
          and r.used_at is null and r.expires_at > now()
        for update of r
     `));
@@ -152,7 +174,8 @@ export async function completePasswordReset(
     if (!reset) return { ok: false, reason: "invalid_token" as const };
 
     await db.execute(sql`
-      update auth_password_resets set used_at = now() where id = ${reset.id}
+      update auth_password_resets set used_at = now()
+       where user_id = ${reset.user_id} and used_at is null
     `);
     await db.execute(sql`
       update users set password_hash = ${newHash}, updated_at = now()

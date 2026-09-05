@@ -506,11 +506,10 @@ export async function login(
 
   return withBypass(async () => {
     await acquireAuthLocks(emailHash, networkHash);
-    const userResult = email ? (await db.execute<{ id: string; passwordHash: string; mfaEnabledAt: Date | null }>(sql`
-      select u.id, u.password_hash as "passwordHash", f.enabled_at as "mfaEnabledAt"
+    const userResult = email ? (await db.execute<{ id: string; passwordHash: string }>(sql`
+      select u.id, u.password_hash as "passwordHash"
         from users u
         join orgs o on o.id = u.org_id and o.env_kind = 'production'
-        left join auth_mfa_factors f on f.user_id = u.id
        where lower(u.email) = ${email} and u.is_active
        order by u.created_at
        limit 2
@@ -567,7 +566,7 @@ export async function login(
       passwordVerification.needsRehash,
     );
 
-    if (user.mfaEnabledAt) {
+    if (await hasEnabledMfaAfterUserLock(user.id)) {
       const challengeToken = await createLoginChallenge({ userId: user.id, emailHash, authMethod: "password", context });
       await recordLoginEvent({ userId: user.id, emailHash, outcome: "mfa_required", authMethod: "password", networkHash, userAgentHash });
       return { kind: "mfa_required", challengeToken };
@@ -579,6 +578,16 @@ export async function login(
     await recordLoginEvent({ userId: user.id, emailHash, outcome: "success", authMethod: "password", networkHash, userAgentHash });
     return { kind: "success", token };
   });
+}
+
+/** Read the factor in a new statement AFTER acquiring the user's lock. A join
+ * in the locking statement can retain its pre-wait snapshot of MFA state. */
+async function hasEnabledMfaAfterUserLock(userId: string): Promise<boolean> {
+  const result = await db.execute<{ enabled: boolean }>(sql`
+    select exists(select 1 from auth_mfa_factors
+      where user_id = ${userId} and enabled_at is not null) as enabled
+  `);
+  return result.rows[0]?.enabled === true;
 }
 
 function consumeMfaCredential(input: {
@@ -1104,22 +1113,20 @@ export async function finishOidcLogin(input: {
   const { networkHash, userAgentHash } = contextHashes(input.context);
   return withBypass(async () => {
     await acquireAuthLocks(emailHash, networkHash);
-    const mapped = (await db.execute<{ id: string; mfaEnabledAt: Date | null }>(sql`
-      select u.id, f.enabled_at as "mfaEnabledAt"
+    const mapped = (await db.execute<{ id: string }>(sql`
+      select u.id
         from auth_oidc_identities identity
         join users u on u.id = identity.user_id and u.is_active
         join orgs o on o.id = u.org_id and o.env_kind = 'production'
-        left join auth_mfa_factors f on f.user_id = u.id
        where identity.issuer = ${input.issuer} and identity.subject = ${input.subject}
        for update of u
     `));
     let user = mapped.rows[0] ?? null;
     if (!user) {
-      const candidates = (await db.execute<{ id: string; mfaEnabledAt: Date | null }>(sql`
-        select u.id, f.enabled_at as "mfaEnabledAt"
+      const candidates = (await db.execute<{ id: string }>(sql`
+        select u.id
           from users u
           join orgs o on o.id = u.org_id and o.env_kind = 'production'
-          left join auth_mfa_factors f on f.user_id = u.id
          where lower(u.email) = ${normalizedEmail} and u.is_active
          order by u.created_at
          limit 2
@@ -1148,7 +1155,7 @@ export async function finishOidcLogin(input: {
       `);
     }
     await ensureLoginState(emailHash, user.id);
-    if (user.mfaEnabledAt) {
+    if (await hasEnabledMfaAfterUserLock(user.id)) {
       const challengeToken = await createLoginChallenge({ userId: user.id, emailHash, authMethod: "oidc", context: input.context });
       await recordLoginEvent({ userId: user.id, emailHash, outcome: "mfa_required", authMethod: "oidc", networkHash, userAgentHash });
       return { kind: "mfa_required", challengeToken };
