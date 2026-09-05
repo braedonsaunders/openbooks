@@ -45,7 +45,7 @@ registerHooks({
 test("concurrent password reset requests honor the hourly cap and leave one usable link", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   const priorSecret = env.SESSION_SECRET;
-  env.SESSION_SECRET = "isolated-reset-concurrency-regression-2026-09-05";
+  env.SESSION_SECRET = randomBytes(32).toString("hex");
   deliveries.length = 0;
   try {
     const userId = (await seedFlowActors(org.orgId)).adminId;

@@ -28,13 +28,6 @@ function sqlText(query: unknown): string {
 
 const mockSources = new Map<string, string>([
   [
-    "mock:json",
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) { return { ok: true, data: await request.json() } }
-    `,
-  ],
-  [
     "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.inventory-advanced-route-test')]
@@ -79,7 +72,6 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@/lib/api/json", "mock:json"],
   ["@openbooks/engine/src/db.ts", "mock:db"],
   ["@openbooks/engine/src/business-date.ts", "mock:business-date"],
   ["@openbooks/engine/src/inventory.ts", "mock:inventory"],
@@ -89,6 +81,9 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
+    if (specifier === "@/lib/api/json") {
+      return nextResolve(new URL("../../../../lib/api/json.ts", import.meta.url).href, _context);
+    }
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }

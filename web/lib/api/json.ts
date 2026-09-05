@@ -111,5 +111,6 @@ export const nullableUuidId = z
 export const ISO_DATE_RE = z.regexes.date;
 
 export function isoDate(message = "must be YYYY-MM-DD") {
-  return z.string({ error: message }).regex(ISO_DATE_RE, message);
+  return z.string({ error: message }).regex(ISO_DATE_RE, message)
+    .refine((value) => !value.startsWith("0000-"), message);
 }

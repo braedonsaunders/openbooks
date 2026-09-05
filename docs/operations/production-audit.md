@@ -415,3 +415,42 @@ Existing revenue history is not rewritten automatically. An inconsistent legacy
 contract needs controlled reconciliation rather than a silent repricing during
 retry. This continuation changes no migrations, deployment or protected posting
 and synchronization files. Remaining coverage in the domain table stays open.
+
+## Inventory request integrity — continuation from efc1e400
+
+The next review traced basic and advanced inventory HTTP commands through their
+idempotency boundary and real stock/journal writes. Seven malformed requests
+reproduced successful writes against the preceding implementation: an invalid
+receipt date, invalid subsidiary IDs on receipt/transfer/voucher commands,
+invalid adjustment cost, unsupported landed-cost allocation basis, and an
+invalid lot reference. The handlers substituted defaults or discarded supplied
+references instead of rejecting the instructions.
+
+Both endpoints now compose the shared exact-money, UUID and calendar-date
+validators before executing their existing domain commands. Omitted defaults
+remain supported; malformed supplied values do not select another entity,
+date, cost or allocation policy. Redundant coercion loops and the independent
+request type declaration were removed. Required transfer/voucher/catalog
+references receive validation errors before database casts. The shared calendar
+validator also refuses year zero, which PostgreSQL date columns cannot store.
+
+The regression pins the business clock into the fixture's open period, proving
+that date rejection is validation rather than an incidental missing-period
+failure. All seven cases fail against the earlier routes. Valid receipt,
+transfer and landed-cost requests still succeed with omitted defaults, replay
+identically, and leave balanced journals without duplicate movements.
+
+GitHub's secret scanner flagged one hardcoded signing string in the preceding
+MFA test. It was a disposable test value, not a production credential. Related
+identity fixtures now generate signing keys in memory. The local secret scan
+of every changed source file reports no findings; no scanner suppression or
+history rewrite was introduced.
+
+Focused verification passed 47 inventory, calendar-boundary and identity tests,
+including the prior transfer/reversal/entity-ownership regressions. The final
+production build and all 3,034 unit tests passed. Web typechecking passed and
+the lint ceiling remains satisfied. The full integration and browser suites
+were not repeated for this batch; their earlier receipts remain separate.
+Before-change failures, passing results and source
+hashes are retained in `audit-inventory-boundaries-2026-09-05` in thread storage.
+No schema, deployment or protected synchronization/posting files changed.
