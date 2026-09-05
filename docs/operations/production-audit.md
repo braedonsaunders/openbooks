@@ -821,3 +821,19 @@ including password verification and the factor lock. All 21 authentication
 integration cases, 3,041 unit tests, web typechecking and the locked production
 build passed. Receipts are retained under `audit-auth-expiry-2026-09-05` in thread
 storage. This checkpoint is distinct from the frozen f7f87fbb full-suite run.
+
+## MFA security-change evidence — continuation from 4992f942
+
+MFA enable, disable and recovery-code rotation changed account security without
+retaining the material action or before/after state. Generic password-login
+events could not establish what changed. All three operations now write an
+attributable user audit event in the same transaction, with enabled status and
+recovery-code counts only. Secrets, ciphertext and credential hashes are never
+serialized into this evidence. Counts reflect the state before a recovery code
+used for reauthentication is consumed.
+
+Six new database cases verify actor, tenant, timestamp, precise non-secret
+before/after values, and complete factor/session rollback on forced audit-write
+failure. All 27 authentication integration cases, 3,041 unit tests, web
+typechecking and the locked production build passed. Receipts are retained under
+`audit-mfa-evidence-2026-09-05` in thread storage.
