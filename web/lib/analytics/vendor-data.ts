@@ -178,11 +178,13 @@ export async function vendorData(
     // Payment behaviour: collapse applications to one row per AP open-item
     // line before rolling up by vendor. A bill paid in installments must still
     // contribute one paid bill, one on-time decision, and one days-to-pay
-    // observation. The latest application date supplies the bill-level payment
-    // date; late spend remains the amount of installments paid after due.
+    // observation only after full settlement. Days run from the bill date;
+    // due dates determine timeliness. Late spend also includes partial payments
+    // actually made after due, within the report cutoff.
     db.execute<VendorPaymentRow>(sql`
       with bill_applications as (
-        select bl.id as bill_line_id, bl.party_id,
+        select bl.id as bill_line_id, bl.party_id, be.posting_date as bill_date,
+          abs(bl.txn_amount) as bill_total, a.target_transaction_amount as applied_amount,
           coalesce(bl.due_date, be.posting_date) as due_date,
           pe.posting_date as payment_date,
           a.amount
@@ -197,18 +199,22 @@ export async function vendorData(
           ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowed)}
           ${subsidiaryVisibleFilter(sql`pl.subsidiary_id`, allowed)}
           and ba.type = 'liability_payable' and a.unapplied_at is null and bl.party_id is not null
+          and be.status in ('posted', 'reversed') and pe.status in ('posted', 'reversed')
+          and be.book_id = ${statementBookExpr(orgId)} and pe.book_id = ${statementBookExpr(orgId)}
+          and a.applied_on <= ${ref} and pe.posting_date <= ${ref}
           and be.posting_date >= ${from} and be.posting_date <= ${to}
       ), bill_payments as (
-        select bill_line_id, party_id, due_date,
+        select bill_line_id, party_id, bill_date, due_date, bill_total,
+          sum(applied_amount) as applied,
           max(payment_date) as last_payment,
           coalesce(sum(amount) filter (where payment_date > due_date), 0) as late_amount
         from bill_applications
-        group by bill_line_id, party_id, due_date
+        group by bill_line_id, party_id, bill_date, due_date, bill_total
       )
       select party_id as id,
-        count(*)::int as paid_lines,
-        round(avg(last_payment - due_date)::numeric, 1) as avg_days,
-        count(*) filter (where last_payment <= due_date)::int as on_time,
+        count(*) filter (where applied >= bill_total)::int as paid_lines,
+        round((avg(last_payment - bill_date) filter (where applied >= bill_total))::numeric, 1) as avg_days,
+        count(*) filter (where applied >= bill_total and last_payment <= due_date)::int as on_time,
         coalesce(sum(late_amount), 0) as late_amount
       from bill_payments
       group by party_id

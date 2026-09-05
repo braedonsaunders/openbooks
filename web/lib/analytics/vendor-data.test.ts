@@ -98,7 +98,7 @@ test("vendor payment analytics counts an installment bill once and uses final se
     const row = data.rows.find((candidate) => candidate.id === org.vendorId);
     assert.ok(row, "vendor payment row should be present in the spend window");
     assert.equal(row.paidBills, 1, "two installments must count as one paid bill");
-    assert.equal(row.avgDaysToPay, 5, "average days must use the final payment date (July 25 − July 20)");
+    assert.equal(row.avgDaysToPay, 10, "average days must run from the bill date to final payment (July 25 − July 15)");
     assert.equal(row.onTimePct, 0, "a bill whose final installment is late is not on time");
     assert.equal(row.lateSpend, 60, "late spend must retain the late installment amount");
   } finally {
