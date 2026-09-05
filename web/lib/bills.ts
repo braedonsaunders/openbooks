@@ -58,17 +58,22 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
     paidAccountId: row.paid_account_id,
     withholdingAccountId: row.withholding_account_id,
   })
-  const codes = new Map<string, TaxComponentConfig[]>(codeRows.rows.map((row) => [String(row.id), [config(row, 1)]]))
+  // A map may contain unrelated setup still awaiting its first rate. Omit
+  // unusable profiles here; computeBillTotals refuses one only when selected.
+  // A real zero-percent row remains usable.
+  const codes = new Map<string, TaxComponentConfig[]>(codeRows.rows
+    .filter((row) => row.effective_rate != null)
+    .map((row) => [String(row.id), [config(row, 1)]]))
 
   const groupRows = (await db.execute<Record<string, unknown>>(sql`
     select tg.id as group_id, tg.price_includes_tax as group_inclusive,
-           tgm.sequence, tc.id, tc.code, tr.rate_percent::text as effective_rate,
+           tgm.sequence, tc.id, tc.code, tc.is_active as code_active, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent,
            tc.calculation_type, tc.compound_on_previous, tc.rounding_scale,
            tc.collected_account_id, tc.paid_account_id, tc.withholding_account_id
       from tax_groups tg
       join tax_group_members tgm on tgm.tax_group_id = tg.id
-      join tax_codes tc on tc.id = tgm.tax_code_id and tc.org_id = tg.org_id and tc.is_active
+      left join tax_codes tc on tc.id = tgm.tax_code_id and tc.org_id = tg.org_id
       left join lateral (
         select rate_percent from tax_rates
          where org_id = ${resolvedOrgId} and tax_code_id = tc.id and effective_from <= ${date}
@@ -78,12 +83,20 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
      order by tg.id, tgm.sequence
   `))
   const groups = new Map<string, TaxComponentConfig[]>()
+  const unusableGroups = new Set<string>()
   for (const row of groupRows.rows) {
     const id = String(row.group_id)
+    if (row.code_active !== true || row.effective_rate == null) {
+      unusableGroups.add(id)
+      continue
+    }
     const members = groups.get(id) ?? []
     members.push(config(row, Number(row.sequence), Boolean(row.group_inclusive)))
     groups.set(id, members)
   }
+  // Never turn a composite tax into a smaller tax by dropping an inactive,
+  // missing or lapsed member. The entire selected group must be usable.
+  for (const id of unusableGroups) groups.delete(id)
   return { codes, groups }
 }
 

@@ -544,3 +544,26 @@ remain separate; this batch exercised the affected routes and accounting writes
 through the real-database suites above. No migration, deployment or protected
 sync/posting files changed. Evidence is retained in thread storage under
 `audit-recurring-template-2026-09-05`.
+
+## Interactive tax-profile completeness — continuation from 4f9513fe
+
+Two database cases reproduced the next billing failures. An active group with
+a disabled component computed only the remaining component's tax, and an
+unrelated active code without an effective rate prevented loading any profile.
+The map now retains only usable single-code profiles and excludes a whole
+group if any member is missing, inactive or lacks an effective rate. Selecting
+an unusable profile still fails before a financial write; unrelated valid
+profiles remain available. Statutory zero rates remain valid.
+
+Five new cases cover inactive, missing and lapsed rates, a complete group and
+a zero-rate component. Together with tax posting and recurring source-fact
+cases, all 17 focused tests passed. All 3,040 canonical unit tests, web
+typechecking and the production build passed. Warning/type ceilings remain
+732 and 398. Evidence is retained under `audit-tax-profile-2026-09-05` in thread
+storage. Browser and full integration suites were not repeated for this small
+shared calculation-map correction.
+
+The broader order/lifecycle review then found millisecond-truncated revision
+checks in sales-order issuance, order mutations and document void. The void
+service also checks its token before acquiring the claim lock and accepts
+impossible dates. Those are open findings for the next continuation.
