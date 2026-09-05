@@ -26,6 +26,11 @@ import { createAppPlatformAdapter, AppPlatformError } from './platform'
 import type { SessionUser } from '@/lib/auth'
 import { permissionSetCovers } from '@/lib/permissions'
 import { lockCustomFieldKeys } from '../custom-field-write-lock'
+import { validateCustomFieldDefinition, type ExistingFieldDef } from '../custom-field-definition'
+import { normalizeCustomFieldConfig } from '../custom-field-config'
+import { isCustomFieldTargetEnabled } from '../customization/gates'
+import { featureGateLockKey } from '../features'
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 
 /**
  * Apps server store — every function is org-scoped: the caller passes the
@@ -107,10 +112,23 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
   // objects/*.json — validate BEFORE the transaction so a bad spec is a clean 400.
   const objects = parseObjectSpecs(bundle.files)
   if (objects.errors.length) throw new AppError(`invalid objects: ${objects.errors.join('; ')}`)
+  for (const field of objects.customFields) {
+    const error = validateCustomFieldDefinition({ ...field })
+    if (error) throw new AppError(`invalid custom field "${field.key}": ${error}`)
+    field.config = normalizeCustomFieldConfig(field.config)
+  }
 
   const manifestJson = JSON.stringify(manifest)
 
   await db.transaction(async (tx) => {
+    if (objects.customFields.length) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
+      for (const field of objects.customFields) {
+        if (!(await isCustomFieldTargetEnabled(orgId, field.targetTable, field.targetKind, tx))) {
+          throw new AppError(`custom field "${field.key}" targets a disabled feature`, 404)
+        }
+      }
+    }
     // Prior grants (absent on first install) become the audit "before" state.
     const prior = (await tx.execute<{ grantedPermissions: string[] | null }>(sql`
       select granted_permissions as "grantedPermissions" from apps
@@ -171,7 +189,7 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     const provisioned = await provisionObjects(tx, orgId, userId, objects, {
       recordTypes: new Set(prev.recordTypes ?? []),
       customFields: new Set(prev.customFields ?? []),
-    })
+    }, { appKey: manifest.key, appVersionId: versionId })
     await tx.execute(sql`update apps set provisioned = ${JSON.stringify(provisioned)}::jsonb where id = ${appId} and org_id = ${orgId}`)
 
     // Supersede the previous active version, then activate the new one.
@@ -189,6 +207,7 @@ async function provisionObjects(
   userId: string,
   objects: ParsedObjects,
   owned: { recordTypes: Set<string>; customFields: Set<string> },
+  source: { appKey: string; appVersionId: string },
 ): Promise<{ recordTypes: string[]; customFields: string[] }> {
   const recordTypes = new Set(owned.recordTypes)
   const customFields = new Set(owned.customFields)
@@ -219,28 +238,40 @@ async function provisionObjects(
 
   for (const cf of objects.customFields) {
     const scoped = `${cf.targetTable}:${cf.key}`
-    const existing = (await tx.execute(sql`
-      select id from custom_field_defs
-       where org_id = ${orgId} and target_table = ${cf.targetTable} and key = ${cf.key} limit 1`,
-    )) as { rows: { id: string }[] }
-    if (existing.rows[0]) {
+    const before = (await tx.execute<ExistingFieldDef>(sql`
+      select custom_field_defs.*, ${documentRevisionSql(sql`created_at`)} as created_at,
+             ${documentRevisionSql(sql`updated_at`)} as updated_at from custom_field_defs
+       where org_id = ${orgId} and target_table = ${cf.targetTable} and key = ${cf.key} limit 1 for update`,
+    )).rows[0]
+    let after: ExistingFieldDef
+    if (before) {
       if (!owned.customFields.has(scoped)) {
         throw new AppError(`custom field "${scoped}" already exists and was not provisioned by this app`, 409)
       }
-      await tx.execute(sql`
+      const error = validateCustomFieldDefinition({ ...cf }, before)
+      if (error) throw new AppError(`invalid custom field "${cf.key}": ${error}`)
+      after = (await tx.execute<ExistingFieldDef>(sql`
         update custom_field_defs
            set label = ${cf.label}, field_type = ${cf.fieldType}, target_kind = ${cf.targetKind},
                config = ${JSON.stringify(cf.config)}::jsonb, is_required = ${cf.isRequired},
-               is_active = true, updated_at = now(), updated_by = ${userId}
-         where id = ${existing.rows[0].id} and org_id = ${orgId}`)
+               is_active = true, updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${userId}
+         where id = ${before.id} and org_id = ${orgId}
+         returning custom_field_defs.*, ${documentRevisionSql(sql`created_at`)} as created_at,
+                   ${documentRevisionSql(sql`updated_at`)} as updated_at`)).rows[0]!
     } else {
-      const created = await tx.execute(sql`
+      const created = await tx.execute<ExistingFieldDef>(sql`
         insert into custom_field_defs (org_id, target_table, target_kind, key, label, field_type, config, is_required, created_by, updated_by)
         values (${orgId}, ${cf.targetTable}, ${cf.targetKind}, ${cf.key}, ${cf.label}, ${cf.fieldType},
                 ${JSON.stringify(cf.config)}::jsonb, ${cf.isRequired}, ${userId}, ${userId})
-        on conflict do nothing returning id`)
+        on conflict do nothing returning custom_field_defs.*, ${documentRevisionSql(sql`created_at`)} as created_at,
+                   ${documentRevisionSql(sql`updated_at`)} as updated_at`)
       if (!created.rows.length) throw new AppError(`custom field "${scoped}" already exists`, 409)
+      after = created.rows[0]!
     }
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'custom_field_defs', ${after.id}, ${before ? 'update' : 'insert'},
+              ${JSON.stringify({ ...(before ? { before } : {}), after, source })}::jsonb, ${userId})`)
     customFields.add(scoped)
   }
 

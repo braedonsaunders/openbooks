@@ -1,3 +1,4 @@
+import { validateCustomFieldDefinitionShape } from '@openbooks/customization'
 import { lintRecordFields } from '../record-schema'
 
 /**
@@ -16,15 +17,6 @@ import { lintRecordFields } from '../record-schema'
  */
 
 const SLUG = /^[a-z][a-z0-9-]*$/
-const SNAKE = /^[a-z][a-z0-9_]*$/
-
-/** Mirror of custom_field_defs.field_type enum (schema/src/extension.ts). */
-const FIELD_TYPES = new Set([
-  'text', 'long_text', 'number', 'currency', 'date', 'boolean', 'select', 'multi_select', 'reference', 'file',
-])
-/** Tables custom fields may extend (matches the admin custom-fields UI). */
-const FIELD_TARGETS = new Set(['documents', 'document_lines', 'parties', 'projects', 'accounts', 'items'])
-
 export interface RecordTypeSpec {
   key: string
   name: string
@@ -91,13 +83,12 @@ export function parseObjectSpecs(files: { path: string; content: string; isBinar
         fields: lint.sections as unknown[],
       })
     } else if (spec?.type === 'custom_field') {
+      const definitionError = validateCustomFieldDefinitionShape(spec)
+      if (definitionError) { out.errors.push(`${f.path}: ${definitionError}`); continue }
       const targetTable = String(spec.targetTable ?? '')
       const key = String(spec.key ?? '')
       const fieldType = String(spec.fieldType ?? '')
       const label = String(spec.label ?? '').trim()
-      if (!FIELD_TARGETS.has(targetTable)) { out.errors.push(`${f.path}: unknown targetTable "${targetTable}"`); continue }
-      if (!SNAKE.test(key)) { out.errors.push(`${f.path}: custom_field key must be snake_case`); continue }
-      if (!FIELD_TYPES.has(fieldType)) { out.errors.push(`${f.path}: unknown fieldType "${fieldType}"`); continue }
       if (!label) { out.errors.push(`${f.path}: custom_field needs a label`); continue }
       const scoped = `${targetTable}:${key}`
       if (seenFields.has(scoped)) { out.errors.push(`${f.path}: duplicate custom_field "${scoped}"`); continue }

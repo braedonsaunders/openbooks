@@ -201,8 +201,8 @@ test('bad slug, unknown fieldType, unknown target are flagged', () => {
   ])
   assert.equal(r.errors.length, 3)
   assert.match(r.errors[0]!, /slug/)
-  assert.match(r.errors[1]!, /fieldType/)
-  assert.match(r.errors[2]!, /targetTable/)
+  assert.match(r.errors[1]!, /field type/)
+  assert.match(r.errors[2]!, /target table/)
 })
 
 test('duplicate keys within a bundle are flagged', () => {

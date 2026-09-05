@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 
 /**
  * Optional-feature registry — the single source of truth for what an org can
@@ -157,14 +157,14 @@ export function featureEnabled(
 }
 
 /** Load the org's feature state (raw overrides; combine with featureEnabled). */
-export async function orgFeatureState(orgId: string): Promise<FeatureState> {
-  const r = (await db.execute<{ f: FeatureState | null }>(sql`select settings->'features' as f from orgs where id = ${orgId}`))
+export async function orgFeatureState(orgId: string, executor: SqlExecutor = db): Promise<FeatureState> {
+  const r = (await executor.execute<{ f: FeatureState | null }>(sql`select settings->'features' as f from orgs where id = ${orgId}`))
   return r.rows[0]?.f ?? {}
 }
 
 /** Server helper for route guards: is this feature on for the org? */
-export async function isFeatureEnabled(orgId: string, key: string): Promise<boolean> {
-  return featureEnabled(await orgFeatureState(orgId), key)
+export async function isFeatureEnabled(orgId: string, key: string, executor: SqlExecutor = db): Promise<boolean> {
+  return featureEnabled(await orgFeatureState(orgId, executor), key)
 }
 
 /**

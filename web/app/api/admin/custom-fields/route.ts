@@ -1,97 +1,16 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { CUSTOM_FIELD_TARGETS, CUSTOM_FIELD_REFERENCE_TABLES } from '@openbooks/customization'
 import { db } from '@openbooks/engine/src/db.ts'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { isUuid } from '../../../../lib/list-params'
-import { validateCustomFieldConfig, normalizeCustomFieldConfig } from '../../../../lib/custom-field-config'
-import type { CustomFieldDef } from '../../../../lib/custom-fields'
+import { normalizeCustomFieldConfig } from '../../../../lib/custom-field-config'
+import { validateCustomFieldDefinition as validateDef, type ExistingFieldDef } from '../../../../lib/custom-field-definition'
 import { lockCustomFieldKeys } from '../../../../lib/custom-field-write-lock'
-// Server-only route: importing the engine adapter is fine, and the reserved
-// set must come from there so validation cannot drift from what headerValues
-// actually exposes at flow runtime.
-import { RESERVED_DOCUMENT_FIELD_KEYS } from '@openbooks/engine/src/flows/documents-adapter.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isCustomFieldTargetEnabled } from '../../../../lib/customization/gates'
 
 export const runtime = 'nodejs'
-
-const FIELD_TYPES = ['text', 'long_text', 'number', 'currency', 'date', 'boolean', 'select', 'multi_select', 'reference']
-
-const REFERENCE_TABLES: readonly string[] = CUSTOM_FIELD_REFERENCE_TABLES
-
-type ExistingFieldDef = {
-  id: string
-  updated_at: string
-  target_table: string
-  target_kind: string | null
-  key: string
-  label: string
-  field_type: string
-  config: unknown
-  is_required: boolean
-  sort_order: number
-  is_active: boolean
-}
-
-function validateDef(body: Record<string, unknown>, existing?: ExistingFieldDef): string | null {
-  const targetTable = body.targetTable === undefined ? existing?.target_table : body.targetTable
-  const targetKind = body.targetKind === undefined ? existing?.target_kind : body.targetKind
-  const key = body.key === undefined ? existing?.key : body.key
-  const label = body.label === undefined ? existing?.label : body.label
-  const fieldType = body.fieldType === undefined ? existing?.field_type : body.fieldType
-  const config = body.config === undefined ? existing?.config : body.config
-
-  if (existing) {
-    if (body.targetTable !== undefined && body.targetTable !== existing.target_table) {
-      return 'target table cannot be changed'
-    }
-    if (body.targetKind !== undefined && (body.targetKind ?? null) !== existing.target_kind) {
-      return 'target kind cannot be changed'
-    }
-    if (body.key !== undefined && body.key !== existing.key) {
-      return 'key cannot be changed'
-    }
-  }
-
-  const target = CUSTOM_FIELD_TARGETS.find((t) => t.table === targetTable)
-  if (!target) return 'invalid target table'
-  if (targetKind !== undefined && targetKind !== null && (typeof targetKind !== 'string' || !targetKind || !target.kinds.some((kind) => kind.value === targetKind))) {
-    return 'invalid target kind for that table'
-  }
-  if (typeof key !== 'string' || !/^[a-z][a-z0-9_]{1,60}$/.test(key)) {
-    return 'key must be snake_case (a-z, 0-9, _)'
-  }
-  // A documents key that collides with a real header field would shadow it in
-  // flow condition evaluation and {{token}} interpolation (e.g. a custom
-  // `total` feeding an approval threshold). Fail closed at registration.
-  if (targetTable === 'documents' && RESERVED_DOCUMENT_FIELD_KEYS.has(String(key))) {
-    return 'key conflicts with a built-in document field'
-  }
-  if (typeof label !== 'string' || !label.trim() || label.length > 120) return 'label required'
-  if (typeof fieldType !== 'string' || !FIELD_TYPES.includes(fieldType)) return 'invalid field type'
-  for (const key of ['isRequired', 'isActive']) {
-    if (body[key] !== undefined && typeof body[key] !== 'boolean') return `${key} must be a boolean`
-  }
-  if (body.sortOrder !== undefined && (typeof body.sortOrder !== 'number' || !Number.isInteger(body.sortOrder) || body.sortOrder < -2147483648 || body.sortOrder > 2147483647)) {
-    return 'sortOrder must be a 32-bit integer'
-  }
-  if (['select', 'multi_select'].includes(String(fieldType))) {
-    const opts = (config as { options?: unknown })?.options
-    if (!Array.isArray(opts) || opts.length === 0 || opts.some((o) => typeof o !== 'string' || !o.trim())) {
-      return 'select fields need at least one option'
-    }
-    if (new Set(opts).size !== opts.length) return 'select options must be unique'
-  }
-  if (String(fieldType) === 'reference') {
-    const cfg = config as { referenceTable?: unknown } | undefined
-    if (typeof cfg?.referenceTable !== 'string' || !REFERENCE_TABLES.includes(cfg.referenceTable)) {
-      return 'reference fields need a valid referenceTable (parties, projects, accounts, items)'
-    }
-  }
-  return validateCustomFieldConfig(fieldType as CustomFieldDef['fieldType'], config)
-}
 
 export async function POST(req: Request) {
   const gate = await guardPermission('admin.custom_fields.manage')
