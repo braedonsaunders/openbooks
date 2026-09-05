@@ -1481,3 +1481,27 @@ and asset-control tests pass. All 3,118 unit tests, workspace type checks and
 the locked production build pass. Explicit-any/lint ceilings remain 391/725.
 Evidence: `audit-depreciation-bounds-2026-09-05`. Asset-edit audit coverage and
 concurrent custom-data preservation are still open and are the next correction.
+
+## Complete asset-edit evidence and concurrent custom preservation — continuation from 5e369662
+
+Asset PATCH previously audited only depreciation-basis changes. Account-only,
+status, identity, descriptive and tax-election changes could commit without
+material configuration evidence. Every successful edit now stores the complete
+locked before-image and committed after-image alongside the actor, in the same
+transaction. Decimal amounts remain strings, and creation/update timestamps use
+the shared lossless PostgreSQL representation. A failed audit write rolls the
+asset and schedule changes back.
+
+Custom data is now merged from the locked row, replacing only submitted tenant
+fields or tax elections. Metadata-only saves leave custom data untouched. Three
+real-writer tests cover metadata, defined custom fields and tax elections while
+another transaction commits newer provenance; their audit before-images also
+start at that committed state. All twelve new regressions failed before the
+fix. All 80 expanded database checks, 3,118 unit tests, web typechecking and the
+locked production build pass. The large-value audit check preserves
+`900000000000000.1234` exactly. Explicit-any/lint ceilings remain 391/725.
+Evidence: `audit-asset-edit-evidence-2026-09-05`.
+
+A separate confirmed gap remains: the asset drawer submits full forms without
+a client revision precondition, allowing sequential stale editors to overwrite
+one another. That API/UI correction and adversarial tests follow next.
