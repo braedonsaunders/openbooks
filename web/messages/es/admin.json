@@ -2481,7 +2481,7 @@
       "disable": "Desactivar",
       "delete": "Eliminar",
       "deleteConfirmTitle": "Eliminar flujo",
-      "deleteConfirm": "¿Eliminar «{name}»? Su historial de ejecuciones también se elimina.",
+      "deleteConfirm": "¿Eliminar «{name}»? Solo se pueden eliminar los flujos sin historial de ejecuciones ni aprobaciones. Desactive un flujo utilizado para conservar su historial.",
       "deleted": "Flujo eliminado",
       "deleteFailed": "No se pudo eliminar el flujo",
       "updateFailed": "No se pudo actualizar el flujo"

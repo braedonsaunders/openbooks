@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { flowSubjectProfileForOrg } from '@openbooks/engine/src/flows/index.ts'
 import type { AutomationGraph } from '@openbooks/forms-core'
@@ -24,7 +25,7 @@ export default async function FlowBuilderPage({ params }: { params: Promise<{ id
 
   const [flowRes, runsRes, usersRes, rolesRes] = await Promise.all([
     (db.execute(sql`
-      select id, name, enabled, subject_kind, graph
+      select id, name, enabled, subject_kind, graph, ${documentRevisionSql(sql`updated_at`)} as updated_at
         from flows where id = ${id} and org_id = ${authz.user.orgId}`)),
     (db.execute(sql`
       select id, subject_kind, subject_id, trigger, status, error, started_at, finished_at
@@ -52,6 +53,7 @@ export default async function FlowBuilderPage({ params }: { params: Promise<{ id
           id: String(flow.id),
           name: String(flow.name),
           enabled: Boolean(flow.enabled),
+          updatedAt: String(flow.updated_at),
           graph: flow.graph as AutomationGraph,
         }}
         runs={runsRes.rows as FlowRunRow[]}

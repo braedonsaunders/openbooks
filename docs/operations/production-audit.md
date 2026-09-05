@@ -1299,3 +1299,28 @@ checks passes all 35 tests, covering resolver, picker and signed browser-session
 paths. All 3,087 unit tests, web typechecking and the locked production build
 passed. Explicit-any and lint ceilings remain 391 and 725. Receipts are retained
 under `audit-org-user-activation-2026-09-05` in thread storage.
+
+## Workflow configuration and history — continuation from d6618c79
+
+Flow activation accepted truthy non-boolean values, and graph saves checked an
+unlocked snapshot: a simultaneous enable and draft edit could leave an invalid
+graph enabled. Deletes also checked approvals before their transaction and
+removed execution/effect history while retaining only a run count in audit.
+PATCH and DELETE now require the exact six-digit revision, lock the parent row
+before validation, and audit the locked before/after state. Successful writes
+advance revisions monotonically. Flows with execution or approval history must
+be disabled instead of deleted; parent locking serializes against child inserts.
+
+All API and server-page readers preserve exact revisions, and both existing
+list controls and the builder submit and retain committed tokens. The builder
+keeps edits made during an in-flight save marked unsaved. Delete confirmation
+copy in all five locales describes the history-preservation rule.
+
+The baseline reproduced 14 failures with two passing controls. All 45 focused
+API/engine tests now pass, including live concurrent enable/edit and approval
+insert/delete interleavings. Twelve browser assertions on the locked production
+build cover save/retry, stale conflicts, edits during a held save response,
+enabling, disabling and deleting unused definitions. All 3,087 unit tests,
+web typechecking and the locked build passed; the final five-locale copy change
+also passes 13 catalogue/view tests. Explicit-any and lint ceilings remain 391
+and 725. Receipts are in `audit-flow-controls-2026-09-05` in thread storage.

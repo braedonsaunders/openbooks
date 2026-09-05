@@ -3336,7 +3336,7 @@
       "disable": "Disable",
       "delete": "Delete",
       "deleteConfirmTitle": "Delete flow",
-      "deleteConfirm": "Delete “{name}”? Its run history is removed too.",
+      "deleteConfirm": "Delete “{name}”? Only flows without execution or approval history can be deleted. Disable a used flow to retain its history.",
       "deleted": "Flow deleted",
       "deleteFailed": "Could not delete the flow",
       "updateFailed": "Could not update the flow"

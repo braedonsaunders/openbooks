@@ -2525,7 +2525,7 @@
       "disable": "Désactiver",
       "delete": "Supprimer",
       "deleteConfirmTitle": "Supprimer le flux",
-      "deleteConfirm": "Supprimer « {name} » ? Son historique d'exécution sera aussi supprimé.",
+      "deleteConfirm": "Supprimer « {name} » ? Seuls les flux sans historique d’exécution ou d’approbation peuvent être supprimés. Désactivez un flux déjà utilisé pour conserver son historique.",
       "deleted": "Flux supprimé",
       "deleteFailed": "Impossible de supprimer le flux",
       "updateFailed": "Impossible de mettre à jour le flux"
