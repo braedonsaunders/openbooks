@@ -137,7 +137,18 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
         const gated = await gatedSetupEntity(entity, orgId)
         const available = new Set(gated.fields.map((field) => field.key))
         const unavailable = entity.fields.filter((field) => !available.has(field.key)).map((field) => field.key)
-        return writeSetup(gated, rows, mode, ctx, unavailable)
+        if (!ctx.dryRun) return writeSetup(gated, rows, mode, ctx, unavailable)
+        // A preview exercises the same storage constraints, policy guards and
+        // audit writes as commit. Keep earlier rows visible to later rows in
+        // this batch, then discard the entire batch without rolling back the
+        // caller's surrounding import transaction or its job evidence.
+        await db.execute(sql`savepoint setup_import_preview`)
+        try {
+          return await writeSetup(gated, rows, mode, { ...ctx, dryRun: false }, unavailable)
+        } finally {
+          await db.execute(sql`rollback to savepoint setup_import_preview`)
+          await db.execute(sql`release savepoint setup_import_preview`)
+        }
       })
     },
   }

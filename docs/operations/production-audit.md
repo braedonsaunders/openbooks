@@ -2211,3 +2211,37 @@ generic setup import preview claims success for a historical-policy update that
 commit refuses, and changing an employee's current country can remove their
 already committed tax slip. This component-policy repair does not certify
 historical employee filing context, remittance mappings or every payroll path.
+
+
+### 2026-09-05 — Setup previews exercise the real write controls
+
+Five failing database regressions showed preview accepting historical-policy
+changes, storage-invalid rows and unavailable audit evidence, and counting two
+rows with one natural key as two creates. The committed import would refuse or
+classify those rows differently.
+
+Setup preview now runs the ordinary batch writer under a savepoint and rolls
+back the complete batch before returning. Earlier preview rows are visible to
+later rows, so duplicate inserts and repeated upserts have the same outcomes as
+commit. Storage guards and audit writes are exercised in the same transaction;
+row failures retain their existing isolation. Rolling back the preview leaves
+its caller's preceding and subsequent transaction work intact. Preview takes
+real write locks while validating and is not a reservation against changes
+that another transaction makes afterward.
+
+All 46 focused tests passed (13,359.747708 ms; zero skips), including six new
+preview regressions and the existing book, feature-gate and declared-default
+checks. Seven built browser HTTP checks passed through the restricted runtime
+role. Database evidence showed no preview components, duplicate departments,
+audit entries or import jobs; the one deliberately committed department had
+exactly one audit entry and one committed import job. The committed payroll
+slip stayed unchanged. Workspace types, changed-file lint, locked production
+build and all 3,153 unit tests passed (139,178.652667 ms; zero skips). Ceilings
+remain 389 explicit-any uses and 723 lint warnings. Evidence is under
+`audit-setup-preview-validation-2026-09-05`; the isolated browser, server and
+fixture tenant were removed.
+
+This closes the preview mismatch recorded in the previous checkpoint. The
+separate historical payroll country/profile defect remains the next accounting
+remediation; this checkpoint does not claim that all historical payroll context
+is stable.
