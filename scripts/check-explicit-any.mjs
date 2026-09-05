@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
  * person who wants headroom must fix code instead of editing a number.
  */
 export const BASELINE_EXPLICIT_ANY = 2021;
-export const MAX_EXPLICIT_ANY = 391;
+export const MAX_EXPLICIT_ANY = 389;
 
 const requireFromWeb = createRequire(new URL("../web/package.json", import.meta.url));
 const ts = requireFromWeb("typescript");

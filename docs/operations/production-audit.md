@@ -2096,3 +2096,41 @@ and does not include this later import repair. A separate follow-on probe has
 confirmed that book imports bypass first-default selection and allow direct
 demotion of the current primary/default book. That book-policy path remains
 open at this checkpoint and is the next repair.
+
+
+### 2026-09-05 — Shared primary/default book lifecycle
+
+Three database probes showed imports creating the first active rate book without
+a default and directly demoting current default/primary books. A fourth probe
+showed interactive promotion of an inactive rate book demoting the prior active
+default. These paths could leave the organization without its authoritative
+active book.
+
+Interactive and imported accounting/rate-book writes now compose one shared
+book lifecycle in `web/lib/setup/books.ts`: first-default selection, prevention
+of direct demotion, active-default validation, tenant book locking, promotion
+and full stored-row audit evidence. Import previews run the same validation
+without mutations. Every demotion and promoted row stays inside the caller's
+transaction/savepoint, including the import job's outer audit transaction.
+
+All 70 focused checks passed (22,683.738958 ms; zero skips), including 14 new
+book import and inactive-promotion cases. Eight injected audit failures verify
+rollback at both demotion and promotion for insert/upsert on both book kinds.
+Seven built browser HTTP checks passed with the non-bypass runtime role; stored
+rows retained one active default and one active primary, and six successful
+changes retained their actor and before/after evidence. The browser, server and
+disposable tenant were cleaned up. Workspace types, final web types, changed
+lint, the locked production build and all 3,149 unit tests passed
+(209,570.99825 ms; zero skips). The refactor removed two explicit
+`any` uses; the enforced explicit-any and warning ceilings were tightened to
+389 and 723. Evidence is under `audit-setup-import-book-policy-2026-09-05`.
+
+The independent full run at `df56ab44` passed all 2,239 checks
+(2,488,757.585875 ms; zero skips). All 1,844 fixture leases were released/reset,
+with four bootstrap/teardown/verification cycles and zero leaks. This checkpoint
+predates the two import repairs. A further real-database probe has reproduced earning creation
+through both interactive setup and imports storing five tax/statutory booleans
+as false when they were omitted, despite explicit true defaults in the setup
+registry. Metadata updates likewise reset omitted flags, and malformed boolean
+strings are accepted as false. Those shared coercion defects remain open at
+this checkpoint and are the next repair.

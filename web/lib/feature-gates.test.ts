@@ -2494,9 +2494,9 @@ test('the surfaces this test was written for are covered', () => {
     'item-rate-book create must 404 — not persist — currency when Multi-currency is off',
   )
   assert.match(
-    read('app/api/admin/setup/[entity]/route.ts'),
-    /body\.currency !== undefined\s*\?\s*String\(body\.currency\)[\s\S]{0,80}base_currency/,
-    'item-rate-book create must fall back to the org base currency when currency is omitted',
+    read('lib/setup/books.ts'),
+    /if \(body\.currency !== undefined\) currency = String\(body\.currency\)[\s\S]{0,500}currency = org\.base_currency/,
+    'item-rate-book create must use the org base currency when currency is omitted',
   )
   assert.match(
     read('app/(app)/admin/setup/[entity]/SetupEntitySection.tsx'),
@@ -2509,19 +2509,19 @@ test('the surfaces this test was written for are covered', () => {
     'the item-rate-book form must hide the currency control when Multi-currency is off',
   )
   assert.match(
-    read('app/api/admin/setup/[entity]/route.ts'),
-    /entity\.key === 'item-rate-books'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,80}multiCurrency[\s\S]{0,600}for update/,
-    'item-rate-book UPDATE must refuse currency when Multi-currency is off — stored books stay',
+    read('app/api/admin/setup/[entity]/route.ts').split('export async function PATCH')[1]!,
+    /entity\.key === 'item-rate-books'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,80}multiCurrency[\s\S]{0,200}status: 404[\s\S]{0,400}saveSetupBook/,
+    'item-rate-book UPDATE must refuse disabled currency before calling the shared book writer',
   )
   assert.match(
-    read('app/api/admin/setup/[entity]/route.ts'),
-    /entity\.key === 'item-rate-books'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,200}status: 404[\s\S]{0,600}for update/,
-    'item-rate-book UPDATE must 404 — not persist — currency when Multi-currency is off',
+    read('lib/setup/books.ts'),
+    /else if \(before\) currency = String\(before\.currency\)/,
+    'item-rate-book UPDATE must retain stored currency when the field is omitted',
   )
   assert.match(
-    read('app/api/admin/setup/[entity]/route.ts'),
-    /currency = case when \$\{body\.currency === undefined\} then currency/,
-    'item-rate-book UPDATE must keep the stored currency when Multi-currency is off and the field is omitted',
+    read('lib/setup/books.ts'),
+    /where id = \$\{options\.id\} and org_id = \$\{orgId\} for update/,
+    'shared book updates must lock the tenant-owned row before reading its currency',
   )
   assert.match(
     read('app/api/admin/payment-operations/[resource]/route.ts'),
