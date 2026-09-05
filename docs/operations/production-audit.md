@@ -1889,3 +1889,41 @@ These are test-harness changes; the preceding production build remains the lates
 product build checkpoint. The failed full integration result above remains a
 failure until a fresh complete run establishes a new checkpoint. Passing targeted
 reruns does not certify the entire codebase or establish production readiness.
+
+## Asset category policy after financial history
+
+Continuation from `49b17c21` reproduced category edits that redirected an asset's
+inherited accumulated-depreciation account after depreciation or impairment had
+posted. Both API requests returned success, despite direct asset edits already
+refusing the equivalent change. Lifecycle posting also read category defaults
+without taking the category lock used by depreciation.
+
+Forward migration `0089_asset_category_policy_guard.sql` prevents changes to a
+category's book accounts, depreciation method, formula reference, life, convention
+or identity once its assets have posted depreciation or lifecycle history. Reversed
+history still counts. The database boundary also covers imports and direct writers;
+it preserves existing data and permits unchanged policy, labels, activation and
+connector metadata. Categories without financial history remain configurable.
+This controls book policy; it does not certify every tax-attribute policy.
+
+Disposal and remeasurement now lock the asset and then its category before reading
+defaults, matching depreciation's lock order. A settings write either commits
+before posting reads those defaults or waits and is refused after posting commits.
+Category setup edits record the locked before row and actual after row, with actor,
+in the same transaction. Failed evidence writes roll back the edit.
+
+All 83 focused checks passed (60,996.479042 ms; zero skips), including 12 new cases
+covering eight protected policy fields across depreciation, impairment, disposal
+and reversed history, both concurrency orders, metadata, audit rollback and tenant
+scope. Four authenticated production-browser checks passed under the restricted
+runtime role. All 3,149 canonical unit tests passed (183,084.880333 ms; zero skips),
+workspace types and the locked production build passed, and the 725-warning /
+391-explicit-any ceilings remain unchanged. Evidence is under
+`audit-asset-category-policy-2026-09-05`.
+
+Apply the forward migration through the normal schema rollout before relying on
+the new application behavior. Keep category policy writes paused during a mixed
+old/new application rollout, because older lifecycle code lacks the category lock.
+Retain the guard on application rollback. A rejected historical policy change needs
+a new category for future assets or a controlled accounting adjustment; do not drop
+the guard to force it through. No production migration or deployment was performed.

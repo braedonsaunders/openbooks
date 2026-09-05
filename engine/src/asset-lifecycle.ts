@@ -126,11 +126,17 @@ async function primaryBookId(orgId: string, exec: SqlExecutor = db): Promise<str
  * before reading carrying-value inputs and then re-reads the committed state.
  */
 async function lockAssetRow(exec: SqlExecutor, orgId: string, assetId: string, allowedSubsidiaryIds?: readonly string[] | null): Promise<void> {
-  const locked = (await exec.execute<{ id: string }>(sql`
-    select id from fixed_assets where org_id = ${orgId} and id = ${assetId}
+  const locked = (await exec.execute<{ id: string; category_id: string }>(sql`
+    select id, category_id from fixed_assets where org_id = ${orgId} and id = ${assetId}
       ${allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
       for update`));
   if (!locked.rows[0]) throw new AssetLifecycleError("asset not found");
+  // Match depreciation's asset-then-category order. Category policy writes must
+  // finish before we read defaults, or wait until our financial history commits.
+  const category = await exec.execute(sql`
+    select id from asset_categories
+     where org_id = ${orgId} and id = ${locked.rows[0].category_id} for update`);
+  if (!category.rows[0]) throw new AssetLifecycleError("asset category not found");
 }
 
 /**
