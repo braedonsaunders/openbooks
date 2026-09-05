@@ -1,4 +1,5 @@
 import 'server-only'
+import type { SqlExecutor } from '@openbooks/engine/src/db.ts'
 import { NextResponse } from 'next/server'
 import {
   RECORD_TYPE_BY_KEY,
@@ -52,10 +53,11 @@ export async function isCustomFieldTargetEnabled(
   orgId: string,
   table: string,
   kind?: string | null,
+  executor?: SqlExecutor,
 ): Promise<boolean> {
   const feature = customFieldTargetFeatureKey(table, kind)
   if (!feature) return true
-  return isFeatureEnabled(orgId, feature)
+  return isFeatureEnabled(orgId, feature, executor)
 }
 
 /** Tables / kinds whose Features switch is off. Historical defs stay. */

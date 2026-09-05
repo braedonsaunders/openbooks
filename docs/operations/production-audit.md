@@ -1819,3 +1819,43 @@ eight independent keys all succeeded. All 3,139 canonical unit tests passed
 725-warning/391-explicit-any limits remain unchanged. Evidence is under
 `audit-custom-field-creation-2026-09-05`. App definition validation and per-definition
 audit evidence remain separate work; the concurrency repair does not certify them.
+
+## App-provisioned custom-field controls
+
+Continuation from `078b1df6` reproduced an app installing a currency definition
+with a Boolean label, a string required flag, reversed bounds and an invalid
+default. It also produced no per-definition audit record. Seventeen initial
+regressions failed across malformed definitions, missing evidence, audit-failure
+rollback and provisioning into a disabled Projects domain.
+
+Bundle parsing and API writes now share the structural definition contract and
+native target catalog. Installation composes the same server-side configuration
+and reserved-key validation as the API, canonicalizes exact bounds, and refuses
+unsupported definitions before writing. App upgrades preserve the existing target
+identity. Each create/update records full before/after evidence with actor,
+timestamp and app-version provenance inside the installation transaction; failed
+audit writes roll back app versions and definitions together. Definition revisions
+advance monotonically even when the stored timestamp is ahead of transaction time.
+
+App provisioning takes the authoritative feature fence before checking enabled
+targets and holds it to commit. Feature helpers accept the existing transaction
+executor, keeping their reads on the connection that owns the lock. A concurrent
+disable test verifies the installer waits, then refuses creation after the feature
+is disabled. The creation locks and unique index from the preceding slice remain.
+
+All 169 focused checks passed (384,762.117333 ms), including 19 app-field control
+cases, adjacent app transactions, definition races and feature controls. Seven
+production-browser checks verified actual install endpoint rejection, valid
+installation/upgrade and exact values in the native editor. Workspace types,
+the locked production build and all 3,139 canonical unit tests passed
+(573,630.853 ms; zero skips). The warning and explicit-any limits remain 725 and
+391. Evidence is under `audit-app-field-controls-2026-09-05`.
+
+The broader run at `078b1df6` finished with 2,152 of 2,153 tests passing, zero skips,
+and one fixture-owner timeout in the item-costing null-existing case
+(7,677,927.124542 ms total). All 12 item-costing revision cases passed when rerun
+against the same source checkpoint. That does not turn the failed full run green.
+Its lifecycle receipt reports 1,754 leases but 1,755 releases/resets and -1 active
+leases. Inspection confirmed overlapping releases can both reset and decrement the
+same slot; this harness defect remains to be repaired before the next full run.
+Both the failure log and exact receipt are retained with the creation-slice evidence.
