@@ -18,7 +18,7 @@ export interface CustomFieldDefClient {
     showInList?: boolean
     referenceTable?: string
     referenceFilter?: Record<string, string>
-    displayMode?: 'normal' | 'hidden' | 'disabled'
+    displayMode?: 'normal' | 'always' | 'hidden' | 'disabled' | 'readonly'
     allowedRoles?: string[]
   }
   isRequired: boolean
@@ -68,6 +68,12 @@ export function customFieldColumns<Row extends Record<string, unknown>>(
     .filter((d) => d.config.displayMode !== 'hidden')
     .map((def) => {
       const base = { key: `cf_${def.key}`, label: def.label, help: def.config.helpText, required: def.isRequired }
+      if (def.config.displayMode === 'disabled' || def.config.displayMode === 'readonly') {
+        return { ...base, width: 'minmax(120px,1fr)', type: 'readonly' as const, render: (row: Row) => {
+          const value = row[base.key]
+          return Array.isArray(value) ? value.join(', ') : String(value ?? '')
+        } }
+      }
       switch (def.fieldType) {
         case 'select':
           return {
