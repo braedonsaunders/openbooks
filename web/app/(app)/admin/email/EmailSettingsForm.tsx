@@ -19,6 +19,7 @@ type View = {
   smtpSecure?: boolean
   smtpUsername?: string
   hasSecret: boolean
+  updatedAt: string | null
 }
 
 export function EmailSettingsForm({ initial }: { initial: View }) {
@@ -37,8 +38,8 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
     setSaving(true)
     try {
       // `hasSecret` is a read-only flag the API reports back; never send it.
-      const { hasSecret: _hasSecret, ...rest } = v
-      const body: Record<string, unknown> = { ...rest }
+      const { hasSecret: _hasSecret, updatedAt, ...rest } = v
+      const body: Record<string, unknown> = { ...rest, expectedUpdatedAt: updatedAt }
       if (replaceSecret) body.secret = secret.trim() ? secret.trim() : null
       const res = await fetch('/api/admin/email', {
         method: 'PUT',

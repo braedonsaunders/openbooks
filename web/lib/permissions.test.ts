@@ -173,13 +173,15 @@ const mockSources = new Map<string, string>([
     'mock:email-config',
     `
       const state = globalThis[Symbol.for('openbooks.email-route-permission-test')]
-      const view = { enabled: false, provider: 'smtp', fromEmail: 'noreply@example.com', hasSecret: false }
+      export class OrgEmailConfigConflictError extends Error {}
+      const view = { enabled: false, provider: 'smtp', fromEmail: 'noreply@example.com', hasSecret: false, updatedAt: '2026-09-05T00:00:00.123450Z' }
       export async function readOrgEmailConfigView(orgId) {
         state.engineCalls.push({ fn: 'readOrgEmailConfigView', orgId })
         return view
       }
       export async function saveOrgEmailConfig(orgId, input) {
         state.engineCalls.push({ fn: 'saveOrgEmailConfig', orgId, input })
+        return view
       }
       export async function resolveOrgEmailTransport(orgId) {
         state.engineCalls.push({ fn: 'resolveOrgEmailTransport', orgId })
@@ -253,7 +255,7 @@ async function putConfig(body: Record<string, unknown>): Promise<Response> {
     new Request('http://localhost/api/admin/email', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, expectedUpdatedAt: '2026-09-05T00:00:00.123450Z' }),
     }),
   )
 }
@@ -299,6 +301,7 @@ test('setup authority reaches every email handler without holding users-manage',
     provider: 'smtp',
     fromEmail: 'noreply@example.com',
     hasSecret: false,
+    updatedAt: '2026-09-05T00:00:00.123450Z',
   })
 
   const saved = await putConfig({
@@ -337,7 +340,6 @@ test('setup authority reaches every email handler without holding users-manage',
     [
       'readOrgEmailConfigView', // GET
       'saveOrgEmailConfig', // PUT persist
-      'readOrgEmailConfigView', // PUT response view
       'resolveOrgEmailTransport', // POST transport resolve
       'insertEmailLog', // POST email_log row
       'markEmailSent', // POST success marker
