@@ -93,12 +93,12 @@ async function seedSalesOrder(
        where id = ${id} and org_id = ${org.orgId}
     `);
   }
-  const updated = (await db.execute<{ updated_at: Date | string }>(sql`
-    select updated_at
+  const updated = (await db.execute<{ updated_at: string }>(sql`
+    select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
       from documents
      where id = ${id} and org_id = ${org.orgId}
   `)).rows[0]!;
-  return { id, updatedAt: new Date(updated.updated_at).toISOString() };
+  return { id, updatedAt: updated.updated_at };
 }
 
 async function seedPostedInvoice(

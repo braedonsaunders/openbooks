@@ -1,3 +1,4 @@
+import { documentRevisionSql, isDocumentRevisionToken } from "@openbooks/engine/src/document-revision.ts"
 import 'server-only'
 import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
@@ -484,13 +485,23 @@ export async function convertOrder(
   userId: string,
   sourceId: string,
   targetKind: string,
-  options: { creditOverrideReason?: string } = {},
+  options: { creditOverrideReason?: string; expectedUpdatedAt?: string } = {},
 ): Promise<ConvertResult> {
   if (!(await isFeatureEnabled(orgId, 'orders'))) throw new ConversionError('Orders feature is disabled')
-  if (targetKind === SALES_FULFILLMENT_KIND) {
-    return fulfillSalesOrderRemainder(orgId, userId, sourceId)
-  }
   return withOrgTransaction(orgId, async () => db.transaction(async (tx) => {
+    if (options.expectedUpdatedAt !== undefined) {
+      const source = (await tx.execute<{ revision: string }>(sql`
+        select ${documentRevisionSql(sql`updated_at`)} as revision from documents
+         where id = ${sourceId} and org_id = ${orgId} for update
+      `)).rows[0];
+      if (!source) throw new ConversionError('Order not found', 404)
+      if (!isDocumentRevisionToken(options.expectedUpdatedAt) || options.expectedUpdatedAt !== source.revision) {
+        throw new ConversionError('this order changed after you opened it; reload and review the latest revision', 409)
+      }
+    }
+    if (targetKind === SALES_FULFILLMENT_KIND) {
+      return fulfillSalesOrderRemainder(orgId, userId, sourceId)
+    }
     const src = (await tx.execute<any>(sql`
       select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
              subsidiary_id, department_id, project_id, location_id, class_id, extra_dims, memo, billing_method
@@ -742,14 +753,14 @@ export async function convertOrder(
     `)
 
     if (target.kind === 'sales_order') {
-      const revision = (await tx.execute<{ updated_at: Date }>(sql`
-        select updated_at from documents where id = ${newId} and org_id = ${orgId}
+      const revision = (await tx.execute<{ updated_at: string }>(sql`
+        select ${documentRevisionSql(sql`updated_at`)} as updated_at from documents where id = ${newId} and org_id = ${orgId}
       `)).rows[0]!.updated_at
       await issueSalesOrder({
         orgId,
         salesOrderId: newId,
         actorId: userId,
-        expectedUpdatedAt: revision.toISOString(),
+        expectedUpdatedAt: revision,
         creditOverrideReason: options.creditOverrideReason,
       })
     }

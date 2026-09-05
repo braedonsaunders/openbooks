@@ -1219,7 +1219,7 @@ test(
 )
 test('load and lock SQL preserve the exact revision token end to end', () => {
   assert.match(
-    DOCUMENTS_SOURCE,
+    readFileSync(new URL('../../engine/src/document-revision.ts', import.meta.url), 'utf8'),
     /function documentRevisionSql[\s\S]*?at time zone 'UTC'[\s\S]*?HH24:MI:SS\.US/,
   )
   // Every load and every lock projects the exact canonical token: the list

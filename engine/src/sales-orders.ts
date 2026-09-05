@@ -1,3 +1,4 @@
+import { documentRevisionSql, isDocumentRevisionToken } from "./document-revision.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withOrgTransaction } from "./db.ts";
 import { add, cmp, normalizeMoney } from "./money.ts";
@@ -55,7 +56,7 @@ interface SalesOrderRow extends Record<string, unknown> {
   party_id: string | null;
   currency: string;
   total: string;
-  updated_at: Date | string;
+  updated_at: string;
 }
 
 interface CustomerRoleRow extends Record<string, unknown> {
@@ -67,13 +68,6 @@ interface CustomerRoleRow extends Record<string, unknown> {
 }
 
 /** Effective permission check for engine-side authority gates: engine/src/actor-permissions.ts. */
-
-/** Raw SQL timestamps may be returned as Date objects or driver strings. */
-function sameRevision(expected: string, actual: Date | string): boolean {
-  const expectedTime = new Date(expected).getTime();
-  const actualTime = actual instanceof Date ? actual.getTime() : new Date(actual).getTime();
-  return Number.isFinite(expectedTime) && Number.isFinite(actualTime) && expectedTime === actualTime;
-}
 
 /**
  * Authoritative customer credit exposure, measured in customer_roles.currency.
@@ -295,7 +289,7 @@ export async function issueSalesOrder(input: {
 }): Promise<IssueSalesOrderResult> {
   return withOrgTransaction(input.orgId, async () => {
     const order = (await db.execute<SalesOrderRow>(sql`
-      select id, status, party_id, currency, total, updated_at
+      select id, status, party_id, currency, total, ${documentRevisionSql(sql`updated_at`)} as updated_at
         from documents
        where id = ${input.salesOrderId}
          and org_id = ${input.orgId}
@@ -309,7 +303,7 @@ export async function issueSalesOrder(input: {
         404,
       );
     }
-    if (!sameRevision(input.expectedUpdatedAt, order.updated_at)) {
+    if (!isDocumentRevisionToken(input.expectedUpdatedAt) || input.expectedUpdatedAt !== order.updated_at) {
       throw new SalesOrderIssueError(
         "this order changed after you opened it; reload and review the latest revision",
         "SALES_ORDER_STALE_REVISION",

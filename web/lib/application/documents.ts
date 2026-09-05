@@ -97,9 +97,9 @@ export function domainFailure(error: unknown): never {
     || error instanceof ControlAccountsIncompleteError
   ) {
     throw new ApplicationError(
-      error instanceof DocumentEditError && error.status === 409 ? "conflict" : "invalid_input",
+      (error instanceof DocumentEditError || error instanceof DocumentVoidError) && error.status === 409 ? "conflict" : "invalid_input",
       error.message,
-      error instanceof DocumentEditError ? error.status : 422,
+      error instanceof DocumentEditError || error instanceof DocumentVoidError ? error.status : 422,
     );
   }
   throw error;

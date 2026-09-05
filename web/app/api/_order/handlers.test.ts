@@ -99,7 +99,7 @@ class OrderRouteHarness {
       partyId: PARTY_ID,
       total: '100.00',
       memo: 'original memo',
-      updatedAt: '2026-08-24T12:00:00.000Z',
+      updatedAt: '2026-08-24T12:00:00.000000Z',
       voidRequestedAt: null,
       subsidiaryId: null,
     }
@@ -180,7 +180,7 @@ class OrderRouteHarness {
       }
     }
 
-    if (normalized.startsWith('select status, updated_at from documents')) {
+    if (normalized.startsWith('select status, to_char(')) {
       if (normalized.endsWith('for update')) await this.acquireDocumentLock()
       return {
         rows: this.matchesDocument(params)
@@ -290,7 +290,7 @@ class OrderRouteHarness {
     if (
       expected == null ||
       Number.isNaN(new Date(expected).getTime()) ||
-      new Date(expected).getTime() !== new Date(this.document.updatedAt).getTime()
+      expected !== this.document.updatedAt
     ) {
       return { failure: 'this document changed after you opened it; reload and review the latest revision' }
     }
@@ -301,7 +301,7 @@ class OrderRouteHarness {
 
     this.markTransactionDirty()
     this.voidReservations += 1
-    this.document.voidRequestedAt = '2026-08-24T12:00:00.000Z'
+    this.document.voidRequestedAt = '2026-08-24T12:00:00.000000Z'
     this.auditLog.push({ action: 'void_requested', documentId: this.document.id })
     await this.holdClaimedPause(this.voidPause)
     await this.beforeVoid()
@@ -525,7 +525,7 @@ const mockSources = new Map<string, string>([
   `],
   ['mock:document-void', `
     const state = ${stateExpression}
-    export class DocumentVoidError extends Error {}
+    export class DocumentVoidError extends Error { constructor(message, status = 422) { super(message); this.status = status } }
     export async function requestDocumentVoid(input) {
       return state.transaction(async () => {
         const result = await state.requestVoid(input)
@@ -793,7 +793,7 @@ test('a caught void failure rolls back its audit and flow effects before returni
   assert.deepEqual(harness.flowEffects, [])
 })
 
-const STALE_TOKEN = '2026-08-01T00:00:00.000Z'
+const STALE_TOKEN = '2026-08-01T00:00:00.000000Z'
 
 async function expectRevisionRefusal(
   request: () => Promise<Response>,
@@ -952,7 +952,7 @@ class IssuePoolHarness {
       partyId: PARTY_ID,
       total: '100.00',
       createdBy: USER_ID,
-      updatedAt: '2026-08-24T09:00:00.000Z',
+      updatedAt: '2026-08-24T09:00:00.000000Z',
     }]])
     this.peakConnections = 0
     this.overflowAttempts = 0
@@ -1341,7 +1341,7 @@ const poolMockSources = new Map<string, string>([
     export async function orderTaxProfileMap() { return new Map() }
   `],
   ['pool:document-delete', `export class DeleteError extends Error {}; export async function deleteDocument() { return {} }`],
-  ['pool:document-void', `export class DocumentVoidError extends Error {}; export async function requestDocumentVoid() { return {} }`],
+  ['pool:document-void', `export class DocumentVoidError extends Error { constructor(message, status = 422) { super(message); this.status = status } }; export async function requestDocumentVoid() { return {} }`],
 ])
 
 const poolHooks = registerHooks({

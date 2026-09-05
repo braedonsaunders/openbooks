@@ -1,7 +1,8 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrgTransaction } from "./db.ts";
-import { businessToday } from "./business-date.ts";
+import { documentRevisionSql, isDocumentRevisionToken } from "./document-revision.ts";
+import { businessToday, isIsoCalendarDate } from "./business-date.ts";
 import {
   assertPeriodModulesOpen,
   CloseError,
@@ -17,7 +18,9 @@ import {
 } from "./transaction-audit.ts";
 import { releaseBillingProvenance, releaseVendorBillProvenance } from "./billing-provenance.ts";
 
-export class DocumentVoidError extends Error {}
+export class DocumentVoidError extends Error {
+  constructor(message: string, readonly status = 422) { super(message); }
+}
 
 export interface DocumentVoidResult {
   status: "voided" | "pending_approval";
@@ -43,7 +46,7 @@ export type DocumentVoidInput = {
 };
 
 function validateReason(reason: string): string {
-  const value = reason.trim();
+  const value = typeof reason === "string" ? reason.trim() : "";
   if (value.length < 5 || value.length > 500) {
     throw new DocumentVoidError("a void reason between 5 and 500 characters is required");
   }
@@ -51,19 +54,20 @@ function validateReason(reason: string): string {
 }
 
 function validateDate(value: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+  if (!isIsoCalendarDate(value)) {
     throw new DocumentVoidError("reversalDate must be a valid YYYY-MM-DD date");
   }
   return value;
 }
 
-type DocumentRow = typeof schema.documents.$inferSelect;
+type DocumentRow = typeof schema.documents.$inferSelect & { revision: string };
 
 async function loadDocument(documentId: string, orgId: string): Promise<DocumentRow> {
   const [doc] = await db
-    .select()
+    .select({ ...getTableColumns(schema.documents), revision: documentRevisionSql(sql`${schema.documents.updatedAt}`) })
     .from(schema.documents)
-    .where(and(eq(schema.documents.id, documentId), eq(schema.documents.orgId, orgId)));
+    .where(and(eq(schema.documents.id, documentId), eq(schema.documents.orgId, orgId)))
+    .for("update");
   if (!doc) throw new DocumentVoidError("document not found");
   return doc;
 }
@@ -126,21 +130,15 @@ export async function requestDocumentVoid(
   const reason = validateReason(input.reason);
   // Business-meaningful default date — the org's business day via a sim-clock-
   // aware instant, not the server's UTC day.
-  const reversalDate = validateDate(input.reversalDate?.trim() || (await businessToday(input.orgId)));
+  const reversalDate = validateDate(input.reversalDate ?? (await businessToday(input.orgId)));
   return withOrgTransaction(input.orgId, async () => {
     const current = await loadDocument(input.documentId, input.orgId);
-    // Exact revision fencing before the claim (and therefore before every
-    // material effect). Millisecond comparison on both sides: the wire token
-    // is an ISO string truncated to ms, so equality in SQL against the stored
-    // microsecond timestamp would never hold.
-    if (
-      input.expectedUpdatedAt !== undefined &&
-      input.expectedUpdatedAt !== null &&
-      new Date(input.expectedUpdatedAt).getTime() !==
-        new Date(current.updatedAt as unknown as string | number | Date).getTime()
-    ) {
+    // The aggregate lock precedes the read and comparison. A waiter observes
+    // the committed revision, including edits that differ by one microsecond.
+    if (input.expectedUpdatedAt != null &&
+        (!isDocumentRevisionToken(input.expectedUpdatedAt) || input.expectedUpdatedAt !== current.revision)) {
       throw new DocumentVoidError(
-        "this document changed after you opened it; reload and review the latest revision",
+        "this document changed after you opened it; reload and review the latest revision", 409,
       );
     }
     // This compare-and-set is the single-winner claim. PostgreSQL locks the

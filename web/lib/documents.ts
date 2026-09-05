@@ -1,4 +1,6 @@
 import 'server-only'
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
+export { documentRevisionSql }
 import { sql, type SQL } from 'drizzle-orm'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
@@ -68,14 +70,6 @@ export async function disabledDocKinds(orgId: string): Promise<string[]> {
 // ---------------------------------------------------------------------------
 // Draft creation + loading
 // ---------------------------------------------------------------------------
-
-/** Lossless wire representation for PostgreSQL's six-digit timestamptz. */
-export function documentRevisionSql(column: SQL): SQL<string> {
-  return sql<string>`to_char(
-    ${column} at time zone 'UTC',
-    'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
-  )`
-}
 
 const DOCUMENT_REVISION_ALIAS = '__documentRevision'
 
