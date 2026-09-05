@@ -170,6 +170,18 @@ counting passing tests does not substitute for those outcomes.
 An unrestricted production-readiness claim remains unsupported while confirmed
 control defects or unverified critical operational journeys remain open.
 
+The competitive comparison was refreshed against primary vendor documentation
+on September 5, 2026. These are documented vendor capabilities, not independent
+acceptance results:
+
+| Benchmark | External capability | OpenBooks evidence and remaining bar |
+|---|---|---|
+| Multi-entity financial control | Consolidation, intercompany workflows, currency handling and role-based access. [OneWorld product documentation](https://www.netsuite.com/portal/assets/public-pdf/ds-netsuite-oneworld.pdf) | Native equivalents exist, with targeted authorization, exact-money and reconciliation regressions recorded here. Repeated boundary defects show that module breadth alone does not establish consistent control. |
+| Auditability and customization | Audit trails, access logs, workflow and customization are part of the documented platform. [OneWorld product documentation](https://www.netsuite.com/portal/assets/public-pdf/ds-netsuite-oneworld.pdf) | OpenBooks has shared audit/extension machinery; the asset-editor fixes and open custom-field-definition findings demonstrate remaining entry-point gaps. Every material write must produce reliable evidence. |
+| Production planning | Supply plans use demand, lead times and planning rules to recommend purchases and work orders. [Supply Planning documentation](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_159171867422.html) | The [repository's declared scope](../../README.md) explicitly excludes a full manufacturing/MRP suite beyond light assembly builds. This remains a capability gap, not something repaired by inventory bug fixes. |
+| Scale and operability | The planning documentation itself recommends testing larger datasets and identifies workload-dependent limits. [Supply Planning documentation](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_159171867422.html) | OpenBooks needs measured workload limits, restore/failover results and representative large-ledger journeys. A clean build or test count does not provide that evidence. |
+
+
 ## Lifecycle review — continuation from 404697ee
 
 This pass follows period-close operations across their HTTP, page, shared
@@ -1569,3 +1581,34 @@ edit controls and valuation display corrections. It precedes the subsequently
 verified depreciation bounds, complete asset-edit evidence, revision protection
 and form corrections above; those have their own focused/build/unit/browser
 receipts and require the next broader integration checkpoint.
+
+## Shared form-picker boundaries — continuation from 77705be3
+
+The form options endpoint resolved authentication but discarded subsidiary
+visibility. Both party transports (including active customer/vendor/employee
+role filters), both account transports and project references now enforce the
+existing record-scope policy. Shared null-subsidiary master records remain
+available to callers with entity access; an empty entity scope returns no
+subsidiary-aware records. Organization-wide items retain their existing model.
+Project references also enforce the authoritative Projects feature gate.
+Both account transports now provide readable labels for unnumbered accounts.
+The database pool was already context-wrapped; it was not an RLS bypass.
+
+Eighteen regressions failed before correction. All 29 database checks pass,
+covering unrestricted/restricted/empty scope, shared records, active-role
+filters, inactive records, foreign tenants, unnumbered accounts and the
+Projects on/off control without deleting data. All 3,118 unit tests, web type
+checks and the locked production build pass. Evidence:
+`audit-form-picker-boundaries-2026-09-05`. Explicit-any/lint ceilings remain
+391/725. The next full integration run is executing the preceding exact
+checkpoint `77705be3`; this picker correction is not included in that run.
+
+The separate accounting conformance run at `77705be3` passed all 42 registered
+cases, with zero failures, declared gaps or unrun cases within that corpus.
+The report is retained under `audit-asset-form-accessibility-2026-09-05/conformance-77705be3`.
+Those bounded cases do not certify all accounting standards or provider behavior.
+
+Continuing traces confirmed missing audit evidence for custom-field definition
+writes, rejection of the registry-supported fixed-asset custom-field target,
+and a read-only display-mode spelling mismatch between settings and the shared
+renderer. These remain open for the next corrections.
