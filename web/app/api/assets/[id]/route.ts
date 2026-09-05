@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 import { depreciationPeriodCount } from '@openbooks/engine/src/depreciation-limits.ts'
 import { buildAllSchedulesWithRunner } from '@openbooks/engine/src/depreciation.ts'
 import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
@@ -9,7 +10,7 @@ import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
-import { assetBasisChanges, mergedAssetBasis, postedAssetBasisEditRefusal, type RequestedAssetBasis } from '../../../../lib/asset-basis-guard'
+import { postedAssetBasisEditRefusal, type RequestedAssetBasis } from '../../../../lib/asset-basis-guard'
 import { loadAsset } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -179,7 +180,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   // -- native GL account overrides -----------------------------------------
-  const custom: Record<string, unknown> = { ...(existing.custom ?? {}) }
+  const customUpdates: Record<string, unknown> = {}
+  let customKeys: string[] = []
   async function accountOverride(v: unknown): Promise<string | null | 'invalid'> {
     const s = strOrNull(v)
     if (s === null) return null
@@ -201,8 +203,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     // Replace only tenant-defined keys. Connector provenance and account
     // overrides share this JSON object and must survive an ordinary UI edit.
-    for (const def of defs) delete custom[def.key]
-    Object.assign(custom, validated.cleaned)
+    customKeys = defs.map(def => def.key)
+    Object.assign(customUpdates, validated.cleaned)
   }
 
   if (body.taxDepreciation !== undefined) {
@@ -233,7 +235,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       clean[regime] = { classCode, businessUsePercent, bonusPercent, section179: section179 ?? '0' }
     }
-    custom.taxDepreciation = clean
+    customUpdates.taxDepreciation = clean
   }
 
   let method: Method | null | undefined
@@ -379,7 +381,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // posting that commits while this request is preparing cannot be
       // followed by a stale basis update or stale audit before-image.
       const lockedRes = (await tx.execute<ExistingAsset>(sql`
-        select * from fixed_assets
+        select fixed_assets.*, ${documentRevisionSql(sql`updated_at`)} as updated_at,
+               ${documentRevisionSql(sql`created_at`)} as created_at from fixed_assets
          where id = ${id} and org_id = ${user.orgId}
            ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
          for update`))
@@ -431,9 +434,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
       }
 
-      // A basis change that IS allowed (nothing has posted) is still audited.
-      const basisChanges = assetBasisChanges(lockedExisting, requestedBasis)
-      await tx.execute(sql`
+      // Merge only submitted custom fields against the locked committed row.
+      // An unrelated metadata save must never restore stale connector provenance.
+      const custom = { ...(lockedExisting.custom ?? {}) }
+      for (const key of customKeys) delete custom[key]
+      Object.assign(custom, customUpdates)
+      const updated = (await tx.execute<ExistingAsset>(sql`
         update fixed_assets set
       name = ${body.name !== undefined ? body.name.trim() || 'New asset' : sql`name`},
       asset_number = ${body.assetNumber !== undefined ? (strOrNull(body.assetNumber) ?? sql`asset_number`) : sql`asset_number`},
@@ -454,20 +460,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       asset_account_id = ${assetAccountId !== undefined ? assetAccountId : sql`asset_account_id`},
       accumulated_depreciation_account_id = ${accumulatedAccountId !== undefined ? accumulatedAccountId : sql`accumulated_depreciation_account_id`},
       depreciation_expense_account_id = ${expenseAccountId !== undefined ? expenseAccountId : sql`depreciation_expense_account_id`},
-      custom = ${JSON.stringify(custom)}::jsonb,
+      custom = ${body.custom !== undefined || body.taxDepreciation !== undefined ? sql`${JSON.stringify(custom)}::jsonb` : sql`custom`},
       status = ${status !== undefined ? status : sql`status`},
-      updated_at = now(), updated_by = ${user.id}
-        where id = ${id} and org_id = ${user.orgId}`)
-      if (basisChanges.length > 0) {
-        await tx.execute(sql`
+      updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
+        where id = ${id} and org_id = ${user.orgId}
+        returning fixed_assets.*, ${documentRevisionSql(sql`updated_at`)} as updated_at,
+                  ${documentRevisionSql(sql`created_at`)} as created_at`)).rows[0]
+      if (!updated) throw new Error('asset not found')
+      await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${user.orgId}, 'fixed_assets', ${id}, 'update',
                   ${JSON.stringify({
-                    before: mergedAssetBasis(lockedExisting, {}),
-                    after: mergedAssetBasis(lockedExisting, requestedBasis),
-                    fields: basisChanges,
+                    before: lockedExisting,
+                    after: updated,
                   })}::jsonb, ${user.id})`)
-      }
       try {
         // Metadata and unchanged-account saves must retain controlled valuation
         // schedules. Financial-history assets cannot change basis through PATCH.
