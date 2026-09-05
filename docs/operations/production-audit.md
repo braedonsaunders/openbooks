@@ -1205,3 +1205,31 @@ passed. All 36 combined employment-date, ledger, waterfall and authorization
 checks now pass, as do all 3,076 unit tests, web typechecking and the locked
 production build. Explicit-any and lint ceilings remain 391 and 725. Receipts
 are retained under `audit-health-headcount-2026-09-05` in thread storage.
+
+## Frozen integration checkpoint — f72136e6
+
+The complete integration suite at frozen revision `f72136e6` passed all 1,727
+tests with zero failures or skips in 1,556,680 ms. A disposable loopback Redis
+instance enabled the durable queue cases; no email workers were started.
+Four fixture slots completed 1,270 leases, releases and resets, four full
+bootstrap/teardown/schema-verification cycles, and zero active leases or leaks.
+The log and copied fixture receipt are retained under
+`audit-analytics-scope-2026-09-05` in thread storage. This checkpoint does not
+cover subsequent commits, which have their own focused and build receipts.
+
+## Inventory reversal chronology — continuation from 4e772784
+
+Receipt, issue, transfer, assembly and landed-cost reversals could be dated
+before their source events. Nonexistent calendar dates also reached PostgreSQL
+instead of producing controlled domain errors. Reversal entry points now use
+the shared calendar validator; locked source movements and inventory journals
+must not be later than the requested reversal. Same-day and later reversals,
+including their idempotent retries, retain existing behavior.
+
+Ten chronology/calendar regressions failed before correction and ten valid
+controls passed. All 38 combined reversal, lifecycle, concurrency and accounting
+checks now pass. Refused operations preserve complete movement, cost-layer,
+journal and allocation snapshots; successful operations reconcile GL to layers.
+All 3,076 unit tests, every workspace typecheck and the locked production build
+passed. Explicit-any and lint ceilings remain 391 and 725. Receipts are retained
+under `audit-inventory-reversal-date-2026-09-05` in thread storage.
