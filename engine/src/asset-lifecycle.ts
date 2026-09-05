@@ -279,7 +279,7 @@ export async function disposeAsset(
     const entryRes = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-      values (${orgId}, ${bookId}, ${asset.subsidiary_id}, ${`DISP-${asset.asset_number}`}, ${opts.date},
+      values (${orgId}, ${bookId}, ${asset.subsidiary_id}, ${`DISP-${asset.asset_number}-${randomUUID()}`}, ${opts.date},
               (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
                  and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1),
               ${`${status === "written_off" ? "Write-off" : "Disposal"} — ${asset.asset_number}`},
@@ -299,8 +299,8 @@ export async function disposeAsset(
     await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid} and org_id = ${orgId}`);
     await tx.execute(sql`update fixed_assets set status = ${status}, updated_at = now(), updated_by = ${opts.actorId} where id = ${assetId} and org_id = ${orgId}`);
     await tx.execute(sql`
-      insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by)
-      values (${orgId}, ${assetId}, ${status === "written_off" ? "written_off" : "disposed"}, ${opts.date}, ${proceeds}, ${eid}, ${opts.actorId})`);
+      insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by, created_at)
+      values (${orgId}, ${assetId}, ${status === "written_off" ? "written_off" : "disposed"}, ${opts.date}, ${proceeds}, ${eid}, ${opts.actorId}, clock_timestamp())`);
     return { assetId, entryId: eid, nbv, gainLoss, status };
   });
 }
@@ -366,7 +366,7 @@ export async function reverseAssetLifecycleEvent(
         entry_status: string;
       }>(sql`
       select event.id, event.asset_id, event.kind, event.journal_entry_id,
-             event.created_at, asset.asset_number, asset.status,
+             event.created_at::text as created_at, asset.asset_number, asset.status,
              asset.subsidiary_id, asset.acquisition_cost, asset.salvage_value,
              entry.book_id, entry.entry_number, entry.origin, entry.status as entry_status
         from asset_events event
@@ -422,15 +422,21 @@ export async function reverseAssetLifecycleEvent(
         "the source asset journal is not an unreversed posted entry",
       );
     }
+    // Preserve full PostgreSQL timestamp precision. Legacy equal-time sources
+    // have ambiguous order and must not authorize an out-of-order reversal.
     const later = (await tx.execute<{ kind: string }>(sql`
-      select kind
-        from asset_events
-       where org_id = ${orgId}
-         and asset_id = ${source.asset_id}
-         and id <> ${source.id}
-         and reverses_event_id is null
-         and created_at > ${source.created_at}
-       order by created_at
+      select later.kind
+        from asset_events later
+       where later.org_id = ${orgId}
+         and later.asset_id = ${source.asset_id}
+         and later.id <> ${source.id}
+         and later.reverses_event_id is null
+         and later.created_at >= ${source.created_at}::timestamptz
+         and not exists (
+           select 1 from asset_events reversal
+            where reversal.org_id = later.org_id and reversal.reverses_event_id = later.id
+         )
+       order by later.created_at
        limit 1
     `));
     if (later.rows[0]) {
@@ -519,12 +525,12 @@ export async function reverseAssetLifecycleEvent(
     const reversalEvent = (await tx.execute<{ id: string }>(sql`
       insert into asset_events
         (org_id, asset_id, kind, occurred_on, amount, journal_entry_id,
-         reverses_event_id, reversal_reason, memo, created_by, updated_by)
+         reverses_event_id, reversal_reason, memo, created_by, updated_by, created_at)
       values
         (${orgId}, ${source.asset_id}, 'reversed', ${opts.date}, null,
          ${reversalEntryId}, ${source.id}, ${reason},
          ${`Reversal of ${source.kind} for ${source.asset_number}`},
-         ${opts.actorId}, ${opts.actorId})
+         ${opts.actorId}, ${opts.actorId}, clock_timestamp())
       returning id
     `));
 
@@ -643,8 +649,8 @@ export async function remeasureAsset(
     }
     await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid} and org_id = ${orgId}`);
     await tx.execute(sql`
-      insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by)
-      values (${orgId}, ${assetId}, ${kind}, ${opts.date}, ${delta}, ${eid}, ${opts.actorId})`);
+      insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by, created_at)
+      values (${orgId}, ${assetId}, ${kind}, ${opts.date}, ${delta}, ${eid}, ${opts.actorId}, clock_timestamp())`);
 
     // Rebuild remaining unposted lines INSIDE this transaction: straight-line
     // (newCV − salvage) over them. Journal, event, and future schedule commit

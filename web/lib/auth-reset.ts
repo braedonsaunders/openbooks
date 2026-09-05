@@ -164,6 +164,16 @@ export async function completePasswordReset(
       update auth_sessions set revoked_at = now(), revocation_reason = 'password_reset'
        where user_id = ${reset.user_id} and revoked_at is null
     `);
+    // A pending MFA challenge has already accepted the previous password.
+    // Invalidate it with the sessions, and discard enrollments authorized by
+    // those sessions. Established MFA factors remain required after reset.
+    await db.execute(sql`
+      update auth_login_challenges set consumed_at = now()
+       where user_id = ${reset.user_id} and consumed_at is null
+    `);
+    await db.execute(sql`
+      delete from auth_mfa_factors where user_id = ${reset.user_id} and enabled_at is null
+    `);
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       select org_id, 'users', id, 'update', '{"passwordReset": true}'::jsonb, id
