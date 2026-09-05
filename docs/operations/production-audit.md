@@ -1247,3 +1247,23 @@ controls passed. All 36 combined NRV, inventory-reversal and accounting checks
 now pass, along with all 3,076 unit tests, every workspace typecheck and the
 locked production build. Explicit-any and lint ceilings remain 391 and 725.
 Receipts are retained under `audit-nrv-reversal-date-2026-09-05` in thread storage.
+
+## Inventory remeasurement concurrency and attribution — continuation from 9095dbcb
+
+NRV remeasurement locked existing cost layers without the shared inventory
+position lock. A concurrent receipt could leave its layer outside that snapshot
+while the subsequent on-hand query included it. Two ten-unit receipts at cost
+10 were remeasured to the correct total 120, but their costs became 2 and 10;
+the next FIFO issue therefore cost 2 instead of 6. Both remeasurement paths now
+take the shared position lock before reading layers and on-hand totals.
+
+The item accounting profile is also read with a share lock inside the same
+transaction, so an in-flight profile edit completes before account selection.
+Both write-down and reversal journals now retain the supplied actor in their
+creation, update and posting columns, matching their valuation evidence.
+
+All five new attribution and adversarial concurrency cases failed before
+correction. All 59 combined inventory, NRV, chronology and concurrency checks
+now pass, as do all 3,076 unit tests, every workspace typecheck and the locked
+production build. Explicit-any and lint ceilings remain 391 and 725. Receipts
+are retained under `audit-nrv-controls-2026-09-05` in thread storage.

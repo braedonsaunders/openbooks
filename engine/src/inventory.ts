@@ -841,7 +841,7 @@ async function getOnHandWith(
   };
 }
 
-async function lockInventoryPosition(
+export async function lockInventoryPosition(
   tx: Runner,
   itemId: string,
   stockLocationId: string,
