@@ -1723,3 +1723,49 @@ passed (148,990.359917 ms; zero skips). Workspace type checks passed after addin
 an explicit Node type reference to the new UI-package test; the locked production
 build passed. The 725-warning and 391-explicit-any limits were retained.
 Evidence is under `audit-custom-field-display-2026-09-05`.
+
+## Custom-field definition configuration integrity
+
+Continuation from `12f34b1a` reproduced a label-only currency edit rounding
+`900000000000000.1234` to `900000000000000.1`: the drawer converted bounds through
+`Number`. It also rebuilt configuration from an empty object, losing reference
+filters and extension metadata; a reference definition could not be saved because
+its target disappeared. The editor now preserves unknown metadata, keeps numeric
+bounds as exact strings, exposes the existing reference type and target catalog,
+and composes the shared typed input for defaults. Labels are associated with their
+controls, legacy display aliases load correctly, and controls are disabled while a
+save is pending. The shared Boolean control now preserves its empty choice instead
+of silently converting it to false; the settings list uses the reference label.
+
+The API now rejects malformed configuration, non-Boolean flags, invalid sort
+orders, blank/duplicate options, invalid display metadata, impossible defaults,
+reversed bounds and unsupported decimal precision before writing. Accepted bounds
+are canonical decimal strings; valid false, zero and multi-selection defaults are
+retained. Validation composes the existing value validator, and normalization
+preserves extension metadata. Existing definition row locks, revision tokens and
+transactional before/after audit evidence remain in force.
+
+All 52 initial invalid-definition reproductions failed before remediation. The
+expanded focused set passed 121 cases: 74 configuration database cases, 35 adjacent
+control/target database cases, eight adjacent route/date cases and four editor
+configuration cases. Invalid requests preserve both definitions and audit rows;
+valid definitions survive creation and label-only edits. The owner-role database
+fixtures test explicit predicates and authorization, while browser journeys use
+the restricted runtime database role with enforced tenant RLS.
+
+Final verification passed 42 real-browser assertions, all 3,139 canonical unit
+tests (106,287.997709 ms; zero skips), workspace type checks and the locked production
+build. The browser separately reproduced and then verified the Boolean empty-state
+repair. Two initial browser assertions used guessed English labels; they were
+corrected to the observed existing labels before the final run. The 725-warning
+and 391-explicit-any limits are unchanged. Evidence is under
+`audit-custom-field-config-2026-09-05`.
+
+The full integration run at `22a40e4a` also completed: all 2,073 tests passed with
+zero failures or skips (1,108,872.978958 ms). Four fixture slots recorded 1,676 leases,
+releases and resets, four bootstrap/teardown/schema cycles, zero active leases and
+zero leaks. Its receipt is retained under `audit-custom-field-targets-2026-09-05`.
+That run predates the display and configuration slices and does not cover them.
+Concurrent definition creation, app-installed definitions, historical type changes
+and reference-value enforcement remain separate audit work; this checkpoint does
+not certify those paths or claim repository-wide defect freedom.

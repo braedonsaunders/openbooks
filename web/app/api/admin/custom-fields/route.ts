@@ -1,10 +1,12 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { CUSTOM_FIELD_TARGETS } from '@openbooks/customization'
+import { CUSTOM_FIELD_TARGETS, CUSTOM_FIELD_REFERENCE_TABLES } from '@openbooks/customization'
 import { db } from '@openbooks/engine/src/db.ts'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { isUuid } from '../../../../lib/list-params'
+import { validateCustomFieldConfig, normalizeCustomFieldConfig } from '../../../../lib/custom-field-config'
+import type { CustomFieldDef } from '../../../../lib/custom-fields'
 // Server-only route: importing the engine adapter is fine, and the reserved
 // set must come from there so validation cannot drift from what headerValues
 // actually exposes at flow runtime.
@@ -16,7 +18,7 @@ export const runtime = 'nodejs'
 
 const FIELD_TYPES = ['text', 'long_text', 'number', 'currency', 'date', 'boolean', 'select', 'multi_select', 'reference']
 
-const REFERENCE_TABLES = ['parties', 'projects', 'accounts', 'items']
+const REFERENCE_TABLES: readonly string[] = CUSTOM_FIELD_REFERENCE_TABLES
 
 type ExistingFieldDef = {
   id: string
@@ -54,10 +56,10 @@ function validateDef(body: Record<string, unknown>, existing?: ExistingFieldDef)
 
   const target = CUSTOM_FIELD_TARGETS.find((t) => t.table === targetTable)
   if (!target) return 'invalid target table'
-  if (targetKind && !target.kinds.some((kind) => kind.value === targetKind)) {
+  if (targetKind !== undefined && targetKind !== null && (typeof targetKind !== 'string' || !targetKind || !target.kinds.some((kind) => kind.value === targetKind))) {
     return 'invalid target kind for that table'
   }
-  if (!/^[a-z][a-z0-9_]{1,60}$/.test(String(key ?? ''))) {
+  if (typeof key !== 'string' || !/^[a-z][a-z0-9_]{1,60}$/.test(key)) {
     return 'key must be snake_case (a-z, 0-9, _)'
   }
   // A documents key that collides with a real header field would shadow it in
@@ -66,21 +68,28 @@ function validateDef(body: Record<string, unknown>, existing?: ExistingFieldDef)
   if (targetTable === 'documents' && RESERVED_DOCUMENT_FIELD_KEYS.has(String(key))) {
     return 'key conflicts with a built-in document field'
   }
-  if (!label || String(label).length > 120) return 'label required'
-  if (!FIELD_TYPES.includes(String(fieldType))) return 'invalid field type'
+  if (typeof label !== 'string' || !label.trim() || label.length > 120) return 'label required'
+  if (typeof fieldType !== 'string' || !FIELD_TYPES.includes(fieldType)) return 'invalid field type'
+  for (const key of ['isRequired', 'isActive']) {
+    if (body[key] !== undefined && typeof body[key] !== 'boolean') return `${key} must be a boolean`
+  }
+  if (body.sortOrder !== undefined && (typeof body.sortOrder !== 'number' || !Number.isInteger(body.sortOrder) || body.sortOrder < -2147483648 || body.sortOrder > 2147483647)) {
+    return 'sortOrder must be a 32-bit integer'
+  }
   if (['select', 'multi_select'].includes(String(fieldType))) {
     const opts = (config as { options?: unknown })?.options
-    if (!Array.isArray(opts) || opts.length === 0 || opts.some((o) => typeof o !== 'string' || !o)) {
+    if (!Array.isArray(opts) || opts.length === 0 || opts.some((o) => typeof o !== 'string' || !o.trim())) {
       return 'select fields need at least one option'
     }
+    if (new Set(opts).size !== opts.length) return 'select options must be unique'
   }
   if (String(fieldType) === 'reference') {
     const cfg = config as { referenceTable?: unknown } | undefined
-    if (!cfg?.referenceTable || !REFERENCE_TABLES.includes(String(cfg.referenceTable))) {
+    if (typeof cfg?.referenceTable !== 'string' || !REFERENCE_TABLES.includes(cfg.referenceTable)) {
       return 'reference fields need a valid referenceTable (parties, projects, accounts, items)'
     }
   }
-  return null
+  return validateCustomFieldConfig(fieldType as CustomFieldDef['fieldType'], config)
 }
 
 export async function POST(req: Request) {
@@ -108,7 +117,7 @@ export async function POST(req: Request) {
     const created = (await tx.execute<ExistingFieldDef>(sql`
       insert into custom_field_defs (org_id, target_table, target_kind, key, label, field_type, config, is_required, sort_order, created_by, updated_by)
       values (${user.orgId}, ${body.targetTable}, ${body.targetKind ?? null}, ${body.key}, ${body.label},
-              ${body.fieldType}, ${JSON.stringify(body.config ?? {})}::jsonb, ${body.isRequired === true}, ${Number(body.sortOrder ?? 0)}, ${user.id}, ${user.id})
+              ${body.fieldType}, ${JSON.stringify(normalizeCustomFieldConfig(body.config))}::jsonb, ${body.isRequired === true}, ${Number(body.sortOrder ?? 0)}, ${user.id}, ${user.id})
       returning custom_field_defs.*, ${documentRevisionSql(sql`created_at`)} as created_at,
                 ${documentRevisionSql(sql`updated_at`)} as updated_at
     `)).rows[0]!
@@ -151,7 +160,7 @@ export async function PATCH(req: Request) {
 
     const label = body.label === undefined ? existing.label : body.label
     const fieldType = body.fieldType === undefined ? existing.field_type : body.fieldType
-    const config = body.config === undefined ? existing.config : (body.config ?? {})
+    const config = normalizeCustomFieldConfig(body.config === undefined ? existing.config : body.config)
     const isRequired = body.isRequired === undefined ? existing.is_required : body.isRequired === true
     const sortOrder = body.sortOrder === undefined ? existing.sort_order : Number(body.sortOrder ?? 0)
     const isActive = body.isActive === undefined ? existing.is_active : body.isActive !== false

@@ -1,5 +1,7 @@
 import { RECORD_TYPES, RECORD_TYPE_BY_KEY, customFieldTargetFor } from './registry';
 
+export const CUSTOM_FIELD_REFERENCE_TABLES = ['parties', 'projects', 'accounts', 'items'] as const;
+
 export type CustomFieldTarget = {
   table: string;
   labelKey: string;

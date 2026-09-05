@@ -13,8 +13,8 @@ export interface CustomFieldDefClient {
     helpText?: string
     placeholder?: string
     defaultValue?: unknown
-    min?: number
-    max?: number
+    min?: number | string
+    max?: number | string
     showInList?: boolean
     referenceTable?: string
     referenceFilter?: Record<string, string>
