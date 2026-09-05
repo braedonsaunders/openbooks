@@ -1182,6 +1182,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
       }
     }
     const found = await db.transaction(async (tx) => {
+      // The locked before-image and committed after-image belong to the same
+      // category edit, including concurrent metadata saves.
+      const before = entity.key === 'asset-categories'
+        ? (await tx.execute(sql`select * from asset_categories where id=${id} and org_id=${orgId} for update`)).rows[0]
+        : undefined
       const updated = ((await tx.execute(sql`
         update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
          where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
@@ -1191,12 +1196,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
       if (members && Array.isArray(body[members.key])) {
         await syncMembers(orgId, id, (body[members.key] as unknown[]).map(String), tx)
       }
+      const after = entity.key === 'asset-categories'
+        ? (await tx.execute(sql`select * from asset_categories where id=${id} and org_id=${orgId}`)).rows[0]
+        : undefined
       await audit({
         orgId: entity.orgScoped ? orgId : null,
         table: entity.table,
         rowId: id,
         action: 'update',
-        changes: {
+        changes: before && after ? { before, after } : {
           ...Object.fromEntries(built.cols.map((c) => [c.column, c.value])),
           ...(entity.key === 'fx-rates' ? { source: 'manual', provider_config_id: null, imported_at: null } : {}),
         },
@@ -1207,6 +1215,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
     if (!found) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json({ id })
   } catch (e) {
+    const databaseError = e as { constraint?: string; cause?: { constraint?: string; message?: string }; message?: string }
+    if ((databaseError.cause?.constraint ?? databaseError.constraint) === 'asset_category_posted_policy') {
+      return NextResponse.json({ error: databaseError.cause?.message ?? databaseError.message }, { status: 409 })
+    }
     // Same storage-authority mapping as POST: an edit that moves a row onto an
     // occupied natural key (codes are editable on several entities) is a
     // duplicate conflict, not a generic save failure.
