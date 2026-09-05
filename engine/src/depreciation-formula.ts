@@ -1,3 +1,4 @@
+import { depreciationPeriodCount } from "./depreciation-limits.ts";
 import { fromUnits, roundDiv, toUnits } from "./money.ts";
 
 /**
@@ -344,7 +345,8 @@ export interface FormulaScheduleLine {
 }
 
 export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaScheduleLine[] {
-  const life = Math.max(1, Math.trunc(input.lifePeriods));
+  const life = depreciationPeriodCount(input.lifePeriods);
+  const fractionPeriods = depreciationPeriodCount(input.firstFractionPeriods ?? 1);
   const cost = toUnits(input.cost);
   const salvage = toUnits(input.salvage);
   const depreciableBase = cost - salvage;
@@ -358,7 +360,6 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
   if (firstPeriodFraction < 0n || firstPeriodFraction > EXACT_SCALE) {
     throw new DepreciationFormulaError("first-period fraction must be between zero and one");
   }
-  const fractionPeriods = Math.max(1, Math.trunc(input.firstFractionPeriods ?? 1));
   // The charge withheld from the reduced periods has to land somewhere, so the
   // schedule grows by exactly the periods'-worth that was held back: one month
   // for mid-month, six for a half-year rule on monthly periods. Without this the

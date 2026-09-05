@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { depreciationPeriodCount } from '@openbooks/engine/src/depreciation-limits.ts'
 import { buildAllSchedulesWithRunner } from '@openbooks/engine/src/depreciation.ts'
 import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -254,9 +255,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   let lifeMonths: number | null | undefined
   if (body.lifeMonths !== undefined) {
-    const n = body.lifeMonths === null || body.lifeMonths === '' ? null : Math.trunc(Number(body.lifeMonths))
-    if (n !== null && (Number.isNaN(n) || n <= 0)) return bad('Useful life must be a positive number of months')
-    lifeMonths = n
+    try {
+      lifeMonths = body.lifeMonths === null || body.lifeMonths === '' ? null : depreciationPeriodCount(body.lifeMonths)
+    } catch (error) {
+      return bad(error instanceof Error ? error.message : 'Invalid useful life')
+    }
   }
   let ratePercent: string | null | undefined
   if (body.ratePercent !== undefined) {
