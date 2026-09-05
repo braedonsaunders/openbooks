@@ -80,6 +80,41 @@ export async function loadTaxComponentConfig(
   ];
 }
 
+/** Resolve a selected code or ordered group through the same effective-rate
+ * loader. Inactive/missing members refuse the whole profile, never partial tax. */
+export async function loadTaxProfileConfig(
+  orgId: string,
+  profile: { taxCodeId: string | null; taxGroupId: string | null },
+  dateIso: string,
+  runner: Runner = db,
+): Promise<TaxComponentConfig[]> {
+  if (profile.taxCodeId && profile.taxGroupId) throw new TaxCalculationError("select either a tax code or a tax group");
+  if (profile.taxCodeId) {
+    const configs = await loadTaxComponentConfig(orgId, profile.taxCodeId, dateIso, runner);
+    if (!configs.length) throw new TaxCalculationError("selected tax code is inactive or missing");
+    return configs;
+  }
+  if (!profile.taxGroupId) return [];
+  const group = (await runner.execute<{ inclusive: boolean }>(sql`
+    select price_includes_tax as inclusive from tax_groups
+     where id = ${profile.taxGroupId} and org_id = ${orgId} and is_active
+  `)).rows[0];
+  if (!group) throw new TaxCalculationError("selected tax group is inactive or missing");
+  const members = (await runner.execute<{ taxCodeId: string; sequence: number }>(sql`
+    select m.tax_code_id as "taxCodeId", m.sequence from tax_group_members m
+      join tax_groups g on g.id = m.tax_group_id
+     where g.id = ${profile.taxGroupId} and g.org_id = ${orgId} order by m.sequence
+  `)).rows;
+  if (!members.length) throw new TaxCalculationError("selected tax group has no components");
+  const configs: TaxComponentConfig[] = [];
+  for (const member of members) {
+    const component = await loadTaxComponentConfig(orgId, member.taxCodeId, dateIso, runner);
+    if (!component.length) throw new TaxCalculationError("selected tax group contains an inactive or missing code");
+    configs.push({ ...component[0]!, sequence: member.sequence, priceIncludesTax: group.inclusive });
+  }
+  return configs;
+}
+
 /**
  * Reconstruct immutable tax evidence for an imported source line. Source
  * adapters already provide the exact line tax total. We first perform the

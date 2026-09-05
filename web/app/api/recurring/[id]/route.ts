@@ -1,10 +1,9 @@
 import { isoDate, uuidId, parseJsonBody } from "@/lib/api/json";
 import { z } from "zod";
-import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db, type SqlExecutor } from "@openbooks/engine/src/db.ts";
-import { RecurringError, runScheduleNow } from "@openbooks/engine/src/recurring.ts";
+import { RecurringError, runScheduleNow, recurringTemplateScopeFilter } from "@openbooks/engine/src/recurring.ts";
 import { can, guardPermission, type Authz } from "../../../../lib/authz";
 import { isDocKindEnabled } from "../../../../lib/documents";
 
@@ -17,11 +16,20 @@ const patchSchema = z.object({
 });
 
 async function ownedEnabled(exec: SqlExecutor, authz: Authz, id: string) {
+  const owned = (await exec.execute<{ templateId: string }>(sql`
+    select template_document_id as "templateId" from recurring_schedules
+     where id = ${id} and org_id = ${authz.user.orgId} for update
+  `)).rows[0];
+  if (!owned) return null;
+  // A line writer locks its parent. Re-evaluate execution scope in a new
+  // statement after acquiring that lock, not in the waiting query's snapshot.
+  await exec.execute(sql`select id from documents
+    where id = ${owned.templateId} and org_id = ${authz.user.orgId} for share`);
   const r = await exec.execute<Record<string, unknown> & { kind: string; auto_post: boolean; next_run_on: string; ends_on: string | null }>(sql`
     select rs.*, d.kind from recurring_schedules rs
       join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
      where rs.id = ${id} and rs.org_id = ${authz.user.orgId}
-       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
+       ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
      for update of rs for share of d
   `);
   const row = r.rows[0];

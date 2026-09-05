@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
 import { allocateDocumentNumber } from "./document-numbering.ts";
 import { actorHasPermission } from "./actor-permissions.ts";
@@ -10,6 +10,8 @@ import { inventoryFeatureEnabled } from "./inventory.ts";
 import { add, cmp, neg, sum } from "./money.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
+import { computeLineTaxes, type TaxComponentConfig } from "./tax.ts";
+import { loadTaxProfileConfig, persistLineTaxComponents } from "./tax-persist.ts";
 import { computeNextRunAt } from "./scripting.ts";
 
 /**
@@ -55,6 +57,24 @@ export class RecurringError extends Error {
     super(message);
     this.name = "RecurringError";
   }
+}
+
+/** Execution authority covers the header and every explicit line entity.
+ * A standing intercompany journal must not act in a hidden entity merely
+ * because its header is visible. Template parent locks fence line edits. */
+export function recurringTemplateScopeFilter(
+  orgId: string, documentId: SQL, subsidiaryId: SQL, allowed: ReadonlySet<string> | null,
+): SQL {
+  if (allowed === null) return sql``;
+  if (!allowed.size) return sql` and false`;
+  const ids = `{${[...allowed].join(",")}}`;
+  return sql` and ${subsidiaryId} = any(${ids}::uuid[])
+    and not exists (
+      select 1 from document_lines recurring_scope_line
+       where recurring_scope_line.org_id = ${orgId} and recurring_scope_line.document_id = ${documentId}
+         and recurring_scope_line.subsidiary_id is not null
+         and not (recurring_scope_line.subsidiary_id = any(${ids}::uuid[]))
+    )`;
 }
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
@@ -393,15 +413,16 @@ export async function runScheduleNow(
       throw new RecurringError("missing permission: documents.manage", 403);
     }
     const scope = await actorAllowedSubsidiaryIds(db, row.orgId, actorId);
-    const template = (await db.execute<{ subsidiaryId: string | null; kind: string }>(sql`
-      select subsidiary_id as "subsidiaryId", kind from documents
-       where id = ${current.templateId} and org_id = ${row.orgId} for share
+    await db.execute(sql`select id from documents
+      where id = ${current.templateId} and org_id = ${row.orgId} for share`);
+    const template = (await db.execute<{ kind: string }>(sql`
+      select d.kind from documents d
+       where d.id = ${current.templateId} and d.org_id = ${row.orgId}
+         ${recurringTemplateScopeFilter(row.orgId, sql`d.id`, sql`d.subsidiary_id`, scope)}
+         ${authority ? recurringTemplateScopeFilter(row.orgId, sql`d.id`, sql`d.subsidiary_id`, authority.allowedSubsidiaryIds) : sql``}
+       for share of d
     `)).rows[0];
-    const visible = (allowed: ReadonlySet<string> | null) => allowed === null
-      || (template?.subsidiaryId != null && allowed.has(template.subsidiaryId));
-    if (!template || !visible(scope) || (authority && !visible(authority.allowedSubsidiaryIds))) {
-      throw new RecurringError("recurring schedule not found", 404);
-    }
+    if (!template) throw new RecurringError("recurring schedule not found", 404);
     if (!(await isRecurringKindEnabled(row.orgId, template.kind))) {
       throw new RecurringError("template document kind is disabled", 404);
     }
@@ -446,7 +467,7 @@ async function generateFromTemplate(
   if (prior) return prior;
 
   const tplRes = (await db.execute<Record<string, any>>(sql`
-    select * from documents where id = ${templateId} and org_id = ${orgId}
+    select * from documents where id = ${templateId} and org_id = ${orgId} for share
   `));
   const tpl = tplRes.rows[0];
   if (!tpl) throw new Error("recurring template document not found");
@@ -507,30 +528,50 @@ async function generateFromTemplate(
   const created = (await db.execute<{ id: string }>(sql`
     insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                            due_date, currency, status, project_id, department_id, location_id, class_id,
-                           billing_method, reference_number, memo, subtotal, tax_total, total, custom, created_by)
+                           billing_method, reference_number, memo, subtotal, tax_total, total, extra_dims, custom, created_by)
     values (${orgId}, ${tpl.kind}, ${documentNumber}, ${tpl.party_id}, ${tpl.subsidiary_id},
             ${documentDate}, ${dueDate}, ${tpl.currency}, 'draft', ${tpl.project_id},
             ${tpl.department_id}, ${tpl.location_id}, ${tpl.class_id}, ${tpl.billing_method},
             ${tpl.reference_number}, ${tpl.memo}, '0', '0', '0',
-            ${JSON.stringify(provenance)}::jsonb, ${context.actorId})
+            ${JSON.stringify(tpl.extra_dims ?? {})}::jsonb, ${JSON.stringify(provenance)}::jsonb, ${context.actorId})
     returning id
   `));
   const newId = created.rows[0]!.id;
 
   const amounts: string[] = [];
   const taxes: string[] = [];
+  const taxProfiles = new Map<string, TaxComponentConfig[]>();
   for (const l of lineRes.rows) {
-    await db.execute(sql`
+    const profileKey = `${l.tax_code_id ?? ""}:${l.tax_group_id ?? ""}`;
+    let configs = taxProfiles.get(profileKey);
+    if (!configs) {
+      configs = await loadTaxProfileConfig(orgId, {
+        taxCodeId: l.tax_code_id ? String(l.tax_code_id) : null,
+        taxGroupId: l.tax_group_id ? String(l.tax_group_id) : null,
+      }, documentDate);
+      taxProfiles.set(profileKey, configs);
+    }
+    if (configs.some(config => config.priceIncludesTax) && l.tax_input_amount == null) {
+      throw new RecurringError(`template line ${l.line_number} is missing its tax-inclusive input amount`);
+    }
+    const tax = configs.length ? computeLineTaxes(String(l.tax_input_amount ?? l.amount), configs, {
+      overridden: l.tax_overridden === true, taxAmount: String(l.tax_amount ?? "0"),
+    }) : null;
+    const amount = tax?.netAmount ?? String(l.amount);
+    const taxAmount = tax?.taxTotal ?? String(l.tax_amount ?? "0");
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
-            quantity, unit, unit_price, amount, tax_code_id, tax_amount, department_id, project_id,
-            location_id, class_id, party_id, is_billable, custom, created_by)
+            quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount, tax_overridden, tax_amount, department_id, project_id,
+            location_id, class_id, subsidiary_id, extra_dims, party_id, is_billable, custom, created_by)
       values (${orgId}, ${newId}, ${l.line_number}, ${l.item_id}, ${l.account_id}, ${l.description},
-            ${l.quantity}, ${l.unit}, ${l.unit_price}, ${l.amount}, ${l.tax_code_id},
-            ${l.tax_amount ?? "0"}, ${l.department_id}, ${l.project_id}, ${l.location_id}, ${l.class_id},
-            ${l.party_id}, ${l.is_billable ?? false}, ${JSON.stringify(l.custom ?? {})}::jsonb, ${context.actorId})
+            ${l.quantity}, ${l.unit}, ${l.unit_price}, ${amount}, ${l.tax_code_id}, ${l.tax_group_id}, ${tax?.inputAmount ?? l.tax_input_amount}, ${tax?.overridden ?? l.tax_overridden},
+            ${taxAmount}, ${l.department_id}, ${l.project_id}, ${l.location_id}, ${l.class_id},
+            ${l.subsidiary_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.party_id}, ${l.is_billable ?? false}, ${JSON.stringify(l.custom ?? {})}::jsonb, ${context.actorId})
+      returning id
     `);
-    amounts.push(String(l.amount ?? "0"));
-    taxes.push(String(l.tax_amount ?? "0"));
+    if (tax) await persistLineTaxComponents(orgId, inserted.rows[0]!.id, tax.components, context.actorId);
+    amounts.push(amount);
+    taxes.push(taxAmount);
   }
 
   // Header totals must tie to the cloned lines under the storage invariant
