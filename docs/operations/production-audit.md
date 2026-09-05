@@ -1352,3 +1352,28 @@ the locked production build pass. Evidence is retained under
 All 3,087 canonical unit tests pass; explicit-any and lint ceilings remain 391
 and 725. The adjacent audit has confirmed separate account-override and
 subsidiary-scope defects in disposal/remeasurement; their remediation is next.
+
+## Asset posting accounts and scope — continuation from 133a80d2
+
+Disposal and remeasurement used legacy custom JSON/category defaults while
+normal depreciation and the editor used native GL overrides. Both now compose
+the same native account resolver as depreciation; adjustment accounts come
+from the category's authoritative setting. Both HTTP routes also discarded
+subsidiary restrictions. They now pass scope to the service, which enforces it
+on the locked asset row before reading carrying value or posting. An empty
+scope denies all assets, including after a concurrent subsidiary move.
+
+Remeasurement now rejects malformed supplied dates instead of substituting
+today; only an omitted date gets the organization's business day. Both engine
+entry points independently validate calendar dates.
+
+The expanded baseline failed 14 of 20 cases, including actual asset transfers
+while posting waited. All 46 focused integration checks now pass, plus two
+isolated date-default/refusal unit checks. All-workspace typechecking and the
+locked production build pass after correcting the SQL row type. Receipts are
+retained under `audit-asset-posting-controls-2026-09-05`. Separate asset-editor
+scope, status-transition and financial-history gaps are confirmed and queued
+for the next correction.
+All 3,089 canonical unit tests pass. Explicit-any and lint ceilings remain 391
+and 725. The extra same-thread root build attempt is not release evidence;
+the successful locked build is recorded in `build-final.log`.

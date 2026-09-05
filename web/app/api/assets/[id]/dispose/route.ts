@@ -78,6 +78,7 @@ export async function POST(
       date,
       actorId: gate.user.id,
       writeOff,
+      ...(gate.allowedSubsidiaryIds ? { allowedSubsidiaryIds: [...gate.allowedSubsidiaryIds] } : {}),
     });
     return NextResponse.json(result);
   } catch (e: unknown) {

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
 import { isIsoCalendarDate } from "./business-date.ts";
-import { buildScheduleWithRunner } from "./depreciation.ts";
+import { buildScheduleWithRunner, resolveAssetAccounts } from "./depreciation.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
 import { orgReportingFramework } from "./reporting-framework.ts";
 
@@ -125,9 +125,11 @@ async function primaryBookId(orgId: string, exec: SqlExecutor = db): Promise<str
  * be the first statement in the remeasurement transaction so a contender waits
  * before reading carrying-value inputs and then re-reads the committed state.
  */
-async function lockAssetRow(exec: SqlExecutor, orgId: string, assetId: string): Promise<void> {
+async function lockAssetRow(exec: SqlExecutor, orgId: string, assetId: string, allowedSubsidiaryIds?: readonly string[] | null): Promise<void> {
   const locked = (await exec.execute<{ id: string }>(sql`
-    select id from fixed_assets where org_id = ${orgId} and id = ${assetId} for update`));
+    select id from fixed_assets where org_id = ${orgId} and id = ${assetId}
+      ${allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
+      for update`));
   if (!locked.rows[0]) throw new AssetLifecycleError("asset not found");
 }
 
@@ -208,6 +210,33 @@ export function remeasurementPolicy(args: {
   return { allowed: true, reversalPortion: fromUnits(toUnits(delta)) };
 }
 
+type AssetAccountRow = {
+  native_asset_account_id: string | null;
+  native_accumulated_account_id: string | null;
+  native_expense_account_id: string | null;
+  asset_account_id: string;
+  accumulated_depreciation_account_id: string;
+  depreciation_expense_account_id: string;
+};
+
+function lifecycleAccounts(asset: AssetAccountRow) {
+  return resolveAssetAccounts({
+    assetAccountId: asset.native_asset_account_id,
+    accumulatedDepreciationAccountId: asset.native_accumulated_account_id,
+    depreciationExpenseAccountId: asset.native_expense_account_id,
+  }, {
+    assetAccountId: asset.asset_account_id,
+    accumulatedDepreciationAccountId: asset.accumulated_depreciation_account_id,
+    depreciationExpenseAccountId: asset.depreciation_expense_account_id,
+  });
+}
+
+function assertLifecycleDate(date: string): void {
+  if (!isIsoCalendarDate(date)) {
+    throw new AssetLifecycleError("date must be a valid calendar date (YYYY-MM-DD)");
+  }
+}
+
 export interface DisposeResult {
   assetId: string;
   entryId: string;
@@ -224,25 +253,30 @@ export interface DisposeResult {
 export async function disposeAsset(
   orgId: string,
   assetId: string,
-  opts: { proceeds?: string; proceedsAccountId?: string | null; date: string; actorId: string | null; writeOff?: boolean },
+  opts: { proceeds?: string; proceedsAccountId?: string | null; date: string; actorId: string | null; writeOff?: boolean; allowedSubsidiaryIds?: readonly string[] | null },
 ): Promise<DisposeResult> {
+  assertLifecycleDate(opts.date);
   const proceeds = opts.writeOff ? "0" : opts.proceeds ?? "0";
   return db.transaction(async (tx) => {
     // Serialize disposal against remeasurement on the authoritative asset row.
     // This must precede every carrying-value read so a contender waits for the
     // prior mutation and then sees its committed schedule/event state.
-    await lockAssetRow(tx, orgId, assetId);
+    await lockAssetRow(tx, orgId, assetId, opts.allowedSubsidiaryIds);
     const bookId = await primaryBookId(orgId, tx);
 
-    const assetRes = (await tx.execute<{
+    const assetRes = (await tx.execute<AssetAccountRow & {
         id: string; asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string;
-        custom: Record<string, unknown> | null; department_id: string | null; project_id: string | null;
+        department_id: string | null; project_id: string | null;
         location_id: string | null; base_currency: string; asset_account_id: string;
         accumulated_depreciation_account_id: string; gain_loss_account_id: string | null; accumulated: string;
       }>(sql`
-      select a.id, a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost, a.custom,
+      select a.id, a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost,
              a.department_id, a.project_id, a.location_id, sub.base_currency,
-             c.asset_account_id, c.accumulated_depreciation_account_id, c.gain_loss_account_id,
+             a.asset_account_id as native_asset_account_id,
+             a.accumulated_depreciation_account_id as native_accumulated_account_id,
+             a.depreciation_expense_account_id as native_expense_account_id,
+             c.asset_account_id, c.accumulated_depreciation_account_id,
+             c.depreciation_expense_account_id, c.gain_loss_account_id,
              coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
                          join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
                         where l.org_id = a.org_id and s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
@@ -259,11 +293,11 @@ export async function disposeAsset(
       throw new AssetLifecycleError("configure a gain/loss on disposal account on the asset category first");
     }
 
-    const custom = (asset.custom?.accounts ?? {}) as Record<string, string | undefined>;
+    const resolvedAccounts = lifecycleAccounts(asset);
     const accounts: DisposalAccounts = {
-      assetAccountId: custom.asset || asset.asset_account_id,
-      accumulatedDepreciationAccountId: custom.accumulated || asset.accumulated_depreciation_account_id,
-      gainLossAccountId: custom.gainLoss || asset.gain_loss_account_id,
+      assetAccountId: resolvedAccounts.assetAccountId,
+      accumulatedDepreciationAccountId: resolvedAccounts.accumulatedDepreciationAccountId,
+      gainLossAccountId: asset.gain_loss_account_id,
       proceedsAccountId: opts.proceedsAccountId,
     };
     // Impairments and revaluations sit on the accumulated-depreciation account
@@ -575,24 +609,29 @@ export async function reverseAssetLifecycleEvent(
 export async function remeasureAsset(
   orgId: string,
   assetId: string,
-  opts: { newCarryingValue: string; date: string; actorId: string | null },
+  opts: { newCarryingValue: string; date: string; actorId: string | null; allowedSubsidiaryIds?: readonly string[] | null },
 ): Promise<RemeasureResult> {
+  assertLifecycleDate(opts.date);
   const bookId = await primaryBookId(orgId);
   return db.transaction(async (tx) => {
     // Lock before reading any carrying-value input. A concurrent
     // remeasurement waits here, then its following SELECT sees the committed
     // event and schedule state from the transaction ahead of it.
-    await lockAssetRow(tx, orgId, assetId);
+    await lockAssetRow(tx, orgId, assetId, opts.allowedSubsidiaryIds);
 
-    const res = (await tx.execute<{
+    const res = (await tx.execute<AssetAccountRow & {
         asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string; salvage_value: string;
-        custom: Record<string, unknown> | null; department_id: string | null; project_id: string | null;
+        department_id: string | null; project_id: string | null;
         location_id: string | null; base_currency: string; accumulated_depreciation_account_id: string;
         gain_loss_account_id: string | null; accumulated: string;
       }>(sql`
-      select a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost, a.salvage_value, a.custom,
+      select a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost, a.salvage_value,
              a.department_id, a.project_id, a.location_id, sub.base_currency,
-             c.accumulated_depreciation_account_id, c.gain_loss_account_id,
+             a.asset_account_id as native_asset_account_id,
+             a.accumulated_depreciation_account_id as native_accumulated_account_id,
+             a.depreciation_expense_account_id as native_expense_account_id,
+             c.asset_account_id, c.accumulated_depreciation_account_id,
+             c.depreciation_expense_account_id, c.gain_loss_account_id,
              coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
                          join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
                         where l.org_id = a.org_id and s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
@@ -608,7 +647,7 @@ export async function remeasureAsset(
     if (!asset.gain_loss_account_id) {
       throw new AssetLifecycleError("configure a gain/loss (adjustment) account on the asset category first");
     }
-    const custom = (asset.custom?.accounts ?? {}) as Record<string, string | undefined>;
+    const resolvedAccounts = lifecycleAccounts(asset);
     // Fold prior remeasurement events into the carrying amount: they credit
     // accumulated depreciation without schedule lines, so the schedule sum alone
     // overstates NBV the moment an asset has been impaired.
@@ -618,8 +657,8 @@ export async function remeasureAsset(
       cost: asset.acquisition_cost,
       accumulated: effectiveAccumulated,
       newCarryingValue: opts.newCarryingValue,
-      accumulatedDepreciationAccountId: custom.accumulated || asset.accumulated_depreciation_account_id,
-      adjustmentAccountId: custom.gainLoss || asset.gain_loss_account_id,
+      accumulatedDepreciationAccountId: resolvedAccounts.accumulatedDepreciationAccountId,
+      adjustmentAccountId: asset.gain_loss_account_id,
     });
     if (isZero(delta)) throw new AssetLifecycleError("new carrying value equals current net book value");
 
