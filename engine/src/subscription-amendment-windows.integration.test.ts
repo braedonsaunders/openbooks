@@ -6,7 +6,7 @@ import { db } from './db.ts';
 import { createScratchOrg, seedFlowActors, dropScratchOrg } from './test-fixtures.ts';
 import { activateLifecycle, applyAmendment, createPlanVersion, publishPlanVersion, AdvancedSubscriptionError } from './advanced-subscriptions.ts';
 
-for (const scenario of ['invalid dates', 'backdated replacement', 'overlapping addition', 'unknown amendment'] as const) {
+for (const scenario of ['invalid dates', 'backdated replacement', 'overlapping addition', 'unknown amendment', 'interval inputs', 'renewal inputs'] as const) {
   test(`subscription contract integrity: ${scenario}`, {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
     const org = await createScratchOrg();
     try {
@@ -23,10 +23,33 @@ for (const scenario of ['invalid dates', 'backdated replacement', 'overlapping a
         await createPlanVersion(org.orgId,actor,{...input,effectiveFrom:'2028-02-29'});
         return;
       }
+      if (scenario === 'interval inputs') {
+        for (const intervalCount of [0, -1, 1.5, NaN, Infinity, 2147483648]) {
+          await assert.rejects(createPlanVersion(org.orgId,actor,{...input,intervalCount}),AdvancedSubscriptionError);
+        }
+        await assert.rejects(createPlanVersion(org.orgId,actor,{...input,interval:'invalid' as 'monthly'}),AdvancedSubscriptionError);
+        await assert.rejects(createPlanVersion(org.orgId,actor,{...input,billingTiming:'invalid' as 'advance'}),AdvancedSubscriptionError);
+        assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_plan_versions where org_id=${org.orgId}`)).rows[0]!.n,0);
+        await createPlanVersion(org.orgId,actor,{...input,intervalCount:2});
+        return;
+      }
       const version = await createPlanVersion(org.orgId,actor,input);
       await publishPlanVersion(org.orgId,actor,version);
       const subscriptionId = randomUUID();
       await db.execute(sql`insert into subscriptions(id,org_id,customer_id,plan_id,quantity,status,start_on,next_bill_on,auto_post,created_by) values (${subscriptionId},${org.orgId},${org.customerId},${planId},'1','active','2026-01-01','2026-01-01',false,${actor})`);
+      if (scenario === 'renewal inputs') {
+        const activation = {subscriptionId,planVersionId:version,termStartsOn:'2026-01-01',termEndsOn:'2027-01-01'};
+        for (const renewalTermMonths of [0, -1, 1.5, NaN, Infinity]) {
+          await assert.rejects(activateLifecycle(org.orgId,actor,{...activation,renewalTermMonths}),AdvancedSubscriptionError);
+        }
+        await assert.rejects(activateLifecycle(org.orgId,actor,{...activation,renewalPolicy:'invalid' as 'auto'}),AdvancedSubscriptionError);
+        await activateLifecycle(org.orgId,actor,{...activation,renewalTermMonths:12});
+        for (const renewalTermMonths of [0, -1, 1.5, NaN, Infinity]) {
+          await assert.rejects(applyAmendment(org.orgId,actor,{subscriptionId,type:'renew',effectiveOn:'2027-01-01',renewalTermMonths,idempotencyKey:randomUUID()}),AdvancedSubscriptionError);
+        }
+        assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_amendments where org_id=${org.orgId}`)).rows[0]!.n,0);
+        return;
+      }
       await activateLifecycle(org.orgId,actor,{subscriptionId,planVersionId:version,termStartsOn:'2026-01-01',termEndsOn:'2027-01-01',renewalPolicy:'none'});
       const amendment = {subscriptionId,type:'change_component' as const,componentKey:'fee',effectiveOn:'2026-03-01',unitPrice:'30',idempotencyKey:randomUUID()};
       if (scenario === 'unknown amendment') {

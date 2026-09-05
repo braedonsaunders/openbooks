@@ -446,6 +446,10 @@ for (const boundary of [
               await db.execute(
                 sql`update parties set subsidiary_id=${org.subsidiaryId} where id=${org.customerId}`,
               )
+              for (const invalid of [true, [], 0, -1, 1.5, '1.5', 'bad']) {
+                assert.equal((await amend(request({action:'createVersion',planId,effectiveFrom:org.date,intervalCount:invalid,components:[{componentKey:'invalid',name:'Invalid',unitPrice:'1'}]}))).status,422)
+                assert.equal((await amend(request({action:'activateLifecycle',subscriptionId,planVersionId:versionId,termStartsOn:org.date,renewalTermMonths:invalid}))).status,422)
+              }
               assert.equal(
                 (
                   await amend(

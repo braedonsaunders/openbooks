@@ -6,6 +6,7 @@ import {
   advancedSubscriptionWorkspace,
   applyAmendment,
   createPlanVersion,
+  subscriptionPeriodCount,
   publishPlanVersion,
   type AmendmentRequest,
   type BillingTiming,
@@ -104,7 +105,7 @@ export async function POST(req: Request) {
           description: body.description == null ? null : String(body.description),
           currency: body.currency === undefined ? undefined : body.currency == null ? null : String(body.currency),
           interval: body.interval as Interval | undefined,
-          intervalCount: body.intervalCount == null ? undefined : Number(body.intervalCount),
+          intervalCount: body.intervalCount == null ? undefined : subscriptionPeriodCount(body.intervalCount),
           billingTiming: body.billingTiming as BillingTiming | undefined,
           changeSummary: body.changeSummary == null ? null : String(body.changeSummary),
           components,
@@ -126,7 +127,7 @@ export async function POST(req: Request) {
           termEndsOn: body.termEndsOn || null,
           trialEndsOn: body.trialEndsOn || null,
           renewalPolicy: (body.renewalPolicy ?? "auto") as RenewalPolicy,
-          renewalTermMonths: body.renewalTermMonths == null || body.renewalTermMonths === "" ? null : Number(body.renewalTermMonths),
+          renewalTermMonths: body.renewalTermMonths == null || body.renewalTermMonths === "" ? null : subscriptionPeriodCount(body.renewalTermMonths, "renewal term"),
         }, authz.allowedSubsidiaryIds);
         return NextResponse.json({ ok: true });
       case "amend": {

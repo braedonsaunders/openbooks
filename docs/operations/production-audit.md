@@ -242,3 +242,46 @@ Final verification for this continuation passed:
 
 The preceding commit's restore drill is documented above; this pass did not
 repeat restore or perform a production rollout. The wider audit remains open.
+
+## Renewal, project markup and reopen controls — 2026-09-05 continuation
+
+This continuation started from `284f1b04`. Four reproduced defects were corrected:
+
+- **Subscription financial terms were silently coerced.** Fractional interval
+  counts and renewal terms were truncated, invalid counts were clamped, and
+  unknown intervals could become annual schedules. HTTP coercion also accepted
+  booleans and arrays as numbers. Domain and HTTP boundaries now require exact
+  positive integers within the persisted integer range, validate timing and
+  renewal enums, and reject malformed dates and calendar overflow. Shared month
+  arithmetic also preserves leap years before year 0100.
+- **Project markup lost precision and ignored invalid configuration.** Rounding
+  a percentage into a multiplier changed a 1.2345% markup on 100,000 from
+  101,234.50 to 101,230. Applying the percentage directly with shared bigint
+  helpers preserves the configured precision. Negative markup is honored;
+  malformed configuration produces a controlled error without billing sources
+  or completing the billing request.
+- **Reopen approvals allowed intersecting scopes.** An organization-wide request
+  and a subsidiary request could both be approved for the same period, book and
+  modules. The overlap check now treats organization-wide scope as intersecting
+  each subsidiary, under the existing period advisory lock. Concurrent approvals
+  accept exactly one conflicting request; separate subsidiaries remain allowed.
+- **Subledger reopening ignored inherited GL closure.** A subsidiary AP-only
+  request could be approved while its governing organization-wide GL lock was
+  closed. Approval now resolves the applicable GL lock, including expiration,
+  and requires GL to be included when that lock blocks posting.
+
+Before-change reproductions are retained alongside passing regressions in
+thread storage under `audit-renewal-close-2026-09-05`. The final focused run passed
+all 90 tests, with zero failures or skips, using a disposable PostgreSQL database.
+It covers renewal retries, amendment persistence, HTTP validation, invoice
+amounts, close approvals, concurrent reopen requests, and lifecycle authorization.
+The canonical unit command passed all 2,997 tests. Workspace typechecks,
+production build, and lint passed; existing lint warnings remain at 733 and
+explicit-any usage remains at 399. All four changed production files match the
+sources used for the isolated production build.
+
+The complete integration and browser suites from the preceding continuation
+were not repeated for this batch. No migrations, production data, deployment
+scripts or protected synchronization/posting files changed. The earlier
+capability gaps and broader audit remain open; this is evidence for these
+corrections, not certification that the entire repository has no defects.
