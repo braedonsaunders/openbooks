@@ -2166,3 +2166,48 @@ No stored component flags are mass-rewritten: an existing false value can be an
 intentional exemption, and previous input omission cannot be inferred reliably
 from the stored value. The next complete integration checkpoint will include
 this coercion repair and both import repairs after the passing `df56ab44` run.
+
+
+### 2026-09-05 — Preserve committed payroll component tax policy
+
+Two real create/calculate/commit regressions changed historical employment
+income from 240.0000 to zero: editing the base earning's taxable flag and deleting
+its component. Deletion detached the historical stub line through the existing
+SET NULL foreign key. Neither action changed the committed pay amounts.
+
+Forward migration 0090 preserves component tax identity and classification after
+committed or voided payroll use, and refuses deletion that would detach that
+history. Unused components remain editable/deletable; names, active status and
+future amount settings remain editable. Payroll commit locks its used component
+rows in deterministic order before checking freshness. An earlier policy edit
+invalidates the calculation; a later edit waits and is refused after commit.
+Raw policy edits also stamp their actual write time for the freshness check.
+Interactive setup returns a named conflict; bulk import rolls back the failed
+row and its audit evidence.
+
+All 64 focused checks passed (27,251.689834 ms; zero skips), including eleven new
+database cases covering classification fields, deletion, voided history, both
+concurrency orders, setup routes and imports. Six built browser HTTP checks
+passed through the restricted application database role; the actual tax slip
+remained unchanged, and successful metadata/create/delete actions retained audit
+snapshots. The failed import was recorded as failed. The isolated browser,
+server and fixture tenant were removed. Workspace types, changed-file lint,
+locked production build and all 3,153 unit tests passed (109,509.3385 ms; zero
+skips). The first unit attempt caught the missing migration-inventory entry;
+0090 is now listed explicitly, without relaxing the inventory check. Quality
+ceilings remain 389 explicit-any uses and 723 lint warnings. Evidence is under
+`audit-payroll-historical-policy-2026-09-05`.
+
+The migration was applied with the normal bootstrap on a disposable database
+and its SQL was repeated successfully. Deploy the forward migration before the
+new application commit path. It changes no tenant data and leaves the baseline
+untouched; an application rollback should retain the database guard. No
+production database or deployment was changed. Existing misclassified or
+already-detached history cannot be reconstructed from current settings and is
+not silently rewritten.
+
+The broader payroll review continues with two separately reproduced defects:
+generic setup import preview claims success for a historical-policy update that
+commit refuses, and changing an employee's current country can remove their
+already committed tax slip. This component-policy repair does not certify
+historical employee filing context, remittance mappings or every payroll path.
