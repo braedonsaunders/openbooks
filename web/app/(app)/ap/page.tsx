@@ -54,7 +54,7 @@ export default async function AP() {
 
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
   const apSettings = { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
-  const position = await apPosition(authz.user.orgId, 4, apSettings)
+  const position = await apPosition(authz.user.orgId, 4, apSettings, undefined, authz.allowedSubsidiaryIds)
   // The schedule bars need each week's label and amount; the week drill
   // fetches the week a reader actually opens from /api/cash/week-entries.
   // Shipping every week's transactions as well repeated the whole open-item

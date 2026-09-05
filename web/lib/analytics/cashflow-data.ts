@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
   bankBalances,
   buildWeekGrid,
@@ -93,21 +94,23 @@ export interface CashflowData {
   accountOptions: { id: string; number: string | null; name: string }[];
 }
 
-export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate?: string): Promise<CashflowData> {
+export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate: string | undefined, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<CashflowData> {
+  const subIds = allowedSubsidiaryIds === null ? undefined : [...allowedSubsidiaryIds];
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
   const [arItems, apItems, arStats, apStats, banks, catConfigs, apCfg, accountRows] = await Promise.all([
-    openItems(orgId, "ar", asOfIso),
-    openItems(orgId, "ap", asOfIso),
-    paymentStats("ar", asOfIso),
-    paymentStats("ap", asOfIso),
-    bankBalances(asOfIso),
+    openItems(orgId, "ar", asOfIso, subIds),
+    openItems(orgId, "ap", asOfIso, subIds),
+    paymentStats("ar", asOfIso, subIds),
+    paymentStats("ap", asOfIso, subIds),
+    bankBalances(asOfIso, subIds),
     loadCategories(orgId),
     analyticsConfig(orgId, "cashflow"),
     (db.execute<AccountOptionRow>(sql`
       select id, number, name from accounts
       where org_id = ${orgId} and is_summary = false
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
       order by number nulls last, name
     `)),
   ]);
@@ -121,7 +124,7 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash };
+  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, subIds };
   const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
 
   const timeline = buildTimeline({

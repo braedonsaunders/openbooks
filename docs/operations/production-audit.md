@@ -988,3 +988,25 @@ implementations; the valid controls passed. The corrected focused run passed
 34 tests. All 3,056 unit tests, web typechecking and the locked production
 build passed, with unchanged 392/726 explicit-any and lint ceilings. Receipts
 are retained under `audit-cash-ledger-2026-09-05` in thread storage. The full integration run in progress remains frozen at 677b924d.
+
+## Cash forecast authorization and payment history — continuation from b840acae
+
+The AP, AR and cashflow pages and assistant tools discarded subsidiary grants.
+Application vitals did the same for cash and aging, while cash account/vendor
+options could disclose hidden-entity metadata even when balances were scoped.
+The composite resolvers now require caller scope, carry it through every cash,
+open-item, SQL-history and option query, and intersect selected banking views
+with the grant. Vitals uses the same scope for its aging reports.
+
+The settlement rollup has no subsidiary dimension. Restricted forecasts now
+reconstruct its statistics from applications whose source and target lines are
+both visible; unrestricted reads retain the rollup. A five-day visible payment
+history previously became thirteen days when hidden twenty-day payments were
+included. The new tests verify both sides, shared counterparties, empty grants,
+selectors, API drilldowns, services, pages, assistant dispatch and vitals.
+Thirty authorization/history regressions failed against the prior behavior;
+the unrestricted controls passed. The corrected combined focused run passed
+87 tests. A typed statistics result removed one explicit-any node; the enforced
+ceilings were lowered to 391 explicit-any nodes and 725 lint warnings. All
+3,056 unit tests, web typechecking and the locked production build passed.
+Receipts are retained under `audit-cash-scope-2026-09-05` in thread storage.

@@ -34,7 +34,7 @@ async function cashSection(context: ApplicationContext) {
   const position = await cashPosition(context.authz.user.orgId, CASH_HORIZON_WEEKS, {
     weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
     restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
-  });
+  }, undefined, undefined, context.authz.allowedSubsidiaryIds);
   return {
     available: true as const,
     asOf: position.asOf,
@@ -57,7 +57,9 @@ async function cashSection(context: ApplicationContext) {
 async function agingSection(context: ApplicationContext, side: "ar" | "ap", asOf: string) {
   const permission = side === "ar" ? "ar.read" : "ap.read";
   if (!can(context.authz, permission)) return unavailable(permission);
-  const result = await agingByParty(side, asOf, undefined, context.authz.user.orgId);
+  const dims = context.authz.allowedSubsidiaryIds === null ? undefined
+    : { subsidiaryIds: [...context.authz.allowedSubsidiaryIds] };
+  const result = await agingByParty(side, asOf, dims, context.authz.user.orgId);
   return {
     available: true as const,
     asOf: result.asOf,

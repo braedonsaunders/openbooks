@@ -58,8 +58,8 @@ test('AP, AR, cash position, and analytics retain signed high-range balances', (
 
 test('subsidiary cash vendor picker scopes payable documents', () => {
   const cashPosition = source('cash-position.ts')
-  assert.match(cashPosition, /d\.subsidiary_id\s+is null or d\.subsidiary_id = any\(/)
-  assert.match(cashPosition, /subIds\.join\("[,]"\)/)
+  assert.match(cashPosition, /subsidiaryVisibleFilter\(sql`d\.subsidiary_id`, visible\)/)
+  assert.match(cashPosition, /requestedSubIds\.filter\(id => allowedSubsidiaryIds\.has\(id\)\)/)
 })
 
 test('cash UI, assistant, and vitals preserve strings and bound chart projections', () => {

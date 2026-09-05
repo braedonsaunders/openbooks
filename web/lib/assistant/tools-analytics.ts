@@ -330,7 +330,7 @@ const cashflowTool: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { horizonWeeks?: 4 | 8 | 12; asOfDate?: string };
     const horizon = a.horizonWeeks ?? 4;
-    const r = await withOrg(authz.user.orgId, () => cashflowData(authz.user.orgId, horizon, a.asOfDate));
+    const r = await withOrg(authz.user.orgId, () => cashflowData(authz.user.orgId, horizon, a.asOfDate, authz.allowedSubsidiaryIds));
     return {
       ok: true,
       data: {
@@ -694,7 +694,7 @@ const apPositionTool: AssistantToolDef = {
     const orgId = authz.user.orgId;
     const r = await withOrg(orgId, async () => {
       const apSettings = await loadApSettings(orgId);
-      return apPosition(orgId, 4, apSettings, a.asOfDate);
+      return apPosition(orgId, 4, apSettings, a.asOfDate, authz.allowedSubsidiaryIds);
     });
     return {
       ok: true,
@@ -762,7 +762,7 @@ const arPositionTool: AssistantToolDef = {
     const orgId = authz.user.orgId;
     const r = await withOrg(orgId, async () => {
       const apSettings = await loadApSettings(orgId);
-      return arPosition(orgId, 4, apSettings, a.asOfDate);
+      return arPosition(orgId, 4, apSettings, a.asOfDate, authz.allowedSubsidiaryIds);
     });
     return {
       ok: true,
@@ -823,7 +823,7 @@ const cashPositionTool: AssistantToolDef = {
     const orgId = authz.user.orgId;
     const r = await withOrg(orgId, async () => {
       const apSettings = await loadApSettings(orgId);
-      return cashPosition(orgId, horizon, apSettings, a.asOfDate);
+      return cashPosition(orgId, horizon, apSettings, a.asOfDate, undefined, authz.allowedSubsidiaryIds);
     });
     return {
       ok: true,
