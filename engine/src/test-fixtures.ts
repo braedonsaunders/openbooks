@@ -729,6 +729,10 @@ const CORE_B = [
  * an exclusive lock, so concurrent writers wait and never see the gap.
  */
 const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
+  // Approved plans are immutable even during sandbox wipes. Delete cells
+  // before headers, retaining the same scoped, transactional guard handling.
+  { table: "budget_lines", trigger: "budget_line_guard" },
+  { table: "budget_scenarios", trigger: "budget_scenario_guard" },
   { table: "field_ticket_labor_lines", trigger: "field_ticket_labor_line_immutable" },
   { table: "field_ticket_labor_snapshots", trigger: "field_ticket_labor_snapshot_retention" },
   { table: "project_financial_profile_versions", trigger: "project_financial_profile_version_guard" },

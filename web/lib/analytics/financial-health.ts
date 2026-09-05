@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { profitAndLoss, balanceSheet, type StatementRow } from "../reports";
 import { statementBookExpr } from "../gl-summary";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { resolveOrgId } from "../org-scope";
 import { decimalSum, type ExactDecimal } from '../statement-format'
 
@@ -246,7 +247,7 @@ function monthsBetween(from: string, to: string): number {
   return Math.max(1, days / 30.4375);
 }
 
-async function depreciationAmortization(orgId: string, from: string, to: string): Promise<number> {
+async function depreciationAmortization(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<number> {
   const r = ((await db.execute(sql`
     with da_accounts as (
       -- These account references are the authoritative D&A classification. They
@@ -272,6 +273,7 @@ async function depreciationAmortization(orgId: string, from: string, to: string)
        and a.type in ('expense', 'expense_other', 'expense_deferred')
        and e.status in ('posted', 'reversed')
        and e.book_id = ${statementBookExpr(orgId)}
+       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
        and (e.origin = 'depreciation' or exists (
          select 1 from da_accounts d where d.account_id = a.id
        ))
@@ -281,9 +283,12 @@ async function depreciationAmortization(orgId: string, from: string, to: string)
   return Number(r.rows[0]?.s ?? 0);
 }
 
-async function activeHeadcount(orgId: string): Promise<number> {
+async function activeHeadcount(orgId: string, allowed: ReadonlySet<string> | null): Promise<number> {
   const r = ((await db.execute(sql`
-    select count(*)::int as c from employee_roles where org_id = ${orgId} and terminated_on is null
+    select count(*)::int as c from employee_roles er
+    join parties p on p.id = er.party_id and p.org_id = er.org_id
+    where er.org_id = ${orgId} and er.terminated_on is null
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed)}
   `)));
   return Number(r.rows[0]?.c ?? 0);
 }
@@ -295,21 +300,23 @@ export async function financialHealth(
     label: string;
   },
   benchmarks: HealthBenchmarks = DEFAULT_BENCHMARKS,
-  orgId?: string,
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<FinancialHealth> {
   const { moneyCompact } = await getMoneyFormatter(orgId)
   const resolvedOrgId = await resolveOrgId(orgId);
+  const dims = allowedSubsidiaryIds === null ? undefined : { subsidiaryIds: [...allowedSubsidiaryIds] };
   const { from, to, label } = period;
   const b = benchmarks;
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
 
   const [pl, priorPl, bs, da, headcount] = await Promise.all([
-    profitAndLoss(from, to, undefined, resolvedOrgId),
-    profitAndLoss(pFrom, pTo, undefined, resolvedOrgId),
-    balanceSheet(to, resolvedOrgId),
-    depreciationAmortization(resolvedOrgId, from, to),
-    activeHeadcount(resolvedOrgId),
+    profitAndLoss(from, to, dims, resolvedOrgId),
+    profitAndLoss(pFrom, pTo, dims, resolvedOrgId),
+    balanceSheet(to, resolvedOrgId, undefined, dims),
+    depreciationAmortization(resolvedOrgId, from, to, allowedSubsidiaryIds),
+    activeHeadcount(resolvedOrgId, allowedSubsidiaryIds),
   ]);
 
   // Operating vs non-operating split, straight off account types.

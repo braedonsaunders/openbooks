@@ -63,6 +63,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:db",
     `
+      export async function withBypassContext(work) { return work() }
       const state = globalThis[Symbol.for('openbooks.financial-health-test')]
       export const db = {
         async execute(query) {
@@ -216,6 +217,7 @@ test("operating metrics exclude income_other from operating income and its deriv
     { from: "2026-01-01", to: "2026-01-31", label: "January 2026" },
     undefined,
     "org-1",
+    null,
   );
   const operatingMargin = result.ratios.profitability.find(
     (ratio) => ratio.id === "operating_margin",
@@ -259,6 +261,7 @@ test("interest coverage is missing without positive interest expense and does no
     { from: "2026-01-01", to: "2026-01-31", label: "January 2026" },
     undefined,
     "org-1",
+    null,
   );
   const interestCoverage = result.ratios.operating.find(
     (ratio) => ratio.id === "interest_coverage",
@@ -340,6 +343,7 @@ test("D&A uses configured mappings or depreciation origin in the primary posted 
     { from: "2026-01-01", to: "2026-01-31", label: "January 2026" },
     undefined,
     "org-1",
+    null,
   );
 
   assert.equal(result.figures.depreciationAmortization, 60);

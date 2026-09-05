@@ -42,8 +42,8 @@ function closeRunScope(allowed: AccountingSubsidiaryScope) {
 }
 
 /**
- * A budget scenario has no header subsidiary: its lines carry the account and
- * optional project dimensions that identify a legal entity. Count only a
+ * A budget scenario has no header subsidiary: each line identifies its legal
+ * entity, with additional account and optional project visibility constraints. Count only a
  * scenario with at least one line and reject the whole scenario if any line
  * points at an entity outside the caller's set.
  */
@@ -53,11 +53,13 @@ function budgetScope(orgId: string, allowed: AccountingSubsidiaryScope, scenario
   if (ids.length === 0) return sql` and false`
   const idArray = sql`${`{${ids.join(',')}}`}::uuid[]`
   const hidden = sql`(
-    (ba.subsidiary_id is not null and ba.subsidiary_id <> all(${idArray}))
+    bl.subsidiary_id <> all(${idArray})
+    or (ba.subsidiary_id is not null and ba.subsidiary_id <> all(${idArray}))
     or (bp.subsidiary_id is not null and bp.subsidiary_id <> all(${idArray}))
   )`
   const visible = sql`(
-    (ba.subsidiary_id is null or ba.subsidiary_id = any(${idArray}))
+    bl.subsidiary_id = any(${idArray})
+    and (ba.subsidiary_id is null or ba.subsidiary_id = any(${idArray}))
     and (bp.subsidiary_id is null or bp.subsidiary_id = any(${idArray}))
   )`
   return sql`
