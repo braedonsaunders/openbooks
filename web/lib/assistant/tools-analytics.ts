@@ -601,12 +601,13 @@ const sentinelTool: AssistantToolDef = {
   description:
     "Sentinel ledger forensics for a posting-date period: Benford first/second-digit conformity, duplicate payment pairs, threshold-trap (just-under-approval-limit) postings, weekend postings, vendor amount outliers (RSF and z-score), sequential invoice runs, ghost-vendor matches, audit-trail deletes/changes, and a per-vendor risk rollup. Every detail list is capped at 50 rows with a truncation flag. Read-only.",
   category: "read",
-  gate: { mode: "anyOf", perms: ["reports.read"] },
+  gate: { mode: "allOf", perms: ["reports.read", "admin.audit.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
+    if (authz.allowedSubsidiaryIds !== null) return { ok: false, error: "forbidden" };
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
-    const r = await withOrg(authz.user.orgId, () => sentinelData(authz.user.orgId, period));
+    const r = await withOrg(authz.user.orgId, () => sentinelData(authz.user.orgId, period, authz));
     return {
       ok: true,
       data: {

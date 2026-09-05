@@ -205,3 +205,19 @@ test("unrestricted Benford drill keeps the shared filter empty", async () => {
     routeState.calls.every((text) => !text.includes("d.subsidiary_id")),
   );
 });
+
+const invalidFilters: Record<string, string>[] = [
+  { digit: "4.5" }, { digit: "0" }, { digit: "10" },
+  { dim: "2d", digit: "9" }, { dim: "unknown" },
+  { from: "not-a-date" }, { to: "2026-02-30" },
+  { from: "2026-12-31", to: "2026-01-01" },
+];
+for (const invalid of invalidFilters) {
+  test(`Benford drill refuses malformed filters before querying: ${JSON.stringify(invalid)}`, async () => {
+    reset();
+    const query = new URLSearchParams({ digit: "4", from: "2026-01-01", to: "2026-12-31", ...invalid });
+    const response = await GET(new Request("http://openbooks.test/api/analytics/sentinel/benford?" + query));
+    assert.equal(response.status, 400);
+    assert.equal(routeState.calls.length, 0);
+  });
+}
