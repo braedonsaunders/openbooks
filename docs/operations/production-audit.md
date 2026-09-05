@@ -1769,3 +1769,53 @@ That run predates the display and configuration slices and does not cover them.
 Concurrent definition creation, app-installed definitions, historical type changes
 and reference-value enforcement remain separate audit work; this checkpoint does
 not certify those paths or claim repository-wide defect freedom.
+
+## Concurrent custom-field creation and app ownership
+
+Continuation from `aef293f3` proved that eight simultaneous authenticated API
+requests could create six definitions with the same tenant, target and key.
+The database reproduction also produced eight winners for competing app installs
+and six winners for mixed API/app writers. Both entry points checked for an
+existing definition before inserting, without sharing a lock or unique index.
+
+Creators now acquire the same transaction advisory lock for each tenant/table/key.
+App bundles acquire all keys in sorted order, including when declarations arrive
+in opposite orders. Losing installs roll back their app, version and definition
+writes. Inserts also handle database conflicts without reporting a successful
+creation. Forward migration `0088_custom_field_definition_uniqueness.sql` adds a
+unique index over tenant, table, normalized kind and key. It includes inactive
+rows because historical custom values still refer to their keys. Different tenant,
+table and non-null kind scopes remain independent. The original baseline is intact.
+
+The migration locks the definition table during preflight and index installation.
+It reports legacy collisions and rolls back without renaming, merging, deactivating
+or deleting definitions. Before rollout, the schema owner should run:
+
+```sql
+select org_id, target_table, coalesce(target_kind, '') as kind_scope, key,
+       array_agg(id order by id) as definition_ids
+from public.custom_field_defs
+group by org_id, target_table, coalesce(target_kind, ''), key
+having count(*) > 1;
+```
+
+Any result requires a reviewed repair that accounts for existing custom values and
+audit history. Schedule the write-blocking metadata migration in the normal schema
+window. Application locks work before the index exists; retain the index during
+an application rollback. No production migration or deployment was performed.
+
+Verification passed 129 focused checks, including competing creators, reversed
+bundle order, adjacent app transaction/audit cases and definition controls. The
+migration tests verify direct concurrent inserts, updates, null/empty equivalence,
+inactive identity, independent scopes, repeat application and collision preservation
+in isolated schemas. The final migration text passed those tests again after its
+required header was added. The canonical migration inventory now lists the new
+forward file; no published migration was edited.
+
+Four production-browser scenarios sent 32 requests under the restricted runtime
+role: three contested scopes each produced one success and seven conflicts, while
+eight independent keys all succeeded. All 3,139 canonical unit tests passed
+(86,781.305416 ms; zero skips), workspace types and the locked build passed, and the
+725-warning/391-explicit-any limits remain unchanged. Evidence is under
+`audit-custom-field-creation-2026-09-05`. App definition validation and per-definition
+audit evidence remain separate work; the concurrency repair does not certify them.

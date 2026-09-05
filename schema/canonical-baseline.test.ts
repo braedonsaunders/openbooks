@@ -178,6 +178,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0085_sync_run_connection_nullable.sql",
     "0086_report_authorization_evidence.sql",
     "0087_charge_rate_fraction_evidence.sql",
+    "0088_custom_field_definition_uniqueness.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
