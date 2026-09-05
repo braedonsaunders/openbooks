@@ -837,3 +837,39 @@ before/after values, and complete factor/session rollback on forced audit-write
 failure. All 27 authentication integration cases, 3,041 unit tests, web
 typechecking and the locked production build passed. Receipts are retained under
 `audit-mfa-evidence-2026-09-05` in thread storage.
+
+## Frozen integration checkpoint — f7f87fbb
+
+The full integration suite completed with 1,466 tests: 1,464 passed, two
+Redis-dependent flow-email cases skipped, and zero failures. The fixture owner
+reported 1,001 leases/releases/resets, four bootstraps/teardowns/schema-wide
+verifications, zero active leases and zero leaks. The exact log and receipt are
+retained under `audit-billing-scope-2026-09-05`. This result belongs to f7f87fbb;
+the subsequent authentication, account and payroll changes have their own
+focused, unit, typecheck and build receipts.
+
+## Payroll profile policy and audit integrity — continuation from 014af7c2
+
+Profile writes silently coerced malformed withholding flags/counts and pay
+basis/vacation methods; an object SIN/SSN could clear the sealed identifier.
+The API now validates these types and enums before its existing exact-money and
+country-pack checks. Explicit nullable clears remain supported, and omission
+preserves the stored identifier. A related registry defect admitted inherited
+object names such as `constructor` as installed country packs. The country
+dictionary now has no prototype, preserving declared and third-party packs while
+refusing inherited names.
+
+Profile creation and editing now retain exact before/after audit evidence in
+the same tenant transaction. The employee lock serializes initial creation;
+the stored predecessor is locked before mutation. Employee/role and schedule
+locks also keep the checked references stable during the write. The audit uses
+an explicit column projection with SIN/SSN presence and last-three digits only,
+never plaintext or ciphertext. Updated timestamps advance monotonically, and
+audit events record the live write time and request identity.
+
+The 43 focused cases cover malformed inputs, explicit clears, secret omission,
+attributed/redacted audit snapshots, audit-failure rollback, concurrent creation
+with chained before-images, built-in pack behavior and third-pack extensibility.
+All 3,042 unit tests, workspace typechecks and the locked production build passed;
+the explicit-any/lint ceilings remain unchanged. Baselines, source snapshots and
+receipts are retained under `audit-payroll-profile-2026-09-05` in thread storage.
