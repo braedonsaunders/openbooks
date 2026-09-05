@@ -1927,3 +1927,33 @@ old/new application rollout, because older lifecycle code lacks the category loc
 Retain the guard on application rollback. A rejected historical policy change needs
 a new category for future assets or a controlled accounting adjustment; do not drop
 the guard to force it through. No production migration or deployment was performed.
+
+## Shared setup evidence and root metadata
+
+Continuation from `435ea9fb` confirmed five initial regressions: root-subsidiary
+metadata edits were rejected by a misplaced deletion check, generic setup creation
+and updates lacked stored snapshots, deletion recorded an empty object, and tax
+group evidence omitted ordered memberships. A subsequent check also found that
+unused tax groups could not be deleted because their owned membership rows were
+left behind under a non-cascading foreign key.
+
+The shared setup audit helper now loads the tenant-scoped stored row and ordered
+tax-group members. Generic creation records the actual after-image; updates lock
+and record before/after state; deletion records the retained before-image. All
+evidence shares the mutation transaction and actor. Tax-group deletion removes
+owned memberships within that transaction; transactional references still refuse
+deletion and restore those memberships. The root metadata refusal is removed,
+while existing structural validation and database deletion protection remain.
+
+All 37 focused checks passed (11,704.544084 ms; zero skips), including 12 new cases
+for snapshots, ordered membership, all three audit-failure rollback paths,
+concurrent before-images, tenant boundaries and root controls. Nine authenticated
+production-browser checks passed; the retained database receipt verifies their
+six configuration audit records. All 3,149 canonical unit tests passed
+(174,763.260834 ms; zero skips), workspace types and the locked production build
+passed, and the warning/explicit-any ceilings remain 725/391. Evidence is under
+`audit-setup-evidence-2026-09-05`.
+
+This repair covers the generic setup mutation path. Specialized book-promotion and
+effective-versioning branches still need their own complete snapshot audit; this
+checkpoint does not certify those branches or the entire configuration surface.
