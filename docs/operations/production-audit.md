@@ -2134,3 +2134,35 @@ as false when they were omitted, despite explicit true defaults in the setup
 registry. Metadata updates likewise reset omitted flags, and malformed boolean
 strings are accepted as false. Those shared coercion defects remain open at
 this checkpoint and are the next repair.
+
+
+### 2026-09-05 — Declared setup defaults and explicit boolean controls
+
+Six database regressions reproduced earning creation ignoring five declared
+true defaults, metadata updates resetting omitted flags to false, and malformed
+boolean strings being accepted as false. Both interactive setup and bulk imports
+shared the same coercer. These were implicit changes to taxability, pension,
+insurance, vacation and disposable-earnings eligibility settings.
+
+The shared row builder now applies declared defaults on creation and preserves
+omitted booleans on updates. Explicit false remains an intentional configuration
+choice. Boolean fields accept the existing supported scalar spellings used by
+CSV/XLSX imports and reject unrecognized strings, objects, arrays and non-boolean
+numbers. Declared numeric/select defaults pass through the same validation as
+submitted values; an invalid explicit value never falls back to a default.
+
+All 66 focused checks passed (38,784.556417 ms; zero skips), including ten new
+database cases and four pure coercion checks. Eight built browser HTTP checks
+passed under the non-bypass runtime role. Stored earning flags remained true
+through omission-only updates, explicitly exempt components retained false,
+malformed rows were absent, and all six successful changes retained audit
+evidence. Workspace types, changed-file lint, the locked production build and
+all 3,153 unit tests passed (161,343.061417 ms; zero skips). Quality ceilings
+remain 389 explicit-any uses and 723 warnings. Evidence is under
+`audit-setup-declared-defaults-2026-09-05`. The isolated browser, server and
+fixture tenant were cleaned up.
+
+No stored component flags are mass-rewritten: an existing false value can be an
+intentional exemption, and previous input omission cannot be inferred reliably
+from the stored value. The next complete integration checkpoint will include
+this coercion repair and both import repairs after the passing `df56ab44` run.

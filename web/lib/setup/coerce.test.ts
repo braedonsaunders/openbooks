@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { coerceField } from './coerce.ts'
-import type { SetupField } from './registry.ts'
+import { buildRow, coerceField } from './coerce.ts'
+import { SETUP_ENTITY_BY_KEY, type SetupField } from './registry.ts'
 
 const countryField: SetupField = { key: 'country', kind: 'country' }
 
@@ -85,4 +85,44 @@ test('number-sequence record choices store stable kind tokens without requiring 
     column: 'document_kind',
     value: 'custrec:sales-order-test',
   })
+})
+
+test('earning creation applies its declared defaults while explicit false remains authoritative', () => {
+  const entity = SETUP_ENTITY_BY_KEY.get('pay-components')!
+  const body = { code: 'TEST', name: 'Test earning', kind: 'earning', value: '10' }
+  const built = buildRow(entity, body, { forCreate: true })
+  assert.ok('cols' in built)
+  const values = Object.fromEntries(built.cols.map(({ column, value }) => [column, value]))
+  for (const column of ['taxable', 'pensionable', 'insurable', 'vacationable', 'include_in_disposable_earnings']) assert.equal(values[column], true)
+  assert.equal(values.basis, 'fixed_amount')
+  assert.equal(values.protection_priority, 100)
+  const explicit = buildRow(entity, { ...body, taxable: false, pensionable: 'no' }, { forCreate: true })
+  assert.ok('cols' in explicit)
+  assert.equal(explicit.cols.find(entry => entry.column === 'taxable')!.value, false)
+  assert.equal(explicit.cols.find(entry => entry.column === 'pensionable')!.value, false)
+})
+
+test('number-sequence creation uses declared numeric defaults without masking invalid explicit values', () => {
+  const entity = SETUP_ENTITY_BY_KEY.get('number-sequences')!
+  const built = buildRow(entity, { documentKind: 'journal' }, { forCreate: true })
+  assert.ok('cols' in built)
+  assert.equal(built.cols.find(entry => entry.column === 'next_number')!.value, 1)
+  assert.equal(built.cols.find(entry => entry.column === 'padding')!.value, 5)
+  assert.deepEqual(buildRow(entity, { documentKind: 'journal', nextNumber: 'invalid' }, { forCreate: true }), { error: 'nextNumber must be a whole number' })
+})
+
+test('setup updates distinguish omitted boolean controls from explicit changes', () => {
+  const entity = SETUP_ENTITY_BY_KEY.get('pay-components')!
+  const built = buildRow(entity, { name: 'Metadata update', kind: 'earning', taxable: false, nonPeriodic: true }, { forCreate: false })
+  assert.ok('cols' in built)
+  assert.equal(built.cols.find(entry => entry.column === 'taxable')!.value, false)
+  assert.equal(built.cols.find(entry => entry.column === 'non_periodic')!.value, true)
+  for (const column of ['pensionable', 'insurable', 'vacationable', 'is_active', 'include_in_disposable_earnings']) assert.ok(!built.cols.some(entry => entry.column === column))
+})
+
+test('setup booleans accept documented scalar spellings and reject malformed controls', () => {
+  const field: SetupField = { key: 'taxable', kind: 'boolean' }
+  for (const value of [true, 1, 'true', ' YES ', 'y', '1', 't']) assert.deepEqual(coerceField(field, value), { column: 'taxable', value: true })
+  for (const value of [false, 0, 'false', ' NO ', 'n', '0', 'f', '', ' ', null, undefined]) assert.deepEqual(coerceField(field, value), { column: 'taxable', value: false })
+  for (const value of ['false-ish', 'truthy', 2, -1, 0.5, NaN, Infinity, [], ['yes'], { enabled: true }]) assert.deepEqual(coerceField(field, value), { error: 'taxable must be a boolean' })
 })
