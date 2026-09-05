@@ -1,3 +1,4 @@
+import { documentRevisionSql, isDocumentRevisionToken } from "@openbooks/engine/src/document-revision.ts"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
@@ -41,19 +42,9 @@ const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 const STALE_REVISION = 'this order changed after you opened it; reload and review the latest revision'
 
-/**
- * Mandatory optimistic-concurrency fence for every mutating order request.
- * The caller echoes documents.updated_at as expectedUpdatedAt; a missing,
- * malformed, or non-current token is refused before any side effect. Both
- * sides compare at millisecond precision: the wire token is an ISO string, so
- * SQL equality against the stored microsecond timestamp would never hold
- * (same idiom as parties/[id] and lib/documents).
- */
+/** Compare the opaque, six-digit revision returned by the order reader. */
 function staleRevision(expected: unknown, actual: unknown): boolean {
-  if (typeof expected !== 'string' || expected === '') return true
-  const expectedTime = new Date(expected).getTime()
-  const actualTime = new Date(actual as string | number | Date).getTime()
-  return Number.isNaN(expectedTime) || expectedTime !== actualTime
+  return !isDocumentRevisionToken(expected) || expected !== actual
 }
 
 /** GET: full order payload (header + lines + links) scoped to the org. */
@@ -106,8 +97,8 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     const { user } = gate
     const { id } = await params
 
-    const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; updated_at: Date }>(
-      sql`select status, document_date, subsidiary_id as "subsidiaryId", updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; updated_at: string }>(
+      sql`select status, document_date, subsidiary_id as "subsidiaryId", ${documentRevisionSql(sql`updated_at`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
     ))
     if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const recordDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
@@ -180,7 +171,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           return NextResponse.json(order)
         } catch (error) {
           if (error instanceof DocumentVoidError) {
-            return NextResponse.json({ error: error.message }, { status: 422 })
+            return NextResponse.json({ error: error.message }, { status: error.status })
           }
           throw error
         }
@@ -196,9 +187,9 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           status: string
           party_id: string | null
           total: string
-          updated_at: Date
+          updated_at: string
         }>(sql`
-          select status, party_id, total, updated_at
+          select status, party_id, total, ${documentRevisionSql(sql`updated_at`)} as updated_at
             from documents
            where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
            for update
@@ -364,8 +355,8 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     }
 
     const mutation = await db.transaction(async (tx) => {
-      const locked = (await tx.execute<{ status: string; updated_at: Date }>(sql`
-        select status, updated_at
+      const locked = (await tx.execute<{ status: string; updated_at: string }>(sql`
+        select status, ${documentRevisionSql(sql`updated_at`)} as updated_at
           from documents
          where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
          for update
@@ -465,8 +456,8 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
       // Draft discard is another lifecycle mutation. Own the same aggregate
       // lock used by issue/void before deleteDocument reads draft status, so a
       // delete that waited behind issuance cannot remove the issued order.
-      const owned = (await db.execute<{ subsidiaryId: string | null; updated_at: Date }>(sql`
-        select subsidiary_id as "subsidiaryId", updated_at
+      const owned = (await db.execute<{ subsidiaryId: string | null; updated_at: string }>(sql`
+        select subsidiary_id as "subsidiaryId", ${documentRevisionSql(sql`updated_at`)} as updated_at
           from documents
          where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
          for update
@@ -506,8 +497,8 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
 
     // Scope check: the source must be this kind, in the caller's org, and
     // inside the caller's subsidiary scope.
-    const owns = (await db.execute<{ subsidiaryId: string | null; updated_at: Date }>(
-      sql`select subsidiary_id as "subsidiaryId", updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    const owns = (await db.execute<{ subsidiaryId: string | null; updated_at: string }>(
+      sql`select subsidiary_id as "subsidiaryId", ${documentRevisionSql(sql`updated_at`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
     ))
     const source = owns.rows[0]
     if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -522,6 +513,7 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
     try {
       const res = await convertOrder(user.orgId, user.id, id, body.targetKind, {
         creditOverrideReason: body.creditOverrideReason,
+        expectedUpdatedAt: body.expectedUpdatedAt,
       })
       return NextResponse.json(res)
     } catch (e) {

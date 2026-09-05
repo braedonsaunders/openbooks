@@ -567,3 +567,33 @@ The broader order/lifecycle review then found millisecond-truncated revision
 checks in sales-order issuance, order mutations and document void. The void
 service also checks its token before acquiring the claim lock and accepts
 impossible dates. Those are open findings for the next continuation.
+
+## Exact order and void revisions — continuation from cee45822
+
+Thirteen real-database regressions failed against the preceding implementation.
+Order reads truncated PostgreSQL revisions to milliseconds; issuance, editing,
+discard and void could accept a token superseded by one microsecond. Void checked
+its revision before acquiring the aggregate lock, and conversion discarded the
+HTTP token before its locked service call. Both could act on an edit committed
+while the command waited. Explicit empty void dates silently selected today;
+impossible dates escaped domain validation and failed later in PostgreSQL.
+
+A shared revision formatter preserves all six fractional digits. Order readers
+and locked mutation checks now use that opaque token, and conversion carries it
+through to the service lock. Void acquires the parent lock before reading and
+validating the revision and returns a 409 conflict without material effects.
+Explicit invalid dates fail as domain errors; only an omitted date defaults.
+Valid current-token issuance, void and quote conversion remain supported.
+
+Focused verification passed all 67 cases, including the new lock races, exact
+wire reads, positive lifecycle commands, three-digit token rejection, existing
+credit controls, before-void rollback and atomic correction tests. All 3,040 canonical
+unit cases passed with the transpiler cache disabled after an initial run
+reported fewer cases. Engine/web typechecks, the locked-dependency production
+build, all 11 browser tests and lint passed (732 warnings, zero errors; 398
+explicit anys). Evidence is retained in thread storage under
+`audit-document-revision-2026-09-05`. Browser and Redis processes stopped.
+
+The next settings review found that the email configuration HTTP writer ignores
+the engine's optional revision fence. Its reader and engine comparison also
+truncate revisions. Those remain open until the settings continuation lands.

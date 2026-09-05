@@ -81,7 +81,7 @@ export async function POST(
     )
   } catch (error) {
     if (error instanceof DocumentVoidError) {
-      return NextResponse.json({ error: error.message }, { status: 422 })
+      return NextResponse.json({ error: error.message }, { status: error.status })
     }
     throw error
   }

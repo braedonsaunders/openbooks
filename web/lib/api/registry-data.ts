@@ -1,3 +1,6 @@
+import { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts';
+export { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken };
+
 /**
  * Pure API registry data + type mappings — NO db / server-only imports, so it
  * is unit-testable and safe to share. The db-backed `loadApiSchema` /
@@ -178,16 +181,8 @@ export const RECORD_TYPE_BY_KEY = new Map(API_RECORD_TYPES.map((t) => [t.key, t]
  * fractional digits; callers must treat the value as opaque and copy it
  * verbatim instead of parsing it through JavaScript Date.
  */
-export const DOCUMENT_REVISION_PATTERN =
-  "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$";
-const DOCUMENT_REVISION_REGEX = new RegExp(DOCUMENT_REVISION_PATTERN);
-
 export const DOCUMENT_REVISION_DESCRIPTION =
   "Exact persisted document revision used for optimistic concurrency. Copy the returned updated_at value verbatim into expectedUpdatedAt for updates; never generate, parse, or reformat it.";
-
-export function isDocumentRevisionToken(value: unknown): value is string {
-  return typeof value === "string" && DOCUMENT_REVISION_REGEX.test(value);
-}
 
 export interface ApiField {
   name: string;

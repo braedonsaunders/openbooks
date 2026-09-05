@@ -576,16 +576,15 @@ test("a stale exact-revision token refuses the void before any before_void effec
     await seedBeforeVoidScript(org, actorId, journalScriptSource(org, `void-fence-${randomUUID()}`));
 
     const storedUpdatedAt = (
-      await db.execute<{ updated_at: Date | string }>(sql`
-        select updated_at
+      await db.execute<{ updated_at: string }>(sql`
+        select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
           from documents
          where id = ${documentId} and org_id = ${org.orgId}
       `)
     ).rows[0]!.updated_at;
-    // The client echoes documents.updated_at as an ISO string truncated to
-    // milliseconds; both sides of the fence compare at that precision.
-    const exactToken = new Date(new Date(storedUpdatedAt as string).getTime()).toISOString();
-    const staleToken = new Date(new Date(exactToken).getTime() - 3_600_000).toISOString();
+    const exactToken = storedUpdatedAt;
+    const staleToken = exactToken.replace(/(\d)Z$/, (_, digit: string) => `${(Number(digit) + 1) % 10}Z`);
+    assert.notEqual(staleToken, exactToken);
 
     await assert.rejects(
       requestDocumentVoid({
