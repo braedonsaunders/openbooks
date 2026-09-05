@@ -3662,6 +3662,20 @@ export async function commitPayRun(input: {
         employeeTaxYearFenceKey(orgId, e.employee_party_id, run.tax_year),
       ),
     );
+    // Historical component policy changes and deletes take the component
+    // row's write lock. Hold the same rows through freshness and commit:
+    // a later editor waits, then the database history guard sees the committed
+    // run; an earlier editor finishes before this transaction checks freshness.
+    await tx.execute(sql`
+      select c.id from pay_components c
+       where c.org_id = ${orgId} and exists (
+         select 1 from pay_stub_lines l
+         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+          where l.org_id = c.org_id and l.component_id = c.id
+            and s.pay_run_document_id = ${documentId}
+       )
+       order by c.id for share of c
+    `);
     // The freshness gate, asked ON THIS TRANSACTION so an engine caller that
     // skips the route's pre-flight gets the same refusal, against the same
     // snapshot the claim below will run under. Dynamic import keeps the

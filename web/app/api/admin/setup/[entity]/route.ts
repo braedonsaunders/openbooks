@@ -1102,7 +1102,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   } catch (e) {
     if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
     const databaseError = e as { constraint?: string; cause?: { constraint?: string; message?: string }; message?: string }
-    if ((databaseError.cause?.constraint ?? databaseError.constraint) === 'asset_category_posted_policy') {
+    if (['asset_category_posted_policy', 'pay_component_historical_policy'].includes(databaseError.cause?.constraint ?? databaseError.constraint ?? '')) {
       return NextResponse.json({ error: databaseError.cause?.message ?? databaseError.message }, { status: 409 })
     }
     // Same storage-authority mapping as POST: an edit that moves a row onto an
@@ -1167,6 +1167,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
     if (e instanceof SetupWriteRefusal) return NextResponse.json({ error: e.message }, { status: e.status })
     if (e instanceof Error && e.message === 'default-required') {
       return NextResponse.json({ error: 'default-required' }, { status: 409 })
+    }
+    const databaseError = e as { constraint?: string; cause?: { constraint?: string; message?: string }; message?: string }
+    if ((databaseError.cause?.constraint ?? databaseError.constraint) === 'pay_component_historical_policy') {
+      return NextResponse.json({ error: databaseError.cause?.message ?? databaseError.message }, { status: 409 })
     }
     // Foreign-key violation → the record is referenced elsewhere.
     if (pgErrorCode(e) === '23503') {
