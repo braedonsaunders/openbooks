@@ -172,14 +172,15 @@ control defects or unverified critical operational journeys remain open.
 
 The competitive comparison was refreshed against primary vendor documentation
 on September 5, 2026. These are documented vendor capabilities, not independent
-acceptance results:
+acceptance results. The primary-source bibliography is retained in the audit
+evidence packet outside the vendor-neutral product repository:
 
 | Benchmark | External capability | OpenBooks evidence and remaining bar |
 |---|---|---|
-| Multi-entity financial control | Consolidation, intercompany workflows, currency handling and role-based access. [OneWorld product documentation](https://www.netsuite.com/portal/assets/public-pdf/ds-netsuite-oneworld.pdf) | Native equivalents exist, with targeted authorization, exact-money and reconciliation regressions recorded here. Repeated boundary defects show that module breadth alone does not establish consistent control. |
-| Auditability and customization | Audit trails, access logs, workflow and customization are part of the documented platform. [OneWorld product documentation](https://www.netsuite.com/portal/assets/public-pdf/ds-netsuite-oneworld.pdf) | OpenBooks has shared audit/extension machinery; the asset-editor fixes and open custom-field-definition findings demonstrate remaining entry-point gaps. Every material write must produce reliable evidence. |
-| Production planning | Supply plans use demand, lead times and planning rules to recommend purchases and work orders. [Supply Planning documentation](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_159171867422.html) | The [repository's declared scope](../../README.md) explicitly excludes a full manufacturing/MRP suite beyond light assembly builds. This remains a capability gap, not something repaired by inventory bug fixes. |
-| Scale and operability | The planning documentation itself recommends testing larger datasets and identifies workload-dependent limits. [Supply Planning documentation](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_159171867422.html) | OpenBooks needs measured workload limits, restore/failover results and representative large-ledger journeys. A clean build or test count does not provide that evidence. |
+| Multi-entity financial control | Consolidation, intercompany workflows, currency handling and role-based access. | Native equivalents exist, with targeted authorization, exact-money and reconciliation regressions recorded here. Repeated boundary defects show that module breadth alone does not establish consistent control. |
+| Auditability and customization | Audit trails, access logs, workflow and customization are part of the documented platform. | OpenBooks has shared audit/extension machinery; the asset-editor fixes and open custom-field-definition findings demonstrate remaining entry-point gaps. Every material write must produce reliable evidence. |
+| Production planning | Supply plans use demand, lead times and planning rules to recommend purchases and work orders. | The [repository's declared scope](../../README.md) explicitly excludes a full manufacturing/MRP suite beyond light assembly builds. This remains a capability gap, not something repaired by inventory bug fixes. |
+| Scale and operability | The planning documentation itself recommends testing larger datasets and identifies workload-dependent limits. | OpenBooks needs measured workload limits, restore/failover results and representative large-ledger journeys. A clean build or test count does not provide that evidence. |
 
 
 ## Lifecycle review — continuation from 404697ee
@@ -1612,3 +1613,40 @@ Continuing traces confirmed missing audit evidence for custom-field definition
 writes, rejection of the registry-supported fixed-asset custom-field target,
 and a read-only display-mode spelling mismatch between settings and the shared
 renderer. These remain open for the next corrections.
+
+
+## Custom-field definition evidence and stale-editor controls
+
+Continuation from `0c774bb7` found that definition creation and edits wrote no
+actor or audit record. PATCH also rebuilt omitted fields from an unlocked read,
+allowing concurrent administrators to silently overwrite each other. Fourteen
+real-database regression cases reproduced twelve failures before correction.
+
+Creation and edits now write actor, request ID and complete before/after evidence
+inside the same transaction as the definition. PATCH locks the tenant-scoped row,
+checks the exact six-digit revision, and advances it monotonically. The settings
+page returns that lossless revision; the drawer pins it to its initial draft and
+handles transport failure without losing input or permanently disabling Save.
+Malformed and absent field IDs now reach the native not-found surface instead
+of throwing a UUID database error or opening a creation drawer.
+
+Verification: 14 database cases plus 6 adjacent route cases passed, including
+forced audit refusal, waiting writers, competing edits, permission and foreign
+record checks. Fifteen production-build browser assertions passed for two-editor
+conflicts, exact revisions, reviewed retries, transport recovery and missing
+records. Web type checks, the locked production build and all 3,118 canonical
+unit tests passed (150,839.497875 ms; zero skips). The existing lint and explicit-any
+limits were retained. Evidence is in `audit-custom-field-controls-2026-09-05`.
+The browser uses a disposable tenant and the runtime RLS database role.
+
+The first unit invocation also caught a documentation regression from the prior
+commit: external benchmark URLs tripped the product-neutrality guard. The source
+bibliography is now retained in the private evidence packet; the public comparison
+remains vendor-neutral, and the unchanged gate passes. Browser test selectors were
+corrected to use the actual translated transport error and the framework's
+streamed not-found UI; neither correction changed application behavior.
+
+Open custom-field traces remain: registry/creation target divergence, read-only
+mode handling, configuration precision/validation, duplicate creation concurrency,
+and app-provisioned definition controls. This checkpoint does not certify those
+remaining paths or replace the broader integration checkpoint.

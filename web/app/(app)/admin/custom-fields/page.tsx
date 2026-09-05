@@ -3,13 +3,14 @@ import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 import { requirePermission } from '../../../../lib/authz'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
-import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
+import { buildListDrawerHref, parseListParams, pickString, isUuid } from '../../../../lib/list-params'
 import { disabledCustomFieldTargets } from '../../../../lib/customization/gates'
 import { FieldDrawer, NewFieldButton } from './FieldDrawer'
 
@@ -41,6 +42,7 @@ export default async function CustomFields({
   const params = parseListParams(sp, { sort: 'target', allowedSorts: ['target'] as const, perPage: 100 })
   const target = pickString(sp.target)
   const fieldId = pickString(sp.field)
+  if (fieldId && fieldId !== 'new' && !isUuid(fieldId)) notFound()
   const orgId = authz.user.orgId
   const hidden = await disabledCustomFieldTargets(orgId)
   if (target && hidden.tables.includes(target)) notFound()
@@ -66,11 +68,12 @@ export default async function CustomFields({
     (db.execute(sql`select target_table, count(*) as n from custom_field_defs where org_id = ${orgId} and ${kindHide} and ${tableHide} group by 1`)),
     db.execute(sql`select count(*) as n from custom_field_defs where ${where}`) as any,
     fieldId && fieldId !== 'new'
-      ? (db.execute(sql`select * from custom_field_defs where id = ${fieldId} and org_id = ${orgId}`) as any)
+      ? (db.execute(sql`select custom_field_defs.*, ${documentRevisionSql(sql`updated_at`)} as updated_at from custom_field_defs where id = ${fieldId} and org_id = ${orgId}`) as any)
       : null,
   ])
 
   const openRow = open?.rows[0] ?? null
+  if (fieldId && fieldId !== 'new' && !openRow) notFound()
   if (openRow && (
     hidden.kinds.includes(openRow.target_kind)
     || (openRow.target_kind == null && hidden.tables.includes(openRow.target_table))
@@ -149,7 +152,7 @@ export default async function CustomFields({
         <Pagination basePath="/admin/custom-fields" currentParams={sp} total={Number(totalRow.rows[0].n)} page={params.page} perPage={params.perPage} />
       </div>
 
-      {fieldId ? <FieldDrawer def={openRow} hiddenKinds={hidden.kinds} hiddenTables={hidden.tables} /> : null}
+      {fieldId ? <FieldDrawer key={fieldId} def={openRow} hiddenKinds={hidden.kinds} hiddenTables={hidden.tables} /> : null}
     </ListPageLayout>
   )
 }

@@ -3,6 +3,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 type ExistingField = {
+  updated_at: string
   target_table: string
   target_kind: string | null
   key: string
@@ -80,13 +81,15 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.custom-fields-route-test')]
       const sqlText = globalThis.openbooksCustomFieldsSqlText
       export const db = {
+        async transaction(run) { return run(db) },
         async execute(query) {
           const text = sqlText(query)
           state.queries.push(text)
           if (text.includes('from custom_field_defs')) {
             return { rows: state.existing ? [state.existing] : [] }
           }
-          if (text.includes('update custom_field_defs')) return { rows: [] }
+          if (text.includes('update custom_field_defs')) return { rows: [state.existing] }
+          if (text.includes('insert into audit_log')) return { rows: [] }
           throw new Error('unexpected database query: ' + text)
         },
       }
@@ -130,6 +133,7 @@ function baseField(overrides: Partial<ExistingField> = {}): ExistingField {
     target_table: 'documents',
     target_kind: 'vendor_bill',
     key: 'shipping_zone',
+    updated_at: '2026-09-05T00:00:00.123456Z',
     label: 'Shipping zone',
     field_type: 'text',
     config: {},
@@ -150,7 +154,7 @@ function patchField(body: Record<string, unknown>): Promise<Response> {
     new Request('http://openbooks.test/api/admin/custom-fields', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: FIELD_ID, ...body }),
+      body: JSON.stringify({ id: FIELD_ID, expectedUpdatedAt: '2026-09-05T00:00:00.123456Z', ...body }),
     }),
   )
 }
@@ -191,6 +195,6 @@ test('PATCH rejects structural target changes but accepts a compatible type upda
     isRequired: true,
   })
   assert.equal(compatible.status, 200)
-  assert.deepEqual(await compatible.json(), { ok: true })
+  assert.deepEqual(await compatible.json(), { ok: true, updatedAt: '2026-09-05T00:00:00.123456Z' })
   assert.equal(state.queries.filter((query) => query.includes('update custom_field_defs')).length, 1)
 })
