@@ -2,9 +2,9 @@
 
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { COUNTRY_CODES } from '../countries'
-import { featureEnabled, resolvedFeatureState } from '../features'
+import { featureEnabled, featureGateLockKey, resolvedFeatureState } from '../features'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity, type SetupField } from '../setup/registry'
 import { buildRow, idColumn } from '../setup/coerce'
 import { auditSetupChange as audit } from '../setup/audit'
@@ -75,18 +75,21 @@ export function setupDescriptor(entity: SetupEntity): ResourceDescriptor {
     iconKey: entity.iconKey || 'sliders',
     readPermission: 'admin.setup.manage',
     writePermission: 'admin.setup.manage',
-    supportsImport: true,
+    supportsImport: !entity.readOnly,
     naturalKey: entity.naturalKey,
   }
 }
 
 async function gatedSetupEntity(entity: SetupEntity, orgId: string): Promise<SetupEntity> {
   const features = await resolvedFeatureState(orgId)
-  return setupEntityForFeatureState(entity, {
+  const gated = setupEntityForFeatureState(entity, {
     multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
     equipment: featureEnabled(features, 'equipment'),
     fieldTickets: featureEnabled(features, 'fieldTickets'),
   })
+  return entity.key === 'item-rate-books' && !featureEnabled(features, 'multiCurrency')
+    ? { ...gated, fields: gated.fields.filter((field) => field.key !== 'currency') }
+    : gated
 }
 
 export function setupResource(entity: SetupEntity, orgId: string): DataResource {
@@ -117,7 +120,24 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
       return { fields, columns: fields.map((f) => ({ key: f.key, label: f.label })), rows: out }
     },
     async write(rows, mode, ctx) {
-      return writeSetup(await gatedSetupEntity(entity, ctx.orgId), rows, mode, ctx)
+      const refuse = (message: string): WriteOutcome => ({
+        created: 0, updated: 0, failed: rows.length,
+        errors: rows.map((_, index) => ({ row: index + 1, message })),
+      })
+      if (entity.readOnly) return refuse('resource is read-only')
+      if (ctx.orgId !== orgId) return refuse('resource belongs to another organization')
+      return withOrgTransaction(orgId, async () => {
+        // Keep discovery, field validation and every row savepoint on the same
+        // connection. A disable either precedes this import or waits for its
+        // entire transaction, including the import job's audit evidence.
+        await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
+        const features = await resolvedFeatureState(orgId)
+        if (entity.featureKey && !featureEnabled(features, entity.featureKey)) return refuse('resource is not available')
+        const gated = await gatedSetupEntity(entity, orgId)
+        const available = new Set(gated.fields.map((field) => field.key))
+        const unavailable = entity.fields.filter((field) => !available.has(field.key)).map((field) => field.key)
+        return writeSetup(gated, rows, mode, ctx, unavailable)
+      })
     },
   }
 }
@@ -136,6 +156,7 @@ async function writeSetup(
   rows: Record<string, unknown>[],
   mode: ImportMode,
   ctx: WriteCtx,
+  unavailableFields: readonly string[],
 ): Promise<WriteOutcome> {
   const resolver = new RefResolver(ctx.orgId)
   const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
@@ -145,9 +166,10 @@ async function writeSetup(
     const rowNo = i + 1
     const src = { ...rows[i] }
     try {
-      if (src.showOnFieldTicket !== undefined && !entity.fields.some((field) => field.key === 'showOnFieldTicket')) {
+      const unavailable = unavailableFields.find((key) => src[key] !== undefined && src[key] !== null && src[key] !== '')
+      if (unavailable) {
         outcome.failed++
-        outcome.errors.push({ row: rowNo, message: 'showOnFieldTicket is not available' })
+        outcome.errors.push({ row: rowNo, message: `${unavailable} is not available` })
         continue
       }
 
@@ -263,6 +285,11 @@ async function writeSetup(
             await tx.execute(sql`savepoint setup_import_row`)
             try {
               const cols = [...built.cols]
+              if (entity.key === 'item-rate-books' && unavailableFields.includes('currency')) {
+                const org = (await tx.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${ctx.orgId}`)).rows[0]
+                if (!org) throw new Error('organization not found')
+                cols.push({ column: 'currency', value: org.base_currency })
+              }
               if (entity.orgScoped) cols.push({ column: 'org_id', value: ctx.orgId })
               if (entity.actorCols) {
                 cols.push({ column: 'created_by', value: ctx.actorId })
