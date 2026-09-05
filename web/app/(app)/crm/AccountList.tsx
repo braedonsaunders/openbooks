@@ -38,7 +38,7 @@ export async function AccountList({
   let drawer: React.ReactNode = null
   if (openId && isUuid(openId)) {
     const [party, account, statuses, owners, territories, sources] = await Promise.all([
-      loadParty(openId, authz.user.orgId),
+      loadParty(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
       loadCrmAccount(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
       db.execute(sql`select id,name,lifecycle_stage from crm_account_statuses where org_id=${authz.user.orgId} and is_active order by lifecycle_stage,sequence`) as any,
       db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`) as any,

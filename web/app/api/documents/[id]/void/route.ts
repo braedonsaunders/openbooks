@@ -1,3 +1,4 @@
+import { isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -65,6 +66,10 @@ export async function POST(
   const body = (parsedBody.data) as {
     reason?: string
     reversalDate?: string | null
+    expectedUpdatedAt?: string
+  }
+  if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    return NextResponse.json({ error: 'Reload the document and supply its exact revision before voiding' }, { status: 409 })
   }
   try {
     const result = await requestDocumentVoid({
@@ -74,6 +79,7 @@ export async function POST(
       reason: body.reason ?? '',
       reversalDate: body.reversalDate,
       source: 'ui',
+      expectedUpdatedAt: body.expectedUpdatedAt,
     })
     return NextResponse.json(
       { ok: true, ...result },

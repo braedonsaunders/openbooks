@@ -1,3 +1,4 @@
+import { isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from './exact-decimal'
 
@@ -89,8 +90,8 @@ export function parseWorkBreakdownTaskInput(input: unknown): WorkBreakdownTaskIn
 }
 
 export function parseExpectedTaskVersion(value: unknown): string {
-  if (typeof value !== 'string' || !value.trim() || !Number.isFinite(Date.parse(value))) {
+  if (!isDocumentRevisionToken(value)) {
     throw new ProjectWorkBreakdownError('A valid task version is required')
   }
-  return new Date(value).toISOString()
+  return value
 }

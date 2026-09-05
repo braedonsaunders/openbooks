@@ -630,3 +630,42 @@ test workaround now disables concurrent optimizing compilation as well as
 Sparkplug. The restarted full suite finished normally. Linux CI and production
 runtime flags are unchanged. Lint/type ceilings remain 732/398. Receipts live
 in thread storage under `audit-email-revision-2026-09-05`.
+
+## Party visibility and reviewed changes — continuation from 3a03e34e
+
+The party regression confirmed a restricted reader receiving both visible and
+hidden-entity invoices in its totals. Shared party reads now require subsidiary
+scope and apply it to the parent, transaction counts, dates, currency totals and
+additional subsidiary assignments. Directory counts, server-page drawers and
+sales-representative pickers use the same visibility predicate. Scoped saves
+replace only visible subsidiary associations; a separate baseline test proved
+that the previous implementation deleted a hidden association. Unrestricted
+readers retain the complete position; empty transaction scope produces no totals.
+
+Party revisions now remain exact from read through the compare-and-set write.
+The real driver returns timestamp text, so the initial theory that every valid
+save failed was disproved. The actual defect was the millisecond precheck
+accepting a stale token and then overwriting with the freshly read database
+revision. The write now predicates on the caller's exact token.
+
+Project task readers and request parsing preserve all six revision digits, and
+accepted writes advance their token even inside one transaction. The task lock
+now names only the task table: two independent editors previously upgraded
+shared project locks and PostgreSQL rejected one with a 40P01 deadlock.
+
+The document drawer now sends JSON and its current revision when discarding a
+draft. Its previous empty request was rejected by the shared JSON parser. Both
+interactive discard and void require the reviewed token, with the engine
+checking it after taking the document lock. The void HTTP route previously
+discarded a supplied stale token and returned 200 after voiding the document.
+The new cases cover stale/missing refusal and successful current-token commands.
+
+This continuation passed 38 focused cases, all 3,040 canonical unit tests,
+engine/web and E2E typechecks, the production build, all 13 browser tests and
+all 19 Redis-backed outbox tests. The new browser case creates a disposable
+invoice and discards it through the actual drawer and confirmation dialog,
+asserting the outgoing six-digit token. A fixture navigation mistake in its
+first run was corrected before the successful run. Lint/type ceilings remain
+732/398. The temporary browser server and Redis were stopped after testing.
+Receipts are retained under `audit-party-task-lifecycle-2026-09-05` in thread
+storage; the separate full integration run targets frozen commit `3a03e34e`.

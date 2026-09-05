@@ -2,6 +2,8 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
+import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
@@ -175,7 +177,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!scope.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const denied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
   if (denied) return denied
-  const payload = await loadParty(id, gate.user.orgId)
+  const payload = await loadParty(id, gate.user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(payload)
 }
@@ -196,7 +198,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const existing = await db.execute<{
     display_name: string
     is_active: boolean
-    updated_at: Date
+    updated_at: string
     customer_hold: boolean
     customer_hold_reason: string | null
     vendor_hold: boolean
@@ -204,7 +206,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     subsidiaryId: string | null
     before: Record<string, unknown>
   }>(sql`
-    select p.display_name, p.is_active, p.updated_at,
+    select p.display_name, p.is_active, ${documentRevisionSql(sql`p.updated_at`)} as updated_at,
            p.subsidiary_id as "subsidiaryId",
            coalesce(cr.is_on_hold, false) as customer_hold,
            cr.hold_reason as customer_hold_reason,
@@ -249,7 +251,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     existingParty.is_active === false &&
     existingParty.display_name === 'New party' &&
     Boolean(displayName && displayName !== 'New party')
-  if (!body.expectedUpdatedAt || new Date(body.expectedUpdatedAt).getTime() !== new Date(existingParty.updated_at).getTime()) {
+  if (!isDocumentRevisionToken(body.expectedUpdatedAt) || body.expectedUpdatedAt !== existingParty.updated_at) {
     return NextResponse.json(
       {
         error: 'this party changed after you opened it; reload and review the latest revision',
@@ -372,9 +374,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         custom = coalesce(${cleanedCustom ? JSON.stringify(cleanedCustom) : null}::jsonb, custom),
         subsidiary_id = ${subsidiaryId !== undefined ? subsidiaryId : sql`subsidiary_id`},
         is_active = ${body.isActive !== undefined ? body.isActive : completesPlaceholder ? true : sql`is_active`},
-        updated_at = now(), updated_by = ${user.id}
+        updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
       where id = ${id} and org_id = ${user.orgId}
-        and updated_at = ${existingParty.updated_at}
+        and updated_at = ${body.expectedUpdatedAt}::timestamptz
       returning id
       `)
       if (!updatedParty.rows[0]) {
@@ -383,7 +385,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       if (additionalSubsidiaryIds !== undefined) {
         await tx.execute(sql`
-          delete from party_subsidiaries where org_id = ${user.orgId} and party_id = ${id}`)
+          delete from party_subsidiaries where org_id = ${user.orgId} and party_id = ${id}
+            ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}`)
         for (const extraId of additionalSubsidiaryIds) {
           await tx.execute(sql`
             insert into party_subsidiaries
@@ -704,6 +707,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     throw e
   }
 
-  const payload = await loadParty(id, user.orgId)
+  const payload = await loadParty(id, user.orgId, gate.allowedSubsidiaryIds)
   return NextResponse.json(payload)
 }

@@ -47,8 +47,8 @@ test('WBS input validation is strict and preserves exact four-decimal values', (
 
 test('WBS updates require a valid optimistic-concurrency version', () => {
   assert.equal(
-    parseExpectedTaskVersion('2026-07-28T12:34:56.000Z'),
-    '2026-07-28T12:34:56.000Z',
+    parseExpectedTaskVersion('2026-07-28T12:34:56.000000Z'),
+    '2026-07-28T12:34:56.000000Z',
   )
   assert.throws(() => parseExpectedTaskVersion(undefined), /valid task version/)
   assert.throws(() => parseExpectedTaskVersion('not-a-date'), /valid task version/)
@@ -148,16 +148,16 @@ const scopeMockSources = new Map<string, string>([
       }
       function taskRows(statement) {
         if (state.allowedSubsidiaryIds !== null && !statement.includes('subsidiary_id')) {
-          return [{ id: 'task-1', project_id: 'project-1', code: '01', name: 'Denied task', status: 'open', estimated_hours: '2.0000', estimated_cost: '100.0000', updated_at: '2026-08-01T00:00:00.000Z' }]
+          return [{ id: 'task-1', project_id: 'project-1', code: '01', name: 'Denied task', status: 'open', estimated_hours: '2.0000', estimated_cost: '100.0000', updated_at: '2026-08-01T00:00:00.000000Z' }]
         }
         if (state.allowedSubsidiaryIds !== null && (!state.projectSubsidiary || !state.allowedSubsidiaryIds.has(state.projectSubsidiary))) return []
-        return [{ id: 'task-1', project_id: 'project-1', code: '01', name: 'Allowed task', status: 'open', estimated_hours: '2.0000', estimated_cost: '100.0000', updated_at: '2026-08-01T00:00:00.000Z' }]
+        return [{ id: 'task-1', project_id: 'project-1', code: '01', name: 'Allowed task', status: 'open', estimated_hours: '2.0000', estimated_cost: '100.0000', updated_at: '2026-08-01T00:00:00.000000Z' }]
       }
       async function execute(query) {
         const statement = text(query)
         state.calls.push(statement)
-        if (statement.includes('insert into project_tasks')) return { rows: [{ id: 'task-created', project_id: 'project-1', code: '02', name: 'Allowed create', status: 'open', estimated_hours: '1.0000', estimated_cost: '50.0000', updated_at: '2026-08-01T00:00:00.000Z' }] }
-        if (statement.includes('update project_tasks')) return { rows: [{ id: 'task-1', project_id: 'project-1', code: '01', name: 'Allowed update', status: 'open', estimated_hours: '3.0000', estimated_cost: '150.0000', updated_at: '2026-08-01T00:00:00.000Z' }] }
+        if (statement.includes('insert into project_tasks')) return { rows: [{ id: 'task-created', project_id: 'project-1', code: '02', name: 'Allowed create', status: 'open', estimated_hours: '1.0000', estimated_cost: '50.0000', updated_at: '2026-08-01T00:00:00.000000Z' }] }
+        if (statement.includes('update project_tasks')) return { rows: [{ id: 'task-1', project_id: 'project-1', code: '01', name: 'Allowed update', status: 'open', estimated_hours: '3.0000', estimated_cost: '150.0000', updated_at: '2026-08-01T00:00:00.000000Z' }] }
         if (statement.includes('from project_tasks')) return { rows: taskRows(statement) }
         if (statement.includes('from projects')) return { rows: projectRows(statement) }
         return { rows: [] }
@@ -312,7 +312,7 @@ async function runWorkBreakdownScopeTest(): Promise<void> {
       taskId: 'task-1',
       actorId: 'user-1',
       allowedSubsidiaryIds: scopeState.allowedSubsidiaryIds,
-      expectedUpdatedAt: '2026-08-01T00:00:00.000Z',
+      expectedUpdatedAt: '2026-08-01T00:00:00.000000Z',
       input: {
         code: '01',
         name: 'Denied update',
@@ -355,7 +355,7 @@ async function runWorkBreakdownScopeTest(): Promise<void> {
     taskId: 'task-1',
     actorId: 'user-1',
     allowedSubsidiaryIds: scopeState.allowedSubsidiaryIds,
-    expectedUpdatedAt: '2026-08-01T00:00:00.000Z',
+    expectedUpdatedAt: '2026-08-01T00:00:00.000000Z',
     input: {
       code: '01',
       name: 'Allowed update',
@@ -385,7 +385,7 @@ async function runWorkBreakdownPatchScopeTest(): Promise<void> {
         status: 'open',
         estimatedHours: '3.0000',
         estimatedCost: '150.0000',
-        expectedUpdatedAt: '2026-08-01T00:00:00.000Z',
+        expectedUpdatedAt: '2026-08-01T00:00:00.000000Z',
       }),
     }),
     { params: Promise.resolve({ id: '00000000-0000-4000-8000-00000000c001', taskId: '00000000-0000-4000-8000-00000000d001' }) },
@@ -413,7 +413,7 @@ async function runWorkBreakdownPatchScopeTest(): Promise<void> {
         status: 'open',
         estimatedHours: '3.0000',
         estimatedCost: '150.0000',
-        expectedUpdatedAt: '2026-08-01T00:00:00.000Z',
+        expectedUpdatedAt: '2026-08-01T00:00:00.000000Z',
       }),
     }),
     { params: Promise.resolve({ id: '00000000-0000-4000-8000-00000000c001', taskId: '00000000-0000-4000-8000-00000000d001' }) },

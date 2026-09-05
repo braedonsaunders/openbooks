@@ -1,5 +1,6 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
+import { documentRevisionSql, isDocumentRevisionToken } from "./document-revision.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
@@ -11,21 +12,27 @@ import { releaseBillingProvenance, releaseVendorBillProvenance } from "./billing
  * entered approval, been issued, or affected the ledger it is part of the
  * books' evidence chain and must be cancelled/voided instead.
  */
-export class DeleteError extends Error {}
+export class DeleteError extends Error {
+  constructor(message: string, readonly status = 422) { super(message); }
+}
 
 export async function deleteDocument(
   documentId: string,
   userId: string | null,
   orgId: string,
-  audit: { source?: string; reason?: string } = {},
+  audit: { source?: string; reason?: string; expectedUpdatedAt?: string } = {},
 ): Promise<{ documentId: string }> {
   return db.transaction(async (tx) => {
     const [doc] = await tx
-      .select()
+      .select({ ...getTableColumns(schema.documents), revision: documentRevisionSql(sql`${schema.documents.updatedAt}`) })
       .from(schema.documents)
       .where(and(eq(schema.documents.id, documentId), eq(schema.documents.orgId, orgId)))
       .for("update");
     if (!doc) throw new DeleteError("document not found");
+    if (audit.expectedUpdatedAt !== undefined &&
+        (!isDocumentRevisionToken(audit.expectedUpdatedAt) || audit.expectedUpdatedAt !== doc.revision)) {
+      throw new DeleteError("this document changed after you opened it; reload and review the latest revision", 409);
+    }
     if (doc.status !== "draft") {
       throw new DeleteError(
         `${doc.documentNumber} is ${doc.status} and cannot be deleted — use the controlled void/cancel action`,

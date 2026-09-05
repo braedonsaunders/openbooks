@@ -97,11 +97,20 @@ export function subtreeIds(all: Pick<SubsidiaryOption, "id" | "parentId">[], sub
  * subsidiaries — the fail-closed predicate shared by every ad-hoc query that
  * fans out over documents outside the canonical list builders (global search,
  * party sublists, payment-run lists). Unrestricted callers get an empty
- * fragment; an empty set denies everything (`and false`).
+ * fragment; an empty set denies documents (`and false`). Master-data callers
+ * may explicitly allow org-wide null assignments, matching guardSubsidiaryScope.
  */
-export function subsidiaryVisibleFilter(column: SQL, allowed: ReadonlySet<string> | null): SQL {
-  if (!allowed) return sql``;
+export function subsidiaryVisibleFilter(
+  column: SQL,
+  allowed: ReadonlySet<string> | null,
+  options: { orgWideNull?: boolean } = {},
+): SQL {
+  if (allowed === null) return sql``;
+  if (!allowed) return sql` and false`;
   const ids = [...allowed];
+  if (options.orgWideNull) {
+    return sql` and (${column} is null or ${column} = any(${`{${ids.join(',')}}`}::uuid[]))`;
+  }
   return ids.length
     ? sql` and ${column} = any(${`{${ids.join(',')}}`}::uuid[])`
     : sql` and false`;
