@@ -2327,3 +2327,64 @@ test("an in-flight automatic remittance decision holds the run against a concurr
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
+
+for (const boundary of ['another run', 'missing parent', 'concurrent retry', 'stale parent', 'voided parent'] as const) {
+  test(`payment-file reprocessing enforces ${boundary}`, { skip: !DB }, async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() => createScratchUser(org.orgId, 'File lineage operator', 'admin'));
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId));
+      const first = await withOrgContext(org.orgId, () => generatePaymentFileArtifact(seeded.runId, org.orgId, actorId));
+      if (boundary === 'concurrent retry') {
+        const results = await Promise.all([1, 2].map(() => withOrgContext(org.orgId, () =>
+          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: first.id }))));
+        assert.equal(results[0]!.id, results[1]!.id, 'a retry must reuse the one successor, never fork the bank-file lineage');
+        const replay = await withOrgContext(org.orgId, () =>
+          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: first.id }));
+        assert.equal(replay.id, results[0]!.id);
+        const count = await withOrgContext(org.orgId, async () => (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from payment_files where payment_run_id=${seeded.runId} and org_id=${org.orgId}
+        `)).rows[0]!.n);
+        assert.equal(count, 2);
+      } else if (boundary === 'stale parent' || boundary === 'voided parent') {
+        if (boundary === 'stale parent') {
+          const second = await withOrgContext(org.orgId, () =>
+            generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: first.id }));
+          await withOrgContext(org.orgId, () =>
+            generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: second.id }));
+        } else {
+          await withOrgContext(org.orgId, () => db.execute(sql`
+            update payment_files set status='voided' where id=${first.id} and org_id=${org.orgId}
+          `));
+        }
+        await assert.rejects(withOrgContext(org.orgId, () =>
+          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: first.id })),
+          (error: unknown) => error instanceof PaymentError && /latest non-voided/.test(error.message));
+      } else {
+        const target = boundary === 'another run'
+          ? await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId))
+          : seeded;
+        const before = await withOrgContext(org.orgId, async () => (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from payment_files where org_id=${org.orgId}
+        `)).rows[0]!.n);
+        await assert.rejects(withOrgContext(org.orgId, () =>
+          generatePaymentFileArtifact(target.runId, org.orgId, actorId, {
+            reprocessFileId: boundary === 'missing parent' ? randomUUID() : first.id,
+          })), (error: unknown) => error instanceof PaymentError && /payment file.*not found/i.test(error.message));
+        const after = await withOrgContext(org.orgId, async () => (await db.execute<{ n: number; status: string }>(sql`
+          select (select count(*)::int from payment_files where org_id=${org.orgId}) as n,
+                 status from payment_files where id=${first.id} and org_id=${org.orgId}
+        `)).rows[0]!);
+        assert.deepEqual(after, { n: before, status: 'approved' });
+      }
+    } finally {
+      await withBypass(() => db.transaction(async (tx) => {
+        await tx.execute(sql`select set_config('openbooks.amend', 'on', true), set_config('openbooks.sandbox_wipe', 'on', true)`);
+        await tx.execute(sql`update orgs set env_kind='sandbox' where id=${org.orgId} and name like 'Scratch %'`);
+        await tx.execute(sql`delete from payment_events where org_id=${org.orgId} and payment_file_id is not null`);
+        await tx.execute(sql`delete from payment_files where org_id=${org.orgId}`);
+      }));
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  });
+}

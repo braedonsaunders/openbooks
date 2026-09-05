@@ -58,3 +58,24 @@ an operational issue appears.
 Run creation, approvals and segregation of duties, bank-file generation and
 delivery, settlement retries and reversals still require systematic lifecycle
 review. Passing these tests does not certify those remaining workflows.
+
+## Bank-file reprocessing follow-up
+
+Reprocessing now verifies that the parent artifact belongs to the requested
+organization and run before creating any stored file. A missing or unrelated
+parent raises a controlled domain error. Previously an unrelated run's file
+could become the parent, while a missing ID reached a raw foreign-key error.
+
+The run lock also serializes successor creation. Concurrent or repeated requests
+for the same parent return its existing live successor, preserving its bytes,
+approval state and audit identity. Older ancestors and voided parents cannot
+create a new branch of independently deliverable bank files; legitimate
+reprocessing proceeds from the latest artifact. No existing artifacts or
+historical lineage are rewritten by deployment.
+
+Five PostgreSQL regressions in `engine/src/payments.integration.test.ts` cover
+unrelated runs, missing parents, concurrent and sequential retries, stale
+ancestors and voided artifacts. The first three failed against the preceding
+implementation. The settlement API also validates both route identifiers before
+querying; malformed IDs return 404 instead of an unhandled database UUID error,
+covered by the payment visibility integration suite.
