@@ -8,9 +8,10 @@ const ROOT = resolve(new URL('..', import.meta.url).pathname)
 
 // Node 24 on macOS can deadlock at process.exit while its background Sparkplug
 // compiler awaits GC and the main thread joins that compiler. Stack sampling
-// confirmed this in a finished test worker. Keep test shutdown synchronous on
+// also confirmed the same cycle in Maglev, so disable background optimizing
+// compilation as well. Keep test shutdown synchronous on
 // that host; production execution and Linux CI retain their runtime defaults.
-const TEST_RUNTIME_FLAGS = process.platform === 'darwin' ? ['--no-concurrent-sparkplug'] : []
+const TEST_RUNTIME_FLAGS = process.platform === 'darwin' ? ['--no-concurrent-sparkplug', '--no-concurrent-recompilation'] : []
 
 
 // Keep this list in one place. Every CI suite and the developer-facing `npm
