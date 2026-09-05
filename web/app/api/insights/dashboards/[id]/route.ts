@@ -1,11 +1,17 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { insightVisibilitySql } from '@/lib/insight-access'
+import { mutateInsight } from '@/lib/insight-mutations'
+import { parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import { loadDashboard, normalizeAllowedRoles, normalizeLayout, strOrNull } from '../../_lib'
+import {
+  loadDashboard,
+  normalizeAllowedRoles,
+  normalizeLayout,
+  strOrNull,
+} from '../../_lib'
 
 export const runtime = 'nodejs'
 
@@ -30,9 +36,12 @@ function dashboardRevisionSql(column: SQL): SQL<string> {
   )`
 }
 
-const DASHBOARD_REVISION_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/
-const DASHBOARD_REVISION_REQUIRED = 'the dashboard revision is required; reload and review the latest revision'
-const DASHBOARD_REVISION_CONFLICT = 'this dashboard changed after you opened it; reload and review the latest revision'
+const DASHBOARD_REVISION_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/
+const DASHBOARD_REVISION_REQUIRED =
+  'the dashboard revision is required; reload and review the latest revision'
+const DASHBOARD_REVISION_CONFLICT =
+  'this dashboard changed after you opened it; reload and review the latest revision'
 
 class DashboardRevisionError extends Error {
   constructor(
@@ -57,25 +66,19 @@ function assertDashboardRevision(expected: string, actual: unknown): void {
   }
 }
 
-async function withExactDashboardRevision<T extends Record<string, unknown>>(dashboard: T, id: string, orgId: string): Promise<T | null> {
-  const row = await db.execute<{ updatedAt: string }>(sql`
-    select ${dashboardRevisionSql(sql.raw('updated_at'))} as "updatedAt"
-      from insight_dashboards
-     where id = ${id} and org_id = ${orgId}
-  `)
-  const revision = row.rows[0]?.updatedAt
-  return typeof revision === 'string' ? ({ ...dashboard, updated_at: revision } as T) : null
-}
-
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const gate = await guardPermission('insights.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id))
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
   const dashboard = await loadDashboard(id, gate.user.orgId)
-  if (!dashboard) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const exact = await withExactDashboardRevision(dashboard, id, gate.user.orgId)
-  return exact ? NextResponse.json(exact) : NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!dashboard)
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  return NextResponse.json(dashboard)
 }
 
 interface PatchBody {
@@ -87,19 +90,24 @@ interface PatchBody {
   allowedRoles?: unknown
 }
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const gate = await guardPermission('insights.create')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id))
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const existing = await loadDashboard(id, user.orgId)
-  if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!existing)
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const parsedBody = await parseJsonBody(req, nameBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as PatchBody
+  const parsedBody = await parseJsonBody(req, nameBodySchema)
+  if (!parsedBody.ok) return parsedBody.response
+  const body = parsedBody.data as PatchBody
 
   let expectedRevision: string
   try {
@@ -112,9 +120,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const name = body.name !== undefined ? body.name.trim() : undefined
-  if (name !== undefined && name === '') return bad('Dashboard name cannot be empty')
+  if (name !== undefined && name === '')
+    return bad('Dashboard name cannot be empty')
 
-  let layout: unknown = undefined
+  let layout: ReturnType<typeof normalizeLayout> | undefined = undefined
   if (body.layout !== undefined) {
     try {
       layout = normalizeLayout(body.layout)
@@ -133,22 +142,37 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   try {
-    await db.transaction(async (tx) => {
-      // Lock and compare in the same transaction as the replacement. A slow
-      // request can therefore never commit over a newer save that advanced
-      // the exact revision while this request was in flight.
-      const locked = (
-        await tx.execute<{ updatedAt: string }>(sql`
+    const outcome = await mutateInsight(
+      gate,
+      'insight_dashboards',
+      id,
+      'update',
+      async (tx) => {
+        // Lock and compare in the same transaction as the replacement. A slow
+        // request can therefore never commit over a newer save that advanced
+        // the exact revision while this request was in flight.
+        const locked = (
+          await tx.execute<{ updatedAt: string }>(sql`
         select ${dashboardRevisionSql(sql.raw('updated_at'))} as "updatedAt"
           from insight_dashboards
          where id = ${id} and org_id = ${user.orgId}
          for update
       `)
-      ).rows[0]
-      if (!locked) throw new DashboardRevisionError(404, 'not found')
-      assertDashboardRevision(expectedRevision, locked.updatedAt)
+        ).rows[0]
+        if (!locked) throw new DashboardRevisionError(404, 'not found')
+        assertDashboardRevision(expectedRevision, locked.updatedAt)
 
-      await tx.execute(sql`
+        if (layout !== undefined && layout.length > 0) {
+          const ids = [...new Set(layout.map((widget) => widget.cardId))]
+          const cards = await tx.execute<{ id: string }>(sql`
+          select id from insight_cards where id = any(${`{${ids.join(',')}}`}::uuid[])
+            and ${insightVisibilitySql(gate)}
+        `)
+          if (cards.rows.length !== ids.length)
+            return bad('Layout references an unavailable card')
+        }
+
+        const updated = await tx.execute(sql`
         update insight_dashboards set
           name = ${name !== undefined ? name : sql`name`},
           description = ${body.description !== undefined ? strOrNull(body.description) : sql`description`},
@@ -157,27 +181,41 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
           updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId}
+        returning *, ${dashboardRevisionSql(sql.raw('updated_at'))} as updated_at
       `)
-    })
+        return NextResponse.json(updated.rows[0])
+      },
+    )
+    return outcome
   } catch (e) {
     if (e instanceof DashboardRevisionError) {
       return NextResponse.json({ error: e.message }, { status: e.status })
     }
     throw e
   }
-
-  const dashboard = await loadDashboard(id, user.orgId)
-  return dashboard ? NextResponse.json(await withExactDashboardRevision(dashboard, id, user.orgId)) : NextResponse.json({ error: 'not found' }, { status: 404 })
 }
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const gate = await guardPermission('insights.create')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id))
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  await db.execute(sql`delete from insight_dashboard_pins where dashboard_id = ${id} and org_id = ${user.orgId}`)
-  await db.execute(sql`delete from insight_dashboards where id = ${id} and org_id = ${user.orgId}`)
-  return NextResponse.json({ ok: true })
+  if (!(await loadDashboard(id, user.orgId)))
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+
+  return mutateInsight(gate, 'insight_dashboards', id, 'delete', async (tx) => {
+    await tx.execute(
+      sql`delete from insight_dashboard_pins where dashboard_id = ${id} and org_id = ${user.orgId}`,
+    )
+    await tx.execute(
+      sql`delete from insight_dashboards where id = ${id} and org_id = ${user.orgId}`,
+    )
+    return NextResponse.json({ ok: true })
+  })
 }

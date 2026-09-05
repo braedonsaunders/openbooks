@@ -24,6 +24,7 @@ test('runInsightQuery compiles and executes the migrated query', async () => {
       measures: [{ agg: 'count' }],
     },
     'org-1',
+    null,
   )
 
   const execution = calls.find(({ text }) => text.startsWith('select * from'))
@@ -58,6 +59,7 @@ test('runInsightQuery reports truncation when the inner query reaches its cap', 
     pool,
     { source: 'ledger_lines', limit: 1 },
     'org-1',
+    null,
   )
 
   const execution = calls.find(({ text }) => text.startsWith('select * from'))
@@ -66,4 +68,33 @@ test('runInsightQuery reports truncation when the inner query reaches its cap', 
   assert.deepEqual(result.rows, [{ id: 1 }])
   assert.equal(result.rowCount, 1)
   assert.equal(result.truncated, true)
+})
+
+test('Insights requires scope before connecting and releases the read transaction on failure', async () => {
+  const calls: Array<{ text: string; params?: unknown[] }> = []
+  let connected = false
+  let released = false
+  const pool: QueryPool = { connect: async () => {
+    connected = true
+    return {
+      async query(text, params) {
+        calls.push({ text, params })
+        if (text.startsWith('select * from')) throw new Error('query interrupted')
+        return { rows: [], fields: [] }
+      },
+      release() { released = true },
+    }
+  } }
+  // A JavaScript caller must not silently become unrestricted by omitting scope.
+  await assert.rejects(() => runInsightQuery(pool, { source: 'documents' }, 'org-1', undefined as unknown as null), /explicit subsidiary/)
+  assert.equal(connected, false)
+  await assert.rejects(() => runInsightQuery(pool, { source: 'documents' }, 'org-1', ['sub-1']), /query interrupted/)
+  assert.equal(calls[0]?.text, 'begin transaction read only')
+  assert.match(calls[1]!.text, /set_config\('app.current_org', \$1, true\).*set_config\('app.bypass_rls', 'off', true\)/)
+  assert.deepEqual(calls[1]!.params, ['org-1'])
+  const execution = calls.find(({ text }) => text.startsWith('select * from'))!
+  assert.match(execution.text, /d\.subsidiary_id = ANY\(\$2::uuid\[\]\)/)
+  assert.deepEqual(execution.params, ['org-1', ['sub-1']])
+  assert.equal(calls.at(-1)?.text, 'rollback')
+  assert.equal(released, true)
 })

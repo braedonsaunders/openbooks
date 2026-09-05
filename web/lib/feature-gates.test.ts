@@ -1048,7 +1048,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/(app)/insights/page.tsx'),
-    /isFeatureEnabled\([^,]+, 'inventory'\)/,
+    /featureEnabled\(features, 'inventory'\)/,
     'the insight card studio must read the Inventory switch before offering item kinds',
   )
   assert.match(

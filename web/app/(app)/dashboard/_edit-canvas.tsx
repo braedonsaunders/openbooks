@@ -4,7 +4,8 @@ import { db } from '@openbooks/engine/src/db.ts'
 import type React from 'react'
 import type { DashboardLayoutData } from '@openbooks/schema'
 import type { Authz } from '@/lib/authz'
-import { can } from '@/lib/authz'
+import { insightVisibilitySql } from '@/lib/insight-access'
+import { getAuthz, can } from '@/lib/authz'
 import { isUuid } from '@/lib/list-params'
 import { WIDGETS } from './_widget-registry'
 import { canSeeWidget } from './_widget-access'
@@ -41,26 +42,29 @@ function appWidgetNodes(apps: DashboardApp[], widgetIds?: readonly string[]): Re
 }
 
 export async function loadPublishedInsightCards(orgId: string): Promise<LibraryCard[]> {
+  const authz = await getAuthz()
+  if (!authz || authz.user.orgId !== orgId) return []
   const res = ((await db.execute(sql`
     select id, name, coalesce(description, '') as description
       from insight_cards
-     where org_id = ${orgId} and status = 'published'
+     where org_id = ${orgId} and status = 'published' and ${insightVisibilitySql(authz)}
      order by name asc
   `)))
   return res.rows as LibraryCard[]
 }
 
 async function loadInsightCardNodes(
-  orgId: string,
+  authz: Authz,
   widgetIds: string[],
 ): Promise<Record<string, React.ReactNode>> {
+  const orgId = authz.user.orgId
   const uuidIds = widgetIds.filter((id) => isUuid(id))
   if (uuidIds.length === 0) return {}
   const res = (await db.execute(sql`
     select id, name, description, query, viz_type, viz_settings
       from insight_cards
      where org_id = ${orgId} and id = any(${`{${uuidIds.join(',')}}`}::uuid[])
-       and status = 'published'
+       and status = 'published' and ${insightVisibilitySql(authz)}
   `)) as any
   const nodes: Record<string, React.ReactNode> = {}
   for (const row of res.rows) {
@@ -83,7 +87,7 @@ export async function loadDashboardView(
 ): Promise<{ nodes: Record<string, React.ReactNode> }> {
   const [metrics, cardNodes, apps] = await Promise.all([
     loadDashboardMetrics(authz),
-    loadInsightCardNodes(authz.user.orgId, layout.widgets.map((w) => w.id)),
+    loadInsightCardNodes(authz, layout.widgets.map((w) => w.id)),
     loadDashboardApps(authz),
   ])
 
@@ -124,7 +128,7 @@ export async function loadDashboardEditCanvas(
     loadDashboardMetrics(authz),
     canUseInsights ? loadPublishedInsightCards(authz.user.orgId) : Promise.resolve([] as LibraryCard[]),
     loadInsightCardNodes(
-      authz.user.orgId,
+      authz,
       layout.widgets.filter((w) => isUuid(w.id)).map((w) => w.id),
     ),
     loadDashboardApps(authz),

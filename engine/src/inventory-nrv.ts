@@ -146,10 +146,10 @@ async function setLayerValueExactly(
   await tx.execute(sql`
     insert into cost_layers
       (id, org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at,
-       original_quantity, remaining_quantity, unit_cost, created_by, updated_by)
+       original_quantity, remaining_quantity, unit_cost, created_at, created_by, updated_by)
     select ${splitLayerId}, org_id, subsidiary_id, item_id, stock_location_id,
            ${layer.source_movement_id}, ${layer.received_at},
-           '1.0000', '1.0000', ${fromUnits(roundingValue)}, ${actorId}, ${actorId}
+           '1.0000', '1.0000', ${fromUnits(roundingValue)}, clock_timestamp(), ${actorId}, ${actorId}
       from cost_layers
      where id = ${layer.id} and org_id = ${orgId}`);
 }

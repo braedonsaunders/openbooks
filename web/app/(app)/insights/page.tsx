@@ -1,3 +1,4 @@
+import { insightVisibilitySql } from '@/lib/insight-access'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -20,7 +21,7 @@ import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
+import { featureEnabled, orgFeatureState } from '../../../lib/features'
 import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { loadCard } from '../../api/insights/_lib'
 import { InsightsTabs } from './InsightsTabs'
@@ -61,11 +62,12 @@ export default async function InsightsCards({
   const statusParam = pickString(sp.status)
   const status = statusParam === 'draft' || statusParam === 'published' ? statusParam : undefined
 
-  const where = sql`org_id = ${orgId}
+  const visibility = insightVisibilitySql(authz)
+  const where = sql`org_id = ${orgId} and ${visibility}
     ${params.q ? sql` and name ilike ${'%' + params.q + '%'}` : sql``}
     ${status ? sql` and status = ${status}` : sql``}`
 
-  const [cards, counts, inventoryEnabled] = await Promise.all([
+  const [cards, counts, features] = await Promise.all([
     (db.execute(sql`
       select id, name, description, viz_type, status, query, updated_at
         from insight_cards
@@ -77,9 +79,9 @@ export default async function InsightsCards({
       select count(*) as total,
              count(*) filter (where status = 'draft') as drafts,
              count(*) filter (where status = 'published') as published
-        from insight_cards where org_id = ${orgId}
+        from insight_cards where org_id = ${orgId} and ${visibility}
     `) as any,
-    isFeatureEnabled(orgId, 'inventory'),
+    orgFeatureState(orgId),
   ])
   const c = counts.rows[0]
   const total = Number(c.total)
@@ -181,8 +183,8 @@ export default async function InsightsCards({
           card={openCard}
           canCreate={canCreate}
           canPublish={canPublish}
-          inventoryEnabled={inventoryEnabled}
-          sourceKeys={allowedSources((permission) => can(authz, permission)).map((s) => s.key)}
+          inventoryEnabled={featureEnabled(features, 'inventory')}
+          sourceKeys={allowedSources((permission) => can(authz, permission), (key) => featureEnabled(features, key)).map((s) => s.key)}
         />
       ) : null}
     </ListPageLayout>

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { join, resolve } from "node:path";
@@ -33,9 +33,10 @@ test("the canonical integration runner owns fixture pool setup and shutdown", ()
   assert.match(runner, /suite === 'unit'/);
 });
 
-test("suite harness propagates child failure and always records the owner receipt", async () => {
+test("suite harness propagates child failure and always records the owner receipt", async (t) => {
   const { runChild, stopFixtureOwner } = await import("./test-suite.mjs");
   const dir = mkdtempSync(join(tmpdir(), "openbooks-fixture-termination-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const failingChild = join(dir, "failing-child.mjs");
   writeFileSync(failingChild, "process.exit(23);\n", "utf8");
   const childStatus = await runChild([failingChild], { ...process.env });
@@ -48,9 +49,11 @@ const metrics = { poolSize: 4, fullBootstrap: 4, leases: 7, releases: 7, resets:
   fullTeardown: 4, schemaWideVerification: 4, activeLeases: 0, leakDetections: 0 };
 const server = createServer((socket) => {
   let data = "";
-  socket.on("data", (chunk) => { data += chunk; });
-  socket.on("end", () => {
-    const request = JSON.parse(data.trim());
+  socket.on("data", (chunk) => {
+    data += chunk;
+    const newline = data.indexOf("\\n");
+    if (newline < 0) return;
+    const request = JSON.parse(data.slice(0, newline));
     if (request.op !== "close") { socket.end(JSON.stringify({ ok: false }) + "\\n"); return; }
     process.stdout.write("[fixture-lifecycle] " + JSON.stringify(metrics) + "\\n");
     socket.end(JSON.stringify({ ok: true, metrics }) + "\\n", () => server.close(() => process.exit(0)));
@@ -66,6 +69,15 @@ server.listen(0, "127.0.0.1", () => {
     cwd: resolve(new URL("..", import.meta.url).pathname),
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env },
+  });
+  // Register cleanup before readiness, so an owner that never reports READY
+  // is still reaped after the readiness promise rejects.
+  t.after(async () => {
+    if (owner.exitCode === null && owner.signalCode === null) {
+      const closed = new Promise((resolveClose) => owner.once("close", resolveClose));
+      owner.kill("SIGKILL");
+      await closed;
+    }
   });
   let output = "";
   const ready = await new Promise((resolveReady, rejectReady) => {
@@ -87,7 +99,7 @@ server.listen(0, "127.0.0.1", () => {
       port: ready,
       clearTimeout: () => {},
       get output() { return output; },
-    });
+    }, { timeoutMs: 5_000 });
     assert.equal(response.ok, true);
     const receiptLine = output.split("\n").find((line) => line.startsWith("[fixture-lifecycle] "));
     assert.ok(receiptLine, "owner must emit a lifecycle receipt before exit");

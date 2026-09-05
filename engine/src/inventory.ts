@@ -1690,7 +1690,10 @@ async function consumeLayers(
        and (${sourceReceiptMovementId}::uuid is null or source.id = ${sourceReceiptMovementId}::uuid)
        and (${lotId}::uuid is null or source.lot_id = ${lotId}::uuid)
        and (${serialId}::uuid is null or source.serial_id = ${serialId}::uuid)
-     order by layer.received_at, layer.id`));
+     -- Keep remeasurement fragments beside their original receipt. A fragment's
+     -- random UUID must never move its residual cost ahead of the original
+     -- layer or behind a later receipt on the same business date.
+     order by layer.received_at, source.created_at, source.id, layer.created_at, layer.id`));
   const layers = layersRes.rows;
 
   let cost: string;
@@ -3237,10 +3240,10 @@ async function revalueLayerExactly(
   await tx.execute(sql`
     insert into cost_layers
       (id, org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at,
-       original_quantity, remaining_quantity, unit_cost, created_by, updated_by)
+       original_quantity, remaining_quantity, unit_cost, created_at, created_by, updated_by)
     select ${splitLayerId}, org_id, subsidiary_id, item_id, stock_location_id,
            ${layer.source_movement_id}, ${layer.received_at},
-           '1.0000', '1.0000', ${fromUnits(roundingRateUnits)},
+           '1.0000', '1.0000', ${fromUnits(roundingRateUnits)}, clock_timestamp(),
            ${actorId}, ${actorId}
       from cost_layers
      where id = ${layer.id} and org_id = ${orgId}

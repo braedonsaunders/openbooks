@@ -68,6 +68,7 @@ export function sourceFromEntity(entity: ReportEntity): CatalogSource {
     ...(entity.defaultSort
       ? { defaultSort: { field: entity.defaultSort.column, dir: entity.defaultSort.direction } }
       : {}),
+    ...(entity.featureKey ? { featureKey: entity.featureKey } : {}),
     ...(entity.requiredPermission ? { requiredPermission: entity.requiredPermission } : {}),
     ...(entity.baseFilter ? { baseFilter: entity.baseFilter } : {}),
   }
@@ -113,6 +114,10 @@ export function sourcePermission(sourceKey: string): string | null {
 }
 
 /** The sources a caller may build on, given a permission predicate. */
-export function allowedSources(can: (permission: string) => boolean): AnalyticsSource[] {
-  return INSIGHT_SOURCES.filter((s) => !s.requiredPermission || can(s.requiredPermission))
+export function allowedSources(
+  can: (permission: string) => boolean,
+  featureEnabled: (key: string) => boolean = () => true,
+): AnalyticsSource[] {
+  return INSIGHT_SOURCES.filter((s) => (!s.requiredPermission || can(s.requiredPermission)) &&
+    (!s.featureKey || featureEnabled(s.featureKey)))
 }

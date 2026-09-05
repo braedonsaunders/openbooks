@@ -80,6 +80,8 @@ export type CatalogSource = {
    *  against this source — sensitive data like payroll wages. Enforced by the
    *  query API and filtered out of the studio's source picker. */
   requiredPermission?: string
+  /** Authoritative Company Settings feature, inherited from the report entity. */
+  featureKey?: string
   /** Implicit predicate ALWAYS AND-ed into every query against this source.
    *  Authored in the catalog, never from user input. */
   baseFilter?: ReportRuleGroup

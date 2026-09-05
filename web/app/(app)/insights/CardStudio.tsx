@@ -170,31 +170,9 @@ export function CardStudio({
     [name, description, query, vizType, vizSettings],
   )
 
-  // Card revisions are opaque, lossless PostgreSQL timestamps. The page's
-  // server-rendered row may have passed through a lossy Date, so hydrate the
-  // exact token from the API before the first debounced save is allowed to
-  // write. Every subsequent response advances this token for the next save.
-  const revisionRef = useRef<string | null>(null)
-  const revisionReadyRef = useRef<Promise<void> | null>(null)
-  useEffect(() => {
-    revisionRef.current = null
-    const controller = new AbortController()
-    const ready = (async () => {
-      try {
-        const res = await fetch(`/api/insights/cards/${card.id}`, {
-          cache: 'no-store',
-          signal: controller.signal,
-        })
-        const data = (await res.json()) as { updated_at?: unknown }
-        if (!res.ok || typeof data.updated_at !== 'string') throw new Error('card revision unavailable')
-        revisionRef.current = data.updated_at
-      } catch (error) {
-        if ((error as { name?: string })?.name !== 'AbortError') revisionRef.current = null
-      }
-    })()
-    revisionReadyRef.current = ready
-    return () => controller.abort()
-  }, [card.id])
+  // The server loads the displayed values and this revision in one SQL read.
+  // Fetching a newer token alone would let stale local fields overwrite it.
+  const revisionRef = useRef<string | null>(card.updated_at)
 
   const first = useRef(true)
   const saveSeq = useRef(0)
@@ -211,8 +189,6 @@ export function CardStudio({
     setSaveState('dirty')
     const timer = setTimeout(() => {
       void (async () => {
-        const revisionReady = revisionReadyRef.current
-        if (revisionReady) await revisionReady
         if (seq !== saveSeq.current) return
         const expectedUpdatedAt = revisionRef.current
         if (!expectedUpdatedAt) {
@@ -264,29 +240,25 @@ export function CardStudio({
   const [busy, setBusy] = useState(false)
   async function setPublished(next: boolean) {
     setBusy(true)
-    const res = await fetch(`/api/insights/cards/${card.id}/publish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publish: next }),
-    })
-    const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? t('errors.updateFailed'))
-    else {
-      setStatus(next ? 'published' : 'draft')
-      toast.success(next ? t('cardStudio.publishedToast') : t('cardStudio.draftToast'))
-      // Publishing also advances updated_at. Refresh the exact token before
-      // a later edit so the next autosave does not fence against the draft
-      // revision that existed before this lifecycle change.
-      try {
-        const latest = await fetch(`/api/insights/cards/${card.id}`, { cache: 'no-store' })
-        const latestData = (await latest.json()) as { updated_at?: unknown }
-        revisionRef.current = latest.ok && typeof latestData.updated_at === 'string' ? latestData.updated_at : null
-      } catch {
-        revisionRef.current = null
+    try {
+      const res = await fetch(`/api/insights/cards/${card.id}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publish: next, expectedUpdatedAt: revisionRef.current }),
+      })
+      const data = await res.json()
+      if (!res.ok) toast.error(data.error ?? t('errors.updateFailed'))
+      else {
+        setStatus(next ? 'published' : 'draft')
+        toast.success(next ? t('cardStudio.publishedToast') : t('cardStudio.draftToast'))
+        revisionRef.current = typeof data.updated_at === 'string' ? data.updated_at : null
       }
+      router.refresh()
+    } catch {
+      toast.error(t('errors.updateFailed'))
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
-    router.refresh()
   }
 
   async function remove() {
@@ -343,7 +315,7 @@ export function CardStudio({
           ) : null}
           {canPublish ? (
             status === 'published' ? (
-              <Button variant="outline" disabled={busy} onClick={() => setPublished(false)}>
+              <Button variant="outline" disabled={busy || saveState !== 'saved'} onClick={() => setPublished(false)}>
                 {t('actions.unpublish')}
               </Button>
             ) : (
@@ -351,7 +323,7 @@ export function CardStudio({
                 {!nameValid ? (
                   <span className="text-xs text-slate-500 dark:text-slate-400">{t('cardStudio.nameRequiredToPublish')}</span>
                 ) : null}
-                <Button disabled={busy || !nameValid} onClick={() => setPublished(true)}>
+                <Button disabled={busy || !nameValid || saveState !== 'saved'} onClick={() => setPublished(true)}>
                   {t('actions.publish')}
                 </Button>
               </>

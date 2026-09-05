@@ -1,3 +1,5 @@
+import { getAuthz } from '@/lib/authz'
+import { insightVisibilitySql } from '@/lib/insight-access'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
@@ -35,7 +37,10 @@ export function normalizeVizSettings(v: unknown): VizSettings {
 export function normalizeAllowedRoles(v: unknown): string[] | null {
   if (v == null) return null
   if (!Array.isArray(v)) throw new Error('allowedRoles must be a list of role keys')
-  const roles = v.filter((x): x is string => typeof x === 'string' && x.trim() !== '')
+  if (v.some((role) => typeof role !== 'string' || role.trim() === '')) {
+    throw new Error('allowedRoles must contain non-empty role keys')
+  }
+  const roles = [...new Set((v as string[]).map((role) => role.trim()))]
   return roles.length ? roles : null
 }
 
@@ -52,10 +57,13 @@ export type CardRow = {
 }
 
 export async function loadCard(id: string, orgId: string): Promise<CardRow | null> {
+  const authz = await getAuthz()
+  if (!authz || authz.user.orgId !== orgId) return null
   const res = (await db.execute<CardRow>(sql`
-    select id, name, description, query, viz_type, viz_settings, status, allowed_roles, updated_at
+    select id, name, description, query, viz_type, viz_settings, status, allowed_roles,
+      to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
       from insight_cards
-     where id = ${id} and org_id = ${orgId}
+     where id = ${id} and org_id = ${orgId} and ${insightVisibilitySql(authz)}
   `))
   return res.rows[0] ?? null
 }
@@ -71,10 +79,13 @@ export type DashboardRow = {
 }
 
 export async function loadDashboard(id: string, orgId: string): Promise<DashboardRow | null> {
+  const authz = await getAuthz()
+  if (!authz || authz.user.orgId !== orgId) return null
   const res = (await db.execute<DashboardRow>(sql`
-    select id, name, description, layout, status, allowed_roles, updated_at
+    select id, name, description, layout, status, allowed_roles,
+      to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
       from insight_dashboards
-     where id = ${id} and org_id = ${orgId}
+     where id = ${id} and org_id = ${orgId} and ${insightVisibilitySql(authz)}
   `))
   return res.rows[0] ?? null
 }
@@ -101,6 +112,8 @@ export async function loadDashboardEmbed(
   orgId: string,
   opts: { publishedOnly?: boolean } = {},
 ): Promise<{ dashboard: DashboardRow; cards: DashboardCard[]; layout: DashboardRow['layout'] } | null> {
+  const authz = await getAuthz()
+  if (!authz || authz.user.orgId !== orgId) return null
   const dashboard = await loadDashboard(dashboardId, orgId)
   if (!dashboard) return null
   const publishedOnly = opts.publishedOnly !== false
@@ -112,6 +125,7 @@ export async function loadDashboardEmbed(
     select id, name, description, query, viz_type, viz_settings, status
       from insight_cards
      where org_id = ${orgId} and id = any(${`{${cardIds.join(',')}}`}::uuid[])
+       and ${insightVisibilitySql(authz)}
        ${publishedOnly ? sql`and status = 'published'` : sql``}
   `))
 
@@ -141,6 +155,8 @@ export async function resolveHomeDashboard(
   userId: string,
   role: string,
 ): Promise<HomeResolution | null> {
+  const authz = await getAuthz()
+  if (!authz || authz.user.orgId !== orgId || authz.user.id !== userId) return null
   // One query resolves all three tiers: the user's personal pointer, their role
   // default, and the system default — restricted to PUBLISHED boards so a draft
   // can't become someone's home. We keep the highest-priority present.
@@ -161,6 +177,7 @@ export async function resolveHomeDashboard(
       from insight_dashboards d
      where d.org_id = ${orgId}
        and d.status = 'published'
+       and ${insightVisibilitySql(authz, 'd')}
        and (
          d.id = (select home_dashboard_id from u)
          or d.home_for_role = ${role}
@@ -182,7 +199,7 @@ export function normalizeLayout(v: unknown): { cardId: string; x: number; y: num
   for (const item of v) {
     if (!item || typeof item !== 'object') continue
     const cardId = ((item)).cardId
-    if (typeof cardId !== 'string' || cardId === '') continue
+    if (typeof cardId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cardId)) throw new Error('layout must reference valid card ids')
     const clamp = (n: unknown, min: number, max: number, dflt: number) => {
       const num = Number(n)
       if (!Number.isFinite(num)) return dflt

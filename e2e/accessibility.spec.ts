@@ -30,6 +30,12 @@ test("authenticated reports hub has no automatically detectable WCAG A/AA violat
       await expect(setupWizard).toHaveCSS("opacity", "1");
     }
 
+    // Opacity entrance animations temporarily blend otherwise accessible text
+    // with the background. Inspect the settled page rather than a random frame.
+    for (const region of await page.locator('[data-page-motion]').all()) {
+      await expect(region).toHaveCSS('opacity', '1');
+    }
+
     const results = await new AxeBuilder({ page }).withTags(wcagTags).analyze();
     expect(
       results.violations,

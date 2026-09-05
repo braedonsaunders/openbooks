@@ -46,7 +46,7 @@
   },
   "scripts": {
     "worker": "tsx engine/src/worker/index.ts",
-    "lint": "node scripts/lint.mjs --max-warnings=734",
+    "lint": "node scripts/lint.mjs --max-warnings=733",
     "typecheck:e2e": "tsc --project e2e/tsconfig.json",
     "check:dependencies": "npm audit --omit=dev --audit-level=moderate",
     "check:history-hygiene": "node scripts/check-history-hygiene.mjs",

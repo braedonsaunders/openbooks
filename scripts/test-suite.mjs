@@ -6,6 +6,13 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(new URL('..', import.meta.url).pathname)
 
+// Node 24 on macOS can deadlock at process.exit while its background Sparkplug
+// compiler awaits GC and the main thread joins that compiler. Stack sampling
+// confirmed this in a finished test worker. Keep test shutdown synchronous on
+// that host; production execution and Linux CI retain their runtime defaults.
+const TEST_RUNTIME_FLAGS = process.platform === 'darwin' ? ['--no-concurrent-sparkplug'] : []
+
+
 // Keep this list in one place. Every CI suite and the developer-facing `npm
 // test` command derives its membership from the same inventory, so a new test
 // cannot accidentally land in one job but not the other.
@@ -121,7 +128,7 @@ export function literalTestPath(file) {
 
 export function runChild(args, env) {
   return new Promise((resolveResult, reject) => {
-    const child = spawn(process.execPath, args, { cwd: ROOT, stdio: 'inherit', env })
+    const child = spawn(process.execPath, [...TEST_RUNTIME_FLAGS, ...args], { cwd: ROOT, stdio: 'inherit', env })
     child.once('error', reject)
     child.once('close', (status, signal) => resolveResult(status ?? (signal ? 1 : 0)))
   })
@@ -162,6 +169,7 @@ const RECEIPT_PATH = resolve(ROOT, '.local', 'fixture-lifecycle-receipt.txt')
 
 async function startFixtureOwner(env) {
   const owner = spawn(process.execPath, [
+    ...TEST_RUNTIME_FLAGS,
     '--import', 'tsx',
     '--import', './engine/src/test-database-bypass.ts',
     './scripts/test-fixture-lifecycle.mjs', '--owner',

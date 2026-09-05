@@ -89,18 +89,26 @@ export function compileCustomQuery(
     : compileRows(entity, q, orgId, opts)
 }
 
+/** Shared server-owned legal-entity policy for reports and Insights. */
+export function compileSubsidiaryScope(
+  entity: ReportEntity,
+  allowedSubsidiaryIds: readonly string[] | null | undefined,
+  bind: (value: unknown) => string,
+): string | null {
+  if (allowedSubsidiaryIds == null) return null
+  const scope = entity.subsidiaryScope
+  if (scope === undefined) throw new Error(`Report entity ${entity.key} has no subsidiary policy`)
+  if (allowedSubsidiaryIds.length === 0) return 'FALSE'
+  if (!scope) return null
+  const predicate = `${scope.column} = ANY(${bind([...allowedSubsidiaryIds])}::uuid[])`
+  return scope.sharedNull ? `(${scope.column} IS NULL OR ${predicate})` : predicate
+}
+
 /** The entity's implicit predicates: org scope + optional baseFilter. */
 function implicitWhere(entity: ReportEntity, orgId: string, params: SqlParams, opts: CompileCustomQueryOpts): string[] {
   const parts = [`${entity.orgColumn} = ${params.add(orgId)}`]
-  if (opts.allowedSubsidiaryIds != null) {
-    const scope = entity.subsidiaryScope
-    if (scope === undefined) throw new Error(`Report entity ${entity.key} has no subsidiary policy`)
-    if (opts.allowedSubsidiaryIds.length === 0) parts.push('FALSE')
-    else if (scope) {
-      const predicate = `${scope.column} = ANY(${params.add([...opts.allowedSubsidiaryIds])}::uuid[])`
-      parts.push(scope.sharedNull ? `(${scope.column} IS NULL OR ${predicate})` : predicate)
-    }
-  }
+  const subsidiary = compileSubsidiaryScope(entity, opts.allowedSubsidiaryIds, (value) => params.add(value))
+  if (subsidiary) parts.push(subsidiary)
   if (entity.baseFilter) {
     const base = compileRuleGroup(entity, entity.baseFilter, params)
     if (base) parts.push(base)
