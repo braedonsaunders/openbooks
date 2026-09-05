@@ -1,4 +1,5 @@
 import "server-only";
+import { statementBookExpr } from "../gl-summary";
 import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -281,6 +282,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     join documents d on d.id = e.source_document_id and d.org_id = e.org_id
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     where l.org_id = ${orgId} and d.voided_at is null
+      and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
       and d.kind in (${spendKindsIn})
       and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
       -- Filter on the line's own posting date: the entry is still joined for
@@ -316,6 +318,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where l.org_id = ${orgId} and d.voided_at is null
+      and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
         and d.kind in (${spendKindsIn})
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
         and e.posting_date >= ${from} and e.posting_date <= ${to}
@@ -344,6 +347,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       where l.org_id = ${orgId} and a.type in ('income', 'income_other')
+        and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
         and e.posting_date >= ${from} and e.posting_date <= ${to}
     `),
     // (Drill-down detail is fetched per entity on click via /api/analytics/drill.)
@@ -372,6 +376,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       join documents d on d.id = e.source_document_id and d.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and d.voided_at is null
+      and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
         and d.kind in ('expense_report', 'vendor_bill')
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
         and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}

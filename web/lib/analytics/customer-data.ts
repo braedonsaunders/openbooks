@@ -1,4 +1,5 @@
 import "server-only";
+import { statementBookExpr } from "../gl-summary";
 import { addMonthsIso } from "@openbooks/reports";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
@@ -334,6 +335,7 @@ export async function customerProfitability(period: { from: string; to: string }
       select id, org_id from journal_entries
        where posting_date >= ${from} and posting_date <= ${to}
          ${orgId ? sql`and org_id = ${orgId}` : sql``}
+         and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
     )
     select pr.customer_id as customer_id,
       coalesce(cp.display_name, 'Unknown') as customer_name,

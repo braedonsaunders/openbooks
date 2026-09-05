@@ -1,4 +1,5 @@
 import "server-only";
+import { statementBookExpr } from "../gl-summary";
 import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
@@ -135,6 +136,7 @@ export async function vendorData(
       with ew as materialized (
         select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${pFrom} and posting_date <= ${to}
+           and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
       )
       select p.id, coalesce(p.display_name, 'Unknown') as name,
         sum(case when e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as spend,
@@ -158,6 +160,7 @@ export async function vendorData(
       with ew as materialized (
         select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${startIso} and posting_date <= ${to}
+           and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
       )
       select to_char(e.posting_date, 'YYYY-MM') as month, sum(l.amount) as spend
       from ew e
