@@ -805,3 +805,19 @@ contention and idempotent creation. All 3,041 unit tests, web typechecking, the
 locked production build and explicit-any check passed without raising lint or
 type-safety ceilings. Receipts are retained in thread storage under
 `audit-account-input-2026-09-05`.
+
+## Authentication expiry after lock waits — continuation from 72366620
+
+Three controlled database cases showed expired credentials still authorizing
+password reset, MFA enrollment and MFA confirmation. Each test starts with a
+valid credential, holds the user row until PostgreSQL confirms real expiry, and
+then releases the waiter. Transaction-start `now()` and a session join evaluated
+before locking retained authority past expiration. Unexpired controls succeeded.
+
+Reset now claims its locked token against the live database clock before any
+credential changes. MFA enrollment locks the user before reading/locking its
+session; enrollment and confirmation recheck current expiry after their waits,
+including password verification and the factor lock. All 21 authentication
+integration cases, 3,041 unit tests, web typechecking and the locked production
+build passed. Receipts are retained under `audit-auth-expiry-2026-09-05` in thread
+storage. This checkpoint is distinct from the frozen f7f87fbb full-suite run.
