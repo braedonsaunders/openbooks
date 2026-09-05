@@ -12,6 +12,7 @@ import { payRunBankFileEntitlement } from "./payroll-bank-file-artifact.ts";
 import {
   calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
 } from "./payroll-run.ts";
+import { t4Slips, w2Slips, form941Worksheet } from "./payroll-yearend.ts";
 import { assertPayRunNotStale, payRunStaleness } from "./payroll-readiness.ts";
 import { unionRemittanceReport, upsertUnionFringe } from "./payroll-union.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
@@ -553,6 +554,19 @@ test(
         select settings#>'{payroll,countries}' as countries from orgs where id = ${org.orgId}
       `));
       assert.ok(!(markers.rows[0]!.countries as string[] | null ?? []).includes("CA"));
+      const historicalW2 = await w2Slips(org.orgId, 2026);
+      const historical941 = await form941Worksheet(org.orgId, 2026);
+      assert.equal(historicalW2.length, 2);
+      assert.ok(historical941.length > 0);
+      const countryEvidence = (await db.execute(sql`select country,country_source from pay_stubs
+        where org_id=${org.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+      assert.deepEqual(countryEvidence,[{country:'US',country_source:'calculation'},{country:'US',country_source:'calculation'}]);
+      await db.execute(sql`update employee_payroll_profiles set country='CA',province='ON'
+        where org_id=${org.orgId} and employee_party_id=${employeeId}`);
+      assert.deepEqual(await w2Slips(org.orgId,2026),historicalW2);
+      assert.deepEqual(await form941Worksheet(org.orgId,2026),historical941);
+      assert.deepEqual(await t4Slips(org.orgId,2026),[]);
+
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

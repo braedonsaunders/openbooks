@@ -236,7 +236,7 @@ test("an opening with no country profile is Canadian, while an explicit US openi
   const countryQueries = queries.filter((query) =>
     query.sql.includes("coalesce(prof.country")
     && (query.sql.includes("from payroll_opening_balances")
-      || query.sql.includes("left join employee_payroll_profiles")));
+      || query.sql.includes("from parties p")));
   assert.equal(countryQueries.length, 4);
   assert.deepEqual(countryQueries.map((query) => query.params[0]), ["CA", "CA", "US", "US"]);
   for (const query of countryQueries) {

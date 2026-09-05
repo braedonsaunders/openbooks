@@ -4,8 +4,10 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, env } from "./db.ts";
 import pg from "pg";
+import { rl1Slips } from "./payroll-rl1.ts";
+import { PAYROLL_COUNTRY_PACKS } from "./payroll/packs.ts";
 import { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } from "./payroll-run.ts";
-import { t4Slips } from "./payroll-yearend.ts";
+import { t4Slips, w2Slips, form941Worksheet } from "./payroll-yearend.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 interface AdoptionFixture {
   orgId: string;
@@ -134,7 +136,7 @@ for (const operation of ["edit", "delete"] as const) {
     });
 }
 
-test("all historical tax classification fields are fixed while labels and future amounts remain editable",
+test("historical report classification is fixed while snapshotted calculation inputs remain editable",
   { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const fx = await seedAdoption();
     try {
@@ -142,8 +144,7 @@ test("all historical tax classification fields are fixed while labels and future
       await commitPayRun(input);
       const before = await t4Slips(fx.orgId, 2026);
       for (const [column, value] of Object.entries({
-        taxable: false, pensionable: false, insurable: false, vacationable: false,
-        non_periodic: true, tax_treatment: "union_dues", country: "US", system_key: "renamed_base",
+        taxable: false, tax_treatment: "union_dues", country: "US", system_key: "renamed_base",
         kind: "deduction",
       })) {
         await assert.rejects(db.execute(sql`update pay_components
@@ -151,7 +152,8 @@ test("all historical tax classification fields are fixed while labels and future
           where org_id = ${fx.orgId} and system_key = 'base_pay'`), historicalPolicyError);
       }
       await db.execute(sql`update pay_components set name = 'Renamed earning', value = '50',
-        is_active = false where org_id = ${fx.orgId} and system_key = 'base_pay'`);
+        is_active = false, pensionable = false, insurable = false, vacationable = false, non_periodic = true
+        where org_id = ${fx.orgId} and system_key = 'base_pay'`);
       assert.deepEqual(await t4Slips(fx.orgId, 2026), before);
       // A new identity can carry changed treatment for future assignments.
       const next = (await db.execute<{id: string}>(sql`insert into pay_components
@@ -257,4 +259,106 @@ test("commit waits for an earlier component editor and then refuses its stale ca
       await editor.query("rollback").catch(() => {}); await committing?.catch(() => {});
       await editor.end(); await dropScratchOrgReporting(fx.orgId);
     }
+  });
+
+for (const change of ["relocate", "delete-profile"] as const) {
+  test(`committed payroll country survives employee profile ${change}`,
+    { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      const fx = await seedAdoption();
+      try {
+        const {input} = await calculatedRun(fx); await commitPayRun(input);
+        const before = await t4Slips(fx.orgId, 2026);
+        assert.equal(before[0]?.box14EmploymentIncome, "240.0000");
+        if (change === "relocate") {
+          await db.execute(sql`update employee_payroll_profiles set country='US',province='TX'
+            where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+        } else {
+          await db.execute(sql`delete from employee_payroll_profiles
+            where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+        }
+        assert.deepEqual(await t4Slips(fx.orgId, 2026), before);
+        assert.deepEqual(await w2Slips(fx.orgId, 2026), [], "a Canadian stub cannot become US wages");
+      } finally {await dropScratchOrgReporting(fx.orgId);}
+    });
+}
+
+test("country snapshots capture calculation provenance and cannot be overwritten",
+  {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+    const fx=await seedAdoption();
+    try {
+      const {input}=await calculatedRun(fx);
+      const stub=(await db.execute(sql`select id,country,country_source from pay_stubs
+        where org_id=${fx.orgId} and pay_run_document_id=${input.documentId}`)).rows[0]!;
+      assert.equal(stub.country,'CA');assert.equal(stub.country_source,'calculation');
+      for (const phase of ['calculated','committed']) {
+        if (phase==='committed') await commitPayRun(input);
+        await assert.rejects(db.execute(sql`update pay_stubs set country='US'
+          where org_id=${fx.orgId} and id=${stub.id}`),(error:unknown)=>{
+          assert.equal((error as {cause?:{constraint?:string}}).cause?.constraint,'pay_stub_historical_country');return true;
+        });
+      }
+    } finally {await dropScratchOrgReporting(fx.orgId);}
+  });
+
+test("legacy province/state snapshots identify supported countries without consulting live profiles",
+  {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+    const seen=new Set<string>();
+    for (const country of ['CA','US']) {
+      for (const region of PAYROLL_COUNTRY_PACKS[country]!.regions.known) {
+        assert.ok(!seen.has(region),'legacy region sets must remain disjoint');seen.add(region);
+        assert.equal((await db.execute(sql`select payroll_legacy_region_country(${region}) as country`)).rows[0]?.country,country);
+      }
+    }
+    assert.equal((await db.execute(sql`select payroll_legacy_region_country('UNKNOWN') as country`)).rows[0]?.country,null);
+  });
+
+for (const province of ['ON','UNKNOWN']) {
+  test(`legacy stub insertion preserves ${province==='ON'?'known':'unknown'} attribution explicitly`,
+    {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+      const fx=await seedAdoption();
+      try {
+        const {input}=await calculatedRun(fx);
+        const saved=(await db.execute<{row:Record<string,unknown>}>(sql`select to_jsonb(s) as row from pay_stubs s
+          where org_id=${fx.orgId} and pay_run_document_id=${input.documentId}`)).rows[0]!.row;
+        await db.execute(sql`delete from pay_stubs where org_id=${fx.orgId} and id=${saved.id}`);
+        const replacement={...saved,province,country:null,country_source:'unknown'};
+        await db.execute(sql`insert into pay_stubs select (jsonb_populate_record(null::pay_stubs,${JSON.stringify(replacement)}::jsonb)).*`);
+        const row=(await db.execute(sql`select country,country_source from pay_stubs where org_id=${fx.orgId} and id=${saved.id}`)).rows[0]!;
+        assert.deepEqual(row,province==='ON'?{country:'CA',country_source:'legacy_region'}:{country:null,country_source:'unknown'});
+        if (province==='UNKNOWN') {
+          await db.execute(sql`update pay_runs set run_status='committed' where org_id=${fx.orgId} and document_id=${input.documentId}`);
+          for (const read of [t4Slips,w2Slips,form941Worksheet,rl1Slips]) {
+            await assert.rejects(read(fx.orgId,2026),/unknown historical country/);
+          }
+        }
+      } finally {await dropScratchOrgReporting(fx.orgId);}
+    });
+}
+
+test("regional Canadian year-end slips survive a later country change",
+  {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+    const fx=await seedAdoption();
+    try {
+      await db.execute(sql`update employee_payroll_profiles set province='QC'
+        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{payroll,qcTaxPayableAccountId}',settings#>'{payroll,taxPayableAccountId}') where id=${fx.orgId}`);
+      const {input}=await calculatedRun(fx);await commitPayRun(input);
+      const before=await rl1Slips(fx.orgId,2026);assert.equal(before.length,1);
+      await db.execute(sql`update employee_payroll_profiles set country='US',province='TX'
+        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+      assert.deepEqual(await rl1Slips(fx.orgId,2026),before);
+    } finally {await dropScratchOrgReporting(fx.orgId);}
+  });
+
+test("a raw prospective vacation flag edit invalidates an already calculated run",
+  { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const fx = await seedAdoption();
+    try {
+      const {input} = await calculatedRun(fx);
+      await db.execute(sql`update pay_components set vacationable=false
+        where org_id=${fx.orgId} and system_key='base_pay'`);
+      await assert.rejects(commitPayRun(input), /recalculate|changed|stale/i);
+      assert.equal((await db.execute(sql`select run_status from pay_runs
+        where org_id=${fx.orgId} and document_id=${input.documentId}`)).rows[0]?.run_status, 'calculated');
+    } finally { await dropScratchOrgReporting(fx.orgId); }
   });

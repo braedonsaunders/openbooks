@@ -2245,3 +2245,62 @@ This closes the preview mismatch recorded in the previous checkpoint. The
 separate historical payroll country/profile defect remains the next accounting
 remediation; this checkpoint does not claim that all historical payroll context
 is stable.
+
+
+### 2026-09-05 — Historical payroll country and prospective component flags
+
+The completed full checkpoint at `c37020fc` passed 2,276 tests with zero failures
+or skips (1,249,145.195084 ms). Its fixture receipt records 1,877 balanced leases,
+releases and resets, four bootstrap/teardown/verification cycles, and no active
+leases or leaks. It includes the import and declared-default repairs preceding
+`900c1248`, not the subsequent payroll-history and preview changes.
+
+Two new real-payroll regressions showed a committed Canadian tax slip disappearing
+after its employee profile was moved to another country or deleted. Pay stubs
+now capture the resolved statutory country and its provenance at calculation.
+Forward migration 0091 derives existing attribution from the already-stored
+province/state using the disjoint region sets of the two supported legacy packs;
+it never consults the employee's current country. Unrecognized legacy regions
+remain explicitly unknown and block affected year-end populations with a named
+review requirement. New calculations supply their country directly, including
+future pack identities. The stored country cannot be overwritten in place.
+Canadian, regional Canadian and US year-end populations use the stub country and
+retain committed rows even when the live profile is absent.
+
+The full run at `53b0b90d` exposed one overbroad restriction in migration 0090:
+prospective pension/insurance/vacation/non-periodic flags were frozen although
+their resulting monetary bases and accruals are already stored on stubs. Forward
+migration 0092 keeps historical report classification and destructive deletion
+protected while allowing those prospective inputs to change. It also stamps
+actual write time for every changed component row, so a raw prospective edit
+cannot bypass calculation freshness. The existing controlled retro-pay test now
+passes without being weakened. The earlier full-run failure remains recorded;
+a new complete checkpoint is required for this implementation.
+
+All 75 focused checks passed (23,230.987459 ms; zero skips), including Canadian
+profile moves/deletion, regional slips, US W-2 and quarterly worksheets, captured
+provenance, all 65 legacy region mappings, immutable country, unknown legacy
+refusals, component freshness, setup controls and controlled retro pay. Three
+built year-end API browser checks passed with the restricted runtime role:
+original data, a later country change, and profile deletion all retained the
+same Canadian amounts and no US wage rows. Workspace types, changed-file lint,
+locked production build and all 3,153 unit tests passed (166,440.629166 ms; zero
+skips). Quality ceilings remain 389 explicit-any uses and 723 lint warnings.
+
+A separate database was bootstrapped from the prior `53b0b90d` schema and seeded
+with genuinely calculated/committed payroll before upgrading. Its current
+profile was moved to the US before migration. Upgrade recovered CA from the
+historical ON region, preserved every pre-existing stub field exactly, and
+restored the original 240.0000 employment-income slip. Repeating the normal
+bootstrap retained that result. The upgrade database, browser tenant, browser
+and server were removed. Evidence is under
+`audit-payroll-country-snapshot-2026-09-05`.
+
+Apply 0091 and 0092 before the new application reads country snapshots. The
+migrations preserve monetary history and existing fields; retain their additive
+columns and guards when rolling an application version back. Legacy unknown
+attribution requires review of original evidence and must not be filled with a
+guessed country. Historical opening-balance country, employee filing-account
+assignment, remittance destination and other live profile dependencies remain
+separate review areas; this checkpoint does not certify those paths or all
+payroll history.
