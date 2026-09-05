@@ -1,6 +1,7 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db } from '@openbooks/engine/src/db.ts'
 import { canonicalJson } from '@openbooks/engine/src/canonical-json.ts'
 import { ACCOUNT_TYPES } from '@openbooks/schema'
@@ -9,28 +10,16 @@ import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/feature
 import { loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { isUuid } from '../../../lib/list-params'
 import { loadAccount } from './_lib'
+import { accountInputFields } from './_input'
 
 export const runtime = 'nodejs'
 
 const CURRENCY_RE = /^[A-Z]{3}$/
 
-interface CreateBody {
-  number?: string | null
-  name?: string
-  type?: string
-  description?: string | null
-  parentId?: string | null
-  isSummary?: boolean
-  isActive?: boolean
-  currencyRestriction?: string | null
-  eliminate?: boolean
-  subsidiaryId?: string | null
-  subsidiaryIncludeChildren?: boolean
-  reconcilable?: boolean
-  monetary?: boolean | null
-  requiredDimensions?: string[]
-  custom?: Record<string, unknown>
-}
+const createBodySchema = z.looseObject({
+  ...accountInputFields,
+  name: z.string().optional(),
+})
 
 function bad(error: string, field?: string, status = 422) {
   return NextResponse.json({ error, ...(field ? { field } : {}) }, { status })
@@ -56,12 +45,9 @@ export async function POST(request: Request) {
   const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
   if (!isUuid(requestId)) return bad('invalid_idempotency_key', undefined, 400)
 
-  const parsedBody = await parseJsonBody(request, jsonObject);
+  const parsedBody = await parseJsonBody(request, createBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const parsed = parsedBody.data
-  const body = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-    ? parsed as CreateBody
-    : {}
+  const body = parsedBody.data
   if (body.currencyRestriction !== undefined && !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
   }
