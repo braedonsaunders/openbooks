@@ -238,9 +238,10 @@ export class ScratchOrgPool<T extends { orgId: string }> {
     resolve: (slot: PoolSlot<T>) => void;
     reject: (error: Error) => void;
   }[] = [];
-  private started = false;
   private closed = false;
   private startPromise: Promise<void> | undefined;
+  private closePromise: Promise<void> | undefined;
+  private readonly releasing = new Map<string, Promise<void>>();
 
   constructor(options: ScratchOrgPoolOptions<T>) {
     if (!Number.isInteger(options.size) || options.size < 1 || options.size > 16) {
@@ -270,20 +271,28 @@ export class ScratchOrgPool<T extends { orgId: string }> {
 
   async start(): Promise<void> {
     if (this.closed) throw new Error("scratch fixture pool is already closed");
-    if (this.started) return this.startPromise;
+    if (this.startPromise) return this.startPromise;
     this.startPromise = (async () => {
       for (let i = 0; i < this.targetSize; i += 1) {
         this.slots.push({ org: await this.store.bootstrap(), leased: false, tainted: false });
         this.metrics.fullBootstrap += 1;
       }
-      this.started = true;
     })();
     await this.startPromise;
   }
 
+  private reserve(slot: PoolSlot<T>): PoolSlot<T> {
+    slot.leased = true;
+    this.metrics.leases += 1;
+    this.metrics.activeLeases += 1;
+    return slot;
+  }
+
   private async nextSlot(): Promise<PoolSlot<T>> {
     const available = this.slots.find((slot) => !slot.leased && !slot.tainted);
-    if (available) return available;
+    // Reserve before yielding: two callers must never observe the same free slot.
+    if (available) return this.reserve(available);
+    if (this.slots.every((slot) => slot.tainted)) throw new Error("scratch fixture pool has no healthy slots");
     return await new Promise<PoolSlot<T>>((resolve, reject) => this.waiters.push({ resolve, reject }));
   }
 
@@ -291,38 +300,51 @@ export class ScratchOrgPool<T extends { orgId: string }> {
     await this.start();
     if (this.closed) throw new Error("scratch fixture pool is already closed");
     const slot = await this.nextSlot();
-    slot.leased = true;
-    this.metrics.leases += 1;
-    this.metrics.activeLeases += 1;
+    if (this.closed) throw new Error("scratch fixture pool is already closed");
     return slot.org;
   }
 
   async release(orgId: string): Promise<void> {
     const slot = this.slots.find((candidate) => candidate.org.orgId === orgId);
     if (!slot) throw new Error(`scratch fixture ${orgId} is not owned by this pool`);
-    // Preserve dropScratchOrg's historical idempotence. A second drop after
-    // a successful reset is a no-op; callers still receive errors for IDs
-    // that are not owned by this pool.
+    const pending = this.releasing.get(orgId);
+    if (pending) return pending;
     if (!slot.leased) return;
-    let failure: unknown;
-    try {
-      await this.store.reset(slot.org);
-      this.metrics.resets += 1;
-    } catch (error) {
-      slot.tainted = true;
-      this.metrics.leakDetections += 1;
-      failure = error;
-    } finally {
-      slot.leased = false;
-      this.metrics.activeLeases -= 1;
-      this.metrics.releases += 1;
-    }
-    const waiter = this.waiters.shift();
-    if (waiter) {
-      if (slot.tainted) waiter.reject(new Error(`scratch fixture ${orgId} was tainted by a failed reset`));
-      else waiter.resolve(slot);
-    }
-    if (failure) throw failure;
+    if (this.closed) throw new Error("scratch fixture pool is already closed");
+
+    // Register the reset before running user/store code, including synchronous
+    // failures. Retries join this operation rather than resetting twice.
+    const task = Promise.resolve().then(async () => {
+      let failure: unknown;
+      let failed = false;
+      try {
+        await this.store.reset(slot.org);
+        this.metrics.resets += 1;
+      } catch (error) {
+        failed = true;
+        slot.tainted = true;
+        this.metrics.leakDetections += 1;
+        failure = error;
+      } finally {
+        slot.leased = false;
+        this.metrics.activeLeases -= 1;
+        this.metrics.releases += 1;
+        // Remove the completed operation before handing the slot to a borrower
+        // whose own immediate release must start a new reset.
+        this.releasing.delete(orgId);
+      }
+      if (this.slots.every((candidate) => candidate.tainted)) {
+        for (const waiter of this.waiters.splice(0)) waiter.reject(new Error("scratch fixture pool has no healthy slots"));
+      }
+      const waiter = this.closed ? undefined : this.waiters.shift();
+      if (waiter) {
+        if (slot.tainted) waiter.reject(new Error(`scratch fixture ${orgId} was tainted by a failed reset`));
+        else waiter.resolve(this.reserve(slot));
+      }
+      if (failed) throw failure;
+    });
+    this.releasing.set(orgId, task);
+    return task;
   }
 
   has(orgId: string): boolean {
@@ -330,29 +352,38 @@ export class ScratchOrgPool<T extends { orgId: string }> {
   }
 
   async close(): Promise<void> {
-    if (this.closed) return;
-    if (this.startPromise) await this.startPromise;
+    if (this.closePromise) return this.closePromise;
     this.closed = true;
-    if (this.metrics.activeLeases > 0) this.metrics.leakDetections += this.metrics.activeLeases;
-    const errors: unknown[] = [];
-    for (const slot of this.slots) {
-      try {
-        await this.store.teardown(slot.org);
-        this.metrics.fullTeardown += 1;
-        this.metrics.schemaWideVerification += 1;
-      } catch (error) {
-        errors.push(error);
-      }
-    }
     for (const waiter of this.waiters.splice(0)) waiter.reject(new Error("scratch fixture pool closed"));
-    if (errors.length > 0 || this.metrics.leakDetections > 0) {
-      throw new Error(
-        `scratch fixture pool closed with lifecycle failures: ${JSON.stringify({
-          errors: errors.map((error) => String(error)),
-          metrics: this.metrics,
-        })}`,
-      );
-    }
+    this.closePromise = (async () => {
+      const errors: unknown[] = [];
+      // A partial bootstrap still owns every successfully created tenant.
+      if (this.startPromise) {
+        try { await this.startPromise; } catch (error) { errors.push(error); }
+      }
+      const resets = await Promise.allSettled([...this.releasing.values()]);
+      for (const reset of resets) if (reset.status === "rejected") errors.push(reset.reason);
+      if (this.metrics.activeLeases > 0) this.metrics.leakDetections += this.metrics.activeLeases;
+      for (const slot of this.slots) {
+        try {
+          await this.store.teardown(slot.org);
+          this.metrics.fullTeardown += 1;
+          this.metrics.schemaWideVerification += 1;
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (errors.length > 0 || this.metrics.leakDetections > 0 || this.metrics.activeLeases !== 0
+          || this.metrics.leases !== this.metrics.releases) {
+        throw new Error(
+          `scratch fixture pool closed with lifecycle failures: ${JSON.stringify({
+            errors: errors.map((error) => String(error)),
+            metrics: this.metrics,
+          })}`,
+        );
+      }
+    })();
+    return this.closePromise;
   }
 }
 
@@ -395,6 +426,8 @@ async function fixtureOwnerRequest<T>(request: Record<string, string>): Promise<
     };
     socket.setTimeout(120_000, () => finish(new Error("fixture owner request timed out")));
     socket.on("error", (error) => finish(error));
+    socket.once("end", () => finish(new Error("fixture owner closed without a complete response")));
+    socket.once("close", () => finish(new Error("fixture owner closed without a complete response")));
     socket.on("data", (chunk) => {
       buffer += chunk.toString();
       const newline = buffer.indexOf("\n");
