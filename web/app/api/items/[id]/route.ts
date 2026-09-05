@@ -1,4 +1,5 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { exactMoney, jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
@@ -43,31 +44,39 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
   return isUuid(s) ? s : 'invalid'
 }
 
-interface PatchBody {
-  kind?: string
-  code?: string | null
-  name?: string
-  description?: string | null
-  category?: string | null
-  unit?: string | null
-  defaultRate?: string | null
-  defaultCost?: string | null
-  incomeAccountId?: string | null
-  expenseAccountId?: string | null
-  costRecoveryAccountId?: string | null
-  taxCodeId?: string | null
-  showOnTimesheet?: boolean
-  isActive?: boolean
-  custom?: Record<string, unknown>
-  // Revenue recognition (ASC 606) item defaults.
-  recognitionRuleId?: string | null
-  deferredAccountId?: string | null
-  createPlansOn?: string
-  revenueAllocation?: string
-  standaloneSellingPrice?: string | null
-  reason?: string | null
-  changeReason?: string | null
-}
+const nullableText = z.string().nullable().optional()
+const nullableMoney = z.preprocess(
+  value => typeof value === 'string' && value.trim() === '' ? null : value,
+  exactMoney().nullable(),
+).optional()
+
+// Validate the complete patch shape before normalization. Non-text values must
+// never become silent clears, and PostgreSQL must not coerce lifecycle flags.
+const itemPatchSchema = z.looseObject({
+  kind: z.string().optional(),
+  code: nullableText,
+  name: z.string().optional(),
+  description: nullableText,
+  category: nullableText,
+  unit: nullableText,
+  defaultRate: nullableMoney,
+  defaultCost: nullableMoney,
+  incomeAccountId: nullableText,
+  expenseAccountId: nullableText,
+  costRecoveryAccountId: nullableText,
+  taxCodeId: nullableText,
+  showOnTimesheet: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  custom: z.record(z.string(), z.unknown()).optional(),
+  recognitionRuleId: nullableText,
+  deferredAccountId: nullableText,
+  createPlansOn: z.string().optional(),
+  revenueAllocation: z.string().optional(),
+  standaloneSellingPrice: nullableMoney,
+  reason: nullableText,
+  changeReason: nullableText,
+})
+type PatchBody = z.output<typeof itemPatchSchema>
 
 const CREATE_PLANS_ON = ['billing', 'fulfillment', 'arrangement'] as const
 const REVENUE_ALLOCATION = ['normal', 'exclude', 'software'] as const
@@ -150,7 +159,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as PatchBody
+  const fields = itemPatchSchema.safeParse(parsedBody.data)
+  if (!fields.success) return bad(fields.error.issues[0]?.message ?? 'Invalid item fields')
+  const body = fields.data
 
   // -- kind ----------------------------------------------------------------
   if (body.kind !== undefined && !ITEM_KINDS.includes(body.kind as (typeof ITEM_KINDS)[number])) {
