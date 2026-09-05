@@ -1161,3 +1161,19 @@ regressions now pass. Receipts are retained under
 `audit-spender-ledger-2026-09-05` in thread storage.
 All 3,073 unit tests, web typechecking and the locked production build passed;
 explicit-any and lint ceilings remain 391 and 725.
+
+## Vendor settlement metrics — continuation from c88c1ad8
+
+Vendor days to pay measured lateness from the due date despite the UI promising
+elapsed days from the bill date. Partial installments counted as paid bills,
+and future-effective applications, future payments and secondary-book
+settlements could affect the report. The query now measures bill-to-final-payment
+days only after full settlement in transaction currency, using posted/reversed
+primary-book entries within the reference date. Late spend continues to include
+actual partial payments made after the due date.
+
+All six new settlement cases failed before correction. All 41 combined
+settlement, installment, period and authorization regressions now pass.
+Receipts are retained under `audit-vendor-settlement-2026-09-05` in thread storage.
+All 3,073 unit tests, web typechecking and the locked production build passed;
+explicit-any and lint ceilings remain 391 and 725.
