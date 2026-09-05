@@ -798,6 +798,29 @@ export async function generatePaymentFileArtifact(
     if (!opts?.reprocessFileId) {
       const live = await findLiveRunArtifact(runId, orgId);
       if (live) return live;
+    } else {
+      // The route authorizes this run, not an arbitrary parent artifact. Keep
+      // lineage inside that same boundary and judge retries under the run lock
+      // so two callers cannot create independently deliverable successors.
+      const parent = (await db.execute<{ id: string; status: string }>(sql`
+        select id, status from payment_files
+         where id = ${opts.reprocessFileId} and payment_run_id = ${runId} and org_id = ${orgId}
+         for update
+      `)).rows[0];
+      if (!parent) throw new PaymentError("payment file not found in this run");
+      const latest = (await db.execute<{ id: string; parent_id: string | null; status: string }>(sql`
+        select id, parent_payment_file_id as parent_id, status from payment_files
+         where payment_run_id = ${runId} and org_id = ${orgId}
+         order by sequence_number desc limit 1
+      `)).rows[0]!;
+      if (latest.parent_id === parent.id && !["superseded", "voided", "rejected"].includes(latest.status)) {
+        const live = await findLiveRunArtifact(runId, orgId);
+        if (live?.id === latest.id) return live;
+        throw new PaymentError("the replacement payment file is unavailable");
+      }
+      if (latest.id !== parent.id || ["superseded", "voided"].includes(parent.status)) {
+        throw new PaymentError("only the latest non-voided payment file can be reprocessed");
+      }
     }
     const stored = await storeArtifactFile(orgId, userId, rendered.filename, rendered.contentType, content, hash);
     const seq = (await db.execute<{ n: number }>(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId} and org_id = ${orgId}`));

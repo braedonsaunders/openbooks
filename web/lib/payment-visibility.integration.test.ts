@@ -120,6 +120,7 @@ const { POST: postPayment } =
   await import('../app/api/payments/post-with-applications/route')
 const { GET: getPayment, PATCH: patchPayment } =
   await import('../app/api/payments/[id]/route')
+const { POST: settleInstruction } = await import('../app/api/payments/runs/[id]/instructions/[instructionId]/settlement/route')
 const { GET: openItems } = await import('../app/api/payments/open-items/route')
 
 async function fixture() {
@@ -257,6 +258,7 @@ for (const boundary of [
   'retained sources',
   'read revision race',
   'collections screen',
+  'malformed settlement identifiers',
 ] as const) {
   test(
     `payment visibility: ${boundary}`,
@@ -268,7 +270,17 @@ for (const boundary of [
           const authz = await getAuthz()
           assert.ok(authz)
           assert.deepEqual([...authz.allowedSubsidiaryIds!], [org.subsidiaryId])
-          if (boundary === 'server list and picker') {
+          if (boundary === 'malformed settlement identifiers') {
+            for (const params of [
+              { id: 'invalid-run', instructionId: randomUUID() },
+              { id: runs.VISIBLE!, instructionId: 'invalid-instruction' },
+            ]) {
+              const response = await settleInstruction(new Request('http://test.local', {
+                method: 'POST', body: JSON.stringify({ status: 'settled', effectiveOn: org.date }),
+              }), { params: Promise.resolve(params) })
+              assert.equal(response.status, 404)
+            }
+          } else if (boundary === 'server list and picker') {
             const tree = await RunsSection({
               ...{ orgId: org.orgId },
               sp: { newRun: '1', preselect: docs.HIDDEN },
