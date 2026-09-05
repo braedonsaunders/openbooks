@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { depreciationPeriodCount } from '@openbooks/engine/src/depreciation-limits.ts'
 import { buildAllSchedulesWithRunner } from '@openbooks/engine/src/depreciation.ts'
 import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
@@ -11,7 +11,7 @@ import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { postedAssetBasisEditRefusal, type RequestedAssetBasis } from '../../../../lib/asset-basis-guard'
-import { loadAsset } from '../_lib'
+import { loadAsset, loadAssetWithRunner } from '../_lib'
 
 export const runtime = 'nodejs'
 
@@ -67,6 +67,7 @@ async function acctExists(id: string, orgId: string): Promise<boolean> {
 }
 
 interface PatchBody {
+  expectedUpdatedAt?: string
   name?: string
   assetNumber?: string
   description?: string | null
@@ -139,6 +140,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as PatchBody
+  if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    return NextResponse.json({ error: 'The asset has changed. Reload it before saving.' }, { status: 409 })
+  }
 
   let subsidiaryId: string | undefined
   if (body.subsidiaryId !== undefined) {
@@ -375,7 +379,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   try {
-    await db.transaction(async (tx) => {
+    const payload = await db.transaction(async (tx) => {
       // The reads above are only an early refusal. Lock and reload the
       // authoritative asset inside the save transaction so a depreciation
       // posting that commits while this request is preparing cannot be
@@ -388,6 +392,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
          for update`))
       const lockedExisting = lockedRes.rows[0]
       if (!lockedExisting) throw new Error('asset not found')
+      if (lockedExisting.updated_at !== body.expectedUpdatedAt) {
+        throw new PostedBasisEditConflict('The asset has changed. Reload it before saving.')
+      }
 
       const lockedPostedRes = (await tx.execute(sql`
         select 1 from depreciation_schedules s
@@ -482,7 +489,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         if (effectiveStatus === 'in_service') throw error
         // Partial drafts legitimately have no category/date/life yet.
       }
+      // Return the saved revision while still holding the parent lock.
+      return loadAssetWithRunner(tx, id, user.orgId)
     })
+    return NextResponse.json(payload)
   } catch (error) {
     if (error instanceof PostedBasisEditConflict) {
       return NextResponse.json({ error: error.message }, { status: 409 })
@@ -490,8 +500,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return bad(error instanceof Error ? error.message : 'Could not build depreciation schedule')
   }
 
-  const payload = await loadAsset(id, user.orgId)
-  return NextResponse.json(payload)
 }
 
 /**

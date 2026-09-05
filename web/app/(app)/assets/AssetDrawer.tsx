@@ -137,6 +137,9 @@ export function AssetDrawer({
   const [busy, setBusy] = useState(false)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [dirty, setDirty] = useState(false)
+  const [revision, setRevision] = useState<string>(a.updated_at)
+  const editVersion = useRef(0)
+  const saveInFlight = useRef(false)
 
   const effectiveLayout = layout ?? defaultFormLayout('fixed_asset')
   const customByKey = useMemo(() => new Map(fieldDefs.map((def) => [def.key, def])), [fieldDefs])
@@ -194,10 +197,11 @@ export function AssetDrawer({
   const first = useRef(true)
   useEffect(() => {
     if (first.current) { first.current = false; return }
-    if (editable) { setDirty(true); setSaveState('dirty') }
+    if (editable) { editVersion.current += 1; setDirty(true); setSaveState('dirty') }
   }, [payloadBody, editable])
 
   function resetForm() {
+    setRevision(a.updated_at)
     setName(isPlaceholderName ? '' : (a.name ?? ''))
     setAssetNumber(a.asset_number ?? '')
     setDescription(a.description ?? '')
@@ -222,28 +226,38 @@ export function AssetDrawer({
     setTaxValues(taxRoot && typeof taxRoot === 'object' && !Array.isArray(taxRoot) ? structuredClone(taxRoot) : {})
   }
 
-  async function patchAsset(extra: Record<string, unknown>) {
+  async function patchAsset(extra: Record<string, unknown>, includeForm = true) {
     const res = await fetch(`/api/assets/${a.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payloadBody, ...extra }),
+      body: JSON.stringify({ ...(includeForm ? payloadBody : {}), ...extra, expectedUpdatedAt: includeForm ? revision : a.updated_at }),
     })
     if (!res.ok) {
       const err = (await res.json()).error ?? t('drawer.saveFailed')
       throw new Error(err === 'invalid_subsidiary' ? t('errors.invalidSubsidiary') : err)
     }
-    return res.json()
+    const saved = await res.json() as AssetPayload
+    setRevision(saved.asset.updated_at)
+    return saved
   }
 
   async function save() {
+    if (saveInFlight.current) return
+    saveInFlight.current = true
+    const submittedVersion = editVersion.current
     setBusy(true); setSaveState('saving')
     try {
       await patchAsset({})
-      setSaveState('saved'); setDirty(false); setMode('view'); router.refresh()
+      if (editVersion.current === submittedVersion) {
+        setSaveState('saved'); setDirty(false); setMode('view')
+      } else {
+        setSaveState('dirty')
+      }
+      router.refresh()
     } catch (error) {
       setSaveState('error')
       toast.error(error instanceof Error ? error.message : t('drawer.saveFailed'))
-    } finally { setBusy(false) }
+    } finally { saveInFlight.current = false; setBusy(false) }
   }
 
   function cancel() {
@@ -251,14 +265,16 @@ export function AssetDrawer({
   }
 
   async function placeInService() {
+    if (saveInFlight.current) return
+    saveInFlight.current = true
     setBusy(true)
     try {
-      await patchAsset({ status: 'in_service' })
+      await patchAsset({ status: 'in_service' }, false)
       setStatus('in_service'); setDirty(false); setMode('view')
       toast.success(t('status.in_service')); router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('drawer.saveFailed'))
-    } finally { setBusy(false); setActionsOpen(false) }
+    } finally { saveInFlight.current = false; setBusy(false); setActionsOpen(false) }
   }
 
   async function runForAsset(bookId: string) {
@@ -363,7 +379,7 @@ export function AssetDrawer({
       <Button size="sm" variant="outline" disabled={busy} onClick={cancel}>{tCommon('actions.cancel')}</Button>
       <Button size="sm" disabled={busy} onClick={save}>{busy ? tCommon('actions.saving') : tCommon('actions.save')}</Button>
     </div> : canManage || canCustomize ? <div className="flex items-center gap-1.5">
-      {canManage && canEditStatus ? <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => setMode('edit')}>{tCommon('actions.edit')}</Button> : null}
+      {canManage && canEditStatus ? <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { resetForm(); setMode('edit') }}>{tCommon('actions.edit')}</Button> : null}
       <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-64 p-1.5" trigger={<Button variant="outline" size="sm" className="h-8 gap-1.5 px-2.5 text-xs" onClick={() => setActionsOpen((open) => !open)} aria-expanded={actionsOpen}>{tCommon('labels.actions')}<ChevronDown className={cn('h-3.5 w-3.5 transition-transform', actionsOpen && 'rotate-180')} aria-hidden /></Button>}>
       {forms.length > 0 ? <div className="mb-1 border-b border-slate-200 p-2 dark:border-slate-800"><Label className="mb-1 block text-xs">{t('drawer.customForm')}</Label><Select value={currentFormId ?? ''} onChange={(event) => selectForm(event.target.value)}>{forms.map((form) => <option key={form.id} value={form.id}>{form.name}</option>)}</Select></div> : null}
       <div className="space-y-0.5 [&_button]:h-8 [&_button]:w-full [&_button]:justify-start [&_button]:rounded [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2 [&_button]:text-xs [&_button]:shadow-none [&_button:hover]:bg-slate-100 dark:[&_button:hover]:bg-slate-800">

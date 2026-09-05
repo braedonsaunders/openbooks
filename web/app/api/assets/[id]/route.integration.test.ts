@@ -1,3 +1,4 @@
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -123,7 +124,7 @@ async function openAssetHolder(fixture: Fixture): Promise<Client> {
   return client;
 }
 
-function patchRequest(fixture: Fixture, body: Record<string, unknown>): Request {
+async function patchRequest(fixture: Fixture, body: Record<string, unknown>): Promise<Request> {
   routeState.authz = {
     user: { orgId: fixture.orgId, id: fixture.actorId },
     allowedSubsidiaryIds: null,
@@ -131,7 +132,7 @@ function patchRequest(fixture: Fixture, body: Record<string, unknown>): Request 
   return new Request(`http://openbooks.test/api/assets/${fixture.assetId}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, expectedUpdatedAt: (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${fixture.assetId}`)).rows[0]!.revision }),
   });
 }
 
@@ -161,7 +162,7 @@ test(
     try {
       holder = await openAssetHolder(fixture);
       let settled = false;
-      const pending = PATCH(patchRequest(fixture, { acquisitionCost: "13000" }), {
+      const pending = PATCH(await patchRequest(fixture, { acquisitionCost: "13000" }), {
         params: Promise.resolve({ id: fixture.assetId }),
       }).then(async (response) => {
         settled = true;
@@ -214,7 +215,7 @@ test(
   async () => {
     const fixture = await seedAsset();
     try {
-      const response = await PATCH(patchRequest(fixture, { acquisitionCost: "13000" }), {
+      const response = await PATCH(await patchRequest(fixture, { acquisitionCost: "13000" }), {
         params: Promise.resolve({ id: fixture.assetId }),
       });
       assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`);

@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import { resolveAssetAccounts } from '@openbooks/engine/src/depreciation.ts'
 import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
@@ -109,17 +110,18 @@ export async function loadAsset(
   options: AssetReadOptions = {},
 ): Promise<AssetPayload | null> {
   // Lifecycle writers lock this parent before changing journals and schedules.
-  return db.transaction((tx) => loadAssetSnapshot(tx, id, orgId, options))
+  return db.transaction((tx) => loadAssetWithRunner(tx, id, orgId, options))
 }
 
-async function loadAssetSnapshot(
+export async function loadAssetWithRunner(
   tx: SqlExecutor,
   id: string,
   orgId: string,
-  options: AssetReadOptions,
+  options: AssetReadOptions = {},
 ): Promise<AssetPayload | null> {
   const assetRes = (await tx.execute<Record<string, any>>(sql`
-    select * from fixed_assets where id = ${id} and org_id = ${orgId} for share
+    select fixed_assets.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
+      from fixed_assets where id = ${id} and org_id = ${orgId} for share
   `))
   const asset = assetRes.rows[0]
   if (!asset) return null
