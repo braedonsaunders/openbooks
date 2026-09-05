@@ -1,4 +1,7 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { isoDate, uuidId, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { advanceCadence } from "@openbooks/engine/src/recurring.ts";
+import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -9,6 +12,17 @@ import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents";
 export const runtime = "nodejs";
 
 const CADENCES = ["weekly", "biweekly", "monthly", "quarterly", "annually", "custom_cron"] as const;
+
+const createSchema = z.object({
+  templateDocumentId: uuidId.optional(),
+  templateDocumentNumber: z.string().trim().min(1).optional(),
+  cadence: z.enum(CADENCES),
+  cron: z.string().trim().min(1).nullable().optional(),
+  nextRunOn: isoDate().optional(),
+  endsOn: isoDate().nullable().optional(),
+  autoPost: z.boolean().optional(),
+  name: z.string().trim().max(255).nullable().optional(),
+});
 
 /**
  * Recurring schedules — a template document + a cadence. The engine runner
@@ -32,6 +46,7 @@ export async function GET() {
       join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
       left join parties p on p.id = d.party_id and p.org_id = rs.org_id
      where rs.org_id = ${authz.user.orgId}
+       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
      order by rs.is_active desc, rs.next_run_on
   `));
   return NextResponse.json({
@@ -42,26 +57,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const authz = await guardPermission("documents.manage");
   if (authz instanceof NextResponse) return authz;
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, createSchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    templateDocumentId?: string;
-    templateDocumentNumber?: string;
-    cadence?: string;
-    cron?: string | null;
-    nextRunOn?: string;
-    endsOn?: string | null;
-    autoPost?: unknown;
-    name?: string | null;
-  };
-
-  // autoPost is a privileged capability, not just a storage flag: every due
-  // occurrence may reach the ledger after the caller's request has finished.
-  // Reject non-booleans rather than allowing truthy/falsy coercion to select a
-  // posting path the caller did not explicitly authorize.
-  if (body.autoPost !== undefined && typeof body.autoPost !== "boolean") {
-    return NextResponse.json({ error: "autoPost must be a boolean" }, { status: 400 });
-  }
+  const body = parsedBody.data;
   const autoPost = body.autoPost ?? false;
   if (autoPost && !can(authz, "gl.post")) {
     return NextResponse.json({ error: "missing permission: gl.post" }, { status: 403 });
@@ -70,30 +68,29 @@ export async function POST(req: Request) {
   if (!body.templateDocumentId && !body.templateDocumentNumber) {
     return NextResponse.json({ error: "a template document is required" }, { status: 400 });
   }
-  if (!body.cadence || !CADENCES.includes(body.cadence as (typeof CADENCES)[number])) {
-    return NextResponse.json({ error: "invalid cadence" }, { status: 400 });
-  }
   if (body.cadence === "custom_cron" && !body.cron) {
     return NextResponse.json({ error: "cron is required for custom_cron" }, { status: 400 });
   }
 
-  // Resolve by id or by the human document number (the UI hands a number).
-  const tpl = (await db.execute<{ id: string; kind: string }>(
-    body.templateDocumentId
-      ? sql`select id, kind from documents where id = ${body.templateDocumentId} and org_id = ${authz.user.orgId}`
-      : sql`select id, kind from documents where document_number = ${body.templateDocumentNumber} and org_id = ${authz.user.orgId} limit 1`,
-  ));
-  if (!tpl.rows.length) {
-    return NextResponse.json({ error: "template document not found" }, { status: 404 });
-  }
-  if (!(await isDocKindEnabled(authz.user.orgId, tpl.rows[0]!.kind))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
-  }
-  const templateDocumentId = tpl.rows[0]!.id;
-
   const nextRunOn = body.nextRunOn ?? await businessToday(authz.user.orgId);
+  try { advanceCadence(nextRunOn, body.cadence, body.cron); }
+  catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "invalid recurrence" }, { status: 400 });
+  }
+  if (body.endsOn && body.endsOn < nextRunOn) {
+    return NextResponse.json({ error: "endsOn must not precede nextRunOn" }, { status: 400 });
+  }
   const created = await db.transaction(async (tx) => {
-    const row = (await tx.execute<Record<string, unknown>>(sql`
+    const tpl = await tx.execute<{ id: string; kind: string }>(sql`
+      select d.id, d.kind from documents d where d.org_id = ${authz.user.orgId}
+        and ${body.templateDocumentId ? sql`d.id = ${body.templateDocumentId}` : sql`d.document_number = ${body.templateDocumentNumber}`}
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
+      order by d.id limit 2 for share of d
+    `);
+    if (!tpl.rows.length || !(await isDocKindEnabled(authz.user.orgId, tpl.rows[0]!.kind))) return null;
+    if (tpl.rows.length > 1) return "ambiguous" as const;
+    const templateDocumentId = tpl.rows[0]!.id;
+    const row = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
       insert into recurring_schedules (org_id, template_document_id, cadence, cron, next_run_on, ends_on,
                                        auto_post, name, created_by, updated_by)
       values (${authz.user.orgId}, ${templateDocumentId}, ${body.cadence}, ${body.cron ?? null},
@@ -107,10 +104,12 @@ export async function POST(req: Request) {
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
       values
-        (${authz.user.orgId}, 'recurring_schedules', ${(row.rows[0] as any).id as string}, 'insert',
+        (${authz.user.orgId}, 'recurring_schedules', ${row.rows[0]!.id}, 'insert',
          ${JSON.stringify({ after: row.rows[0] })}::jsonb, ${authz.user.id})
     `);
     return row.rows[0]!;
   });
-  return NextResponse.json({ id: ((created)).id as string }, { status: 201 });
+  if (!created) return NextResponse.json({ error: "template document not found" }, { status: 404 });
+  if (created === "ambiguous") return NextResponse.json({ error: "document number is ambiguous; select a template ID" }, { status: 400 });
+  return NextResponse.json({ id: created.id }, { status: 201 });
 }

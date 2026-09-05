@@ -1,7 +1,7 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
-import type { SubsidiaryRestriction } from "@openbooks/schema";
+import { actorAllowedSubsidiaryIds } from "@openbooks/engine/src/actor-subsidiaries.ts";
 import { subsidiaryFeatureEnabled } from "./features";
 
 /**
@@ -114,32 +114,5 @@ export function subsidiaryVisibleFilter(column: SQL, allowed: ReadonlySet<string
  * `and subsidiary_id = any(...)` only when non-null.
  */
 export async function allowedSubsidiaryIds(userId: string, orgId: string): Promise<Set<string> | null> {
-  if (!orgId) throw new Error("Subsidiary authorization requires an organization");
-  // Identity-layer lookup: the user's assignments and super-admin flag live in
-  // their HOME org, which is invisible under another org's RLS context when a
-  // member is acting cross-org (org switch). Read them with the identity
-  // bypass, exactly like the auth bootstrap — otherwise a cross-org actor
-  // resolves an empty set and every list filters to nothing.
-  const identity = await withBypassContext(async () => {
-    const su = (await db.execute<{ is_super_admin: boolean }>(sql`
-      select is_super_admin from users where id = ${userId}`));
-    const assignments = (await db.execute<{ restriction: SubsidiaryRestriction | null }>(sql`
-      select r.subsidiary_restriction as restriction
-        from role_assignments a join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-       where a.user_id = ${userId} and a.org_id = ${orgId}`));
-    return { superAdmin: su.rows[0]?.is_super_admin === true, rows: assignments.rows as { restriction: SubsidiaryRestriction | null }[] };
-  });
-  if (identity.superAdmin) return null;
-  const r = identity;
-  if (r.rows.length === 0) return new Set();
-  const restrictions = r.rows.map((row) => row.restriction ?? { mode: "all" as const });
-  if (restrictions.some((x) => x.mode === "all")) return null;
-
-  const all = await subsidiaryOptions(true, true);
-  const allowed = new Set<string>();
-  for (const x of restrictions) {
-    if (x.mode === "subtree") for (const id of subtreeIds(all, x.subsidiaryId)) allowed.add(id);
-    if (x.mode === "list") for (const id of x.subsidiaryIds) allowed.add(id);
-  }
-  return allowed;
+  return withBypassContext(() => actorAllowedSubsidiaryIds(db, orgId, userId));
 }

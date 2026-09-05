@@ -20,8 +20,8 @@ const recurringAct = collectionsClient.slice(
 )
 
 test('missing recurring schedule returns 404 without a delete audit', () => {
-  const snapshot = deleteHandler.indexOf('select * from recurring_schedules')
-  const missingGuard = deleteHandler.indexOf('if (!existing.rows[0]) return "not_found"')
+  const snapshot = deleteHandler.indexOf('await ownedEnabled(tx, authz, id)')
+  const missingGuard = deleteHandler.indexOf('if (!existing) return "not_found"')
   const deletion = deleteHandler.indexOf('delete from recurring_schedules')
   const audit = deleteHandler.indexOf('insert into audit_log')
 
@@ -56,15 +56,15 @@ test('recurring schedule with generated documents returns a localized-safe 409 b
 test('existing recurring schedule is locked, deleted, and audited with its true before-state', () => {
   assert.match(deleteHandler, /db\.transaction\(async \(tx\)/)
   assert.match(
-    deleteHandler,
-    /select \* from recurring_schedules where id = \$\{id\} and org_id = \$\{authz\.user\.orgId\}[\s\S]*for update/,
+    route,
+    /where rs\.id = \$\{id\} and rs\.org_id = \$\{authz\.user\.orgId\}[\s\S]*for update of rs for share of d/,
   )
   assert.match(
     deleteHandler,
     /delete from recurring_schedules where id = \$\{id\} and org_id = \$\{authz\.user\.orgId\}/,
   )
   assert.match(deleteHandler, /insert into audit_log/)
-  assert.match(deleteHandler, /JSON\.stringify\(\{ before: existing\.rows\[0\], after: null \}\)/)
+  assert.match(deleteHandler, /JSON\.stringify\(\{ before: existing, after: null \}\)/)
   assert.doesNotMatch(deleteHandler, /before: existing\.rows\[0\] \?\? null/)
   assert.match(deleteHandler, /return "deleted" as const/)
   assert.match(deleteHandler, /return NextResponse\.json\(\{ ok: true \}\)/)
@@ -82,5 +82,5 @@ test('recurring schedule action failures display the generated-document conflict
 })
 
 test('run now passes the authenticated user to recurring generation', () => {
-  assert.match(route, /runScheduleNow\(id,\s*authz\.user\.id\)/)
+  assert.match(route, /runScheduleNow\(id,\s*authz\.user\.id, undefined,/)
 })

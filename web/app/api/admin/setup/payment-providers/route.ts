@@ -9,7 +9,7 @@ import {
   saveAcceptanceConfig,
   testAcceptanceConnection,
 } from "@openbooks/engine/src/payment-acceptance.ts";
-import { businessToday, parseIsoDate } from "@openbooks/engine/src/business-date.ts";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
@@ -18,7 +18,6 @@ import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decim
 
 export const runtime = "nodejs";
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Audit-evidence shape for payment_surcharge_rules: the stored row itself. */
 type SurchargeRuleSnapshot = {
@@ -141,13 +140,12 @@ export async function POST(req: Request) {
     // Effective dating accepts only real calendar days: a malformed string
     // would otherwise surface as a Postgres cast failure and an inverted
     // range as a constraint violation — both raw 500s.
-    const isoCalendarDay = (raw: string) => DATE_RE.test(raw) && parseIsoDate(raw).toISOString().slice(0, 10) === raw;
     const effectiveFrom = typeof body.effectiveFrom === "string" && body.effectiveFrom ? body.effectiveFrom : await businessToday(orgId);
     const effectiveTo = typeof body.effectiveTo === "string" && body.effectiveTo ? body.effectiveTo : null;
-    if (!isoCalendarDay(effectiveFrom)) {
+    if (!isIsoCalendarDate(effectiveFrom)) {
       return NextResponse.json({ error: "effectiveFrom must be a calendar date (YYYY-MM-DD)" }, { status: 422 });
     }
-    if (effectiveTo !== null && (!isoCalendarDay(effectiveTo) || effectiveTo < effectiveFrom)) {
+    if (effectiveTo !== null && (!isIsoCalendarDate(effectiveTo) || effectiveTo < effectiveFrom)) {
       return NextResponse.json(
         { error: "effectiveTo must be a calendar date on or after effectiveFrom" },
         { status: 422 },

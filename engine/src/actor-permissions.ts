@@ -1,6 +1,22 @@
 import { sql } from "drizzle-orm";
-import type { SqlExecutor } from "./db.ts";
+import { db, withBypassContext, type SqlExecutor } from "./db.ts";
 import { permissionSetCovers, resolveEffectivePermissions } from "./permissions.ts";
+
+/** Read a home identity without losing changes in the caller's tenant transaction. */
+export async function actorIdentity(exec: SqlExecutor, orgId: string, actorId: string) {
+  // Preserve the caller's uncommitted identity changes when it belongs to
+  // this tenant. Only a home-org identity outside that view needs the explicit
+  // identity bypass used by HTTP authentication.
+  type Identity = { isSuperAdmin: boolean; isActive: boolean };
+  const local = (await exec.execute<Identity>(sql`
+    select is_super_admin as "isSuperAdmin", is_active as "isActive"
+      from users where id = ${actorId} and org_id = ${orgId}
+  `)).rows[0];
+  return local ?? (await withBypassContext(() => db.execute<Identity>(sql`
+    select is_super_admin as "isSuperAdmin", is_active as "isActive"
+      from users where id = ${actorId}
+  `))).rows[0];
+}
 
 /**
  * Effective permission check for ENGINE-side authority gates — the deep
@@ -23,13 +39,8 @@ export async function actorHasPermission(
   actorId: string,
   permission: string,
 ): Promise<boolean> {
-  const who = (await exec.execute<{ isSuperAdmin: boolean }>(sql`
-    select is_super_admin as "isSuperAdmin"
-      from users
-     where id = ${actorId} and org_id = ${orgId} and is_active
-  `));
-  const row = who.rows[0];
-  if (!row) return false;
+  const row = await actorIdentity(exec, orgId, actorId);
+  if (!row?.isActive) return false;
   if (row.isSuperAdmin) return true;
 
   const assignments = (await exec.execute<{ permissions: string[] | null }>(sql`

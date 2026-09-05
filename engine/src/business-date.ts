@@ -68,21 +68,43 @@ export async function businessToday(orgId: string): Promise<string> {
 
 /** Parse YYYY-MM-DD as a UTC calendar date — no local-timezone shift. */
 export function parseIsoDate(iso: string): Date {
-  const [year, month, day] = iso.split("-").map(Number);
-  return new Date(Date.UTC(year!, (month ?? 1) - 1, day ?? 1));
+  const date = typeof iso === "string" && /^\d{4}-\d{2}-\d{2}$/.test(iso)
+    ? new Date(`${iso}T00:00:00.000Z`)
+    : new Date(NaN);
+  if (Number.isNaN(date.getTime()) || date.getUTCFullYear() < 1
+      || date.toISOString().slice(0, 10) !== iso) {
+    throw new RangeError("business date must be a valid YYYY-MM-DD calendar date in years 0001 through 9999");
+  }
+  return date;
+}
+
+/** Boolean boundary for forms that report invalid dates instead of throwing. */
+export function isIsoCalendarDate(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try { parseIsoDate(value); return true; }
+  catch { return false; }
 }
 
 function isoDay(date: Date): string {
+  if (Number.isNaN(date.getTime()) || date.getUTCFullYear() < 1 || date.getUTCFullYear() > 9999) {
+    throw new RangeError("business date exceeds the supported calendar (0001 through 9999)");
+  }
   return date.toISOString().slice(0, 10);
+}
+
+function calendarOffset(value: number): void {
+  if (!Number.isSafeInteger(value)) throw new RangeError("calendar offset must be a safe whole number");
 }
 
 /** First day of the calendar month that contains `iso`. */
 export function startOfMonth(iso: string): string {
+  parseIsoDate(iso);
   return `${iso.slice(0, 7)}-01`;
 }
 
 /** Add (or subtract) whole calendar days on the YYYY-MM-DD grid. */
 export function addCalendarDays(iso: string, days: number): string {
+  calendarOffset(days);
   const date = parseIsoDate(iso);
   date.setUTCDate(date.getUTCDate() + days);
   return isoDay(date);
@@ -90,9 +112,11 @@ export function addCalendarDays(iso: string, days: number): string {
 
 /** First day of the calendar month `months` before the month that contains `iso`. */
 export function addCalendarMonthsStart(iso: string, months: number): string {
-  const date = parseIsoDate(startOfMonth(iso));
+  calendarOffset(months);
+  const date = parseIsoDate(iso);
+  date.setUTCDate(1);
   date.setUTCMonth(date.getUTCMonth() + months);
-  return startOfMonth(isoDay(date));
+  return isoDay(date);
 }
 
 /** Monday of the ISO week that contains `iso` (matches Postgres date_trunc('week')). */
@@ -105,6 +129,8 @@ export function mondayOfIsoWeek(iso: string): string {
 
 /** `weeks` consecutive Mondays ending with the week that contains `iso`, oldest first. */
 export function weekStartsEndingOn(iso: string, weeks: number): string[] {
+  calendarOffset(weeks);
+  if (weeks < 0) throw new RangeError("week count must not be negative");
   const monday = parseIsoDate(mondayOfIsoWeek(iso));
   const starts: string[] = [];
   for (let i = weeks - 1; i >= 0; i--) {
@@ -117,9 +143,11 @@ export function weekStartsEndingOn(iso: string, weeks: number): string[] {
 
 /** Inclusive calendar-quarter bounds for the quarter that contains `iso`. */
 export function calendarQuarterBounds(iso: string): { start: string; end: string } {
-  const [year, month] = iso.split("-").map(Number);
-  const quarter = Math.floor(((month ?? 1) - 1) / 3);
-  const start = new Date(Date.UTC(year!, quarter * 3, 1));
-  const end = new Date(Date.UTC(year!, quarter * 3 + 3, 0));
+  const date = parseIsoDate(iso);
+  const quarter = Math.floor(date.getUTCMonth() / 3);
+  const start = new Date(date);
+  start.setUTCMonth(quarter * 3, 1);
+  const end = new Date(date);
+  end.setUTCMonth(quarter * 3 + 3, 0);
   return { start: isoDay(start), end: isoDay(end) };
 }
