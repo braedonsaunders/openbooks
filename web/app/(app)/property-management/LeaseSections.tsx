@@ -182,6 +182,11 @@ export function EscalationsSection({ lease, rows, permissions, busy, act }: { le
     method: "percent",
     value: "",
   });
+  // Escalations compound in effective-date order (the API refuses anything
+  // else), so only the earliest scheduled one is offered for application.
+  const nextScheduledId = rows
+    .filter((row) => row.status === "scheduled")
+    .sort((left, right) => String(left.effectiveOn).localeCompare(String(right.effectiveOn)))[0]?.id;
   return (
     <div className="space-y-4">
       {rows.length ? (
@@ -209,7 +214,7 @@ export function EscalationsSection({ lease, rows, permissions, busy, act }: { le
                   <Status value={row.status} />
                 </TableCell>
                 <TableCell>
-                  {row.status === "scheduled" && permissions.manage ? (
+                  {row.id === nextScheduledId && permissions.manage ? (
                     <Button
                       size="sm"
                       variant="outline"

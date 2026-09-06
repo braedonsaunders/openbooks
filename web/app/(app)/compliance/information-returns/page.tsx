@@ -55,8 +55,8 @@ export default async function InformationReturnsPage() {
   const lastYear = Number((await businessToday(orgId)).slice(0, 4)) - 1
 
   const [filings, readiness, projectsEnabled] = await Promise.all([
-    loadFilings(orgId),
-    loadInformationReturnReadiness(orgId, lastYear),
+    loadFilings(orgId, authz.allowedSubsidiaryIds),
+    loadInformationReturnReadiness(orgId, lastYear, authz.allowedSubsidiaryIds),
     isFeatureEnabled(orgId, 'projects'),
   ])
   const tabs = await complianceTabs('/compliance/information-returns', { projectsEnabled })

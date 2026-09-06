@@ -1662,3 +1662,89 @@ test("both inventory HTTP routes thread every monetary action through the idempo
   assert.match(advancedRoute, /await ensureLot\(orgId/);
   assert.match(advancedRoute, /await ensureSerial\(orgId/);
 });
+
+test("manual-basis landed cost lands on a target whose layers carry no value, keeping GL = Σ layers", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    // Free-of-charge stock (samples, warranty replacements) arrives on a
+    // supplier bill as a zero-priced line: posting drops the zero GL leg but
+    // the receipt still creates a zero-value layer. The freight to bring it
+    // in is a real cost the operator then capitalizes by manual voucher.
+    // The item bills straight to its asset account (no received-not-billed
+    // clearing), so the bill receipt is the non-posting kind.
+    await db.execute(sql`
+      update item_inventory_profiles set received_not_billed_account_id = null
+       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`);
+    const billId = await draftApprovedInventoryBill(org, [
+      { itemId: org.items.fifo, quantity: "10", unitPrice: "0", amount: "0" },
+      { itemId: org.items.component, quantity: "5", unitPrice: "10", amount: "50" },
+    ]);
+    await postDocument(billId, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    });
+    await assertInvariant(org);
+    assert.equal(
+      toUnits((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity),
+      toUnits("10"),
+    );
+
+    const allocationsFor = async (voucherId: string) =>
+      (await db.execute<{ n: number; total: string }>(sql`
+        select count(*)::int as n, coalesce(sum(amount), 0)::text as total
+          from landed_cost_allocations
+         where org_id = ${org.orgId} and voucher_id = ${voucherId}
+           and reverses_allocation_id is null`)).rows[0]!;
+    const layerValue = async (itemId: string) =>
+      (await db.execute<{ v: string }>(sql`
+        select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0)::text as v
+          from cost_layers where org_id = ${org.orgId} and item_id = ${itemId}`)).rows[0]!.v;
+
+    // A single zero-value target: previously died on an empty allocation list.
+    const single = await postLandedCostVoucher(org.orgId, actor, {
+      amount: "10",
+      basis: "manual",
+      freightAccountId: org.accounts.freight,
+      subsidiaryId: org.subsidiaryId,
+      voucherDate: org.date,
+      targets: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId, manualAmount: "10" }],
+    });
+    await assertInvariant(org);
+    assert.deepEqual(await allocationsFor(single.id), { n: 1, total: "10.0000" });
+    assert.equal(toUnits(await layerValue(org.items.fifo)), toUnits("10"));
+
+    // Mixed targets: previously the zero-value target's share debited the
+    // asset account with no layer revaluation and no allocation evidence,
+    // leaving the GL above the subledger by exactly that share.
+    const mixed = await postLandedCostVoucher(org.orgId, actor, {
+      amount: "15",
+      basis: "manual",
+      freightAccountId: org.accounts.freight,
+      subsidiaryId: org.subsidiaryId,
+      voucherDate: org.date,
+      targets: [
+        { itemId: org.items.fifo, stockLocationId: org.stockLocationId, manualAmount: "10" },
+        { itemId: org.items.component, stockLocationId: org.stockLocationId, manualAmount: "5" },
+      ],
+    });
+    await assertInvariant(org);
+    assert.deepEqual(await allocationsFor(mixed.id), { n: 2, total: "15.0000" });
+    assert.equal(toUnits(await layerValue(org.items.fifo)), toUnits("20"));
+    assert.equal(toUnits(await layerValue(org.items.component)), toUnits("55"));
+
+    // Both vouchers reverse cleanly because every debit has layer evidence.
+    for (const voucherId of [mixed.id, single.id]) {
+      const reversal = await reverseLandedCostVoucher(org.orgId, actor, {
+        voucherId,
+        reversalDate: org.date,
+        reason: "Controlled reversal of manual landed cost on zero-value stock",
+      });
+      assert.equal(reversal.alreadyReversed, false);
+      await assertInvariant(org);
+    }
+    assert.equal(toUnits(await layerValue(org.items.fifo)), 0n);
+    assert.equal(toUnits(await layerValue(org.items.component)), toUnits("50"));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

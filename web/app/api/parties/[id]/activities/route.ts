@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
+import { crmActivityScope } from '../../../../../lib/crm-scope'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -34,12 +35,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const requestedPage = Number(url.searchParams.get('page') ?? '1')
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
 
-  const where = sql`a.org_id=${gate.user.orgId}
+  // Same activity boundary as the CRM account record and the activities list:
+  // an activity is visible only when every linked record is. Rows, count,
+  // facets and the ?q= search all sit behind it so nothing hidden leaks.
+  const scoped = sql`a.org_id=${gate.user.orgId}
     and exists (
       select 1 from crm_activity_links l
        where l.org_id=a.org_id and l.activity_id=a.id
          and l.subject_kind='account' and l.subject_id=${id}
-    )
+    )${crmActivityScope(gate.allowedSubsidiaryIds)}`
+  const where = sql`${scoped}
     ${q ? sql`and (a.subject ilike ${`%${q}%`} or coalesce(a.body,'') ilike ${`%${q}%`})` : sql``}
     ${kind ? sql`and a.kind=${kind}` : sql``}
     ${status ? sql`and a.status=${status}` : sql``}`
@@ -55,12 +60,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       select array_remove(array_agg(distinct a.kind order by a.kind),null) kinds,
              array_remove(array_agg(distinct a.status order by a.status),null) statuses
         from crm_activities a
-       where a.org_id=${gate.user.orgId}
-         and exists (
-           select 1 from crm_activity_links l
-            where l.org_id=a.org_id and l.activity_id=a.id
-              and l.subject_kind='account' and l.subject_id=${id}
-         )`),
+       where ${scoped}`),
   ]))
 
   return NextResponse.json({

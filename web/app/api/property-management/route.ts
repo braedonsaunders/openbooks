@@ -229,6 +229,7 @@ async function guardSubsidiaryAccess(
       "addEscalation",
       "scheduleLease",
       "billRent",
+      "assessLateFees",
       "recordDeposit",
     ].includes(action)
   ) {
@@ -236,6 +237,21 @@ async function guardSubsidiaryAccess(
       sql`select p.subsidiary_id as "subsidiaryId" from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where l.org_id=${authz.user.orgId} and l.id=${String(body.leaseId ?? "")}`,
     )) as any;
     subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
+    if (action === "updateLease" && body.propertyId !== undefined) {
+      // A draft lease may move to another property: the target must be
+      // visible to the caller too, and a hidden target reads as missing.
+      const targetId = String(body.propertyId ?? "");
+      const target = UUID.test(targetId)
+        ? (await db.execute<{ subsidiaryId: string | null }>(
+            sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${targetId}`,
+          )).rows[0]?.subsidiaryId ?? null
+        : null;
+      if (!target || !allowed.has(String(target)))
+        return NextResponse.json(
+          { error: "Property-management record not found" },
+          { status: 404 },
+        );
+    }
   } else if (action === "applyEscalation") {
     const result = (await db.execute(
       sql`select p.subsidiary_id as "subsidiaryId" from lease_escalations e join property_leases l on l.id=e.lease_id and l.org_id=e.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where e.org_id=${authz.user.orgId} and e.id=${String(body.escalationId ?? "")}`,

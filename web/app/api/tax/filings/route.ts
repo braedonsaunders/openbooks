@@ -69,16 +69,23 @@ export async function POST(req: Request) {
     )
     const { snapshot, snapshotHash } = buildTaxFilingSnapshot(result, normalizedAdjustments)
 
+    // The engine clamps the requested window to the registration's filing
+    // period (result.from/result.to) and THAT window is the filing's stored
+    // identity (tax_filings_period_version). The advisory lock and the version
+    // must be derived from the same persisted key — never from the caller's
+    // unclamped dates — or two prepares inside one quarter would compute the
+    // same version and collide, and mark-filed (which locks on the stored
+    // window) would serialize against nothing.
     const filing = await db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`tax-filing:${gate.user.orgId}:${body.code}:${body.from}:${body.to}`}))`)
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`tax-filing:${gate.user.orgId}:${result.formCode}:${result.from}:${result.to}`}))`)
       const form = (await tx.execute<{ country: string | null }>(sql`
         select country from tax_return_forms
-         where org_id = ${gate.user.orgId} and code = ${body.code} limit 1`))
+         where org_id = ${gate.user.orgId} and code = ${result.formCode} limit 1`))
       const versions = (await tx.execute<{ version: number }>(sql`
         select coalesce(max(version), 0)::int + 1 as version
           from tax_filings
-         where org_id = ${gate.user.orgId} and form_code = ${body.code}
-           and period_from = ${body.from} and period_to = ${body.to}`))
+         where org_id = ${gate.user.orgId} and form_code = ${result.formCode}
+           and period_from = ${result.from} and period_to = ${result.to}`))
       const version = Number(versions.rows[0]?.version ?? 1)
       const inserted = (await tx.execute<{ id: string; version: number }>(sql`
         insert into tax_filings

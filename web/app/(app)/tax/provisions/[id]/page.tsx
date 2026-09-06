@@ -22,7 +22,9 @@ export default async function TaxProvisionDetail({ params }: { params: Promise<{
   const t = await getTranslations('tax.provisions')
   const org = await orgInfo()
   const { id } = await params
-  const run = await getProvisionRun(authz.user.orgId, id)
+  // Same entity projection as the REST twin: a run with no visible entity is
+  // indistinguishable from a missing one.
+  const run = await getProvisionRun(authz.user.orgId, id, authz.allowedSubsidiaryIds)
   if (!run) notFound()
   const m = (v: string) => money(v, { currency: org?.base_currency })
   const payload = run.payload as {
@@ -38,7 +40,9 @@ export default async function TaxProvisionDetail({ params }: { params: Promise<{
   }
   const framework = payload.framework ?? 'asc740'
   const recon = payload.rateReconciliation ?? []
-  const canPost = can(authz, 'reports.create') && run.status === 'draft'
+  // Posting is the gl.post route's authority, and it refuses restricted callers
+  // (a provision posts the whole entity set); the button mirrors both.
+  const canPost = can(authz, 'gl.post') && authz.allowedSubsidiaryIds === null && run.status === 'draft'
 
   return (
     <ListPageLayout

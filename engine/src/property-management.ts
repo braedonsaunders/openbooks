@@ -18,6 +18,9 @@ export class PropertyManagementError extends Error {
 }
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** Cash and control classes never serve as the offset for deposit interest or adjustments. */
+const DEPOSIT_OFFSET_EXCLUDED_TYPES = new Set(["asset_bank", "asset_receivable", "liability_payable", "liability_card"]);
 
 function exactMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);
@@ -639,6 +642,24 @@ export async function updatePropertyLease(input: {
         update lease_charges set amount=${baseRent},effective_from=${startsOn},effective_to=${endsOn},income_account_id=${property.rent_income_account_id},
           updated_at=now(),updated_by=${input.actorId} where org_id=${input.orgId} and lease_id=${input.leaseId} and charge_type='base_rent'
       `);
+    } else if (current.endsOn != null && (endsOn == null || endsOn > current.endsOn)) {
+      // Term extension. The base-rent window that ends exactly on the old
+      // lease end is the term-derived one (creation, or the successor an
+      // escalation inserted); it follows the new end so the extended months
+      // schedule, bill, and escalate. Windows an escalation already closed
+      // earlier stay closed. Storage constraint 0060 still refuses any overlap.
+      const extended = (await tx.execute<{ id: string; effectiveFrom: string; amount: string }>(sql`
+        update lease_charges set effective_to=${endsOn},updated_at=now(),updated_by=${input.actorId}
+         where org_id=${input.orgId} and lease_id=${input.leaseId} and charge_type='base_rent' and effective_to=${current.endsOn}
+         returning id,effective_from::text as "effectiveFrom",amount::text as amount
+      `));
+      for (const window of extended.rows) {
+        await audit(tx, input.orgId, "lease_charges", window.id, "update", input.actorId, {
+          reason: "lease term extended", leaseId: input.leaseId, chargeType: "base_rent",
+          before: { effectiveFrom: window.effectiveFrom, effectiveTo: current.endsOn, amount: normalizeMoney(window.amount) },
+          after: { effectiveFrom: window.effectiveFrom, effectiveTo: endsOn, amount: normalizeMoney(window.amount) },
+        }, input.requestId ?? null);
+      }
     }
     await audit(tx, input.orgId, "property_leases", input.leaseId, "update", input.actorId, (() => {
       // The before/after pair covers every money-moving term: term dates,
@@ -722,10 +743,24 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; le
   });
 }
 
+/**
+ * Furthest a caller may pre-generate schedule lines, in months from the start
+ * of the current business month. The scheduler rolls a 13-month window every
+ * day, so lines beyond it exist only for explicit look-ahead; the cap keeps a
+ * single request from materialising an unbounded schedule in one transaction.
+ */
+export const MAX_LEASE_SCHEDULE_HORIZON_MONTHS = 120;
+
 async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: string, actorId: string | null, leaseId: string, throughOn?: string): Promise<number> {
   const leaseResult = (await runner.execute<LeaseScheduleContextRow>(sql`select starts_on as "startsOn",ends_on as "endsOn",billing_day as "billingDay",status from property_leases where org_id=${orgId} and id=${leaseId}`));
   const lease = leaseResult.rows[0]; if (!lease || !["active", "notice"].includes(lease.status)) throw new PropertyManagementError("Active lease not found");
-  const horizon = throughOn ?? addDays(addMonths(startOfMonth(await businessToday(orgId)), 13), -1);
+  const currentMonth = startOfMonth(await businessToday(orgId));
+  const requested = validDate(throughOn, "Schedule horizon");
+  const cap = addDays(addMonths(currentMonth, MAX_LEASE_SCHEDULE_HORIZON_MONTHS), -1);
+  if (requested != null && requested > cap) {
+    throw new PropertyManagementError(`Schedule horizon cannot exceed ${MAX_LEASE_SCHEDULE_HORIZON_MONTHS} months ahead (through ${cap})`);
+  }
+  const horizon = requested ?? addDays(addMonths(currentMonth, 13), -1);
   const charges = (await runner.execute<LeaseChargeScheduleRow>(sql`select id,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by effective_from`));
   let created = 0;
   for (const charge of charges.rows) {
@@ -822,6 +857,21 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, escal
     await assertEnabled(tx, orgId);
     const escalation = (await tx.execute<LeaseEscalationDbRow>(sql`select * from lease_escalations where org_id=${orgId} and id=${escalationId} for update`));
     const e = escalation.rows[0]; if (!e || e.status !== "scheduled") throw new PropertyManagementError("Scheduled escalation not found");
+    // Escalations compound: each one is computed from the rent in force on its
+    // effective date, so they must be applied in effective-date order. An
+    // earlier scheduled one must go first, and a later one already applied
+    // (by whatever path) means this one can no longer be computed correctly.
+    const ordering = (await tx.execute<{ effective_on: string; status: string }>(sql`
+      select effective_on::text as effective_on,status from lease_escalations
+       where org_id=${orgId} and lease_id=${e.lease_id} and id<>${escalationId}
+         and ((status='scheduled' and effective_on<${e.effective_on}) or (status='applied' and effective_on>${e.effective_on}))
+       order by effective_on limit 1`)).rows[0];
+    if (ordering?.status === "scheduled") {
+      throw new PropertyManagementError(`Apply the earlier scheduled escalation effective ${ordering.effective_on} first; escalations compound in effective-date order`);
+    }
+    if (ordering?.status === "applied") {
+      throw new PropertyManagementError(`A later escalation effective ${ordering.effective_on} is already applied; escalations compound in effective-date order`);
+    }
     const chargeResult = (await tx.execute<BaseRentChargeRow>(sql`select * from lease_charges where org_id=${orgId} and lease_id=${e.lease_id} and charge_type='base_rent' and effective_from<=${e.effective_on} and (effective_to is null or effective_to>=${e.effective_on}) order by effective_from desc, id desc limit 1 for update`));
     const charge = chargeResult.rows[0]; if (!charge) throw new PropertyManagementError("Effective base-rent charge not found");
     if (e.effective_on <= charge.effective_from) throw new PropertyManagementError("Escalation must begin after the current rent charge starts");
@@ -1071,7 +1121,7 @@ export async function levelLeaseRentStraightLine(
  * real user's id never leaks onto another actor's artifacts.
  */
 export async function billDueLeaseCharges(orgId: string, actorId: string | null, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ billed: number; invoices: string[] }> {
-  const through = asOf ?? await businessToday(orgId);
+  const through = validDate(asOf, "Billing date") ?? await businessToday(orgId);
   await assertEnabled(db, orgId);
   const due = (await db.execute<DueLeaseChargeRow>(sql`
     select s.id,s.lease_id as "leaseId",s.due_on as "dueOn",s.amount,s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",
@@ -1249,8 +1299,28 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
       if (bank.rows[0]?.type !== "asset_bank") throw new PropertyManagementError("Security-deposit cash must use an active bank account");
     }
 
+    // Cash kinds post against the bank recorded on the subledger row — a
+    // separate offset would move the GL cash leg somewhere the subledger does
+    // not say. Interest and adjustments post against a validated non-cash,
+    // non-control account that is not the deposit liability itself (a
+    // self-cancelling journal would leave the subledger unreconcilable).
+    const cashKind = bankId !== null;
+    if (cashKind && input.offsetAccountId && input.offsetAccountId !== bankId) {
+      throw new PropertyManagementError("Cash deposit activity posts against the bank account; an offset account is not accepted");
+    }
     let targetLineId: string | null = null;
-    let offsetId: string | null = applied ? null : input.offsetAccountId ?? bankId;
+    let offsetId: string | null = applied ? null : cashKind ? bankId : input.offsetAccountId ?? null;
+    if (!applied && !cashKind && offsetId) {
+      if (!UUID_RE.test(offsetId)) throw new PropertyManagementError("Offset account is invalid");
+      const offset = (await tx.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
+        select type,is_active,is_summary from accounts where org_id=${input.orgId} and id=${offsetId}`)).rows[0];
+      if (!offset) throw new PropertyManagementError("Offset account not found");
+      if (!offset.is_active || offset.is_summary) throw new PropertyManagementError("Offset account must be an active posting account");
+      if (offsetId === row.deposit_liability_account_id) throw new PropertyManagementError("Offset account cannot be the deposit liability account");
+      if (DEPOSIT_OFFSET_EXCLUDED_TYPES.has(offset.type)) {
+        throw new PropertyManagementError("Interest and adjustments post against an expense or income account, never cash or a control account");
+      }
+    }
     if (applied) {
       const target = (await tx.execute<{ id: string; account_id: string }>(sql`
         select jl.id,jl.account_id
@@ -1584,9 +1654,13 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
           and s.period_starts_on<=${pool.period_ends_on} and s.period_ends_on>=${pool.period_starts_on}),0)::text as billed
       from property_leases l left join property_units u on u.id=l.unit_id and u.org_id=l.org_id where l.org_id=${orgId} and l.property_id=${pool.property_id}
         and l.cam_method='pro_rata' and l.status not in ('draft','cancelled') and l.starts_on<=${pool.period_ends_on}
-        and coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on})>=${pool.period_starts_on}`));
+        and coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on})>=${pool.period_starts_on}
+      order by l.id`));
     if (!leases.rows.length) throw new PropertyManagementError("No pro-rata CAM leases overlap this period");
     const poolDays = dayCount(pool.period_starts_on, pool.period_ends_on);
+    // Lease-id order everywhere below: the allocation, the rounding residual,
+    // and the fingerprint are pure functions of the sources, never of the
+    // physical row order the planner happens to return.
     const weighted = leases.rows.map((lease) => {
       const days = overlapDayCount(lease.overlap_start, lease.overlap_end, pool.period_starts_on, pool.period_ends_on);
       const basis = pool.allocation_basis === "equal" ? 10_000n
@@ -1597,25 +1671,23 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
     if (!weighted.length) throw new PropertyManagementError(pool.allocation_basis === "rentable_area"
       ? "Overlapping CAM leases need positive rentable area" : "Overlapping CAM leases need a positive allocation weight");
     const totalWeight = weighted.reduce((total, lease) => total + lease.weight, 0n);
-    const shares: string[] = [];
-    for (const [index, lease] of weighted.entries()) {
-      if (pool.allocation_basis === "custom") {
-        shares.push(mulRatio(exactMoney(lease.cam_share_percent, "CAM share"), BigInt(lease.days), BigInt(poolDays)));
-      } else if (index === weighted.length - 1) {
-        shares.push(add("100", neg(sum(shares))));
-      } else {
-        shares.push(mulRatio("100", lease.weight, totalWeight));
-      }
-    }
+    // Rounding residual convention: the largest weight absorbs it (smallest
+    // relative distortion); ties go to the lowest lease id.
+    const residualIndex = pool.allocation_basis === "custom" ? -1
+      : weighted.reduce((best, lease, index) => lease.weight > weighted[best]!.weight ? index : best, 0);
+    const shares: string[] = weighted.map((lease, index) => {
+      if (pool.allocation_basis === "custom") return mulRatio(exactMoney(lease.cam_share_percent, "CAM share"), BigInt(lease.days), BigInt(poolDays));
+      return index === residualIndex ? "0.0000" : mulRatio("100", lease.weight, totalWeight);
+    });
+    if (residualIndex >= 0) shares[residualIndex] = add("100", neg(sum(shares)));
     if (pool.allocation_basis === "custom" && cmp(sum(shares), "100") > 0) {
       throw new PropertyManagementError("Time-weighted custom CAM shares exceed 100%");
     }
-    const budgetAllocations: string[] = [];
-    const actualAllocations: string[] = [];
-    for (const [index, share] of shares.entries()) {
-      const forceResidual = pool.allocation_basis !== "custom" && index === shares.length - 1;
-      budgetAllocations.push(forceResidual ? add(pool.budget_amount, neg(sum(budgetAllocations))) : mulPercent(pool.budget_amount, share));
-      actualAllocations.push(forceResidual ? add(actualAmount, neg(sum(actualAllocations))) : mulPercent(actualAmount, share));
+    const budgetAllocations = shares.map((share, index) => index === residualIndex ? "0.0000" : mulPercent(pool.budget_amount, share));
+    const actualAllocations = shares.map((share, index) => index === residualIndex ? "0.0000" : mulPercent(actualAmount, share));
+    if (residualIndex >= 0) {
+      budgetAllocations[residualIndex] = add(pool.budget_amount, neg(sum(budgetAllocations)));
+      actualAllocations[residualIndex] = add(actualAmount, neg(sum(actualAllocations)));
     }
     // Commit-time consistency proof: the fences above seal the kernel's
     // posting paths, but a write that bypassed the covered scopes entirely
@@ -1628,7 +1700,7 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
       throw new PropertyManagementError("CAM source ledgers changed while finalizing; resolve the entries and retry");
     }
     const finalizeSourceFingerprint = createHash("sha256").update(canonicalJson({
-      kind: "cam_finalize.v1",
+      kind: "cam_finalize.v2",
       poolId,
       propertyId: pool.property_id,
       periodStartsOn: pool.period_starts_on,
@@ -1638,10 +1710,11 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
       expenseAccountIds: [...pool.expense_account_ids].sort(),
       budgetAmount: pool.budget_amount,
       actualAmount,
-      sources: weighted
-        .map((lease) => ({ leaseId: lease.id, days: lease.days, weight: lease.weight.toString(), billed: lease.billed }))
-        .sort((left, right) => left.leaseId.localeCompare(right.leaseId)),
-      shares,
+      // Each share is bound to its lease (v2); a detached share list could
+      // match while the residual sat on a different tenant.
+      sources: weighted.map((lease, index) => ({
+        leaseId: lease.id, days: lease.days, weight: lease.weight.toString(), billed: lease.billed, share: shares[index]!,
+      })),
     })).digest("hex");
     await tx.execute(sql`delete from cam_allocations where org_id=${orgId} and pool_id=${poolId}`);
     for (const [index, lease] of weighted.entries()) {
@@ -1952,7 +2025,7 @@ export async function propertyManagementWorkspace(orgId: string) {
       from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id left join property_units u on u.id=l.unit_id and u.org_id=l.org_id
       join parties t on t.id=l.tenant_id and t.org_id=l.org_id where l.org_id=${orgId} order by case l.status when 'active' then 0 when 'notice' then 1 when 'draft' then 2 else 3 end,l.lease_number`),
     db.execute<LeaseChargeRow>(sql`select id,lease_id as "leaseId",charge_type as "chargeType",description,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} order by effective_from`),
-    db.execute<LeaseEscalationRow>(sql`select id,lease_id as "leaseId",effective_on as "effectiveOn",method,value,previous_amount as "previousAmount",new_amount as "newAmount",status from lease_escalations where org_id=${orgId} order by effective_on desc`),
+    db.execute<LeaseEscalationRow>(sql`select id,lease_id as "leaseId",effective_on as "effectiveOn",method,value,previous_amount as "previousAmount",new_amount as "newAmount",status from lease_escalations where org_id=${orgId} order by effective_on,id`),
     db.execute<LeaseScheduleRow>(sql`select s.id,s.lease_id as "leaseId",s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",s.due_on as "dueOn",s.amount,s.status,s.invoice_document_id as "invoiceDocumentId",d.document_number as "invoiceNumber",
       d.status as "invoiceStatus",d.due_date as "invoiceDueOn",d.open_balance as "invoiceOpenBalance",c.charge_type as "chargeType",c.description
       from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id

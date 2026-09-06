@@ -65,10 +65,15 @@ const { addCalendarDays } =
   await import('@openbooks/engine/src/business-date.ts')
 const { customersHome } = await import('./module-home/customers')
 const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm.ts')
-const { GET: opportunityRead, PATCH: opportunityEdit } =
-  await import('../app/api/crm/opportunities/[id]/route')
+const {
+  GET: opportunityRead,
+  PATCH: opportunityEdit,
+  DELETE: opportunityDelete,
+} = await import('../app/api/crm/opportunities/[id]/route')
 const { POST: estimate } =
   await import('../app/api/crm/opportunities/[id]/estimate/route')
+const { GET: partyActivities } =
+  await import('../app/api/parties/[id]/activities/route')
 const { GET: accountRead, PATCH: accountEdit } =
   await import('../app/api/crm/accounts/[id]/route')
 const {
@@ -139,6 +144,8 @@ for (const boundary of [
   'CRM linked documents',
   'CRM pipeline entity',
   'CRM activity relationships',
+  'CRM opportunity delete',
+  'CRM estimate permission',
   'depreciation date',
   'tax transports',
 ] as const) {
@@ -161,7 +168,8 @@ for (const boundary of [
             ).rows[0]!.id
             const id = randomUUID()
             const target =
-              boundary === 'CRM opportunity detail and edit'
+              boundary === 'CRM opportunity detail and edit' ||
+              boundary === 'CRM opportunity delete'
                 ? other
                 : org.subsidiaryId
             await db.execute(
@@ -208,7 +216,38 @@ for (const boundary of [
                 (await activityDelete(request({}), activityParams)).status,
                 404,
               )
+              // The same activity also linked to a visible account must stay
+              // hidden on the customer flyout sublist: every relationship has
+              // to be visible, and the hidden opportunity link is not.
+              await db.execute(
+                sql`insert into crm_activity_links(org_id,activity_id,subject_kind,subject_id,created_by,updated_by) values (${org.orgId},${activityId},'account',${org.customerId},${actor},${actor})`,
+              )
+              const partyParams = {
+                params: Promise.resolve({ id: org.customerId }),
+              }
+              const sublist = (q = '') =>
+                partyActivities(
+                  new Request(
+                    `http://audit.local/api/parties/${org.customerId}/activities${q}`,
+                  ),
+                  partyParams,
+                )
+              const hiddenSublist = await sublist()
+              assert.equal(hiddenSublist.status, 200)
+              const hiddenBody = await hiddenSublist.json()
+              assert.deepEqual(hiddenBody.rows, [])
+              assert.equal(hiddenBody.total, 0)
+              assert.deepEqual(hiddenBody.kinds, [])
+              assert.deepEqual(hiddenBody.statuses, [])
+              // ?q= must not act as an oracle over hidden subjects/bodies.
+              assert.equal(
+                (await (await sublist('?q=New')).json()).total,
+                0,
+              )
               await restrict(org.orgId, null)
+              const visibleBody = await (await sublist()).json()
+              assert.equal(visibleBody.rows.length, 1)
+              assert.equal(visibleBody.total, 1)
               assert.equal(
                 (await activityRead(request({}), activityParams)).status,
                 200,
@@ -309,6 +348,108 @@ for (const boundary of [
                   .documents.length,
                 1,
               )
+              assert.equal(
+                (await opportunityDelete(request({}), params)).status,
+                422,
+              )
+            } else if (boundary === 'CRM opportunity delete') {
+              // Create an activity linked to the (hidden-entity) opportunity.
+              await restrict(org.orgId, null)
+              const created = await activityDraft(
+                new NextRequest('http://audit.local', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    subjectKind: 'opportunity',
+                    subjectId: id,
+                  }),
+                }),
+              )
+              assert.equal(created.status, 200)
+              const activityId = (await created.json()).id
+              const activityParams = {
+                params: Promise.resolve({ id: activityId }),
+              }
+              // Out-of-scope delete is indistinguishable from a missing row.
+              await restrict(org.orgId, [org.subsidiaryId])
+              const denied = await opportunityDelete(request({}), params)
+              assert.equal(denied.status, 404)
+              assert.deepEqual(await denied.json(), { error: 'not found' })
+              assert.equal(
+                (
+                  await db.execute(
+                    sql`select 1 from crm_opportunities where id=${id} and org_id=${org.orgId}`,
+                  )
+                ).rows.length,
+                1,
+                'a restricted caller must not delete a hidden opportunity',
+              )
+              await restrict(org.orgId, null)
+              assert.equal(
+                (await opportunityDelete(request({}), params)).status,
+                200,
+              )
+              assert.equal(
+                (await opportunityDelete(request({}), params)).status,
+                404,
+              )
+              // Polymorphic links must not dangle: a link to a deleted subject
+              // would hide the activity from every restricted reader forever.
+              assert.deepEqual(
+                (
+                  await db.execute(
+                    sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_kind='opportunity' and subject_id=${id}`,
+                  )
+                ).rows,
+                [],
+              )
+              await restrict(org.orgId, [org.subsidiaryId])
+              assert.equal(
+                (await activityRead(request({}), activityParams)).status,
+                200,
+              )
+              assert.ok(
+                (
+                  await db.execute(
+                    sql`select 1 from audit_log where org_id=${org.orgId} and table_name='crm_opportunities' and row_id=${id} and action='delete'`,
+                  )
+                ).rows.length >= 1,
+                'deleting an opportunity leaves audit evidence',
+              )
+            } else if (boundary === 'CRM estimate permission') {
+              // AR-only users (no crm.* keys) must not create estimates: the
+              // estimate copies CRM data onto a quote and mutates CRM links.
+              await restrict(org.orgId, null)
+              await db.execute(
+                sql`update app_roles set permissions='["ar.read","ar.create","crm.opportunities.read"]'::jsonb where org_id=${org.orgId} and key='domain_auditor'`,
+              )
+              const forbidden = await estimate(request({}), params)
+              assert.equal(forbidden.status, 403)
+              assert.deepEqual(
+                (
+                  await db.execute(
+                    sql`select 1 from crm_opportunity_documents where org_id=${org.orgId} and opportunity_id=${id}`,
+                  )
+                ).rows,
+                [],
+              )
+              assert.deepEqual(
+                (
+                  await db.execute(
+                    sql`select 1 from documents where org_id=${org.orgId} and kind='quote'`,
+                  )
+                ).rows,
+                [],
+                'no quote may be created without crm.opportunities.manage',
+              )
+              await db.execute(
+                sql`update app_roles set permissions='["crm.opportunities.read","crm.opportunities.manage"]'::jsonb where org_id=${org.orgId} and key='domain_auditor'`,
+              )
+              assert.equal((await estimate(request({}), params)).status, 403)
+              await db.execute(
+                sql`update app_roles set permissions='["ar.read","ar.create","crm.opportunities.read","crm.opportunities.manage"]'::jsonb where org_id=${org.orgId} and key='domain_auditor'`,
+              )
+              const allowed = await estimate(request({}), params)
+              assert.equal(allowed.status, 200, JSON.stringify(await allowed.clone().json()))
             } else {
               const read = () =>
                 forecast(

@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { periodLockBlocksPosting } from "./close.ts";
 import { CurrencyError, updateFxRate } from "./currencies.ts";
 import { db } from "./db.ts";
 import { fromUnits, isZero, mulPercent, mulRate, neg, sum, toUnits } from "./money.ts";
@@ -11,11 +12,16 @@ import { loadSubsidiaryContext } from "./subsidiaries.ts";
  *  - deriveConsolidatedRates: builds the period's consolidated exchange-rate
  *    rows (current / average / historical) from the daily fx_rates table for
  *    every currency pair the subsidiary tree needs. Manual overrides
- *    (source='manual') are never touched.
+ *    (source='manual') are never touched. Refused once the period's GL is
+ *    closed (the rates are close evidence); every created/changed row is
+ *    audited with before/after rates and the actor.
  *
  *  - runOwnershipConsolidation: posts acquisition, NCI, and equity-method
- *    adjustments into the elimination subsidiary. Re-runnable: prior
- *    effective generations are reversed first.
+ *    adjustments into the elimination subsidiary, translating each foreign
+ *    subsidiary's period activity through the period's consolidated rates.
+ *    Re-runnable: prior effective generations are reversed first. The
+ *    acquisition elimination posts once per acquired subsidiary, across
+ *    every effective-dated policy row that describes that acquisition.
  *
  *  - runAutoElimination: at period close, reverses the period's activity on
  *    accounts flagged `eliminate` into the elimination subsidiary, so
@@ -181,24 +187,63 @@ async function runOwnershipConsolidationIn(
     // consolidated adjustments (alternate books keep their own ledgers).
     // The policy window is inclusive; acquisition_date is guaranteed to be
     // on or before effective_from by the ownership policy constraint.
-    const periodActivity = (await tx.execute<{ profit: string; distributions: string }>(sql`
-      select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
-             coalesce(sum(l.amount) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions
+    //
+    // Every adjustment posts in the elimination subsidiary's currency, so a
+    // foreign subsidiary's functional-currency activity is translated line by
+    // line through the period's consolidated rates with the SAME policy the
+    // elimination phase and statement translation apply: flow (P&L) accounts
+    // at the period average rate, everything else at the period-end current
+    // rate. A same-currency subsidiary translates at par. A missing rate is
+    // refused outright — summing untranslated amounts would silently allocate
+    // NCI and equity income in the wrong currency.
+    const periodActivity = (await tx.execute<{ profit: string; distributions: string; missingRate: boolean | null }>(sql`
+      select coalesce(-sum(round(l.amount * translation.rate, 4)) filter (where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
+             coalesce(sum(round(l.amount * translation.rate, 4)) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions,
+             bool_or(translation.rate is null) as "missingRate"
        from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
         join accounts a on a.id=l.account_id and a.org_id=l.org_id
+        join subsidiaries source_sub on source_sub.id=l.subsidiary_id and source_sub.org_id=l.org_id
+        left join consolidated_fx_rates consolidated
+          on consolidated.org_id=e.org_id
+         and consolidated.period_id=e.period_id
+         and consolidated.from_currency=source_sub.base_currency
+         and consolidated.to_currency=${elimination.baseCurrency}
+        cross join lateral (
+          select case
+            when source_sub.base_currency=${elimination.baseCurrency} then 1::numeric
+            when a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+              then consolidated.average_rate
+            else consolidated.current_rate
+          end as rate
+        ) translation
        where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
          and l.subsidiary_id=${interest.subsidiary_id} and e.period_id=${periodId}
          and e.posting_date between ${interest.effective_from}
              and coalesce(${interest.effective_to}, 'infinity'::date)
     `));
+    if (periodActivity.rows[0]!.missingRate) {
+      const source = context.byId.get(interest.subsidiary_id);
+      throw new ConsolidationError(
+        `no consolidated rate for ${source?.baseCurrency ?? "unknown"}→${elimination.baseCurrency} in period ${periodId} — derive rates first`,
+      );
+    }
     const profit = periodActivity.rows[0]!.profit;
     const distributions = periodActivity.rows[0]!.distributions;
 
     if (interest.method === "full") {
+      // The acquisition is eliminated ONCE per acquired subsidiary, not once
+      // per policy row: an ownership change is recorded by closing the used
+      // policy and opening a new effective-dated one for the same
+      // acquisition, and that successor must not re-eliminate equity the
+      // group already eliminated. Identity = (subsidiary, acquisition date)
+      // across every policy row; a genuine re-acquisition carries a new date.
       const acquisitionExists = (await tx.execute(sql`
         select 1 from ownership_consolidation_entries oce
+         join subsidiary_ownership_interests policy on policy.id=oce.interest_id and policy.org_id=oce.org_id
          join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted' and je.book_id=${bookId}
-        where oce.interest_id=${interest.id} and oce.kind='acquisition' and je.reverses_entry_id is null
+        where oce.org_id=${orgId} and oce.kind='acquisition' and je.reverses_entry_id is null
+          and policy.subsidiary_id=${interest.subsidiary_id}
+          and policy.acquisition_date=${interest.acquisition_date}
           and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.org_id=${orgId} and rev.status='posted') limit 1
       `));
       if (!acquisitionExists.rows[0] && interest.acquisition_date <= period.ends_on) {
@@ -304,8 +349,47 @@ async function neededPairs(orgId: string, runner: Runner): Promise<{ from: strin
  *   historical — carried forward from the prior period (else = current)
  * Upserts source='derived' rows; rows a controller set to 'manual' are kept.
  */
-export async function deriveConsolidatedRates(orgId: string, periodId: string): Promise<number> {
-  return deriveConsolidatedRatesIn(orgId, periodId, db);
+export async function deriveConsolidatedRates(
+  orgId: string,
+  periodId: string,
+  actorId: string | null = null,
+): Promise<number> {
+  return deriveConsolidatedRatesIn(orgId, periodId, db, actorId);
+}
+
+/** The columns a consolidated rate row is audited and compared by. */
+type ConsolidatedRateSnapshot = {
+  current_rate: string;
+  average_rate: string;
+  historical_rate: string;
+  source: string;
+};
+
+/**
+ * Consolidated rates are period-close evidence: once the period's GL is
+ * closed (org-wide OR for any legal entity — the rates translate every
+ * entity in the tree), re-deriving them would silently restate published
+ * consolidated statements. Refuse with the close's own lock semantics
+ * (periodLockBlocksPosting: closed, or an expired reopen window).
+ */
+async function assertConsolidatedRatesOpen(
+  orgId: string,
+  periodId: string,
+  exec: Runner,
+): Promise<void> {
+  const book = (await exec.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active limit 1`));
+  const bookId = book.rows[0]?.id;
+  if (!bookId) throw new ConsolidationError("no active primary accounting book is configured");
+  const locks = (await exec.execute<{ state: string; reopenExpiresAt: Date | string | null; reason: string | null }>(sql`
+    select state, reopen_expires_at as "reopenExpiresAt", reason
+      from period_locks
+     where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId} and module = 'gl'`));
+  if (locks.rows.some((lock) => periodLockBlocksPosting(lock, false))) {
+    throw new ConsolidationError(
+      "GL is closed for this period — consolidated exchange rates are close evidence and cannot be re-derived until the period is reopened",
+    );
+  }
 }
 
 /**
@@ -313,17 +397,37 @@ export async function deriveConsolidatedRates(orgId: string, periodId: string): 
  * the caller's executor so the combined command can commit them together
  * with the phases that consume them. Callers needing atomicity wrap this in
  * their own transaction (the API does exactly that for 'derive-rates').
+ *
+ * Returns the number of rate rows actually created or refreshed: pairs pinned
+ * to 'manual' are skipped by the upsert predicate and are NOT counted. Every
+ * row created or whose rates changed leaves an audit_log row carrying the
+ * before/after rates and the actor.
  */
-async function deriveConsolidatedRatesIn(orgId: string, periodId: string, exec: Runner): Promise<number> {
-  const periodRes = (await exec.execute<{ id: string; starts_on: string; ends_on: string; fiscal_year: number; period_number: number }>(sql`
-    select id, starts_on, ends_on, fiscal_year, period_number from accounting_periods
+async function deriveConsolidatedRatesIn(
+  orgId: string,
+  periodId: string,
+  exec: Runner,
+  actorId: string | null,
+): Promise<number> {
+  const periodRes = (await exec.execute<{
+    id: string; starts_on: string; ends_on: string; fiscal_year: number; period_number: number;
+    is_adjustment: boolean; fiscal_calendar_id: string;
+  }>(sql`
+    select id, starts_on, ends_on, fiscal_year, period_number, is_adjustment, fiscal_calendar_id
+      from accounting_periods
      where id = ${periodId} and org_id = ${orgId}`));
   const period = periodRes.rows[0];
   if (!period) throw new ConsolidationError(`period ${periodId} not found`);
+  await assertConsolidatedRatesOpen(orgId, periodId, exec);
 
   const pairs = await neededPairs(orgId, exec);
   let written = 0;
   for (const pair of pairs) {
+    // Historical carries forward from the period immediately preceding this
+    // one. An adjustment period shares its final regular period's dates, so
+    // "ends before this period starts" would skip that regular period (and
+    // any earlier adjustment period of the same year); those same-end-date
+    // predecessors are ordered by period number instead.
     const rates = (await exec.execute<{ current: string | null; average: string | null; historical: string | null }>(sql`
       select
         (select rate from fx_rates
@@ -337,8 +441,17 @@ async function deriveConsolidatedRatesIn(orgId: string, periodId: string, exec: 
         (select cf.historical_rate from consolidated_fx_rates cf
            join accounting_periods p on p.id = cf.period_id and p.org_id = cf.org_id
           where cf.org_id = ${orgId} and cf.from_currency = ${pair.from} and cf.to_currency = ${pair.to}
-            and p.ends_on < ${period.starts_on}
-          order by p.ends_on desc limit 1) as historical
+            and p.id <> ${period.id}
+            and (
+              p.ends_on < ${period.starts_on}
+              or (
+                ${period.is_adjustment}
+                and p.fiscal_calendar_id = ${period.fiscal_calendar_id}
+                and p.ends_on = ${period.ends_on}
+                and p.period_number < ${period.period_number}
+              )
+            )
+          order by p.ends_on desc, p.period_number desc limit 1) as historical
     `));
     const r = rates.rows[0];
     if (!r?.current) {
@@ -349,7 +462,13 @@ async function deriveConsolidatedRatesIn(orgId: string, periodId: string, exec: 
     const current = persistDerivedFxRate(r.current);
     const average = persistDerivedFxRate(r.average ?? r.current);
     const historical = persistDerivedFxRate(r.historical ?? r.current);
-    await exec.execute(sql`
+    const before = (await exec.execute<ConsolidatedRateSnapshot & { id: string }>(sql`
+      select id, current_rate::text as current_rate, average_rate::text as average_rate,
+             historical_rate::text as historical_rate, source
+        from consolidated_fx_rates
+       where org_id = ${orgId} and period_id = ${periodId}
+         and from_currency = ${pair.from} and to_currency = ${pair.to}`)).rows[0] ?? null;
+    const touched = (await exec.execute<ConsolidatedRateSnapshot & { id: string }>(sql`
       insert into consolidated_fx_rates
         (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source)
       values (${orgId}, ${periodId}, ${pair.from}, ${pair.to},
@@ -361,8 +480,40 @@ async function deriveConsolidatedRatesIn(orgId: string, periodId: string, exec: 
             updated_at = now()
         where consolidated_fx_rates.source = 'derived'
           and consolidated_fx_rates.org_id = ${orgId}
-    `);
+      returning id, current_rate::text as current_rate, average_rate::text as average_rate,
+                historical_rate::text as historical_rate, source
+    `)).rows[0];
+    // No row back = the manual override's predicate suppressed the update.
+    if (!touched) continue;
     written++;
+    const after: ConsolidatedRateSnapshot = {
+      current_rate: touched.current_rate,
+      average_rate: touched.average_rate,
+      historical_rate: touched.historical_rate,
+      source: touched.source,
+    };
+    const beforeSnapshot: ConsolidatedRateSnapshot | null = before
+      ? { current_rate: before.current_rate, average_rate: before.average_rate, historical_rate: before.historical_rate, source: before.source }
+      : null;
+    const changed =
+      !beforeSnapshot ||
+      beforeSnapshot.current_rate !== after.current_rate ||
+      beforeSnapshot.average_rate !== after.average_rate ||
+      beforeSnapshot.historical_rate !== after.historical_rate;
+    if (!changed) continue;
+    await exec.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (${orgId}, 'consolidated_fx_rates', ${touched.id}, ${beforeSnapshot ? "update" : "insert"},
+              ${JSON.stringify({
+                mode: "derive_consolidated_rates",
+                periodId,
+                fromCurrency: pair.from,
+                toCurrency: pair.to,
+                before: beforeSnapshot,
+                after,
+              })}::jsonb,
+              ${actorId}, 'derive_consolidated_rates')
+    `);
   }
   return written;
 }
@@ -616,7 +767,7 @@ export async function runCombinedConsolidation(
 }> {
   return db.transaction(
     async (tx) => ({
-      ratesWritten: await deriveConsolidatedRatesIn(orgId, periodId, tx),
+      ratesWritten: await deriveConsolidatedRatesIn(orgId, periodId, tx, userId),
       ownership: await runOwnershipConsolidationIn(orgId, periodId, userId, tx),
       elimination: await runAutoEliminationIn(orgId, periodId, userId, tx),
     }),

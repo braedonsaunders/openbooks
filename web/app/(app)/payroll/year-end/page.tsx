@@ -1,13 +1,14 @@
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
+import { notFound } from 'next/navigation'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
+import { scopedYearEndFilings } from '../../../../lib/payroll-scoped-views'
 import { YearEndView } from './YearEndView'
 
 export const dynamic = 'force-dynamic'
@@ -42,7 +43,11 @@ export default async function PayrollYearEndPage({
   // Year-end shows ANNUAL and QUARTERLY returns only. Separation documents
   // (the ROE, a P45) are due per interruption of earnings — within days of
   // the employee event — and live on /payroll/separations, never here.
-  const filings = await orgYearEndFilings(authz.user.orgId, year)
+  // The same population guard the JSON route applies: a restricted caller
+  // whose scope excludes any row of the year's population gets the route's
+  // not-found answer here too, never a rendered slip.
+  const filings = await scopedYearEndFilings(authz, year)
+  if (!filings) notFound()
   const sections = filings.filter(
     (filing) => filing.cadence !== 'separation' && (filing.installed || filing.data.rows.length > 0),
   )

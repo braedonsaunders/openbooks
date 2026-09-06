@@ -1,14 +1,14 @@
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { openingBalancesForYear, OPENING_BALANCE_FIELDS } from '@openbooks/engine/src/payroll-opening-balances.ts'
-import { entitlementOpenings } from '@openbooks/engine/src/payroll-entitlements.ts'
+import { OPENING_BALANCE_FIELDS } from '@openbooks/engine/src/payroll-opening-balances.ts'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
+import { scopedEntitlementOpenings, scopedOpeningBalances } from '../../../../lib/payroll-scoped-views'
 import { EntitlementOpeningsView } from './EntitlementOpeningsView'
 import { OpeningBalancesView } from './OpeningBalancesView'
 
@@ -44,10 +44,10 @@ export default async function PayrollOpeningBalancesPage({
     ? requested
     : currentYear
 
-  const data = await openingBalancesForYear(orgId, year)
+  const data = await scopedOpeningBalances(authz, year)
   // Bank carry-ins are NOT year-scoped (a bank has one lifetime balance), so
   // this load deliberately ignores `year`. See EntitlementOpeningsView.
-  const banks = await entitlementOpenings(orgId)
+  const banks = await scopedEntitlementOpenings(authz)
   const tabs = await groupTabs('payroll', '/payroll/opening-balances', { orgId })
   const text = (key: string, fallback: string) =>
     t.has(key as never) ? t(key as never) : fallback

@@ -13,6 +13,14 @@ import { lockReasonsFor } from './time-lifecycle'
  * row pointing back at the original (`amends_entry_id`), never an edit of
  * history. The offsetting hours are the negation of the original so a later
  * approval posts the reverse labour / billing impact.
+ *
+ * The amendment is a faithful contra: it carries the original's approval-time
+ * snapshots (bill rate, cost rate and their provenance, costing basis, task)
+ * so approving it re-derives nothing — today's rate books and wages must not
+ * leak into a correction of yesterday's evidence, and an amendment of
+ * ESTIMATED time never posts a phantom overhead pair. It does NOT join the
+ * original's field ticket: the ticket is signed evidence of who was on site
+ * and its labor snapshot is immutable; the correction lives on the week.
  */
 export async function amendTimeEntry(
   orgId: string,
@@ -20,30 +28,8 @@ export async function amendTimeEntry(
   entryId: string,
 ): Promise<{ id: string; amendsEntryId: string; amended: number }> {
   return withOrgTransaction(orgId, async () => {
-    const src = (await db.execute<{
-      id: string
-      employee_party_id: string
-      worked_on: string
-      hours: string
-      time_type_id: string | null
-      item_id: string | null
-      project_id: string | null
-      department_id: string | null
-      memo: string | null
-      is_billable: boolean
-      custom: Record<string, unknown> | null
-      invoiced_by_line_id: string | null
-      payroll_batch_ref: string | null
-      cost_journal_entry_id: string | null
-      overhead_journal_entry_id: string | null
-      field_ticket_id: string | null
-      billing_status: 'unbilled' | 'billed'
-      amends_entry_id: string | null
-    }>(sql`
-      select id, employee_party_id, worked_on, hours, time_type_id, item_id,
-             project_id, department_id, memo, is_billable, custom,
-             invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
-             overhead_journal_entry_id, field_ticket_id, billing_status, amends_entry_id
+    const src = (await db.execute<AmendableRow>(sql`
+      select ${AMENDABLE_COLUMNS}
         from time_entries
        where id = ${entryId} and org_id = ${orgId}
        for update
@@ -78,8 +64,10 @@ type AmendableRow = {
   time_type_id: string | null
   item_id: string | null
   project_id: string | null
+  project_task_id: string | null
   department_id: string | null
   memo: string | null
+  memo_is_private: boolean
   is_billable: boolean
   custom: Record<string, unknown> | null
   invoiced_by_line_id: string | null
@@ -90,7 +78,35 @@ type AmendableRow = {
   billing_status: 'unbilled' | 'billed'
   amends_entry_id: string | null
   status?: string
+  /** Approval-time financial snapshots — copied verbatim onto the contra. */
+  costing_basis: 'actual' | 'estimated'
+  cost_rate: string | null
+  labor_cost_rate_id: string | null
+  wage_rate: string | null
+  wage_currency: string | null
+  wage_fx_rate: string | null
+  cost_rate_currency: string | null
+  cost_rate_subsidiary_id: string | null
+  bill_rate: string | null
+  bill_rate_source_rate: string | null
+  bill_rate_source_currency: string | null
+  bill_rate_fx_rate: string | null
+  bill_rate_currency: string | null
+  bill_rate_book_id: string | null
+  bill_rate_version_id: string | null
+  bill_rate_line_id: string | null
 }
+
+/** Every column an amendment reads from its original (one list for both entry points). */
+const AMENDABLE_COLUMNS = sql`
+  id, employee_party_id, worked_on, hours, time_type_id, item_id,
+  project_id, project_task_id, department_id, memo, memo_is_private, is_billable, custom,
+  invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
+  overhead_journal_entry_id, field_ticket_id, billing_status, amends_entry_id, status,
+  costing_basis, cost_rate, labor_cost_rate_id, wage_rate, wage_currency, wage_fx_rate,
+  cost_rate_currency, cost_rate_subsidiary_id,
+  bill_rate, bill_rate_source_rate, bill_rate_source_currency, bill_rate_fx_rate,
+  bill_rate_currency, bill_rate_book_id, bill_rate_version_id, bill_rate_line_id`
 
 async function insertAmendment(
   orgId: string,
@@ -106,15 +122,29 @@ async function insertAmendment(
     departmentId: row.department_id,
   })
   if (!ownedRefs) throw new Error('amendment line references are not in this organization')
+  // The original's labour cost is exactly hours × cost_rate, and an approved
+  // original with no snapshot cost nothing. The contra must cost the exact
+  // negative of that — so a missing snapshot is carried as ZERO, never left
+  // null for the approval resolver to fill with today's wage.
+  const costRate = row.cost_rate ?? '0'
   const inserted = (await db.execute<{ id: string }>(sql`
     insert into time_entries
       (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
-       project_id, department_id, memo, is_billable, status, custom,
+       project_id, project_task_id, department_id, memo, memo_is_private, is_billable, status, custom,
+       costing_basis, cost_rate, labor_cost_rate_id, wage_rate, wage_currency, wage_fx_rate,
+       cost_rate_currency, cost_rate_subsidiary_id,
+       bill_rate, bill_rate_source_rate, bill_rate_source_currency, bill_rate_fx_rate,
+       bill_rate_currency, bill_rate_book_id, bill_rate_version_id, bill_rate_line_id,
        amends_entry_id, created_by, updated_by)
     values
       (${orgId}, ${ownedEmployee}, ${row.worked_on}, ${neg(row.hours)},
-       ${ownedRefs.timeTypeId}, ${ownedRefs.itemId}, ${ownedRefs.projectId}, ${ownedRefs.departmentId},
-       ${row.memo}, ${row.is_billable}, 'draft', ${JSON.stringify(row.custom ?? {})}::jsonb,
+       ${ownedRefs.timeTypeId}, ${ownedRefs.itemId}, ${ownedRefs.projectId},
+       ${ownedRefs.projectId ? row.project_task_id : null}, ${ownedRefs.departmentId},
+       ${row.memo}, ${row.memo_is_private}, ${row.is_billable}, 'draft', ${JSON.stringify(row.custom ?? {})}::jsonb,
+       ${row.costing_basis}, ${costRate}, ${row.labor_cost_rate_id}, ${row.wage_rate}, ${row.wage_currency}, ${row.wage_fx_rate},
+       ${row.cost_rate_currency}, ${row.cost_rate_subsidiary_id},
+       ${row.bill_rate}, ${row.bill_rate_source_rate}, ${row.bill_rate_source_currency}, ${row.bill_rate_fx_rate},
+       ${row.bill_rate_currency}, ${row.bill_rate_book_id}, ${row.bill_rate_version_id}, ${row.bill_rate_line_id},
        ${row.id}, ${actorId}, ${actorId})
     returning id
   `))
@@ -139,11 +169,7 @@ export async function amendLockedWeek(
     const days = weekWindow(week)
 
     const src = (await db.execute<AmendableRow>(sql`
-      select id, employee_party_id, worked_on, hours, time_type_id, item_id,
-             project_id, department_id, memo, is_billable, custom,
-             invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
-             overhead_journal_entry_id, field_ticket_id, billing_status,
-             amends_entry_id, status
+      select ${AMENDABLE_COLUMNS}
         from time_entries
        where org_id = ${orgId}
          and employee_party_id = ${ownedEmployee}

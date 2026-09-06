@@ -3,6 +3,7 @@ import { canonicalDecimal } from "./exact-decimal.ts";
 import { db } from "./db.ts";
 import { add, cmp, normalizeMoney } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";
+import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from "./payroll-fences.ts";
 import type { PayrollSubsidiaryScope } from "./payroll-run.ts";
 
 function openingSubsidiaryScopeFilter(
@@ -591,6 +592,14 @@ export async function saveOpeningBalances(input: {
   if (input.rows.length === 0) return result;
 
   return db.transaction(async (tx) => {
+    // Serialize with any pay-run commit for these employees' statutory year:
+    // a commit in flight finishes first and the lock check below sees its
+    // stubs; a save that wins the fence commits first and the run's freshness
+    // gate refuses the stale calculation. Never both.
+    await takeEmployeeTaxYearFences(
+      tx,
+      input.rows.map((row) => employeeTaxYearFenceKey(input.orgId, row.employeePartyId, year)),
+    );
     const locks = await openingBalanceLocks(input.orgId, year, tx, input.allowedSubsidiaryIds);
 
     // Employees must belong to this org. Resolving names in one pass also

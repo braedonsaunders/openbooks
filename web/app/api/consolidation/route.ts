@@ -49,9 +49,10 @@ export async function POST(req: Request) {
       // Derivation writes one row per currency pair; run it as ONE atomic unit
       // so a missing spot rate for any needed pair aborts the whole refresh
       // instead of leaving earlier pairs' derived rows committed over a stale
-      // remainder (a partially refreshed period).
+      // remainder (a partially refreshed period). The engine refuses a period
+      // whose GL is closed (422) and audits every changed rate to this actor.
       const written = await withOrgTransaction(user.orgId, () =>
-        deriveConsolidatedRates(user.orgId, periodId),
+        deriveConsolidatedRates(user.orgId, periodId, user.id),
       )
       return NextResponse.json({ ok: true, written })
     }

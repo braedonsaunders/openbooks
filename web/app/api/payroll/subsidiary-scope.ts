@@ -224,3 +224,57 @@ export function payrollVisibleScheduleFilter(gate: Authz) {
       order by root.created_at limit 1)
   ) = any(${`{${ids.join(',')}}`}::uuid[])`
 }
+
+/**
+ * Employees a restricted caller may see, or null for an unrestricted one.
+ * Payroll pages, API routes and assistant tools that filter a population
+ * share this one query so the three transports cannot disagree.
+ */
+export async function visiblePayrollEmployeeIds(gate: Authz): Promise<Set<string> | null> {
+  if (gate.allowedSubsidiaryIds === null) return null
+  const rows = await db.execute<{ id: string }>(sql`
+    select id from parties p
+     where p.org_id = ${gate.user.orgId}
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`)
+  return new Set(rows.rows.map((row) => row.id))
+}
+
+/**
+ * A remittance period is an employer-level aggregate: refusing the whole
+ * period when any committed stub in it sits outside the caller's scope is the
+ * only fail-closed answer, because filtering afterwards would still leak
+ * gross/employee totals from a hidden subsidiary. Historical stubs are guarded
+ * on the filing account they were captured under, inactive accounts included.
+ */
+export async function guardRemittancePeriod(
+  gate: Authz,
+  from: string,
+  to: string,
+): Promise<Response | null> {
+  if (gate.allowedSubsidiaryIds === null) return null
+  const rows = (await db.execute<{ employeeId: string; filingAccountId: string | null }>(sql`
+    select distinct s.employee_party_id as "employeeId",
+           s.filing_account_id as "filingAccountId"
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+       and r.run_status = 'committed'
+     where s.org_id = ${gate.user.orgId} and s.pay_date between ${from} and ${to}
+  `)).rows
+  const employeeDenied = await guardPayrollEmployees(gate, rows.map((row) => row.employeeId))
+  if (employeeDenied) return employeeDenied
+  const accountIds = rows.map((row) => row.filingAccountId).filter(Boolean)
+  return accountIds.length ? guardPayrollFilingAccounts(gate, accountIds, true) : null
+}
+
+/** The year-end population guard, applied to every filing section at once. */
+export async function guardPayrollYearEndFilings(
+  gate: Authz,
+  filings: readonly { country: string; key: string; data: PayrollFilingData }[],
+): Promise<Response | null> {
+  if (gate.allowedSubsidiaryIds === null) return null
+  for (const filing of filings) {
+    const denied = await guardPayrollFilingData(gate, filing.country, filing.key, filing.data)
+    if (denied) return denied
+  }
+  return null
+}

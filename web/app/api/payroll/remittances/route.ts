@@ -1,16 +1,13 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
 import { createRemittanceBill, payrollRemittanceSummary } from '@openbooks/engine/src/payroll-remittance.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
-import type { Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import {
-  guardPayrollEmployees,
   guardPayrollFilingAccounts,
   guardPayrollVendor,
+  guardRemittancePeriod,
 } from '../subsidiary-scope'
 
 export const dynamic = 'force-dynamic'
@@ -75,31 +72,4 @@ export async function POST(req: Request) {
     if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })
     throw e
   }
-}
-
-/**
- * The remittance engine currently exposes an org-wide aggregate API. Before a
- * restricted caller reaches it, prove that every employee and filing account
- * contributing to that aggregate is visible. Denying the mixed aggregate is
- * fail-closed: returning it and filtering groups afterwards would still leak
- * gross/employee totals from a hidden subsidiary.
- */
-async function guardRemittancePeriod(
-  gate: Authz,
-  from: string,
-  to: string,
-): Promise<Response | null> {
-  if (gate.allowedSubsidiaryIds === null) return null
-  const rows = (await db.execute<{ employeeId: string; filingAccountId: string | null }>(sql`
-    select distinct s.employee_party_id as "employeeId",
-           s.filing_account_id as "filingAccountId"
-      from pay_stubs s
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-       and r.run_status = 'committed'
-     where s.org_id = ${gate.user.orgId} and s.pay_date between ${from} and ${to}
-  `)).rows
-  const employeeDenied = await guardPayrollEmployees(gate, rows.map((row) => row.employeeId))
-  if (employeeDenied) return employeeDenied
-  const accountIds = rows.map((row) => row.filingAccountId).filter(Boolean)
-  return accountIds.length ? guardPayrollFilingAccounts(gate, accountIds, true) : null
 }

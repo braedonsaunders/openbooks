@@ -100,6 +100,11 @@ export async function resolveSubsidiaryView(
     // activity actually falls in — never a single set borrowed from the
     // report's own period. The report period's set stays mandatory here:
     // resolveSubsidiaryView refuses a context whose own period has no rates.
+    //
+    // Rate windows are posting-date windows, so they must partition the
+    // calendar: an adjustment period shares its final regular period's
+    // dates and is excluded — activity dated on that day translates through
+    // the regular period's rates, whichever period_id the journal carries.
     const scope = (await db.execute<{ org_id: string }>(sql`
       select org_id from subsidiaries where id = ${node.id}`));
     if (!scope.rows[0]) throw new Error(`subsidiary ${node.id} not found while resolving consolidated rates`);
@@ -112,6 +117,7 @@ export async function resolveSubsidiaryView(
          and cf.to_currency = ${node.baseCurrency}
          and cf.from_currency = any(${`{${foreign.join(",")}}`}::text[])
          and p.ends_on <= ${periodTo}
+         and not p.is_adjustment
        order by p.ends_on`));
     const byCcy = new Map<string, typeof r.rows>();
     for (const row of r.rows) {

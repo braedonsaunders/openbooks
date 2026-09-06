@@ -45,7 +45,7 @@ export default async function Projects({
   const projectTransactionKind = pickString(sp.projectTxnKind)
 
   const openProject =
-    projectId && projectId !== 'new' && isUuid(projectId) ? await loadProject(projectId, orgId) : null
+    projectId && projectId !== 'new' && isUuid(projectId) ? await loadProject(projectId, orgId, authz.allowedSubsidiaryIds) : null
 
   // party pickers + resolved form layout + cockpit data for the flyout
   // (only when a project is open).

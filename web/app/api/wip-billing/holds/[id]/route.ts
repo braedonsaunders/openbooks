@@ -18,7 +18,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { reason?: string } | null
   try {
-    return NextResponse.json(await releaseWipHold(gate.user.orgId, gate.user.id, id, body?.reason ?? ''))
+    return NextResponse.json(await releaseWipHold(gate.user.orgId, gate.user.id, id, body?.reason ?? '', gate.allowedSubsidiaryIds))
   } catch (error) {
     const status = error instanceof WipBillingError ? error.status : 500
     return NextResponse.json({ error: (error as Error).message }, { status })

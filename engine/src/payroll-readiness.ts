@@ -641,6 +641,24 @@ export async function payRunReadiness(
   await flagMissingOpeningBalances({ orgId, documentId, run, people, flag });
   await flagMissingEntitlementOpenings({ orgId, documentId, run, people, flag });
 
+  // A retro run carries its own control set (source period voided or moved,
+  // cross-year, retired component, another open retro run on the same cell).
+  // The commit enforces the blockers; the pre-flight shows them here so the
+  // operator sees the refusal before pressing Commit. Dynamic import keeps
+  // the readiness ↔ retro-store ↔ pay-run cycle out of the engine load order.
+  if (run.run_type === "retro") {
+    const { retroRunFindings } = await import("./payroll-retro-store.ts");
+    for (const finding of await retroRunFindings(orgId, documentId, db, allowedSubsidiaryIds)) {
+      items.push({
+        severity: finding.severity,
+        code: finding.code,
+        employees: finding.employees,
+        detail: finding.detail,
+        href: "/payroll/retro",
+      });
+    }
+  }
+
   return tally(people.length);
 }
 
@@ -963,7 +981,7 @@ export async function payRunStaleness(
       components_changed: boolean; component_definitions_changed: boolean;
       derived_rules_changed: boolean; entitlements_changed: boolean;
       worker_comp_changed: boolean; time_types_changed: boolean;
-      settings_changed: boolean; ytd_changed: boolean;
+      settings_changed: boolean; ytd_changed: boolean; opening_balances_changed: boolean;
     }>(sql`
     select r.calculated_at, r.calculation_source_snapshot, r.calculation_source_digest,
            r.calculated_at is null as never_calculated,
@@ -1076,7 +1094,31 @@ export async function payRunStaleness(
                      and mine.org_id = os.org_id
                      and mine.pay_run_document_id = r.document_id
                    where os.org_id = r.org_id
-                     and os.pay_run_document_id = other.document_id)) as ytd_changed
+                     and os.pay_run_document_id = other.document_id)) as ytd_changed,
+           -- Statutory carry-ins are the ONLY input for this year's annual
+           -- ceilings (payroll-opening-balances.ts). A carry-in saved, changed
+           -- or deleted for someone on the run after it was calculated makes
+           -- the stub's CPP/EI/FICA deductions a fiction; deletes leave no row
+           -- to timestamp, so the save's audit evidence is watched as well.
+           (exists (
+             select 1 from payroll_opening_balances b
+               join pay_stubs mine
+                 on mine.employee_party_id = b.employee_party_id and mine.org_id = b.org_id
+                and mine.pay_run_document_id = r.document_id
+              where b.org_id = r.org_id and b.tax_year = r.tax_year
+                and (b.updated_at > r.calculated_at
+                     or exists (select 1 from payroll_opening_balance_components oc
+                                 where oc.org_id = b.org_id and oc.opening_balance_id = b.id
+                                   and oc.updated_at > r.calculated_at)))
+            or exists (
+             select 1 from audit_log al
+              where al.org_id = r.org_id and al.table_name = 'payroll_opening_balances'
+                and al.at > r.calculated_at
+                and (al.changes->>'taxYear')::int = r.tax_year
+                and exists (select 1 from pay_stubs mine
+                             where mine.org_id = r.org_id and mine.pay_run_document_id = r.document_id
+                               and mine.employee_party_id::text = al.changes->>'employeePartyId')))
+             as opening_balances_changed
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
@@ -1128,6 +1170,7 @@ export async function payRunStaleness(
     row.time_types_changed || exactTimeTypesChanged ? "timeTypes" : null,
     row.settings_changed ? "settings" : null,
     row.ytd_changed ? "ytd" : null,
+    row.opening_balances_changed ? "openingBalances" : null,
   ].filter((r): r is string => r !== null);
   return {
     stale: reasons.length > 0,

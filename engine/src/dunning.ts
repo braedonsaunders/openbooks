@@ -21,6 +21,20 @@ import { enqueueFlowEmail } from "./scheduler-outbox.ts";
  * lives outside the posting kernel entirely.
  */
 
+/**
+ * Document kinds a dunning policy may target. Dunning chases an open
+ * receivable past its due date and mails the document's party, so only the
+ * customer-facing open-item kind qualifies. `dunning_policies.applies_to_kind`
+ * is bare text: the API refuses anything else on write, and the runner
+ * re-checks here and skips (fails closed on) any policy that slipped through —
+ * a policy aimed at a payable kind would otherwise mail the org's own vendors.
+ */
+export const DUNNABLE_DOCUMENT_KINDS: ReadonlySet<string> = new Set(["customer_invoice"]);
+
+export function isDunnableDocumentKind(kind: string): boolean {
+  return DUNNABLE_DOCUMENT_KINDS.has(kind);
+}
+
 export type DunningStage = {
   id: string;
   sequence: number;
@@ -148,6 +162,12 @@ async function runDunningInternal(
       `));
 
       for (const policy of policies.rows) {
+        if (!isDunnableDocumentKind(policy.appliesToKind)) {
+          console.warn(
+            `[dunning] policy ${policy.id} applies to ${JSON.stringify(policy.appliesToKind)}, which is not a dunnable receivable kind — skipped`,
+          );
+          continue;
+        }
         const stageRows = (await db.execute<DunningStage>(sql`
           select id, sequence, name, offset_days as "offsetDays",
                  subject_template as "subjectTemplate", body_template as "bodyTemplate", escalate

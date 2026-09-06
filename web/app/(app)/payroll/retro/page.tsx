@@ -1,12 +1,11 @@
 import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
 import { PageHeader } from '@openbooks/ui'
-import { db } from '@openbooks/engine/src/db.ts'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
+import { scopedRetroSchedules } from '../../../../lib/payroll-scoped-views'
 import { RetroWorkspace, type RetroSchedule } from './RetroWorkspace'
 
 export const dynamic = 'force-dynamic'
@@ -43,17 +42,7 @@ export default async function PayrollRetroPage() {
   const text = (key: string, fallback: string) =>
     t.has(key as never) ? t(key as never) : fallback
 
-  const schedules = (await db.execute<RetroSchedule>(sql`
-    select s.id, s.name
-      from pay_schedules s
-     where s.org_id = ${orgId} and s.is_active
-       -- Only a schedule that has actually paid something can owe retro.
-       and exists (
-         select 1 from pay_runs r
-          where r.org_id = s.org_id and r.pay_schedule_id = s.id
-            and r.run_status = 'committed')
-     order by s.name
-  `))
+  const schedules: RetroSchedule[] = await scopedRetroSchedules(authz)
 
   const tabs = await groupTabs('payroll', '/payroll/retro', { orgId })
 
@@ -70,7 +59,7 @@ export default async function PayrollRetroPage() {
         />
       }
     >
-      <RetroWorkspace schedules={schedules.rows} canRun={can(authz, 'payroll.run')} />
+      <RetroWorkspace schedules={schedules} canRun={can(authz, 'payroll.run')} />
     </ListPageLayout>
   )
 }

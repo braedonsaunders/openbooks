@@ -7,6 +7,7 @@ import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustme
 import { applyRollup, resolveInvoicingProfile } from './invoice-rollup'
 import { roundCurrencyMoney } from '@openbooks/engine/src/currencies.ts'
 import { subsidiaryVisibleFilter } from './subsidiaries'
+import { projectContractCapacityUsed } from './wip-billing'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 /** The day the invoice is cut, or the period it closes. */
@@ -217,6 +218,8 @@ export async function generateInvoiceFromBillingRequest(
       timeKind?: 'regular' | 'overtime' | 'double_time' | null
     }
     const built: BuiltLine[] = []
+    /** Milestone schedule rows this invoice actually bills (provenance is stamped on these only). */
+    const billedScheduleIds: string[] = []
 
     // A request that names a work-based basis is billing actual work, so it must
     // build from that work even when the project type defaults to milestones —
@@ -253,6 +256,7 @@ export async function generateInvoiceFromBillingRequest(
         select id, name, amount_billed from billing_schedules
          where org_id = ${orgId} and project_id = ${req.project_id} and billing_request_id is null
          order by sort_order
+         for update
       `))
       if (scheds.rows.length === 0) throw new BillingError('No open milestones to bill on this project')
       if (!fixedPriceCreditAcct) throw new BillingError('No income account is configured to post milestones to')
@@ -266,6 +270,7 @@ export async function generateInvoiceFromBillingRequest(
           throw new BillingError('A milestone billed amount is invalid')
         }
         if (isZero(amt)) continue
+        billedScheduleIds.push(String(m.id))
         built.push({
           itemId: null,
           accountId: fixedPriceCreditAcct,
@@ -612,25 +617,21 @@ export async function generateInvoiceFromBillingRequest(
       }
     }
 
-    // (3) Not-to-exceed cap: trim the cumulative invoiced total to the contract.
+    // (3) Not-to-exceed cap: trim the CUMULATIVE claimed total to the contract.
+    // "Claimed" is the one shared definition WIP prebilling enforces too: every
+    // non-voided invoice on the project (a draft already reserves what it will
+    // bill), net of credits, plus open prebill worksheets. The project row is
+    // locked (for share) by the request read above, so two concurrent requests
+    // cannot each observe the full remaining capacity.
     if (invoicing.notToExceed && built.length) {
       const contractRes = (await tx.execute<{ contract: string }>(sql`
         select coalesce(contract_value, 0)::text as contract from projects where id = ${req.project_id} and org_id = ${orgId}
       `))
       const contract = contractRes.rows[0]?.contract ?? '0'
       if (cmp(contract, '0') > 0) {
-        const invRes = (await tx.execute<{ inv: string }>(sql`
-          select coalesce(sum(dl.amount), 0)::text as inv
-            from document_lines dl
-            join documents d
-              on d.id = dl.document_id and d.org_id = dl.org_id
-           where dl.org_id = ${orgId}
-             and coalesce(dl.project_id, d.project_id) = ${req.project_id}
-             and d.kind = 'customer_invoice' and d.status = 'posted'
-        `))
-        const invoicedToDate = invRes.rows[0]?.inv ?? '0'
+        const claimedToDate = await projectContractCapacityUsed(tx, orgId, req.project_id, ptype.financialProfile.invoicedToDate)
         const running = sum(built.map((l) => l.amount))
-        const remaining = add(contract, negate(invoicedToDate))
+        const remaining = add(contract, negate(claimedToDate))
         if (cmp(remaining, '0') <= 0) throw new BillingError('The not-to-exceed budget is fully invoiced')
         const over = add(running, negate(remaining))
         if (cmp(over, '0') > 0) {
@@ -802,11 +803,14 @@ export async function generateInvoiceFromBillingRequest(
       `)
     }
 
-    // Advance milestone schedules consumed by this request.
-    if (req.basis === 'milestone' || (invoicing.lineBuilder === 'milestone' && !billsActualWork)) {
+    // Advance ONLY the milestone schedules this invoice billed. Zero-amount
+    // (unpriced) rows were skipped as lines; claiming them here would consume
+    // them without billing them, and provenance release only unwinds on void.
+    if (billedScheduleIds.length > 0) {
       await tx.execute(sql`
         update billing_schedules set billing_request_id = ${requestId}, percent_billed = coalesce(percent_complete, percent_billed), updated_by = ${userId}
          where org_id = ${orgId} and project_id = ${req.project_id} and billing_request_id is null
+           and id = any(${`{${billedScheduleIds.join(',')}}`}::uuid[])
       `)
     }
 

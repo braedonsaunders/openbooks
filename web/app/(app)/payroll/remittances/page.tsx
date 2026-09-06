@@ -2,13 +2,14 @@ import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { payrollRemittanceSummary } from '@openbooks/engine/src/payroll-remittance.ts'
+import { notFound } from 'next/navigation'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
+import { scopedRemittanceSummary } from '../../../../lib/payroll-scoped-views'
 import { RemittancesView } from './RemittancesView'
 
 export const dynamic = 'force-dynamic'
@@ -38,7 +39,10 @@ export default async function PayrollRemittancesPage({
   const from = DATE.test(pickString(sp.from) ?? '') ? (pickString(sp.from) as string) : defaults.from
   const to = DATE.test(pickString(sp.to) ?? '') ? (pickString(sp.to) as string) : defaults.to
 
-  const groups = await payrollRemittanceSummary(authz.user.orgId, { from, to })
+  // Employer-level aggregate: refused outright for a caller whose scope
+  // excludes any stub in the period, exactly as the JSON route answers.
+  const groups = await scopedRemittanceSummary(authz, { from, to })
+  if (!groups) notFound()
 
   const moduleTabs = await groupTabs('payroll', '/payroll/remittances', { orgId: authz.user.orgId })
 

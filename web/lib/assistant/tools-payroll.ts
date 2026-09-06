@@ -3,10 +3,15 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { payRunReadiness, payrollSetupState } from "@openbooks/engine/src/payroll-readiness.ts";
-import { orgYearEndFilings } from "@openbooks/engine/src/payroll-yearend.ts";
 import { entitlementBalances } from "@openbooks/engine/src/payroll-entitlements.ts";
-import { payrollRemittanceSummary } from "@openbooks/engine/src/payroll-remittance.ts";
 import { isFeatureEnabled } from "../features";
+import { subsidiaryScopeAllows } from "../authz";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
+import {
+  guardPayrollEmployees,
+  payrollVisiblePartyFilter,
+} from "../../app/api/payroll/subsidiary-scope";
+import { scopedRemittanceSummary, scopedYearEndFilings } from "../payroll-scoped-views";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { dateInput, uuidInput, num, capList, orgToday } from "./tools-shared";
 
@@ -24,6 +29,7 @@ import { dateInput, uuidInput, num, capList, orgToday } from "./tools-shared";
 
 const PAY_RUN_SELECT = sql`
   select r.document_id, d.document_number, d.status as document_status, d.currency,
+         d.subsidiary_id,
          r.pay_schedule_id, s.name as schedule_name,
          r.period_start::text as period_start, r.period_end::text as period_end,
          r.pay_date::text as pay_date, r.tax_year, r.run_status,
@@ -67,7 +73,7 @@ const listPayRuns: AssistantToolDef = {
     const limit = Math.min(a.limit ?? 50, 200);
     const runs = (await db.execute<Record<string, unknown>>(sql`
       ${PAY_RUN_SELECT}
-       where r.org_id = ${authz.user.orgId}
+       where r.org_id = ${authz.user.orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by r.pay_date desc, d.document_number desc
        limit ${limit}
     `));
@@ -95,8 +101,12 @@ const getPayRun: AssistantToolDef = {
        where r.org_id = ${authz.user.orgId} and r.document_id = ${a.documentId}
     `));
     const run = runs.rows[0];
-    if (!run) return { ok: false, error: "pay_run_not_found" };
-    const readiness = await payRunReadiness(authz.user.orgId, a.documentId);
+    // A run outside the caller's legal-entity scope is indistinguishable from
+    // a missing one — the answer the JSON route gives.
+    if (!run || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, run.subsidiary_id as string | null)) {
+      return { ok: false, error: "pay_run_not_found" };
+    }
+    const readiness = await payRunReadiness(authz.user.orgId, a.documentId, authz.allowedSubsidiaryIds);
     const items = capList(
       readiness.items.map((item) => ({
         severity: item.severity,
@@ -136,7 +146,8 @@ const payrollYearEnd: AssistantToolDef = {
       return { ok: false, error: "payroll_feature_disabled" };
     }
     const a = raw as { taxYear: number };
-    const sections = await orgYearEndFilings(authz.user.orgId, a.taxYear);
+    const sections = await scopedYearEndFilings(authz, a.taxYear);
+    if (!sections) return { ok: false, error: "not_found" };
     return {
       ok: true,
       data: {
@@ -227,6 +238,7 @@ const listPayrollEmployees: AssistantToolDef = {
         left join pay_schedules s on s.id = prof.pay_schedule_id and s.org_id = prof.org_id
         left join payroll_filing_accounts fa on fa.id = prof.filing_account_id and fa.org_id = prof.org_id
        where prof.org_id = ${authz.user.orgId}
+         ${payrollVisiblePartyFilter(authz)}
          ${like ? sql` and p.display_name ilike ${like}` : sql``}
        order by p.display_name
        limit ${limit}
@@ -276,6 +288,9 @@ const payrollEntitlements: AssistantToolDef = {
        where org_id = ${authz.user.orgId} and id = ${a.employeePartyId}
     `));
     if (!exists.rows[0]) return { ok: false, error: "employee_not_found" };
+    if (await guardPayrollEmployees(authz, [a.employeePartyId])) {
+      return { ok: false, error: "employee_not_found" };
+    }
     const balances = await entitlementBalances(authz.user.orgId, a.employeePartyId, a.asOfDate);
     const capped = capList(
       balances.map((b) => ({
@@ -321,10 +336,11 @@ const payrollRemittances: AssistantToolDef = {
       return { ok: false, error: "payroll_feature_disabled" };
     }
     const a = raw as { fromDate: string; toDate: string };
-    const groups = await payrollRemittanceSummary(authz.user.orgId, {
+    const groups = await scopedRemittanceSummary(authz, {
       from: a.fromDate,
       to: a.toDate,
     });
+    if (!groups) return { ok: false, error: "not_found" };
     const capped = capList(
       groups.map((g) => {
         const components = capList(

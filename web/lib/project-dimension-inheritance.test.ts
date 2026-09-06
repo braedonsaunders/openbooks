@@ -21,14 +21,19 @@ test("every project commercial query follows canonical dimension inheritance", (
     );
   }
 
+  // The not-to-exceed cap has ONE definition of claimed contract capacity,
+  // shared by billing-request invoicing and WIP prebilling; it must inherit
+  // the document project like every other commercial query.
   const billing = source("web/lib/billing.ts");
-  assert.match(
-    billing,
-    /sum\(dl\.amount\)[\s\S]*coalesce\(dl\.project_id, d\.project_id\) = \$\{req\.project_id\}/,
-  );
+  assert.match(billing, /projectContractCapacityUsed\(/);
   assert.doesNotMatch(
     billing,
     /sum\(subtotal\)[\s\S]*project_id = \$\{req\.project_id\}/,
+  );
+  const wip = source("web/lib/wip-billing.ts");
+  assert.match(
+    wip,
+    /export async function projectContractCapacityUsed[\s\S]*sum\(case when document\.kind[\s\S]*coalesce\(line\.project_id, document\.project_id\) = \$\{projectId\}/,
   );
 
   const certificate = source(

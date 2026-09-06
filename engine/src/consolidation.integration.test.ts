@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient, QueryResult } from "pg";
+import { refreshCloseRun, setPeriodLockState, startCloseRun } from "./close.ts";
 import { deriveConsolidatedRates, runAutoElimination, runOwnershipConsolidation } from "./consolidation.ts";
 import { db, pool, withOrgTransaction } from "./db.ts";
 import {
@@ -722,10 +723,13 @@ test("derived consolidated FX refresh is all-or-nothing and respects manual over
     await db.execute(sql`
       update consolidated_fx_rates set source = 'manual'
        where org_id = ${org.orgId} and period_id = ${org.periodId} and from_currency = 'USD'`);
+    // The count is the number of rows the refresh actually created or
+    // updated: the pinned USD row is skipped by the upsert predicate, so only
+    // EUR is written (the earlier "2" counted pairs attempted, not rows).
     const rewritten = await withOrgTransaction(org.orgId, () =>
       deriveConsolidatedRates(org.orgId, org.periodId),
     );
-    assert.equal(rewritten, 2);
+    assert.equal(rewritten, 1);
     const secondPass = (await db.execute<{
       from_currency: string;
       current_rate: string;
@@ -1387,6 +1391,321 @@ test("a policy edit committing before the run's snapshot fails the run closed an
         .catch(() => undefined);
       holder.release();
     }
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("ownership adjustments translate a foreign subsidiary's period activity at the period's consolidated rates", { skip: !DB }, async () => {
+  // Regression (G1): NCI and equity-method allocations were computed from the
+  // subsidiary's functional-currency amounts and posted as if they were the
+  // elimination subsidiary's currency. Every period-activity figure must be
+  // translated the way the elimination phase translates it (flows at the
+  // period average, balances at the period-end current rate), and a missing
+  // consolidated rate must refuse the run rather than allocate untranslated.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const eurChildId = randomUUID();
+    const gbpAssociateId = randomUUID();
+    const eliminationId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values
+        (${eurChildId},${org.orgId},${org.subsidiaryId},'Euro Co','EUR','DE','{}'::jsonb,false,true,'{}'::jsonb),
+        (${gbpAssociateId},${org.orgId},${org.subsidiaryId},'Sterling Associate','GBP','GB','{}'::jsonb,false,true,'{}'::jsonb),
+        (${eliminationId},${org.orgId},${org.subsidiaryId},'Ownership eliminations','CAD','CA','{}'::jsonb,true,true,'{}'::jsonb)
+    `);
+    const defs = [
+      ["investment", "1400", "Investment in subsidiary", "asset_current_other"],
+      ["equityIncome", "4020", "Equity income", "income_other"],
+      ["nciEquity", "3100", "Non-controlling interest", "equity"],
+      ["nciIncome", "6100", "Profit attributable to NCI", "expense_other"],
+      ["goodwill", "1500", "Goodwill", "asset_fixed"],
+      ["fairValue", "1510", "Fair value adjustment", "asset_fixed"],
+      ["childEquity", "3000", "Child share capital", "equity"],
+    ] as const;
+    const accounts = new Map<string, string>();
+    for (const [key, number, name, type] of defs) {
+      const id = randomUUID();
+      accounts.set(key, id);
+      await db.execute(sql`
+        insert into accounts
+          (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+        values (${id},${org.orgId},${number},${name},${type},false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)
+      `);
+    }
+    const postEntry = async (subsidiaryId: string, currency: string, tag: string, debitAccount: string, creditAccount: string, amount: string, postingDate: string) => {
+      const entry = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries
+          (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin)
+        values (${entry},${org.orgId},${org.bookId},${subsidiaryId},${tag},${postingDate},${org.periodId},${tag},'draft','manual')`);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+        values
+          (${org.orgId},${entry},1,${debitAccount},${subsidiaryId},${amount},${currency},${amount},'1'),
+          (${org.orgId},${entry},2,${creditAccount},${subsidiaryId},${"-" + amount},${currency},${"-" + amount},'1')`);
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`);
+    };
+    // EUR child: €1000 opening equity at acquisition, €100 period profit.
+    await postEntry(eurChildId, "EUR", "EUR-CAP", org.accounts.bank, accounts.get("childEquity")!, "1000", "2026-07-01");
+    await postEntry(eurChildId, "EUR", "EUR-PROFIT", org.accounts.bank, org.accounts.revenue, "100", org.date);
+    // GBP associate (equity method, 30%): £200 period profit.
+    await postEntry(gbpAssociateId, "GBP", "GBP-PROFIT", org.accounts.bank, org.accounts.revenue, "200", org.date);
+    await db.execute(sql`
+      insert into consolidated_fx_rates
+        (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source)
+      values
+        (${org.orgId}, ${org.periodId}, 'EUR', 'CAD', '1.6000000000', '1.5000000000', '1.4000000000', 'manual'),
+        (${org.orgId}, ${org.periodId}, 'GBP', 'CAD', '1.8000000000', '1.7000000000', '1.6000000000', 'manual')`);
+    await db.execute(sql`
+      insert into subsidiary_ownership_interests
+        (id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,
+         acquisition_date,acquisition_cost,fair_value_net_assets,acquisition_rate,nci_measurement,
+         investment_account_id,equity_income_account_id,nci_equity_account_id,nci_income_account_id,
+         goodwill_account_id,fair_value_adjustment_account_id)
+      values
+        (${randomUUID()},${org.orgId},${org.subsidiaryId},${eurChildId},'2026-07-01','80','full',
+         '2026-07-01','1200','1400','1.4','proportionate',${accounts.get("investment")!},
+         ${accounts.get("equityIncome")!},${accounts.get("nciEquity")!},${accounts.get("nciIncome")!},
+         ${accounts.get("goodwill")!},${accounts.get("fairValue")!}),
+        (${randomUUID()},${org.orgId},${org.subsidiaryId},${gbpAssociateId},'2026-07-01','30','equity',
+         '2026-07-01','0','0','1','proportionate',${accounts.get("investment")!},
+         ${accounts.get("equityIncome")!},null,null,null,null)
+    `);
+
+    const run = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
+    assert.equal(run.entryIds.length, 3, "acquisition + NCI income + equity-method income");
+    // Acquisition (at the acquisition rate 1.4): equity €1000 → 1400; NCI
+    // 20% × 1400 = 280; goodwill 1200 + 280 − 1400 = 80; investment −1200.
+    // NCI income: €100 profit × 1.5 average = 150 → 20% = 30 (not 20).
+    // Equity income: £200 × 1.7 average = 340 → 30% = 102 (not 60).
+    assert.deepEqual(await ownershipEntryBalances(run.entryIds), [
+      { number: "1400", amount: "-1098.0000" },
+      { number: "1500", amount: "80.0000" },
+      { number: "3000", amount: "1400.0000" },
+      { number: "3100", amount: "-310.0000" },
+      { number: "4020", amount: "-102.0000" },
+      { number: "6100", amount: "30.0000" },
+    ]);
+    const currencies = (await db.execute<{ currency: string; fx_rate: string }>(sql`
+      select distinct l.currency, l.fx_rate::text as fx_rate from journal_lines l
+       where l.entry_id = any(${`{${run.entryIds.join(",")}}`}::uuid[])`));
+    assert.deepEqual(currencies.rows, [{ currency: "CAD", fx_rate: "1.0000000000" }],
+      "adjustments are denominated in the elimination subsidiary's currency");
+
+    // A foreign entity with no consolidated rate for the period is refused —
+    // never allocated at par — and the refusal leaves the prior generation intact.
+    await db.execute(sql`
+      delete from consolidated_fx_rates where org_id = ${org.orgId} and from_currency = 'GBP'`);
+    await assert.rejects(
+      runOwnershipConsolidation(org.orgId, org.periodId, actorId),
+      /no consolidated rate for GBP→CAD/,
+    );
+    const intact = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries
+       where id = any(${`{${run.entryIds.join(",")}}`}::uuid[]) and status = 'posted'`));
+    assert.equal(intact.rows[0]!.n, 3, "the refused rerun reversed nothing");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a successor ownership policy for the same acquisition does not re-post the acquisition elimination", { skip: !DB }, async () => {
+  // Regression (G2): the acquisition check was keyed on the policy ROW, so
+  // the effective-dated successor policy an ownership change requires (used
+  // policies are immutable) re-eliminated acquisition-date equity, goodwill,
+  // and the parent's investment a second time in its first period.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const { childId, interestId, accounts } = await seedOwnershipConsolidationFixture(org);
+    // Policy A covers July only; policy B (90%) takes over from August for
+    // the SAME acquisition (identical acquisition date and terms).
+    await db.execute(sql`
+      update subsidiary_ownership_interests set effective_to = '2026-07-31' where id = ${interestId}`);
+    const july = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
+    assert.equal(july.entryIds.length, 2, "July posts the acquisition and NCI income");
+
+    const augustPeriodId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      select ${augustPeriodId}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, fiscal_calendar_id
+        from accounting_periods where id = ${org.periodId}`);
+    const successorId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiary_ownership_interests
+        (id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,
+         acquisition_date,acquisition_cost,fair_value_net_assets,acquisition_rate,nci_measurement,
+         investment_account_id,equity_income_account_id,nci_equity_account_id,nci_income_account_id,
+         goodwill_account_id,fair_value_adjustment_account_id)
+      values (${successorId},${org.orgId},${org.subsidiaryId},${childId},'2026-08-01','90','full',
+              '2026-07-01','900','1000','1','proportionate',${accounts.get("investment")!},
+              ${accounts.get("equityIncome")!},${accounts.get("nciEquity")!},${accounts.get("nciIncome")!},
+              ${accounts.get("goodwill")!},${accounts.get("fairValue")!})`);
+    const augustProfit = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin)
+      values (${augustProfit},${org.orgId},${org.bookId},${childId},'OWN-AUG-PROFIT','2026-08-15',${augustPeriodId},'August profit','draft','manual')`);
+    await db.execute(sql`
+      insert into journal_lines
+        (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+      values
+        (${org.orgId},${augustProfit},1,${org.accounts.bank},${childId},'200','CAD','200','1'),
+        (${org.orgId},${augustProfit},2,${org.accounts.revenue},${childId},'-200','CAD','-200','1')`);
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${augustProfit}`);
+
+    const august = await runOwnershipConsolidation(org.orgId, augustPeriodId, actorId);
+    const kinds = (await db.execute<{ kind: string }>(sql`
+      select kind from ownership_consolidation_entries where run_id = ${august.runId} order by kind`));
+    assert.deepEqual(kinds.rows.map((row) => row.kind), ["nci_income"],
+      "the successor policy allocates August profit only; the acquisition was eliminated in July");
+    assert.deepEqual(await ownershipEntryBalances(august.entryIds), [
+      { number: "3100", amount: "-20.0000" },
+      { number: "6100", amount: "20.0000" },
+    ], "10% NCI of August's 200 profit");
+
+    // Effective acquisition eliminations across the whole org: exactly one.
+    const acquisitions = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n
+        from ownership_consolidation_entries oce
+        join journal_entries je on je.id = oce.journal_entry_id and je.status = 'posted'
+       where oce.org_id = ${org.orgId} and oce.kind = 'acquisition'`));
+    assert.equal(acquisitions.rows[0]!.n, 1, "one acquisition elimination per acquired subsidiary");
+
+    // Re-running August reverses and replaces its own generation but still
+    // does not touch the acquisition.
+    const rerun = await runOwnershipConsolidation(org.orgId, augustPeriodId, actorId);
+    const rerunKinds = (await db.execute<{ kind: string }>(sql`
+      select kind from ownership_consolidation_entries where run_id = ${rerun.runId} order by kind`));
+    assert.deepEqual(rerunKinds.rows.map((row) => row.kind), ["nci_income", "reversal"]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("derived historical rates carry into an adjustment period from the period immediately before it", { skip: !DB }, async () => {
+  // Regression (G5, engine side): the carry-forward looked for periods ending
+  // strictly before the target period STARTS. An adjustment period starts on
+  // its final regular period's end date, so that regular period was skipped
+  // and the adjustment period inherited a stale historical rate.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const usdId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${usdId}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    const augustId = randomUUID();
+    const adjustmentId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      select unnest(array[${augustId}::uuid, ${adjustmentId}::uuid]), ${org.orgId}, 2026,
+             unnest(array[8, 13]), unnest(array['2026-08', 'FY2026 adjustment']),
+             unnest(array['2026-08-01'::date, '2026-08-31'::date]), '2026-08-31'::date,
+             unnest(array[false, true]), fiscal_calendar_id
+        from accounting_periods where id = ${org.periodId}`);
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values
+        (${org.orgId}, 'USD', 'CAD', '2026-07-15', 'spot', '1.3000000000'),
+        (${org.orgId}, 'USD', 'CAD', '2026-08-20', 'spot', '1.3500000000')`);
+    assert.equal(await deriveConsolidatedRates(org.orgId, org.periodId, actorId), 1);
+    assert.equal(await deriveConsolidatedRates(org.orgId, augustId, actorId), 1);
+    // A controller pins August's historical rate so the two predecessors are
+    // distinguishable: July carries 1.30, August 1.32.
+    await db.execute(sql`
+      update consolidated_fx_rates set historical_rate = '1.3200000000', source = 'manual'
+       where org_id = ${org.orgId} and period_id = ${augustId}`);
+    assert.equal(await deriveConsolidatedRates(org.orgId, adjustmentId, actorId), 1);
+    const derived = (await db.execute<{ name: string; historical_rate: string; current_rate: string }>(sql`
+      select p.name, cf.historical_rate::text as historical_rate, cf.current_rate::text as current_rate
+        from consolidated_fx_rates cf join accounting_periods p on p.id = cf.period_id
+       where cf.org_id = ${org.orgId} order by p.period_number`));
+    assert.deepEqual(derived.rows, [
+      { name: "2026-07", historical_rate: "1.3000000000", current_rate: "1.3000000000" },
+      { name: "2026-08", historical_rate: "1.3200000000", current_rate: "1.3500000000" },
+      { name: "FY2026 adjustment", historical_rate: "1.3200000000", current_rate: "1.3500000000" },
+    ], "the adjustment period inherits August's historical rate, not July's");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("derived consolidated rates are audited, invalidate close evidence, and are refused once the GL is closed", { skip: !DB }, async () => {
+  // Regression (G6): derive-rates upserted consolidated_fx_rates with no lock
+  // check, no audit evidence, and outside the close run's data fingerprint —
+  // a re-derive silently restated closed consolidated statements.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const usdId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${usdId}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values (${org.orgId}, 'USD', 'CAD', '2026-07-10', 'spot', '1.3000000000')`);
+    const auditRows = async () => (await db.execute<{ action: string; actor_id: string | null; changes: Record<string, unknown> }>(sql`
+      select action, actor_id, changes from audit_log
+       where org_id = ${org.orgId} and table_name = 'consolidated_fx_rates' order by at, id`)).rows;
+
+    // Open period: the derive writes the row and audits it to the actor.
+    assert.equal(await withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId, actorId)), 1);
+    const firstAudit = await auditRows();
+    assert.equal(firstAudit.length, 1);
+    assert.equal(firstAudit[0]!.action, "insert");
+    assert.equal(firstAudit[0]!.actor_id, actorId);
+    assert.equal(firstAudit[0]!.changes.before, null);
+    assert.equal((firstAudit[0]!.changes.after as { current_rate: string }).current_rate, "1.3000000000");
+
+    const runId = await startCloseRun({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, actorId });
+    const before = await refreshCloseRun(org.orgId, runId, actorId);
+
+    // A rate change re-derived into an OPEN close run changes the run's
+    // fingerprint (the rates are close evidence) and leaves before/after.
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values (${org.orgId}, 'USD', 'CAD', '2026-07-20', 'spot', '1.3100000000')`);
+    assert.equal(await withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId, actorId)), 1);
+    const after = await refreshCloseRun(org.orgId, runId, actorId);
+    assert.notEqual(after.fingerprint, before.fingerprint, "re-derived rates must change the close fingerprint");
+    const secondAudit = await auditRows();
+    assert.equal(secondAudit.length, 2);
+    assert.equal(secondAudit[1]!.action, "update");
+    assert.equal((secondAudit[1]!.changes.before as { current_rate: string }).current_rate, "1.3000000000");
+    assert.equal((secondAudit[1]!.changes.after as { current_rate: string }).current_rate, "1.3100000000");
+
+    // A no-op re-derive neither adds audit noise nor disturbs the fingerprint.
+    assert.equal(await withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId, actorId)), 1);
+    assert.equal((await auditRows()).length, 2);
+    assert.equal((await refreshCloseRun(org.orgId, runId, actorId)).fingerprint, after.fingerprint);
+
+    // Closed GL: the derive is refused before any row is touched.
+    await setPeriodLockState({
+      orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, module: "gl", state: "closed",
+      actorId, reason: "period closed for the regression",
+    });
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values (${org.orgId}, 'USD', 'CAD', '2026-07-25', 'spot', '1.4000000000')`);
+    await assert.rejects(
+      withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId, actorId)),
+      /GL is closed for this period/,
+    );
+    const pinned = (await db.execute<{ current_rate: string }>(sql`
+      select current_rate::text as current_rate from consolidated_fx_rates
+       where org_id = ${org.orgId} and period_id = ${org.periodId}`));
+    assert.deepEqual(pinned.rows, [{ current_rate: "1.3100000000" }], "closed-period rates are untouched");
+    assert.equal((await auditRows()).length, 2, "a refused derive leaves no audit trace");
+  } finally {
     await dropScratchOrg(org.orgId);
   }
 });

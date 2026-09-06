@@ -12,6 +12,7 @@ import {
 } from '@openbooks/engine/src/tax-persist.ts'
 import { nextDocumentNumber } from './bills'
 import { isFeatureEnabled } from './features'
+import { subsidiaryVisibleFilter } from './subsidiaries'
 import type { FinancialProfile, InvoicingProfile } from '@openbooks/schema'
 import {
   capWipSources,
@@ -119,6 +120,13 @@ export interface PrebillDetail extends PrebillListRow {
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type Executor = Pick<Tx, 'execute'>
+/**
+ * The caller's subsidiary visibility (authz.allowedSubsidiaryIds): null is
+ * unrestricted, a set (even empty) fails closed. Every entry point applies it
+ * to the worksheet's PROJECT, so a worksheet on a hidden project is missing —
+ * in lists, analytics, by id, and for every write.
+ */
+type SubsidiaryScope = ReadonlySet<string> | null
 
 type ProjectPolicyContext = {
   projectId: string
@@ -169,6 +177,7 @@ async function loadProjectPolicy(
   orgId: string,
   projectId: string,
   lock = false,
+  scope: SubsidiaryScope = null,
 ): Promise<ProjectPolicyContext> {
   const project = (await executor.execute<{
     id: string
@@ -178,23 +187,26 @@ async function loadProjectPolicy(
     key: string | null
     name: string | null
     billing_method: string | null
-    financial_profile: FinancialProfile | null
     invoicing_profile: InvoicingProfile | null
   }>(sql`
     select project.id, project.project_type_id, coalesce(project.contract_value, 0)::text as contract_value,
            coalesce((project.custom->>'markupPercent')::numeric, 0)::text as markup_percent,
-           type.key, type.name, type.billing_method, type.financial_profile, type.invoicing_profile
+           type.key, type.name, type.billing_method, type.invoicing_profile
       from projects project
       left join project_types type on type.org_id = project.org_id and type.id = project.project_type_id
      where project.org_id = ${orgId} and project.id = ${projectId}
        and project.status not in ('closed', 'cancelled')
+       ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
      ${lock ? sql`for update of project` : sql``}
   `))
   const row = project.rows[0]
   if (!row) throw new WipBillingError('Project not found or is no longer active', 404)
-  if (!row.project_type_id || !row.financial_profile || !row.invoicing_profile) {
+  if (!row.project_type_id || !row.invoicing_profile) {
     throw new WipBillingError('Assign an active project type before creating a prebill')
   }
+  // The financial policy is the effective-dated version history — the ONLY
+  // place a profile lives. The newest published version is the fallback for a
+  // source dated before the first window; no published version fails closed.
   const versions = (await executor.execute<WipPolicyVersion>(sql`
     select id, effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
            financial_profile as "financialProfile"
@@ -202,6 +214,8 @@ async function loadProjectPolicy(
      where org_id = ${orgId} and project_type_id = ${row.project_type_id}
      order by effective_from desc
   `))
+  const latest = versions.rows[0]
+  if (!latest) throw new WipBillingError('Publish a financial profile for the project type before creating a prebill')
   return {
     projectId: row.id,
     projectTypeId: row.project_type_id,
@@ -210,7 +224,7 @@ async function loadProjectPolicy(
     billingMethod: row.billing_method,
     contractValue: normalizeMoney(row.contract_value),
     markupPercent: normalizeMoney(row.markup_percent),
-    fallbackProfile: row.financial_profile,
+    fallbackProfile: latest.financialProfile,
     invoicingProfile: row.invoicing_profile,
     versions: versions.rows,
   }
@@ -218,6 +232,49 @@ async function loadProjectPolicy(
 
 function textList(values: string[]): string {
   return `{${values.map((value) => value.replaceAll('"', '')).join(',')}}`
+}
+
+/**
+ * Contract capacity already CLAIMED on a project — the single definition of
+ * "invoiced to date" that every not-to-exceed check uses (billing-request
+ * invoicing and WIP prebilling alike), so the two paths can never disagree:
+ *   + every non-voided invoice line on the project, whatever its lifecycle
+ *     state — a draft already reserves the amount it will bill;
+ *   − every non-voided credit line;
+ *   + every open worksheet (draft / review / approved) not yet converted.
+ * Voiding an invoice is the only thing that gives capacity back.
+ */
+export async function projectContractCapacityUsed(
+  executor: Executor,
+  orgId: string,
+  projectId: string,
+  invoicedToDate: { docKinds: string[]; creditKinds: string[] },
+  options: { excludePrebillId?: string } = {},
+): Promise<string> {
+  const invoiceKinds = invoicedToDate.docKinds.length ? invoicedToDate.docKinds : ['customer_invoice']
+  const creditKinds = invoicedToDate.creditKinds.length ? invoicedToDate.creditKinds : ['customer_credit']
+  const allKinds = [...new Set([...invoiceKinds, ...creditKinds])]
+  const excludePrebillId = options.excludePrebillId ?? null
+  const used = (await executor.execute<{ used: string }>(sql`
+    select coalesce((
+             select sum(case when document.kind = any(${textList(creditKinds)}::text[])
+                             then -line.amount else line.amount end)
+               from document_lines line
+               join documents document on document.org_id = line.org_id and document.id = line.document_id
+              where line.org_id = ${orgId}
+                and coalesce(line.project_id, document.project_id) = ${projectId}
+                and document.status <> 'voided'
+                and document.kind = any(${textList(allKinds)}::text[])
+           ), 0)
+           + coalesce((
+             select sum(worksheet.proposed_bill_amount)
+               from wip_prebills worksheet
+              where worksheet.org_id = ${orgId} and worksheet.project_id = ${projectId}
+                and worksheet.status in ('draft', 'review', 'approved')
+                and (${excludePrebillId}::uuid is null or worksheet.id <> ${excludePrebillId})
+           ), 0) as used
+  `))
+  return normalizeMoney(used.rows[0]?.used ?? '0')
 }
 
 async function remainingContractCapacity(
@@ -229,29 +286,8 @@ async function remainingContractCapacity(
 ): Promise<string | null> {
   const profile = effectiveWipPolicy(policy.versions, policy.fallbackProfile, asOf).financialProfile
   if (profile.totalPrice.method !== 'not_to_exceed') return null
-  const invoiceKinds = profile.invoicedToDate.docKinds.length ? profile.invoicedToDate.docKinds : ['customer_invoice']
-  const creditKinds = profile.invoicedToDate.creditKinds.length ? profile.invoicedToDate.creditKinds : ['customer_credit']
-  const allKinds = [...new Set([...invoiceKinds, ...creditKinds])]
-  const used = (await executor.execute<{ used: string }>(sql`
-    select coalesce((
-             select sum(case when document.kind = any(${textList(creditKinds)}::text[])
-                             then -line.amount else line.amount end)
-               from document_lines line
-               join documents document on document.org_id = line.org_id and document.id = line.document_id
-              where line.org_id = ${orgId}
-                and coalesce(line.project_id, document.project_id) = ${policy.projectId}
-                and document.status = 'posted'
-                and document.kind = any(${textList(allKinds)}::text[])
-           ), 0)
-           + coalesce((
-             select sum(worksheet.proposed_bill_amount)
-               from wip_prebills worksheet
-              where worksheet.org_id = ${orgId} and worksheet.project_id = ${policy.projectId}
-                and worksheet.status in ('draft', 'review', 'approved')
-                and (${excludePrebillId ?? null}::uuid is null or worksheet.id <> ${excludePrebillId ?? null})
-           ), 0) as used
-  `))
-  const remaining = add(policy.contractValue, `-${normalizeMoney(used.rows[0]?.used ?? '0')}`)
+  const used = await projectContractCapacityUsed(executor, orgId, policy.projectId, profile.invoicedToDate, { excludePrebillId })
+  const remaining = add(policy.contractValue, `-${used}`)
   return cmp(remaining, '0') > 0 ? remaining : '0.0000'
 }
 
@@ -343,14 +379,14 @@ async function refreshTotals(tx: Tx, orgId: string, prebillId: string, actorId: 
  * an active-worksheet exclusion prevents two reviewers from reserving the same
  * unbilled work concurrently.
  */
-export async function createPrebill(orgId: string, actorId: string, input: CreatePrebillInput) {
+export async function createPrebill(orgId: string, actorId: string, input: CreatePrebillInput, scope: SubsidiaryScope = null) {
   const periodEnd = requireDate(input.periodEnd, 'Period end')
   const periodStart = input.periodStart ? requireDate(input.periodStart, 'Period start') : null
   if (periodStart && periodStart > periodEnd) throw new WipBillingError('Period start must be on or before period end')
 
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`wip-prebill:${orgId}:${input.projectId}`}, 0))`)
-    const policy = await loadProjectPolicy(tx, orgId, input.projectId, true)
+    const policy = await loadProjectPolicy(tx, orgId, input.projectId, true, scope)
     const procedureReason = sourceLinePrebillingReason(policy.invoicingProfile)
     if (procedureReason) throw new WipBillingError(procedureReason)
     const cutoffPolicy = effectiveWipPolicy(policy.versions, policy.fallbackProfile, periodEnd)
@@ -549,7 +585,7 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
   })
 }
 
-export async function listPrebills(orgId: string, projectId?: string): Promise<PrebillListRow[]> {
+export async function listPrebills(orgId: string, projectId?: string, scope: SubsidiaryScope = null): Promise<PrebillListRow[]> {
   const result = (await db.execute<PrebillListRow>(sql`
     select worksheet.id,
            worksheet.worksheet_number as "worksheetNumber",
@@ -573,13 +609,14 @@ export async function listPrebills(orgId: string, projectId?: string): Promise<P
       left join documents invoice on invoice.org_id = worksheet.org_id and invoice.id = worksheet.invoice_document_id
      where worksheet.org_id = ${orgId}
        and (${projectId ?? null}::uuid is null or worksheet.project_id = ${projectId ?? null})
+       ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
      order by worksheet.created_at desc
   `))
   return result.rows
 }
 
-export async function loadPrebill(orgId: string, id: string): Promise<PrebillDetail | null> {
-  const headers = await listPrebills(orgId)
+export async function loadPrebill(orgId: string, id: string, scope: SubsidiaryScope = null): Promise<PrebillDetail | null> {
+  const headers = await listPrebills(orgId, undefined, scope)
   const header = headers.find((row) => row.id === id)
   if (!header) return null
   const [lineResult, eventResult, detailResult] = await Promise.all([
@@ -629,6 +666,7 @@ export async function updatePrebillLine(
   prebillId: string,
   lineId: string,
   input: UpdatePrebillLineInput,
+  scope: SubsidiaryScope = null,
 ) {
   const proposed = persistMoney(input.proposedBillAmount, 'Proposed bill amount')
   const evidence = evidenceList(input.adjustmentEvidence)
@@ -642,8 +680,10 @@ export async function updatePrebillLine(
                           and other.id <> line.id and other.disposition = 'bill'), 0)::text as other_proposed
         from wip_prebill_lines line
         join wip_prebills worksheet on worksheet.org_id = line.org_id and worksheet.id = line.prebill_id
+        join projects project on project.org_id = worksheet.org_id and project.id = worksheet.project_id
        where line.org_id = ${orgId} and line.prebill_id = ${prebillId} and line.id = ${lineId}
-       for update
+         ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
+       for update of line, worksheet
     `))
     const before = current.rows[0]
     if (!before) throw new WipBillingError('Prebill line not found', 404)
@@ -656,7 +696,7 @@ export async function updatePrebillLine(
     if (changed && !reason) throw new WipBillingError('A reason is required for a write-up or write-down')
     if (changed && evidence.length === 0) throw new WipBillingError('Evidence is required for a write-up or write-down')
     if (before.custom?.policy?.totalPriceMethod === 'not_to_exceed') {
-      const policy = await loadProjectPolicy(tx, orgId, before.project_id)
+      const policy = await loadProjectPolicy(tx, orgId, before.project_id, false, scope)
       const capacity = await remainingContractCapacity(tx, orgId, policy, before.period_end, prebillId)
       if (capacity != null && cmp(add(before.other_proposed, proposed), capacity) > 0) {
         throw new WipBillingError(`Proposed billing exceeds the remaining not-to-exceed capacity of ${capacity}`)
@@ -691,6 +731,7 @@ export async function holdPrebillLine(
   lineId: string,
   reason: string,
   evidence: string[] = [],
+  scope: SubsidiaryScope = null,
 ) {
   const cleanReason = reason.trim()
   if (!cleanReason) throw new WipBillingError('A hold reason is required')
@@ -701,8 +742,10 @@ export async function holdPrebillLine(
              line.project_id, worksheet.status
         from wip_prebill_lines line
         join wip_prebills worksheet on worksheet.org_id = line.org_id and worksheet.id = line.prebill_id
+        join projects project on project.org_id = worksheet.org_id and project.id = worksheet.project_id
        where line.org_id = ${orgId} and line.prebill_id = ${prebillId} and line.id = ${lineId}
-       for update
+         ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
+       for update of line, worksheet
     `))
     const source = row.rows[0]
     if (!source) throw new WipBillingError('Prebill line not found', 404)
@@ -736,7 +779,7 @@ export async function holdPrebillLine(
   })
 }
 
-export async function releaseWipHold(orgId: string, actorId: string, holdId: string, reason: string) {
+export async function releaseWipHold(orgId: string, actorId: string, holdId: string, reason: string, scope: SubsidiaryScope = null) {
   const releaseReason = reason.trim()
   if (!releaseReason) throw new WipBillingError('A release reason is required')
   return db.transaction(async (tx) => {
@@ -745,6 +788,11 @@ export async function releaseWipHold(orgId: string, actorId: string, holdId: str
          set released_at = now(), released_by = ${actorId}, release_reason = ${releaseReason},
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${holdId} and released_at is null
+         and exists (
+           select 1 from projects project
+            where project.org_id = wip_holds.org_id and project.id = wip_holds.project_id
+              ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
+         )
        returning source_type, source_id
     `))
     const source = released.rows[0]
@@ -775,6 +823,7 @@ export async function transitionPrebill(
   id: string,
   action: 'submit' | 'return' | 'approve' | 'void',
   reason?: string,
+  scope: SubsidiaryScope = null,
 ) {
   const transitions: Record<typeof action, { from: PrebillStatus[]; to: PrebillStatus; event: string }> = {
     submit: { from: ['draft'], to: 'review', event: 'submitted' },
@@ -788,10 +837,13 @@ export async function transitionPrebill(
   }
   return db.transaction(async (tx) => {
     const locked = (await tx.execute<{ status: PrebillStatus; submitted_by: string | null; created_by: string | null; project_id: string; period_end: string; custom: { policy?: { totalPriceMethod?: string } } }>(sql`
-      select status, submitted_by, created_by, project_id, period_end::text as period_end, custom
-        from wip_prebills
-       where org_id = ${orgId} and id = ${id}
-       for update
+      select worksheet.status, worksheet.submitted_by, worksheet.created_by, worksheet.project_id,
+             worksheet.period_end::text as period_end, worksheet.custom
+        from wip_prebills worksheet
+        join projects project on project.org_id = worksheet.org_id and project.id = worksheet.project_id
+       where worksheet.org_id = ${orgId} and worksheet.id = ${id}
+         ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
+       for update of worksheet
     `))
     const header = locked.rows[0]
     if (!header) throw new WipBillingError('Prebill not found', 404)
@@ -817,7 +869,7 @@ export async function transitionPrebill(
       throw new WipBillingError('Every write-up and write-down requires a reason and evidence')
     }
     if ((action === 'submit' || action === 'approve') && header.custom?.policy?.totalPriceMethod === 'not_to_exceed') {
-      const policy = await loadProjectPolicy(tx, orgId, header.project_id)
+      const policy = await loadProjectPolicy(tx, orgId, header.project_id, false, scope)
       const capacity = await remainingContractCapacity(tx, orgId, policy, header.period_end, id)
       if (capacity != null && cmp(worksheet.proposed_total, capacity) > 0) {
         throw new WipBillingError(`Prebill exceeds the remaining not-to-exceed capacity of ${capacity}`)
@@ -847,7 +899,7 @@ export async function transitionPrebill(
  * the draft customer invoice, making double billing impossible even if two
  * conversion requests race.
  */
-export async function convertPrebill(orgId: string, actorId: string, id: string) {
+export async function convertPrebill(orgId: string, actorId: string, id: string, scope: SubsidiaryScope = null) {
   const existing = (await db.execute<{ status: PrebillStatus; invoice_id: string | null; invoice_number: string | null; subsidiary_id: string | null }>(sql`
     select worksheet.status, worksheet.invoice_document_id as invoice_id, project.subsidiary_id,
            invoice.document_number as invoice_number
@@ -855,6 +907,7 @@ export async function convertPrebill(orgId: string, actorId: string, id: string)
       join projects project on project.org_id = worksheet.org_id and project.id = worksheet.project_id
       left join documents invoice on invoice.org_id = worksheet.org_id and invoice.id = worksheet.invoice_document_id
      where worksheet.org_id = ${orgId} and worksheet.id = ${id}
+       ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
   `))
   const observed = existing.rows[0]
   if (!observed) throw new WipBillingError('Prebill not found', 404)
@@ -873,6 +926,7 @@ export async function convertPrebill(orgId: string, actorId: string, id: string)
         left join subsidiaries subsidiary on subsidiary.org_id = project.org_id and subsidiary.id = project.subsidiary_id
         left join project_types type on type.org_id = project.org_id and type.id = project.project_type_id
        where worksheet.org_id = ${orgId} and worksheet.id = ${id}
+         ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
        for update of worksheet
     `))
     const worksheet = header.rows[0]
@@ -896,7 +950,7 @@ export async function convertPrebill(orgId: string, actorId: string, id: string)
       throw new WipBillingError('This worksheet does not contain an eligible source-line billing policy snapshot')
     }
     if (policySnapshot.totalPriceMethod === 'not_to_exceed') {
-      const policy = await loadProjectPolicy(tx, orgId, worksheet.project_id)
+      const policy = await loadProjectPolicy(tx, orgId, worksheet.project_id, false, scope)
       const capacity = await remainingContractCapacity(tx, orgId, policy, worksheet.period_end, id)
       if (cmp(String(worksheet.proposed_bill_amount), capacity ?? '0') > 0) {
         throw new WipBillingError(`Prebill exceeds the remaining not-to-exceed capacity of ${capacity ?? '0.0000'}`)
@@ -1084,7 +1138,7 @@ export interface WipAnalytics {
   leakage: { writeDowns: string; heldOver90: string; total: string }
 }
 
-function eligibleWipSources(orgId: string, asOf: string) {
+function eligibleWipSources(orgId: string, asOf: string, scope: SubsidiaryScope) {
   return sql`
     with raw_sources as (
       select 'time_entry'::text as source_type, te.id as source_id, te.project_id,
@@ -1114,10 +1168,11 @@ function eligibleWipSources(orgId: string, asOf: string) {
       select source.*, project.contract_value,
              coalesce((project.custom->>'markupPercent')::numeric, 0) as project_markup,
              type.invoicing_profile,
-             coalesce(version.financial_profile, type.financial_profile) as profile
+             coalesce(version.financial_profile, latest.financial_profile) as profile
         from raw_sources source
         join projects project on project.org_id = ${orgId} and project.id = source.project_id
           and project.status not in ('closed', 'cancelled')
+          ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
         join project_types type on type.org_id = ${orgId} and type.id = project.project_type_id and type.is_active
         left join lateral (
           select policy.financial_profile
@@ -1127,7 +1182,14 @@ function eligibleWipSources(orgId: string, asOf: string) {
              and (policy.effective_to is null or policy.effective_to >= source.source_date)
            order by policy.effective_from desc limit 1
         ) version on true
-       where coalesce(type.invoicing_profile->>'billingProcedure', 'standard') = 'standard'
+        left join lateral (
+          select policy.financial_profile
+            from project_financial_profile_versions policy
+           where policy.org_id = ${orgId} and policy.project_type_id = type.id
+           order by policy.effective_from desc limit 1
+        ) latest on true
+       where latest.financial_profile is not null
+         and coalesce(type.invoicing_profile->>'billingProcedure', 'standard') = 'standard'
          and type.invoicing_profile->>'lineBuilder' in ('tm_actual', 'cost_plus')
          and (type.invoicing_profile->'allowedBases' ? 'time_selection'
            or type.invoicing_profile->'allowedBases' ? 'date_range')
@@ -1160,7 +1222,7 @@ function eligibleWipSources(orgId: string, asOf: string) {
                - coalesce((select sum(case when invoice.kind = any(array(select jsonb_array_elements_text(coalesce(source.profile#>'{invoicedToDate,creditKinds}','["customer_credit"]'::jsonb)))) then -line.amount else line.amount end)
                              from document_lines line join documents invoice on invoice.org_id=line.org_id and invoice.id=line.document_id
                             where line.org_id=${orgId} and coalesce(line.project_id,invoice.project_id)=source.project_id
-                              and invoice.status='posted'
+                              and invoice.status<>'voided'
                               and invoice.kind = any(array(select jsonb_array_elements_text(coalesce(source.profile#>'{invoicedToDate,docKinds}','["customer_invoice"]'::jsonb) || coalesce(source.profile#>'{invoicedToDate,creditKinds}','["customer_credit"]'::jsonb))))),0)
                - coalesce((select sum(worksheet.proposed_bill_amount) from wip_prebills worksheet
                             where worksheet.org_id=${orgId} and worksheet.project_id=source.project_id
@@ -1185,12 +1247,12 @@ function eligibleWipSources(orgId: string, asOf: string) {
   `
 }
 
-export async function wipAnalytics(orgId: string, asOf?: string): Promise<WipAnalytics> {
+export async function wipAnalytics(orgId: string, asOf?: string, scope: SubsidiaryScope = null): Promise<WipAnalytics> {
   const asOfDate = asOf ?? (await businessToday(orgId))
   requireDate(asOfDate, 'As-of date')
   const [agingResult, realizationResult, leakageResult] = await Promise.all([
     db.execute<WipAnalytics['aging']>(sql`
-      ${eligibleWipSources(orgId, asOfDate)}
+      ${eligibleWipSources(orgId, asOfDate, scope)}
       select coalesce(sum(capped_available_value) filter (where ${asOfDate}::date-source_date <= 0),0)::text as current,
              coalesce(sum(capped_available_value) filter (where ${asOfDate}::date-source_date between 1 and 30),0)::text as "days1to30",
              coalesce(sum(capped_available_value) filter (where ${asOfDate}::date-source_date between 31 and 60),0)::text as "days31to60",
@@ -1200,16 +1262,21 @@ export async function wipAnalytics(orgId: string, asOf?: string): Promise<WipAna
         from eligible_sources
     `),
     db.execute<{ original: string; billed: string; adjustment: string }>(sql`
-      select coalesce(sum(original_bill_amount),0)::text as original,
-             coalesce(sum(proposed_bill_amount),0)::text as billed,
-             coalesce(sum(adjustment_amount),0)::text as adjustment
-        from wip_prebills where org_id=${orgId} and status='converted'
+      select coalesce(sum(worksheet.original_bill_amount),0)::text as original,
+             coalesce(sum(worksheet.proposed_bill_amount),0)::text as billed,
+             coalesce(sum(worksheet.adjustment_amount),0)::text as adjustment
+        from wip_prebills worksheet
+        join projects project on project.org_id=worksheet.org_id and project.id=worksheet.project_id
+       where worksheet.org_id=${orgId} and worksheet.status='converted'
+         ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
     `),
     db.execute<{ write_downs: string }>(sql`
       select coalesce(sum(-line.adjustment_amount) filter (where line.adjustment_amount < 0),0)::text as write_downs
         from wip_prebill_lines line
         join wip_prebills worksheet on worksheet.org_id=line.org_id and worksheet.id=line.prebill_id
+        join projects project on project.org_id=worksheet.org_id and project.id=worksheet.project_id
        where line.org_id=${orgId} and worksheet.status in ('approved','converted')
+         ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
     `),
   ])
   const aging = agingResult.rows[0] ?? { current: '0', days1to30: '0', days31to60: '0', days61to90: '0', over90: '0', held: '0' }
@@ -1217,7 +1284,7 @@ export async function wipAnalytics(orgId: string, asOf?: string): Promise<WipAna
   const original = Number(realization.original)
   const percent = original === 0 ? null : Number(realization.billed) / original
   const heldOver90Result = (await db.execute<{ amount: string }>(sql`
-    ${eligibleWipSources(orgId, asOfDate)}
+    ${eligibleWipSources(orgId, asOfDate, scope)}
     select coalesce(sum(source_value) filter (where held and ${asOfDate}::date-source_date > 90),0)::text as amount
       from eligible_sources
   `))
@@ -1230,7 +1297,7 @@ export async function wipAnalytics(orgId: string, asOf?: string): Promise<WipAna
   }
 }
 
-export async function listWipProjects(orgId: string): Promise<WipProjectOption[]> {
+export async function listWipProjects(orgId: string, scope: SubsidiaryScope = null): Promise<WipProjectOption[]> {
   const result = (await db.execute<{ id: string; name: string; customerName: string | null; projectTypeName: string; invoicingProfile: InvoicingProfile }>(sql`
     select project.id, project.name, customer.display_name as "customerName",
            type.name as "projectTypeName", type.invoicing_profile as "invoicingProfile"
@@ -1238,6 +1305,7 @@ export async function listWipProjects(orgId: string): Promise<WipProjectOption[]
       left join parties customer on customer.org_id=project.org_id and customer.id=project.customer_id
       join project_types type on type.org_id=project.org_id and type.id=project.project_type_id and type.is_active
      where project.org_id=${orgId} and project.status not in ('closed','cancelled')
+       ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
      order by project.name
   `))
   return result.rows.flatMap((row) => sourceLinePrebillingReason(row.invoicingProfile) == null

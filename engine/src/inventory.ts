@@ -5137,14 +5137,30 @@ export async function postLandedCostVoucher(
           for (const row of w.rows)
             weightsByLayer.set(row.cost_layer_id, row.weight);
         }
-        const subShares = apportionUnits(
-          share,
-          layerWeights(
-            r.layers,
-            input.basis === "manual" ? "value" : input.basis,
-            weightsByLayer,
-          ),
+        // A manual share is the operator's explicit amount for this target;
+        // it spreads across the target's layers pro rata to carrying value.
+        // Layers received free of charge carry none, so a target that is
+        // entirely zero-value spreads its share pro rata to quantity instead
+        // (exactly what the quantity basis does for the same stock). Value
+        // apportionment onto a valueless target would allocate nothing and
+        // leave the asset debit with no layer behind it.
+        let subWeights = layerWeights(
+          r.layers,
+          input.basis === "manual" ? "value" : input.basis,
+          weightsByLayer,
         );
+        if (input.basis === "manual" && isZero(sum(subWeights))) {
+          subWeights = layerWeights(r.layers, "quantity");
+        }
+        const subShares = apportionUnits(share, subWeights);
+        // Every unit of the target's share must land on a layer before the
+        // matching asset debit is written: GL = Σ layers is the invariant
+        // the voucher exists to keep, and the reversal needs the evidence.
+        if (subShares.reduce((a, b) => a + b, 0n) !== share) {
+          throw new InventoryError(
+            `landed cost share ${shareAmount} for item ${r.target.itemId} at location ${r.target.stockLocationId} cannot be apportioned across its on-hand layers on the ${input.basis} basis`,
+          );
+        }
         for (let j = 0; j < r.layers.length; j++) {
           const layerShare = subShares[j]!;
           if (layerShare === 0n) continue;

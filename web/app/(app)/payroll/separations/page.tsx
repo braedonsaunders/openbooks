@@ -1,13 +1,14 @@
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
+import { notFound } from 'next/navigation'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
+import { scopedYearEndFilings } from '../../../../lib/payroll-scoped-views'
 import { SeparationsView } from './SeparationsView'
 
 export const dynamic = 'force-dynamic'
@@ -38,7 +39,8 @@ export default async function PayrollSeparationsPage({
   const requested = Number(pickString(sp.year))
   const year = Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : currentYear
 
-  const filings = await orgYearEndFilings(authz.user.orgId, year)
+  const filings = await scopedYearEndFilings(authz, year)
+  if (!filings) notFound()
   const sections = filings.filter(
     (filing) => filing.cadence === 'separation' && (filing.installed || filing.data.rows.length > 0),
   )

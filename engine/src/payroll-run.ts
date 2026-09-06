@@ -1,3 +1,4 @@
+import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from "./payroll-fences.ts";
 import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "./db.ts";
@@ -954,48 +955,7 @@ interface StubComputation {
   warnings: EntitlementWarning[];
 }
 
-/**
- * The transaction advisory lock that fences one employee's STATUTORY YEAR —
- * the identity two pay runs share when they can corrupt each other's
- * year-to-date, and the thing both must hold before either computes or
- * commits against it.
- *
- * Two runs for the same employee and tax year used to synchronize on nothing
- * they both held: each locked its own pay_runs row, so their calculations
- * read the same YTD base and their commits neither saw each other nor
- * waited — both posted withholdings computed from the same unconsumed
- * ceilings. Locking the RUN row cannot fix this; the fence is keyed by the
- * EMPLOYEE AND TAX YEAR both racing runs carry.
- *
- * Transaction-scoped like every advisory lock in this codebase
- * (`payroll-remittance.ts`, `fx-revaluation.ts`, `inventory.ts`), so it is
- * released at COMMIT or ROLLBACK and never leaks across the pool.
- * `calculatePayRun` takes it around every year-to-date read and
- * `commitPayRun` around its freshness gates: the second of two racing runs
- * therefore re-reads a world in which the first has already committed, and is
- * refused as stale (`payRunStaleness`'s "ytd" reason) instead of paying twice.
- */
-export const employeeTaxYearFenceKey = (
-  orgId: string,
-  employeePartyId: string | null | undefined,
-  taxYear: number | string | null | undefined,
-): string => `payroll-run-ytd:${orgId}:${employeePartyId}:${taxYear}`;
-
-/**
- * Take the fences for a run's employees, IN SORTED KEY ORDER.
- *
- * A run fences everyone on its roster, an overlapping run fences a subset of
- * it; acquiring in one deterministic order is what lets overlapping rosters
- * queue behind each other instead of deadlocking mid-set.
- */
-async function takeEmployeeTaxYearFences(
-  tx: Pick<typeof db, "execute">,
-  keys: readonly string[],
-): Promise<void> {
-  for (const key of [...new Set(keys)].sort()) {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
-  }
-}
+export { employeeTaxYearFenceKey } from "./payroll-fences.ts";
 
 /**
  * Count the employer's employee population for jurisdiction rules that key off
@@ -3493,7 +3453,7 @@ async function payRunGlLegs(
   orgId: string,
   documentId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
-): Promise<{ legs: PayRunGlLeg[]; debitTotal: string }> {
+): Promise<{ legs: PayRunGlLeg[]; debitTotal: string; lineLiabilities: { lineId: string; accountId: string }[] }> {
   {
     const settings = await payrollSettings(orgId, allowedSubsidiaryIds);
     const costing = await laborCostingSettings(orgId);
@@ -3526,7 +3486,7 @@ async function payRunGlLegs(
     }
 
     const stubLines = (await tx.execute<Record<string, string | null>>(sql`
-      select s.employee_party_id, l.kind, l.description, l.amount, l.project_id, l.department_id,
+      select l.id as line_id, s.employee_party_id, l.kind, l.description, l.amount, l.project_id, l.department_id,
              c.system_key, c.expense_account_id, c.liability_account_id, s.net_pay
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -3559,6 +3519,10 @@ async function payRunGlLegs(
     };
 
     const netByEmployee = new Map<string, string>();
+    // The account each liability line accrues to, resolved ONCE here and
+    // stamped on the stub line at commit so a later remittance debits the
+    // account that was credited, not the component's setup of the day.
+    const lineLiabilities: { lineId: string; accountId: string }[] = [];
     for (const line of stubLines.rows) {
       netByEmployee.set(line.employee_party_id!, line.net_pay!);
       const amount = line.amount!;
@@ -3580,6 +3544,7 @@ async function payRunGlLegs(
           );
         }
         accumulate(liability, neg(amount), line.description ?? "Deduction");
+        lineLiabilities.push({ lineId: line.line_id!, accountId: liability });
       } else {
         const liability = line.liability_account_id ?? statutoryLiability(line.system_key ?? null);
         if (!liability) {
@@ -3592,6 +3557,7 @@ async function payRunGlLegs(
           projectId: line.project_id, departmentId: line.department_id,
         });
         accumulate(liability, neg(amount), line.description ?? "Employer burden");
+        lineLiabilities.push({ lineId: line.line_id!, accountId: liability });
       }
     }
     for (const [employeePartyId, net] of netByEmployee) {
@@ -3601,7 +3567,7 @@ async function payRunGlLegs(
     const total = sum([...legs.values()].map((l) => l.amount));
     if (cmp(total, "0") !== 0) throw new PayrollError(`pay run GL projection is unbalanced (${total})`);
     const debitTotal = sum([...legs.values()].filter((l) => cmp(l.amount, "0") > 0).map((l) => l.amount));
-    return { legs: [...legs.values()], debitTotal };
+    return { legs: [...legs.values()], debitTotal, lineLiabilities };
   }
 }
 
@@ -3684,6 +3650,22 @@ export async function commitPayRun(input: {
     const { assertPayRunNotStale, staleCalculationMessage } =
       await import("./payroll-readiness.ts");
     await assertPayRunNotStale(orgId, documentId, tx, input.allowedSubsidiaryIds);
+    // A retro run's own control set (payroll-retro-store.ts): a voided or
+    // re-settled source period, a cross-year settlement, a retired component,
+    // or another open retro run already holding the same cell. The pre-flight
+    // shows these; the commit ENFORCES them on this transaction so a caller
+    // that skips the wizard cannot pay the same difference twice.
+    if (run.run_type === "retro") {
+      const { retroRunFindings } = await import("./payroll-retro-store.ts");
+      const blockers = (await retroRunFindings(orgId, documentId, tx, input.allowedSubsidiaryIds))
+        .filter((finding) => finding.severity === "blocker");
+      if (blockers.length > 0) {
+        throw new PayrollError(
+          `retro run cannot be committed (${[...new Set(blockers.map((b) => b.code))].join(", ")})`
+          + " — review the retro run's source periods before paying it",
+        );
+      }
+    }
     // Money must not move before the run is approved. Dynamic import keeps the
     // module cycle out of the engine's load order (same idiom as
     // flows/documents-adapter.ts → document-void.ts).
@@ -3720,12 +3702,26 @@ export async function commitPayRun(input: {
       ));
     }
 
-    const { legs, debitTotal } = await payRunGlLegs(
+    const { legs, debitTotal, lineLiabilities } = await payRunGlLegs(
       tx,
       orgId,
       documentId,
       input.allowedSubsidiaryIds,
     );
+    // Freeze the credited liability account on every deduction/contribution
+    // line (migration 0094): remittance reads the snapshot, so editing the
+    // component's account afterwards can never restate a committed period.
+    if (lineLiabilities.length > 0) {
+      await tx.execute(sql`
+        update pay_stub_lines l
+           set liability_account_id = stamp.account_id, liability_account_source = 'commit',
+               updated_by = ${actorId}, updated_at = now()
+          from unnest(${`{${lineLiabilities.map((x) => x.lineId).join(",")}}`}::uuid[],
+                      ${`{${lineLiabilities.map((x) => x.accountId).join(",")}}`}::uuid[])
+               as stamp(line_id, account_id)
+         where l.org_id = ${orgId} and l.id = stamp.line_id
+      `);
+    }
 
     await tx.execute(sql`delete from document_lines where org_id = ${orgId} and document_id = ${documentId}`);
     let lineNumber = 1;

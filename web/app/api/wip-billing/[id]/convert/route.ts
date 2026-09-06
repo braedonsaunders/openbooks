@@ -14,7 +14,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   try {
-    return NextResponse.json(await convertPrebill(gate.user.orgId, gate.user.id, id))
+    return NextResponse.json(await convertPrebill(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds))
   } catch (error) {
     const status = error instanceof WipBillingError ? error.status : 500
     return NextResponse.json({ error: (error as Error).message }, { status })

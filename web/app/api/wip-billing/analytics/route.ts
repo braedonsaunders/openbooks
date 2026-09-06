@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   const feature = await guardWipBillingFeature(gate.user.orgId)
   if (feature) return feature
   try {
-    return NextResponse.json({ analytics: await wipAnalytics(gate.user.orgId, new URL(req.url).searchParams.get('asOf') ?? undefined) })
+    return NextResponse.json({ analytics: await wipAnalytics(gate.user.orgId, new URL(req.url).searchParams.get('asOf') ?? undefined, gate.allowedSubsidiaryIds) })
   } catch (error) {
     const status = error instanceof WipBillingError ? error.status : 500
     return NextResponse.json({ error: (error as Error).message }, { status })

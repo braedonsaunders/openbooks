@@ -43,6 +43,7 @@ export async function PATCH(
         lineId,
         String(body.reason ?? ''),
         Array.isArray(body.evidence) ? body.evidence.map(String) : [],
+        gate.allowedSubsidiaryIds,
       )
       return NextResponse.json(result)
     }
@@ -54,7 +55,7 @@ export async function PATCH(
       proposedBillAmount,
       adjustmentReason: body.adjustmentReason == null ? null : String(body.adjustmentReason),
       adjustmentEvidence: Array.isArray(body.adjustmentEvidence) ? body.adjustmentEvidence.map(String) : [],
-    })
+    }, gate.allowedSubsidiaryIds)
     return NextResponse.json(result)
   } catch (error) {
     const status = error instanceof WipBillingError ? error.status : 500

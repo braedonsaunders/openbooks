@@ -209,9 +209,22 @@ function rateSetsBySubsidiary(
  */
 function assertRateCoverage(subsidiary: StatementSubsidiaryContext, required: { from: string; to: string }[]): void {
   for (const [subsidiaryId, sets] of rateSetsBySubsidiary(subsidiary.rates!)) {
-    const sorted = [...sets].sort((a, b) => a.periodFrom.localeCompare(b.periodFrom));
+    const sorted = [...sets].sort((a, b) => a.periodFrom.localeCompare(b.periodFrom) || a.periodTo.localeCompare(b.periodTo));
     const merged: { from: string; to: string }[] = [];
+    let previous: StatementSubsidiaryRateSet | undefined;
     for (const w of sorted) {
+      // Windows select a line's rate by posting date, so two windows sharing
+      // a date (an adjustment period beside its final regular period) would
+      // make the in-query lookup ambiguous. Refuse here, before any rows are
+      // read, instead of surfacing a database cardinality error mid-render.
+      if (previous && w.periodFrom <= previous.periodTo) {
+        throw new Error(
+          `Consolidated rate windows overlap for ${w.currency} (subsidiary ${subsidiaryId}): ` +
+            `${previous.periodFrom}..${previous.periodTo} and ${w.periodFrom}..${w.periodTo}. ` +
+            'Rate windows must be one per regular accounting period.',
+        );
+      }
+      previous = w;
       const last = merged[merged.length - 1];
       // +1 day: consecutive accounting periods share no dates but abut.
       if (last && addDays(last.to, 1) >= w.periodFrom) {

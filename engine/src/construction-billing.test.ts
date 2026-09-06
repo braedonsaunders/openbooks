@@ -4,6 +4,8 @@ import {
   ConstructionBillingError,
   computeApplication,
   createPayApplication,
+  releaseRetainage,
+  requireIsoDate,
   revisedScheduleValue,
   type AppLineInput,
 } from "./construction-billing.ts";
@@ -180,4 +182,18 @@ test("createPayApplication rejects a period before the previous invoiced Date", 
     await createPayApplication("org-1", "user-1", projectId, "2026-08-01"),
     { id: "app-1", applicationNumber: 1 },
   );
+});
+
+test("period-ending dates are validated as calendar days before any database work", async (t) => {
+  const transactionDb = db as unknown as { transaction(callback: unknown): Promise<unknown> };
+  t.mock.method(transactionDb, "transaction", async () => {
+    throw new Error("database work must not start for an invalid date");
+  });
+  const isDateError = (error: unknown) =>
+    error instanceof ConstructionBillingError && /valid calendar date/.test(error.message);
+  for (const bad of ["undefined", "", "2026-02-30", "07/31/2026", "2026-7-1", "2026-07-01T00:00:00Z"]) {
+    await assert.rejects(releaseRetainage("org-1", "user-1", "project-1", bad, "100"), isDateError, `releaseRetainage(${bad})`);
+    await assert.rejects(createPayApplication("org-1", "user-1", "project-1", bad), isDateError, `createPayApplication(${bad})`);
+  }
+  assert.equal(requireIsoDate("2026-07-31", "Period ending"), "2026-07-31");
 });

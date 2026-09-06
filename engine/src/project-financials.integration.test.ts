@@ -3,11 +3,12 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import pg from "pg";
-import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
+import { BUILTIN_PROJECT_TYPES, type FinancialProfile } from "@openbooks/schema";
 import { resolveProjectFinancials } from "./project-financials.ts";
+import { applyOverheadForTime } from "./overhead-apply.ts";
 import { db, pool, type SqlExecutor } from "./db.ts";
 import { sum } from "./money.ts";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -256,6 +257,64 @@ test("the profitability report reconciles headline cost with its account detail 
       sum(report.costByAccount.map((row) => row.amount)),
       report.measures.actual_cost,
     );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * rate_engine overhead must resolve the published rate card exactly the way the
+ * posting engine does: an org-wide (department-less) rate applies to every
+ * entry, a department's own rate overrides the org-wide rows for that
+ * department, and stacked org-wide rows sum. Anything else silently drops
+ * overhead from total_cost / gross_profit for department-less time.
+ */
+test("rate-engine overhead matches org-wide rates and the posted net-zero pair", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const projectId = randomUUID();
+    const employeeId = randomUUID();
+    const departmentId = randomUUID();
+    const orgWideEntry = randomUUID();
+    const departmentEntry = randomUUID();
+    await db.execute(sql`
+      insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+      values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-OH', 'Overhead parity job', ${org.customerId}, 'active', true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${employeeId}, ${org.orgId}, 'employee', 'Overhead worker', ${org.subsidiaryId}, true, '{}'::jsonb)`);
+    await db.execute(sql`insert into departments (id, org_id, name) values (${departmentId}, ${org.orgId}, 'Field crew')`);
+    // Two stacked org-wide category rows (10 + 2) and one department row (15).
+    await db.execute(sql`
+      insert into overhead_rates (id, org_id, department_id, category, method, rate_kind, rate_percent, effective_from)
+      values (${randomUUID()}, ${org.orgId}, null, 'Equipment', 'standard', 'per_hour', '10.0000', '2026-01-01'),
+             (${randomUUID()}, ${org.orgId}, null, 'Consumables', 'standard', 'per_hour', '2.0000', '2026-01-01'),
+             (${randomUUID()}, ${org.orgId}, ${departmentId}, 'Equipment', 'standard', 'per_hour', '15.0000', '2026-01-01')`);
+    await db.execute(sql`
+      insert into time_entries (id, org_id, employee_party_id, worked_on, hours, project_id, department_id, status, costing_basis, is_billable, custom, created_by, updated_by)
+      values (${orgWideEntry}, ${org.orgId}, ${employeeId}, ${org.date}, '4.0000', ${projectId}, null, 'approved', 'actual', false, '{}'::jsonb, ${actor}, ${actor}),
+             (${departmentEntry}, ${org.orgId}, ${employeeId}, ${org.date}, '4.0000', ${projectId}, ${departmentId}, 'approved', 'actual', false, '{}'::jsonb, ${actor}, ${actor})`);
+
+    const rateEngineProfile = {
+      ...profile,
+      overhead: { method: "rate_engine" as const, rateEngine: { rateSource: "standard" as const, hoursBasis: "total_hours" as const, dimension: "overhead", scope: "department" as const } },
+      totalCost: { components: ["actual_cost", "committed_cost", "overhead"] as FinancialProfile["totalCost"]["components"] },
+    };
+    const report = await resolveProjectFinancials(org.orgId, projectId, rateEngineProfile);
+    // 4h × (10 + 2) org-wide + 4h × 15 department-specific = 108.
+    assert.equal(report.measures.calculated_overhead, "108.0000");
+    assert.equal(report.measures.overhead, "108.0000");
+    assert.equal(report.measures.total_cost, "108.0000");
+    assert.equal(report.measures.gross_profit, "-108.0000");
+
+    // The statistical measure and the posted net-zero pair are ONE rule.
+    await db.execute(sql`
+      update orgs set settings = settings || ${JSON.stringify({ overheadApplication: { mode: "net_zero_pair", accountId: org.accounts.adjustment } })}::jsonb
+       where id = ${org.orgId}`);
+    const applied = await applyOverheadForTime(org.orgId, actor, [orgWideEntry, departmentEntry]);
+    assert.equal(applied.entries, 2);
+    assert.equal(applied.total, report.measures.calculated_overhead);
   } finally {
     await dropScratchOrg(org.orgId);
   }

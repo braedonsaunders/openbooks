@@ -8,6 +8,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadCrmAccount } from '../../../../../lib/crm'
+import { isIsoTimestamp } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
@@ -70,6 +71,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'annual revenue must be a non-negative amount' }, { status: 422 })
   }
   const annualRevenue = annualRevenueRaw === null ? null : normalizeMoney(annualRevenueRaw)
+  if (body.nextActionAt != null && body.nextActionAt !== '' && !isIsoTimestamp(body.nextActionAt)) {
+    return NextResponse.json({ error: 'invalid nextActionAt: expected an ISO date or date-time' }, { status: 422 })
+  }
   const qualification = body.qualification === undefined ? undefined : body.qualification
   if (qualification !== undefined && (qualification === null || typeof qualification !== 'object' || Array.isArray(qualification))) {
     return NextResponse.json({ error: 'qualification must be an object' }, { status: 422 })

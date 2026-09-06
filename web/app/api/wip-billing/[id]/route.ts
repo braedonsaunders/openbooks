@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (feature) return feature
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const prebill = await loadPrebill(gate.user.orgId, id)
+  const prebill = await loadPrebill(gate.user.orgId, id, gate.allowedSubsidiaryIds)
   return prebill ? NextResponse.json({ prebill }) : NextResponse.json({ error: 'not found' }, { status: 404 })
 }
 
@@ -39,6 +39,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       id,
       body.action as 'submit' | 'return' | 'approve' | 'void',
       body.reason,
+      gate.allowedSubsidiaryIds,
     )
     return NextResponse.json(result)
   } catch (error) {

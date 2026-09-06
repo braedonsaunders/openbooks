@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db, inDbTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import {
@@ -58,6 +58,37 @@ export async function overheadApplicationSettings(orgId: string): Promise<Overhe
   return overheadApplicationSettingsFrom(db, orgId);
 }
 
+/**
+ * THE rule for which published `overhead_rates` rows apply to a time entry —
+ * one SQL fragment shared by the posting engine (applyOverheadForTime, the
+ * backfill and its counter) and the statistical project-financials measure,
+ * so the number a cockpit reports can never differ from the pair the ledger
+ * carries. Given the table aliases of the rate row and the entry:
+ *   - same org, and the rate's effective window covers the worked day;
+ *   - an org-wide row (null department) applies to every entry — including
+ *     department-less time; a department row only to that department;
+ *   - most specific wins: when the entry's department has its own row of the
+ *     same rate kind in force that day, org-wide rows of that kind step aside;
+ *   - rows of one scope may stack (category rows) — each match is one term.
+ */
+export function overheadRateAppliesToTimeEntry(rateAlias: string, entryAlias: string): SQL {
+  const r = sql.raw(rateAlias);
+  const te = sql.raw(entryAlias);
+  return sql`${r}.org_id = ${te}.org_id
+         and (${r}.department_id is null or ${r}.department_id = ${te}.department_id)
+         and ${r}.effective_from <= ${te}.worked_on
+         and (${r}.effective_to is null or ${r}.effective_to >= ${te}.worked_on)
+         and not exists (
+           select 1 from overhead_rates specific_rate
+            where specific_rate.org_id = ${te}.org_id
+              and specific_rate.rate_kind = ${r}.rate_kind
+              and specific_rate.department_id = ${te}.department_id
+              and ${r}.department_id is null
+              and specific_rate.effective_from <= ${te}.worked_on
+              and (specific_rate.effective_to is null or specific_rate.effective_to >= ${te}.worked_on)
+         )`;
+}
+
 export interface OverheadApplyResult {
   entryId: string | null;
   total: string;
@@ -82,48 +113,47 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     if (settings.mode !== "net_zero_pair" || !settings.accountId) return none;
 
     const idArr = `{${timeEntryIds.join(",")}}`;
+    // Lock the eligible entries first, then resolve their rate terms: a card
+    // may stack several rows for one scope (category rows), so the amount is
+    // the SUM of every applicable row's term and each entry appears exactly
+    // once — the journal stamp below claims each carried entry once.
     const rows = (await tx.execute<{ id: string; project_id: string; worked_on: string; amount: string }>(sql`
-      select te.id, te.project_id, te.worked_on,
+      with locked as (
+        select te.id, te.org_id, te.project_id, te.worked_on, te.hours, te.department_id
+          from time_entries te
+         where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[])
+           and te.status = 'approved' and te.project_id is not null
+           and te.costing_basis = 'actual'
+           and te.overhead_journal_entry_id is null
+           and not exists (
+             select 1 from projects p
+             join project_types pt on pt.id = p.project_type_id and pt.org_id = te.org_id
+            where p.id = te.project_id and p.org_id = te.org_id
+              and (
+                select v.financial_profile->'overhead'->>'method'
+                  from project_financial_profile_versions v
+                 where v.org_id = te.org_id
+                   and v.project_type_id = pt.id
+                   and v.effective_from <= te.worked_on
+                   and (v.effective_to is null or v.effective_to >= te.worked_on)
+                 order by v.effective_from desc
+                 limit 1
+              ) = 'none'
+           )
+         order by te.id
+         for update of te
+      )
+      select entry.id, entry.project_id, entry.worked_on,
              -- hours × rate is quantized to the ledger scale at source: the raw
              -- numeric(19,4)×numeric(19,4) product carries up to 8 decimals,
              -- which money parsing would reject as over-precise.
-             round(te.hours * r.rate_percent, 4) as amount
-        from time_entries te
+             sum(round(entry.hours * r.rate_percent, 4)) as amount
+        from locked entry
         join overhead_rates r
-          on r.org_id = te.org_id
-         and r.rate_kind = 'per_hour'
-         and (r.department_id is null or r.department_id = te.department_id)
-         and r.effective_from <= te.worked_on
-         and (r.effective_to is null or r.effective_to >= te.worked_on)
-         -- most specific: a department rate beats the org-wide (null-dept) rate
-         and not exists (
-           select 1 from overhead_rates r2
-            where r2.org_id = te.org_id and r2.rate_kind = 'per_hour'
-              and r2.department_id = te.department_id and r.department_id is null
-              and r2.effective_from <= te.worked_on
-              and (r2.effective_to is null or r2.effective_to >= te.worked_on)
-         )
-       where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[])
-         and te.status = 'approved' and te.project_id is not null
-         and te.costing_basis = 'actual'
-         and te.overhead_journal_entry_id is null
-         and not exists (
-           select 1 from projects p
-           join project_types pt on pt.id = p.project_type_id and pt.org_id = te.org_id
-          where p.id = te.project_id and p.org_id = te.org_id
-            and (
-              select v.financial_profile->'overhead'->>'method'
-                from project_financial_profile_versions v
-               where v.org_id = te.org_id
-                 and v.project_type_id = pt.id
-                 and v.effective_from <= te.worked_on
-                 and (v.effective_to is null or v.effective_to >= te.worked_on)
-               order by v.effective_from desc
-               limit 1
-            ) = 'none'
-         )
-       order by te.id
-       for update of te`));
+          on r.rate_kind = 'per_hour'
+         and ${overheadRateAppliesToTimeEntry("r", "entry")}
+       group by entry.id, entry.project_id, entry.worked_on
+       order by entry.id`));
     if (rows.rows.length === 0) return none;
 
     const byProject = new Map<string, string>();
@@ -188,10 +218,7 @@ export async function countUnappliedOverheadTime(orgId: string): Promise<{ entri
        and te.overhead_journal_entry_id is null
        and exists (
          select 1 from overhead_rates r
-          where r.org_id = te.org_id and r.rate_kind = 'per_hour'
-            and (r.department_id is null or r.department_id = te.department_id)
-            and r.effective_from <= te.worked_on
-            and (r.effective_to is null or r.effective_to >= te.worked_on)
+          where r.rate_kind = 'per_hour' and ${overheadRateAppliesToTimeEntry("r", "te")}
        )
        and not exists (
          select 1 from projects p
@@ -230,10 +257,7 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
          and te.overhead_journal_entry_id is null
          and exists (
            select 1 from overhead_rates r
-            where r.org_id = te.org_id and r.rate_kind = 'per_hour'
-              and (r.department_id is null or r.department_id = te.department_id)
-              and r.effective_from <= te.worked_on
-              and (r.effective_to is null or r.effective_to >= te.worked_on)
+            where r.rate_kind = 'per_hour' and ${overheadRateAppliesToTimeEntry("r", "te")}
          )
          and not exists (
            select 1 from projects p

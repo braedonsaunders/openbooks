@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { canonicalJson } from "./canonical-json.ts";
 import { addCalendarDays, businessToday } from "./business-date.ts";
 import { db, withOrg, withBypassContext, withOrgContext, inDbTransaction, type SqlExecutor } from "./db.ts";
+import { revaluationReadiness } from "./fx-revaluation.ts";
 
 export class CloseError extends Error {}
 
@@ -869,7 +870,17 @@ async function periodFingerprint(
           and d.status in ('draft','pending_approval','approved','posted')
           and d.posting_period_id is null) as unassigned_document_changed,
       (select count(*) from reconciliations r join accounting_periods p on p.id = ${periodId} and p.org_id = r.org_id
-        where r.org_id = ${orgId} and r.through_date <= p.ends_on and r.status = 'signed_off') as reconciliations
+        where r.org_id = ${orgId} and r.through_date <= p.ends_on and r.status = 'signed_off') as reconciliations,
+      -- Consolidated translation rates are close evidence: re-deriving or
+      -- overriding a period's rates restates every consolidated statement, so
+      -- the change must invalidate completed tasks like a ledger change does.
+      -- Value-based (not updated_at) so a no-op re-derive leaves sign-offs intact.
+      (select coalesce(string_agg(
+                 cf.from_currency || '>' || cf.to_currency || ':' || cf.current_rate::text || '/'
+                   || cf.average_rate::text || '/' || cf.historical_rate::text || '/' || cf.source,
+                 ',' order by cf.from_currency, cf.to_currency), '')
+         from consolidated_fx_rates cf
+        where cf.org_id = ${orgId} and cf.period_id = ${periodId}) as consolidated_rates
   `));
   return createHash("sha256")
     .update(JSON.stringify(result.rows[0] ?? {}))
@@ -1093,10 +1104,16 @@ async function readinessChecks(
       period_number: number;
       is_adjustment: boolean;
       base_currency: string;
+      elimination_currency: string;
     }>(sql`
     select r.period_id, r.book_id, p.starts_on, p.ends_on,
            p.fiscal_calendar_id, p.period_number, p.is_adjustment,
-           o.base_currency
+           o.base_currency,
+           coalesce(
+             (select s.base_currency from subsidiaries s
+               where s.org_id = o.id and s.is_elimination and s.is_active
+               order by s.created_at, s.id limit 1),
+             o.base_currency) as elimination_currency
       from close_runs r
       join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
       join orgs o on o.id = r.org_id
@@ -1165,49 +1182,44 @@ async function readinessChecks(
          select 1 from fx_rates f where f.org_id = ${orgId} and f.from_currency = c.currency
            and f.to_currency = ${ctx.base_currency} and f.rate_type = 'spot' and f.as_of <= ${ctx.ends_on}
        )`),
+      // The revaluation ENGINE decides fx readiness: the same monetary
+      // population, spot-rate lookup, and delta arithmetic runRevaluation
+      // posts from. A position already at the period-end rate needs no entry
+      // (the engine skips it), so it is not an exception; a position the
+      // engine cannot reverse (no following period) is reported as its own
+      // actionable exception below rather than as "unrevalued".
+      revaluationReadiness(orgId, ctx.book_id, ctx.period_id),
+      // Intercompany residuals are measured the way runAutoElimination
+      // measures them: every subsidiary's flagged activity translated into the
+      // elimination subsidiary's currency through the period's consolidated
+      // rates (average for flows, current for balances), with the elimination
+      // subsidiary's own lines included at par — so a group that eliminates
+      // cleanly reads zero per account, whatever functional currencies its
+      // entities keep. A foreign entity with no consolidated rate cannot be
+      // measured at all; that is counted separately, never as a residual.
       db.execute(sql`
-      select count(*) as count from (
-        select l.subsidiary_id, l.currency
-          from journal_lines l
-          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-          join accounting_periods ep on ep.id = e.period_id and ep.org_id = e.org_id
-          join accounts a on a.id = l.account_id and a.org_id = l.org_id
-          join subsidiaries s on s.id = l.subsidiary_id and s.org_id = l.org_id
-         where l.org_id = ${orgId} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
-           and e.origin <> 'fx_revaluation'
-           and (
-             ep.ends_on < ${ctx.ends_on}
-             or ep.id = ${ctx.period_id}
-             or (
-               ${ctx.is_adjustment}
-               and ep.fiscal_calendar_id = ${ctx.fiscal_calendar_id}
-               and ep.ends_on = ${ctx.ends_on}
-               and (
-                 not ep.is_adjustment
-                 or ep.period_number <= ${ctx.period_number}
-               )
-             )
-           )
-           and l.currency <> s.base_currency
-           and a.type in ('asset_bank', 'asset_receivable', 'liability_payable')
-         group by l.subsidiary_id, l.currency
-        having sum(l.txn_amount) <> 0
-      ) positions
-      where not exists (
-        select 1 from journal_entries r
-         where r.org_id = ${orgId} and r.period_id = ${ctx.period_id} and r.book_id = ${ctx.book_id}
-           and r.subsidiary_id = positions.subsidiary_id
-           and r.origin = 'fx_revaluation' and r.reverses_entry_id is null
-      )`),
-      db.execute(sql`
-      select count(*) as count from (
-        select a.id
+      select count(*) filter (where residual <> 0 and not coalesce(missing_rate, false)) as count,
+             count(*) filter (where missing_rate) as missing_rates
+        from (
+        select a.id,
+               sum(round(l.amount * case
+                 when s.base_currency = ${ctx.elimination_currency} then 1
+                 when a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+                   then consolidated.average_rate
+                 else consolidated.current_rate
+               end, 4)) as residual,
+               bool_or(s.base_currency <> ${ctx.elimination_currency} and consolidated.id is null) as missing_rate
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           join accounts a on a.id = l.account_id and a.org_id = l.org_id and a.eliminate
+          join subsidiaries s on s.id = l.subsidiary_id and s.org_id = l.org_id
+          left join consolidated_fx_rates consolidated
+            on consolidated.org_id = e.org_id
+           and consolidated.period_id = e.period_id
+           and consolidated.from_currency = s.base_currency
+           and consolidated.to_currency = ${ctx.elimination_currency}
          where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
          group by a.id
-        having sum(l.amount) <> 0
       ) residuals`),
       db.execute(sql`
       select coalesce(rules->>'amount', '10000.0000') as amount,
@@ -1300,7 +1312,17 @@ async function readinessChecks(
       severity: "error",
       title: "close.diagnostics.fx-unrevalued.title",
       message: "close.diagnostics.fx-unrevalued.message",
-      count: Number(fxReval.rows[0]?.count ?? 0),
+      count: fxReval.unrevaluedPositions,
+      details: { positionsMissingSpotRate: fxReval.positionsMissingSpotRate },
+    },
+    {
+      code: "fx-reversal-period-missing",
+      taskKey: "fx-revalued",
+      category: "foreign_exchange",
+      severity: "error",
+      title: "close.diagnostics.fx-reversal-period-missing.title",
+      message: "close.diagnostics.fx-reversal-period-missing.message",
+      count: fxReval.reversalPeriodMissing ? 1 : 0,
     },
     {
       code: "intercompany-residual",
@@ -1310,6 +1332,15 @@ async function readinessChecks(
       title: "close.diagnostics.intercompany-residual.title",
       message: "close.diagnostics.intercompany-residual.message",
       count: Number(intercompany.rows[0]?.count ?? 0),
+    },
+    {
+      code: "consolidated-rates-missing",
+      taskKey: "intercompany-balanced",
+      category: "intercompany",
+      severity: "critical",
+      title: "close.diagnostics.consolidated-rates-missing.title",
+      message: "close.diagnostics.consolidated-rates-missing.message",
+      count: Number(intercompany.rows[0]?.missing_rates ?? 0),
     },
     {
       code: "material-variances",

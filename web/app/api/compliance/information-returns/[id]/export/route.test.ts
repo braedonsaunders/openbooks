@@ -29,12 +29,19 @@ const mockSources = new Map<string, string>([
         if (!state.authz) return NextResponse.json({ error: "forbidden" }, { status: 403 })
         return state.authz
       }
+      export function guardSubsidiaryScope(authz, subsidiaryId) {
+        const scope = authz?.allowedSubsidiaryIds ?? null
+        if (scope === null) return null
+        if (subsidiaryId && scope.has(subsidiaryId)) return null
+        return NextResponse.json({ error: "not found" }, { status: 404 })
+      }
     `,
   ],
   [
     "mock:compliance",
     `
       export async function guardComplianceFeature() { return null }
+      export async function loadInformationReturnFilingScope() { return { subsidiaryId: null } }
     `,
   ],
   [

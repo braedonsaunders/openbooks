@@ -150,3 +150,27 @@ test("null subsidiary scope remains unrestricted", async () => {
     }
   }
 });
+
+test("recall filters are validated at the boundary before they reach the engine", async () => {
+  const uuid = "00000000-0000-4000-8000-000000000002";
+  for (const query of [
+    "lotId=not-a-lot",
+    "itemId=not-an-item",
+    "expiresOnOrBefore=soon",
+    "expiresOnOrBefore=2026-13-45",
+    "expiresOnOrBefore=20260831",
+  ]) {
+    reset(null);
+    const response = await GET(new Request(`http://openbooks.test/api/inventory/advanced?view=recall&${query}`));
+    assert.equal(response.status, 422, query);
+    assert.equal(state.recallFilters.length, 0, `${query} must not reach queryLotRecall`);
+  }
+  reset(null);
+  const ok = await GET(
+    new Request(`http://openbooks.test/api/inventory/advanced?view=recall&lotId=${uuid}&itemId=${uuid}&expiresOnOrBefore=2026-08-31`),
+  );
+  assert.equal(ok.status, 200);
+  assert.equal(state.recallFilters[0]?.lotId, uuid);
+  assert.equal(state.recallFilters[0]?.itemId, uuid);
+  assert.equal(state.recallFilters[0]?.expiresOnOrBefore, "2026-08-31");
+});

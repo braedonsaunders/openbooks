@@ -23,6 +23,7 @@ import {
 } from '@openbooks/engine/src/payroll-entitlements.ts'
 import type { CellValue, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
 import type { DataResource, WriteCtx } from './resources'
+import { employeeWriteScopeError } from './write-scope'
 
 /**
  * Mid-year adoption carry-in as an import/export resource.
@@ -53,6 +54,7 @@ export const PAYROLL_OPENING_BALANCES_DESCRIPTOR: ResourceDescriptor = {
   writePermission: 'payroll.manage',
   supportsImport: true,
   naturalKey: 'employee + taxYear',
+  scopedWrite: true,
 }
 
 /**
@@ -238,6 +240,15 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
             outcome.errors.push({ row: rowNo, message: employee.error, field: 'employee' })
             continue
           }
+          // Scope is decided before the preview reports anything: a restricted
+          // importer must not learn, even in dry-run, that a hidden employee
+          // exists and would be created/updated.
+          const scopeError = await employeeWriteScopeError(ctx.orgId, employee.id, ctx.allowedSubsidiaryIds)
+          if (scopeError) {
+            outcome.failed++
+            outcome.errors.push({ row: rowNo, message: scopeError, field: 'employee' })
+            continue
+          }
 
           if (!lockCache.has(taxYear)) {
             lockCache.set(taxYear, await openingBalanceLocks(ctx.orgId, taxYear))
@@ -277,6 +288,7 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
             actorId: ctx.actorId,
             taxYear,
             rows: [{ employeePartyId: employee.id, amounts: src, components }],
+            allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? undefined,
           })
           outcome.created += result.created
           outcome.updated += result.updated + result.deleted
@@ -321,6 +333,7 @@ export const PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR: ResourceDescriptor = {
   writePermission: 'payroll.manage',
   supportsImport: true,
   naturalKey: 'employee + plan',
+  scopedWrite: true,
 }
 
 function entitlementFields(plans: readonly EntitlementPlan[]): ResourceField[] {
@@ -397,6 +410,15 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
           if ('error' in employee) {
             outcome.failed++
             outcome.errors.push({ row: rowNo, message: employee.error, field: 'employee' })
+            continue
+          }
+          // Scope is decided before the preview reports anything: a restricted
+          // importer must not learn, even in dry-run, that a hidden employee
+          // exists and would be created/updated.
+          const scopeError = await employeeWriteScopeError(ctx.orgId, employee.id, ctx.allowedSubsidiaryIds)
+          if (scopeError) {
+            outcome.failed++
+            outcome.errors.push({ row: rowNo, message: scopeError, field: 'employee' })
             continue
           }
           const planKey = String(src.plan ?? '').trim().toLowerCase()

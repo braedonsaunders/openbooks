@@ -8,11 +8,13 @@ import {
   createPayApplication,
   generatePayApplicationInvoice,
   releaseRetainage,
+  requireIsoDate,
   revisedScheduleValue,
   submitPayApplication,
   voidPayApplication,
 } from "@openbooks/engine/src/construction-billing.ts";
-import { guardPermission } from "../../../lib/authz";
+import { guardPermission, guardSubsidiaryScope } from "../../../lib/authz";
+import { isUuid } from "../../../lib/list-params";
 import { projectCostSummary } from "../../../lib/project-costing";
 import { add, cmp, normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
@@ -36,6 +38,11 @@ export async function GET(req: Request) {
   const projectId = url.searchParams.get("projectId");
   if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
   const orgId = authz.user.orgId;
+  // A project outside the caller's subsidiary scope is a missing project.
+  const scope = await projectScope(orgId, projectId);
+  if (!scope) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const denied = guardSubsidiaryScope(authz, scope.subsidiaryId);
+  if (denied) return denied;
   if (!(await supportsApplicationsForPayment(orgId, projectId))) {
     return NextResponse.json({ error: "This project's billing profile does not use applications for payment" }, { status: 422 });
   }
@@ -108,29 +115,52 @@ async function pinIncomeAccount(exec: SqlExecutor, orgId: string, accountId: unk
   return id;
 }
 
-async function ownsProject(orgId: string, projectId: string): Promise<boolean> {
-  const r = (await db.execute(
-    sql`select 1 from projects where id = ${projectId} and org_id = ${orgId}`,
-  ));
-  return r.rows.length > 0;
+/** The project a request targets, with the subsidiary that scopes it. */
+interface ProjectScope {
+  projectId: string;
+  subsidiaryId: string | null;
 }
 
-async function actionProjectId(orgId: string, action: string, body: Record<string, unknown>): Promise<string | null> {
+async function projectScope(orgId: string, projectId: unknown): Promise<ProjectScope | null> {
+  if (typeof projectId !== "string" || !isUuid(projectId)) return null;
+  const r = (await db.execute<{ id: string; subsidiary_id: string | null }>(
+    sql`select id, subsidiary_id from projects where id = ${projectId} and org_id = ${orgId}`,
+  ));
+  const row = r.rows[0];
+  return row ? { projectId: row.id, subsidiaryId: row.subsidiary_id } : null;
+}
+
+async function ownsProject(orgId: string, projectId: string): Promise<boolean> {
+  return (await projectScope(orgId, projectId)) !== null;
+}
+
+/**
+ * Resolve the project an action touches — directly, or through the parent of
+ * the child row it names — together with that project's subsidiary, so the
+ * caller's scope is enforced before any engine work. Unknown ids, malformed
+ * ids and cross-org rows all resolve to null (a missing record).
+ */
+async function actionProjectScope(orgId: string, action: string, body: Record<string, unknown>): Promise<ProjectScope | null> {
   if (["addSov", "addChangeOrder", "createPayApp", "releaseRetainage"].includes(action)) {
-    return typeof body.projectId === "string" && await ownsProject(orgId, body.projectId) ? body.projectId : null;
+    return projectScope(orgId, body.projectId);
   }
   let query: SQL;
+  const childId = ["submitPayApp", "approvePayApp", "voidPayApp", "billPayApp"].includes(action) ? body.payApplicationId : body.id;
+  if (typeof childId !== "string" || !isUuid(childId)) return null;
   if (["updateSov", "deleteSov"].includes(action)) {
-    query = sql`select project_id from sov_lines where id = ${body.id} and org_id = ${orgId}`;
+    query = sql`select p.id, p.subsidiary_id from sov_lines l join projects p on p.id = l.project_id and p.org_id = l.org_id
+                 where l.id = ${childId} and l.org_id = ${orgId}`;
   } else if (["approveChangeOrder", "voidChangeOrder"].includes(action)) {
-    query = sql`select project_id from change_orders where id = ${body.id} and org_id = ${orgId}`;
+    query = sql`select p.id, p.subsidiary_id from change_orders co join projects p on p.id = co.project_id and p.org_id = co.org_id
+                 where co.id = ${childId} and co.org_id = ${orgId}`;
   } else if (["submitPayApp", "approvePayApp", "voidPayApp", "billPayApp"].includes(action)) {
-    query = sql`select project_id from pay_applications where id = ${body.payApplicationId} and org_id = ${orgId}`;
+    query = sql`select p.id, p.subsidiary_id from pay_applications pa join projects p on p.id = pa.project_id and p.org_id = pa.org_id
+                 where pa.id = ${childId} and pa.org_id = ${orgId}`;
   } else {
     return null;
   }
-  const result = (await db.execute<{ project_id: string }>(query));
-  return result.rows[0]?.project_id ?? null;
+  const row = (await db.execute<{ id: string; subsidiary_id: string | null }>(query)).rows[0];
+  return row ? { projectId: row.id, subsidiaryId: row.subsidiary_id } : null;
 }
 
 export async function POST(req: Request) {
@@ -151,9 +181,12 @@ export async function POST(req: Request) {
   const userId = authz.user.id;
   const projectActions = new Set(["addSov", "updateSov", "deleteSov", "addChangeOrder", "approveChangeOrder", "voidChangeOrder", "createPayApp", "submitPayApp", "approvePayApp", "voidPayApp", "billPayApp", "releaseRetainage"]);
   if (projectActions.has(action)) {
-    const projectId = await actionProjectId(orgId, action, body);
-    if (!projectId) return NextResponse.json({ error: "not found" }, { status: 404 });
-    if (!(await supportsApplicationsForPayment(orgId, projectId))) {
+    const scope = await actionProjectScope(orgId, action, body);
+    if (!scope) return NextResponse.json({ error: "not found" }, { status: 404 });
+    // Out of the caller's subsidiary scope ⇒ indistinguishable from missing.
+    const denied = guardSubsidiaryScope(authz, scope.subsidiaryId);
+    if (denied) return denied;
+    if (!(await supportsApplicationsForPayment(orgId, scope.projectId))) {
       return NextResponse.json({ error: "This project's billing profile does not use applications for payment" }, { status: 422 });
     }
   }
@@ -261,7 +294,11 @@ export async function POST(req: Request) {
       }
       case "approveChangeOrder": {
         // Approving a change order also lands its value as a new SOV line so the
-        // contract sum and future draws reflect it.
+        // contract sum and future draws reflect it. An omitted approval date is
+        // the business day; a supplied one must be a real calendar day.
+        const approvedOn = body.approvedOn == null || body.approvedOn === ""
+          ? await businessToday(orgId)
+          : requireIsoDate(body.approvedOn, "Approval date");
         await db.transaction(async (tx) => {
           const co = (await tx.execute<any>(sql`
             select project_id, number, description, amount, target_sov_line_id, created_by from change_orders
@@ -306,7 +343,7 @@ export async function POST(req: Request) {
           `));
           if (activeApplication.rows.length) throw new ConstructionBillingError("Complete or void the current application before approving a change order");
           await tx.execute(sql`
-            update change_orders set status = 'approved', approved_on = ${body.approvedOn ?? await businessToday(orgId)},
+            update change_orders set status = 'approved', approved_on = ${approvedOn},
                    approved_by = ${userId},
                    updated_at = now(), updated_by = ${userId}
              where id = ${body.id} and org_id = ${orgId}
@@ -359,7 +396,6 @@ export async function POST(req: Request) {
                         'after', jsonb_build_object('projectId', ${row.project_id}, 'scheduledValue', ${String(row.amount)})),
                       ${userId})`);
           }
-          const approvedOn = body.approvedOn ?? await businessToday(orgId);
           await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'change_orders', ${body.id}, 'approve',
                     jsonb_build_object('before', jsonb_build_object('status', 'draft'), 'after',

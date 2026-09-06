@@ -7,8 +7,8 @@ import {
   InformationReturnError,
   stampRecipientCopiesPrinted,
 } from '@openbooks/engine/src/information-returns.ts'
-import { guardPermission } from '@/lib/authz'
-import { guardComplianceFeature } from '@/lib/compliance'
+import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
+import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { maskTin, type RecipientFormData } from '@/lib/information-return-form'
 import { renderInformationReturnBatchPdf, renderInformationReturnPdf } from '@/lib/information-return-pdf'
 import { isUuid } from '@/lib/list-params'
@@ -44,6 +44,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const recipientId = new URL(req.url).searchParams.get('recipientId')
   if (recipientId && !isUuid(recipientId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Entity isolation before any filing detail is read (same 404 as a missing filing).
+  const filingScope = await loadInformationReturnFilingScope(orgId, id)
+  if (!filingScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
+  if (scopeDenied) return scopeDenied
 
   const filings = (await db.execute<{
       tax_year: number

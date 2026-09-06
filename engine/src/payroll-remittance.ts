@@ -145,7 +145,11 @@ export async function payrollRemittanceSummary(
       province: string; amount: string;
     }>(sql`
     select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
-           c.liability_account_id, ${filingAccount} as filing_account_id, s.province,
+           -- The account the line was CREDITED to at commit (0094). A pre-0094
+           -- line whose component named no account resolves, as it always did,
+           -- through the pack's legacy slot in resolveAccount below.
+           coalesce(l.liability_account_id, c.liability_account_id) as liability_account_id,
+           ${filingAccount} as filing_account_id, s.province,
            sum(l.amount) as amount
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -157,7 +161,7 @@ export async function payrollRemittanceSummary(
        and coalesce(c.system_key, '') <> all(${internalAccruals}::text[])
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      group by c.id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
-              c.liability_account_id, ${filingAccount}, s.province
+              coalesce(l.liability_account_id, c.liability_account_id), ${filingAccount}, s.province
      order by c.sequence, c.code
   `));
   if (rows.rows.length === 0) return [];

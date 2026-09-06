@@ -6,6 +6,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadActivity } from '../../../../../lib/crm'
+import { isIsoTimestamp } from '../../../../../lib/crm-dates'
 
 export const runtime = 'nodejs'
 
@@ -52,7 +53,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
     }
   }
-  if (body.startsAt && body.endsAt && new Date(body.endsAt) < new Date(body.startsAt)) return NextResponse.json({ error: 'end must not precede start' }, { status: 422 })
+  // Timestamp columns: refuse anything Postgres would not cast so a 22P02
+  // never escapes the write as a 500. Blank/null clears the value.
+  for (const key of ['startsAt', 'endsAt', 'dueAt', 'reminderAt'] as const) {
+    const value = body[key]
+    if (value != null && value !== '' && !isIsoTimestamp(value)) {
+      return NextResponse.json({ error: `invalid ${key}: expected an ISO date or date-time` }, { status: 422 })
+    }
+  }
+  // Ordering is checked against the value that will be stored (request value,
+  // else the current row), so a one-sided change cannot trip the database
+  // check constraint after the lock.
+  const startsAt = body.startsAt !== undefined ? textOrNull(body.startsAt) : (current.rows[0].starts_at as string | null)
+  const endsAt = body.endsAt !== undefined ? textOrNull(body.endsAt) : (current.rows[0].ends_at as string | null)
+  if (startsAt && endsAt && new Date(endsAt) < new Date(startsAt)) return NextResponse.json({ error: 'end must not precede start' }, { status: 422 })
   const duration = body.durationMinutes === undefined || body.durationMinutes === null || body.durationMinutes === '' ? null : Number(body.durationMinutes)
   if (duration !== null && (!Number.isInteger(duration) || duration < 0)) return NextResponse.json({ error: 'duration must be non-negative minutes' }, { status: 422 })
   const links = body.links as Array<{ subjectKind: string; subjectId: string }> | undefined

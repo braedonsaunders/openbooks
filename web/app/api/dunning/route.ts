@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { isDunnableDocumentKind } from "@openbooks/engine/src/dunning.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardPermission } from "../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
@@ -80,6 +81,12 @@ export async function POST(req: Request) {
   }
   const stages = validStages(body.stages ?? []);
   if (stages === null) return NextResponse.json({ error: "invalid stages" }, { status: 400 });
+  // The runner selects documents by this kind and mails their party; only a
+  // dunnable receivable kind may ever be configured (see engine dunning.ts).
+  const appliesToKind = body.appliesToKind === undefined ? "customer_invoice" : body.appliesToKind;
+  if (typeof appliesToKind !== "string" || !isDunnableDocumentKind(appliesToKind)) {
+    return NextResponse.json({ error: "appliesToKind must be a dunnable receivable document kind" }, { status: 422 });
+  }
   const minBalanceRaw = canonicalDecimal(body.minBalance ?? "0", 4);
   if (minBalanceRaw === null || compareDecimal(minBalanceRaw, "0") < 0) {
     return NextResponse.json({ error: "minBalance must be a non-negative amount" }, { status: 400 });
@@ -90,7 +97,7 @@ export async function POST(req: Request) {
     const created = (await tx.execute<Record<string, unknown>>(sql`
       insert into dunning_policies (org_id, name, applies_to_kind, grace_period_days, min_balance,
                                     reply_to, is_active, created_by, updated_by)
-      values (${authz.user.orgId}, ${body.name}, ${(body.appliesToKind as string) ?? "customer_invoice"},
+      values (${authz.user.orgId}, ${body.name}, ${appliesToKind},
               ${Number(body.gracePeriodDays ?? 0)}, ${minBalance},
               ${(body.replyTo as string | null) ?? null}, ${body.isActive !== false},
               ${authz.user.id}, ${authz.user.id})

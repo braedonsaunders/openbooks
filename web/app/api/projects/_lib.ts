@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { loadFieldDefs, type CustomFieldDef } from '../../../lib/custom-fields'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 /**
  * Project payload for the flyout + cockpit header: the project row (with the
@@ -38,9 +39,20 @@ export interface ProjectPayload {
   customFieldDefs: ProjectCustomFieldDef[]
 }
 
-export async function loadProject(id: string, orgId: string): Promise<ProjectPayload | null> {
+/**
+ * Load one project for the flyout / cockpit. The caller's subsidiary scope is
+ * applied HERE, so a project outside it is a missing project for every
+ * surface built on this loader — pages cannot forget to check. Unrestricted
+ * callers (null) see the whole org.
+ */
+export async function loadProject(
+  id: string,
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): Promise<ProjectPayload | null> {
   const proj = (await db.execute<Record<string, unknown>>(sql`
     select * from projects where id = ${id} and org_id = ${orgId}
+      ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
   `))
   if (!proj.rows[0]) return null
   const row = proj.rows[0]

@@ -154,9 +154,17 @@
       "title": "Foreign balances are not revalued",
       "message": "{count, plural, one {# foreign-currency monetary balance has not been revalued to the period-end rate.} other {# foreign-currency monetary balances have not been revalued to the period-end rate.}}"
     },
+    "fx-reversal-period-missing": {
+      "title": "No following period for the revaluation reversal",
+      "message": "Foreign balances need revaluation, but no later accounting period exists for the mandatory reversal to land in. Generate the next fiscal period, then run the revaluation."
+    },
     "intercompany-residual": {
       "title": "Intercompany activity does not eliminate",
       "message": "{count, plural, one {# elimination account has a non-zero group residual.} other {# elimination accounts have a non-zero group residual.}}"
+    },
+    "consolidated-rates-missing": {
+      "title": "Consolidated exchange rates are missing",
+      "message": "{count, plural, one {# elimination account carries foreign-entity activity with no consolidated rate for the period. Derive consolidated rates before eliminating.} other {# elimination accounts carry foreign-entity activity with no consolidated rate for the period. Derive consolidated rates before eliminating.}}"
     },
     "material-variances": {
       "title": "Material fluctuations require explanation",
