@@ -45,6 +45,13 @@ export interface WriteCtx {
   dryRun: boolean
   /** Transactions only: post to the ledger after creating the draft. */
   post?: boolean
+  /**
+   * The caller's role-derived subsidiary fence; null = organization-wide.
+   * The import route always supplies it. Only resources whose descriptor
+   * declares `scopedWrite` are reachable by a restricted caller, and they
+   * must refuse every row outside this set.
+   */
+  allowedSubsidiaryIds?: ReadonlySet<string> | null
 }
 
 export interface DataResource {

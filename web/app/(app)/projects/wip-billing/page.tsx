@@ -20,10 +20,10 @@ export default async function WipBillingPage({
   const sp = await searchParams
   const selectedId = pickString(sp.prebill)
   const [prebills, projects, analytics, selected] = await Promise.all([
-    listPrebills(authz.user.orgId),
-    listWipProjects(authz.user.orgId),
-    wipAnalytics(authz.user.orgId),
-    selectedId && isUuid(selectedId) ? loadPrebill(authz.user.orgId, selectedId) : null,
+    listPrebills(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
+    listWipProjects(authz.user.orgId, authz.allowedSubsidiaryIds),
+    wipAnalytics(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
+    selectedId && isUuid(selectedId) ? loadPrebill(authz.user.orgId, selectedId, authz.allowedSubsidiaryIds) : null,
   ])
   return (
     <ListPageLayout

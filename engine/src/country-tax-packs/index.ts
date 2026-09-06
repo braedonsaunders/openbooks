@@ -14,7 +14,7 @@ import { NEW_ZEALAND_TAX_PACK } from "./nz.ts";
 import { SINGAPORE_TAX_PACK } from "./sg.ts";
 import { UNITED_STATES_TAX_PACK } from "./us.ts";
 import { SOUTH_AFRICA_TAX_PACK } from "./za.ts";
-import type { CountryTaxCodeDefinition, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition } from "./types.ts";
+import type { CountryTaxCodeDefinition, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition, TaxReturnPackBox } from "./types.ts";
 
 export type { CountryPackCoverage, CountryTaxCodeDefinition, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition } from "./types.ts";
 
@@ -52,6 +52,21 @@ export function countryTaxPackForReturn(returnPackCode: string): CountryTaxPackD
   return COUNTRY_TAX_PACKS.find((pack) =>
     pack.parentReturnPackCode === returnPackCode || pack.jurisdictions.some((item) => item.returnPackCode === returnPackCode),
   );
+}
+
+/**
+ * The library definition of one return box. The return engine uses the box's
+ * declared `glMap` side (sales vs purchases) to decide which document family a
+ * taxable-base box sums, because tax_report_lines stores only the basis: a
+ * code that applies to BOTH sides is mapped into both the sales-base and the
+ * purchases-base box, and only the box knows which side it reports.
+ */
+export function taxReturnPackBox(returnPackCode: string, lineCode: string): TaxReturnPackBox | undefined {
+  for (const pack of COUNTRY_TAX_PACKS) {
+    const returnPack = pack.returnPacks.find((item) => item.code === returnPackCode);
+    if (returnPack) return returnPack.boxes.find((box) => box.lineCode === lineCode);
+  }
+  return undefined;
 }
 
 export function countryTaxCodeForReturn(returnPackCode: string): CountryTaxCodeDefinition | undefined {

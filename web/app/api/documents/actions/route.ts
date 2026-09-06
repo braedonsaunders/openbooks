@@ -6,6 +6,7 @@ import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { ControlAccountsIncompleteError } from '@openbooks/engine/src/control-accounts.ts'
 import { postDocument, PostingError, runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
 import { getAuthz, can, guardSubsidiaryScope } from '../../../../lib/authz'
+import { isUuid } from '../../../../lib/list-params'
 import { controlDeps, DOC_KINDS, createPermission, isDocKindEnabled, postPermission } from '../../../../lib/documents'
 
 export const runtime = 'nodejs'
@@ -46,11 +47,17 @@ export async function POST(req: Request) {
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    action: 'submit' | 'post'
-    documentId?: string
+  const body = parsedBody.data as { action?: unknown; documentId?: unknown }
+  // The verb decides which permission is checked and which lifecycle path
+  // runs, so it is validated as a closed set: an unrecognized action must
+  // never fall through to the posting path.
+  const action = body.action === 'submit' || body.action === 'post' ? body.action : null
+  if (!action) return NextResponse.json({ error: "action must be 'submit' or 'post'" }, { status: 400 })
+  if (typeof body.documentId !== 'string' || !body.documentId) {
+    return NextResponse.json({ error: 'documentId required' }, { status: 400 })
   }
-  if (!body.documentId) return NextResponse.json({ error: 'documentId required' }, { status: 400 })
+  // A malformed id can name nothing: same answer as a missing document.
+  if (!isUuid(body.documentId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const [doc] = await db
     .select()
@@ -65,13 +72,13 @@ export async function POST(req: Request) {
   const cfg = DOC_KINDS[doc.kind]
   if (!cfg) return NextResponse.json({ error: `kind "${doc.kind}" is not actionable here` }, { status: 422 })
 
-  const perm = body.action === 'post' ? postPermission(doc.kind) : createPermission(doc.kind)
+  const perm = action === 'post' ? postPermission(doc.kind) : createPermission(doc.kind)
   if (!can(authz, perm)) {
     return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })
   }
 
   try {
-    if (body.action === 'submit') {
+    if (action === 'submit') {
       if (doc.status !== 'draft') {
         return NextResponse.json({ error: `document is ${doc.status}, not draft` }, { status: 422 })
       }

@@ -5,6 +5,7 @@ import type { FinancialProfile, CostSource, OverheadSource } from '@openbooks/sc
 import { resolveAccountGroups } from './account-groups.ts'
 import { add, cmp, fromUnits, mul, mulPercent, neg, normalizeMoney, roundDiv, sum, toUnits } from './money.ts'
 import { directSubcontractOpenCommitment } from './subcontract-commitments.ts'
+import { overheadRateAppliesToTimeEntry } from './overhead-apply.ts'
 
 /**
  * Profile-driven project financials — the configurable successor to the hardcoded
@@ -54,9 +55,11 @@ function costPredicate(src: CostSource, accountIds: string[]): SQL {
  * Rates come ONLY from the published, effective-dated rate card
  * (overhead_rates). The Overhead Model's live composite is an analytical
  * preview that seeds publishing — it is never a costing basis, so project costs
- * and closed-period margins can never restate retroactively. A department's
- * rate is the SUM of its effective rows (a card may stack category rows);
- * per_hour rows cost hours × $rate, percent rows cost labor cost × rate%.
+ * and closed-period margins can never restate retroactively. Which rows apply
+ * to an entry is the posting engine's own rule (overheadRateAppliesToTimeEntry):
+ * org-wide rows reach every entry, a department's own row overrides them, and
+ * rows of one scope stack (a card may carry category rows); per_hour rows cost
+ * hours × $rate, percent rows cost labor cost × rate%.
  * Purely statistical — no GL posting.
  */
 async function rateEngineOverhead(
@@ -73,10 +76,7 @@ async function rateEngineOverhead(
              4
            )), 0) as overhead
       from time_entries te
-      join overhead_rates o on o.department_id = te.department_id
-        and te.worked_on >= o.effective_from
-        and (o.effective_to is null or te.worked_on <= o.effective_to)
-        and o.org_id = ${orgId}
+      join overhead_rates o on ${overheadRateAppliesToTimeEntry('o', 'te')}
      where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
        ${basis === 'billed_hours'
          ? sql`and te.is_billable`

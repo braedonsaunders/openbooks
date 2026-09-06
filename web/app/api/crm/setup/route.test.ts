@@ -279,3 +279,41 @@ for (const [label, body, table] of actions) {
     assert.equal(state.inTx, false);
   });
 }
+
+test("save-team refuses duplicate members instead of tripping the unique index", async () => {
+  reset();
+
+  const response = await post({
+    action: "save-team",
+    key: "sales",
+    name: "Sales",
+    members: [
+      { userId: USER_ID, role: "member" },
+      { userId: USER_ID, role: "manager" },
+    ],
+  });
+
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), { error: "duplicate team member" });
+  assert.equal(state.committed.length, 0);
+  assert.equal(state.outsideWrites.length, 0);
+});
+
+test("save-team refuses a manager duplicated in the member list under another role", async () => {
+  reset();
+
+  const response = await post({
+    action: "save-team",
+    key: "sales",
+    name: "Sales",
+    managerUserId: USER_ID,
+    members: [
+      { userId: USER_ID, role: "member" },
+      { userId: USER_ID, role: "member" },
+    ],
+  });
+
+  assert.equal(response.status, 422);
+  assert.equal(state.committed.length, 0);
+  assert.equal(state.outsideWrites.length, 0);
+});

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "./db.ts";
-import { renderTemplate, runDunning, selectDueStage, type DunningStage } from "./dunning.ts";
+import { isDunnableDocumentKind, renderTemplate, runDunning, selectDueStage, type DunningStage } from "./dunning.ts";
 import { postDocument } from "./posting.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
 
@@ -510,6 +510,62 @@ test("a fully paid invoice never generates a reminder", { skip: !DB }, async () 
     assert.equal(run.scanned, 1);
     assert.equal(run.sent, 0);
     const notice = await stagedNotice(invoiceId);
+    assert.equal(notice.logRows.length, 0);
+    assert.equal(notice.outboxRows.length, 0);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("only dunnable receivable kinds may be configured as a policy target", () => {
+  assert.equal(isDunnableDocumentKind("customer_invoice"), true);
+  for (const kind of ["vendor_bill", "vendor_credit", "customer_credit", "journal_entry", "", "CUSTOMER_INVOICE"]) {
+    assert.equal(isDunnableDocumentKind(kind), false, kind);
+  }
+});
+
+test("a policy pointed at a payable kind never duns the vendor", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // The column is bare text; a policy row aimed at vendor bills must be
+    // ignored by the runner (fail closed), not turned into vendor mail.
+    await db.execute(sql`
+      update parties set email = 'ap@supplier.test' where id = ${org.vendorId} and org_id = ${org.orgId}
+    `);
+    const policyId = randomUUID();
+    await db.execute(sql`
+      insert into dunning_policies (id, org_id, name, applies_to_kind, grace_period_days, min_balance)
+      values (${policyId}, ${org.orgId}, 'Mis-targeted', 'vendor_bill', 0, '0')
+    `);
+    await db.execute(sql`
+      insert into dunning_stages
+        (id, org_id, policy_id, sequence, name, offset_days, subject_template, body_template)
+      values (${randomUUID()}, ${org.orgId}, ${policyId}, 1, 'First reminder', 0,
+              'Reminder: {{invoice}}', 'Hi {{party}}, {{amount}} on {{invoice}} was due {{dueDate}}.')
+    `);
+    const userId = await createScratchUser(org.orgId, "Dunning Tester", "accountant");
+    const billId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, due_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+      values (${billId}, ${org.orgId}, 'vendor_bill', 'draft', ${`BILL-${randomUUID().slice(0, 8)}`},
+              ${org.subsidiaryId}, ${org.vendorId}, ${org.date}, '2026-06-01',
+              'CAD', '1', '100', '0', '100', ${userId})
+    `);
+    await db.execute(sql`
+      insert into document_lines
+        (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+      values (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', '100', '100', '0', '0')
+    `);
+    await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`);
+    await postDocument(billId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+
+    const run = await runDunning("2026-07-10");
+    assert.equal(run.sent, 0);
+    assert.equal(run.scanned, 0, "a non-dunnable policy must not scan documents at all");
+    const notice = await stagedNotice(billId);
     assert.equal(notice.logRows.length, 0);
     assert.equal(notice.outboxRows.length, 0);
   } finally {

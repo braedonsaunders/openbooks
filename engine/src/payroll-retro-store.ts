@@ -552,6 +552,22 @@ export interface CreateRetroPayRunResult {
 export async function createRetroPayRun(
   input: CreateRetroPayRunInput,
 ): Promise<CreateRetroPayRunResult> {
+  const { orgId } = input;
+  // One retro run at a time per schedule. Two operators (or a double-click)
+  // proposing the same difference must not each mint a draft run holding the
+  // same (employee, source period) cell: the second would be refused at commit
+  // (retro.doubleSettled) only after recalculation replayed its stored
+  // allocation. The creator serializes here and refuses the duplicate up front.
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`payroll-retro-create:${orgId}:${input.payScheduleId}`}, 0))`);
+    return createRetroPayRunLocked(input, tx);
+  });
+}
+
+async function createRetroPayRunLocked(
+  input: CreateRetroPayRunInput,
+  tx: Pick<typeof db, "execute">,
+): Promise<CreateRetroPayRunResult> {
   const { orgId, actorId } = input;
   const proposal = await proposeRetroPay({
     orgId, actorId,
@@ -581,6 +597,29 @@ export async function createRetroPayRun(
     );
   }
 
+  // An open (draft/calculated) retro run already holding one of these cells
+  // is the double-settlement the commit gate refuses; refuse it here, before
+  // a second run exists, naming the run that holds the cell.
+  const cells = paying.map((p) => `${p.candidate.employeePartyId}:${p.candidate.sourcePayRunDocumentId}`);
+  const held = (await tx.execute<{ document_number: string | null; employee_name: string }>(sql`
+    select d.document_number, p.display_name as employee_name
+      from payroll_retro_settlements st
+      join pay_runs rr on rr.document_id = st.retro_pay_run_document_id and rr.org_id = st.org_id
+      join documents d on d.id = rr.document_id and d.org_id = rr.org_id
+      join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
+     where st.org_id = ${orgId}
+       and rr.run_status in ('draft', 'calculated')
+       and (st.employee_party_id::text || ':' || st.source_pay_run_document_id::text) = any(${`{${cells.join(",")}}`}::text[])
+     order by d.document_number
+     limit 1
+  `)).rows[0];
+  if (held) {
+    throw new RetroPayError(
+      `retro run ${held.document_number ?? ""} already settles ${held.employee_name}'s period(s) and has not been committed `
+      + "— commit or delete that run before proposing the same difference again",
+    );
+  }
+
   const employeePartyIds = [...new Set(paying.map((p) => p.candidate.employeePartyId))];
   const periodStart = paying
     .map((p) => p.candidate.periodStart)
@@ -599,7 +638,7 @@ export async function createRetroPayRun(
     allowedSubsidiaryIds: input.allowedSubsidiaryIds,
   });
 
-  await db.transaction(async (tx) => {
+  {
     for (const period of paying) {
       const difference = period.difference!;
       const buckets = payableRetroBuckets(difference);
@@ -635,7 +674,7 @@ export async function createRetroPayRun(
         `);
       }
     }
-  });
+  }
 
   return {
     documentId: run.documentId,

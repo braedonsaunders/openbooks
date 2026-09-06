@@ -42,6 +42,15 @@ const mockAuthz = `
   export function can(_authz, permission) {
     return state.authz?.permissions?.has(permission) ?? false
   }
+  // Same semantics as the real gate (web/lib/authz.ts): unrestricted callers
+  // pass; a restricted caller passes only for a subsidiary in their set, and
+  // an org-root (null) record fails closed with the list-miss 404 body.
+  export function guardSubsidiaryScope(authz, subsidiaryId) {
+    const scope = authz?.allowedSubsidiaryIds ?? null
+    if (scope === null) return null
+    if (subsidiaryId && scope.has(subsidiaryId)) return null
+    return Response.json({ error: 'not found' }, { status: 404 })
+  }
 `;
 
 const hooks = registerHooks({

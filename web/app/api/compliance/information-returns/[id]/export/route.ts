@@ -3,8 +3,8 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { filedBoxAmounts, formDefinition } from '@openbooks/engine/src/information-returns.ts'
-import { guardPermission } from '@/lib/authz'
-import { guardComplianceFeature } from '@/lib/compliance'
+import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
+import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 
 export const runtime = 'nodejs'
@@ -47,6 +47,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { orgId } = gate.user
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Entity isolation before any filing detail is read (same 404 as a missing filing).
+  const filingScope = await loadInformationReturnFilingScope(orgId, id)
+  if (!filingScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
+  if (scopeDenied) return scopeDenied
 
   const filings = (await db.execute<{ tax_year: number; form_type: string; currency: string; status: string; payer_name: string }>(sql`
     select f.tax_year, f.form_type, f.currency, f.status,

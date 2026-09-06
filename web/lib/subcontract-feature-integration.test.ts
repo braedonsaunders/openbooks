@@ -27,10 +27,12 @@ const transitionRouteMockSources = new Map<string, string>([
     "mock:authz",
     `
       export async function guardPermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' } }
+        return { user: { orgId: 'org-1', id: 'user-1' }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
       }
+      export function guardSubsidiaryScope() { return null }
     `,
   ],
+  ["mock:subsidiaries", "export function subsidiaryVisibleFilter() { return '' }"],
   ["mock:feature-gate", "export async function guardSubcontractsFeature() { return null }"],
   ["mock:features", "export async function isFeatureEnabled() { return true }"],
   ["mock:exact-decimal", "export function canonicalDecimal() { return '0.0000' }"],
@@ -82,6 +84,7 @@ const transitionRouteMockUrls = new Map<string, string>([
   ["@/lib/api/json", "mock:json"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/subcontracts-gate", "mock:feature-gate"],
+  ["../../../lib/subsidiaries", "mock:subsidiaries"],
   ["../../../lib/features", "mock:features"],
   ["../../../lib/exact-decimal", "mock:exact-decimal"],
   ["@openbooks/engine/src/db.ts", "mock:db"],

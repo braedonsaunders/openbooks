@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "./db.ts";
 import { loadControlAccounts } from "./control-accounts.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "./money.ts";
@@ -46,6 +46,22 @@ export const MONETARY_ACCOUNT_TYPES = [
   "liability_payable",
 ] as const;
 
+/**
+ * The monetary-item predicate (IAS 21.8/16) over an `accounts` row aliased
+ * `a`: bank, receivable, and payable types by default, plus any balance-sheet
+ * account explicitly flagged `accounts.monetary = true`, minus any account
+ * flagged `monetary = false`. ONE definition: the revaluation engine's
+ * position loader and the close readiness check both consume it, so the
+ * check can never demand a revaluation the engine would not post (or ignore
+ * one it would).
+ */
+export const MONETARY_ACCOUNT_SQL = sql`case
+  when a.monetary is false then false
+  when a.monetary is true then a.type not in
+    ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred', 'equity')
+  else a.type in ('asset_bank', 'asset_receivable', 'liability_payable')
+end`;
+
 /** One foreign-currency monetary exposure for a single legal entity. */
 export interface RevaluationPosition {
   accountId: string;
@@ -73,6 +89,16 @@ export interface RevaluationLine {
  * rounds to zero (rate unchanged, or nothing on the books) produce no line —
  * which is what makes a no-op close post nothing.
  */
+/**
+ * The signed base-currency restatement one position needs: `foreignBalance ×
+ * periodEndRate − carryingBase`, exact to ledger scale. Shared by the posting
+ * arithmetic and the close readiness probe so both agree on "no revaluation
+ * needed" to the last unit.
+ */
+export function positionDelta(p: Pick<RevaluationPosition, "foreignBalance" | "periodEndRate" | "carryingBase">): string {
+  return add(mulRate(p.foreignBalance, p.periodEndRate), neg(p.carryingBase));
+}
+
 export function computeRevaluation(
   positions: RevaluationPosition[],
   unrealizedGainLossAccountId: string,
@@ -80,8 +106,7 @@ export function computeRevaluation(
   const monetaryLines: RevaluationLine[] = [];
   let netDelta = "0";
   for (const p of positions) {
-    const revalued = mulRate(p.foreignBalance, p.periodEndRate);
-    const delta = add(revalued, neg(p.carryingBase));
+    const delta = positionDelta(p);
     if (isZero(delta)) continue;
     monetaryLines.push({ accountId: p.accountId, amount: delta });
     netDelta = add(netDelta, delta);
@@ -178,6 +203,37 @@ async function loadPositions(
   functionalCurrency: string,
   asOfDate: string,
 ): Promise<RevaluationPosition[]> {
+  const positions: RevaluationPosition[] = [];
+  const asAtDate = sql`e.posting_date <= ${asOfDate}`;
+  for (const exposure of await loadExposures(orgId, bookId, subsidiaryId, functionalCurrency, asOfDate, asAtDate)) {
+    if (!exposure.periodEndRate) {
+      throw new RevaluationError(
+        `no spot rate for ${exposure.currency}→${functionalCurrency} on or before ${asOfDate}`,
+      );
+    }
+    positions.push({ ...exposure, periodEndRate: exposure.periodEndRate });
+  }
+  return positions;
+}
+
+/**
+ * The raw exposure population behind `loadPositions` — the same monetary
+ * predicate, book, status, and rate lookup, but each position carries its
+ * period-end rate as `null` when no spot rate exists instead of aborting the
+ * whole entity (the readiness probe counts a missing rate as an unrevalued
+ * exposure rather than hiding the ones behind it). `scope` selects which
+ * journal entries (alias `e`) form the population: the poster restates every
+ * balance on the books as at the period-end date; the close probe measures
+ * the close run's period-identity scope.
+ */
+async function loadExposures(
+  orgId: string,
+  bookId: string,
+  subsidiaryId: string,
+  functionalCurrency: string,
+  asOfDate: string,
+  scope: SQL,
+): Promise<(Omit<RevaluationPosition, "periodEndRate"> & { periodEndRate: string | null })[]> {
   const r = (await db.execute<{ account_id: string; currency: string; carrying_base: string; foreign_balance: string }>(sql`
     select l.account_id                         as account_id,
            l.currency                           as currency,
@@ -191,34 +247,149 @@ async function loadPositions(
        and e.book_id = ${bookId}
        and e.status in ('posted', 'reversed')
        and e.origin <> 'fx_revaluation'
-       and e.posting_date <= ${asOfDate}
+       and ${scope}
        and l.currency <> ${functionalCurrency}
-       and case
-             when a.monetary is false then false
-             when a.monetary is true then a.type not in
-               ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred', 'equity')
-             else a.type in ('asset_bank', 'asset_receivable', 'liability_payable')
-           end
+       and ${MONETARY_ACCOUNT_SQL}
      group by l.account_id, l.currency
      having sum(l.txn_amount) <> 0`));
 
-  const positions: RevaluationPosition[] = [];
+  const exposures: (Omit<RevaluationPosition, "periodEndRate"> & { periodEndRate: string | null })[] = [];
   for (const row of r.rows) {
-    const rate = await periodEndRate(orgId, row.currency, functionalCurrency, asOfDate);
-    if (!rate) {
-      throw new RevaluationError(
-        `no spot rate for ${row.currency}→${functionalCurrency} on or before ${asOfDate}`,
-      );
-    }
-    positions.push({
+    exposures.push({
       accountId: row.account_id,
       currency: row.currency,
       carryingBase: row.carrying_base,
       foreignBalance: row.foreign_balance,
-      periodEndRate: rate,
+      periodEndRate: await periodEndRate(orgId, row.currency, functionalCurrency, asOfDate),
     });
   }
-  return positions;
+  return exposures;
+}
+
+/** Whether a subsidiary already carries this period's revaluation entry in the book. */
+async function hasRevaluationEntry(
+  orgId: string,
+  bookId: string,
+  periodId: string,
+  subsidiaryId: string,
+): Promise<boolean> {
+  const existing = (await db.execute(sql`
+    select 1 from journal_entries
+     where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId}
+       and subsidiary_id = ${subsidiaryId} and origin = 'fx_revaluation'
+       and reverses_entry_id is null limit 1`));
+  return existing.rows.length > 0;
+}
+
+type RevaluationPeriod = {
+  id: string;
+  ends_on: string;
+  name: string;
+  is_adjustment: boolean;
+  fiscal_calendar_id: string;
+  period_number: number;
+  next_starts_on: string | null;
+  next_period_id: string | null;
+};
+
+/** The period plus the following regular period its reversal must land in. */
+async function loadRevaluationPeriod(orgId: string, periodId: string): Promise<RevaluationPeriod> {
+  const periodRes = (await db.execute<RevaluationPeriod>(sql`
+    select p.id as id, p.ends_on as ends_on, p.name as name,
+           p.is_adjustment as is_adjustment, p.fiscal_calendar_id as fiscal_calendar_id,
+           p.period_number as period_number,
+           (select n.starts_on from accounting_periods n
+             where n.org_id = ${orgId} and n.starts_on > p.ends_on and n.is_adjustment = false
+             order by n.starts_on asc limit 1) as next_starts_on,
+           (select n.id from accounting_periods n
+             where n.org_id = ${orgId} and n.starts_on > p.ends_on and n.is_adjustment = false
+             order by n.starts_on asc limit 1) as next_period_id
+      from accounting_periods p
+     where p.org_id = ${orgId} and p.id = ${periodId}`));
+  const period = periodRes.rows[0];
+  if (!period) throw new RevaluationError(`accounting period ${periodId} not found`);
+  return period;
+}
+
+export interface RevaluationReadiness {
+  /** Foreign-currency monetary positions the engine WOULD restate (non-zero
+   *  delta at the period-end spot rate, or no spot rate at all) in entities
+   *  that carry no revaluation entry for the period yet. */
+  unrevaluedPositions: number;
+  /** Of those, positions with no usable period-end spot rate. */
+  positionsMissingSpotRate: number;
+  /** True when unrevalued positions exist but no following regular period
+   *  exists for the mandatory reversal — the engine refuses to post until
+   *  periods are generated. */
+  reversalPeriodMissing: boolean;
+}
+
+/**
+ * The close run's ledger scope for a period, by exact period identity (the
+ * close doctrine: a journal belongs to the period it is assigned to, never
+ * one inferred from its date): every period that ended before this one plus
+ * the period itself, and for an adjustment period also the regular period
+ * sharing its end date and any lower-numbered adjustment period of the same
+ * calendar. An entry assigned to an adjustment period is outside its regular
+ * period's close even when dated inside it.
+ */
+function closePeriodScope(period: RevaluationPeriod): SQL {
+  return sql`exists (
+    select 1 from accounting_periods ep
+     where ep.id = e.period_id and ep.org_id = e.org_id
+       and (
+         ep.ends_on < ${period.ends_on}
+         or ep.id = ${period.id}
+         or (
+           ${period.is_adjustment}
+           and ep.fiscal_calendar_id = ${period.fiscal_calendar_id}
+           and ep.ends_on = ${period.ends_on}
+           and (not ep.is_adjustment or ep.period_number <= ${period.period_number})
+         )
+       ))`;
+}
+
+/**
+ * Period-close readiness, decided by the SAME monetary population rule,
+ * spot-rate lookup, and delta arithmetic `runRevaluation` uses. A position
+ * whose delta rounds to zero is already at the period-end rate: the engine
+ * posts nothing for it ("no revaluation needed"), so readiness must not
+ * demand an entry that can never exist. Entities that already carry the
+ * period's revaluation entry are satisfied outright, matching the engine's
+ * idempotency rule.
+ *
+ * Population scope: the probe measures the close run's period-identity scope
+ * (closePeriodScope), while the poster restates every balance on the books
+ * as at the period-end date — a superset. Anything the probe flags is
+ * therefore a position the engine will restate when run.
+ */
+export async function revaluationReadiness(
+  orgId: string,
+  bookId: string,
+  periodId: string,
+): Promise<RevaluationReadiness> {
+  const period = await loadRevaluationPeriod(orgId, periodId);
+  const ctx = await loadSubsidiaryContext(db, orgId);
+  const scope = closePeriodScope(period);
+  let unrevaluedPositions = 0;
+  let positionsMissingSpotRate = 0;
+  for (const subsidiary of ctx.byId.values()) {
+    if (await hasRevaluationEntry(orgId, bookId, periodId, subsidiary.id)) continue;
+    const exposures = await loadExposures(orgId, bookId, subsidiary.id, subsidiary.baseCurrency, period.ends_on, scope);
+    for (const exposure of exposures) {
+      if (!exposure.periodEndRate) {
+        unrevaluedPositions++;
+        positionsMissingSpotRate++;
+        continue;
+      }
+      if (!isZero(positionDelta({ ...exposure, periodEndRate: exposure.periodEndRate }))) unrevaluedPositions++;
+    }
+  }
+  return {
+    unrevaluedPositions,
+    positionsMissingSpotRate,
+    reversalPeriodMissing: unrevaluedPositions > 0 && (!period.next_period_id || !period.next_starts_on),
+  };
 }
 
 /** Latest spot rate foreign→functional on or before the date, with the inverse
@@ -263,18 +434,7 @@ export async function runRevaluation(
   const gainLossAccount = await unrealizedAccount(orgId);
   const ctx = await loadSubsidiaryContext(db, orgId);
 
-  const periodRes = (await db.execute<{ ends_on: string; name: string; next_starts_on: string | null; next_period_id: string | null }>(sql`
-    select p.ends_on as ends_on, p.name as name,
-           (select n.starts_on from accounting_periods n
-             where n.org_id = ${orgId} and n.starts_on > p.ends_on and n.is_adjustment = false
-             order by n.starts_on asc limit 1) as next_starts_on,
-           (select n.id from accounting_periods n
-             where n.org_id = ${orgId} and n.starts_on > p.ends_on and n.is_adjustment = false
-             order by n.starts_on asc limit 1) as next_period_id
-      from accounting_periods p
-     where p.org_id = ${orgId} and p.id = ${periodId}`));
-  const period = periodRes.rows[0];
-  if (!period) throw new RevaluationError(`accounting period ${periodId} not found`);
+  const period = await loadRevaluationPeriod(orgId, periodId);
   const asOfDate = period.ends_on;
 
   const result: RevaluationRunResult = { posted: [], skipped: [], problems: [] };
@@ -290,12 +450,7 @@ export async function runRevaluation(
     // Idempotency fast path: never post a second revaluation into an
     // already-revalued period. Advisory only — the authoritative check runs
     // under the advisory lock inside postRevaluationEntry's transaction.
-    const existing = (await db.execute(sql`
-      select 1 from journal_entries
-       where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId}
-         and subsidiary_id = ${subsidiaryId} and origin = 'fx_revaluation'
-         and reverses_entry_id is null limit 1`));
-    if (existing.rows.length > 0) {
+    if (await hasRevaluationEntry(orgId, bookId, periodId, subsidiaryId)) {
       result.skipped.push({ subsidiaryId, reason: ALREADY_REVALUED });
       continue;
     }

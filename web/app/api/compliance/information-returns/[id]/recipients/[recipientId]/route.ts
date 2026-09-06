@@ -4,8 +4,8 @@ import {
   InformationReturnError,
   updateFilingRecipient,
 } from '@openbooks/engine/src/information-returns.ts'
-import { guardPermission } from '@/lib/authz'
-import { guardComplianceFeature } from '@/lib/compliance'
+import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
+import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 
 export const runtime = 'nodejs'
@@ -33,6 +33,11 @@ export async function PATCH(
   const { orgId, id: actorId } = gate.user
   const { id, recipientId } = await params
   if (!isUuid(id) || !isUuid(recipientId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Entity isolation before the body is even parsed (same 404 as a missing filing).
+  const filingScope = await loadInformationReturnFilingScope(orgId, id)
+  if (!filingScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
+  if (scopeDenied) return scopeDenied
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;

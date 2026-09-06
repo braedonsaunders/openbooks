@@ -10,6 +10,7 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadOpportunity } from '../../../../../lib/crm'
+import { isIsoCalendarDate } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 
@@ -131,6 +132,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!((await db.execute(sql`select 1 from currencies where code = ${currency}`))).rows[0]) return NextResponse.json({ error: 'invalid currency' }, { status: 422 })
   let winLossReason = body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason)
   if (nextStatus.is_closed && !nextStatus.is_won && !winLossReason) return NextResponse.json({ error: 'a loss reason is required' }, { status: 422 })
+  // The date column is a plain calendar date; refuse anything else here so a
+  // Postgres cast failure can never escape the transaction as a 500.
+  const expectedCloseDate = body.expectedCloseDate === undefined ? undefined : textOrNull(body.expectedCloseDate)
+  if (body.expectedCloseDate != null && body.expectedCloseDate !== '' && !isIsoCalendarDate(expectedCloseDate)) {
+    return NextResponse.json({ error: 'expected close date must be a valid YYYY-MM-DD date' }, { status: 422 })
+  }
   const lines = (body.lines)
   let calculated: ReturnType<typeof computeOpportunityTotals> | null = null
   let lineMathInputs: Parameters<typeof computeOpportunityTotals>[0] | null = null
@@ -343,12 +350,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       for (let index = 0; index < lines.length; index++) {
         const input = lines[index]!
         const math = calculated.lines[index]!
+        // A line without its own probability inherits the header; store null so
+        // a later header change can re-weight it (a stored copy of the header
+        // rate would be indistinguishable from an explicit per-line override).
         await tx.execute(sql`
           insert into crm_opportunity_lines
             (org_id, opportunity_id, line_number, item_id, description, quantity, unit, unit_price,
              amount, probability, expected_amount, created_by, updated_by)
           values (${user.orgId}, ${id}, ${index + 1}, ${input.itemId ?? null}, ${textOrNull(input.description)},
-                  ${math.quantity}, ${textOrNull(input.unit)}, ${math.unitPrice}, ${math.amount}, ${math.probability},
+                  ${math.quantity}, ${textOrNull(input.unit)}, ${math.unitPrice}, ${math.amount},
+                  ${input.probability == null ? null : math.probability},
                   ${math.expectedAmount}, ${user.id}, ${user.id})`)
       }
     }
@@ -360,14 +371,46 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         values (${user.orgId}, ${id}, ${member.userId}, ${member.contributionPercent}, ${member.isPrimary === true}, ${user.id}, ${user.id})`)
     }
     const projected = calculated?.projectedAmount ?? current.projected_amount
-    const weighted = calculated?.weightedAmount ?? (probability !== Number(current.probability)
-      ? computeOpportunityTotals([{ quantity: '1', unitPrice: String(current.projected_amount) }], probability).weightedAmount
-      : current.weighted_amount)
-        await tx.execute(sql`
+    let weighted = calculated?.weightedAmount ?? current.weighted_amount
+    if (!calculated && probability !== Number(current.probability)) {
+      // The header probability moved but the lines were not resent (or the
+      // move came from a status default). Weighted must still follow the
+      // stored line detail: per-line overrides keep their rate, inherited
+      // lines take the new header rate, and weighted_amount = Σ expected.
+      const stored = await tx.execute<{ id: string; amount: string | number; probability: number | null }>(sql`
+        select id, amount, probability from crm_opportunity_lines
+         where opportunity_id = ${id} and org_id = ${user.orgId}
+         order by line_number for update`)
+      if (stored.rows.length) {
+        // Rows written before inherited lines were stored as null carry a copy
+        // of the then-current header rate; treat those as inherited too.
+        const inherited = stored.rows.map((line) => line.probability == null || Number(line.probability) === Number(current.probability))
+        const recalculated = computeOpportunityTotals(
+          stored.rows.map((line, index) => ({
+            quantity: '1',
+            unitPrice: normalizeMoney(String(line.amount)),
+            probability: inherited[index] ? null : Number(line.probability),
+          })),
+          probability,
+        )
+        for (let index = 0; index < stored.rows.length; index++) {
+          if (!inherited[index]) continue
+          await tx.execute(sql`
+            update crm_opportunity_lines
+               set probability = null, expected_amount = ${recalculated.lines[index]!.expectedAmount},
+                   updated_at = now(), updated_by = ${user.id}
+             where id = ${stored.rows[index]!.id} and org_id = ${user.orgId}`)
+        }
+        weighted = recalculated.weightedAmount
+      } else {
+        weighted = computeOpportunityTotals([{ quantity: '1', unitPrice: String(current.projected_amount) }], probability).weightedAmount
+      }
+    }
+    await tx.execute(sql`
       update crm_opportunities set
         title = ${title}, party_id = ${partyId}, primary_contact_id = ${contactId}, owner_user_id = ${ownerUserId},
         sales_team_id = ${salesTeamId}, status_id = ${statusId}, lead_source_id = ${leadSourceId},
-        expected_close_date = ${body.expectedCloseDate !== undefined ? textOrNull(body.expectedCloseDate) : sql`expected_close_date`},
+        expected_close_date = ${expectedCloseDate !== undefined ? expectedCloseDate : sql`expected_close_date`},
         forecast_category = ${category}, probability = ${probability},
         currency = ${currency},
         projected_amount = ${projected}, weighted_amount = ${weighted},
@@ -408,15 +451,36 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('crm.opportunities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
+  const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const linked = (await db.execute(sql`select 1 from crm_opportunity_documents where opportunity_id = ${id} and org_id = ${gate.user.orgId} limit 1`))
-  if (linked.rows[0]) return NextResponse.json({ error: 'An opportunity with linked sales documents cannot be deleted; close it instead' }, { status: 422 })
-  const deleted = await db.transaction(async (tx) => {
-    await tx.execute(sql`delete from crm_opportunity_team_members where opportunity_id = ${id} and org_id = ${gate.user.orgId}`)
-    await tx.execute(sql`delete from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${gate.user.orgId}`)
-    await tx.execute(sql`delete from crm_opportunity_stage_events where opportunity_id = ${id} and org_id = ${gate.user.orgId}`)
-    return tx.execute(sql`delete from crm_opportunities where id = ${id} and org_id = ${gate.user.orgId} returning id`)
-  }) as unknown as { rows: unknown[] }
-  return deleted.rows[0] ? NextResponse.json({ ok: true }) : NextResponse.json({ error: 'not found' }, { status: 404 })
+  const outcome = await db.transaction(async (tx) => {
+    // Lock the row inside the caller's entity scope first. The estimate route
+    // takes the same lock before it links a quote, so the linked-document
+    // check below cannot interleave with a quote that is being attached; an
+    // out-of-scope row reads exactly like a missing one.
+    const locked = await tx.execute<Record<string, unknown>>(sql`
+      select o.* from crm_opportunities o
+       where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}
+       for update of o`)
+    const current = locked.rows[0]
+    if (!current) return 'missing' as const
+    const linked = await tx.execute(sql`select 1 from crm_opportunity_documents where opportunity_id = ${id} and org_id = ${user.orgId} limit 1`)
+    if (linked.rows[0]) return 'linked' as const
+    await tx.execute(sql`delete from crm_opportunity_team_members where opportunity_id = ${id} and org_id = ${user.orgId}`)
+    await tx.execute(sql`delete from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId}`)
+    await tx.execute(sql`delete from crm_opportunity_stage_events where opportunity_id = ${id} and org_id = ${user.orgId}`)
+    // Activity links are polymorphic (no FK). A link left pointing at a deleted
+    // subject would fail the every-relationship-visible rule and hide the
+    // activity from every restricted reader forever.
+    await tx.execute(sql`delete from crm_activity_links where org_id = ${user.orgId} and subject_kind = 'opportunity' and subject_id = ${id}`)
+    await tx.execute(sql`delete from crm_opportunities where id = ${id} and org_id = ${user.orgId}`)
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${user.orgId}, 'crm_opportunities', ${id}, 'delete', ${JSON.stringify({ before: current })}::jsonb, ${user.id})`)
+    return 'deleted' as const
+  })
+  if (outcome === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (outcome === 'linked') return NextResponse.json({ error: 'An opportunity with linked sales documents cannot be deleted; close it instead' }, { status: 422 })
+  return NextResponse.json({ ok: true })
 }

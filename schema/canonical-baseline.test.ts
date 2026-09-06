@@ -184,6 +184,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0091_pay_stub_country_snapshot.sql",
     "0092_pay_component_snapshot_flags.sql",
     "0093_pay_stub_filing_account_snapshot.sql",
+    "0094_pay_stub_line_liability_snapshot.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

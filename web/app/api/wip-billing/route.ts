@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   if (feature) return feature
   const projectId = new URL(req.url).searchParams.get('projectId') ?? undefined
   if (projectId && !isUuid(projectId)) return NextResponse.json({ error: 'invalid projectId' }, { status: 400 })
-  return NextResponse.json({ prebills: await listPrebills(gate.user.orgId, projectId) })
+  return NextResponse.json({ prebills: await listPrebills(gate.user.orgId, projectId, gate.allowedSubsidiaryIds) })
 }
 
 export async function POST(req: Request) {
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       periodStart: body.periodStart == null ? null : String(body.periodStart),
       periodEnd: String(body.periodEnd ?? ''),
       notes: body.notes == null ? null : String(body.notes),
-    })
+    }, gate.allowedSubsidiaryIds)
     return NextResponse.json(result, { status: 201 })
   } catch (error) {
     const status = error instanceof WipBillingError ? error.status : 500

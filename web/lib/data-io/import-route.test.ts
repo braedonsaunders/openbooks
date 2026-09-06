@@ -204,7 +204,9 @@ const mockSources = new Map<string, string>([
       }
 
       export async function guardPermission() {
-        return { user: { orgId: 'org-1', id: 'actor-1' } }
+        // An organization-wide caller: the route refuses restricted callers
+        // for resources whose write path cannot enforce the subsidiary fence.
+        return { user: { orgId: 'org-1', id: 'actor-1' }, permissions: new Set(), allowedSubsidiaryIds: null }
       }
     `,
   ],

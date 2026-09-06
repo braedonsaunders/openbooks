@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import {
   SubcontractError,
@@ -26,10 +26,12 @@ import {
   voidVendorPayApplication,
 } from "@openbooks/engine/src/subcontracts.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
-import { guardPermission } from "../../../lib/authz";
+import { guardPermission, guardSubsidiaryScope } from "../../../lib/authz";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
 import { isFeatureEnabled } from "../../../lib/features";
+import { isUuid } from "../../../lib/list-params";
 import { guardSubcontractsFeature } from "../../../lib/subcontracts-gate";
+import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,14 +81,16 @@ export async function GET(request: Request) {
             from vendor_pay_applications where org_id = s.org_id and subcontract_id = s.id
         ) apps on true
        where s.org_id = ${orgId}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by case s.status when 'active' then 0 when 'pending_approval' then 1 when 'draft' then 2 else 3 end,
                 s.number
     `));
     return NextResponse.json({ subcontracts: rows.rows });
   }
 
-  const contract = (await db.execute(sql`
-    select s.id, s.number, s.title, s.description, s.status, s.currency,
+  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const contract = (await db.execute<Record<string, unknown> & { projectSubsidiaryId: string | null }>(sql`
+    select s.id, s.number, s.title, s.description, s.status, s.currency, p.subsidiary_id as "projectSubsidiaryId",
            s.project_id as "projectId", p.name as "projectName", s.vendor_id as "vendorId", v.display_name as "vendorName",
            s.original_commitment as "originalCommitment", s.default_retainage_percent as "defaultRetainagePercent",
            s.purchase_order_id as "purchaseOrderId", s.starts_on as "startsOn", s.ends_on as "endsOn",
@@ -99,6 +103,10 @@ export async function GET(request: Request) {
      where s.org_id = ${orgId} and s.id = ${id}
   `));
   if (!contract.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
+  // A subcontract on a project outside the caller's scope is a missing one.
+  const { projectSubsidiaryId, ...subcontract } = contract.rows[0];
+  const denied = guardSubsidiaryScope(authz, projectSubsidiaryId);
+  if (denied) return denied;
   const [sov, changes, applications, lines, controls, releases] = (await Promise.all([
     db.execute(sql`
       select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
@@ -153,7 +161,7 @@ export async function GET(request: Request) {
     `),
   ]));
   return NextResponse.json({
-    subcontract: contract.rows[0],
+    subcontract,
     sovLines: sov.rows,
     changeOrders: changes.rows,
     payApplications: applications.rows,
@@ -166,6 +174,66 @@ export async function GET(request: Request) {
 const approvalActions = new Set(["approveSubcontract", "approveChangeOrder", "approvePayApplication"]);
 const postingActions = new Set(["createVendorBill", "releaseRetainage"]);
 const paymentActions = new Set(["addPaymentControl", "releasePaymentControl"]);
+
+/**
+ * Which request field names the record each action touches, and the table that
+ * record lives in. Every action reaches a project through this chain, so the
+ * caller's subsidiary scope is enforced on the PROJECT before any engine work.
+ */
+type ScopeTable = "projects" | "subcontracts" | "subcontract_sov_lines" | "subcontract_change_orders" | "vendor_pay_applications" | "subcontract_payment_controls";
+const ACTION_SCOPE: Record<string, { table: ScopeTable; key: string }> = {
+  createSubcontract: { table: "projects", key: "projectId" },
+  updateSubcontract: { table: "subcontracts", key: "id" },
+  submitSubcontract: { table: "subcontracts", key: "id" },
+  approveSubcontract: { table: "subcontracts", key: "id" },
+  transitionSubcontract: { table: "subcontracts", key: "id" },
+  addSovLine: { table: "subcontracts", key: "subcontractId" },
+  addChangeOrder: { table: "subcontracts", key: "subcontractId" },
+  createPayApplication: { table: "subcontracts", key: "subcontractId" },
+  releaseRetainage: { table: "subcontracts", key: "subcontractId" },
+  addPaymentControl: { table: "subcontracts", key: "subcontractId" },
+  removeSovLine: { table: "subcontract_sov_lines", key: "id" },
+  approveChangeOrder: { table: "subcontract_change_orders", key: "id" },
+  voidChangeOrder: { table: "subcontract_change_orders", key: "id" },
+  updatePayApplication: { table: "vendor_pay_applications", key: "payApplicationId" },
+  submitPayApplication: { table: "vendor_pay_applications", key: "id" },
+  approvePayApplication: { table: "vendor_pay_applications", key: "id" },
+  voidPayApplication: { table: "vendor_pay_applications", key: "id" },
+  createVendorBill: { table: "vendor_pay_applications", key: "id" },
+  releasePaymentControl: { table: "subcontract_payment_controls", key: "id" },
+};
+
+/**
+ * The subsidiary of the project an action targets: `undefined` for an unknown
+ * action (the dispatcher answers 400), `{ found: false }` when the named record
+ * does not exist in this org (malformed ids included), else the project's
+ * subsidiary for the scope gate.
+ */
+async function actionProjectSubsidiary(
+  orgId: string,
+  action: string,
+  body: Record<string, unknown>,
+): Promise<{ found: boolean; subsidiaryId: string | null } | undefined> {
+  const source = ACTION_SCOPE[action];
+  if (!source) return undefined;
+  const id = body[source.key];
+  if (typeof id !== "string" || !isUuid(id)) return { found: false, subsidiaryId: null };
+  let query: SQL;
+  if (source.table === "projects") {
+    query = sql`select p.subsidiary_id from projects p where p.org_id = ${orgId} and p.id = ${id}`;
+  } else if (source.table === "subcontracts") {
+    query = sql`select p.subsidiary_id from subcontracts s
+                  join projects p on p.id = s.project_id and p.org_id = s.org_id
+                 where s.org_id = ${orgId} and s.id = ${id}`;
+  } else {
+    query = sql`select p.subsidiary_id from ${sql.raw(source.table)} child
+                  join subcontracts s on s.id = child.subcontract_id and s.org_id = child.org_id
+                  join projects p on p.id = s.project_id and p.org_id = s.org_id
+                 where child.org_id = ${orgId} and child.id = ${id}`;
+  }
+  const row = (await db.execute<{ subsidiary_id: string | null }>(query)).rows[0];
+  return row ? { found: true, subsidiaryId: row.subsidiary_id } : { found: false, subsidiaryId: null };
+}
 
 export async function POST(request: Request) {
   const parsedBody = await parseJsonBody(request, jsonObject);
@@ -182,6 +250,26 @@ export async function POST(request: Request) {
   if (feature) return feature;
   const orgId = authz.user.orgId;
   const userId = authz.user.id;
+  // Lifecycle transitions are validated before any lookup so malformed input
+  // never reaches the database.
+  if (action === "transitionSubcontract") {
+    try {
+      parseSubcontractTransitionAction(body.transition);
+    } catch (error) {
+      if (error instanceof SubcontractError) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      throw error;
+    }
+  }
+  // Every action is scoped by the project it reaches: a record on a project
+  // outside the caller's subsidiary scope is indistinguishable from a missing one.
+  const scope = await actionProjectSubsidiary(orgId, action, body);
+  if (scope) {
+    if (!scope.found) return NextResponse.json({ error: "not found" }, { status: 404 });
+    const denied = guardSubsidiaryScope(authz, scope.subsidiaryId);
+    if (denied) return denied;
+  }
   try {
     let result: unknown = { ok: true };
     switch (action) {

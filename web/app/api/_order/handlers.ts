@@ -5,6 +5,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../lib/authz'
+import { isUuid } from '../../../lib/list-params'
 import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, exactOrderMoney, exactOrderQuantity, loadOrder, orderTaxProfileMap, type OrderLineInput } from './lib'
 import { cmp, toUnits } from '@openbooks/engine/src/money.ts'
@@ -53,6 +54,7 @@ export function makeGET(cfg: OrderHandlerConfig) {
     const gate = await guardFeaturePermission(cfg.readPerm, 'orders')
     if (gate instanceof NextResponse) return gate
     const { id } = await params
+    if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const owned = (await db.execute<{ subsidiaryId: string | null }>(
       sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${gate.user.orgId}`,
     ))
@@ -96,6 +98,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
+    if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
     const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; updated_at: string }>(
       sql`select status, document_date, subsidiary_id as "subsidiaryId", ${documentRevisionSql(sql`updated_at`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
@@ -445,6 +448,7 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
+    if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
     // A missing/malformed body just means no revision token was supplied;
     // the fence below answers that with the same reload-and-retry 409 as a
     // stale token, so legacy empty-body deletes fail closed uniformly.
@@ -486,6 +490,7 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
+    if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const parsedBody = await parseJsonBody(req, jsonObject)
     if (!parsedBody.ok) return parsedBody.response
     const body = parsedBody.data as {

@@ -76,11 +76,25 @@ export async function GET(req: Request) {
           )})`;
 
   if (view === "recall") {
+    // Recall filters are cast to uuid/date inside the engine query; validate
+    // them here so a malformed filter is a request failure, not a server one.
+    const lotId = url.searchParams.get("lotId") ?? undefined;
+    const itemId = url.searchParams.get("itemId") ?? undefined;
+    const expiresOnOrBefore = url.searchParams.get("expiresOnOrBefore") ?? undefined;
+    if (lotId !== undefined && !isUuid(lotId)) {
+      return NextResponse.json({ error: "lotId must be a valid id" }, { status: 422 });
+    }
+    if (itemId !== undefined && !isUuid(itemId)) {
+      return NextResponse.json({ error: "itemId must be a valid id" }, { status: 422 });
+    }
+    if (expiresOnOrBefore !== undefined && !isoDate().safeParse(expiresOnOrBefore).success) {
+      return NextResponse.json({ error: "expiresOnOrBefore must be YYYY-MM-DD" }, { status: 422 });
+    }
     const recallFilter = {
       lotNumber: url.searchParams.get("lotNumber") ?? undefined,
-      lotId: url.searchParams.get("lotId") ?? undefined,
-      itemId: url.searchParams.get("itemId") ?? undefined,
-      expiresOnOrBefore: url.searchParams.get("expiresOnOrBefore") ?? undefined,
+      lotId,
+      itemId,
+      expiresOnOrBefore,
       includeExpiryOnly: url.searchParams.get("expiring") === "1",
       subsidiaryIds: allowedSubsidiaryIds,
     } as Parameters<typeof queryLotRecall>[1];

@@ -20,6 +20,7 @@ import {
   type WriteOutcome,
 } from './types'
 import type { DataResource, WriteCtx } from './resources'
+import { employeeWriteScopeError } from './write-scope'
 
 /**
  * The prior payroll provider's register, as an import/export resource.
@@ -62,6 +63,7 @@ export const PRIOR_PAYROLL_REGISTER_DESCRIPTOR: ResourceDescriptor = {
   writePermission: 'payroll.manage',
   supportsImport: true,
   naturalKey: 'register + employee',
+  scopedWrite: true,
 }
 
 /** Header fields every register row carries, before the component columns. */
@@ -321,6 +323,12 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
           if ('error' in employee) {
             outcome.failed++
             outcome.errors.push({ row: rowNo, message: employee.error, field: 'employee' })
+            continue
+          }
+          const scopeError = await employeeWriteScopeError(ctx.orgId, employee.id, ctx.allowedSubsidiaryIds)
+          if (scopeError) {
+            outcome.failed++
+            outcome.errors.push({ row: rowNo, message: scopeError, field: 'employee' })
             continue
           }
 

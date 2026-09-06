@@ -1,70 +1,28 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
 import {
   assertMovementDate,
   EntitlementOpeningSaveError,
-  entitlementOpenings,
   saveEntitlementOpenings,
   type EntitlementOpeningWrite,
 } from '@openbooks/engine/src/payroll-entitlements.ts'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
-import { type Authz } from '../../../../../lib/authz'
-import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
+import { scopedEntitlementOpenings } from '../../../../../lib/payroll-scoped-views'
 import { guardPayrollEmployees } from '../../subsidiary-scope'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-async function visibleEmployeeIds(orgId: string, gate: Authz): Promise<Set<string> | null> {
-  if (gate.allowedSubsidiaryIds === null) return null
-  const rows = await db.execute<{ id: string }>(sql`
-    select id from parties p
-     where p.org_id = ${orgId}
-       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`)
-  return new Set(rows.rows.map((row) => row.id))
-}
-
-/**
- * Mid-year adoption carry-in for entitlement PLANS — the vacation and
- * banked-time balances an employee arrives holding.
- *
- * A sibling of ../route.ts rather than part of it, because the fact has a
- * different key: a bank has one lifetime balance, not one per tax year (the
- * ledger's unique index is (org, plan, employee) with no year). Folding it into
- * the year-scoped payload would invite an operator to re-enter the same balance
- * once per year and double an employer's liability.
- *
- * Same permissions as the statutory carry-in — `payroll.read` / `payroll.manage`
- * — and every rule (money validation, the sign check against the plan's
- * direction, the refusal to restate a carry-in a committed run consumed) lives
- * in engine/src/payroll-entitlements.ts. This route only translates HTTP.
- */
-
 export async function GET(req: Request) {
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
   if (gate instanceof NextResponse) return gate
   const asOf = new URL(req.url).searchParams.get('asOf')
   try {
-    const data = await entitlementOpenings(gate.user.orgId, { asOf: asOf ? assertMovementDate(asOf) : undefined })
-    const visible = await visibleEmployeeIds(gate.user.orgId, gate)
-    if (visible) {
-      const rows = data.rows.filter((row) => visible.has(row.employeePartyId))
-      const blocked = Object.fromEntries(
-        Object.entries(data.blocked).filter(([employeePartyId]) => visible.has(employeePartyId)),
-      )
-      return NextResponse.json({
-        ...data,
-        rows,
-        entered: rows.filter((row) => Object.keys(row.amounts).length > 0).length,
-        blocked,
-      })
-    }
+    const data = await scopedEntitlementOpenings(gate, { asOf: asOf ? assertMovementDate(asOf) : undefined })
     return NextResponse.json(data)
   } catch (error) {
     if (error instanceof PayrollError) {

@@ -564,6 +564,25 @@ export async function loadFilings(
   return r.rows
 }
 
+/**
+ * The subsidiary an information-return filing belongs to, for the by-id
+ * routes' scope gate. Returns null when the filing does not exist in the org.
+ * A filing with no subsidiary is an org-root filing: `loadFilings` hides it
+ * from restricted callers (its filter has no orgWideNull), and the by-id gate
+ * must fail closed the same way — `guardSubsidiaryScope(gate, null)` does.
+ */
+export async function loadInformationReturnFilingScope(
+  orgId: string,
+  filingId: string
+): Promise<{ subsidiaryId: string | null } | null> {
+  const r = await db.execute<{ subsidiaryId: string | null }>(sql`
+    select subsidiary_id as "subsidiaryId"
+      from information_return_filings
+     where org_id = ${orgId} and id = ${filingId}
+  `)
+  return r.rows[0] ?? null
+}
+
 export interface RecipientRow {
   id: string
   partyId: string

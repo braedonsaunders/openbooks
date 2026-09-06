@@ -14,6 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { accounts } from "./coa";
 import { payrollFilingAccounts } from "./payroll-filing";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
@@ -522,11 +523,26 @@ export const payStubLines = pgTable(
     departmentId: uuid("department_id"),
     timeTypeId: uuid("time_type_id"),
     sequence: integer("sequence").notNull().default(100),
+    /** Snapshot at commit: the account this line was credited to. Remittances
+     * debit this, never the component's current setup. */
+    liabilityAccountId: uuid("liability_account_id"),
+    liabilityAccountSource: text("liability_account_source", {
+      enum: ["unknown", "commit", "legacy_component"],
+    }).notNull().default("unknown"),
     ...auditColumns,
   },
   (t) => [
     index("pay_stub_lines_stub").on(t.stubId, t.sequence),
     index("pay_stub_lines_project").on(t.orgId, t.projectId),
+    foreignKey({ name: "pay_stub_lines_liability_account_tenant_fkey",
+      columns: [t.orgId, t.liabilityAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    index("pay_stub_lines_liability_account").on(t.orgId, t.liabilityAccountId),
+    check("pay_stub_lines_liability_account_evidence", sql`
+      (${t.liabilityAccountSource} = 'unknown' and ${t.liabilityAccountId} is null) or
+      (${t.liabilityAccountSource} in ('commit', 'legacy_component') and ${t.liabilityAccountId} is not null)
+    `),
   ],
 );
 

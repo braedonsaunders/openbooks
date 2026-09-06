@@ -194,6 +194,15 @@ export async function POST(req: NextRequest) {
         !members.some((member) => member.userId === body.managerUserId)
       )
         members.push({ userId: body.managerUserId, role: "manager" });
+      // One membership row per user: the unique index would otherwise turn a
+      // duplicated entry into a 500 after the team header was written.
+      if (
+        new Set(members.map((member) => member.userId)).size !== members.length
+      )
+        return NextResponse.json(
+          { error: "duplicate team member" },
+          { status: 422 },
+        );
       for (const member of members)
         if (
           !isUuid(member.userId) ||

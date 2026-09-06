@@ -7,6 +7,7 @@ const ORG_ID = '00000000-0000-4000-8000-000000000001'
 const USER_ID = '00000000-0000-4000-8000-000000000002'
 const DOCUMENT_ID = '00000000-0000-4000-8000-000000000003'
 const PARTY_ID = '00000000-0000-4000-8000-000000000004'
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 interface SqlQuery {
   readonly __orderTestSql: true
@@ -385,6 +386,11 @@ class OrderRouteHarness {
   }
 
   private matchesDocument(params: unknown[]): boolean {
+    // Postgres rejects a malformed uuid literal with 22P02 before matching;
+    // mirror that so an unguarded [id] segment surfaces as the 500 it is.
+    if (typeof params[0] !== 'string' || !UUID_RE.test(params[0])) {
+      throw new Error(`invalid input syntax for type uuid: "${String(params[0])}"`)
+    }
     return !this.deleted
       && params[0] === this.document.id
       && params[1] === this.document.kind
@@ -578,9 +584,10 @@ const hooks = registerHooks({
 })
 
 const handlerUrl = './handlers.ts?order-route-concurrency-test'
-const { makeDELETE, makePATCH, makeConvertPOST } = await import(handlerUrl) as typeof import('./handlers.ts')
+const { makeGET, makeDELETE, makePATCH, makeConvertPOST } = await import(handlerUrl) as typeof import('./handlers.ts')
 hooks.deregister()
 
+const GET = makeGET({ kind: 'quote', readPerm: 'ar.read', createPerm: 'ar.create' })
 const PATCH = makePATCH({ kind: 'quote', readPerm: 'ar.read', createPerm: 'ar.create' })
 const DELETE = makeDELETE({ kind: 'quote', readPerm: 'ar.read', createPerm: 'ar.create' })
 const CONVERT = makeConvertPOST({ kind: 'quote', readPerm: 'ar.read', createPerm: 'ar.create' })
@@ -646,6 +653,29 @@ function fulfilledResponse(result: PromiseSettledResult<Response>, label: string
   )
   return result.value
 }
+
+test('a malformed [id] segment is a plain 404 on every order handler, never a uuid cast failure', async () => {
+  const json = { 'content-type': 'application/json' }
+  for (const id of ['abc', 'new', '00000000-0000-4000-8000-00000000000g', '']) {
+    harness.reset('draft')
+    const route = (path = '') => `http://openbooks.test/api/estimates/${id}${path}`
+    const bound = { params: Promise.resolve({ id }) }
+    const responses = await Promise.all([
+      GET(new Request(route()), bound),
+      PATCH(new Request(route(), { method: 'PATCH', headers: json, body: JSON.stringify({ memo: 'x', expectedUpdatedAt: harness.document.updatedAt }) }), bound),
+      DELETE(new Request(route(), { method: 'DELETE', headers: json, body: JSON.stringify({ expectedUpdatedAt: harness.document.updatedAt }) }), bound),
+      CONVERT(new Request(route('/convert'), { method: 'POST', headers: json, body: JSON.stringify({ targetKind: 'sales_order', expectedUpdatedAt: harness.document.updatedAt }) }), bound),
+    ])
+    for (const [index, response] of responses.entries()) {
+      assert.equal(response.status, 404, `${['GET', 'PATCH', 'DELETE', 'convert'][index]} ${JSON.stringify(id)}`)
+      assert.deepEqual(await response.json(), { error: 'not found' })
+    }
+    assert.equal(harness.lockAttempts, 0)
+    assert.equal(harness.headerWrites, 0)
+    assert.equal(harness.deleteCalls, 0)
+    assert.equal(harness.convertCalls, 0)
+  }
+})
 
 test('issuing serializes a stale draft replacement and rejects it after approval', async () => {
   harness.reset('draft')

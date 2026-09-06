@@ -2,9 +2,11 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { isDunnableDocumentKind } from "@openbooks/engine/src/dunning.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
+import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
@@ -50,7 +52,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const authz = await guardPermission("documents.manage");
   if (authz instanceof NextResponse) return authz;
   const { id } = await params;
-  if (!(await owned(authz.user.orgId, id))) {
+  // A malformed id names nothing: same answer as a policy in another org.
+  if (!isUuid(id) || !(await owned(authz.user.orgId, id))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const parsedBody = await parseJsonBody(req, jsonObject);
@@ -58,6 +61,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = (parsedBody.data) as Record<string, unknown>;
   const stages = "stages" in body ? validStages(body.stages) : undefined;
   if (stages === null) return NextResponse.json({ error: "invalid stages" }, { status: 400 });
+  if (
+    "appliesToKind" in body &&
+    (typeof body.appliesToKind !== "string" || !isDunnableDocumentKind(body.appliesToKind))
+  ) {
+    return NextResponse.json({ error: "appliesToKind must be a dunnable receivable document kind" }, { status: 422 });
+  }
   let minBalance: string | undefined;
   if ("minBalance" in body) {
     const minBalanceRaw = canonicalDecimal(body.minBalance, 4);
@@ -130,6 +139,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const authz = await guardPermission("documents.manage");
   if (authz instanceof NextResponse) return authz;
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
   await db.transaction(async (tx) => {
     // Snapshot policy and ladder first: deletion removes the only record of
     // how this org chased overdue invoices.

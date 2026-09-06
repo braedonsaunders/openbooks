@@ -2353,3 +2353,174 @@ Evidence is under `audit-payroll-filing-snapshot-2026-09-05`. This checkpoint do
 not reconstruct missing original evidence or certify opening-balance attribution,
 mutable filing-account metadata, remittance destination/accounting policy, or
 all payroll workflows. No production database or deployment was changed.
+
+## Cross-domain scope, integrity and control divergences — 2026-09-06
+
+The remaining-coverage column above named eight domains where only the API
+transport had been traced. This pass hunted each of them for the recurring
+defect shape (policy divergence between entry points) and for history
+mutability, concurrency and arithmetic faults, then fixed what reproduced.
+Every correction ships with a database regression that failed against the
+prior implementation and passes now; the before/after logs are under
+`thr_euzdd2x36a/<domain>/`.
+
+### Payroll
+
+Server pages and the assistant tools read payroll populations directly from
+the engine while the JSON routes guarded them, so a caller restricted to one
+legal entity was shown year-end slips, separation documents, remittance
+aggregates, opening balances and retro schedules its own API refused with
+404. One loader module (`web/lib/payroll-scoped-views.ts`) now makes every
+scope decision, and the pages, the routes and all six assistant payroll tools
+read through it; a source-pattern test pins the pages to the loaders. The
+generic import route bound the caller's subsidiary fence on export but not on
+import: a restricted importer could load payroll carry-ins (the only input for
+the year's CPP/EI ceilings) for another entity's employee, and the preview
+disclosed that employee as "created". Import now refuses restricted callers
+for every resource that does not enforce the fence in its write path, and the
+payroll resources enforce it row by row before preview reports anything.
+
+The commit-time freshness gate never watched statutory carry-ins: a carry-in
+saved between Calculate and Commit was silently ignored, the employee was
+deducted past the annual maximum, and the carry-in was then locked in a state
+the committed stub contradicted. The gate now watches carry-in rows, their
+components and the save's audit evidence (deletes leave no row to timestamp),
+and the carry-in save serializes on the same employee × tax-year fence the
+commit takes. The retro-pay control set (voided or moved source period,
+cross-year, retired component, another open retro run holding the same cell)
+was computed and displayed nowhere and enforced nowhere: the commit now
+refuses a retro run with any blocker, the pre-flight shows the findings, and
+retro-run creation serializes per schedule and refuses a duplicate up front.
+
+The liability account a committed deduction was credited to was re-read from
+the pay component's current setup by the remittance summary and the
+remittance bill, so repointing a component moved an already-accrued period to
+a different account. Forward migration 0094 stamps the credited account on
+each committed stub line; the commit resolves it once for the GL projection
+and the stamp, remittances read the stamp, and it is immutable. Committed
+legacy lines are backfilled from the component's account and marked as such
+(the figure every summary reported until now, so no historical amount
+changes); lines whose component names no account keep resolving through the
+pack's legacy slot. The remittance destination (vendor) remains a policy read
+from setup: which party is paid is a prospective decision, which account was
+credited is history.
+
+### CRM
+
+Opportunity deletion ignored the caller's subsidiary scope, read its
+linked-document guard unlocked against an estimate route that inserts links
+under a row lock, and left activity links dangling so every restricted reader
+lost those activities forever. Deletion now locks the scoped row, checks and
+removes links inside one transaction, and writes audit evidence. The party
+activities tab omitted the shared activity boundary (a hidden note's body was
+searchable one substring at a time); estimates from opportunities were gated
+on the AR create permission alone and now require CRM manage as well; a
+header-probability change without resent lines recomputed the weighted amount
+from the header and contradicted stored per-line overrides; malformed dates
+and non-UUID order ids reached PostgreSQL as server errors and now fail as
+client errors. Duplicate team members are refused.
+
+### Tax and statutory
+
+Taxable-base return boxes summed every posted document family for a code, so
+a code that applies to both sides put purchases into the sales box and vice
+versa (GST34 line 101, VAT100 boxes 6 and 7). Each box now resolves its side
+from the pack definition or the code, restricts to the kernel's document
+families and nets credit memos. Filing preparation locked and versioned on the
+requested window but stored the obligation-clamped window, so a second
+version of a mid-quarter registration could never be prepared; identity is
+now derived from the stored window. The provision detail, information-return
+and compliance pages dropped the scope their routes pass; every by-id
+information-return route (lifecycle, transmittal export, recipient copies,
+recipient adjustments) had no entity gate; the tax page rendered every filing
+to callers every tax route refuses. All now apply the routes' fences.
+
+### Projects and construction
+
+Progress billing (schedule of values, change orders, applications, retainage
+release) and subcontracts checked organization membership only, and the
+project cockpit page and the WIP billing workspace reached any project by id
+while the project route refused it. Project financials dropped every
+organization-wide overhead rate through a null-equals join and double counted
+stacked department rates, disagreeing with the posting engine and the WIP
+pricing. A time amendment re-derived bill rate, cost rate and costing basis
+instead of negating the original, so a reversal did not net to zero and an
+estimated-basis original produced phantom negative overhead. The
+not-to-exceed cap counted posted invoices only, so two open billing requests
+could each draft the full contract value. Retainage and change-order dates
+reached PostgreSQL unvalidated, and milestone billing claimed unpriced
+schedule rows it did not bill. Each is corrected with its regression.
+The WIP billing workspace also selected a column the project-type table
+does not carry, so every prebill creation and the WIP analytics query failed
+against the current schema; the fallback profile now resolves from the type's
+newest published financial-profile version and fails closed when none exists.
+
+### Inventory, AP/AR and property
+
+The shared document action route validated no action verb: any spelling other
+than submit fell into the posting path under the create permission. Manual
+landed-cost apportionment debited inventory for a target whose layers carried
+no value and wrote no allocation, leaving the GL over the subledger with
+nothing to reverse. Lot-recall filters and dunning ids reached the database
+unvalidated; the dunning document kind was an unchecked string that could mail
+vendors. Extending an active lease never extended its base-rent window (a
+renewal billed nothing); escalations applied out of date order under-
+compounded rent; a lease could be re-parented into an unseen entity; the
+schedule horizon and billing date were unbounded; a deposit offset could be
+the liability account itself; CAM rounding residue and the finalize
+fingerprint depended on physical row order.
+
+### General ledger, close and consolidation
+
+Ownership consolidation posted non-controlling-interest and equity-method
+adjustments untranslated for foreign subsidiaries, and a successor
+effective-dated ownership policy re-posted the acquisition elimination. The
+intercompany-residual readiness check summed functional-currency amounts
+across currencies, and the FX-revaluation check disagreed with the engine on
+zero deltas, monetary overrides and a missing following period, so a
+reconciled multi-currency group could never be approved for close. The
+generated adjustment period overlapped the final regular day and made
+year-end consolidated statements fail with a scalar-subquery error.
+Re-deriving consolidated rates on a closed period restated published
+statements with no lock, audit or close-run invalidation. All six are
+corrected; two new close exceptions name missing consolidated rates and a
+missing reversal period.
+
+### Deferred, by name
+
+Purchase orders for stock items cannot be billed because nothing produces the
+receipt leg the three-way match requires; the design (a purchase-receipt
+document clearing received-not-billed, or a procurement setting for the match
+depth) is recorded in the thread ledger and not built. Party deactivation with
+open opportunities, empty forecast snapshots, re-billing a voided rent
+invoice, a self-service change-password route (only the email reset exists),
+persisting a taxable-base side on tenant-authored boxes, and a zero-priced
+stock line on a bill for an item with a received-not-billed account (raw
+nonzero-journal violation) remain open and named.
+
+### Verification for this batch
+
+Every workspace typechecks and the locked production build passes. The unit
+suite passed 3,169 tests with zero failures or skips. The integration suite
+ran on a freshly bootstrapped isolated database (migration 0094 applied by
+the production bootstrap) and passed 2,353 of 2,357 tests with zero failures;
+the four skips are the pre-existing environment-conditional cases (the
+no-context fail-closed probe, the two Redis-backed flow-email cases, and the
+runtime-role tax-pack installer), none of them new. Fixture receipt: 1,950
+balanced leases, releases and resets, four bootstrap/teardown/verification
+cycles, no active leases and no leak detections. Lint reports zero errors and
+722 warnings; the ceiling was tightened to that measured count, and explicit
+`any` remains at its 389 ceiling.
+
+An upgrade database bootstrapped from `04cafd03` was seeded with committed
+payroll whose CPP component carried a tenant-mapped liability account and
+whose EI component did not. Migration 0094 stamped the mapped component's
+lines as `legacy_component` with that account, left the unmapped lines
+`unknown`, reported identical remittance accounts before and after, and kept
+reporting the mapped account after the component was repointed. Evidence is
+under `thr_euzdd2x36a/payroll/`.
+
+Not certified by this pass: the purchase-receipt leg and every item listed
+under "Deferred, by name"; live provider acceptance, object-storage recovery,
+production-scale load and complete end-to-end business journeys. No production
+database or deployment was changed.

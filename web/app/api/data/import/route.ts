@@ -65,13 +65,23 @@ export async function POST(req: Request) {
   const mode = body.mode
   const format: ImportFormat = body.format ?? 'csv'
 
-  const resource = await getResource(orgId, body.resource ?? '')
+  const resource = await getResource(orgId, body.resource ?? '', authz.allowedSubsidiaryIds)
   if (!resource) return NextResponse.json({ error: 'unknown resource' }, { status: 404 })
   if (!resource.descriptor.supportsImport) {
     return NextResponse.json({ error: 'resource is read-only' }, { status: 400 })
   }
   if (!can(authz, resource.descriptor.writePermission)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  }
+  // The export route binds the caller's subsidiary fence before every read.
+  // Writes carry the same fence: a resource that does not enforce it in its
+  // write() is refused outright for a restricted caller rather than silently
+  // loading rows into legal entities the caller cannot see.
+  if (authz.allowedSubsidiaryIds !== null && !resource.descriptor.scopedWrite) {
+    return NextResponse.json(
+      { error: 'importing this resource requires organization-wide access' },
+      { status: 403 },
+    )
   }
 
   if (mode === 'parse') {
@@ -115,7 +125,13 @@ export async function POST(req: Request) {
     post = true
   }
 
-  const ctx = { orgId, actorId: authz.user.id, dryRun: mode === 'preview', post }
+  const ctx = {
+    orgId,
+    actorId: authz.user.id,
+    dryRun: mode === 'preview',
+    post,
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+  }
 
   if (mode === 'preview') {
     const outcome = await resource.write(mappedRows, importMode, ctx)

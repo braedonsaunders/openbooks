@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { pool, type SqlExecutor } from "./db.ts";
 import { abs, add, cmp, fromUnits, neg, toUnits } from "./money.ts";
+import { taxReturnPackBox } from "./country-tax-packs/index.ts";
 import { uuidArray } from "./subsidiaries.ts";
 import { buildFilingCalendar, type FilingFrequency } from "./tax-nexus.ts";
 
@@ -57,6 +58,17 @@ export interface TaxReturnBox {
 
 export class TaxReturnError extends Error {
   readonly name = "TaxReturnError";
+}
+
+/**
+ * Which document family a taxable-base box sums when the library does not
+ * describe the box: a one-sided code decides for itself; a both-sides code has
+ * no declared side (null) and contributes both families.
+ */
+export function taxableBaseSideForCode(appliesTo: string | undefined): "sales" | "purchases" | null {
+  if (appliesTo === "sales") return "sales";
+  if (appliesTo === "purchases") return "purchases";
+  return null;
 }
 
 /**
@@ -447,21 +459,66 @@ async function computeTaxReturnInSnapshot(
     }
     glRaw.set(src.lineCode, add(glRaw.get(src.lineCode) ?? "0", total));
   }
+  // A taxable-base box reports ONE side of the ledger — a sales box sums the
+  // customer document family, a purchases box the vendor/expense family — so a
+  // code that applies to both sides (every provisioned code does) must not
+  // feed its purchases into the sales box and vice versa.  The side comes from
+  // the library box definition (glMap) and, for a box the library does not
+  // describe, from the code's own applies_to.  A both-sides code on an
+  // undescribed box has no declared side and keeps summing both families.
+  // Credit memos store positive line amounts and are flipped by the kernel at
+  // posting time; they net here the same way.  Card refunds already carry
+  // their own sign (the kernel posts them unflipped).
+  const appliesToByCode = new Map<string, string>();
+  const allBaseCodes = [...new Set([...baseCodesByLineCode.values()].flat())];
+  if (allBaseCodes.length > 0) {
+    const codeRows = (await runner.execute<{ id: string; applies_to: string }>(sql`
+      select id, applies_to from tax_codes
+       where org_id = ${orgId} and id = any(${uuidArray(allBaseCodes)}::uuid[])`));
+    for (const row of codeRows.rows) appliesToByCode.set(row.id, row.applies_to);
+  }
   for (const [lineCode, codes] of baseCodesByLineCode) {
-    const codeArray = uuidArray(codes);
+    const declared = taxReturnPackBox(formCode, lineCode)?.glMap ?? null;
+    const salesCodes: string[] = [];
+    const purchaseCodes: string[] = [];
+    for (const code of codes) {
+      const side = declared ?? taxableBaseSideForCode(appliesToByCode.get(code));
+      if (side === "sales" || side === null) salesCodes.push(code);
+      if (side === "purchases" || side === null) purchaseCodes.push(code);
+    }
+    const salesArray = uuidArray(salesCodes);
+    const purchaseArray = uuidArray(purchaseCodes);
     const r = (await runner.execute<{ total: string }>(sql`
-      select coalesce(sum(dl.amount), 0)::text as total
+      select coalesce(sum(
+               case when d.kind in ('customer_credit', 'vendor_credit') then -dl.amount else dl.amount end
+             ), 0)::text as total
         from document_lines dl
         join documents d on d.id = dl.document_id and d.org_id = dl.org_id
        where dl.org_id = ${orgId}
          and d.status = 'posted'
          and coalesce(d.posting_date, d.document_date) between ${from} and ${to}
          and (
-           dl.tax_code_id = any(${codeArray}::uuid[])
-           or exists (
-             select 1 from document_line_tax_components c
-              where c.org_id = dl.org_id and c.document_line_id = dl.id
-                and c.tax_code_id = any(${codeArray}::uuid[])
+           (
+             d.kind in ('customer_invoice', 'customer_credit')
+             and (
+               dl.tax_code_id = any(${salesArray}::uuid[])
+               or exists (
+                 select 1 from document_line_tax_components c
+                  where c.org_id = dl.org_id and c.document_line_id = dl.id
+                    and c.tax_code_id = any(${salesArray}::uuid[])
+               )
+             )
+           )
+           or (
+             d.kind in ('vendor_bill', 'vendor_credit', 'expense_report', 'check', 'card_charge', 'card_refund')
+             and (
+               dl.tax_code_id = any(${purchaseArray}::uuid[])
+               or exists (
+                 select 1 from document_line_tax_components c
+                  where c.org_id = dl.org_id and c.document_line_id = dl.id
+                    and c.tax_code_id = any(${purchaseArray}::uuid[])
+               )
+             )
            )
          )`));
     glRaw.set(lineCode, add(glRaw.get(lineCode) ?? "0", r.rows[0]?.total ?? "0"));

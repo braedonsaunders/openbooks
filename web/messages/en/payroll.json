@@ -100,7 +100,8 @@
         "workerComp": "workers' compensation rates",
         "timeTypes": "time type setup",
         "settings": "payroll settings",
-        "ytd": "another run's year-to-date"
+        "ytd": "another run's year-to-date",
+        "openingBalances": "opening balances (carry-ins)"
       }
     },
     "readiness": {
@@ -119,6 +120,14 @@
       "dryRunTitle": "Test calculation results",
       "dryRunHint": "Nothing was saved. Run Calculate to build the stubs for real.",
       "codes": {
+        "retro": {
+          "sourceVoided": "A source period this run settles has been voided ({detail}).",
+          "crossTaxYear": "A source period falls outside the {detail} statutory year — file an amended return instead.",
+          "stale": "A source period's inputs changed after this run was quantified. Recreate the retro run.",
+          "doubleSettled": "Another open retro run already settles the same period for this employee.",
+          "componentRetired": "A pay component this run pays on has been retired.",
+          "zeroDelta": "This run pays nothing for the employee; the period differences to zero."
+        },
         "setup": {
           "pack": "No payroll country pack is installed.",
           "wageExpense": "No wage expense account is configured.",

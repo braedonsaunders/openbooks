@@ -17,6 +17,24 @@ import { add, cmp, formatMoney, mulPercent, mulRatio, neg, normalizeMoney, sum, 
 
 export class ConstructionBillingError extends Error {}
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Calendar-day boundary check for every date this engine interpolates into a
+ * DATE column. Anything that is not a real ISO day (a missing value the route
+ * stringified, a locale format, "2026-02-30") is refused with the domain error
+ * here — before any transaction opens — instead of surfacing as a 22007 from
+ * PostgreSQL. The round-trip guards V8's lenient parser, which silently rolls
+ * February 30 into March.
+ */
+export function requireIsoDate(value: unknown, label: string): string {
+  if (typeof value === "string" && ISO_DATE.test(value)) {
+    const parsed = new Date(`${value}T00:00:00Z`);
+    if (!Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value) return value;
+  }
+  throw new ConstructionBillingError(`${label} must be a valid calendar date (YYYY-MM-DD)`);
+}
+
 /** Persist retainage-release amount through exact decimal then ledger money. Fail closed. */
 function persistRetainageReleaseAmount(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
@@ -266,7 +284,7 @@ export async function createPayApplication(
   periodEnd: string,
   retainagePercent = "10",
 ): Promise<{ id: string; applicationNumber: number }> {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(periodEnd)) throw new ConstructionBillingError("A valid period-ending date is required");
+  requireIsoDate(periodEnd, "Period ending");
   const exactRetainage = persistRetainagePercent(retainagePercent);
   if (cmp(exactRetainage, "0") < 0 || cmp(exactRetainage, "100") > 0) {
     throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
@@ -631,6 +649,7 @@ export async function releaseRetainage(
   periodEnd: string,
   amount: string,
 ): Promise<{ invoiceId: string; documentNumber: string; amount: string }> {
+  requireIsoDate(periodEnd, "Period ending");
   return db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
     await assertApplicationProcedure(tx, orgId, projectId);

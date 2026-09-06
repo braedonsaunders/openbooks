@@ -47,7 +47,7 @@ export default async function ComplianceHomePage({
   const taxYear = Number.isInteger(yearParam) ? yearParam : Number((await businessToday(orgId)).slice(0, 4)) - 1
 
   const [overview, projectsEnabled] = await Promise.all([
-    loadComplianceOverview(orgId, taxYear),
+    loadComplianceOverview(orgId, taxYear, authz.allowedSubsidiaryIds),
     isFeatureEnabled(orgId, 'projects'),
   ])
   const tabs = await complianceTabs('/compliance', { projectsEnabled })

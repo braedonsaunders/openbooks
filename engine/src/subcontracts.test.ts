@@ -3,10 +3,16 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   SubcontractError,
+  approveSubcontractChangeOrder,
   computeVendorApplication,
+  createSubcontract,
+  createSubcontractPaymentControl,
+  createVendorPayApplication,
   parseSubcontractTransitionAction,
+  releaseVendorRetainage,
   revisedSubcontractSovValue,
 } from "./subcontracts.ts";
+import { db } from "./db.ts";
 
 test("subcontract transition parser is strict and runs before transaction work", () => {
   for (const action of ["substantially_complete", "close", "void"] as const) {
@@ -409,4 +415,39 @@ test("deductive change cannot erase earned work", () => {
     () => revisedSubcontractSovValue("1000", "-200", "0.00005"),
     SubcontractError,
   );
+});
+
+test("subcontract dates are validated as calendar days before any database work", async (t) => {
+  const transactionDb = db as unknown as { transaction(callback: unknown): Promise<unknown> };
+  t.mock.method(transactionDb, "transaction", async () => {
+    throw new Error("database work must not start for an invalid date");
+  });
+  const isDateError = (error: unknown) =>
+    error instanceof SubcontractError && /valid calendar date/.test(error.message);
+  const base = { orgId: "org-1", userId: "user-1", subcontractId: "sub-1" };
+  // The route stringifies a missing approvedOn to "undefined"; that must be a
+  // domain rejection, not a 22007 from the date column.
+  await assert.rejects(approveSubcontractChangeOrder("org-1", "user-1", "co-1", "undefined"), isDateError);
+  for (const bad of ["", "2026-02-30", "07/31/2026", "2026-7-1"]) {
+    await assert.rejects(approveSubcontractChangeOrder("org-1", "user-1", "co-1", bad), isDateError, `approve(${bad})`);
+    await assert.rejects(releaseVendorRetainage({ ...base, periodEnd: bad, amount: "100" }), isDateError, `release(${bad})`);
+    await assert.rejects(createVendorPayApplication({ ...base, periodEnd: bad }), isDateError, `application(${bad})`);
+    await assert.rejects(
+      createSubcontractPaymentControl({ ...base, controlType: "payment_hold", reason: "Lien notice", effectiveOn: bad }),
+      isDateError,
+      `control effectiveOn(${bad})`,
+    );
+    // Optional dates: empty means "not set"; anything else must be a calendar day.
+    if (bad === "") continue;
+    await assert.rejects(
+      createSubcontractPaymentControl({ ...base, controlType: "payment_hold", reason: "Lien notice", effectiveOn: "2026-07-01", expiresOn: bad }),
+      isDateError,
+      `control expiresOn(${bad})`,
+    );
+    await assert.rejects(
+      createSubcontract({ ...base, projectId: "p-1", vendorId: "v-1", number: "S-1", title: "Roofing", originalCommitment: "1000", startsOn: bad }),
+      isDateError,
+      `subcontract startsOn(${bad})`,
+    );
+  }
 });

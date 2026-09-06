@@ -9,8 +9,8 @@ import {
   recomputeFiling,
   voidFiling,
 } from '@openbooks/engine/src/information-returns.ts'
-import { getAuthz, can } from '@/lib/authz'
-import { guardComplianceFeature } from '@/lib/compliance'
+import { getAuthz, can, guardSubsidiaryScope } from '@/lib/authz'
+import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 
 export const runtime = 'nodejs'
@@ -49,6 +49,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!can(authz, needed)) {
     return NextResponse.json({ error: `missing permission: ${needed}` }, { status: 403 })
   }
+  // Entity isolation: the engine is scope-blind, so the filing's subsidiary is
+  // checked here before any action — an out-of-scope filing is indistinguishable
+  // from a missing one (the same 404 the list and create paths use).
+  const filingScope = await loadInformationReturnFilingScope(orgId, id)
+  if (!filingScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(authz, filingScope.subsidiaryId)
+  if (scopeDenied) return scopeDenied
 
   try {
     if (action === 'compute') {

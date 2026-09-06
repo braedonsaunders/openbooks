@@ -5,6 +5,7 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { isDocKindEnabled } from '../../../../../../lib/documents'
+import { guardPermission } from '../../../../../../lib/authz'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../../lib/features'
@@ -59,8 +60,15 @@ function persistEstimateLineUnitPrice(value: unknown): string {
 }
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('ar.create', 'crm')
+  // Creating an estimate mutates CRM state (it links the quote to the
+  // opportunity and copies its title, amounts, dimensions and lines) AND
+  // creates an AR document, so the caller needs both the CRM manage right
+  // and the AR create right; an AR-only role must not read pipeline data
+  // through a quote it minted.
+  const gate = await guardFeaturePermission('crm.opportunities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
+  const arGate = await guardPermission('ar.create')
+  if (arGate instanceof NextResponse) return arGate
   const { user } = gate
   if (!(await isDocKindEnabled(user.orgId, 'quote'))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })

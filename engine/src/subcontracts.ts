@@ -7,6 +7,29 @@ import { add, cmp, mulPercent, neg, normalizeMoney, sum } from "./money.ts";
 
 export class SubcontractError extends Error {}
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Calendar-day boundary check for every date interpolated into a DATE column.
+ * A missing value the route stringified ("undefined"), a locale format, or a
+ * non-existent day ("2026-02-30") is refused with the domain error before any
+ * transaction opens, instead of surfacing as a PostgreSQL 22007. The round-trip
+ * guards V8's lenient parser, which rolls February 30 into March.
+ */
+function requireSubcontractDate(value: unknown, label: string): string {
+  if (typeof value === "string" && ISO_DATE.test(value)) {
+    const parsed = new Date(`${value}T00:00:00Z`);
+    if (!Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value) return value;
+  }
+  throw new SubcontractError(`${label} must be a valid calendar date (YYYY-MM-DD)`);
+}
+
+/** Optional-date variant: null/empty means "not set"; anything else must be a calendar day. */
+function optionalSubcontractDate(value: unknown, label: string): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  return requireSubcontractDate(value, label);
+}
+
 export type SubcontractTransitionAction = "substantially_complete" | "close" | "void";
 
 const subcontractTransitionActions = new Set<SubcontractTransitionAction>([
@@ -349,7 +372,9 @@ export async function createSubcontract(input: {
   if (cmp(retainage, "0") < 0 || cmp(retainage, "100") > 0) {
     throw new SubcontractError("Retainage percent must be between 0 and 100");
   }
-  if (input.startsOn && input.endsOn && input.endsOn < input.startsOn) {
+  const startsOn = optionalSubcontractDate(input.startsOn, "Start date");
+  const endsOn = optionalSubcontractDate(input.endsOn, "End date");
+  if (startsOn && endsOn && endsOn < startsOn) {
     throw new SubcontractError("End date cannot precede start date");
   }
   return db.transaction(async (tx) => {
@@ -408,6 +433,9 @@ export async function updateDraftSubcontract(input: {
   const retainage = persistSubcontractDefaultRetainage(input.defaultRetainagePercent);
   if (!title || cmp(original, "0") <= 0) throw new SubcontractError("Title and a positive commitment are required");
   if (cmp(retainage, "0") < 0 || cmp(retainage, "100") > 0) throw new SubcontractError("Retainage percent must be between 0 and 100");
+  const startsOn = optionalSubcontractDate(input.startsOn, "Start date");
+  const endsOn = optionalSubcontractDate(input.endsOn, "End date");
+  if (startsOn && endsOn && endsOn < startsOn) throw new SubcontractError("End date cannot precede start date");
   await db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
     const before = (await tx.execute(sql`select * from subcontracts where org_id = ${input.orgId} and id = ${input.id} for update`));
@@ -415,7 +443,7 @@ export async function updateDraftSubcontract(input: {
     if (before.rows[0].status !== "draft") throw new SubcontractError("Only a draft subcontract can be edited");
     const after = (await tx.execute(sql`
       update subcontracts set title = ${title}, description = ${input.description ?? null}, original_commitment = ${original},
-        default_retainage_percent = ${retainage}, starts_on = ${input.startsOn ?? null}, ends_on = ${input.endsOn ?? null},
+        default_retainage_percent = ${retainage}, starts_on = ${startsOn}, ends_on = ${endsOn},
         updated_at = now(), updated_by = ${input.userId}
       where org_id = ${input.orgId} and id = ${input.id} returning *
     `));
@@ -567,6 +595,7 @@ export async function createSubcontractChangeOrder(input: {
 }
 
 export async function approveSubcontractChangeOrder(orgId: string, userId: string, id: string, approvedOn: string): Promise<void> {
+  requireSubcontractDate(approvedOn, "Approval date");
   await db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, orgId);
     const result = (await tx.execute<any>(sql`
@@ -618,7 +647,7 @@ export async function createVendorPayApplication(input: {
   periodEnd: string;
   vendorInvoiceNumber?: string | null;
 }): Promise<{ id: string; applicationNumber: number }> {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.periodEnd)) throw new SubcontractError("Valid period-ending date is required");
+  requireSubcontractDate(input.periodEnd, "Period ending");
   return db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
     const contract = (await tx.execute<{ status: string; default_retainage_percent: string }>(sql`select status, default_retainage_percent from subcontracts where org_id = ${input.orgId} and id = ${input.subcontractId} for update`));
@@ -843,6 +872,7 @@ export async function releaseVendorRetainage(input: {
 }): Promise<{ vendorBillDocumentId: string; documentNumber: string; amount: string }> {
   const amount = persistSubcontractRetainageReleaseAmount(input.amount);
   if (cmp(amount, "0") <= 0) throw new SubcontractError("Release amount must be positive");
+  requireSubcontractDate(input.periodEnd, "Period ending");
   return db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
     const contract = (await tx.execute<any>(sql`
@@ -906,6 +936,9 @@ export async function createSubcontractPaymentControl(input: {
   if (input.controlType === "joint_check" && !input.jointPayeePartyId) throw new SubcontractError("Joint checks require a joint payee");
   if (input.controlType === "payment_hold" && input.jointPayeePartyId) throw new SubcontractError("Payment holds do not have a joint payee");
   if (amountLimit && cmp(amountLimit, "0") <= 0) throw new SubcontractError("Amount limit must be positive");
+  const effectiveOn = requireSubcontractDate(input.effectiveOn, "Effective date");
+  const expiresOn = optionalSubcontractDate(input.expiresOn, "Expiry date");
+  if (expiresOn && expiresOn < effectiveOn) throw new SubcontractError("Expiry date cannot precede the effective date");
   return db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
     const scope = (await tx.execute<{ subcontract_ok: boolean; payee_ok: boolean; app_ok: boolean; bill_ok: boolean }>(sql`
@@ -923,7 +956,7 @@ export async function createSubcontractPaymentControl(input: {
       insert into subcontract_payment_controls (org_id, subcontract_id, pay_application_id, vendor_bill_document_id,
         control_type, joint_payee_party_id, amount_limit, reason, effective_on, expires_on, created_by, updated_by)
       values (${input.orgId}, ${input.subcontractId}, ${input.payApplicationId ?? null}, ${input.vendorBillDocumentId ?? null},
-        ${input.controlType}, ${input.jointPayeePartyId ?? null}, ${amountLimit}, ${reason}, ${input.effectiveOn}, ${input.expiresOn ?? null},
+        ${input.controlType}, ${input.jointPayeePartyId ?? null}, ${amountLimit}, ${reason}, ${effectiveOn}, ${expiresOn},
         ${input.userId}, ${input.userId}) returning id
     `));
     const id = result.rows[0]!.id;

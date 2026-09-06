@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
+import { notFound } from 'next/navigation'
 import { Settings } from 'lucide-react'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, Button, TabContent, cn } from '@openbooks/ui'
@@ -30,6 +31,11 @@ type FilingRow = FilingHistoryRecord & { created_at: string }
 
 export default async function TaxPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const authz = await requirePermission('reports.read')
+  // Returns and filings have no subsidiary dimension: every tax REST path
+  // refuses an entity-restricted caller (guardSubsidiaryScope(gate, null) → 404),
+  // and this page applies the identical fence rather than rendering the
+  // org-wide filing history to them.
+  if (authz.allowedSubsidiaryIds !== null) notFound()
   const { orgId } = authz.user
   const sp = await searchParams
   const t = await getTranslations('tax')

@@ -63,6 +63,12 @@ export interface ResourceDescriptor {
   /** Transactions can optionally post to the ledger; this gates that step. */
   canPost?: boolean
   postPermission?: string
+  /**
+   * `write()` enforces `WriteCtx.allowedSubsidiaryIds` itself. Resources
+   * without it are refused for subsidiary-restricted importers by the import
+   * route (see web/lib/data-io/write-scope.ts).
+   */
+  scopedWrite?: boolean
 }
 
 export type ResourceGroup = 'Setup' | 'Master data' | 'Property management' | 'Records' | 'Transactions'

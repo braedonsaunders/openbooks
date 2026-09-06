@@ -10,6 +10,7 @@ import {
   retroRunFindings,
   retroRunReview,
 } from "./payroll-retro-store.ts";
+import { payRunReadiness } from "./payroll-readiness.ts";
 import { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } from "./payroll-run.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
@@ -191,6 +192,15 @@ test(
       assert.equal(retro.employees, 1);
       assert.equal(retro.total, "720.0000");
 
+      // A second proposal while that run is still open (a double-click, a
+      // second operator) must not mint a second run holding the same cells.
+      await assert.rejects(
+        createRetroPayRun({
+          orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+        }),
+        /already settles Robin Field's period\(s\) and has not been committed/,
+      );
+
       const review = await retroRunReview(org.orgId, retro.documentId);
       assert.equal(review.total, "720.0000");
       assert.equal(review.settlements.length, 3);
@@ -290,6 +300,45 @@ test(
         stubLines.rows.every((l) => /retro 2026-/.test(l.description)),
         "each line names the period it makes good",
       );
+
+      // The retro control set is ENFORCED at commit, not merely displayed: a
+      // competing open retro run holding one of this run's cells (the state a
+      // creator that bypassed the fence above would leave) blocks the commit
+      // and shows in the pre-flight until it is resolved.
+      const competitor = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-01-05", periodEnd: "2026-01-18", payDate: "2026-08-21",
+        runType: "retro", employeePartyIds: [employeeId],
+      });
+      await db.execute(sql`
+        insert into payroll_retro_settlements
+          (org_id, retro_pay_run_document_id, employee_party_id, source_pay_run_document_id,
+           source_period_start, source_period_end, source_pay_date, source_tax_year,
+           original_earnings, recomputed_earnings, previously_settled, delta, reasons,
+           created_by, updated_by)
+        select org_id, ${competitor.documentId}, employee_party_id, source_pay_run_document_id,
+               source_period_start, source_period_end, source_pay_date, source_tax_year,
+               original_earnings, recomputed_earnings, previously_settled, delta, reasons,
+               created_by, updated_by
+          from payroll_retro_settlements
+         where org_id = ${org.orgId} and retro_pay_run_document_id = ${retro.documentId}
+           and source_pay_run_document_id = ${sourceRuns[0]}`);
+      const preflight = await payRunReadiness(org.orgId, retro.documentId);
+      assert.ok(
+        preflight.items.some((item) => item.code === "retro.doubleSettled" && item.severity === "blocker"),
+        "the pre-flight shows the competing open run",
+      );
+      await assert.rejects(
+        commitPayRun({ orgId: org.orgId, documentId: retro.documentId, actorId }),
+        /retro run cannot be committed \(retro\.doubleSettled\)/,
+      );
+      await db.execute(sql`
+        update pay_runs set run_status = 'voided', updated_at = now()
+         where org_id = ${org.orgId} and document_id = ${competitor.documentId}`);
+      assert.deepEqual(await retroRunFindings(org.orgId, retro.documentId), []);
+      // The voided competitor changed another run for these employees after
+      // this run was calculated; recalculate through the ordinary gate.
+      await calculatePayRun({ orgId: org.orgId, documentId: retro.documentId, actorId });
 
       await commitPayRun({ orgId: org.orgId, documentId: retro.documentId, actorId });
       const legs = (await db.execute<{ amount: string; project_id: string | null }>(sql`
