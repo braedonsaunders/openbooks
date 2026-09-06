@@ -239,6 +239,13 @@ export async function correctPostedDocument(
   }
   assertApplicationPermission(context, createPermission(header.kind));
   assertApplicationPermission(context, postPermission(header.kind));
+  // The replacement may be re-homed by the correction body. A restricted
+  // actor may only re-home it into an entity it can see: an omitted id keeps
+  // the source's (already gated) entity, an explicit id is gated here like
+  // every records/payments write, and an explicit null is an unresolved
+  // entity that fails closed for a restricted scope.
+  const rehomedSubsidiaryId = input.correction.subsidiaryId;
+  assertSubsidiaryAccess(context, rehomedSubsidiaryId === undefined ? header.subsidiaryId : rehomedSubsidiaryId);
   const outcome = await executeIdempotent({
     context,
     operation: "documents.correct",

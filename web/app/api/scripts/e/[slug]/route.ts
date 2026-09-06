@@ -11,8 +11,11 @@ export const runtime = 'nodejs'
  * ctx.request = { method, query, body }; its main() return is the response
  * body. Callers authenticate as themselves and need scripts.execute; the
  * script sees the calling user in ctx.user. The engine runtime additionally
- * gates ob.journal.create behind that user's gl.post, so invoking a restlet is
- * never a way to write ledger entries past role permissions.
+ * gates ob.journal.create behind that user's gl.post AND subsidiary scope, and
+ * ob.query / ob.record.load / ob.search behind the same three gates as
+ * /api/query (queryConsole feature, sql.execute, unrestricted subsidiary
+ * scope), so invoking a restlet is never a way to write ledger entries or read
+ * the governed catalog past role permissions.
  */
 async function handle(req: Request, slug: string) {
   const gate = await guardFeaturePermission('scripts.execute', 'scripts')

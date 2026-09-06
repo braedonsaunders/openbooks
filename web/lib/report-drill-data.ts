@@ -115,9 +115,15 @@ function budgetSubsidiaryFilter(authz: Authz): ReturnType<typeof sql> {
   )`
 }
 
-/** Merge a report-selected subsidiary with the caller's legal-entity scope. */
-function ledgerDims(
-  target: Extract<ReportDrillTarget, { kind: 'ledger' }>,
+/**
+ * Merge a report-selected subsidiary with the caller's legal-entity scope.
+ * The URL is untrusted: a requested node is intersected with the caller's
+ * allowlist, and a restricted caller who requested nothing is confined to
+ * that allowlist (an empty allowlist reads no rows). Shared by every drill
+ * kind that reads subsidiary-tagged rows.
+ */
+function scopedDims(
+  target: { dims?: StatementDimFilter; subsidiaryId?: string },
   authz: Authz,
 ): DimFilter {
   const rawDims = target.dims as StatementDimFilter & { subsidiaryIds?: string[] } | undefined
@@ -142,7 +148,7 @@ function paginate<T>(rows: T[], page: number): T[] {
 
 async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>, authz: Authz, page: number): Promise<ReportDrillResponse> {
   const { money } = await getMoneyFormatter(authz.user.orgId)
-  const dims = ledgerDims(target, authz)
+  const dims = scopedDims(target, authz)
   const [tc, tr, result] = await Promise.all([
     getTranslations('common'),
     getTranslations('reports'),
@@ -206,7 +212,7 @@ async function agingData(target: Extract<ReportDrillTarget, { kind: 'aging' }>, 
   const [tc, tr, result] = await Promise.all([
     getTranslations('common'),
     getTranslations('reports'),
-    agingDetail(target.side, target.asOf, target.dims, authz.user.orgId),
+    agingDetail(target.side, target.asOf, scopedDims(target, authz), authz.user.orgId),
   ])
   const rows = result.rows.filter((row) => (!target.partyId || row.partyId === target.partyId) && (!target.bucket || row.bucket === target.bucket))
   return {

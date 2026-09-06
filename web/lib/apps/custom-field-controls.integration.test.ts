@@ -102,3 +102,41 @@ test('app field installation rechecks a feature after a competing disable commit
   assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from custom_field_defs where org_id=${org.orgId}`)).rows[0]!.n,0);
  }finally{await holder.query('rollback');await holder.end();await pending?.catch(()=>{});await dropScratchOrg(org.orgId)}
 });
+
+// X5: uninstall preserves provisioned objects but deleted the ownership map with
+// the apps row, so every reinstall of the same app 409'd on its own objects.
+// Provenance is now recovered from the uninstall audit evidence, restricted to
+// objects that existed at uninstall time, and the adoption is itself audited.
+test('app reinstall after uninstall re-adopts the objects it provisioned', {skip:!process.env.OPENBOOKS_DB_URL}, async()=>{
+ const org=await createScratchOrg();
+ const {deleteApp}=await import('./store');
+ try{
+  const actor=(await seedFlowActors(org.orgId)).adminId;
+  const recordType={type:'record_type',key:'review-asset',name:'Review asset',pluralName:'Review assets',fields:[{id:'main',fields:[{id:'name',type:'text',label:'Name'}]}]};
+  const withType=(version:string)=>{const b=bundle({fieldType:'text',config:{}},version);b.files.push({path:'objects/type.json',content:JSON.stringify(recordType)});return b;};
+  const install=(version:string)=>withOrgContext(org.orgId,()=>installApp(org.orgId,actor,withType(version)));
+  const objects=async()=>(await db.execute<{types:number;fields:number;apps:number}>(sql`select (select count(*)::int from custom_record_types where org_id=${org.orgId} and key='review-asset') as types,(select count(*)::int from custom_field_defs where org_id=${org.orgId} and key='review_field') as fields,(select count(*)::int from apps where org_id=${org.orgId}) as apps`)).rows[0]!;
+  await install('1.0.0');
+  assert.deepEqual(await objects(),{types:1,fields:1,apps:1});
+  await withOrgContext(org.orgId,()=>deleteApp(org.orgId,actor,'field-controls-review'));
+  assert.deepEqual(await objects(),{types:1,fields:1,apps:0},'uninstall preserves provisioned objects');
+
+  await install('1.0.1');
+  assert.deepEqual(await objects(),{types:1,fields:1,apps:1},'reinstall upgrades in place, no duplicates');
+  const app=(await db.execute<{provisioned:{recordTypes:string[];customFields:string[]}}>(sql`select provisioned from apps where org_id=${org.orgId} and key='field-controls-review'`)).rows[0]!;
+  assert.deepEqual(app.provisioned,{recordTypes:['review-asset'],customFields:['parties:review_field']});
+  const adoption=(await db.execute<{changes:{event:string;appKey:string;evidenceAuditId:string;after:{provisioned:{recordTypes:string[];customFields:string[]}}}}>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='apps' and changes->>'event'='app_provenance_adopted'`)).rows;
+  assert.equal(adoption.length,1);
+  assert.equal(adoption[0]!.changes.appKey,'field-controls-review');
+  assert.deepEqual(adoption[0]!.changes.after.provisioned,{recordTypes:['review-asset'],customFields:['parties:review_field']});
+  const evidence=(await db.execute(sql`select 1 from audit_log where id=${adoption[0]!.changes.evidenceAuditId} and org_id=${org.orgId} and changes->>'event'='app_uninstall'`)).rows;
+  assert.equal(evidence.length,1,'adoption cites the uninstall evidence it relied on');
+
+  // A same-key object authored AFTER the uninstall is the user's, not the app's.
+  await withOrgContext(org.orgId,()=>deleteApp(org.orgId,actor,'field-controls-review'));
+  await db.execute(sql`delete from custom_field_defs where org_id=${org.orgId} and key='review_field'`);
+  await db.execute(sql`insert into custom_field_defs (org_id,target_table,key,label,field_type,config,created_by,updated_by) values (${org.orgId},'parties','review_field','User field','text','{}'::jsonb,${actor},${actor})`);
+  await assert.rejects(()=>install('1.0.2'),error=>(error as {status?:number}).status===409);
+  assert.equal((await objects()).apps,0,'the refused install rolled back');
+ }finally{await dropScratchOrg(org.orgId)}
+});

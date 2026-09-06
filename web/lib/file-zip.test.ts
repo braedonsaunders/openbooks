@@ -136,3 +136,43 @@ test('buildZip skips unreadable files without charging them to the source limit'
   assert.equal(result.included, 1)
   assert.deepEqual(state.added, [{ path: 'readable.bin', length: MAX_ZIP_BYTES }])
 })
+
+test('buildZip normalises every archive path to a safe relative POSIX path', async () => {
+  reset()
+  const cases: Array<[string, string]> = [
+    ['../../etc/passwd', 'etc/passwd'],
+    ['..\\..\\Windows\\win.ini', 'Windows/win.ini'],
+    ['C:\\Users\\victim\\note.txt', 'Users/victim/note.txt'],
+    ['/absolute/leading.pdf', 'absolute/leading.pdf'],
+    ['Folder/./sub/../x.pdf', 'Folder/sub/x.pdf'],
+    ['Folder/ctl\u0000char\u001f.txt', 'Folder/ctlchar.txt'],
+    ['  ', 'file'],
+  ]
+  cases.forEach(([raw], index) => {
+    state.blobs.set(`f${index}`, {
+      filename: raw,
+      contentType: 'application/octet-stream',
+      bytes: sizedBytes(1),
+      versionId: `v${index}`,
+    })
+  })
+
+  const result = await buildZip('org-1', viewer, cases.map(([raw], index) => ({ id: `f${index}`, path: raw })))
+
+  assert.equal(result.included, cases.length)
+  assert.deepEqual(state.added.map((entry) => entry.path), cases.map(([, expected]) => expected))
+})
+
+test('buildZip de-duplicates paths after normalisation, not before', async () => {
+  reset()
+  for (const id of ['a', 'b']) {
+    state.blobs.set(id, { filename: 'x', contentType: 'text/plain', bytes: sizedBytes(1), versionId: id })
+  }
+
+  await buildZip('org-1', viewer, [
+    { id: 'a', path: 'Folder/report.pdf' },
+    { id: 'b', path: '\\Folder\\.\\report.pdf' },
+  ])
+
+  assert.deepEqual(state.added.map((entry) => entry.path), ['Folder/report.pdf', 'Folder/report (2).pdf'])
+})

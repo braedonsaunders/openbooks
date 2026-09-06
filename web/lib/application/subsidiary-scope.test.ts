@@ -108,7 +108,8 @@ function callCount(haystack: string, needle: string): number {
 
 test("all application financial boundaries use the centralized subsidiary guard", () => {
   const boundaries: ReadonlyArray<{ file: string; calls: number }> = [
-    { file: "documents.ts", calls: 1 },
+    // header gate + correction re-home gate (X4)
+    { file: "documents.ts", calls: 2 },
     { file: "payments.ts", calls: 2 },
     { file: "records.ts", calls: 3 },
     { file: "close.ts", calls: 2 },

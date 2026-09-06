@@ -728,6 +728,25 @@ export function resolveEffectivePermissions(args: {
   return permissions;
 }
 
+/**
+ * Privilege ceiling for delegated administration. `admin.users.manage` and
+ * `admin.roles.manage` are ordinary catalogue keys, so an administrator who
+ * holds only one of them must not be able to mint or hand out permissions
+ * they do not themselves hold. Returns every `requested` key that the
+ * `ceiling` set does not cover (wildcard-aware, in request order, deduped);
+ * empty means the request sits inside the ceiling. A `*` ceiling covers all.
+ */
+export function permissionsOutsideCeiling(
+  ceiling: ReadonlySet<string>,
+  requested: Iterable<string>,
+): string[] {
+  const missing: string[] = [];
+  for (const key of new Set(requested)) {
+    if (!permissionSetCovers(ceiling, key)) missing.push(key);
+  }
+  return missing;
+}
+
 const CATALOGUE_SET: ReadonlySet<string> = new Set(PERMISSION_CATALOGUE);
 
 /** True when `key` is a known catalogue permission (used to validate role edits). */

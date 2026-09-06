@@ -19,10 +19,37 @@ export type MaskTransform =
   | "null_out"
   | "reseal_secret";
 
+/** The typed "no value" a NOT NULL column receives when its policy removes the
+ * value: masking must never fail a clone on a NOT NULL constraint, and it must
+ * never leave the production value behind. Supported deliberately narrowly —
+ * an unsupported type is a policy error, not something to guess around. */
+function emptyValueSql(col: string, column: { udtName: string }): string {
+  switch (column.udtName) {
+    case "jsonb":
+    case "json":
+      return `'{}'::${column.udtName}`;
+    case "text":
+    case "varchar":
+    case "bpchar":
+      return `''`;
+    default:
+      throw new Error(
+        `masking policy for NOT NULL column "${col}" (${column.udtName}) cannot remove the value: unsupported type`,
+      );
+  }
+}
+
 /** SQL expression that rewrites `col` under `transform`. `idExpr` is the row's
- * stable seed for deterministic output (usually the `id` column). */
-export function maskExpr(col: string, transform: MaskTransform, idExpr = "id"): string {
+ * stable seed for deterministic output (usually the `id` column). `column`
+ * (type + nullability) lets value-removing transforms honour NOT NULL. */
+export function maskExpr(
+  col: string,
+  transform: MaskTransform,
+  idExpr = "id",
+  column?: { udtName: string; isNullable: boolean },
+): string {
   const q = `"${col}"`;
+  const removed = column && !column.isNullable ? emptyValueSql(col, column) : "null";
   switch (transform) {
     case "faker_name":
       return `('Contact ' || upper(substr(md5(${idExpr}::text), 1, 6)))`;
@@ -38,10 +65,10 @@ export function maskExpr(col: string, transform: MaskTransform, idExpr = "id"): 
       // Deterministic ±50% jitter, preserves sign and numeric type.
       return `(case when ${q} is null then null else round(${q} * (0.5 + (abs(hashtext(${idExpr}::text)) % 1000) / 1000.0), 4) end)`;
     case "null_out":
-      return `null`;
+      return removed;
     case "reseal_secret":
       // Can't re-encrypt in SQL; null = "unconfigured", the safe sandbox state.
-      return `null`;
+      return removed;
   }
 }
 
@@ -71,23 +98,41 @@ export async function loadMaskingPolicies(
   return map;
 }
 
-/** High-confidence default policies seeded for an org that has none. Columns
- * that don't exist in the schema are skipped by the clone generator, so a bad
- * guess is harmless. */
+/** High-confidence default policies every org receives. Columns that don't
+ * exist in the schema are skipped by the clone generator, so a bad guess is
+ * harmless. Beyond contact PII this covers the identifiers a masked sandbox
+ * must never carry: bank routing + last-four, taxpayer identification (TIN
+ * ciphertext, last four, type) on vendor and information-return rows, and the
+ * party / legal-entity tax registrations. The org row's own tax ids are not
+ * cloned at all; createSandbox/refreshSandbox blank them for masked sandboxes.
+ *
+ * `users` rows are deliberately NOT masked: they are the sandbox's login
+ * identities (the customization layer), not business PII payload, and a
+ * sandbox that cannot be signed into is useless. */
 const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "party_bank_accounts", columnName: "account_number_encrypted", transform: "reseal_secret" },
+  { tableName: "party_bank_accounts", columnName: "account_last_four", transform: "null_out" },
+  { tableName: "party_bank_accounts", columnName: "routing", transform: "null_out" },
   { tableName: "parties", columnName: "email", transform: "faker_email" },
   { tableName: "parties", columnName: "display_name", transform: "faker_name" },
   { tableName: "parties", columnName: "legal_name", transform: "faker_name" },
   { tableName: "parties", columnName: "phone", transform: "faker_phone" },
+  { tableName: "parties", columnName: "tax_ids", transform: "null_out" },
+  { tableName: "vendor_roles", columnName: "tin_encrypted", transform: "reseal_secret" },
+  { tableName: "vendor_roles", columnName: "tin_last4", transform: "null_out" },
+  { tableName: "vendor_roles", columnName: "tin_type", transform: "null_out" },
+  { tableName: "information_return_recipients", columnName: "tin_last4", transform: "null_out" },
+  { tableName: "information_return_recipients", columnName: "tin_type", transform: "null_out" },
+  { tableName: "subsidiaries", columnName: "tax_ids", transform: "null_out" },
   { tableName: "addresses", columnName: "line1", transform: "redact" },
   { tableName: "addresses", columnName: "line2", transform: "redact" },
 ];
 
+/** Make sure every default policy exists for the org. Idempotent: a policy the
+ * org already holds (active or deliberately deactivated) is left untouched,
+ * so a newly added default reaches existing tenants without overriding their
+ * configuration. */
 export async function seedDefaultMaskingPolicies(prodOrgId: string): Promise<void> {
-  const existing = (await db.execute(sql`
-    select 1 from masking_policies where org_id = ${prodOrgId} limit 1`));
-  if (existing.rows.length) return;
   for (const p of DEFAULT_POLICIES) {
     await db
       .insert(schema.maskingPolicies)

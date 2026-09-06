@@ -5,6 +5,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { guardPermission } from "../../../../lib/authz";
 import { isDocKindEnabled } from "../../../../lib/documents";
+import { isUuid } from "../../../../lib/list-params";
 import { prettifyTemplateHtml } from "../../../../lib/pdf-templates/prettify";
 import { getPdfTemplate } from "../../../../lib/pdf-templates/store";
 
@@ -17,6 +18,9 @@ export async function GET(_req: Request, { params }: Params) {
   const gate = await guardPermission("admin.customization.manage");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
+  // A malformed id is indistinguishable from a missing template and never
+  // reaches the uuid column.
+  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
   const row = await getPdfTemplate(gate.user.orgId, id);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
   if (!(await isDocKindEnabled(gate.user.orgId, row.recordType))) {
@@ -31,6 +35,7 @@ export async function PATCH(req: Request, { params }: Params) {
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
   const existing = await getPdfTemplate(user.orgId, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
   if (!(await isDocKindEnabled(user.orgId, existing.recordType))) {
@@ -114,6 +119,7 @@ export async function DELETE(_req: Request, { params }: Params) {
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
   const existing = await getPdfTemplate(user.orgId, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
   if (!(await isDocKindEnabled(user.orgId, existing.recordType))) {

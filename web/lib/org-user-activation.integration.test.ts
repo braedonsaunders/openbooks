@@ -29,6 +29,9 @@ for (const kind of ["production", "preview", "sandbox"] as const) {
         try {
           const homeId = await createScratchUser(homeOrg.orgId, "Home member", "member");
           await db.execute(sql`update users set is_super_admin=${superAdmin} where id=${homeId}`);
+          // Sandbox entry additionally requires admin.sandboxes.manage in the production org
+          // (org-access-sandbox-permission.integration.test.ts); this suite is about activation.
+          if (kind === "sandbox") await db.execute(sql`update app_roles set permissions='["admin.sandboxes.manage"]'::jsonb where org_id=${homeOrg.orgId} and key='member'`);
           await db.execute(sql`update orgs set env_kind='production' where id=${homeOrg.orgId}`);
           await db.execute(sql`update orgs set env_kind=${kind},sandbox_of=${kind === "sandbox" ? homeOrg.orgId : null} where id=${target.orgId}`);
           const seed = (await db.execute<{ seed: string }>(sql`select sandbox_seed::text as seed from orgs where id=${target.orgId}`)).rows[0]!.seed;

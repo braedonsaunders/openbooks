@@ -46,7 +46,7 @@ import {
   mergeReportFilters,
   reportPeriodField,
 } from './custom-reports'
-import type { ReportQuery } from './report-filters'
+import { isReportUuidParam, type ReportQuery } from './report-filters'
 import { isFeatureEnabled } from './features'
 import { requireReportAuthz, canAccessReportDefinition, type ReportAuthorization } from './report-execution-context'
 import { resolveSubsidiaryView } from './consolidation'
@@ -242,7 +242,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       return {
         render: 'data',
         data: generalLedgerExportData(
-          await generalLedger(period.from, period.to, { accountId: p.get('account') ?? undefined, dims, orgId }),
+          await generalLedger(period.from, period.to, { accountId: isReportUuidParam(p.get('account')) ? p.get('account')! : undefined, dims, orgId }),
           t('generalLedger.title'),
           t,
         ),
@@ -319,7 +319,7 @@ export async function resolveDefinitionToExportData(
   id: string,
   p: URLSearchParams,
   ctx: ResolveReportCtx,
-  options: { extraFilters?: ReportRuleGroup | null; definition?: ReportAuthorization['definition'] } = {},
+  options: { extraFilters?: ReportRuleGroup | null } = {},
 ): Promise<ExportData> {
   const r = (await db.execute<{
       kind: string
@@ -334,7 +334,12 @@ export async function resolveDefinitionToExportData(
       from report_definitions
      where id = ${id} and org_id = ${orgId}
   `))
-  const row = options.definition ?? r.rows[0]
+  // Always the definition as SAVED NOW — never a copy captured at scheduling
+  // time — so a scheduled delivery reflects the report's current columns and
+  // filters, exactly like an on-demand run. The execution principal must be
+  // able to run that current definition (a schedule's authorization snapshot
+  // only pins who runs it and their subsidiary scope).
+  const row = r.rows[0]
   if (!row) throw new Error('report not found')
 
   const authz = await requireReportAuthz(orgId)

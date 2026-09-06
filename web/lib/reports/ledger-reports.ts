@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
+import { bucketSubsidiaryFilter, glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
 import { ZERO } from "./decimals";
@@ -70,7 +70,7 @@ export async function generalLedger(
            where g.org_id = ${orgId}
              and g.book_id = ${statementBookExpr(orgId)}
              and g.month < date_trunc('month', ${from}::date)::date
-             ${opts.dims?.subsidiaryIds?.length ? sql`and g.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(',')}}`}::uuid[])` : sql``}
+             ${bucketSubsidiaryFilter(opts.dims?.subsidiaryIds, sql`g`)}
              ${opts.accountId ? sql`and g.account_id = ${opts.accountId}` : sql``}
           union all
           select l.account_id, l.amount

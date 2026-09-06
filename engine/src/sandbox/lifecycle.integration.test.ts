@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
-import { createScratchOrg, dropScratchOrg } from "../test-fixtures.ts";
-import { createSandbox, deleteSandbox, refreshSandbox } from "./lifecycle.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../test-fixtures.ts";
+import { createSandbox, deleteSandbox, refreshSandbox, resetSandbox } from "./lifecycle.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -205,4 +205,134 @@ test("a failed refresh rolls back the wipe instead of leaving a partial sandbox"
     }
     await dropScratchOrg(org.orgId);
   }
+});
+
+async function withSandboxCleanup(
+  org: { orgId: string },
+  sandboxName: string,
+  work: (handle: { sandboxId: string | null }) => Promise<void>,
+): Promise<void> {
+  const handle: { sandboxId: string | null } = { sandboxId: null };
+  try {
+    await work(handle);
+  } finally {
+    // Cleanup failures are surfaced, not swallowed: a sandbox that cannot be
+    // deleted would also block the production org teardown behind it.
+    const rows = (await db.execute<{ id: string }>(sql`
+      select id from sandboxes where production_org_id = ${org.orgId} and name = ${sandboxName}`)).rows;
+    for (const row of rows) await deleteSandbox(row.id);
+    await dropScratchOrg(org.orgId);
+  }
+}
+
+test("a sandbox never holds production API keys or SFTP logins (global credential indexes)", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const sandboxName = `Credential exclusion ${randomUUID()}`;
+  await withSandboxCleanup(org, sandboxName, async (handle) => {
+    const ownerId = await createScratchUser(org.orgId, "Integrator", "integrator");
+    await db.execute(sql`
+      insert into api_keys (org_id, user_id, name, key_prefix, key_hash, key_preview, scopes)
+      values (${org.orgId}, ${ownerId}, 'Prod sync', 'ob_live_abc', ${randomUUID().replaceAll("-", "")}, 'abcd', '["gl.read"]'::jsonb)`);
+    await db.execute(sql`
+      insert into sftp_servers (org_id, name, username, password_encrypted, root_prefix)
+      values (${org.orgId}, 'Bank drop', ${`u${randomUUID().replaceAll("-", "")}`}, 'sealed', ${`sftp/${org.orgId}`})`);
+
+    const created = await createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "full", masked: false });
+    handle.sandboxId = created.sandboxId;
+
+    const state = (await db.execute<{ status: string; api_keys: number; sftp_servers: number; schedules: number }>(sql`
+      select (select status from sandboxes where id = ${created.sandboxId}) as status,
+             (select count(*)::int from api_keys where org_id = ${created.sandboxOrgId}) as api_keys,
+             (select count(*)::int from sftp_servers where org_id = ${created.sandboxOrgId}) as sftp_servers,
+             (select count(*)::int from sftp_import_schedules where org_id = ${created.sandboxOrgId}) as schedules`)).rows[0]!;
+    assert.deepEqual(state, { status: "ready", api_keys: 0, sftp_servers: 0, schedules: 0 });
+
+    await refreshSandbox(created.sandboxId);
+    const refreshed = (await db.execute<{ status: string; api_keys: number; sftp_servers: number }>(sql`
+      select (select status from sandboxes where id = ${created.sandboxId}) as status,
+             (select count(*)::int from api_keys where org_id = ${created.sandboxOrgId}) as api_keys,
+             (select count(*)::int from sftp_servers where org_id = ${created.sandboxOrgId}) as sftp_servers`)).rows[0]!;
+    assert.deepEqual(refreshed, { status: "ready", api_keys: 0, sftp_servers: 0 });
+  });
+});
+
+test("refresh and reset leave a sandbox as credential-free and inert as create does", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const sandboxName = `Neuter on refresh ${randomUUID()}`;
+  await withSandboxCleanup(org, sandboxName, async (handle) => {
+    await db.execute(sql`
+      insert into psp_provider_configs (org_id, provider, display_name, is_enabled, secrets, publishable_key)
+      values (${org.orgId}, 'stripe', 'Stripe', true, 'sealed-secret', 'pk_live_x')`);
+    await db.execute(sql`
+      insert into bank_feed_connections (org_id, account_id, name, provider, status, credentials, is_active, sync_cadence, next_sync_at)
+      values (${org.orgId}, ${org.accounts.bank}, 'Main feed', 'plaid', 'connected', 'sealed-credentials', true, 'daily', now())`);
+    await db.execute(sql`
+      update orgs set settings = coalesce(settings, '{}'::jsonb) || '{"email":{"provider":"smtp"}}'::jsonb where id = ${org.orgId}`);
+
+    const created = await createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "full", masked: false });
+    handle.sandboxId = created.sandboxId;
+
+    const inert = async (): Promise<Record<string, unknown>> =>
+      (await db.execute(sql`
+        select (select count(*)::int from psp_provider_configs where org_id = ${created.sandboxOrgId}
+                 and (is_enabled or secrets is not null or publishable_key is not null)) as live_psp,
+               (select count(*)::int from bank_feed_connections where org_id = ${created.sandboxOrgId}
+                 and (is_active or credentials is not null or status <> 'disconnected' or next_sync_at is not null)) as live_feeds,
+               (select settings ? 'email' from orgs where id = ${created.sandboxOrgId}) as email_configured,
+               (select status from sandboxes where id = ${created.sandboxId}) as status`)).rows[0] as Record<string, unknown>;
+
+    assert.deepEqual(await inert(), { live_psp: 0, live_feeds: 0, email_configured: false, status: "ready" });
+
+    await refreshSandbox(created.sandboxId, { keepCustomizations: true });
+    assert.deepEqual(await inert(), { live_psp: 0, live_feeds: 0, email_configured: false, status: "ready" }, "refresh must not rehydrate credentials");
+
+    await resetSandbox(created.sandboxId);
+    assert.deepEqual(await inert(), { live_psp: 0, live_feeds: 0, email_configured: false, status: "ready" }, "reset must not rehydrate credentials");
+  });
+});
+
+test("a masked sandbox carries no bank routing, taxpayer ids or org tax ids", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const sandboxName = `Masking coverage ${randomUUID()}`;
+  await withSandboxCleanup(org, sandboxName, async (handle) => {
+    const partyId = randomUUID();
+    const bankId = randomUUID();
+    await db.execute(sql`update orgs set tax_ids = '{"CA_BN":"123456789RT0001"}'::jsonb where id = ${org.orgId}`);
+    await db.execute(sql`update subsidiaries set tax_ids = '{"CA_BN":"123456789RT0001"}'::jsonb where id = ${org.subsidiaryId}`);
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, tax_ids)
+      values (${partyId}, ${org.orgId}, 'vendor', 'Masked Vendor', '{"US_EIN":"12-3456789"}'::jsonb)`);
+    await db.execute(sql`
+      insert into vendor_roles (org_id, party_id, tin_encrypted, tin_last4, tin_type)
+      values (${org.orgId}, ${partyId}, 'sealed-tin', '6789', 'ein')`);
+    await db.execute(sql`
+      insert into party_bank_accounts (id, org_id, party_id, bank_name, routing, account_number_encrypted, account_last_four)
+      values (${bankId}, ${org.orgId}, ${partyId}, 'Bank', '{"institution":"001","transit":"12345"}'::jsonb, 'sealed-account', '4321')`);
+
+    const created = await createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "masked", masked: true });
+    handle.sandboxId = created.sandboxId;
+
+    const masked = async (): Promise<Record<string, unknown>> =>
+      (await db.execute(sql`
+        select (select tax_ids from orgs where id = ${created.sandboxOrgId}) as org_tax_ids,
+               (select count(*)::int from parties where org_id = ${created.sandboxOrgId}
+                 and coalesce(tax_ids, '{}'::jsonb) <> '{}'::jsonb) as identified_parties,
+               (select count(*)::int from vendor_roles where org_id = ${created.sandboxOrgId}
+                 and (tin_encrypted is not null or tin_last4 is not null or tin_type is not null)) as identified_vendors,
+               (select count(*)::int from subsidiaries where org_id = ${created.sandboxOrgId}
+                 and tax_ids <> '{}'::jsonb) as identified_subsidiaries,
+               (select count(*)::int from party_bank_accounts where org_id = ${created.sandboxOrgId}
+                 and (routing <> '{}'::jsonb or account_number_encrypted is not null or account_last_four is not null)) as routable_accounts,
+               (select count(*)::int from party_bank_accounts where org_id = ${created.sandboxOrgId}) as bank_accounts,
+               (select status from sandboxes where id = ${created.sandboxId}) as status`)).rows[0] as Record<string, unknown>;
+
+    const expected = {
+      org_tax_ids: {}, identified_parties: 0, identified_vendors: 0, identified_subsidiaries: 0,
+      routable_accounts: 0, bank_accounts: 1, status: "ready",
+    };
+    assert.deepEqual(await masked(), expected);
+
+    await refreshSandbox(created.sandboxId);
+    assert.deepEqual(await masked(), expected, "refresh keeps the masked sandbox identifier-free");
+  });
 });

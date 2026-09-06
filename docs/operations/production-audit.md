@@ -2541,3 +2541,94 @@ price variance account with a deterministic entry so replays cannot book it
 twice. Vendor-credit returns accept goods-receipt movements as their source.
 See `docs/operations/purchase-receipts.md`. A dedicated receipt reversal
 remains open, as it does for shipments.
+
+## Second hunt round: identity, extensions, files, reports — 2026-09-06
+
+The four domains the first round left untraced were hunted the same way and
+produced 25 reproducible defects, all corrected with regressions.
+
+### Identity and sessions
+
+A user holding only the user-management or role-management permission could
+assign themselves the built-in administrator role, or rewrite their own role
+to the full catalogue, in one request. Delegated administration now enforces a
+ceiling: a role may only be granted, created or widened within the actor's
+own effective permissions, never to oneself, with super administrators exempt.
+Deleting a role stripped every assignment and left active users with valid
+sessions that could reach nothing; the delete now refuses when active users
+would be left without a role unless a replacement role within the ceiling is
+supplied, and every removed or replacement assignment is audited. Entering a
+sandbox environment was gated only in the shell; the resolver every request
+uses now requires the sandbox permission for the production identity, so a
+stale environment cookie cannot keep a member inside after the permission is
+removed. The internal service endpoints compared their shared token with
+plain equality and passed the tenant id to the row-security scope unvalidated;
+a constant-time helper and a UUID gate now front both.
+
+### Extensions, scripts and application tools
+
+Journal writes from installed apps and user scripts always posted into the
+organization's root entity regardless of the caller's scope; they now resolve
+the entity with the same decision table the journal draft route applies and
+refuse anything outside scope. Script query helpers bypassed the query
+console's three gates (feature, permission, unrestricted scope) and are now
+held to them for attributed callers. The assistant's open-items, financial
+trends and budget tools ran without the caller's entity allowlist; a
+correction tool let a restricted actor re-home the replacement document into
+an unseen entity; uninstalling an app destroyed the provenance a reinstall
+needs, so any reinstall was refused forever. All corrected; reinstalls now
+re-adopt provisioned objects from the uninstall's audit evidence.
+
+### Files, PDFs and sandboxes
+
+Detaching an attachment skipped the visibility gate the listing applies and
+was the step around the retention guard for evidence on posted documents; the
+PDF template preview rendered a real record, including pay stubs, to anyone
+with the customization permission; header and footer merges interpolated
+record values unescaped; zip entry names were built from raw file names; and
+three PDF routes reached the database with unvalidated ids. Sandbox refreshes
+re-copied production credentials that only creation had neutered, the clone
+copied API keys and SFTP servers into globally unique indexes (which made
+sandbox creation fail for any tenant that had ever created an API key), and
+masked sandboxes still carried bank routing, taxpayer identifiers and the
+organization's tax registrations. All corrected; credential tables are now
+excluded from clones outright, and refreshes neuter and re-mask.
+
+### Reports and statements
+
+Six report pages ignored the caller's entity restriction while their exports
+honoured it; the aging drill-through was unscoped; the indirect cash flow fell
+through to organization-wide net income and cash for an empty scope; the
+direct cash flow statement fused parallel accounting books; scheduled report
+deliveries rendered a frozen copy of the definition so edits never reached
+recipients; financial trends mixed period identity with posting date and were
+unscoped by book and entity; dimension filters reached the database
+unvalidated; and the prior-period comparison was an equal-day window rather
+than the prior accounting period. All corrected. Scheduled deliveries now
+render the current definition and re-check the pinned principal's access.
+
+### Deferred, by name
+
+A dedicated goods-receipt reversal; a replacement-role picker in the role
+delete dialog; book selection on statement PDF exports (the page has a book
+selector, the export always renders the primary book); resolving pay-stub
+subsidiary scope through the pay run so restricted callers can print their
+own entity's stubs; the first round's open items.
+
+### Verification for the second round
+
+Every workspace typechecks and the locked production build passes. The unit
+suite passed 3,209 tests with one failure that was a doctrine conflict, not a
+product defect: the reports correction had moved the financial-trends query
+onto posting-date windows, which the period-identity contract forbids; the
+query was restored to exact ledger period identity (closing cash as a balance
+across every ledger period ending on or before the row's period) with the new
+book and entity scoping kept, and the contract, trends and assistant-scope
+tests pass. The integration suite ran on the isolated database and passed
+2,383 of 2,387 with zero failures and the same four environment-conditional
+skips. Fixture receipt: 1,980 balanced leases, releases and resets, four
+bootstrap/teardown/verification cycles, no leaks. Lint reports zero errors and
+722 warnings at the ceiling; explicit `any` holds at 389. The goods-receipt
+regression drives receipt, replay, over-receipt refusal, receipt-governed
+billing, price variance, replay of the posting-effect drain and the
+no-clearing-account refusal end to end against the real posting engine.

@@ -5,6 +5,7 @@ import { PageHeader, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { agingByParty, agingDetail, dimensionOptions, type AgingSide } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
+import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { ReportFilterBar } from '../ReportFilterBar'
@@ -49,7 +50,11 @@ export default async function Aging({
   const requestedPeriod = sp.period && AS_OF_PERIOD_PRESETS.includes(sp.period) ? sp.period : 'today'
   const period = await resolvePeriod(requestedPeriod, { customFrom: q.from, customTo: q.to })
   const asOf = period.to
-  const dims = q.dims
+  // Legal-entity scope is enforced here, not by the picker: a restricted
+  // reader's view resolves to the subsidiaries they may see (empty = no rows)
+  // and every query below carries it — the same contract as the export path.
+  const subView = await reportSubsidiaryView(q.subsidiaryId, asOf)
+  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
   const [summary, detailResult, opts, org] = await Promise.all([
     agingByParty(side, asOf, dims),
     detail ? agingDetail(side, asOf, dims) : null,
@@ -74,8 +79,9 @@ export default async function Aging({
         <>
           <PageHeader title={title} back={{ href: '/reports', label: tr('hub.title') }} />
           <ReportFilterBar
-            controls={{ period: true, asOf: true, dimensions: true }}
+            controls={{ period: true, asOf: true, dimensions: true, subsidiary: true }}
             dimensions={opts}
+            subsidiaries={subView.picker}
             defaultPeriod="today"
             periodPresets={AS_OF_PERIOD_PRESETS}
             actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom({ ...sp, period: requestedPeriod })} /> : null}<SaveViewButton /><ExportMenu kind="aging" params={sp} /></>}
@@ -153,12 +159,12 @@ export default async function Aging({
                   </TableCell>
                   {BUCKETS.map((b) => (
                     <TableCell key={b} className={cn('text-right tabular-nums', decimalCmp(r[b], '0') < 0 && 'text-red-600 dark:text-red-400')}>
-                      <ReportDrillLink target={{ kind: 'aging', label: `${r.partyName ?? t('noParty')} · ${bucketLabels[b]}`, side, asOf, dims, partyId: r.partyId ?? undefined, bucket: b }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                      <ReportDrillLink target={{ kind: 'aging', subsidiaryId: q.subsidiaryId, label: `${r.partyName ?? t('noParty')} · ${bucketLabels[b]}`, side, asOf, dims, partyId: r.partyId ?? undefined, bucket: b }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
                         {!decimalIsZero(r[b]) ? m(r[b]) : <span className="text-slate-300 dark:text-slate-600">—</span>}
                       </ReportDrillLink>
                     </TableCell>
                   ))}
-                  <TableCell className="text-right font-semibold tabular-nums"><ReportDrillLink target={{ kind: 'aging', label: r.partyName ?? t('noParty'), side, asOf, dims, partyId: r.partyId ?? undefined }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(r.total)}</ReportDrillLink></TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums"><ReportDrillLink target={{ kind: 'aging', subsidiaryId: q.subsidiaryId, label: r.partyName ?? t('noParty'), side, asOf, dims, partyId: r.partyId ?? undefined }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(r.total)}</ReportDrillLink></TableCell>
                 </TableRow>
               ))
             )}
@@ -166,9 +172,9 @@ export default async function Aging({
               <TableRow className={reportTotalRowClass}>
                 <TableCell className="font-bold">{tr('trialBalance.totals')}</TableCell>
                 {BUCKETS.map((b) => (
-                  <TableCell key={b} className="text-right font-bold tabular-nums"><ReportDrillLink target={{ kind: 'aging', label: bucketLabels[b], side, asOf, dims, bucket: b }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(summary.totals[b])}</ReportDrillLink></TableCell>
+                  <TableCell key={b} className="text-right font-bold tabular-nums"><ReportDrillLink target={{ kind: 'aging', subsidiaryId: q.subsidiaryId, label: bucketLabels[b], side, asOf, dims, bucket: b }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(summary.totals[b])}</ReportDrillLink></TableCell>
                 ))}
-                <TableCell className="text-right font-bold tabular-nums"><ReportDrillLink target={{ kind: 'aging', label: tr('trialBalance.totals'), side, asOf, dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(summary.totals.total)}</ReportDrillLink></TableCell>
+                <TableCell className="text-right font-bold tabular-nums"><ReportDrillLink target={{ kind: 'aging', subsidiaryId: q.subsidiaryId, label: tr('trialBalance.totals'), side, asOf, dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(summary.totals.total)}</ReportDrillLink></TableCell>
               </TableRow>
             ) : null}
           </TableBody>

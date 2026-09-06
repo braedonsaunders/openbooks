@@ -9,6 +9,7 @@ import { db, schema } from "./db.ts";
 import { runUserSql } from "./sqlapi.ts";
 import { createScriptJournal } from "./journal-writes.ts";
 import { actorHasPermission } from "./actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "./actor-subsidiaries.ts";
 
 /**
  * User scripting: REAL JavaScript (ES2023), executed in a QuickJS sandbox —
@@ -30,6 +31,15 @@ import { actorHasPermission } from "./actor-permissions.ts";
  *   ob.log(...)              collect log lines (persisted to script_runs)
  *   ob.abort("reason")       veto the operation (before_* triggers only)
  *   ob.query(sql)            run a SELECT through the read-only role -> rows[]
+ *                            (ob.record.load / ob.search are sugar over it).
+ *                            Raw SQL over the governed catalog cannot apply a
+ *                            subsidiary allowlist, so an ATTRIBUTED caller must
+ *                            satisfy exactly what /api/query demands: the
+ *                            queryConsole feature, sql.execute, and an
+ *                            unrestricted subsidiary scope — a restlet is never
+ *                            a way to read past the query console's gates.
+ *                            Actor-less runs (engine triggers, cron) keep the
+ *                            documented system path.
  *   ob.runtime               { org, trigger, user } -- read-only context info
  *   ob.record.load(t, id)    load one row by id (convenience over ob.query)
  *   ob.search(t, filters)    search rows by key=value filters
@@ -141,6 +151,35 @@ export function mergeBeforePostCustomMutation(
   };
 }
 
+/**
+ * The refusal an attributed caller gets from ob.query, or null when the call
+ * may proceed. Mirrors web/app/api/query/route.ts gate-for-gate:
+ * guardFeaturePermission("sql.execute", "queryConsole") and
+ * hasUnrestrictedQueryScope. Resolved live against the tenant (ctx.user's
+ * roles array is display data), and only for a signed-in principal —
+ * system-driven runs have no caller to authorize and remain governed by the
+ * scripts feature alone.
+ */
+export async function scriptQueryRefusal(
+  ctx: Pick<ScriptContext, "org" | "user">,
+): Promise<string | null> {
+  const userId = ctx.user?.id;
+  if (!userId) return null;
+  const feature = (await db.execute<{ enabled: boolean }>(sql`
+    select coalesce((settings->'features'->>'queryConsole')::boolean, false) as enabled
+      from orgs
+     where id = ${ctx.org.id}
+  `)).rows[0];
+  if (!feature?.enabled) return "queryConsole feature is disabled";
+  if (!(await actorHasPermission(db, ctx.org.id, userId, "sql.execute"))) {
+    return "missing permission: sql.execute";
+  }
+  if ((await actorAllowedSubsidiaryIds(db, ctx.org.id, userId)) !== null) {
+    return "raw queries require unrestricted subsidiary access";
+  }
+  return null;
+}
+
 /** Domain-boundary gate for every script execution path. */
 export async function scriptingFeatureEnabled(orgId: string): Promise<boolean> {
   const result = (await db.execute<{ enabled: string | null }>(sql`
@@ -177,8 +216,14 @@ export async function runScript(
       return { error: vm.newError(`__OB_ABORT__${String(reason)}`) };
     });
 
+    // The caller's query authorization is fixed for the run; resolve it once
+    // on first use so ob.search loops do not re-read roles per statement.
+    let queryRefusal: Promise<string | null> | undefined;
     const queryFn = vm.newAsyncifiedFunction("__query", async (sqlH) => {
       const sqlText = String(vm.dump(sqlH));
+      queryRefusal ??= scriptQueryRefusal(ctx);
+      const refusal = await queryRefusal;
+      if (refusal) return { error: vm.newError(`query: ${refusal}`) };
       try {
         const result = await runUserSql(sqlText, {
           orgId: ctx.org.id,
@@ -215,11 +260,17 @@ export async function runScript(
         }
         try {
           const input = JSON.parse(String(vm.dump(inputH)));
+          // The caller's live subsidiary scope travels with the write: a
+          // restricted principal can only journal into an entity it may see,
+          // exactly as at the HTTP draft route. System runs are unrestricted.
+          const allowedSubsidiaryIds = ctx.user?.id
+            ? await actorAllowedSubsidiaryIds(db, ctx.org.id, ctx.user.id)
+            : null;
           const result = await createScriptJournal(
             ctx.org.id,
             ctx.user?.id ?? null,
             input,
-            { post },
+            { post, allowedSubsidiaryIds },
           );
           return vm.newString(JSON.stringify(result));
         } catch (e) {

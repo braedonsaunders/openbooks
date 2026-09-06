@@ -7,6 +7,7 @@ import { abs, cmp, isZero, normalizeMoney, sum } from "./money.ts";
 import { loadRequiredControlAccounts } from "./control-accounts.ts";
 import { postDocument, runPostDocumentEffects } from "./posting.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
+import { actorAllowedSubsidiaryIds } from "./actor-subsidiaries.ts";
 
 /**
  * Governed journal writes for sandboxed code (App backends + user scripts).
@@ -45,7 +46,35 @@ export interface ScriptJournalInput {
   documentDate?: string;
   memo?: string;
   referenceNumber?: string;
+  /**
+   * Explicit legal entity for the journal. Omitted = choose a default the
+   * same way the HTTP draft route does: the root for an unrestricted actor,
+   * the single allowed entity for a restricted one, otherwise refused.
+   */
+  subsidiaryId?: string | null;
   lines: ScriptJournalLine[];
+}
+
+/**
+ * Scope refusal codes — the same vocabulary web/lib/journals.ts
+ * DraftJournalScopeError uses for the HTTP draft route, so a sandbox caller is
+ * refused exactly like a browser caller (an out-of-scope entity stays
+ * indistinguishable from a nonexistent one).
+ */
+export type JournalScopeErrorCode =
+  | "invalid_subsidiary"
+  | "subsidiary_not_allowed"
+  | "no_available_subsidiary"
+  | "ambiguous_subsidiary_scope";
+
+export interface CreateScriptJournalOptions {
+  post?: boolean;
+  /**
+   * The acting principal's subsidiary visibility: null = unrestricted, a Set
+   * = the allowed entities. Omitted = resolved live from the actor's roles
+   * (never assumed unrestricted); an actor-less system caller is unrestricted.
+   */
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 }
 
 export interface ScriptJournalResult {
@@ -59,6 +88,13 @@ export interface ScriptJournalResult {
 
 export class JournalWriteError extends Error {
   readonly name = "JournalWriteError";
+  /** Present for subsidiary-scope refusals (see JournalScopeErrorCode). */
+  readonly code?: JournalScopeErrorCode;
+
+  constructor(message: string, code?: JournalScopeErrorCode) {
+    super(message);
+    if (code) this.code = code;
+  }
 }
 
 /** Persist leftover journal-line amounts through exact decimal then ledger money. Fail closed. */
@@ -192,6 +228,101 @@ async function insertScriptDraft(
   });
 }
 
+type ResolvedJournalSubsidiary = { subsidiaryId: string; baseCurrency: string };
+
+/**
+ * Select the legal entity a sandbox journal is written into, under the
+ * caller's subsidiary scope — the same decision table as the HTTP draft route
+ * (web/app/api/journals/draft/route.ts + web/lib/journals.ts):
+ *   - explicit id: must be a UUID, inside the scope (else "not found", so an
+ *     out-of-scope entity is indistinguishable from a missing one), and an
+ *     active non-elimination entity of this org;
+ *   - no id, unrestricted: the root;
+ *   - no id, restricted: exactly one active allowed entity auto-selects; an
+ *     empty scope or several entities are refused rather than guessed.
+ * Sandboxed code previously always resolved the ROOT regardless of the
+ * caller's scope, letting a restricted principal post into an entity it may
+ * not even see.
+ */
+async function resolveScriptJournalSubsidiary(
+  orgId: string,
+  actorId: string | null,
+  requested: string | null | undefined,
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+): Promise<ResolvedJournalSubsidiary> {
+  const resolvedScope = allowedSubsidiaryIds === undefined
+    ? actorId ? await actorAllowedSubsidiaryIds(db, orgId, actorId) : null
+    : allowedSubsidiaryIds;
+  const scope = resolvedScope === null
+    ? null
+    : new Set([...resolvedScope].map((id) => id.toLowerCase()));
+
+  const pick = (row: { id: string; base_currency: string | null }): ResolvedJournalSubsidiary => {
+    if (!row.base_currency) {
+      throw new JournalWriteError("subsidiary has no configured functional currency");
+    }
+    return { subsidiaryId: row.id, baseCurrency: row.base_currency };
+  };
+
+  if (requested !== undefined && requested !== null) {
+    if (typeof requested !== "string" || !UUID_RE.test(requested)) {
+      throw new JournalWriteError("invalid subsidiary", "invalid_subsidiary");
+    }
+    const normalized = requested.toLowerCase();
+    if (scope !== null && !scope.has(normalized)) {
+      throw new JournalWriteError("subsidiary not found", "subsidiary_not_allowed");
+    }
+    const explicit = (await db.execute<{ id: string; base_currency: string | null }>(sql`
+      select id, nullif(trim(base_currency), '') as base_currency
+        from subsidiaries
+       where org_id = ${orgId} and id = ${normalized}
+         and is_active and not is_elimination`)).rows[0];
+    if (!explicit) throw new JournalWriteError("invalid subsidiary", "invalid_subsidiary");
+    return pick(explicit);
+  }
+
+  if (scope !== null) {
+    const ids = [...scope].filter((id) => UUID_RE.test(id));
+    if (ids.length === 0) {
+      throw new JournalWriteError("no available subsidiary", "no_available_subsidiary");
+    }
+    const allowed = (await db.execute<{ id: string; base_currency: string | null }>(sql`
+      select id, nullif(trim(base_currency), '') as base_currency
+        from subsidiaries
+       where org_id = ${orgId} and is_active and not is_elimination
+         and id in ${ids}`)).rows;
+    if (allowed.length === 0) {
+      throw new JournalWriteError("no available subsidiary", "no_available_subsidiary");
+    }
+    if (allowed.length !== 1) {
+      throw new JournalWriteError(
+        "a subsidiaryId must be selected when more than one legal entity is available",
+        "ambiguous_subsidiary_scope",
+      );
+    }
+    return pick(allowed[0]!);
+  }
+
+  const company = ((await db.execute(sql`
+    select s.id as subsidiary_id, nullif(trim(s.base_currency), '') as base_currency
+      from orgs o
+      left join lateral (
+        select id, base_currency from subsidiaries
+         where org_id = o.id and parent_id is null and is_active and not is_elimination
+         limit 1
+      ) s on true
+     where o.id = ${orgId}
+  `))).rows[0] as { subsidiary_id: string | null; base_currency: string | null } | undefined;
+  if (!company) throw new JournalWriteError("organization does not exist");
+  if (!company.subsidiary_id) {
+    throw new JournalWriteError("organization has no active root subsidiary");
+  }
+  if (!company.base_currency) {
+    throw new JournalWriteError("root subsidiary has no configured functional currency");
+  }
+  return { subsidiaryId: company.subsidiary_id, baseCurrency: company.base_currency };
+}
+
 /**
  * Create a balanced draft journal from sandboxed code, optionally posting it.
  * Account codes resolve within the org; unknown/inactive accounts are refused.
@@ -205,7 +336,7 @@ export async function createScriptJournal(
   orgId: string,
   actorId: string | null,
   input: ScriptJournalInput,
-  opts: { post?: boolean } = {},
+  opts: CreateScriptJournalOptions = {},
 ): Promise<ScriptJournalResult> {
   // The pure validator cannot know the tenant, so the org's business-day
   // default is applied here. The validator refuses a missing date rather
@@ -238,25 +369,12 @@ export async function createScriptJournal(
     for (const id of ids) if (!found.has(id)) throw new JournalWriteError(`unknown, inactive, or summary accountId "${id}"`);
   }
 
-  const company = ((await db.execute(sql`
-    select s.id as subsidiary_id, nullif(trim(s.base_currency), '') as base_currency
-      from orgs o
-      left join lateral (
-        select id, base_currency from subsidiaries
-         where org_id = o.id and parent_id is null and is_active and not is_elimination
-         limit 1
-      ) s on true
-     where o.id = ${orgId}
-  `))).rows[0] as { subsidiary_id: string | null; base_currency: string | null } | undefined;
-  if (!company) throw new JournalWriteError("organization does not exist");
-  if (!company.subsidiary_id) {
-    throw new JournalWriteError("organization has no active root subsidiary");
-  }
-  if (!company.base_currency) {
-    throw new JournalWriteError("root subsidiary has no configured functional currency");
-  }
-  const subsidiaryId = company.subsidiary_id;
-  const baseCurrency = company.base_currency;
+  const { subsidiaryId, baseCurrency } = await resolveScriptJournalSubsidiary(
+    orgId,
+    actorId,
+    input.subsidiaryId,
+    opts.allowedSubsidiaryIds,
+  );
 
   if (!opts.post) {
     // A committed draft IS the documented successful outcome of a draft-only

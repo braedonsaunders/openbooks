@@ -3,6 +3,7 @@ import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
 import { isDocKindEnabled } from "../../../../../lib/documents";
 import { pdfResponse, safeName } from "../../../../../lib/export";
+import { isUuid } from "../../../../../lib/list-params";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../../../lib/pdf-templates/catalog";
 import { mergeAndPrintPdf } from "../../../../../lib/pdf-templates/render";
 import { resolvePdfTemplate } from "../../../../../lib/pdf-templates/store";
@@ -29,6 +30,10 @@ export async function GET(
   if (!(await isDocKindEnabled(user.orgId, recordType))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
+
+  // A malformed id is answered exactly like a missing record, before it can
+  // reach a uuid column (a database cast error would otherwise surface as 500).
+  if (!isUuid(id)) return NextResponse.json({ error: "record not found" }, { status: 404 });
 
   const templateId = new URL(req.url).searchParams.get("template");
   const owned = await loadRecordSubsidiaryScope(recordType, user.orgId, id);

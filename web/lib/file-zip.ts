@@ -26,6 +26,23 @@ export type ZipEntry = {
 };
 
 /**
+ * Normalise a manifest path (built from user-authored folder and file names)
+ * to a safe, relative POSIX archive path: backslashes become separators,
+ * drive-letter and leading-separator forms lose their root, `.`/`..` segments
+ * are dropped (never resolved upward), control characters are stripped and
+ * blank segments collapse. An entry whose name is empty after cleaning is
+ * archived as `file` so it is never silently lost.
+ */
+export function safeZipPath(raw: string): string {
+  const segments = raw
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .split(/[\\/]+/)
+    .map((segment) => segment.replace(/^[A-Za-z]:$/, '').trim())
+    .filter((segment) => segment !== '' && segment !== '.' && segment !== '..')
+  return segments.length > 0 ? segments.join('/') : 'file'
+}
+
+/**
  * File ids + archive-relative paths for a folder subtree (the folder, its
  * sub-folders, and their active files). One extra row over the cap is fetched
  * so callers can detect "too many".
@@ -64,8 +81,10 @@ export async function filesZipManifest(orgId: string, fileIds: string[]): Promis
 
 /**
  * Build a zip from the given entries. Per-file visibility is enforced by
- * getFileBlob (invisible/unreadable files are skipped). De-duplicates archive
- * paths. Returns the zip bytes plus how many files were actually included.
+ * getFileBlob (invisible/unreadable files are skipped). Every archive path is
+ * normalised through safeZipPath before use and de-duplicated AFTER
+ * normalisation. Returns the zip bytes plus how many files were actually
+ * included.
  */
 export async function buildZip(
   orgId: string,
@@ -83,7 +102,7 @@ export async function buildZip(
     if (!blob) continue
     if (sourceBytes + blob.bytes.length > MAX_ZIP_BYTES) throw new ZipSizeLimitError()
     sourceBytes += blob.bytes.length
-    let path = e.path
+    let path = safeZipPath(e.path)
     if (used.has(path)) {
       const dot = path.lastIndexOf('.')
       const stem = dot > 0 ? path.slice(0, dot) : path

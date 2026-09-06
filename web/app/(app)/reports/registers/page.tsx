@@ -6,6 +6,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { DocTypeBadge } from '../../../../components/doc-type-badge'
 import { dimensionOptions, partyRegister, type AgingSide } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
+import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, toSearchParams } from '../../../../lib/report-filters'
 import { ReportFilterBar } from '../ReportFilterBar'
@@ -34,7 +35,11 @@ export default async function RegistersPage({
   const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-  const dims = q.dims
+  // Legal-entity scope is enforced here, not by the picker: a restricted
+  // reader's view resolves to the subsidiaries they may see (empty = no rows)
+  // and every query below carries it — the same contract as the export path.
+  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
   const [reg, opts, org] = await Promise.all([
     partyRegister(side, { from: period.from, to: period.to, dims }),
     dimensionOptions(),
@@ -56,7 +61,7 @@ export default async function RegistersPage({
             back={{ href: '/reports', label: t('hub.title') }}
           />
           <ReportFilterBar
-            controls={{ period: true, dimensions: true }}
+            controls={{ period: true, dimensions: true, subsidiary: true }}
             leading={
               <>
                 <Link href={`/reports/registers?side=ar&${keep}`}>
@@ -69,6 +74,7 @@ export default async function RegistersPage({
               </>
             }
             dimensions={opts}
+            subsidiaries={subView.picker}
             actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="registers" params={sp} /></>}
           />
           {reg.truncated && <p className="text-xs text-amber-600 dark:text-amber-400">{t('registers.truncated')}</p>}

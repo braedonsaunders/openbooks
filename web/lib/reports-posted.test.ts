@@ -220,8 +220,11 @@ test("financial statements exclude draft and other unposted journals", { skip: !
 
     // Adjustment periods can overlap a regular period's calendar dates.
     // Period analytics must use the ledger's exact period identity, not infer
-    // it from posting_date.
+    // it from posting_date: the regular row carries only its own entries, an
+    // adjustment period is never a row, and closing cash is the balance as at
+    // the period end across every ledger period ending on or before it.
     const scratch = await withBypass(() => createScratchOrg());
+    const taxBookId = randomUUID();
     try {
       await withBypass(async () => {
       const calendar = await db.execute(sql\`
@@ -247,8 +250,14 @@ test("financial statements exclude draft and other unposted journals", { skip: !
           '{}'::jsonb
         )
       \`);
+      await db.execute(sql\`
+        insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+        values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)
+      \`);
       const regularEntryId = randomUUID();
       const adjustmentEntryId = randomUUID();
+      const adjustmentExpenseId = randomUUID();
+      const taxBookEntryId = randomUUID();
       await db.execute(sql\`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
@@ -259,7 +268,13 @@ test("financial statements exclude draft and other unposted journals", { skip: !
            \${scratch.periodId}, 'Regular period revenue', 'draft', 'manual', null),
           (\${adjustmentEntryId}, \${scratch.orgId}, \${scratch.bookId},
            \${scratch.subsidiaryId}, 'ADJUSTMENT-ACTIVITY', '2025-06-30',
-           \${adjustmentPeriodId}, 'Adjustment period revenue', 'draft', 'manual', null)
+           \${adjustmentPeriodId}, 'Adjustment period revenue', 'draft', 'manual', null),
+          (\${adjustmentExpenseId}, \${scratch.orgId}, \${scratch.bookId},
+           \${scratch.subsidiaryId}, 'ADJUSTMENT-EXPENSE', '2025-06-30',
+           \${adjustmentPeriodId}, 'Adjustment period accrual', 'draft', 'manual', null),
+          (\${taxBookEntryId}, \${scratch.orgId}, \${taxBookId},
+           \${scratch.subsidiaryId}, 'TAX-BOOK-ACTIVITY', '2025-06-30',
+           \${scratch.periodId}, 'Parallel book revenue', 'draft', 'manual', null)
       \`);
       await db.execute(sql\`
         insert into journal_lines
@@ -273,12 +288,20 @@ test("financial statements exclude draft and other unposted journals", { skip: !
           (\${scratch.orgId}, \${adjustmentEntryId}, 1, \${scratch.accounts.bank},
            \${scratch.subsidiaryId}, '900.0000', 'CAD', '900.0000', '1'),
           (\${scratch.orgId}, \${adjustmentEntryId}, 2, \${scratch.accounts.revenue},
-           \${scratch.subsidiaryId}, '-900.0000', 'CAD', '-900.0000', '1')
+           \${scratch.subsidiaryId}, '-900.0000', 'CAD', '-900.0000', '1'),
+          (\${scratch.orgId}, \${adjustmentExpenseId}, 1, \${scratch.accounts.cogs},
+           \${scratch.subsidiaryId}, '25.0000', 'CAD', '25.0000', '1'),
+          (\${scratch.orgId}, \${adjustmentExpenseId}, 2, \${scratch.accounts.bank},
+           \${scratch.subsidiaryId}, '-25.0000', 'CAD', '-25.0000', '1'),
+          (\${scratch.orgId}, \${taxBookEntryId}, 1, \${scratch.accounts.bank},
+           \${scratch.subsidiaryId}, '5000.0000', 'CAD', '5000.0000', '1'),
+          (\${scratch.orgId}, \${taxBookEntryId}, 2, \${scratch.accounts.revenue},
+           \${scratch.subsidiaryId}, '-5000.0000', 'CAD', '-5000.0000', '1')
       \`);
       await db.execute(sql\`
         update journal_entries
            set status = 'posted', posted_at = now()
-         where id in (\${regularEntryId}, \${adjustmentEntryId})
+         where id in (\${regularEntryId}, \${adjustmentEntryId}, \${adjustmentExpenseId}, \${taxBookEntryId})
       \`);
       });
 
@@ -286,8 +309,26 @@ test("financial statements exclude draft and other unposted journals", { skip: !
         const trends = await financialTrends(scratch.orgId, 15);
         const regularPeriod = trends.find((row) => row.id === scratch.periodId);
         assert.ok(regularPeriod, "regular completed period appears in trends");
+        assert.equal(trends.some((row) => row.name === "FY25 Adjustment"), false, "adjustment periods are not trend rows");
+        // The regular row carries the entries the ledger assigned to it: the
+        // adjustment period's revenue and accrual are that period's, and the
+        // parallel book is excluded.
         assert.equal(regularPeriod.revenue, "100.0000");
+        assert.equal(toUnits(regularPeriod.expenses), 0n);
         assert.equal(regularPeriod.net_income, "100.0000");
+        // Closing cash is the balance as at the period end across every ledger
+        // period ending on or before it — the adjustment period included.
+        assert.equal(regularPeriod.closing_cash, "975.0000");
+        // A restricted caller with nothing visible sees zero activity, not the org.
+        const none = (await financialTrends(scratch.orgId, 15, [])).find((row) => row.id === scratch.periodId);
+        assert.ok(none);
+        assert.equal(toUnits(none.revenue), 0n, "empty subsidiary scope must not widen to the org");
+        assert.equal(toUnits(none.closing_cash), 0n, "empty subsidiary scope must not widen closing cash to the org");
+        // An explicit book reads that book only.
+        const tax = (await financialTrends(scratch.orgId, 15, undefined, taxBookId)).find((row) => row.id === scratch.periodId);
+        assert.ok(tax);
+        assert.equal(tax.revenue, "5000.0000");
+        assert.equal(tax.closing_cash, "5000.0000");
       });
     } finally {
       await withBypass(() => dropScratchOrg(scratch.orgId));

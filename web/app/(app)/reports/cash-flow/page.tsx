@@ -4,6 +4,7 @@ import { Badge, PageHeader, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { cashFlow, dimensionOptions, type CashFlowSection } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
+import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { ReportFilterBar } from '../ReportFilterBar'
@@ -35,7 +36,11 @@ export default async function CashFlow({
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const from = period.from
   const to = period.to
-  const dims = q.dims
+  // Legal-entity scope is enforced here, not by the picker: a restricted
+  // reader's view resolves to the subsidiaries they may see (empty = no rows)
+  // and every query below carries it — the same contract as the export path.
+  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
   const [cf, opts, org] = await Promise.all([cashFlow(from, to, dims), dimensionOptions(), orgInfo()])
   const m = (v: ExactDecimal) => money(v, { currency: org?.base_currency })
   const openingTo = new Date(`${from}T00:00:00Z`)
@@ -59,8 +64,9 @@ export default async function CashFlow({
             back={{ href: '/reports', label: tr('hub.title') }}
           />
           <ReportFilterBar
-            controls={{ period: true, dimensions: true }}
+            controls={{ period: true, dimensions: true, subsidiary: true }}
             dimensions={opts}
+            subsidiaries={subView.picker}
             actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="cash-flow" params={sp} /></>}
           />
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">

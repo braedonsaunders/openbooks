@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
-import { guardPermission } from "../../../../lib/authz";
+import { can, guardPermission } from "../../../../lib/authz";
 import { isDocKindEnabled } from "../../../../lib/documents";
 import { pdfResponse } from "../../../../lib/export";
 import { PDF_RECORD_TYPE_BY_KEY, sampleValues } from "../../../../lib/pdf-templates/catalog";
@@ -15,6 +15,13 @@ export const runtime = "nodejs";
  * exact PDF against the record type's most recent real record, falling back to
  * the catalog's sample values. This IS the editor's preview: what Chromium
  * prints here is byte-identical to what the record's PDF button produces.
+ *
+ * Because the sample is a REAL record, the preview is a disclosure surface:
+ * the designer must also hold the record family's read permission (the same
+ * gate the record's own PDF route applies), and the sample is chosen inside
+ * the designer's subsidiary scope — never from a legal entity hidden from
+ * them. A designer who cannot read any real record still previews against
+ * the catalog's synthetic sample values.
  */
 export async function POST(req: Request) {
   const gate = await guardPermission("admin.customization.manage");
@@ -33,6 +40,9 @@ export async function POST(req: Request) {
   };
   const meta = body.recordType ? PDF_RECORD_TYPE_BY_KEY[body.recordType] : undefined;
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
+  if (!can(gate, meta.readPermission)) {
+    return NextResponse.json({ error: `missing permission: ${meta.readPermission}` }, { status: 403 });
+  }
   if (!(await isDocKindEnabled(user.orgId, meta.key))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
@@ -48,7 +58,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 });
   }
 
-  const sampleId = await findSamplePdfRecordId(meta.key, user.orgId);
+  const sampleId = await findSamplePdfRecordId(meta.key, user.orgId, gate.allowedSubsidiaryIds);
   const real = sampleId ? await loadPdfRecordValues(meta.key, user.orgId, sampleId) : null;
   const values = real?.values ?? sampleValues(meta);
 

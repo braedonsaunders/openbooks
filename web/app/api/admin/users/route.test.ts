@@ -15,6 +15,21 @@ interface RouteState {
   transactionCalls: number
   failOnText?: string
   assignments: { id: string; role_id: string }[]
+  /** Permissions carried by the role being assigned (what `app_roles.permissions` returns). */
+  rolePermissions: string[]
+  /** The acting administrator's resolved authorization, as guardPermission would return it. */
+  authz: { user: { orgId: string; id: string; isSuperAdmin: boolean }; permissions: Set<string> }
+}
+
+const ORG_ID = '00000000-0000-4000-8000-00000000a001'
+const ACTOR_ID = '00000000-0000-4000-8000-00000000a002'
+/** Everything a user administrator ordinarily holds; deliberately NOT the full catalogue. */
+const ACTOR_PERMISSIONS = ['admin.users.manage', 'gl.read', 'ap.read', 'ar.read']
+function actorAuthz(overrides: { permissions?: string[]; isSuperAdmin?: boolean } = {}) {
+  return {
+    user: { orgId: ORG_ID, id: ACTOR_ID, isSuperAdmin: overrides.isSuperAdmin ?? false },
+    permissions: new Set(overrides.permissions ?? ACTOR_PERMISSIONS),
+  }
 }
 
 const state: RouteState = {
@@ -33,6 +48,8 @@ const state: RouteState = {
       role_id: '00000000-0000-4000-8000-00000000a006',
     },
   ],
+  rolePermissions: ['gl.read'],
+  authz: actorAuthz(),
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
@@ -52,8 +69,6 @@ function sqlText(query: unknown): string {
 }
 ;(globalThis as typeof globalThis & { openbooksSqlTextAdminUsers: typeof sqlText }).openbooksSqlTextAdminUsers = sqlText
 
-const ORG_ID = '00000000-0000-4000-8000-00000000a001'
-const ACTOR_ID = '00000000-0000-4000-8000-00000000a002'
 const TARGET_ID = '00000000-0000-4000-8000-00000000a003'
 const ROLE_ID = '00000000-0000-4000-8000-00000000a006'
 const ASSIGNMENT_ID = '00000000-0000-4000-8000-00000000a007'
@@ -72,7 +87,9 @@ const mockSources = new Map<string, string>([
         text.includes('insert into audit_log')
       const rowsFor = (text) => {
         if (text.includes('select id from users')) return [{ id: '${TARGET_ID}' }]
-        if (text.includes('select id, key from app_roles')) return [{ id: '${ROLE_ID}', key: 'member' }]
+        if (text.includes('select id, key, permissions from app_roles')) {
+          return [{ id: '${ROLE_ID}', key: 'member', permissions: state.rolePermissions }]
+        }
         if (text.includes('insert into role_assignments')) return [{ id: '${ASSIGNMENT_ID}' }]
         if (text.includes('select id, role_id from role_assignments')) return state.assignments
         if (text.includes('delete from role_assignments')) return [{ id: '${ASSIGNMENT_ID}' }]
@@ -131,8 +148,9 @@ const mockSources = new Map<string, string>([
   [
     'mock:authz',
     `
+      const state = globalThis[Symbol.for('openbooks.admin-users-route-test')]
       export async function guardPermission() {
-        return { user: { orgId: '${ORG_ID}', id: '${ACTOR_ID}' } }
+        return { ...state.authz, allowedSubsidiaryIds: null }
       }
     `,
   ],
@@ -171,6 +189,8 @@ function reset(): void {
   state.inTx = false
   state.transactionCalls = 0
   state.failOnText = undefined
+  state.rolePermissions = ['gl.read']
+  state.authz = actorAuthz()
   state.assignments = [
     {
       id: '00000000-0000-4000-8000-00000000a004',
@@ -273,4 +293,63 @@ test('a failed set-active audit rolls back account and session changes', async (
     false,
     'the failed audit did not partially commit',
   )
+})
+
+// ID2 — privilege ceiling. admin.users.manage is an ordinary permission; the
+// role being granted must sit inside the actor's own effective permissions and
+// an administrator may never grant a role to themselves (super admins exempt).
+
+test('an administrator cannot assign a role carrying permissions they do not hold', async () => {
+  reset()
+  state.rolePermissions = ['gl.read', 'gl.post', 'admin.roles.manage']
+
+  const response = await post({ action: 'assign', userId: TARGET_ID, roleId: ROLE_ID })
+
+  assert.equal(response.status, 403)
+  const body = (await response.json()) as { error: string; missing?: string[] }
+  assert.match(body.error, /gl\.post/)
+  assert.match(body.error, /admin\.roles\.manage/)
+  assert.deepEqual(body.missing, ['gl.post', 'admin.roles.manage'])
+  assert.equal(
+    state.executed.some((text) => text.includes('insert into role_assignments')),
+    false,
+    'no assignment was attempted',
+  )
+})
+
+test('a role within the ceiling is assignable and honours module wildcards', async () => {
+  reset()
+  state.authz = actorAuthz({ permissions: ['admin.users.manage', 'gl.*'] })
+  state.rolePermissions = ['gl.read', 'gl.post']
+
+  const response = await post({ action: 'assign', userId: TARGET_ID, roleId: ROLE_ID })
+
+  assert.equal(response.status, 200)
+  assert.ok(state.committed.some((text) => text.includes('insert into role_assignments')))
+})
+
+test('an administrator cannot grant a role to themselves', async () => {
+  reset()
+  state.rolePermissions = ['gl.read']
+
+  const response = await post({ action: 'assign', userId: ACTOR_ID, roleId: ROLE_ID })
+
+  assert.equal(response.status, 403)
+  assert.match(((await response.json()) as { error: string }).error, /yourself|own account/i)
+  assert.equal(
+    state.executed.some((text) => text.includes('insert into role_assignments')),
+    false,
+    'no self-grant was attempted',
+  )
+})
+
+test('a super administrator is exempt from the ceiling and the self-grant rule', async () => {
+  reset()
+  state.authz = actorAuthz({ permissions: ['*'], isSuperAdmin: true })
+  state.rolePermissions = ['admin.roles.manage', 'gl.post']
+
+  const response = await post({ action: 'assign', userId: ACTOR_ID, roleId: ROLE_ID })
+
+  assert.equal(response.status, 200)
+  assert.ok(state.committed.some((text) => text.includes('insert into role_assignments')))
 })

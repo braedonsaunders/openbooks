@@ -163,6 +163,13 @@ async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promi
     await db.execute(sql`select set_config('openbooks.migration', 'on', true)`);
     await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
     await db.execute(sql`select set_config('openbooks.sandbox_wipe', 'on', true)`);
+    // Park the sandbox's users inactive BEFORE their role assignments go:
+    // role_assignments_active_user_guard (immediate here) forbids leaving an
+    // ACTIVE user roleless, which every reset/delete of a sandbox that holds
+    // cloned users would otherwise trip.
+    if (byName.has("users") && byName.has("role_assignments")) {
+      await db.execute(sql`update users set is_active = false where org_id = ${sandboxOrgId}`);
+    }
     for (const [table, columns] of Object.entries(SANDBOX_CYCLE_BREAKERS)) {
       if (!byName.has(table)) continue;
       await db.execute(sql.raw(
@@ -213,7 +220,9 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   const p = prod.rows[0];
   if (!p) throw new Error(`production org not found: ${input.productionOrgId}`);
 
-  // The sandbox org row (orgs has no org_id, so it isn't RLS-scoped).
+  // The sandbox org row (orgs has no org_id, so it isn't RLS-scoped). The org
+  // row is not cloned, so masking policies never see it: a masked sandbox
+  // starts without the organization's tax registrations.
   await db.execute(sql`
     insert into orgs (
       id, name, legal_name, base_currency, country, tax_ids, settings,
@@ -221,7 +230,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
     )
     values (
       ${sandboxOrgId}, ${input.name}, ${p.legal_name}, ${p.base_currency}, ${p.country},
-      ${JSON.stringify(p.tax_ids ?? {})}::jsonb, ${JSON.stringify(p.settings ?? {})}::jsonb,
+      ${JSON.stringify(masked ? {} : (p.tax_ids ?? {}))}::jsonb, ${JSON.stringify(p.settings ?? {})}::jsonb,
       'sandbox', ${input.productionOrgId}, ${seed}, ${input.createdBy ?? null}
     )`);
 
@@ -345,6 +354,12 @@ export async function refreshSandbox(
         sandboxOrgId: s.org_id,
         seed: sandboxSeed,
       });
+      // The re-copy just rehydrated every integration/credential row from
+      // production; make the sandbox inert again inside the same unit so a
+      // reader can never observe a refreshed sandbox that could reach the
+      // outside world (worker-scheduled refreshes run unattended).
+      await neuterSandbox(s.org_id);
+      if (s.masked) await scrubSandboxOrgIdentity(s.org_id);
 
       await db.execute(sql`
         update sandboxes
@@ -359,6 +374,14 @@ export async function refreshSandbox(
        where id = ${sandboxId} and org_id = ${s.org_id}`);
     throw err;
   }
+}
+
+/** A masked sandbox's org row never carries the organization's tax
+ * registrations (the row is not cloned, so column masking cannot reach it). */
+async function scrubSandboxOrgIdentity(sandboxOrgId: string): Promise<void> {
+  await db.execute(sql`
+    update orgs set tax_ids = '{}'::jsonb, updated_at = now()
+     where id = ${sandboxOrgId} and env_kind = 'sandbox' and tax_ids <> '{}'::jsonb`);
 }
 
 export async function resetSandbox(sandboxId: string): Promise<void> {

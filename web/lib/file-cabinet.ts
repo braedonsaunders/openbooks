@@ -1041,16 +1041,45 @@ export async function restoreFolder(
        for update
     `)
 
-    await tx.execute(sql`
-      update folders
-         set is_inactive = false, updated_at = now()
-       where id in (${descendants}) and org_id = ${orgId}
-    `)
-    await tx.execute(sql`
-      update files
-         set is_inactive = false, updated_at = now()
-       where folder_id in (${descendants}) and org_id = ${orgId}
-    `)
+    // Restore is the exact inverse of the trash: deleteFolder recorded which
+    // rows it actually deactivated and which were ALREADY in the trash (a file
+    // or sub-folder the user trashed on its own beforehand). Those keep their
+    // own trash entry and their own restore; resurrecting them here would
+    // silently undo a separate, audited decision. Without evidence (a delete
+    // that predates audited trashing) the whole subtree is restored.
+    const evidence = (await tx.execute<{ changes: FolderDeleteEvidence }>(sql`
+      select changes
+        from audit_log
+       where org_id = ${orgId} and table_name = 'folders' and row_id = ${id}
+         and action = 'delete' and changes ->> 'event' = 'delete'
+       order by at desc
+       limit 1
+    `)).rows[0]?.changes
+    const keepFolders = new Set(
+      (evidence?.before?.folders ?? []).filter((row) => row.isInactive).map((row) => row.id),
+    )
+    const keepFiles = new Set(
+      (evidence?.before?.files ?? []).filter((row) => row.isInactive).map((row) => row.id),
+    )
+    const foldersToRestore = beforeFolders.rows.filter((row) => !keepFolders.has(row.id)).map((row) => row.id)
+    const filesToRestore = beforeFiles.rows.filter((row) => !keepFiles.has(row.id)).map((row) => row.id)
+
+    if (foldersToRestore.length > 0) {
+      await tx.execute(sql`
+        update folders
+           set is_inactive = false, updated_at = now()
+         where id in (${descendants}) and org_id = ${orgId}
+           and id = any(${`{${foldersToRestore.join(',')}}`}::uuid[])
+      `)
+    }
+    if (filesToRestore.length > 0) {
+      await tx.execute(sql`
+        update files
+           set is_inactive = false, updated_at = now()
+         where folder_id in (${descendants}) and org_id = ${orgId}
+           and id = any(${`{${filesToRestore.join(',')}}`}::uuid[])
+      `)
+    }
 
     await recordFileEvent({
       orgId,
@@ -1061,14 +1090,28 @@ export async function restoreFolder(
       changes: {
         before: { folders: beforeFolders.rows, files: beforeFiles.rows },
         after: {
-          folders: beforeFolders.rows.map(({ id: folderId }) => ({ id: folderId, isInactive: false })),
-          files: beforeFiles.rows.map(({ id: fileId }) => ({ id: fileId, isInactive: false })),
+          folders: beforeFolders.rows.map(({ id: folderId, isInactive }) => ({
+            id: folderId,
+            isInactive: keepFolders.has(folderId) ? isInactive : false,
+          })),
+          files: beforeFiles.rows.map(({ id: fileId, isInactive }) => ({
+            id: fileId,
+            isInactive: keepFiles.has(fileId) ? isInactive : false,
+          })),
         },
       },
       executor: tx,
     })
     return true
   })
+}
+
+/** Shape of deleteFolder's audit evidence consulted by restoreFolder. */
+interface FolderDeleteEvidence {
+  before?: {
+    folders?: Array<{ id: string; isInactive: boolean }>
+    files?: Array<{ id: string; isInactive: boolean }>
+  }
 }
 
 /**
@@ -1827,6 +1870,24 @@ interface PurgedFileEvidence {
   attachments: Array<{ targetTable: string; targetId: string }>
 }
 
+/**
+ * Attachment links (aliased `fa`) that are RETAINED evidence: a posted
+ * document, a compliance record that is still in force, or a fixed asset.
+ * Purge refuses to destroy such a file and detach refuses to unlink it — the
+ * two halves of one guarantee, since a detached file becomes purgeable.
+ */
+const RETAINED_ATTACHMENT: SQL = sql`(
+  (fa.target_table = 'documents' and exists (
+    select 1 from documents d
+     where d.id = fa.target_id and d.org_id = fa.org_id and d.status = 'posted'))
+  or (fa.target_table = 'compliance_records' and exists (
+    select 1 from compliance_records cr
+     where cr.id = fa.target_id and cr.org_id = fa.org_id and cr.status <> 'superseded'))
+  or (fa.target_table = 'fixed_assets' and exists (
+    select 1 from fixed_assets a
+     where a.id = fa.target_id and a.org_id = fa.org_id))
+)`
+
 async function capturePurgeEvidence(
   exec: SqlExecutor,
   orgId: string,
@@ -1886,17 +1947,7 @@ export async function purgeFile(
       select fa.id
         from file_attachments fa
        where fa.file_id = ${id} and fa.org_id = ${orgId}
-         and (
-           (fa.target_table = 'documents' and exists (
-             select 1 from documents d
-              where d.id = fa.target_id and d.org_id = fa.org_id and d.status = 'posted'))
-           or (fa.target_table = 'compliance_records' and exists (
-             select 1 from compliance_records cr
-              where cr.id = fa.target_id and cr.org_id = fa.org_id and cr.status <> 'superseded'))
-           or (fa.target_table = 'fixed_assets' and exists (
-             select 1 from fixed_assets a
-              where a.id = fa.target_id and a.org_id = fa.org_id))
-         )
+         and ${RETAINED_ATTACHMENT}
        limit 1
     `))
     if (material.rows.length > 0) return null
@@ -2063,21 +2114,61 @@ export async function attachExisting(input: {
   return r.rows[0]?.id ?? null
 }
 
-/** Detach a file from a record (does NOT delete the file). */
-export async function detachAttachment(orgId: string, attachmentId: string): Promise<boolean> {
-  const r = (await db.execute<{ id: string }>(sql`
-    delete from file_attachments where id = ${attachmentId} and org_id = ${orgId} returning id
-  `))
-  return r.rows.length > 0
+export type AttachmentLink = {
+  id: string
+  fileId: string
+  targetTable: string
+  targetId: string
 }
 
-/** Get the target table for an attachment link (for permission gating). */
-export async function getAttachmentTarget(
+export type DetachOutcome = { ok: true } | { ok: false; reason: 'not found' | 'retained' }
+
+/**
+ * Detach a file from a record (does NOT delete the file). Refuses when the
+ * link is retained evidence (RETAINED_ATTACHMENT: posted document, in-force
+ * compliance record, fixed asset) — otherwise detaching would be the way
+ * around purge's retention guard. The link row is locked before the check so
+ * a concurrent posting cannot slip between the decision and the delete. With
+ * `audit`, the delete and its actor-attributed before-evidence commit as one
+ * unit.
+ */
+export async function detachAttachment(
   orgId: string,
   attachmentId: string,
-): Promise<string | null> {
-  const r = (await db.execute<{ target_table: string }>(sql`
-    select target_table from file_attachments where id = ${attachmentId} and org_id = ${orgId}
+  audit?: FileMutationAudit,
+): Promise<DetachOutcome> {
+  return runMutation(audit?.executor, async (tx) => {
+    const link = (await tx.execute<{ fileId: string; targetTable: string; targetId: string; retained: boolean }>(sql`
+      select fa.file_id as "fileId", fa.target_table as "targetTable", fa.target_id as "targetId",
+             ${RETAINED_ATTACHMENT} as retained
+        from file_attachments fa
+       where fa.id = ${attachmentId} and fa.org_id = ${orgId}
+       for update of fa
+    `)).rows[0]
+    if (!link) return { ok: false as const, reason: 'not found' as const }
+    if (link.retained) return { ok: false as const, reason: 'retained' as const }
+    await tx.execute(sql`delete from file_attachments where id = ${attachmentId} and org_id = ${orgId}`)
+    if (audit) {
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: 'file_attachments',
+        rowId: attachmentId,
+        action: 'delete',
+        changes: { before: { fileId: link.fileId, targetTable: link.targetTable, targetId: link.targetId } },
+        executor: tx,
+      })
+    }
+    return { ok: true as const }
+  })
+}
+
+/** The full attachment link (file + target) for permission and scope gating. */
+export async function getAttachmentLink(orgId: string, attachmentId: string): Promise<AttachmentLink | null> {
+  const r = (await db.execute<AttachmentLink>(sql`
+    select id, file_id as "fileId", target_table as "targetTable", target_id as "targetId"
+      from file_attachments
+     where id = ${attachmentId} and org_id = ${orgId}
   `))
-  return r.rows[0]?.target_table ?? null
+  return r.rows[0] ?? null
 }
