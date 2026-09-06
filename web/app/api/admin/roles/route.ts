@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { seedDashboardDefaultsForOrg } from "@openbooks/engine/src/dashboard-defaults.ts";
+import { permissionsOutsideCeiling } from "@openbooks/engine/src/permissions.ts";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
-import { guardPermission } from "../../../../lib/authz";
+import { type Authz, guardPermission } from "../../../../lib/authz";
 import { isCataloguePermission, PERMISSION_CATALOGUE } from "../../../../lib/permissions";
 import { isUuid } from "../../../../lib/list-params";
 
@@ -16,6 +17,13 @@ export const runtime = "nodejs";
  *
  * Built-in roles: only `permissions` may change, and the `admin` role is
  * fully locked (always the full catalogue) so an org can't lock itself out.
+ *
+ * Privilege ceiling: admin.roles.manage is an ordinary permission. An
+ * administrator may only create a role from, or ADD permissions to a role
+ * from, their own effective permission set (removing permissions is never an
+ * escalation). Super admins are exempt. Deleting a role never strands an
+ * active user with zero roles: the request must name a replacement role
+ * (itself inside the ceiling) or it is refused.
  */
 
 const KEY_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/;
@@ -37,6 +45,24 @@ function normalizePermissions(input: unknown): string[] | null {
     set.add(p);
   }
   return PERMISSION_CATALOGUE.filter((p) => set.has(p));
+}
+
+/**
+ * 403 naming every permission in `granted` that the actor does not hold, or
+ * null when the grant sits inside the actor's ceiling (super admins exempt).
+ */
+function ceilingViolation(authz: Authz, granted: readonly string[]): NextResponse | null {
+  if (authz.user.isSuperAdmin) return null;
+  const missing = permissionsOutsideCeiling(authz.permissions, granted);
+  if (missing.length === 0) return null;
+  return NextResponse.json(
+    { error: `cannot grant permissions you do not hold: ${missing.join(", ")}`, missing },
+    { status: 403 },
+  );
+}
+
+function rolePermissionList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((p): p is string => typeof p === "string") : [];
 }
 
 /**
@@ -130,6 +156,8 @@ export async function POST(req: Request) {
   if (!permissions) {
     return NextResponse.json({ error: "permissions must be known catalogue keys" }, { status: 400 });
   }
+  const escalation = ceilingViolation(gate, permissions);
+  if (escalation) return escalation;
   let restriction: SubsidiaryRestriction = { mode: "all" };
   if (body.subsidiaryRestriction !== undefined) {
     const norm = await normalizeSubsidiaryRestriction(body.subsidiaryRestriction, actor.orgId);
@@ -200,6 +228,11 @@ export async function PATCH(req: Request) {
         { status: 400 },
       );
     }
+    // Only what the edit ADDS is a grant; keeping or dropping keys the actor
+    // lacks does not widen anyone's access.
+    const current = new Set(rolePermissionList(role.permissions));
+    const escalation = ceilingViolation(gate, permissions.filter((p) => !current.has(p)));
+    if (escalation) return escalation;
     sets.push(sql`permissions = ${JSON.stringify(permissions)}`);
     changes.permissions = [role.permissions, permissions];
   }
@@ -241,6 +274,14 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ ok: true });
 }
 
+type AffectedAssignment = {
+  id: string;
+  user_id: string;
+  user_name: string;
+  is_active: boolean;
+  other_roles: number;
+};
+
 export async function DELETE(req: Request) {
   const gate = await guardPermission("admin.roles.manage");
   if (gate instanceof NextResponse) return gate;
@@ -248,8 +289,20 @@ export async function DELETE(req: Request) {
 
   const parsedBody3 = await parseJsonBody(req, jsonObject);
   if (!parsedBody3.ok) return parsedBody3.response;
-  const { id } = (parsedBody3.data) as { id?: string };
+  const { id, replacementRoleId } = (parsedBody3.data) as {
+    id?: string;
+    replacementRoleId?: unknown;
+  };
   if (!id || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
+  if (replacementRoleId !== undefined && replacementRoleId !== null) {
+    if (typeof replacementRoleId !== "string" || !isUuid(replacementRoleId)) {
+      return NextResponse.json({ error: "replacementRoleId must be a uuid" }, { status: 400 });
+    }
+    if (replacementRoleId === id) {
+      return NextResponse.json({ error: "a role cannot replace itself" }, { status: 400 });
+    }
+  }
+  const replacementId = typeof replacementRoleId === "string" ? replacementRoleId : null;
 
   const existing = ((await db.execute(sql`
     select id, key, name, is_built_in from app_roles
@@ -260,12 +313,77 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: "built-in roles cannot be deleted" }, { status: 403 });
   }
 
+  let replacement: { id: string; key: string; permissions: unknown } | null = null;
+  if (replacementId) {
+    const r = await db.execute<{ id: string; key: string; permissions: unknown }>(sql`
+      select id, key, permissions from app_roles
+       where id = ${replacementId} and org_id = ${actor.orgId}`);
+    replacement = r.rows[0] ?? null;
+    if (!replacement) {
+      return NextResponse.json({ error: "replacement role not found" }, { status: 404 });
+    }
+    // Reassigning users onto the replacement is a grant: same ceiling as assign.
+    const escalation = ceilingViolation(gate, rolePermissionList(replacement.permissions));
+    if (escalation) return escalation;
+  }
+
   // No DB-level FK cascade yet (informal FKs) — remove assignments explicitly.
-  // Keep cleanup and its audit evidence in one transaction so a failed write
-  // rolls back every part of the role deletion.
-  await db.transaction(async (tx) => {
+  // Keep the invariant check, cleanup, replacement grants and their audit
+  // evidence in one transaction so a failed write rolls back every part of
+  // the role deletion. The per-org lock serializes against concurrent
+  // assign/unassign so the "would be left with zero roles" read stays true
+  // at commit (the deferred DB guard is the last line of defence).
+  return db.transaction(async (tx) => {
     await tx.execute(sql`
-      delete from role_assignments where role_id = ${id} and org_id = ${actor.orgId}`);
+      select pg_advisory_xact_lock(hashtextextended(${`openbooks:role-delete:${actor.orgId}`}, 0))
+    `);
+    const affected = await tx.execute<AffectedAssignment>(sql`
+      select a.id, a.user_id, u.name as user_name, u.is_active,
+             (select count(*)::int from role_assignments o
+               where o.org_id = a.org_id and o.user_id = a.user_id and o.role_id <> a.role_id) as other_roles
+        from role_assignments a
+        join users u on u.id = a.user_id and u.org_id = a.org_id
+       where a.role_id = ${id} and a.org_id = ${actor.orgId}
+       order by u.is_active desc, u.name, a.id
+    `);
+    const stranded = affected.rows.filter((row) => row.is_active && row.other_roles === 0);
+    if (stranded.length > 0 && !replacement) {
+      const named = stranded.slice(0, 5).map((row) => row.user_name);
+      const suffix = stranded.length > named.length ? `, and ${stranded.length - named.length} more` : "";
+      return NextResponse.json(
+        {
+          error: `${stranded.length} active ${stranded.length === 1 ? "user holds" : "users hold"} only this role (${named.join(", ")}${suffix}); choose a replacement role or reassign them first`,
+          affectedCount: stranded.length,
+          affectedUsers: stranded.map((row) => ({ id: row.user_id, name: row.user_name })),
+        },
+        { status: 409 },
+      );
+    }
+
+    for (const row of affected.rows) {
+      await tx.execute(sql`
+        delete from role_assignments where id = ${row.id} and org_id = ${actor.orgId}`);
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${actor.orgId}, 'role_assignments', ${row.id}, 'delete',
+                ${JSON.stringify({ userId: [row.user_id, null], roleId: [id, null], reason: "role_deleted" })},
+                ${actor.id})`);
+    }
+    if (replacement) {
+      for (const row of stranded) {
+        const inserted = await tx.execute<{ id: string }>(sql`
+          insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
+          values (${actor.orgId}, ${row.user_id}, ${replacement.id}, ${actor.id}, ${actor.id})
+          on conflict (org_id, user_id, role_id) do nothing
+          returning id`);
+        if (!inserted.rows[0]) continue;
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${actor.orgId}, 'role_assignments', ${inserted.rows[0].id}, 'insert',
+                  ${JSON.stringify({ userId: [null, row.user_id], roleId: [null, replacement.id], reason: "role_deleted_replacement", replacedRoleId: id })},
+                  ${actor.id})`);
+      }
+    }
     await tx.execute(sql`
       delete from role_dashboard_layouts where role_key = ${role.key} and org_id = ${actor.orgId}`);
     await tx.execute(
@@ -275,9 +393,19 @@ export async function DELETE(req: Request) {
       orgId: actor.orgId,
       rowId: id,
       action: "delete",
-      changes: { key: [role.key, null], name: [role.name, null] },
+      changes: {
+        key: [role.key, null],
+        name: [role.name, null],
+        removedAssignments: affected.rows.length,
+        replacementRoleId: replacement?.id ?? null,
+        reassignedUsers: replacement ? stranded.map((row) => row.user_id) : [],
+      },
       actorId: actor.id,
     }, tx);
+    return NextResponse.json({
+      ok: true,
+      removedAssignments: affected.rows.length,
+      reassignedUsers: replacement ? stranded.length : 0,
+    });
   });
-  return NextResponse.json({ ok: true });
 }

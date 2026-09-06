@@ -1,5 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
+import { parseInternalOrgId, requestHasInternalToken } from '../../../../../lib/internal-token'
 import { publishOverheadRates } from '../../../../../lib/overhead-publish'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 
@@ -15,17 +16,20 @@ export const runtime = 'nodejs'
  *   POST /api/internal/overhead/publish  { orgId, effectiveFrom }
  */
 export async function POST(req: Request) {
-  const expected = process.env.OPENBOOKS_INTERNAL_TOKEN || ''
-  const provided = req.headers.get('x-internal-token') || ''
-  if (!expected || provided !== expected) {
+  // Constant-time compare that fails closed when no token is configured
+  // (this route is public + CSRF-exempt: the token is its only control).
+  if (!requestHasInternalToken(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
-  const { orgId, effectiveFrom } = body
-  if (!orgId || !/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? '')) {
-    return NextResponse.json({ error: 'orgId and effectiveFrom are required' }, { status: 422 })
+  // Validate the org id BEFORE any org-scoped work (feature gate, RLS scope):
+  // an unparsable id must be a 422 here, never a Postgres cast error later.
+  const orgId = parseInternalOrgId(body.orgId)
+  const effectiveFrom = typeof body.effectiveFrom === 'string' ? body.effectiveFrom : ''
+  if (!orgId || !/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
+    return NextResponse.json({ error: 'orgId (uuid) and effectiveFrom (YYYY-MM-DD) are required' }, { status: 422 })
   }
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature

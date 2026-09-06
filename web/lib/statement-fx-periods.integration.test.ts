@@ -64,8 +64,10 @@ test(
         const calendar = (await db.execute(sql\`
           select fiscal_calendar_id from accounting_periods where id = \${org.periodId}
         \`)).rows[0];
-        // May exists because the house equal-length comparative window starts
-        // one day before the period's own start (2026-06-31-30 = 2026-05-31).
+        // May exists to prove rate sets load for EVERY period up to the report
+        // date, not only the ones a column reads. The July comparative is the
+        // preceding ACCOUNTING period (June 1-30, see priorAccountingWindow),
+        // never an equal-day window reaching back into May.
         const mayPeriodId = randomUUID();
         const priorPeriodId = randomUUID();
         await db.execute(sql\`
@@ -135,6 +137,7 @@ test(
           // July's 1.40 (which would show 140).
           const pnl = await profitAndLossView(period, "July 2026", pnlLabels, { ...opts, compare: "prior_period" });
           assert.equal(pnl.columns.length, 4, "current + prior + variance pair");
+          assert.deepEqual([pnl.columns[1].from, pnl.columns[1].to], ["2026-06-01", "2026-06-30"], "prior column is the preceding accounting period");
           const netIncome = findLine(pnl, "Net income");
           assert.deepEqual(netIncome.values.slice(0, 3).map(n), [140, 120, 20]);
 
@@ -195,7 +198,7 @@ test(
           const gappedOpts = { orgId: org.orgId, subsidiary: gappedView.subsidiary };
           await assert.rejects(
             profitAndLossView(period, "July 2026", pnlLabels, { ...gappedOpts, compare: "prior_period" }),
-            (error) => error instanceof MissingRatesError && /covering 2026-05-31\.\.2026-07-31/.test(error.message),
+            (error) => error instanceof MissingRatesError && /covering 2026-06-01\.\.2026-07-31/.test(error.message),
           );
           await assert.rejects(
             balanceSheetView({ from: "2026-06-01", to: "2026-07-31" }, "June-July 2026", bsLabels, gappedOpts),

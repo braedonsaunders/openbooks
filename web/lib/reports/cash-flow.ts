@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { bucketSubsidiaryFilter, glActivityBuckets, glSummaryEligibleDims } from "../gl-summary";
+import { bucketSubsidiaryFilter, glActivityBuckets, glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalIsMaterial, decimalSum, type ExactDecimal } from "../statement-format";
 import { ZERO, compareAbsoluteDescending, decimalSubtract } from "./decimals";
@@ -85,9 +85,22 @@ const CASH_FLOW_TYPE_LABEL: Record<string, string> = {
  *
  * The three sections therefore sum to the net change in cash, which is proven
  * against the bank accounts' opening/closing balances.
+ *
+ * Every leg answers for exactly ONE accounting book (`bookId`, the org's
+ * primary book when omitted — see statementBookExpr): journal entries are
+ * book-mandatory, and an unscoped read would fuse a parallel book's mirror
+ * entries into the sections while the summary-backed cash balances stayed
+ * primary-only, so the statement could never tie.
  */
-export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId?: string): Promise<CashFlowResult> {
+export async function cashFlow(
+  from: string,
+  to: string,
+  dims?: DimFilter,
+  orgId?: string,
+  bookId?: string | null,
+): Promise<CashFlowResult> {
   const resolvedOrgId = await resolveOrgId(orgId);
+  const book = statementBookExpr(resolvedOrgId, bookId);
   // Contra movements: non-bank lines on entries that also hit a bank account,
   // grouped by account type. `-sum(amount)` converts debit-signed line amounts
   // into their effect on cash (credit a contra → cash in → positive).
@@ -100,6 +113,7 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
+         and e.book_id = ${book}
          and l.account_id in (
            select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank')
     )
@@ -108,6 +122,7 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where e.id in (select id from cash_entries)
+       and e.book_id = ${book}
        and l.org_id = ${resolvedOrgId} and a.type <> 'asset_bank' and ${dimWhere(dims)}
      group by a.type
   `));
@@ -137,6 +152,7 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
         minDate: null,
         maxDate: to,
         boundaries: [{ date: from, kind: 'start' }],
+        bookId,
       })
     : null;
   const cash = (await db.execute<{ opening: string; closing: string }>(
@@ -155,6 +171,7 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
                  coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+              and e.book_id = ${book}
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
            where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}`,
   ));

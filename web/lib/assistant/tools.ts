@@ -824,10 +824,15 @@ const financialTrends: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({ limit: z.number().int().min(2).max(15).optional() }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    const denied = reportScopeDenied(authz);
+    if (denied) return denied;
     const limit = Math.min((raw as { limit?: number }).limit ?? 15, 15);
     return {
       ok: true,
-      data: { periods: await financialTrendRows(authz.user.orgId, limit), href: "/reports/pnl" },
+      data: {
+        periods: await financialTrendRows(authz.user.orgId, limit, reportDims(authz)?.subsidiaryIds),
+        href: "/reports/pnl",
+      },
     };
   },
 };
@@ -847,6 +852,8 @@ const budgetVsActualTool: AssistantToolDef = {
     if (!scenarioId) {
       return { ok: true, data: { scenarios: await budgetScenarioOptions(authz.user.orgId), href: "/budgets" } };
     }
+    const denied = reportScopeDenied(authz);
+    if (denied) return denied;
     const view = await budgetVsActualView(scenarioId, authz.user.orgId, {
       actual: "Actual",
       budget: "Budget",
@@ -858,7 +865,7 @@ const budgetVsActualTool: AssistantToolDef = {
       expenses: "Expenses",
       netIncome: "Net income",
       totalOf: (section) => `Total ${section}`,
-    });
+    }, {}, reportDims(authz)?.subsidiaryIds);
     if (!view) return { ok: false, error: "budget_not_found" };
     return {
       ok: true,
@@ -1094,7 +1101,9 @@ const listOpenItems: AssistantToolDef = {
       return { ok: false, error: "forbidden" };
     }
     const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
-    const all = await openItems(authz.user.orgId, a.side, asOf);
+    // Same allowlist conversion as the cash cockpits: null = unrestricted
+    // (undefined), a Set = its ids, and an empty Set yields no rows.
+    const all = await openItems(authz.user.orgId, a.side, asOf, reportDims(authz)?.subsidiaryIds);
     const scoped = a.partyId ? all.filter((item) => item.partyId === a.partyId) : all;
     scoped.sort((x, y) =>
       (x.dueDate ?? x.tranDate).getTime() - (y.dueDate ?? y.tranDate).getTime());

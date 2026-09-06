@@ -84,6 +84,9 @@ const mockSources = new Map<string, string>([
     `
       const harness = globalThis[Symbol.for('openbooks.pay-stub-values-test')]
       export const db = { execute: (query) => harness.execute(query) }
+      // lib/subsidiaries (the shared scope predicate values.ts reuses) imports
+      // this seam; the pay-stub path under test never reaches it.
+      export async function withBypassContext(_opts, work) { return work() }
     `,
   ],
   [

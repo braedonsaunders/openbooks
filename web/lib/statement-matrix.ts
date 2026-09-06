@@ -405,7 +405,7 @@ async function buildAmountColumns(opts: {
     `))
     const groups = values.rows.map((value) => ({ key: value.id, name: value.name, dimVal: value.id as string | null }))
     if (unassigned.rows.length) groups.push({ key: 'unassigned', name: 'Unassigned', dimVal: null })
-    const periods = comparePeriods(period, compare, periodLabel)
+    const periods = await comparePeriods(orgId, period, compare, periodLabel)
     const grouped = periods.length > 1
     const cols: AmountColumn[] = []
     for (const group of groups) {
@@ -456,7 +456,7 @@ async function buildAmountColumns(opts: {
 
     // Compose breakout WITH compare: each breakout value gets one column per
     // period (Current + Prior). With no compare it stays one column per value.
-    const periods = comparePeriods(period, compare, periodLabel)
+    const periods = await comparePeriods(orgId, period, compare, periodLabel)
     const grouped = periods.length > 1
     const cols: AmountColumn[] = []
     for (const g of groups) {
@@ -478,26 +478,69 @@ async function buildAmountColumns(opts: {
   }
 
   // breakout === 'none' — base column, plus comparison.
-  const periods = comparePeriods(period, compare, periodLabel)
+  const periods = await comparePeriods(orgId, period, compare, periodLabel)
   return { cols: periods.map((p) => ({ key: p.key, label: p.label, from: p.from, to: p.to })), truncated: false }
 }
 
+/**
+ * The prior ACCOUNTING period(s) for a requested window. When the window is
+ * exactly a run of consecutive regular periods on the default fiscal calendar
+ * (one month, one quarter, a fiscal year …), the comparative is the same
+ * number of periods immediately preceding it — so February compares to all
+ * of January, not to the 28 days ending January 31. Windows that do not
+ * align to period boundaries have no accounting-period comparative and fall
+ * back to an equal-length window, labelled as such — as does an aligned
+ * window with no contiguous prior run on the calendar (the calendar starts
+ * here). Never silent: `aligned` tells the caller which comparative it got.
+ */
+export async function priorAccountingWindow(
+  orgId: string,
+  period: { from: string; to: string },
+): Promise<{ from: string; to: string; aligned: boolean }> {
+  const periods = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
+    select p.starts_on::text as starts_on, p.ends_on::text as ends_on
+      from accounting_periods p
+      join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+     where p.org_id = ${orgId} and fc.is_default and fc.is_active and not p.is_adjustment
+     order by p.starts_on, p.ends_on
+  `)).rows
+  const abuts = (i: number) => periods[i + 1]?.starts_on === addDays(periods[i]!.ends_on, 1)
+  const first = periods.findIndex((p) => p.starts_on === period.from)
+  if (first >= 0) {
+    // Walk forward through abutting periods until one ends on `period.to`.
+    let last = first
+    while (periods[last]!.ends_on < period.to && abuts(last)) last += 1
+    if (periods[last]!.ends_on === period.to) {
+      const count = last - first + 1
+      const priorFirst = first - count
+      // The prior run must itself be contiguous and abut the current window.
+      let contiguous = priorFirst >= 0
+      for (let i = priorFirst; contiguous && i < first; i += 1) contiguous = abuts(i)
+      if (contiguous) return { from: periods[priorFirst]!.starts_on, to: periods[first - 1]!.ends_on, aligned: true }
+    }
+  }
+  const priorTo = addDays(period.from, -1)
+  const priorFrom = addDays(priorTo, -daysBetween(period.from, period.to))
+  return { from: priorFrom, to: priorTo, aligned: false }
+}
+
 /** The period columns implied by a compare setting: just the base window when
- *  `none`, otherwise Current + the shifted Prior window (year or equal-length
- *  prior period). Reused for every breakout group so the two compose. */
-function comparePeriods(
+ *  `none`, otherwise Current + the Prior window (prior year, or the preceding
+ *  accounting period(s) — see priorAccountingWindow). Reused for every
+ *  breakout group so the two compose. */
+async function comparePeriods(
+  orgId: string,
   period: { from: string; to: string },
   compare: StatementCompare,
   periodLabel: string,
-): { key: string; label: string; from: string; to: string }[] {
+): Promise<{ key: string; label: string; from: string; to: string }[]> {
   const current = { key: 'current', label: compare === 'none' ? periodLabel : 'Current', from: period.from, to: period.to }
   if (compare === 'none') return [current]
   if (compare === 'prior_year') {
     return [current, { key: 'prior', label: 'Prior year', from: addMonthsIso(period.from, -12), to: addMonthsIso(period.to, -12) }]
   }
-  const priorTo = addDays(period.from, -1)
-  const priorFrom = addDays(priorTo, -daysBetween(period.from, period.to))
-  return [current, { key: 'prior', label: 'Prior period', from: priorFrom, to: priorTo }]
+  const prior = await priorAccountingWindow(orgId, period)
+  return [current, { key: 'prior', label: prior.aligned ? 'Prior period' : 'Prior period (equal length)', from: prior.from, to: prior.to }]
 }
 
 /** Roll each column vector up the account tree; sign-flip and prune like the

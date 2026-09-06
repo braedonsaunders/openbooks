@@ -45,6 +45,17 @@ const EXCLUDE = new Set([
   "audit_log",
   "api_key_events",
   "intercompany_pairs",
+  // Credential material is never copied. api_keys.key_hash and
+  // sftp_servers.username sit in GLOBAL unique indexes (api_keys_hash,
+  // sftp_servers_username_global) because the API/SFTP front doors route a
+  // credential to its tenant without an org predicate — so a verbatim copy
+  // either collides (23505, failing every clone of an org that ever minted a
+  // key) or, worse, would resolve a production credential to the sandbox.
+  // Import schedules hang off SFTP servers and go with them. neuterSandbox
+  // still deactivates any rows that reach a sandbox by other means.
+  "api_keys",
+  "sftp_servers",
+  "sftp_import_schedules",
   // A sandbox must not inherit production's backup schedule, and its run
   // ledger must not reference production's S3 objects (a delete inside the
   // sandbox would remove production's backup). Sandboxes start backup-free.
@@ -79,6 +90,9 @@ export const PARENT_FILTER: Record<string, (prodOrg: string) => string> = {
 export interface ColumnInfo {
   name: string;
   isUuid: boolean;
+  /** Postgres type name (information_schema udt_name), e.g. uuid, text, jsonb. */
+  udtName: string;
+  isNullable: boolean;
 }
 
 export interface TableInfo {
@@ -125,8 +139,10 @@ export function assertUuid(v: string): string {
 
 export async function loadCatalog(): Promise<Catalog> {
   // Columns for every base table in public, flagged as uuid or not.
-  const colsRes = await db.execute<{ table_name: string; column_name: string; udt_name: string }>(sql`
-    select c.table_name, c.column_name, c.data_type, c.udt_name
+  const colsRes = await db.execute<{
+    table_name: string; column_name: string; udt_name: string; is_nullable: string;
+  }>(sql`
+    select c.table_name, c.column_name, c.data_type, c.udt_name, c.is_nullable
       from information_schema.columns c
       join information_schema.tables t
         on t.table_name = c.table_name and t.table_schema = c.table_schema
@@ -183,7 +199,12 @@ export async function loadCatalog(): Promise<Catalog> {
       byTable.set(r.table_name, t);
     }
     const isUuid = r.udt_name === "uuid";
-    t.columns.push({ name: r.column_name, isUuid });
+    t.columns.push({
+      name: r.column_name,
+      isUuid,
+      udtName: r.udt_name,
+      isNullable: r.is_nullable === "YES",
+    });
     if (r.column_name === "org_id") t.hasOrgId = true;
     if (r.column_name === "id") t.hasId = true;
   }

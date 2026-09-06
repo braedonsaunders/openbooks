@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { isValidEmailAddress } from '@openbooks/emails'
 import { can, guardPermission, guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isDocKindEnabled } from '../../../../../../lib/documents'
+import { isUuid } from '../../../../../../lib/list-params'
 import { PDF_RECORD_TYPE_BY_KEY } from '../../../../../../lib/pdf-templates/catalog'
 import { resolveRecordRecipient, sendRecordPdfEmail } from '../../../../../../lib/pdf-templates/send'
 import { loadRecordSubsidiaryScope } from '../../../lib'
@@ -51,6 +52,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ recordTy
   if (!(await isDocKindEnabled(gate.user.orgId, recordType))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
+  // A malformed id is a plain not-found, settled before any record lookup.
+  if (!isUuid(id)) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   const owned = await loadRecordSubsidiaryScope(recordType, gate.user.orgId, id)
   if (!owned) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
@@ -70,6 +73,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ recordT
   if (!(await isDocKindEnabled(gate.user.orgId, recordType))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
+  if (!isUuid(id)) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   const owned = await loadRecordSubsidiaryScope(recordType, gate.user.orgId, id)
   if (!owned) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)

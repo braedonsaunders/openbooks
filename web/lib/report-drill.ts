@@ -29,6 +29,8 @@ export type ReportDrillTarget =
       side: AgingSide
       asOf: string
       dims?: StatementDimFilter
+      /** Subsidiary context node the report was viewed under (scoped server-side). */
+      subsidiaryId?: string
       partyId?: string
       bucket?: AgingBucket
     }
@@ -193,7 +195,16 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       ? (input.bucket as AgingBucket)
       : undefined
     if (!asOf || !ISO_DATE.test(asOf) || !side) return null
-    return { kind: 'aging', label, side, asOf, dims: dimsValue(input.dims), partyId: uuidValue(input.partyId), bucket }
+    return {
+      kind: 'aging',
+      label,
+      side,
+      asOf,
+      dims: dimsValue(input.dims),
+      subsidiaryId: uuidValue(input.subsidiaryId),
+      partyId: uuidValue(input.partyId),
+      bucket,
+    }
   }
 
   if (input.kind === 'budget') {

@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
+import { permissionSetCovers, resolveEffectivePermissions } from "@openbooks/engine/src/permissions.ts";
 
 /**
  * The "one login across tenants" resolution layer. A person logs in as their
@@ -77,6 +78,32 @@ async function actingUserIn(
   // identity. Preview/sample companies still require an explicit mapped user:
   // their copied tenant data must never inherit a cross-tenant user identity.
   return home.isSuperAdmin && envKind === "production" ? home.id : null;
+}
+
+/**
+ * Whether the users row `actingUserId` holds `permission` in `orgId` right
+ * now — the same role-union + override resolution authz uses, evaluated
+ * directly (this module runs before Authz exists and must not depend on it).
+ */
+async function actingUserHolds(actingUserId: string, orgId: string, permission: string): Promise<boolean> {
+  const [assignments, overrides] = await Promise.all([
+    db.execute<{ permissions: unknown }>(sql`
+      select r.permissions
+        from role_assignments a
+        join app_roles r on r.id = a.role_id and r.org_id = a.org_id
+       where a.user_id = ${actingUserId} and a.org_id = ${orgId}`),
+    db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
+      select permission, effect
+        from user_permission_overrides
+       where user_id = ${actingUserId} and org_id = ${orgId}`),
+  ]);
+  const effective = resolveEffectivePermissions({
+    rolePermissionSets: assignments.rows.map((r) =>
+      Array.isArray(r.permissions) ? r.permissions.filter((p): p is string => typeof p === "string") : [],
+    ),
+    overrides: overrides.rows,
+  });
+  return permissionSetCovers(effective, permission);
 }
 
 /** Every top-level production or explicitly granted preview org the member can reach. */
@@ -161,6 +188,14 @@ export async function resolveActiveEnv(
       const prodId = org.sandboxOf as string;
       const acting = await actingUserIn(home, prodId, "production");
       if (!acting) return null;
+      // Entering a sandbox is a privileged act: the member must hold
+      // admin.sandboxes.manage in the PRODUCTION org (super admins hold
+      // everything). Enforced here — not only in the switcher UI — because
+      // this resolver also runs per request from currentUser(), so revoking
+      // the permission ejects a member already inside on their next request.
+      if (!home.isSuperAdmin && !(await actingUserHolds(acting, prodId, "admin.sandboxes.manage"))) {
+        return null;
+      }
       const sb = (await db.execute(sql`
         select name, status from sandboxes where org_id = ${activeOrgId}`)) as unknown as { rows: SandboxSqlRow[] };
       if (!sb.rows[0] || sb.rows[0].status !== "ready") return null;

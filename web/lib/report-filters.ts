@@ -74,6 +74,18 @@ function oneOf<T extends string>(v: string | undefined, allowed: T[], fallback: 
   return v && (allowed as string[]).includes(v) ? (v as T) : fallback
 }
 
+/** A uuid-valued param, or undefined when absent or malformed. */
+function uuidParam(sp: ParamSource, key: string): string | undefined {
+  const value = read(sp, key)
+  return value && UUID.test(value) ? value : undefined
+}
+
+/** True when `value` is a well-formed uuid — for page/route params that bind
+ *  into uuid predicates outside the shared query (e.g. `account`). */
+export function isReportUuidParam(value: string | null | undefined): value is string {
+  return !!value && UUID.test(value)
+}
+
 function segmentFilters(sp: ParamSource): Record<string, string> {
   const entries = sp instanceof URLSearchParams ? [...sp.entries()] : Object.entries(sp)
   return Object.fromEntries(
@@ -98,17 +110,18 @@ export function parseReportQuery(sp: ParamSource): ReportQuery {
     })(),
     compare: oneOf(read(sp, REPORT_PARAM_KEYS.compare), COMPARES, 'none'),
     basis: oneOf(read(sp, REPORT_PARAM_KEYS.basis), BASES, 'accrual'),
+    // Dimension ids bind straight into uuid predicates (dimWhere), so a
+    // hand-edited or stale value is re-clamped to "no filter" here — the same
+    // authoritative treatment the other filter params get — instead of
+    // surfacing a database cast error from every statement page and export.
     dims: {
-      departmentId: read(sp, REPORT_PARAM_KEYS.dept) || undefined,
-      projectId: read(sp, REPORT_PARAM_KEYS.project) || undefined,
-      locationId: read(sp, REPORT_PARAM_KEYS.location) || undefined,
-      classId: read(sp, REPORT_PARAM_KEYS.class) || undefined,
+      departmentId: uuidParam(sp, REPORT_PARAM_KEYS.dept),
+      projectId: uuidParam(sp, REPORT_PARAM_KEYS.project),
+      locationId: uuidParam(sp, REPORT_PARAM_KEYS.location),
+      classId: uuidParam(sp, REPORT_PARAM_KEYS.class),
       segments: segmentFilters(sp),
     },
-    customerId: (() => {
-      const value = read(sp, REPORT_PARAM_KEYS.customer)
-      return value && UUID.test(value) ? value : undefined
-    })(),
+    customerId: uuidParam(sp, REPORT_PARAM_KEYS.customer),
     projectScope: oneOf(read(sp, REPORT_PARAM_KEYS.projectScope), ['active', 'all'], 'active'),
     subsidiaryId: read(sp, REPORT_PARAM_KEYS.sub) || undefined,
     showZero: read(sp, REPORT_PARAM_KEYS.zero) === '1',

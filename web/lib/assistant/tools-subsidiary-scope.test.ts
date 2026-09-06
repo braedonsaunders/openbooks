@@ -39,3 +39,34 @@ test("empty restricted scopes fail closed for report helpers and journal reads",
   assert.match(glSummary, /if \(subsidiaryIds === undefined\) return/);
   assert.match(glSummary, /: sql`and false`/);
 });
+
+const trends = read("../reports/trends.ts");
+
+test("financial_trends, budget_vs_actual and list_open_items carry the caller's subsidiary allowlist", () => {
+  // X3b: the trend and budget tools previously passed only orgId.
+  assert.match(tools, /financialTrendRows\(authz\.user\.orgId, limit, reportDims\(authz\)\?\.subsidiaryIds\)/);
+  assert.match(tools, /budgetVsActualView\(scenarioId, authz\.user\.orgId, \{[\s\S]*?\}, \{\}, reportDims\(authz\)\?\.subsidiaryIds\)/);
+  assert.match(trends, /export async function financialTrends\([\s\S]*subsidiaryIds\?: readonly string\[\]/);
+  assert.match(trends, /scope\(sql`l\.subsidiary_id`\)/);
+  assert.match(trends, /scope\(sql`jl\.subsidiary_id`\)/);
+  // X3: list_open_items dropped the allowlist entirely.
+  assert.match(tools, /openItems\(authz\.user\.orgId, a\.side, asOf, reportDims\(authz\)\?\.subsidiaryIds\)/);
+  // Both report tools fail closed on an empty restricted scope before querying.
+  const trendsTool = tools.slice(tools.indexOf('name: "financial_trends"'), tools.indexOf("financialTrendRows("));
+  assert.match(trendsTool, /reportScopeDenied\(authz\)/);
+  const budgetTool = tools.slice(tools.indexOf('name: "budget_vs_actual"'), tools.indexOf("budgetVsActualView("));
+  assert.match(budgetTool, /reportScopeDenied\(authz\)/);
+});
+
+const cashFlowIndirect = read("../reports/cash-flow-indirect.ts");
+const ledgerReports = read("../reports/ledger-reports.ts");
+
+test("summary-backed statement legs fail closed on an empty subsidiary scope", () => {
+  // RP3: `subsidiaryIds?.length ? … : sql``` treated an EMPTY allowlist as
+  // "no filter" and fell through to org-wide net income and cash. Every
+  // summary leg must use the shared bucket filter, whose [] case is `and false`.
+  assert.doesNotMatch(cashFlowIndirect, /subsidiaryIds\?\.length \?/);
+  assert.equal(cashFlowIndirect.match(/bucketSubsidiaryFilter\(dims\?\.subsidiaryIds\)/g)?.length, 2);
+  assert.doesNotMatch(ledgerReports, /subsidiaryIds\?\.length \?/);
+  assert.match(ledgerReports, /bucketSubsidiaryFilter\(opts\.dims\?\.subsidiaryIds, sql`g`\)/);
+});

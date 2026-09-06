@@ -187,10 +187,14 @@ export function glAccountMovement(opts: {
   )`
 }
 
-/** Optional subsidiary scope applied to the buckets relation. */
-export function bucketSubsidiaryFilter(subsidiaryIds?: string[]): SQL {
+/**
+ * Optional subsidiary scope applied to the buckets relation (or any summary
+ * relation via `alias`). Undefined = unrestricted; an EMPTY list is a caller
+ * whose visibility resolved to nothing and must read no rows — never "all".
+ */
+export function bucketSubsidiaryFilter(subsidiaryIds?: string[], alias: SQL = sql`b`): SQL {
   if (subsidiaryIds === undefined) return sql``
   return subsidiaryIds.length
-    ? sql`and b.subsidiary_id = any(${`{${subsidiaryIds.join(',')}}`}::uuid[])`
+    ? sql`and ${alias}.subsidiary_id = any(${`{${subsidiaryIds.join(',')}}`}::uuid[])`
     : sql`and false`
 }

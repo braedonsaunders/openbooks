@@ -186,10 +186,17 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     // with a user-authored object aborts the whole install transaction.
     const prevRes = (await tx.execute<{ provisioned: { recordTypes?: string[]; customFields?: string[] } }>(sql`select provisioned from apps where id = ${appId} and org_id = ${orgId}`))
     const prev = prevRes.rows[0]?.provisioned ?? {}
-    const provisioned = await provisionObjects(tx, orgId, userId, objects, {
+    const owned = {
       recordTypes: new Set(prev.recordTypes ?? []),
       customFields: new Set(prev.customFields ?? []),
-    }, { appKey: manifest.key, appVersionId: versionId })
+    }
+    // A fresh row after an uninstall has lost its ownership map; recover it
+    // from the uninstall audit evidence so the reinstall may upgrade the
+    // objects it provisioned instead of colliding with them forever.
+    if (!prior.rows.length) {
+      await adoptUninstalledProvenance(tx, orgId, userId, appId, manifest.key, objects, owned)
+    }
+    const provisioned = await provisionObjects(tx, orgId, userId, objects, owned, { appKey: manifest.key, appVersionId: versionId })
     await tx.execute(sql`update apps set provisioned = ${JSON.stringify(provisioned)}::jsonb where id = ${appId} and org_id = ${orgId}`)
 
     // Supersede the previous active version, then activate the new one.
@@ -198,6 +205,84 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
   })
 
   return { key: manifest.key }
+}
+
+/**
+ * Reinstall provenance recovery. Uninstall deliberately preserves provisioned
+ * objects (they hold living master data) but deletes the apps row that carried
+ * the ownership map — the only thing that lets a later install upgrade rather
+ * than 409 on them. deleteApp's audit row keeps that map verbatim
+ * (`changes.before.provisioned`, keyed by app key), so a fresh install of the
+ * same key consults the LATEST uninstall evidence and re-adopts an object only
+ * when both hold:
+ *   - that evidence lists the object (record type key / "table:key"), and
+ *   - the object row predates the uninstall — a same-key object authored after
+ *     the uninstall belongs to the user and still collides.
+ * Every adoption is itself audited against the new apps row, so provenance
+ * never changes hands silently. Mutates `owned` in place.
+ */
+async function adoptUninstalledProvenance(
+  tx: SqlExecutor,
+  orgId: string,
+  userId: string,
+  appId: string,
+  appKey: string,
+  objects: ParsedObjects,
+  owned: { recordTypes: Set<string>; customFields: Set<string> },
+): Promise<void> {
+  if (!objects.recordTypes.length && !objects.customFields.length) return
+  const evidence = (await tx.execute<{
+    id: string
+    at: Date
+    provisioned: { recordTypes?: unknown; customFields?: unknown } | null
+  }>(sql`
+    select id, at, changes->'before'->'provisioned' as provisioned
+      from audit_log
+     where org_id = ${orgId} and table_name = 'apps' and action = 'delete'
+       and changes->>'event' = 'app_uninstall'
+       and changes->'before'->>'key' = ${appKey}
+     order by at desc, id desc
+     limit 1`)).rows[0]
+  if (!evidence) return
+  const listed = (value: unknown): Set<string> =>
+    new Set(Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [])
+  const recordTypes = listed(evidence.provisioned?.recordTypes)
+  const customFields = listed(evidence.provisioned?.customFields)
+
+  const adopted = { recordTypes: [] as string[], customFields: [] as string[] }
+  for (const rt of objects.recordTypes) {
+    if (owned.recordTypes.has(rt.key) || !recordTypes.has(rt.key)) continue
+    const survived = (await tx.execute(sql`
+      select 1 from custom_record_types
+       where org_id = ${orgId} and key = ${rt.key} and created_at <= ${evidence.at}
+       limit 1`)).rows.length > 0
+    if (survived) adopted.recordTypes.push(rt.key)
+  }
+  for (const cf of objects.customFields) {
+    const scoped = `${cf.targetTable}:${cf.key}`
+    if (owned.customFields.has(scoped) || !customFields.has(scoped)) continue
+    const survived = (await tx.execute(sql`
+      select 1 from custom_field_defs
+       where org_id = ${orgId} and target_table = ${cf.targetTable} and key = ${cf.key}
+         and created_at <= ${evidence.at}
+       limit 1`)).rows.length > 0
+    if (survived) adopted.customFields.push(scoped)
+  }
+  if (!adopted.recordTypes.length && !adopted.customFields.length) return
+
+  for (const key of adopted.recordTypes) owned.recordTypes.add(key)
+  for (const key of adopted.customFields) owned.customFields.add(key)
+  await tx.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'apps', ${appId}, 'update',
+      ${JSON.stringify({
+        event: 'app_provenance_adopted',
+        appKey,
+        evidenceAuditId: evidence.id,
+        before: { provisioned: { recordTypes: [], customFields: [] } },
+        after: { provisioned: adopted },
+      })}::jsonb,
+      ${userId})`)
 }
 
 /** Upsert declared objects inside the install transaction. Returns provenance. */
@@ -620,9 +705,14 @@ export async function runBridgeMethod(opts: {
     const adapters: AppHostAdapters = { storage: storageAdapter(opts.orgId, app.id) }
     if (recordsGranted) adapters.records = recordsAdapter(opts.orgId)
     if (glGranted) {
+      // The bridge caller's subsidiary scope travels with the write, so an App
+      // backend cannot journal into an entity the signed-in user may not see.
       adapters.journal = {
         create: (input, post) =>
-          createScriptJournal(opts.orgId, opts.user.id, input as ScriptJournalInput, { post }),
+          createScriptJournal(opts.orgId, opts.user.id, input as ScriptJournalInput, {
+            post,
+            allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
+          }),
       }
     }
     adapters.platform = platform

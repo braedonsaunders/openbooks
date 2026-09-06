@@ -520,3 +520,23 @@ test('payroll scope decisions precede representative service and artifact calls'
     'remittance aggregate scope must settle before summary generation',
   )
 })
+
+test('template preview demands the record type’s read authority and samples inside scope', () => {
+  // The editor preview prints a REAL record (the org's most recent one), so it
+  // is a disclosure surface: designer authority alone must not open it, and
+  // the sample must be chosen with the same subsidiary predicate the lists use.
+  const preview = source('app/api/pdf-templates/preview/route.ts')
+  assert.match(preview, /guardPermission\("admin\.customization\.manage"\)/)
+  assert.match(preview, /can\(gate, meta\.readPermission\)/, 'the record family read permission is required')
+  assert.ok(
+    preview.indexOf('can(gate, meta.readPermission)') < preview.indexOf('findSamplePdfRecordId('),
+    'authority is settled before any sample record is looked up',
+  )
+  assert.match(preview, /findSamplePdfRecordId\(meta\.key, user\.orgId, gate\.allowedSubsidiaryIds\)/)
+
+  const values = source('lib/pdf-templates/values.ts')
+  assert.match(values, /export async function findSamplePdfRecordId\(\s*recordType: string,\s*orgId: string,\s*scope: ReadonlySet<string> \| null,?\s*\)/)
+  assert.ok(count(values, 'subsidiaryVisibleFilter(sql`subsidiary_id`, scope)') >= 2,
+    'document and journal samples both carry the shared visibility predicate')
+  assert.match(values, /if \(scope !== null\) return null/, 'types without a resolvable subsidiary fail closed for restricted callers')
+})

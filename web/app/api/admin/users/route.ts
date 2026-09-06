@@ -6,6 +6,7 @@ import {
   type SqlExecutor,
   withOrgTransaction,
 } from "@openbooks/engine/src/db.ts";
+import { permissionsOutsideCeiling } from "@openbooks/engine/src/permissions.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 
@@ -14,6 +15,11 @@ export const runtime = "nodejs";
 /**
  * Admin user management: assign/unassign roles, toggle active.
  * Gated by admin.users.manage; every mutation is org-scoped and audited.
+ *
+ * Privilege ceiling: admin.users.manage is an ordinary permission, so an
+ * administrator may only grant a role whose permissions sit inside their own
+ * effective set, and never to themselves. Super admins are exempt — they
+ * already hold everything. Otherwise this route is a one-call escalation.
  */
 
 async function audit(
@@ -61,10 +67,31 @@ export async function POST(req: Request) {
       if (!body.roleId || !isUuid(body.roleId)) {
         return NextResponse.json({ error: "roleId required" }, { status: 400 });
       }
-      const role = await db.execute(sql`
-        select id, key from app_roles where id = ${body.roleId} and org_id = ${actor.orgId}`);
+      const role = await db.execute<{ id: string; key: string; permissions: unknown }>(sql`
+        select id, key, permissions from app_roles where id = ${body.roleId} and org_id = ${actor.orgId}`);
       if (!role.rows[0])
         return NextResponse.json({ error: "role not found" }, { status: 404 });
+      if (!actor.isSuperAdmin) {
+        if (body.userId === actor.id) {
+          return NextResponse.json(
+            { error: "you cannot grant a role to yourself" },
+            { status: 403 },
+          );
+        }
+        const rolePermissions = Array.isArray(role.rows[0].permissions)
+          ? role.rows[0].permissions.filter((p): p is string => typeof p === "string")
+          : [];
+        const missing = permissionsOutsideCeiling(gate.permissions, rolePermissions);
+        if (missing.length > 0) {
+          return NextResponse.json(
+            {
+              error: `cannot grant permissions you do not hold: ${missing.join(", ")}`,
+              missing,
+            },
+            { status: 403 },
+          );
+        }
+      }
       return withOrgTransaction(actor.orgId, async () => {
         const inserted = (await db.execute(sql`
           insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)

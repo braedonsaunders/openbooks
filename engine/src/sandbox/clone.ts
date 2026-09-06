@@ -62,11 +62,15 @@ export const CUSTOMIZATION_LAYER = new Set([
   "users",
 ]);
 
-/** Generate the INSERT..SELECT that copies one table, or null to skip it. */
+/** Generate the INSERT..SELECT that copies one table, or null to skip it.
+ * `retainedTenantTables` = tenant-owned tables the clone deliberately does not
+ * copy (the catalog EXCLUDE set): a real FK into one of them can never be
+ * copied verbatim — the value would be a pointer at PRODUCTION's row. */
 function generateCopySql(
   t: TableInfo,
   opts: CloneOptions,
   rebaseSet: Set<string>,
+  retainedTenantTables: Set<string>,
   masking: Map<string, Map<string, MaskTransform>>,
 ): string | null {
   const seed = assertUuid(opts.seed);
@@ -78,14 +82,22 @@ function generateCopySql(
   const exprs: string[] = [];
   for (const c of t.columns) {
     cols.push(`"${c.name}"`);
+    const fkTarget = t.fks[c.name];
     if (c.name === "id" && t.hasId) {
       exprs.push(`ob_rebase("id", '${seed}')`);
     } else if (c.name === "org_id") {
       exprs.push(`'${sbx}'::uuid`);
-    } else if ((t.fks[c.name] && rebaseSet.has(t.fks[c.name]!)) || t.forceRebase.has(c.name)) {
+    } else if (fkTarget && retainedTenantTables.has(fkTarget)) {
+      if (!c.isNullable) {
+        throw new Error(
+          `sandbox clone: ${t.name}.${c.name} is NOT NULL and references ${fkTarget}, which is never copied into a sandbox`,
+        );
+      }
+      exprs.push("null");
+    } else if ((fkTarget && rebaseSet.has(fkTarget)) || t.forceRebase.has(c.name)) {
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
     } else if (tableMask?.has(c.name)) {
-      exprs.push(`${maskExpr(c.name, tableMask.get(c.name)!)} `);
+      exprs.push(`${maskExpr(c.name, tableMask.get(c.name)!, "id", c)} `);
     } else {
       exprs.push(`"${c.name}"`);
     }
@@ -118,6 +130,9 @@ function generateCopySql(
 export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   const cat = await loadCatalog();
   const { tables, rebaseSet } = cat;
+  const retainedTenantTables = new Set(
+    cat.tenantTables.map((t) => t.name).filter((name) => !rebaseSet.has(name)),
+  );
   const masking = opts.masked
     ? await loadMaskingPolicies(opts.productionOrgId)
     : new Map<string, Map<string, MaskTransform>>();
@@ -144,7 +159,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     await db.execute(sql`select set_config('openbooks.migration', 'on', true)`);
     await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
     for (const t of selected) {
-      const stmt = generateCopySql(t, opts, rebaseSet, masking);
+      const stmt = generateCopySql(t, opts, rebaseSet, retainedTenantTables, masking);
       if (!stmt) continue;
       const res = (await db.execute(sql.raw(stmt)));
       const n = res.rowCount ?? 0;

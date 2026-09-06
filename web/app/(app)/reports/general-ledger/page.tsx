@@ -5,8 +5,9 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { DocTypeBadge } from '../../../../components/doc-type-badge'
 import { dimensionOptions, generalLedger } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
+import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery } from '../../../../lib/report-filters'
+import { isReportUuidParam, parseReportQuery } from '../../../../lib/report-filters'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { TxnLink } from '../TxnLink'
@@ -33,9 +34,13 @@ export default async function GeneralLedgerPage({
   const scheduleDefId = await reportScheduleAnchor('general-ledger')
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-  const dims = q.dims
+  // Legal-entity scope is enforced here, not by the picker: a restricted
+  // reader's view resolves to the subsidiaries they may see (empty = no rows)
+  // and every query below carries it — the same contract as the export path.
+  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
   const [gl, opts, org] = await Promise.all([
-    generalLedger(period.from, period.to, { accountId: sp.account, dims }),
+    generalLedger(period.from, period.to, { accountId: isReportUuidParam(sp.account) ? sp.account : undefined, dims }),
     dimensionOptions(undefined, dims.projectId),
     orgInfo(),
   ])
@@ -53,8 +58,9 @@ export default async function GeneralLedgerPage({
             back={{ href: '/reports', label: t('hub.title') }}
           />
           <ReportFilterBar
-            controls={{ period: true, dimensions: true }}
+            controls={{ period: true, dimensions: true, subsidiary: true }}
             dimensions={opts}
+            subsidiaries={subView.picker}
             actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="general-ledger" params={sp} /></>}
           />
           {gl.truncated && <p className="text-xs text-amber-600 dark:text-amber-400">{t('generalLedger.truncated')}</p>}

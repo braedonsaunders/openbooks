@@ -6,6 +6,7 @@ import { add, cmp, isZero, mul, neg, sum } from '@openbooks/engine/src/money.ts'
 import { amountInWords } from '@openbooks/engine/src/payroll-cheques.ts'
 import { createMoneyFormatter, type MoneyFormatter } from '../money-format'
 import { resolveLocale } from '../locale'
+import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { PDF_RECORD_TYPE_BY_KEY, type PdfMergeField, type PdfRecordTypeMeta } from './catalog'
 import { loadFieldTicket } from '../field-tickets'
 
@@ -554,31 +555,39 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
   return { values, reference: ticket.documentNumber }
 }
 
-/** The most recent record of a type — real data for the editor preview. */
-export async function findSamplePdfRecordId(recordType: string, orgId: string): Promise<string | null> {
+/**
+ * The most recent record of a type — real data for the editor preview.
+ * `scope` is the caller's allowedSubsidiaryIds: the sample is the most recent
+ * record INSIDE that scope (the same predicate the record lists apply), so a
+ * restricted designer never previews a hidden legal entity's record. Types
+ * without a resolvable subsidiary (pay stubs) fail closed for any restricted
+ * caller, exactly as the print route's own scope decision does.
+ */
+export async function findSamplePdfRecordId(
+  recordType: string,
+  orgId: string,
+  scope: ReadonlySet<string> | null,
+): Promise<string | null> {
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
   if (!meta) return null
   if (meta.key === 'journal_entry') {
     const r = (await db.execute<{ id: string }>(sql`
-      select id from journal_entries where org_id = ${orgId} order by created_at desc limit 1
+      select id from journal_entries where org_id = ${orgId}${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}
+       order by created_at desc limit 1
     `))
     return r.rows[0]?.id ?? null
   }
-  if (meta.key === 'pay_stub') {
+  if (meta.key === 'pay_stub' || meta.key === 'payroll_cheque') {
+    if (scope !== null) return null
     const r = (await db.execute<{ id: string }>(sql`
-      select id from pay_stubs where org_id = ${orgId} order by created_at desc limit 1
-    `))
-    return r.rows[0]?.id ?? null
-  }
-  if (meta.key === 'payroll_cheque') {
-    const r = (await db.execute<{ id: string }>(sql`
-      select id from pay_stubs where org_id = ${orgId} and cheque_number is not null
+      select id from pay_stubs where org_id = ${orgId}
+         and (${meta.key === 'pay_stub'} or cheque_number is not null)
        order by created_at desc limit 1
     `))
     return r.rows[0]?.id ?? null
   }
   const r = (await db.execute<{ id: string }>(sql`
-    select id from documents where org_id = ${orgId} and kind = ${meta.docKind}
+    select id from documents where org_id = ${orgId} and kind = ${meta.docKind}${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}
      order by created_at desc limit 1
   `))
   return r.rows[0]?.id ?? null

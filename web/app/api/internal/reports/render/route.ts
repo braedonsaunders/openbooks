@@ -9,6 +9,7 @@ import { resolveDefinitionToExportData } from '../../../../../lib/report-run'
 import { exportDataToPdf, exportDataToXlsx, orgBranding, resolveLayout, type Translator } from '../../../../../lib/report-pdf'
 import { resolvePeriod } from '../../../../../lib/periods'
 import { parseReportQuery } from '../../../../../lib/report-filters'
+import { internalTokenMatches, parseInternalOrgId } from '../../../../../lib/internal-token'
 
 export const runtime = 'nodejs'
 
@@ -21,19 +22,20 @@ export const runtime = 'nodejs'
  *   GET /api/internal/reports/render?orgId=&definitionId=&<report params>
  */
 export async function GET(req: Request) {
-  const expected = process.env.OPENBOOKS_INTERNAL_TOKEN || ''
-  const provided = req.headers.get('x-internal-token') || ''
-  if (!expected || provided !== expected) {
+  if (!internalTokenMatches(req.headers.get('x-internal-token'), process.env.OPENBOOKS_INTERNAL_TOKEN)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
   const url = new URL(req.url)
   const p = url.searchParams
-  const orgId = p.get('orgId')
   const definitionId = p.get('definitionId')
-  if (!orgId || !definitionId) {
+  if (!p.get('orgId') || !definitionId) {
     return NextResponse.json({ error: 'orgId and definitionId are required' }, { status: 422 })
   }
+  // The org id opens an RLS scope: an unparsable id is a bad request, never a
+  // database cast error surfaced as a server fault.
+  const orgId = parseInternalOrgId(p.get('orgId'))
+  if (!orgId) return NextResponse.json({ error: 'orgId must be a uuid' }, { status: 400 })
 
   // No session on this seam: scope every row-level-secured query to the
   // worker-supplied org explicitly (FORCE RLS otherwise yields zero rows).
@@ -74,6 +76,12 @@ export async function GET(req: Request) {
       orgId,
     })
     if (!authorization_snapshot) return NextResponse.json({ error: 'report schedule requires reauthorization' }, { status: 403 })
+    // The snapshot pins WHO authorized the schedule (principal + subsidiary
+    // allowlist + the definition as it stood, kept as evidence). It is not the
+    // report: the run renders the definition's CURRENT saved columns/filters,
+    // and resolveDefinitionToExportData re-checks that the pinned principal
+    // may still run that current definition — an edit that widens it beyond
+    // the principal's grants fails the run rather than delivering.
     const authz = await scheduledReportAuthz(orgId, authorization_snapshot)
     if (p.get('authorizeOnly') === '1') return new NextResponse(null, { status: 204 })
     const data = await withReportAuthz(authz, () => resolveDefinitionToExportData(
@@ -81,7 +89,7 @@ export async function GET(req: Request) {
       definitionId,
       p,
       { orgId, t, period: scheduledPeriod, query: scheduledQ },
-      { extraFilters, definition: authorization_snapshot!.definition },
+      { extraFilters },
     ))
     const stamp = await businessToday(orgId)
     if (p.get('format') === 'xlsx') {

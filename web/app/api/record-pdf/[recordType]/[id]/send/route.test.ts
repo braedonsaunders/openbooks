@@ -236,3 +236,30 @@ test('GET keeps rendering/recipient prefill on read authority alone', async () =
   assert.equal(state.recipientCalls.length, 1)
   assert.deepEqual(state.sendCalls, [], 'GET never delivers mail')
 })
+
+test('a malformed record id is refused as not found before any scope or disclosure work', async () => {
+  for (const bad of ['not-a-uuid', '1 or 1=1', '00000000-0000-4000-8000-00000000a00', '../etc']) {
+    reset()
+    state.granted = new Set(['ar.read', 'ar.create'])
+
+    const getResponse = await GET(
+      new Request(`http://openbooks.test/api/record-pdf/customer_invoice/${encodeURIComponent(bad)}/send`),
+      { params: Promise.resolve({ recordType: 'customer_invoice', id: bad }) },
+    )
+    assert.equal(getResponse.status, 404, `GET "${bad}" must be a plain not-found`)
+    assert.deepEqual(await getResponse.json(), { error: 'record not found' })
+
+    const postResponse = await POST(
+      new Request(`http://openbooks.test/api/record-pdf/customer_invoice/${encodeURIComponent(bad)}/send`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ to: 'someone@elsewhere.test' }),
+      }),
+      { params: Promise.resolve({ recordType: 'customer_invoice', id: bad }) },
+    )
+    assert.equal(postResponse.status, 404, `POST "${bad}" must be a plain not-found`)
+    assert.deepEqual(await postResponse.json(), { error: 'record not found' })
+    assert.deepEqual(state.recipientCalls, [], `"${bad}" never reaches recipient resolution`)
+    assert.deepEqual(state.sendCalls, [], `"${bad}" never reaches delivery`)
+  }
+})

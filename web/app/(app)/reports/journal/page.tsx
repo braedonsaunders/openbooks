@@ -5,6 +5,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { DocTypeBadge } from '../../../../components/doc-type-badge'
 import { dimensionOptions, journalReport } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
+import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { TxnLink } from '../TxnLink'
@@ -31,7 +32,11 @@ export default async function JournalPage({
   const scheduleDefId = await reportScheduleAnchor('journal')
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-  const dims = q.dims
+  // Legal-entity scope is enforced here, not by the picker: a restricted
+  // reader's view resolves to the subsidiaries they may see (empty = no rows)
+  // and every query below carries it — the same contract as the export path.
+  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
   const [journal, opts, org] = await Promise.all([
     journalReport(period.from, period.to, { dims }),
     dimensionOptions(),
@@ -48,8 +53,9 @@ export default async function JournalPage({
             back={{ href: '/reports', label: t('hub.title') }}
           />
           <ReportFilterBar
-            controls={{ period: true, dimensions: true }}
+            controls={{ period: true, dimensions: true, subsidiary: true }}
             dimensions={opts}
+            subsidiaries={subView.picker}
             actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="journal" params={sp} /></>}
           />
           {journal.truncated && <p className="text-xs text-amber-600 dark:text-amber-400">{t('journal.truncated')}</p>}

@@ -88,3 +88,29 @@ test('the live PDF body path cannot emit triple-brace record markup', async () =
   const captured = readCapturedInput()
   assert.doesNotMatch(captured.bodyHtml, /attacker\.example|<img/i)
 })
+
+test('header and footer escape record values while keeping the live page counters raw', async () => {
+  state.input = null
+  await mergeAndPrintPdf(
+    {
+      compiledHtml: '<p>{{name}}</p>',
+      paperSize: 'letter',
+      orientation: 'portrait',
+      marginMm: 14,
+      headerHtml: '<div>{{name}} · {{{memo}}}</div>',
+      footerHtml: '<div>Page {{page}} of {{pages}} — {{memo}}</div>',
+    },
+    {
+      name: 'Ada & Co',
+      // Entity-encoded markup: plainValue() decodes it to a real <img> tag, so
+      // an unescaped header/footer merge would hand Chromium live markup.
+      memo: '&lt;img src="https://attacker.example/pixel" onerror="steal()"&gt;Visible note',
+    },
+  )
+
+  const captured = readCapturedInput()
+  assert.equal(captured.headerHtml, '<div>Ada &amp; Co · &lt;img src=&quot;https://attacker.example/pixel&quot; onerror=&quot;steal()&quot;&gt;Visible note</div>')
+  assert.equal(captured.footerHtml, '<div>Page {{page}} of {{pages}} — &lt;img src=&quot;https://attacker.example/pixel&quot; onerror=&quot;steal()&quot;&gt;Visible note</div>')
+  assert.doesNotMatch(String(captured.headerHtml), /<img/i)
+  assert.doesNotMatch(String(captured.footerHtml), /<img/i)
+})
