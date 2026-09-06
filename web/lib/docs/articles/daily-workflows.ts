@@ -104,10 +104,25 @@ Use it when the organization needs pre-approval, committed-cost reporting, or a
 formal source for the later bill. Convert it through the record's **Actions**
 menu rather than entering the same purchase again.
 
+## Goods receipt
+
+When stock arrives before the vendor's invoice, record a **Goods receipt** from
+the purchase order's **Actions** menu. The receipt brings the items on hand at
+the order price and credits the item's received-not-billed account, so the
+balance sheet shows inventory you hold but have not yet been billed for. Each
+receipt is immutable evidence linked to its order; partial deliveries produce
+one receipt each, and an order cannot be received beyond its ordered quantity.
+Every inventory item received this way must name a received-not-billed account
+in its costing profile; service and other non-stock lines are never received,
+they bill directly against the order.
+
 ## Vendor bill
 
 A bill records the obligation to the vendor. It may be entered manually, created
-from capture, or converted from a purchase order. Validate the vendor invoice
+from capture, or converted from a purchase order. A bill converted from an
+order only covers stock that has been received; it clears the received-not-billed
+balance instead of receiving the stock again, and any difference between the
+vendor's price and the order price posts to the item's variance account. Validate the vendor invoice
 number, dates, quantities, accounts, dimensions, tax, and duplicate risk before
 approval and posting.
 

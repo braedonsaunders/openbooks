@@ -2524,3 +2524,20 @@ Not certified by this pass: the purchase-receipt leg and every item listed
 under "Deferred, by name"; live provider acceptance, object-storage recovery,
 production-scale load and complete end-to-end business journeys. No production
 database or deployment was changed.
+
+## Goods receipts close the procure-to-pay gap for stock — 2026-09-06
+
+Stock lines on a purchase order bill on a three-way match, but nothing in the
+product produced the receipt leg: the only writer of the received quantity
+was sales fulfillment, so every order carrying an inventory, assembly or kit
+line was unbillable through conversion and AP capture alike. A new immutable
+`purchase_receipt` document, the inbound counterpart of the sales shipment,
+receives an approved order's stock lines (partial, lot/serial-aware,
+idempotent, fenced under the order lock) at the order price against the
+item's received-not-billed account. The vendor bill for received stock now
+clears that account instead of receiving the stock a second time, and any
+difference between the invoiced and order price posts to the item's purchase
+price variance account with a deterministic entry so replays cannot book it
+twice. Vendor-credit returns accept goods-receipt movements as their source.
+See `docs/operations/purchase-receipts.md`. A dedicated receipt reversal
+remains open, as it does for shipments.

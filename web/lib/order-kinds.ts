@@ -11,6 +11,11 @@ export type OrderKind = (typeof ORDER_KINDS)[number]
  * sales order. It is deliberately not an ORDER_KIND: it cannot be edited or
  * converted as another commercial commitment. */
 export const SALES_FULFILLMENT_KIND = 'sales_fulfillment' as const
+/** Immutable operational document created when stock physically arrives on a
+ * purchase order (the goods receipt). It brings the stock in at the order
+ * price against received-not-billed; the vendor bill later clears that. Not
+ * an ORDER_KIND: it cannot be edited or converted. */
+export const PURCHASE_RECEIPT_KIND = 'purchase_receipt' as const
 
 /**
  * What a given order kind is allowed to convert into.
@@ -26,5 +31,8 @@ export const CONVERSION_TARGETS: Record<
     { kind: 'customer_invoice', labelKey: 'kinds.invoice', prefix: 'INV-', link: 'bills' },
   ],
   sales_order: [{ kind: 'customer_invoice', labelKey: 'kinds.invoice', prefix: 'INV-', link: 'bills' }],
-  purchase_order: [{ kind: 'vendor_bill', labelKey: 'kinds.bill', prefix: 'BILL-', link: 'bills' }],
+  purchase_order: [
+    { kind: 'purchase_receipt', labelKey: 'kinds.receipt', prefix: 'RCPT-', link: 'fulfills' },
+    { kind: 'vendor_bill', labelKey: 'kinds.bill', prefix: 'BILL-', link: 'bills' },
+  ],
 }
