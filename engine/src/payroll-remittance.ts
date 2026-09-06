@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, sum } from "./money.ts";
 import {
-  effectiveFilingAccountSql,
+  assertPayrollFilingAccountKnown,
   filingAccountRef,
   type FilingAccountRef,
   type PayrollFilingAccount,
@@ -92,7 +92,7 @@ async function filingAccountsByIdIn(
     select id, country, program_type, account_number, name, remitter_type,
            subsidiary_id, state_code, is_default, is_active
       from payroll_filing_accounts
-     where org_id = ${orgId} and is_active
+     where org_id = ${orgId}
      order by is_default desc, account_number
   `);
   return new Map(rows.rows.map((row) => [String(row.id), {
@@ -128,7 +128,8 @@ export async function payrollRemittanceSummary(
 ): Promise<RemittanceGroup[]> {
   const declaration = statutoryRemittanceDeclaration();
   const rawSettings = await rawPayrollSettings(orgId, executor);
-  const filingAccount = effectiveFilingAccountSql("prof");
+  await assertPayrollFilingAccountKnown(executor, orgId, range);
+  const filingAccount = sql`s.filing_account_id`;
   // '' can never be a declared key, so the coalesce keeps user components
   // (null system_key) in the summary whatever the exclusion list holds.
   const internalAccruals = `{${declaration.internalAccrualSystemKeys.join(",")}}`;
@@ -151,8 +152,6 @@ export async function payrollRemittanceSummary(
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
       left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
-      left join employee_payroll_profiles prof
-        on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where l.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        and l.kind in ('deduction', 'employer_contribution')
        and coalesce(c.system_key, '') <> all(${internalAccruals}::text[])
@@ -170,8 +169,6 @@ export async function payrollRemittanceSummary(
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
-      left join employee_payroll_profiles prof
-        on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      group by ${filingAccount}

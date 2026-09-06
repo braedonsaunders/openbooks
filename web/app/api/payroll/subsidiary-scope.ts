@@ -37,6 +37,7 @@ export async function guardPayrollEmployees(
 export async function guardPayrollFilingAccounts(
   gate: Authz,
   accountIds: readonly (string | null | undefined)[],
+  includeInactive = false,
 ): Promise<Response | null> {
   if (gate.allowedSubsidiaryIds === null) return null
   const ids = [...new Set(accountIds.filter((id): id is string => Boolean(id)))]
@@ -46,7 +47,7 @@ export async function guardPayrollFilingAccounts(
       from payroll_filing_accounts
      where org_id = ${gate.user.orgId}
        and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-       and is_active
+       and (${includeInactive} or is_active)
   `)).rows
   if (rows.length !== ids.length) return notFound()
   for (const row of rows) {
@@ -85,7 +86,7 @@ export async function visibleRemittanceAccountIds(
     const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
       select id, subsidiary_id as "subsidiaryId"
         from payroll_filing_accounts
-       where org_id = ${gate.user.orgId} and is_active
+       where org_id = ${gate.user.orgId}
          and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
     `)).rows
     for (const row of rows) {
@@ -115,7 +116,7 @@ export async function guardPayrollFilingData(
   // aggregate account-only row (for example an unassigned Form 941) has no
   // employee dimension and therefore follows the explicit root convention.
   if (employees.length > 0 && accounts.length === 0) return null
-  return guardPayrollFilingAccounts(gate, accounts)
+  return guardPayrollFilingAccounts(gate, accounts, true)
 }
 
 /** Same guard for stored amendment rows, where only opaque row ids are kept. */
@@ -133,7 +134,7 @@ export async function guardPayrollFilingRowIds(
   const employees = parsed.flatMap((row) => row!.employees)
   const accounts = parsed.flatMap((row) => row!.accounts)
   if (employees.length > 0 && accounts.length === 0) return null
-  return guardPayrollFilingAccounts(gate, accounts)
+  return guardPayrollFilingAccounts(gate, accounts, true)
 }
 
 /** Parse the built-in filing row keys. Unknown pack row shapes fail closed. */

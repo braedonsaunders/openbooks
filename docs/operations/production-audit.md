@@ -2304,3 +2304,52 @@ guessed country. Historical opening-balance country, employee filing-account
 assignment, remittance destination and other live profile dependencies remain
 separate review areas; this checkpoint does not certify those paths or all
 payroll history.
+
+## Payroll filing-account snapshots and legacy reconciliation — 2026-09-05
+
+Two actual calculate/commit regressions showed that changing an employee's
+filing account, or changing the organization's default, moved already committed
+240.0000 wages and accrued remittance groups to a different employer account.
+Calculation resolved the correct filing account but did not persist it; year-end
+and remittance queries recomputed it from live profiles. New pay stubs now store
+that resolved account and explicit provenance. Captured null stays unassigned.
+T4 employment and employer-contribution summaries, W-2, Form 941 and remittance
+amount/gross/headcount grouping read the snapshot. Historical labels include
+inactive accounts; prospective selectors retain their active-account filter.
+
+Forward migration 0093 adds the snapshot, same-tenant foreign key, immutable
+attribution guard and evidence fields. It does not invent a historical account
+for legacy stubs: those remain unknown and affected reports refuse pending
+review. An operational reconciliation command validates original evidence,
+checks live payroll-management permission, previews by rolling back actual
+writes, and applies a reviewed batch atomically. Only unknown attribution can be
+resolved once. Storage records the actor, timestamp, full before/after row and
+evidence; incomplete evidence, cross-tenant/country accounts, reassignment of
+captured history and deletion of referenced accounts are refused. See
+[the reconciliation runbook](payroll-filing-attribution-reconciliation.md).
+
+Following the historical account through authorization found another defect:
+the remittance route checked the current profile's account before returning
+historical account totals. A real two-subsidiary route regression reproduced a
+200 for an out-of-scope original employer after reassignment to a visible one.
+The route now checks the stored account and returns the same 404 as a missing
+record. Historical filing/remittance checks can authorize inactive original
+accounts; creation checks remain active-only. Unresolved legacy remittance
+reports return a controlled 422 instead of an unhandled server error.
+
+All 84 focused tests passed (26,462.555375 ms, zero skips), covering Canadian and
+US reporting, profile/default changes, profile deletion, deactivation, explicit
+unassigned history, immutable attribution, authorization, tenant/country
+coherence, audit evidence, batch rollback inside caller transactions, amendments,
+remittance execution and controlled retro payroll. Workspace types and
+changed-file lint passed. An upgrade database bootstrapped from `b64b0736` was
+seeded with committed payroll and then a later profile reassignment. Migration
+preserved every original stub field exactly and left attribution unknown.
+Command preview left zero changes/audits; apply restored the account proven by
+the original register, preserved monetary fields and wrote exactly one audit.
+Repeating apply was refused with no additional audit.
+
+Evidence is under `audit-payroll-filing-snapshot-2026-09-05`. This checkpoint does
+not reconstruct missing original evidence or certify opening-balance attribution,
+mutable filing-account metadata, remittance destination/accounting policy, or
+all payroll workflows. No production database or deployment was changed.

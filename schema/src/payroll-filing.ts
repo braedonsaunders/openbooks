@@ -65,6 +65,7 @@ export const payrollFilingAccounts = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("payroll_filing_accounts_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("payroll_filing_accounts_org_number").on(t.orgId, t.accountNumber),
     index("payroll_filing_accounts_org_country").on(t.orgId, t.country, t.programType),
     // At most one default per country pack, so the fallback assignment is
