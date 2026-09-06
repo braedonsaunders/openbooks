@@ -182,6 +182,12 @@ function docHref(kind: string, id: string): string {
       return `/purchase-orders?order=${id}`
     case 'quote':
       return `/estimates?estimate=${id}`
+    case 'purchase_receipt':
+      // Goods receipts are immutable evidence on the order they receive; the
+      // inventory ledger is where their movements are inspected.
+      return '/inventory'
+    case 'sales_fulfillment':
+      return '/inventory'
     default:
       return '/'
   }

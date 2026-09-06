@@ -51,6 +51,12 @@ export function remainingOrderLine(input: {
   return { quantity: fromQuantityUnits(remaining), amount: fromUnits(amount), taxAmount: fromUnits(tax) }
 }
 
+/** Exact ledger-money extension of a numeric(28,8) quantity by a numeric(28,8)
+ * unit price, in one integer operation (the rule remainingOrderLine applies). */
+export function orderLineAmount(quantity: string, unitPrice: string): string {
+  return fromUnits(roundedDivide(toQuantityUnits(quantity) * toQuantityUnits(unitPrice), 1_000_000_000_000n))
+}
+
 /**
  * Quantity headroom shared by order billing legs. Stock lines can only bill
  * received-and-unbilled quantity; service lines use the ordered remainder.

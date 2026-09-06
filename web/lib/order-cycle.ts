@@ -6,6 +6,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { nextDocumentNumber, persistLineTaxComponents } from './bills'
 import {
   ORDER_KINDS,
+  PURCHASE_RECEIPT_KIND,
   SALES_FULFILLMENT_KIND,
   type OrderKind,
   CONVERSION_TARGETS,
@@ -16,12 +17,13 @@ import { lineRequiresReceipt } from '@openbooks/engine/src/ap-capture-service.ts
 import {
   billableRemainderQuantityUnits,
   fromQuantityUnits,
+  orderLineAmount,
   remainingOrderLine,
   toQuantityUnits,
 } from './order-cycle-math'
 import { isFeatureEnabled } from './features'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { applySalesFulfillmentInventoryIssues } from '@openbooks/engine/src/inventory.ts'
+import { applyPurchaseReceiptInventory, applySalesFulfillmentInventoryIssues } from '@openbooks/engine/src/inventory.ts'
 import { issueSalesOrder } from '@openbooks/engine/src/sales-orders.ts'
 
 export { ORDER_KINDS, CONVERSION_TARGETS }
@@ -475,6 +477,265 @@ async function fulfillSalesOrderRemainder(
   })
 }
 
+export type PurchaseReceiptLineInput = SalesFulfillmentLineInput
+
+export interface PurchaseReceiptInput {
+  receiptDate: string
+  /** Required stable command identity: a lost response retried with the same
+   * key returns the stored receipt instead of receiving the stock twice. */
+  idempotencyKey: string
+  lines: PurchaseReceiptLineInput[]
+}
+
+interface PurchaseReceiptSourceLineRow extends Record<string, unknown> {
+  id: string
+  line_number: number
+  item_id: string | null
+  account_id: string | null
+  description: string | null
+  quantity: string
+  unit: string | null
+  unit_price: string
+  department_id: string | null
+  project_id: string | null
+  location_id: string | null
+  class_id: string | null
+  extra_dims: Record<string, unknown> | null
+  stock_location_id: string | null
+  quantity_fulfilled: string
+  custom: Record<string, unknown> | null
+  item_kind: string | null
+  has_inventory_profile: boolean
+  received_not_billed_account_id: string | null
+}
+
+/**
+ * Record one immutable goods receipt against a purchase order and bring the
+ * stock in within the same transaction (DR inventory / CR received-not-billed
+ * at the order price). Advances the order lines' received quantity, which is
+ * the ceiling the receipt-governed vendor bill later bills against. Source
+ * header and line locks fence concurrent partial receipts; a stable command
+ * key makes serial and concurrent retries exactly-once — the same shape as
+ * fulfillSalesOrder, on the inbound side.
+ */
+export async function receivePurchaseOrder(
+  orgId: string,
+  userId: string,
+  sourceId: string,
+  input: PurchaseReceiptInput,
+): Promise<ConvertResult> {
+  if (!(await isFeatureEnabled(orgId, 'orders'))) throw new ConversionError('Orders feature is disabled')
+  if (!(await isFeatureEnabled(orgId, 'inventory'))) throw new ConversionError('Inventory is disabled')
+  const idempotencyKey = input.idempotencyKey.trim()
+  if (idempotencyKey.length < 1 || idempotencyKey.length > 500) {
+    throw new ConversionError('Receipt idempotency key must be between 1 and 500 characters')
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.receiptDate)) throw new ConversionError('Receipt date must be YYYY-MM-DD')
+  const requested = canonicalFulfillmentLines(input.lines)
+  const command = { receiptDate: input.receiptDate, lines: requested }
+  return db.transaction(async (tx) => {
+    const source = (await tx.execute<SalesFulfillmentSourceRow>(sql`
+      select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
+             subsidiary_id, department_id, project_id, location_id, class_id,
+             extra_dims, memo, billing_method
+        from documents
+       where id = ${sourceId} and org_id = ${orgId}
+       for update
+    `)).rows[0]
+    if (!source) throw new ConversionError('Purchase order not found')
+    if (source.kind !== 'purchase_order') throw new ConversionError('Only a purchase order can be received')
+    if (source.status === 'draft') throw new ConversionError('Issue the purchase order before receiving it')
+    if (source.status === 'voided') throw new ConversionError('This purchase order is voided')
+    if (source.status !== 'approved') throw new ConversionError(`This purchase order is ${source.status}`)
+
+    const replay = (await tx.execute<{ id: string; document_number: string; command_matches: boolean }>(sql`
+      select target.id, target.document_number,
+             target.custom->'purchaseReceiptCommand' = ${JSON.stringify(command)}::jsonb as command_matches
+        from document_links link
+        join documents target
+          on target.id = link.to_document_id and target.org_id = link.org_id
+       where link.org_id = ${orgId} and link.from_document_id = ${sourceId}
+         and link.link_type = 'fulfills' and target.kind = ${PURCHASE_RECEIPT_KIND}
+         and target.custom->>'receiptIdempotencyKey' = ${idempotencyKey}
+       limit 1
+    `)).rows[0]
+    if (replay) {
+      if (!replay.command_matches) {
+        throw new ConversionError('Receipt idempotency key was already used with a different receipt', 409)
+      }
+      return { id: replay.id, documentNumber: replay.document_number, kind: PURCHASE_RECEIPT_KIND, replayed: true }
+    }
+
+    const sourceLines = (await tx.execute<PurchaseReceiptSourceLineRow>(sql`
+      select dl.id, dl.line_number, dl.item_id, dl.account_id, dl.description,
+             dl.quantity, dl.unit, dl.unit_price, dl.department_id, dl.project_id, dl.location_id,
+             dl.class_id, dl.extra_dims, dl.stock_location_id, dl.quantity_fulfilled,
+             dl.custom, i.kind as item_kind,
+             profile.item_id is not null as has_inventory_profile,
+             profile.received_not_billed_account_id
+        from document_lines dl
+        left join items i on i.id = dl.item_id and i.org_id = dl.org_id
+        left join item_inventory_profiles profile
+          on profile.item_id = dl.item_id and profile.org_id = dl.org_id
+       where dl.document_id = ${sourceId} and dl.org_id = ${orgId}
+       order by dl.line_number
+       for update of dl
+    `)).rows
+    const sourceById = new Map(sourceLines.map((line) => [line.id, line]))
+    const selected = requested.map((request) => {
+      const line = sourceById.get(request.sourceLineId)
+      if (!line) throw new ConversionError(`Purchase-order line ${request.sourceLineId} was not found`)
+      if (line.item_id == null || !lineRequiresReceipt(line.item_kind)) {
+        throw new ConversionError(
+          `Purchase-order line ${line.line_number} is not stock and is billed on a two-way match, not received`,
+        )
+      }
+      if (!line.has_inventory_profile) {
+        throw new ConversionError(`Purchase-order line ${line.line_number} is an inventory item without a costing profile`)
+      }
+      if (!line.received_not_billed_account_id) {
+        throw new ConversionError(
+          `Purchase-order line ${line.line_number} cannot be received before its bill: the item has no received-not-billed account`,
+        )
+      }
+      const remaining = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_fulfilled))
+      const receiving = toQuantityUnits(request.quantity)
+      if (remaining <= 0n) throw new ConversionError(`Purchase-order line ${line.line_number} is already fully received`)
+      if (receiving > remaining) {
+        throw new ConversionError(
+          `Purchase-order line ${line.line_number} has only ${fromQuantityUnits(remaining)} remaining to receive`,
+        )
+      }
+      return { request, line }
+    })
+
+    const documentNumber = await nextDocumentNumber(orgId, PURCHASE_RECEIPT_KIND, 'RCPT-', source.subsidiary_id)
+    const receiptId = randomUUID()
+    const custom = { receiptIdempotencyKey: idempotencyKey, purchaseReceiptCommand: command }
+    await tx.execute(sql`
+      insert into documents
+        (id, org_id, kind, document_number, party_id, document_date, currency,
+         fx_rate, status, subsidiary_id, department_id, project_id, location_id,
+         class_id, extra_dims, billing_method, memo, subtotal, tax_total, total,
+         custom, created_by, updated_by)
+      values
+        (${receiptId}, ${orgId}, ${PURCHASE_RECEIPT_KIND}, ${documentNumber},
+         ${source.party_id}, ${input.receiptDate}, ${source.currency}, ${source.fx_rate},
+         'draft', ${source.subsidiary_id}, ${source.department_id}, ${source.project_id},
+         ${source.location_id}, ${source.class_id}, ${JSON.stringify(source.extra_dims ?? {})}::jsonb,
+         ${source.billing_method}, ${source.memo}, '0', '0', '0',
+         ${JSON.stringify(custom)}::jsonb, ${userId}, ${userId})
+    `)
+
+    // Approved lines are storage-immutable (migration 0034); advancing the
+    // received quantity is operational evidence, not a commercial edit. The
+    // header is locked for this transaction, so reopen, advance, restore.
+    const reopened = (await tx.execute<{ id: string }>(sql`
+      update documents set status = 'draft', updated_by = ${userId}
+       where id = ${sourceId} and org_id = ${orgId} and status = 'approved'
+      returning id
+    `)).rows[0]
+    if (!reopened) throw new ConversionError('Purchase order changed while it was being received', 409)
+
+    let lineNumber = 1
+    for (const { request, line } of selected) {
+      // Received at the order price: the amount is the value the receipt
+      // credits to received-not-billed and the bill later clears.
+      const amount = orderLineAmount(request.quantity, String(line.unit_price))
+      const lineCustom = {
+        ...(line.custom ?? {}),
+        receipt: { sourceLineId: line.id, lotId: request.lotId, serialId: request.serialId },
+      }
+      await tx.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, item_id, account_id, description,
+           quantity, unit, unit_price, amount, tax_amount, department_id,
+           project_id, location_id, class_id, extra_dims, stock_location_id,
+           is_billable, custom, created_by, updated_by)
+        values
+          (${orgId}, ${receiptId}, ${lineNumber}, ${line.item_id}, ${line.account_id},
+           ${line.description}, ${request.quantity}, ${line.unit}, ${line.unit_price}, ${amount}, '0',
+           ${line.department_id}, ${line.project_id}, ${line.location_id}, ${line.class_id},
+           ${JSON.stringify(line.extra_dims ?? {})}::jsonb, ${line.stock_location_id}, false,
+           ${JSON.stringify(lineCustom)}::jsonb, ${userId}, ${userId})
+      `)
+      const advanced = (await tx.execute<{ id: string }>(sql`
+        update document_lines
+           set quantity_fulfilled = quantity_fulfilled + ${request.quantity},
+               updated_by = ${userId}
+         where id = ${line.id} and org_id = ${orgId}
+           and quantity_fulfilled + ${request.quantity} <= quantity
+        returning id
+      `)).rows[0]
+      if (!advanced) {
+        throw new ConversionError(`Purchase-order line ${line.line_number} changed while it was being received`, 409)
+      }
+      lineNumber++
+    }
+
+    const restored = (await tx.execute<{ id: string }>(sql`
+      update documents set status = 'approved', updated_by = ${userId}
+       where id = ${sourceId} and org_id = ${orgId} and status = 'draft'
+      returning id
+    `)).rows[0]
+    if (!restored) throw new ConversionError('Purchase order changed while it was being received', 409)
+
+    await tx.execute(sql`
+      insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by)
+      values (${orgId}, ${sourceId}, ${receiptId}, 'fulfills', ${userId})
+    `)
+    await applyPurchaseReceiptInventory(tx, orgId, userId, receiptId, input.receiptDate, source.subsidiary_id)
+    await tx.execute(sql`
+      update documents set status = 'approved', updated_by = ${userId}
+       where id = ${receiptId} and org_id = ${orgId}
+    `)
+    return { id: receiptId, documentNumber, kind: PURCHASE_RECEIPT_KIND }
+  })
+}
+
+/** Receive every stock line's remaining quantity through the conversion
+ * surface, with a key derived from the observed source state so concurrent
+ * clicks replay one receipt. Call receivePurchaseOrder directly for explicit
+ * partial quantities or lot/serial selections. */
+async function receivePurchaseOrderRemainder(
+  orgId: string,
+  userId: string,
+  sourceId: string,
+): Promise<ConvertResult> {
+  const receiptDate = await businessToday(orgId)
+  const rows = (await db.execute<{ id: string; quantity: string; quantity_fulfilled: string; item_id: string | null; item_kind: string | null }>(sql`
+    select line.id, line.quantity, line.quantity_fulfilled, line.item_id, i.kind as item_kind
+      from document_lines line
+      join documents source on source.id = line.document_id and source.org_id = line.org_id
+      left join items i on i.id = line.item_id and i.org_id = line.org_id
+     where line.org_id = ${orgId} and source.id = ${sourceId}
+       and source.kind = 'purchase_order'
+     order by line.id
+  `)).rows
+  const lines = rows.flatMap((line) => {
+    if (line.item_id == null || !lineRequiresReceipt(line.item_kind)) return []
+    const remaining = toQuantityUnits(line.quantity) - toQuantityUnits(line.quantity_fulfilled)
+    return remaining > 0n ? [{ sourceLineId: line.id, quantity: fromQuantityUnits(remaining) }] : []
+  })
+  if (lines.length === 0) {
+    const latest = (await db.execute<{ id: string; document_number: string }>(sql`
+      select target.id, target.document_number
+        from document_links link
+        join documents target on target.id = link.to_document_id and target.org_id = link.org_id
+       where link.org_id = ${orgId} and link.from_document_id = ${sourceId}
+         and link.link_type = 'fulfills' and target.kind = ${PURCHASE_RECEIPT_KIND}
+       order by target.created_at desc, target.id desc
+       limit 1
+    `)).rows[0]
+    if (!latest) throw new ConversionError('This purchase order has no stock lines left to receive')
+    return { id: latest.id, documentNumber: latest.document_number, kind: PURCHASE_RECEIPT_KIND, replayed: true }
+  }
+  const idempotencyKey = `purchase-receipt-remainder:${createHash('sha256')
+    .update(JSON.stringify({ sourceId, receiptDate, lines }))
+    .digest('hex')}`
+  return receivePurchaseOrder(orgId, userId, sourceId, { receiptDate, idempotencyKey, lines })
+}
+
 /**
  * Convert an order document into `targetKind`, pulling forward each line's
  * remaining (quantity − quantity_billed). Records a document_links edge and
@@ -501,6 +762,9 @@ export async function convertOrder(
     }
     if (targetKind === SALES_FULFILLMENT_KIND) {
       return fulfillSalesOrderRemainder(orgId, userId, sourceId)
+    }
+    if (targetKind === PURCHASE_RECEIPT_KIND) {
+      return receivePurchaseOrderRemainder(orgId, userId, sourceId)
     }
     const src = (await tx.execute<any>(sql`
       select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
@@ -645,11 +909,18 @@ export async function convertOrder(
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id,
-              location_id, class_id, extra_dims, stock_location_id, is_billable, created_by)
+              location_id, class_id, extra_dims, stock_location_id, is_billable, custom, created_by)
         values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${l.account_id}, ${l.description},
               ${fromQuantityUnits(r.units)}, ${l.unit}, ${l.unit_price}, ${amount},
               ${l.tax_code_id}, ${l.tax_group_id}, ${taxAmount}, ${l.department_id}, ${l.project_id},
-              ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.stock_location_id}, ${l.is_billable}, ${userId})
+              ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.stock_location_id}, ${l.is_billable},
+              ${JSON.stringify(
+                // A bill line drawn from a purchase-order line keeps that
+                // provenance: bill posting uses it to clear received-not-billed
+                // for stock a goods receipt already brought in, instead of
+                // receiving the stock a second time.
+                doc.kind === 'purchase_order' && target.kind === 'vendor_bill' ? { purchaseOrderLineId: l.id } : {},
+              )}::jsonb, ${userId})
         returning id
       `))
       const newLineId = inserted.rows[0]!.id
