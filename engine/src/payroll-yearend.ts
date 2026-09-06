@@ -4,6 +4,7 @@ import { db } from "./db.ts";
 import { add, cmp, neg, normalizeMoney } from "./money.ts";
 import {
   effectiveFilingAccountSql,
+  assertPayrollFilingAccountKnown,
   filingAccountRef,
   filingAccountsById,
   type FilingAccountRef,
@@ -321,14 +322,13 @@ export interface T4SummaryTotals {
  */
 export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]> {
   await assertPayrollCountryKnown(db, orgId, taxYear);
+  await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
   const caps = caYearCaps(taxYear);
   const rows = (await db.execute<Record<string, unknown>>(sql`
     with committed as (
-      select s.*, ${effectiveFilingAccountSql("prof")} as filing_account_id
+      select s.*
         from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-      left join employee_payroll_profiles prof
-        on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
        and s.country = 'CA'
     )
@@ -464,7 +464,7 @@ export async function t4Summary(
     : sql``;
   // Empty fragments keep the org-wide summary's SQL identical to before.
   const employerAccountFilter = scoped
-    ? sql`and ${effectiveFilingAccountSql("prof")} is not distinct from ${account}`
+    ? sql`and s.filing_account_id is not distinct from ${account}`
     : sql``;
   const billAccountFilter = scoped
     ? sql`and (custom->'payrollRemittance'->>'filingAccountId') is not distinct from ${account}`
@@ -477,8 +477,6 @@ export async function t4Summary(
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-      left join employee_payroll_profiles prof
-        on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where l.org_id = ${orgId} and s.tax_year = ${taxYear}
        and l.kind = 'employer_contribution' and coalesce(pc.country, 'CA') = 'CA'
        ${employerAccountFilter}
@@ -813,9 +811,10 @@ export interface Form941Quarter {
  */
 export async function form941Worksheet(orgId: string, taxYear: number): Promise<Form941Quarter[]> {
   await assertPayrollCountryKnown(db, orgId, taxYear);
+  await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select extract(quarter from s.pay_date)::int as quarter,
-           ${effectiveFilingAccountSql("prof")} as filing_account_id,
+           s.filing_account_id as filing_account_id,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
@@ -832,8 +831,6 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
                 where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-      left join employee_payroll_profiles prof
-        on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
      group by 1, 2 order by 2 nulls first, 1
   `));
@@ -916,10 +913,11 @@ export function openingYtdIntoW2Slip(slip: W2Slip, opening: OpeningYearEndYtd): 
 
 export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]> {
   await assertPayrollCountryKnown(db, orgId, taxYear);
+  await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select s.employee_party_id, p.display_name,
            array_agg(distinct s.province order by s.province) as states,
-           ${effectiveFilingAccountSql("prof")} as filing_account_id,
+           s.filing_account_id as filing_account_id,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
@@ -937,11 +935,9 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
                   and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-      left join employee_payroll_profiles prof
-        on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
       join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
-      group by s.employee_party_id, p.display_name, ${effectiveFilingAccountSql("prof")}
+      group by s.employee_party_id, p.display_name, s.filing_account_id
       -- The carry-in lands on the employee's FIRST slip, so an employee filed
       -- under more than one EIN needs a deterministic order, not just name.
      order by p.display_name, min(s.pay_date)

@@ -458,6 +458,9 @@ test(
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
+      const originalFilingAccountId = randomUUID();
+      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,is_default)
+        values(${originalFilingAccountId},${org.orgId},'US','us_ein','12-3456789','Original employer',true)`);
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       // BOTH employees calculate now. This assertion used to be "1 paid, 1
       // refused, because California is not supported" — the second employee was
@@ -561,6 +564,15 @@ test(
       const countryEvidence = (await db.execute(sql`select country,country_source from pay_stubs
         where org_id=${org.orgId} and pay_run_document_id=${run.documentId}`)).rows;
       assert.deepEqual(countryEvidence,[{country:'US',country_source:'calculation'},{country:'US',country_source:'calculation'}]);
+      assert.ok(historicalW2.every(slip => slip.filingAccountId === originalFilingAccountId));
+      assert.ok(historical941.every(quarter => quarter.filingAccountId === originalFilingAccountId));
+      const nextFilingAccountId = randomUUID();
+      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name)
+        values(${nextFilingAccountId},${org.orgId},'US','us_ein','98-7654321','Next employer')`);
+      await db.execute(sql`update employee_payroll_profiles set filing_account_id=${nextFilingAccountId}
+        where org_id=${org.orgId}`);
+      assert.deepEqual(await w2Slips(org.orgId,2026),historicalW2);
+      assert.deepEqual(await form941Worksheet(org.orgId,2026),historical941);
       await db.execute(sql`update employee_payroll_profiles set country='CA',province='ON'
         where org_id=${org.orgId} and employee_party_id=${employeeId}`);
       assert.deepEqual(await w2Slips(org.orgId,2026),historicalW2);

@@ -35,8 +35,13 @@ export async function GET(req: Request) {
   }
   const denied = await guardRemittancePeriod(gate, from, to)
   if (denied) return denied
-  const groups = await payrollRemittanceSummary(gate.user.orgId, { from, to })
-  return NextResponse.json({ groups })
+  try {
+    const groups = await payrollRemittanceSummary(gate.user.orgId, { from, to })
+    return NextResponse.json({ groups })
+  } catch (error) {
+    if (error instanceof PayrollError) return NextResponse.json({ error: error.message }, { status: 422 })
+    throw error
+  }
 }
 
 export async function POST(req: Request) {
@@ -87,19 +92,14 @@ async function guardRemittancePeriod(
   if (gate.allowedSubsidiaryIds === null) return null
   const rows = (await db.execute<{ employeeId: string; filingAccountId: string | null }>(sql`
     select distinct s.employee_party_id as "employeeId",
-           coalesce(prof.filing_account_id,
-             (select fa.id from payroll_filing_accounts fa
-               where fa.org_id = prof.org_id and fa.is_active and fa.is_default
-                 and fa.country = coalesce(prof.country, 'CA') limit 1)) as "filingAccountId"
+           s.filing_account_id as "filingAccountId"
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
        and r.run_status = 'committed'
-      left join employee_payroll_profiles prof
-        on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where s.org_id = ${gate.user.orgId} and s.pay_date between ${from} and ${to}
   `)).rows
   const employeeDenied = await guardPayrollEmployees(gate, rows.map((row) => row.employeeId))
   if (employeeDenied) return employeeDenied
   const accountIds = rows.map((row) => row.filingAccountId).filter(Boolean)
-  return accountIds.length ? guardPayrollFilingAccounts(gate, accountIds) : null
+  return accountIds.length ? guardPayrollFilingAccounts(gate, accountIds, true) : null
 }

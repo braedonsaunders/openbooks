@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { PayrollError } from "./payroll-error.ts";
+import { db, type SqlExecutor } from "./db.ts";
 
 /**
  * Payroll filing accounts — the employer's remittance/filing identities.
@@ -40,12 +41,13 @@ export interface PayrollFilingAccount {
 export async function listFilingAccounts(
   orgId: string,
   country?: string,
+  includeInactive = false,
 ): Promise<PayrollFilingAccount[]> {
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select id, country, program_type, account_number, name, remitter_type,
            subsidiary_id, state_code, is_default, is_active
       from payroll_filing_accounts
-     where org_id = ${orgId} and is_active
+     where org_id = ${orgId} and (${includeInactive} or is_active)
        and (${country ?? null}::text is null or country = ${country ?? null})
      order by is_default desc, account_number
   `));
@@ -88,8 +90,8 @@ export const UNASSIGNED_FILING_ACCOUNT: FilingAccountRef = {
  * the profile's account, else the default account for the profile's country.
  * `profileAlias` is the alias the caller gave employee_payroll_profiles.
  *
- * Kept as one fragment so the remittance summary, the year-end returns, and
- * the filing-account pickers never drift on the fallback rule.
+ * Used for prospective calculation and current-profile pickers. Committed
+ * reporting reads pay_stubs.filing_account_id, including an explicit null.
  */
 export function effectiveFilingAccountSql(profileAlias: string) {
   const profile = sql.raw(profileAlias);
@@ -106,7 +108,7 @@ export function effectiveFilingAccountSql(profileAlias: string) {
 export async function filingAccountsById(
   orgId: string,
 ): Promise<Map<string, PayrollFilingAccount>> {
-  const accounts = await listFilingAccounts(orgId);
+  const accounts = await listFilingAccounts(orgId, undefined, true);
   return new Map(accounts.map((account) => [account.id, account]));
 }
 
@@ -124,4 +126,25 @@ export function filingAccountRef(
     name: account.name,
     remitterType: account.remitterType,
   };
+}
+
+/** Legacy rows were never attributed at calculation; current settings are not evidence. */
+export async function assertPayrollFilingAccountKnown(
+  executor: SqlExecutor,
+  orgId: string,
+  scope: { taxYear: number } | { from: string; to: string },
+): Promise<void> {
+  const filter = "taxYear" in scope
+    ? sql`s.tax_year = ${scope.taxYear}`
+    : sql`s.pay_date between ${scope.from} and ${scope.to}`;
+  const result = await executor.execute(sql`
+    select s.id from pay_stubs s
+    join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
+     where s.org_id = ${orgId} and ${filter}
+       and r.run_status = 'committed' and s.filing_account_source = 'unknown'
+     limit 1
+  `);
+  if (result.rows.length) {
+    throw new PayrollError("Committed payroll has an unknown historical filing account. Reconcile its original payroll evidence before generating filing or remittance reports.");
+  }
 }

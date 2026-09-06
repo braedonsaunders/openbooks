@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -13,6 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { payrollFilingAccounts } from "./payroll-filing";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
 /**
@@ -434,6 +436,12 @@ export const payStubs = pgTable(
     countrySource: text("country_source", {
       enum: ["calculation", "legacy_region", "unknown"],
     }).notNull().default("unknown"),
+    /** Explicit null means unassigned, never a live default-account fallback. */
+    filingAccountId: uuid("filing_account_id"),
+    filingAccountSource: text("filing_account_source", {
+      enum: ["unknown", "calculation", "insertion", "reconciled"],
+    }).notNull().default("unknown"),
+    filingAccountEvidence: jsonb("filing_account_evidence"),
     /** Snapshot: recalculation never depends on the live profile. */
     province: text("province").notNull(),
     periodsPerYear: integer("periods_per_year").notNull(),
@@ -462,6 +470,21 @@ export const payStubs = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({ name: "pay_stubs_filing_account_tenant_fkey",
+      columns: [t.orgId, t.filingAccountId],
+      foreignColumns: [payrollFilingAccounts.orgId, payrollFilingAccounts.id],
+    }),
+    index("pay_stubs_filing_account").on(t.orgId, t.filingAccountId),
+    check("pay_stubs_filing_account_evidence", sql`
+      (${t.filingAccountSource} = 'unknown' and ${t.filingAccountId} is null and ${t.filingAccountEvidence} is null) or
+      (${t.filingAccountSource} in ('calculation', 'insertion') and ${t.filingAccountEvidence} is null) or
+      (${t.filingAccountSource} = 'reconciled' and ${t.filingAccountEvidence} is not null
+        and jsonb_typeof(${t.filingAccountEvidence}) = 'object'
+        and coalesce(jsonb_typeof(${t.filingAccountEvidence}->'reason') = 'string', false)
+        and coalesce(jsonb_typeof(${t.filingAccountEvidence}->'reference') = 'string', false)
+        and length(trim(${t.filingAccountEvidence}->>'reason')) > 0
+        and length(trim(${t.filingAccountEvidence}->>'reference')) > 0)
+    `),
     check("pay_stubs_country_evidence", sql`
       (${t.country} is null and ${t.countrySource} = 'unknown') or
       (${t.country} is not null and ${t.country} ~ '^[A-Z]{2}$'
