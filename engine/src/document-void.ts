@@ -449,7 +449,7 @@ export async function completeRequestedDocumentVoid(
       }
 
       if (String(doc.kind) === "customer_invoice") {
-        await releaseBillingProvenance(tx, orgId, documentId);
+        await releaseBillingProvenance(tx, orgId, documentId, { actorId: String(doc.void_requested_by), reason: String(doc.void_reason) });
       }
       if (String(doc.kind) === "vendor_bill") {
         await releaseVendorBillProvenance(tx, orgId, documentId);

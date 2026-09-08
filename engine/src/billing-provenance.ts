@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "./db.ts";
 
 /**
- * Release the billing provenance a project invoice consumed. Called when a
+ * Release the billing provenance a generated invoice consumed. Called when a
  * generated `customer_invoice` is voided or deleted so its billed time entries /
  * cost lines become billable again and the originating billing request reopens.
  * Idempotent; runs inside the caller's transaction. Without this, voiding or
@@ -17,7 +17,28 @@ export async function releaseBillingProvenance(
   tx: SqlExecutor,
   orgId: string,
   documentId: string,
+  audit: { actorId: string | null; reason: string },
 ): Promise<void> {
+  // Keep source release and its evidence in the caller's controlled void/delete
+  // transaction. The historical invoice retains its original schedule IDs;
+  // clearing this current reservation permits a corrected invoice exactly once.
+  await tx.execute(sql`
+    with released as (
+      update lease_schedule_lines
+         set status = 'scheduled', invoice_document_id = null,
+             updated_at = now(), updated_by = ${audit.actorId}
+       where org_id = ${orgId} and invoice_document_id = ${documentId}
+         and status = 'invoiced'
+       returning id
+    )
+    insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+    select ${orgId}, 'lease_schedule_lines', id, 'billing_released',
+      jsonb_build_object(
+        'before', jsonb_build_object('status', 'invoiced', 'invoice_document_id', ${documentId}::text),
+        'after', jsonb_build_object('status', 'scheduled', 'invoice_document_id', null),
+        'reason', ${audit.reason}::text), ${audit.actorId}::uuid
+    from released
+  `);
   const lineRes = (await tx.execute<{ id: string }>(sql`
     select id from document_lines where document_id = ${documentId} and org_id = ${orgId}
   `));
