@@ -102,10 +102,10 @@ async function runOwnershipConsolidationIn(
   const period = periodResult.rows[0];
   if (!period) throw new ConsolidationError(`period ${periodId} not found`);
   const bookResult = (await tx.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id=${orgId} and is_primary and is_active limit 1
+    select id from accounting_books where org_id=${orgId} and is_primary and is_active and posts_gl limit 1 for share
   `));
   const bookId = bookResult.rows[0]?.id;
-  if (!bookId) throw new ConsolidationError("no active primary accounting book is configured");
+  if (!bookId) throw new ConsolidationError("no active primary posting book is configured");
   // FOR SHARE pins every policy row this generation consumes for the whole
   // transaction: a material policy edit (ownership_interest_guard's
   // immutability tuple) must own the row exclusively, so it waits until the
@@ -579,9 +579,9 @@ async function runAutoEliminationIn(
   const period = periodRes.rows[0];
   if (!period) throw new ConsolidationError(`period ${periodId} not found`);
   const bookRes = (await tx.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary limit 1`));
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share`));
   const book = bookRes.rows[0];
-  if (!book) throw new ConsolidationError("no primary accounting book is configured");
+  if (!book) throw new ConsolidationError("no active primary posting book is configured");
 
   // Source scope = the destination book: only primary-book entries feed the
   // consolidated elimination.

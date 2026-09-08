@@ -1709,3 +1709,28 @@ test("derived consolidated rates are audited, invalidate close evidence, and are
     await dropScratchOrg(org.orgId);
   }
 });
+
+for (const phase of ["ownership", "elimination"] as const) {
+  for (const flag of ["is_active", "posts_gl"] as const) {
+    test(`consolidation ${phase} refuses primary ${flag}=false without posting a generation`,{skip:!DB},async()=>{
+      const org=await createScratchOrg();
+      try {
+        const actorId=(await seedFlowActors(org.orgId)).adminId;
+        const fixture=await seedOwnershipConsolidationFixture(org);
+        await db.execute(sql`update accounts set eliminate=true where org_id=${org.orgId}
+          and id in (${org.accounts.bank},${org.accounts.revenue},${fixture.accounts.get("childEquity")!})`);
+        await db.execute(sql`update accounting_books set ${sql.raw(flag)}=false where org_id=${org.orgId} and id=${org.bookId}`);
+        const run=()=>phase === "ownership" ? runOwnershipConsolidation(org.orgId,org.periodId,actorId)
+          : runAutoElimination(org.orgId,org.periodId,actorId);
+        await assert.rejects(run(),/active primary (posting|accounting) book/);
+        const state=(await db.execute<{journals:number;runs:number}>(sql`
+          select (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
+            (select count(*)::int from ownership_consolidation_runs where org_id=${org.orgId} and status<>'failed') as runs`)).rows[0]!;
+        assert.deepEqual(state,{journals:2,runs:0});
+        await db.execute(sql`update accounting_books set ${sql.raw(flag)}=true where org_id=${org.orgId} and id=${org.bookId}`);
+        const posted=await run();
+        assert.ok("entryIds" in posted ? posted.entryIds.length>0 : posted.entryId);
+      } finally {await dropScratchOrg(org.orgId);}
+    });
+  }
+}
