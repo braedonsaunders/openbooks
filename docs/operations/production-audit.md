@@ -3024,3 +3024,22 @@ employee transfer the original employer receives 404 for its historical filing
 population. The new employer was also refused in that fixture; it is not
 evidence of year-end disclosure. Evidence:
 `audit-payroll-filing-history-scope-2026-09-07/before.log`.
+
+## Native UUID filing authorization — 2026-09-07
+
+The filing row parser accepted UUID versions 1–5 while this database generates
+UUIDv7. A real hidden-entity filing account was silently removed from a T4
+row's authorization inputs, allowing the restricted caller through. Native
+employee IDs were also rejected, and malformed nonempty account suffixes were
+treated as unassigned accounts. The parser now uses the shared UUID validator,
+retains valid account IDs, and refuses malformed nonempty suffixes.
+
+The new integration regression failed before the fix and passes afterward.
+It verifies hidden-account denial in both stored-row and population guards,
+visible-account acceptance, native employee IDs across built-in filing shapes,
+and malformed T4/W-2 suffix denial. All 56 focused checks passed
+(7,330.440375 ms, zero failures/skips); web typecheck and changed-file lint
+passed. Evidence: `audit-payroll-filing-history-scope-2026-09-07/uuid-before.log`,
+`uuid-regression-before.log`, `uuid-focused.log`, `uuid-typecheck.log`, and
+`uuid-lint.log`. The historical employee-transfer filing defect remains a
+separate open audit item.
