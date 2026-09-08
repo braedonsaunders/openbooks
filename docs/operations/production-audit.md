@@ -3094,3 +3094,23 @@ bill count, and the existing remittance concurrency suite. Workspace
 typechecks and changed-file lint passed. Evidence:
 `audit-remittance-transport-scope-2026-09-07/before.log`, `overlap-before.log`,
 `focused.log`, `typecheck.log`, and `lint.log`.
+
+## Native depreciation evidence and typed candidate discovery — 2026-09-07
+
+Normal uploads receive database-generated UUIDv7 IDs, but depreciation input
+validation accepted only versions 1–5. Replacing the test's UUIDv4 file fixture
+with the native generator reproduced `an attached evidence file is required`
+for valid attached evidence. Validation now accepts the supported UUID range;
+attachment, tenant, evidence-retention, posting and concurrency controls remain
+exercised by the existing integration suite using native IDs.
+
+The due-line query now selects and types only its four discovery/error-context
+fields; posting still reloads authoritative fields under locks. This removes
+one explicit `any` and unnecessary projected values. The enforced quality
+limits are reduced to 380 explicit-any nodes and 712 lint warnings.
+
+All 42 depreciation and CI-integrity checks passed (52,923.462042 ms, zero
+failures/skips), engine typecheck passed, and full repository lint passed with
+zero errors and exactly 712 warnings. Explicit-any verification passed at 380.
+Evidence: `audit-depreciation-native-evidence-2026-09-07/before.log`,
+`focused.log`, `typecheck.log`, `lint-full.log`, and `any.log`.

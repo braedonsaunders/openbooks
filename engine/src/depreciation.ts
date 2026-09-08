@@ -550,7 +550,7 @@ export async function recordDepreciationInput(
   const memo = args.memo.trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(args.effectiveDate)) throw new Error("effective date is required");
   if (!memo) throw new Error("an accounting memo is required");
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(args.evidenceFileId)) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(args.evidenceFileId)) {
     throw new Error("an attached evidence file is required");
   }
   const value = persistDepreciationInputValue(args.value);
@@ -723,30 +723,14 @@ export async function runDepreciation(
 ): Promise<RunDepreciationResult> {
   // Due, unposted lines are only a candidate list. Account, dimension, and
   // other posting fields are reloaded under locks inside each line transaction.
-  const due = (await db.execute<any>(sql`
-    select l.id            as line_id,
-           l.planned_amount as planned,
-           l.sequence      as sequence,
-           l.period_id     as period_id,
-           s.book_id       as book_id,
-           p.name          as period_name,
-           p.ends_on       as period_ends_on,
-           (period_module_is_closed(${orgId}, p.id, s.book_id, a.subsidiary_id, 'assets')
-             or period_module_is_closed(${orgId}, p.id, s.book_id, a.subsidiary_id, 'gl')) as period_closed,
-           a.id            as asset_id,
-           a.subsidiary_id as subsidiary_id,
-           sub.base_currency as base_currency,
-           a.asset_number  as asset_number,
-           a.name          as asset_name,
-           a.asset_account_id as asset_account,
-           a.accumulated_depreciation_account_id as asset_accum,
-           a.depreciation_expense_account_id as asset_expense,
-           a.department_id as department_id,
-           a.project_id    as project_id,
-           a.location_id   as location_id,
-           c.asset_account_id                    as cat_asset,
-           c.accumulated_depreciation_account_id as cat_accum,
-           c.depreciation_expense_account_id     as cat_expense
+  const due = (await db.execute<{
+    line_id: string;
+    asset_id: string;
+    asset_number: string;
+    period_name: string;
+  }>(sql`
+    select l.id as line_id, a.id as asset_id,
+           a.asset_number, p.name as period_name
       from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
       join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.posts_gl and bk.is_active
