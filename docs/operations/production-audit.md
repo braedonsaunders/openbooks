@@ -3557,3 +3557,27 @@ to post. All 37 focused provision and computation checks passed
 (6,397.600167 ms, no failures/skips); engine typecheck and changed-file lint
 passed. Evidence: `audit-tax-provision-posting-policy-2026-09-08/before.log`,
 `focused-final.log`, `typecheck-final.log`, and `lint-final.log`.
+
+## Straight-line property rent snapshot and posting policy — 2026-09-08
+
+Six real policy regressions posted rent accruals with restricted accounts or
+locations, an inactive subsidiary, an inactive/non-posting primary book, or
+USD property amounts treated as CAD functional amounts at rate one. A separate
+controlled race changed first-year rent from $10,000 to $20,000 while the
+service waited on the lease. It still posted the old +$2,000 accrual instead
+of the corrected −$6,000.
+
+The service now discovers IDs, then locks feature/account configuration, the
+hierarchy and lease before reading property terms and the full charge stream.
+Those inputs, current accrual and new posting share one transaction. It also
+requires an eligible primary posting book, validates account/location/entity
+policy, and refuses currency translation without supporting evidence.
+
+All 31 focused levelling, deposit and property checks passed (8,021.216 ms,
+no failures/skips), including the controlled rent edit and repeat no-op. All
+3,210 unit tests passed (135,414.272083 ms, no skips); workspace typechecks,
+locked-dependency production build and full lint passed (zero errors, 709
+warnings). The explicit-any guard remains at 378. Evidence:
+`audit-property-levelling-posting-policy-2026-09-08/before.log`,
+`concurrency-before.log`, `focused-final.log`, `unit.log`, `typecheck-full.log`,
+`build.log`, `lint-full.log`, and `explicit-any.log`.

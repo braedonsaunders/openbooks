@@ -984,82 +984,85 @@ export async function levelLeaseRentStraightLine(
   await assertEnabled(db, orgId);
   const asOf = validDate(opts.asOf, "Levelling date")!;
 
-  const slAccount = (await db.execute<{ acct: string | null }>(sql`
-    select settings->'controlAccounts'->>'straightLineRent' as acct from orgs where id = ${orgId}
-  `));
-  const straightLineRentAccountId = slAccount.rows[0]?.acct ?? null;
-
-  const leases = (await db.execute<{
-      id: string; leaseNumber: string; startsOn: string; endsOn: string; billingDay: number;
-      tenantId: string; subsidiaryId: string; locationId: string | null; currency: string;
-      rentIncomeAccountId: string | null;
-    }>(sql`
-    select l.id, l.lease_number as "leaseNumber", l.starts_on as "startsOn", l.ends_on as "endsOn",
-           l.billing_day as "billingDay", l.tenant_id as "tenantId",
-           p.subsidiary_id as "subsidiaryId", p.location_id as "locationId", p.currency,
-           p.rent_income_account_id as "rentIncomeAccountId"
-      from property_leases l
-      join managed_properties p on p.id = l.property_id and p.org_id = l.org_id
-     where l.org_id = ${orgId} and l.status in ('active','notice') and l.ends_on is not null
-       and (${opts.onlyLeaseId ?? null}::uuid is null or l.id = ${opts.onlyLeaseId ?? null})
-     order by l.lease_number`));
-
+  const candidates = (await db.execute<{ id: string }>(sql`
+    select id from property_leases where org_id=${orgId} and status in ('active','notice') and ends_on is not null
+      and (${opts.onlyLeaseId ?? null}::uuid is null or id=${opts.onlyLeaseId ?? null})
+    order by lease_number,id`)).rows;
   const results: LeaseLevellingResult[] = [];
-  for (const lease of leases.rows) {
-    const charges = (await db.execute<{ amount: string; frequency: "monthly" | "quarterly" | "annually" | "one_time"; effectiveFrom: string; effectiveTo: string | null }>(sql`
-      select amount, frequency, effective_from as "effectiveFrom", effective_to as "effectiveTo"
-        from lease_charges
-       where org_id = ${orgId} and lease_id = ${lease.id} and charge_type = 'base_rent'
-       order by effective_from`));
-    if (charges.rows.length === 0) continue;
-
-    // The full contractual stream over the term, with a day-count weight per
-    // billing period (1 for full periods, the active/nominal ratio otherwise).
-    const rows: { periodEndsOn: string; amount: string; weight: string }[] = [];
-    for (const charge of charges.rows) {
-      if (charge.frequency === "one_time") continue; // not periodic rent
-      const step = charge.frequency === "monthly" ? 1 : charge.frequency === "quarterly" ? 3 : 12;
-      for (const period of leaseChargeSchedule({
-        amount: charge.amount, frequency: charge.frequency,
-        effectiveFrom: charge.effectiveFrom, effectiveTo: charge.effectiveTo,
-        leaseStartsOn: lease.startsOn, leaseEndsOn: lease.endsOn,
-        throughOn: lease.endsOn, billingDay: lease.billingDay,
-      })) {
-        const nominalStart = startOfMonth(period.periodStartsOn);
-        const nominalEnd = addDays(addMonths(nominalStart, step), -1);
-        const active = dayCount(period.periodStartsOn, period.periodEndsOn);
-        const nominal = dayCount(nominalStart, nominalEnd);
-        rows.push({
-          periodEndsOn: period.periodEndsOn,
-          amount: period.amount,
-          weight: active >= nominal ? "1" : mulRatio("1", BigInt(active), BigInt(nominal)),
-        });
+  for (const candidate of candidates) {
+    const result = await withOrgTransaction(orgId, async () => {
+      if (!(await lockAndCheckOrgFeature(db, orgId, "propertyManagement"))) {
+        throw new PropertyManagementError("Property management feature is disabled");
       }
-    }
-    if (rows.length === 0) continue;
-    rows.sort((a, b) => (a.periodEndsOn < b.periodEndsOn ? -1 : a.periodEndsOn > b.periodEndsOn ? 1 : 0));
+      await db.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
+      const slAccount = (await db.execute<{ acct: string | null }>(sql`
+        select settings->'controlAccounts'->>'straightLineRent' as acct from orgs where id = ${orgId} for share
+      `));
+      const straightLineRentAccountId = slAccount.rows[0]?.acct ?? null;
+      const claimed = (await db.execute<{ id: string }>(sql`select id from property_leases
+        where org_id=${orgId} and id=${candidate.id} for update`)).rows[0];
+      if (!claimed) return null;
+      const leaseRows = (await db.execute<{
+          id: string; leaseNumber: string; startsOn: string; endsOn: string; billingDay: number;
+          tenantId: string; subsidiaryId: string; locationId: string | null; currency: string;
+          rentIncomeAccountId: string | null;
+        }>(sql`
+        select l.id, l.lease_number as "leaseNumber", l.starts_on as "startsOn", l.ends_on as "endsOn",
+               l.billing_day as "billingDay", l.tenant_id as "tenantId",
+               p.subsidiary_id as "subsidiaryId", p.location_id as "locationId", p.currency,
+               p.rent_income_account_id as "rentIncomeAccountId"
+          from property_leases l
+          join managed_properties p on p.id = l.property_id and p.org_id = l.org_id
+         where l.org_id = ${orgId} and l.status in ('active','notice') and l.ends_on is not null
+           and l.id = ${candidate.id}
+         for share of p`));
+      const lease = leaseRows.rows[0];
+      if (!lease) return null;
+      // All contract, property and account inputs are read after claiming the
+      // lease. An edit that committed while we waited must shape this accrual.
+      const charges = (await db.execute<{ amount: string; frequency: "monthly" | "quarterly" | "annually" | "one_time"; effectiveFrom: string; effectiveTo: string | null }>(sql`
+        select amount, frequency, effective_from as "effectiveFrom", effective_to as "effectiveTo"
+          from lease_charges
+         where org_id = ${orgId} and lease_id = ${lease.id} and charge_type = 'base_rent'
+         order by effective_from, id for share`));
+      if (charges.rows.length === 0) return null;
 
-    const totalUnits = rows.reduce((a, r) => a + toUnits(r.amount), 0n);
-    const level = apportion(totalUnits, rows.map((r) => r.weight));
-    let straightLine = 0n;
-    let billed = 0n;
-    for (let i = 0; i < rows.length; i++) {
-      if (rows[i]!.periodEndsOn > asOf) break;
-      straightLine += level[i]!;
-      billed += toUnits(rows[i]!.amount);
-    }
-    const target = straightLine - billed;
+      // The full contractual stream over the term, with a day-count weight per
+      // billing period (1 for full periods, the active/nominal ratio otherwise).
+      const rows: { periodEndsOn: string; amount: string; weight: string }[] = [];
+      for (const charge of charges.rows) {
+        if (charge.frequency === "one_time") continue; // not periodic rent
+        const step = charge.frequency === "monthly" ? 1 : charge.frequency === "quarterly" ? 3 : 12;
+        for (const period of leaseChargeSchedule({
+          amount: charge.amount, frequency: charge.frequency,
+          effectiveFrom: charge.effectiveFrom, effectiveTo: charge.effectiveTo,
+          leaseStartsOn: lease.startsOn, leaseEndsOn: lease.endsOn,
+          throughOn: lease.endsOn, billingDay: lease.billingDay,
+        })) {
+          const nominalStart = startOfMonth(period.periodStartsOn);
+          const nominalEnd = addDays(addMonths(nominalStart, step), -1);
+          const active = dayCount(period.periodStartsOn, period.periodEndsOn);
+          const nominal = dayCount(nominalStart, nominalEnd);
+          rows.push({
+            periodEndsOn: period.periodEndsOn,
+            amount: period.amount,
+            weight: active >= nominal ? "1" : mulRatio("1", BigInt(active), BigInt(nominal)),
+          });
+        }
+      }
+      if (rows.length === 0) return null;
+      rows.sort((a, b) => (a.periodEndsOn < b.periodEndsOn ? -1 : a.periodEndsOn > b.periodEndsOn ? 1 : 0));
 
-    // Serialize balance-changing levelling runs on the lease row. The target
-    // above is deterministic for this lease/asOf, but the posted balance must
-    // be read only after this lock: a concurrent run may have committed while
-    // this call was building its contractual stream.
-    const outcome = await withOrgTransaction(orgId, async () => {
-      const lockedLease = await db.execute<{ id: string }>(sql`
-        select id from property_leases where org_id=${orgId} and id=${lease.id} for update
-      `);
-      if (lockedLease.rows.length === 0) return null;
-
+      const totalUnits = rows.reduce((a, r) => a + toUnits(r.amount), 0n);
+      const level = apportion(totalUnits, rows.map((r) => r.weight));
+      let straightLine = 0n;
+      let billed = 0n;
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i]!.periodEndsOn > asOf) break;
+        straightLine += level[i]!;
+        billed += toUnits(rows[i]!.amount);
+      }
+      const target = straightLine - billed;
       const posted = (await db.execute<{ accrual: string }>(sql`
         select coalesce(sum(jl.amount), 0)::text as accrual
           from journal_lines jl
@@ -1070,7 +1073,13 @@ export async function levelLeaseRentStraightLine(
       `));
       const postedAccrual = posted.rows[0]?.accrual ?? "0";
       const deltaUnits = target - toUnits(postedAccrual);
-      if (deltaUnits === 0n) return { postedAccrual, deltaUnits, entryId: null };
+      const result: LeaseLevellingResult = {
+        leaseId: lease.id, leaseNumber: lease.leaseNumber,
+        straightLineToDate: fromUnits(straightLine), billedToDate: fromUnits(billed),
+        targetAccrual: fromUnits(target), postedAccrual,
+        delta: fromUnits(deltaUnits), entryId: null,
+      };
+      if (deltaUnits === 0n) return result;
       if (!straightLineRentAccountId) {
         throw new PropertyManagementError(
           "Configure the straight-line rent account (Company Settings → controlAccounts.straightLineRent) before levelling lease income",
@@ -1081,12 +1090,34 @@ export async function levelLeaseRentStraightLine(
       }
 
       const ctx = (await db.execute<{ book_id: string | null; period_id: string | null }>(sql`
-        select (select id from accounting_books where org_id = ${orgId} and is_primary limit 1) as book_id,
+        select (select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share) as book_id,
                (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
                   and starts_on <= ${asOf} and ends_on >= ${asOf} limit 1) as period_id
       `));
-      if (!ctx.rows[0]?.book_id) throw new PropertyManagementError("No primary accounting book");
+      if (!ctx.rows[0]?.book_id) throw new PropertyManagementError("No active primary posting book");
       if (!ctx.rows[0]?.period_id) throw new PropertyManagementError(`No accounting period covers ${asOf}`);
+
+      const subsidiaryContext = await loadSubsidiaryContext(db, orgId);
+      const subsidiary = subsidiaryContext.byId.get(lease.subsidiaryId);
+      if (!subsidiary?.isActive) throw new PropertyManagementError("Rent levelling subsidiary is missing or inactive");
+      if (lease.currency !== subsidiary.baseCurrency) {
+        throw new PropertyManagementError("Rent levelling requires the property currency to match the subsidiary functional currency");
+      }
+      const accountIds = [straightLineRentAccountId, lease.rentIncomeAccountId];
+      await db.execute(sql`select id from accounts where org_id=${orgId}
+        and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+      if (lease.locationId) await db.execute(sql`select id from locations
+        where org_id=${orgId} and id=${lease.locationId} for share`);
+      try {
+        await validateSubsidiaryRestrictions(db, {
+          orgId, ctx: subsidiaryContext, docSubsidiaryId: lease.subsidiaryId,
+          lines: accountIds.map((accountId) => ({ accountId, amount: fromUnits(deltaUnits),
+            subsidiaryId: lease.subsidiaryId, locationId: lease.locationId })),
+        });
+      } catch (error) {
+        if (error instanceof SubsidiaryError) throw new PropertyManagementError(error.message);
+        throw error;
+      }
 
       const amount = fromUnits(deltaUnits < 0n ? -deltaUnits : deltaUnits);
       const memo = `Straight-line rent levelling — ${lease.leaseNumber} (as of ${asOf})`;
@@ -1111,20 +1142,10 @@ export async function levelLeaseRentStraightLine(
       await db.execute(sql`
         update journal_entries set status='posted',posted_at=now(),posted_by=${actorId},updated_at=now(),updated_by=${actorId}
          where org_id=${orgId} and id=${eid}`);
-      return { postedAccrual, deltaUnits, entryId: eid };
+      result.entryId = eid;
+      return result;
     });
-
-    if (!outcome) continue;
-    results.push({
-      leaseId: lease.id,
-      leaseNumber: lease.leaseNumber,
-      straightLineToDate: fromUnits(straightLine),
-      billedToDate: fromUnits(billed),
-      targetAccrual: fromUnits(target),
-      postedAccrual: outcome.postedAccrual,
-      delta: fromUnits(outcome.deltaUnits),
-      entryId: outcome.entryId,
-    });
+    if (result) results.push(result);
   }
   return results;
 }
