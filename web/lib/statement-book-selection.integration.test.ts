@@ -47,7 +47,7 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { resolveReport } = await import('./report-run')
 const { withReportAuthz } = await import('./report-execution-context')
-const { parseReportQuery, buildDrillTarget } = await import('./report-filters')
+const { parseReportQuery, buildDrillTarget, REPORT_PARAM_KEYS } = await import('./report-filters')
 const { parseReportDrillTarget, encodeReportDrillTarget } = await import('./report-drill')
 const { GET: exportStatement } = await import('../app/api/reports/statement/[kind]/export/route')
 const { GET: drill } = await import('../app/api/reports/drill/route')
@@ -70,7 +70,11 @@ function matrixProps(node: unknown): MatrixProps | null {
 }
 async function fixture(action: (org: Fixture, book: string, authz: import('./authz').Authz) => Promise<void>) {
   const org = await createScratchOrg()
+  let unrelated: Fixture | undefined
   try {
+    unrelated = await createScratchOrg()
+    await db.execute(sql`update subsidiaries set name='000 unrelated statement tenant'
+      where org_id=${unrelated.orgId} and id=${unrelated.subsidiaryId}`)
     const uid = await createScratchUser(org.orgId, 'Book reader', 'book_reader')
     await db.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb where org_id=${org.orgId} and key='book_reader'`)
     state.user = { id: uid, orgId: org.orgId, isSuperAdmin: false, name: 'Book reader', email: 'reader@example.test',
@@ -91,14 +95,15 @@ async function fixture(action: (org: Fixture, book: string, authz: import('./aut
     await withOrgTransaction(org.orgId, () => withReportAuthz(authz, () => action(org, book, authz)))
   } finally {
     state.user = null
-    await dropScratchOrgReporting(org.orgId)
+    try { await dropScratchOrgReporting(org.orgId) }
+    finally { if (unrelated) await dropScratchOrgReporting(unrelated.orgId) }
   }
 }
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
 // The schema-owner fixture connection bypasses RLS and pooled runs contain
 // several scratch tenants. Select this fixture's entity explicitly so this
 // accounting-book test does not depend on another tenant's picker ordering.
-const params = (org: Fixture, book?: string) => ({ period: 'custom', from: org.date, to: org.date, subsidiary: org.subsidiaryId, ...(book === undefined ? {} : { book }) })
+const params = (org: Fixture, book?: string) => ({ period: 'custom', from: org.date, to: org.date, [REPORT_PARAM_KEYS.sub]: org.subsidiaryId, ...(book === undefined ? {} : { book }) })
 const request = (url: string) => new Request('http://test.local' + url)
 
 for (const kind of ['pnl', 'balance-sheet'] as const) {
@@ -111,6 +116,7 @@ for (const kind of ['pnl', 'balance-sheet'] as const) {
       assert.equal(matrix.view.lines.find(line => line.accountId === account)?.values?.[0], expected, 'screen amount')
       assert.equal(matrix.drill.bookId, selected ? book : org.bookId, 'drill retains the displayed book')
       const p = new URLSearchParams(sp)
+      assert.equal(parseReportQuery(p).subsidiaryId, org.subsidiaryId, "fixture selects its entity through the real parser")
       const resolved = await resolveReport(kind, p, { orgId: org.orgId, t: key => key,
         period: { from: org.date, to: org.date, label: 'Book period' }, query: parseReportQuery(p) })
       assert.equal(resolved.render, 'view')

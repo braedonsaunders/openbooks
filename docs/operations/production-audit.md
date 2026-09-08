@@ -3167,3 +3167,19 @@ statement-fixture change used the ignored `subsidiary` key instead of the
 shared parser's `sub` key. That correction is still required; this checkpoint
 is not a passing full integration gate. Evidence:
 `audit-payroll-remittance-history-scope-2026-09-07/full-integration.log`.
+
+## Deterministic statement-fixture entity selection — 2026-09-07
+
+A deliberately earlier-sorting unrelated tenant reproduces both shared-renderer
+failures without running the whole suite. The fixture now uses
+`REPORT_PARAM_KEYS.sub`, and directly asserts that `parseReportQuery` resolves
+its subsidiary. The unrelated tenant remains in the fixture so this regression
+cannot be hidden by an otherwise empty scratch database. Both tenants are
+cleaned up even if an assertion fails.
+
+All 25 statement/domain-boundary checks passed (9,129.298125 ms, zero
+failures/skips), including screen, shared renderer, CSV/XLSX, drill-through,
+invalid books and retired scenario-book history. Web typecheck and changed-file
+lint passed. No production report behavior changed. Evidence:
+`audit-statement-fixture-parameter-2026-09-07/before.log`, `focused.log`,
+`typecheck.log`, and `lint.log`. A new full integration run is still required.
