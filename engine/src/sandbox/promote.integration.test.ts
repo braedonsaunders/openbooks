@@ -28,6 +28,7 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
   const reviewerId = await createScratchUser(prod.orgId, "Promote Reviewer", "admin");
   const approverId = await createScratchUser(prod.orgId, "Promote Approver", "admin");
   const applierId = await createScratchUser(prod.orgId, "Promote Applier", "admin");
+  await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${prod.orgId} and key='admin'`);
   const sbxOrgId = randomUUID();
   const seed = randomUUID();
   const sandboxId = randomUUID();
@@ -212,7 +213,7 @@ async function rolePromotionFixture(kind: "update_assigned" | "delete_assigned" 
   const actors = await Promise.all(["Creator", "Reviewer", "Approver", "Applier"].map((name) =>
     createScratchUser(prod.orgId, name, "admin")));
   const adminId = (await db.execute<{ id: string }>(sql`select id from app_roles where org_id = ${prod.orgId} and key = 'admin'`)).rows[0]!.id;
-  await db.execute(sql`update app_roles set is_built_in = true where id = ${adminId}`);
+  await db.execute(sql`update app_roles set is_built_in = true, permissions='["*"]'::jsonb where id = ${adminId}`);
   let roleId = adminId;
   if (kind === "delete_builtin") {
     roleId = (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
