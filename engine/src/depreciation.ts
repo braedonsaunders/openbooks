@@ -7,7 +7,7 @@ import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./deprec
 import { bookConventionWindow } from "./depreciation-conventions.ts";
 import type { BookDepreciationConvention } from "@openbooks/schema";
 import { assertFinalKernelBalance } from "./posting.ts";
-import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
+import { loadSubsidiaryContext, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /** Persist a manual/usage depreciation fact through exact decimal then ledger money. Fail closed. */
 function persistDepreciationInputValue(value: unknown): string {
@@ -1010,6 +1010,7 @@ export async function runDepreciation(
     update fixed_assets a
        set status = 'fully_depreciated', updated_at = now()
      where a.org_id = ${orgId} and a.status = 'in_service'
+       ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
        ${assetId ? sql`and a.id = ${assetId}` : sql``}
        and exists (
          select 1 from depreciation_schedules s

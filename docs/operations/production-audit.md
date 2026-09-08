@@ -3695,3 +3695,26 @@ source-cost recovery ceilings, exact fractional valuation and disabled-book
 controls. Workspace typechecks, changed-file ESLint and `git diff --check`
 passed. Private evidence: `audit-nrv-posting-policy-2026-09-08`. The running
 `0083b76c` full integration archive predates this fix.
+
+### Depreciation status reconciliation respects caller scope (2026-09-08)
+
+Confirmed on `c4432e14`: after the journal loop correctly filtered out hidden
+assets, its final status reconciliation updated every eligible asset in the
+organization. A caller with an empty scope or access to another subsidiary
+could change a hidden child's lagging `in_service` status to
+`fully_depreciated`, while the run reported zero postings.
+
+The final UPDATE now carries the same subsidiary restriction, using the shared
+UUID-array binder. The two real database regressions use a valid fully-posted
+schedule with a lagging legacy/imported status; both failed before the fix.
+They also verify that the owning subsidiary's authorized caller can reconcile
+the status without duplicating the journal.
+
+Validation: 8/8 focused depreciation checks passed (4,754.836708 ms), engine
+typecheck and changed-file ESLint passed. Private evidence:
+`audit-depreciation-status-scope-2026-09-08`.
+
+Separate checkpoint at `c4432e14`, before this scope fix: 3,210/3,210 unit tests
+passed with no skips (101,993.79625 ms), and the production web build passed
+using the locked dependency installation. Those runs include the payroll-book
+and NRV-policy fixes. Logs: `audit-nrv-posting-policy-2026-09-08`.
