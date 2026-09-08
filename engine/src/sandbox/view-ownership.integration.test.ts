@@ -17,17 +17,18 @@ for (const table of ["saved_views", "list_views", "saved_reports"] as const) {
         const actors: string[] = [];
         for (const name of ["Creator", "Reviewer", "Approver", "Applier"]) actors.push(await createScratchUser(org.orgId, name, "admin"));
         await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`);
+        const owner = actors[3];
         const view = randomUUID();
         if (table === "saved_views") await db.execute(sql`insert into saved_views(id,org_id,slug,name,query,scope,owner_id)
-          values(${view},${org.orgId},'private-audit','Private audit','{"entity":"documents","columns":["id"]}'::jsonb,'private',${actors[0]})`);
+          values(${view},${org.orgId},'private-audit','Private audit','{"entity":"documents","columns":["id"]}'::jsonb,'private',${owner})`);
         else if (table === "list_views") await db.execute(sql`insert into list_views(id,org_id,record_type,name,scope,owner_id,config)
-          values(${view},${org.orgId},'customer_invoice','Private audit','user',${actors[0]},'{}'::jsonb)`);
+          values(${view},${org.orgId},'customer_invoice','Private audit','user',${owner},'{}'::jsonb)`);
         else await db.execute(sql`insert into saved_reports(id,org_id,name,path,created_by_user_id)
-          values(${view},${org.orgId},'Private audit','/reports/pnl',${actors[0]})`);
+          values(${view},${org.orgId},'Private audit','/reports/pnl',${owner})`);
         sandbox = await createSandbox({ productionOrgId: org.orgId, name: "View owner regression", tier: "full", masked: false });
         const field = table === "saved_reports" ? "created_by_user_id" : "owner_id";
         const sandboxView = (await db.execute<{ id: string; owner: string }>(sql`select id,${sql.identifier(field)} as owner from ${sql.identifier(table)} where org_id=${sandbox.sandboxOrgId}`)).rows[0]!;
-        assert.notEqual(sandboxView.owner, actors[0]);
+        assert.notEqual(sandboxView.owner, owner);
         const unchanged = await buildChangeSet(sandbox.sandboxId, "Unchanged views", actors[0]);
         assert.equal((await db.execute(sql`select id from change_set_items where change_set_id=${unchanged.changeSetId} and table_name=${table}`)).rows.length, 0);
         if (scenario === "legacy owner repair") {
@@ -36,14 +37,14 @@ for (const table of ["saved_views", "list_views", "saved_reports"] as const) {
         const change = await buildChangeSet(sandbox.sandboxId, "Reviewed owner mapping", actors[0]);
         const items = (await db.execute<{ payload: Record<string, unknown> }>(sql`select payload from change_set_items where change_set_id=${change.changeSetId} and table_name=${table}`)).rows;
         assert.equal(items.length, 1);
-        assert.equal(items[0]!.payload[field], actors[0]);
+        assert.equal(items[0]!.payload[field], owner);
         await reviewChangeSet(change.changeSetId, actors[1]);
         await approveChangeSet(change.changeSetId, actors[2]);
         await applyChangeSet(change.changeSetId, actors[3]);
         await deleteSandbox(sandbox.sandboxId);
         sandbox = undefined;
         const retained = (await db.execute<{ owner: string; name: string }>(sql`select ${sql.identifier(field)} as owner,name from ${sql.identifier(table)} where org_id=${org.orgId} and id=${view}`)).rows;
-        assert.deepEqual(retained, [{ owner: actors[0], name: scenario === "legacy owner repair" ? "Private audit" : "Reviewed view" }]);
+        assert.deepEqual(retained, [{ owner, name: scenario === "legacy owner repair" ? "Private audit" : "Reviewed view" }]);
       } finally {
         if (sandbox) await deleteSandbox(sandbox.sandboxId);
         await dropScratchOrgReporting(org.orgId);

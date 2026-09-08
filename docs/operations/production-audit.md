@@ -4457,3 +4457,52 @@ The same drawer was visually checked at 390×844: the document width remained
 390 pixels, with the shared table containing its horizontal overflow. The owned
 browser and preview server were closed after verification, and both fixture
 tenants were removed. Final copy handles singular counts and applied-state text.
+
+### Passing full integration checkpoint (2026-09-08, 1ed3a5089)
+
+The frozen 1ed3a5089 integration run passed 2,697/2,697 without skips or
+failures in 1,432,585.781917 ms. Its lifecycle receipt records 2,314 balanced
+leases, releases and resets, four bootstraps/teardowns/schema-wide verifications,
+zero active leases and zero leaks. This includes the retainage book/lifecycle
+fixes, tenant role constraints, promotion capture preconditions and parent-first
+sandbox copying. It predates the persisted promotion UI and the domain controls
+below; those have separate targeted verification. Evidence:
+`audit-sandbox-tree-order-2026-09-08/full-integration.log`.
+
+### Promotion domain permissions and record controls (2026-09-08)
+
+Eight actual service probes demonstrated that sandbox-management permission
+alone could apply scripts, custom fields, forms, organization list views, saved
+reports/views, report definitions and account groups. Promotion now requires
+the corresponding ordinary write permission from the applier's locked authority
+snapshot. Its allowlist and permission mapping are one source of truth. Each
+regression first denies the underprivileged applier, then grants the domain
+permission and successfully applies the same approved artifact. Existing role
+grant ceilings and override denials remain enforced.
+
+Seven further probes reproduced missing record controls: other users' saved
+views/reports/private lists could be changed (including private lists by a
+global administrator), built-in reports could be deleted or reclassified, and
+scripts could be changed while the authoritative Scripts feature was disabled.
+Promotion now checks both the current and proposed owner, preserves built-in
+report identity and checks Scripts through the shared transaction-locking feature
+helper. Private lists retain their ordinary owner-only rule even for an admin.
+Historical sandbox-owner repairs require a proven mapping to the applying owner;
+an arbitrary payload owner cannot grant access. Built-in report title/query
+configuration remains editable; kind, system status and report type are fixed.
+
+Additional real-service cases cover owner create/update/delete for all three
+owned record types, attempted ownership transfers in both directions and an
+ownership denial after an earlier authorized configuration write. The latter
+proves both records and audit entries roll back and the artifact stays approved.
+The initial rollback fixture used obsolete custom-field column names; correcting
+it to the actual target_table/field_type schema preserved the intended assertion.
+Existing ownership fixtures now use the independent applying actor as owner;
+the multi-table script fixture explicitly enables the feature it exercises.
+Workspace types, changed-file lint and the exact-lock production build passed.
+The final serial sandbox and server-action matrix passed 84/84 without skips
+(49,399.278 ms), including the 31 new domain/record-control regressions. An earlier
+invocation overlapped a duplicate runner, so its shared output was not used as
+the final receipt; both runners exited and the serial matrix was run cleanly.
+Evidence: `audit-promotion-domain-controls-2026-09-08`. These checks establish the
+listed controls; they do not certify every promotion payload or production workflow.

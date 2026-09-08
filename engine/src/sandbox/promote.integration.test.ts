@@ -29,6 +29,7 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
   const approverId = await createScratchUser(prod.orgId, "Promote Approver", "admin");
   const applierId = await createScratchUser(prod.orgId, "Promote Applier", "admin");
   await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${prod.orgId} and key='admin'`);
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}','{"scripts":true}'::jsonb) where id=${prod.orgId}`);
   const sbxOrgId = randomUUID();
   const seed = randomUUID();
   const sandboxId = randomUUID();
