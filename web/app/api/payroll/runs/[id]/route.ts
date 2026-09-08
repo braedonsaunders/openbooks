@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { calculatePayRun, commitPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
+import { calculatePayRun, commitPayRun, PayrollError, previewPayRunGl, payrollSubsidiaryInScope } from '@openbooks/engine/src/payroll-run.ts'
 import { recordPayRunPayment } from '@openbooks/engine/src/payroll-payment.ts'
 import { assertPayRunNotStale } from '@openbooks/engine/src/payroll-readiness.ts'
 import {
@@ -38,72 +38,91 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const orgId = gate.user.orgId
 
-  const runs = (await db.execute<Record<string, unknown>>(sql`
-    select r.document_id, d.document_number, d.status as document_status, d.currency,
-           d.subsidiary_id as "subsidiaryId",
-           r.pay_schedule_id, s.name as schedule_name,
-           r.period_start::text as period_start, r.period_end::text as period_end,
-           r.pay_date::text as pay_date, r.tax_year, r.run_status,
-           r.gross_total, r.net_total, r.employer_cost_total, r.employee_count
-      from pay_runs r
-      join documents d on d.id = r.document_id and d.org_id = r.org_id
-      left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
-     where r.org_id = ${orgId} and r.document_id = ${id}`))
-  const run = runs.rows[0]
-  if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const denied = guardSubsidiaryScope(gate, run.subsidiaryId as string | null | undefined)
-  if (denied) return denied
+  return db.transaction(async (tx) => {
+    const runs = (await tx.execute<Record<string, unknown>>(sql`
+      select r.document_id, d.document_number, d.status as document_status, d.currency,
+             d.subsidiary_id as "subsidiaryId",
+             r.pay_schedule_id, s.name as schedule_name,
+             r.period_start::text as period_start, r.period_end::text as period_end,
+             r.pay_date::text as pay_date, r.tax_year, r.run_status,
+             r.gross_total, r.net_total, r.employer_cost_total, r.employee_count
+        from pay_runs r
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+        left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
+       where r.org_id = ${orgId} and r.document_id = ${id}
+         for share of r,d`))
+    const run = runs.rows[0]
+    if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const denied = guardSubsidiaryScope(gate, run.subsidiaryId as string | null | undefined)
+    if (denied) return denied
 
-  const [stubs, lines] = (await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
-      select st.id, st.employee_party_id, p.display_name as employee_name, st.province,
-             st.gross, st.pensionable_earnings, st.insurable_earnings, st.net_pay,
-             st.employer_cost, st.vacation_accrued, st.federal_claim, st.provincial_claim,
-             st.factors
-        from pay_stubs st
-        join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
-       where st.org_id = ${orgId} and st.pay_run_document_id = ${id}
-       order by p.display_name`),
-    db.execute<Record<string, unknown>>(sql`
-      select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence,
-             c.code as component_code, pr.name as project_name, dep.name as department_name
-        from pay_stub_lines l
-        join pay_stubs st on st.id = l.stub_id and st.org_id = l.org_id
-        left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
-        left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
-        left join departments dep on dep.id = l.department_id and dep.org_id = l.org_id
-       where l.org_id = ${orgId} and st.pay_run_document_id = ${id}
-       order by l.stub_id, l.sequence`),
-  ]))
+    if (gate.allowedSubsidiaryIds != null) {
+      // Header totals and the detail form describe the whole run. Keep the run
+      // and employee ownership stable, and refuse a partially visible population.
+      const participants = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+        select p.subsidiary_id from parties p
+         where p.org_id=${orgId} and (exists (
+           select 1 from pay_stubs st where st.org_id=p.org_id and st.employee_party_id=p.id
+             and st.pay_run_document_id=${id}) or exists (
+           select 1 from pay_run_adjustments a where a.org_id=p.org_id and a.employee_party_id=p.id
+             and a.pay_run_document_id=${id}))
+         order by p.id for share`)).rows
+      if (participants.some((party) => !payrollSubsidiaryInScope(gate.allowedSubsidiaryIds, party.subsidiary_id))) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
+    }
 
-  const linesByStub = new Map<string, Record<string, unknown>[]>()
-  for (const line of lines.rows) {
-    const stubId = String(line.stub_id)
-    const list = linesByStub.get(stubId)
-    if (list) list.push(line)
-    else linesByStub.set(stubId, [line])
-  }
-  const [adjustments, adjustableComponents] = (await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
-      select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount, a.hours,
-             a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
-        from pay_run_adjustments a
-        join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
-        left join pay_components c on c.id = a.component_id and c.org_id = a.org_id
-       where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
-       order by p.display_name, a.created_at`),
-    db.execute<Record<string, unknown>>(sql`
-      select id, code, name, kind from pay_components
-       where org_id = ${orgId} and is_active
-         and (system_key is null or system_key in ('base_pay','overtime','bonus','vacation_payout'))
-       order by sequence, code`),
-  ]))
+    const [stubs, lines] = (await Promise.all([
+      tx.execute<Record<string, unknown>>(sql`
+        select st.id, st.employee_party_id, p.display_name as employee_name, st.province,
+               st.gross, st.pensionable_earnings, st.insurable_earnings, st.net_pay,
+               st.employer_cost, st.vacation_accrued, st.federal_claim, st.provincial_claim,
+               st.factors
+          from pay_stubs st
+          join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
+         where st.org_id = ${orgId} and st.pay_run_document_id = ${id}
+         order by p.display_name`),
+      tx.execute<Record<string, unknown>>(sql`
+        select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence,
+               c.code as component_code, pr.name as project_name, dep.name as department_name
+          from pay_stub_lines l
+          join pay_stubs st on st.id = l.stub_id and st.org_id = l.org_id
+          left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+          left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
+          left join departments dep on dep.id = l.department_id and dep.org_id = l.org_id
+         where l.org_id = ${orgId} and st.pay_run_document_id = ${id}
+         order by l.stub_id, l.sequence`),
+    ]))
 
-  return NextResponse.json({
-    run,
-    stubs: stubs.rows.map((stub) => ({ ...stub, lines: linesByStub.get(String(stub.id)) ?? [] })),
-    adjustments: adjustments.rows,
-    adjustableComponents: adjustableComponents.rows,
+    const linesByStub = new Map<string, Record<string, unknown>[]>()
+    for (const line of lines.rows) {
+      const stubId = String(line.stub_id)
+      const list = linesByStub.get(stubId)
+      if (list) list.push(line)
+      else linesByStub.set(stubId, [line])
+    }
+    const [adjustments, adjustableComponents] = (await Promise.all([
+      tx.execute<Record<string, unknown>>(sql`
+        select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount, a.hours,
+               a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
+          from pay_run_adjustments a
+          join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
+          left join pay_components c on c.id = a.component_id and c.org_id = a.org_id
+         where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
+         order by p.display_name, a.created_at`),
+      tx.execute<Record<string, unknown>>(sql`
+        select id, code, name, kind from pay_components
+         where org_id = ${orgId} and is_active
+           and (system_key is null or system_key in ('base_pay','overtime','bonus','vacation_payout'))
+         order by sequence, code`),
+    ]))
+
+    return NextResponse.json({
+      run,
+      stubs: stubs.rows.map((stub) => ({ ...stub, lines: linesByStub.get(String(stub.id)) ?? [] })),
+      adjustments: adjustments.rows,
+      adjustableComponents: adjustableComponents.rows,
+    })
   })
 }
 

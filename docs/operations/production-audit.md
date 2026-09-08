@@ -3796,3 +3796,23 @@ A separate run-detail GET disclosure was reproduced during this validation and
 is under remediation; this adjustment/preview fix does not close that finding.
 The full integration archive currently running at `71a3c2d1` predates these
 adjustment/preview changes.
+
+### Payroll run detail protects the entire employee population (2026-09-08)
+
+The separate GET disclosure noted above is now fixed. A real request for a
+visible run containing an inaccessible employee returned the employee's name,
+wages, net pay, statutory factors and component lines before the fix.
+
+Detail reads now hold shared locks on the run and document, authorize all
+employees referenced by stubs or adjustments under shared ownership locks, and
+return the complete response within that transaction. A partially visible run
+returns the same HTTP 404 body as a missing run. This also protects an
+adjustment-only draft after its calculated stubs were invalidated.
+
+Validation: 11/11 payroll route checks passed (7,228.001541 ms), including hidden
+stubs, hidden adjustments, a concurrent employee transfer, authorized scoped
+reads and unrestricted reads. Existing mutation and payroll surface scope
+checks remain green. Workspace typechecks, changed-file ESLint and whitespace
+validation passed. Private evidence: `audit-payroll-run-read-scope-2026-09-08`.
+The 3,210-test unit/build checkpoint in the previous section predates this GET
+change; the running `71a3c2d1` full archive predates both payroll scope commits.
