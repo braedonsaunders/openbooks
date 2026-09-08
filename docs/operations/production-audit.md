@@ -3529,3 +3529,14 @@ changed-file lint passed. Refusals leave no journal or deposit transaction, and
 correcting policy permits the preserved receipt. Evidence:
 `audit-property-deposit-posting-policy-2026-09-08/before.log`, `focused.log`,
 `typecheck.log`, and `lint.log`.
+
+## Lease primary-book eligibility — 2026-09-08
+
+Lease commencement and scheduled payment each posted with either primary-book
+activation or GL posting disabled. The existing locked book lookup now requires
+both flags. Four database regressions verify named refusal, unchanged lease
+status and payment claims, no new journal fragments, and successful resumption
+after restoring book eligibility. All 33 lease integration and measurement
+checks passed (5,150.947917 ms, no failures/skips); engine typecheck and
+changed-file lint passed. Evidence: `audit-lease-book-policy-2026-09-08/before.log`,
+`focused-final.log`, `typecheck-final.log`, and `lint.log`.

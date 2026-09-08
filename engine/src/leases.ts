@@ -519,13 +519,13 @@ async function leaseRow(orgId: string, leaseId: string, runner: SqlExecutor): Pr
 
 async function postingContext(runner: SqlExecutor, orgId: string, subsidiaryId: string, date: string) {
   const r = (await runner.execute<{ book_id: string | null; period_id: string | null; currency: string | null }>(sql`
-    select (select id from accounting_books where org_id = ${orgId} and is_primary limit 1 for share) as book_id,
+    select (select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share) as book_id,
            (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
               and starts_on <= ${date} and ends_on >= ${date} limit 1 for share) as period_id,
            (select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}) as currency
   `));
   const row = r.rows[0];
-  if (!row?.book_id) throw new LeaseError("no primary accounting book");
+  if (!row?.book_id) throw new LeaseError("no active primary posting book");
   if (!row.period_id) throw new LeaseError(`no accounting period covers ${date}`);
   if (!row.currency) throw new LeaseError("subsidiary not found");
   return { bookId: row.book_id, periodId: row.period_id, currency: row.currency };
