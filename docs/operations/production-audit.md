@@ -3540,3 +3540,20 @@ after restoring book eligibility. All 33 lease integration and measurement
 checks passed (5,150.947917 ms, no failures/skips); engine typecheck and
 changed-file lint passed. Evidence: `audit-lease-book-policy-2026-09-08/before.log`,
 `focused-final.log`, `typecheck-final.log`, and `lint.log`.
+
+## Income-tax provision posting policy — 2026-09-08
+
+Provision source fingerprints did not prevent posting to a restricted expense
+account, an inactive entity, an inactive primary book or a primary book with
+GL posting disabled. Each case was reproduced against the real database. The
+posting service now holds organization/entity policy, requires an active
+primary posting book, locks every account in the proposed replacement, and
+validates all entity legs before reversing or superseding any earlier run.
+
+Eight policy cases cover both an initial posting and replacement of a posted
+run. Refusals retain the draft, leave the prior run and its journal posted,
+and create no additional journals. Correcting policy permits the same draft
+to post. All 37 focused provision and computation checks passed
+(6,397.600167 ms, no failures/skips); engine typecheck and changed-file lint
+passed. Evidence: `audit-tax-provision-posting-policy-2026-09-08/before.log`,
+`focused-final.log`, `typecheck-final.log`, and `lint-final.log`.
