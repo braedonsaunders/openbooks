@@ -37,6 +37,18 @@ const PROMOTABLE = [
 const PROMOTABLE_ARRAY = `{${PROMOTABLE.join(",")}}`;
 
 const STRUCTURAL = new Set(["id", "org_id", "created_at", "updated_at", "created_by", "updated_by"]);
+const USER_REFERENCE_COLUMNS: Readonly<Record<string, string>> = {
+  saved_views: "owner_id",
+  list_views: "owner_id",
+  saved_reports: "created_by_user_id",
+};
+
+function mappedUserReference(value: unknown, ids: ReadonlyMap<string, string>, label: string): string | null {
+  if (value === null) return null;
+  const mapped = typeof value === "string" ? ids.get(value.toLowerCase()) : undefined;
+  if (!mapped) throw new Error(`${label}: user reference has no counterpart in the production organization; recapture after correcting ownership`);
+  return mapped;
+}
 
 interface SandboxTargetRow extends Record<string, unknown> { org_id: string; production_org_id: string }
 interface SandboxSeedRow extends Record<string, unknown> { sandbox_seed: string }
@@ -140,6 +152,14 @@ export async function buildChangeSet(
     const subsidiaryMap = await sandboxSubsidiaryMap(prod, sbx, seed);
     const productionSubsidiaries = new Map([...subsidiaryMap.keys()].map(id => [id, id]));
     const toProduction = new Map([...subsidiaryMap].map(([source, target]) => [target, source]));
+    const users = (await db.execute<{ production_id: string; sandbox_id: string | null }>(sql`
+      select p.id as production_id, s.id as sandbox_id from users p
+      left join users s on s.org_id=${sbx} and s.id=ob_rebase(p.id,${seed}::uuid)
+       where p.org_id=${prod}`)).rows;
+    const toProductionUser = new Map(users.flatMap(row => row.sandbox_id ? [[row.sandbox_id, row.production_id] as const] : []));
+    // A previously corrupted production owner can be repaired through its
+    // proven origin, but only as an explicit reviewed change-set item.
+    const productionUser = new Map([...users.map(row => [row.production_id, row.production_id] as const), ...toProductionUser]);
 
     const cs = (await db
       .insert(schema.changeSets)
@@ -170,11 +190,21 @@ export async function buildChangeSet(
           left join "${t}" p on p.org_id = '${prod}' and ob_rebase(p.id, '${seed}') = s.id
          where s.org_id = '${sbx}'`));
       for (const d of diff.rows) {
+        const userField = USER_REFERENCE_COLUMNS[t];
+        let repairsProductionReference = false;
+        if (userField) {
+          d.sbx_row[userField] = mappedUserReference(d.sbx_row[userField], toProductionUser, `promotion ${t}/${d.sbx_id}`);
+          if (d.prod_row) {
+            const original = d.prod_row[userField];
+            d.prod_row[userField] = mappedUserReference(original, productionUser, `production ${t}/${d.prod_id}`);
+            repairsProductionReference = original !== d.prod_row[userField];
+          }
+        }
         if (t === "app_roles") {
           d.sbx_row.subsidiary_restriction = remapRoleRestriction(d.sbx_row.subsidiary_restriction, toProduction, `promotion role ${d.sbx_id}`);
           if (d.prod_row) d.prod_row.subsidiary_restriction = remapRoleRestriction(d.prod_row.subsidiary_restriction, productionSubsidiaries, `production role ${d.prod_id}`);
         }
-        if (contentSig(d.sbx_row) === contentSig(d.prod_row)) continue; // unchanged
+        if (!repairsProductionReference && contentSig(d.sbx_row) === contentSig(d.prod_row)) continue; // unchanged
         const targetId = d.prod_id ?? randomUUID();
         const payload = { ...d.sbx_row, id: targetId, org_id: prod, created_by: null, updated_by: null };
         await db.insert(schema.changeSetItems).values({
@@ -326,6 +356,12 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
           || typeof payload.id !== "string" || payload.id.toLowerCase() !== target.toLowerCase()
           || typeof payload.org_id !== "string" || payload.org_id.toLowerCase() !== prod.toLowerCase()) {
           throw new Error(`promotion payload identity does not match ${t}/${target}`);
+        }
+        const userField = USER_REFERENCE_COLUMNS[t];
+        if (userField && payload[userField] !== null) {
+          const ownerId = typeof payload[userField] === "string" ? assertUuid(payload[userField]) : null;
+          const owner = (await db.execute(sql`select id from users where org_id=${prod} and id=${ownerId} for key share`)).rows[0];
+          if (!owner) throw new Error(`promotion ${t}/${target}: user reference must belong to production; recapture the change set`);
         }
         if (t === "app_roles") {
           const requested = promotedRolePermissions(payload.permissions);
