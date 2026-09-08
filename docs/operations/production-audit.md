@@ -3718,3 +3718,23 @@ Separate checkpoint at `c4432e14`, before this scope fix: 3,210/3,210 unit tests
 passed with no skips (101,993.79625 ms), and the production web build passed
 using the locked dependency installation. Those runs include the payroll-book
 and NRV-policy fixes. Logs: `audit-nrv-posting-policy-2026-09-08`.
+
+### Percent-complete editing serializes with Projects disable (2026-09-08)
+
+Confirmed on `c4432e14` through the real route and PostgreSQL, with only the
+authentication boundary supplied by the fixture: a request passed its initial
+Projects check, changed the override, then waited behind a concurrent disable
+in the revenue-sync service. After disable committed, the service correctly did
+nothing, but the route still committed the override and returned HTTP 200.
+
+The route now checks and holds the authoritative Projects row lock inside the
+transaction before updating the project. A disable that wins returns HTTP 404
+without changing the override or audit columns; a write that wins retains the
+feature lock through override and schedule synchronization.
+
+Validation: three real database checks passed (3,646.579875 ms): the route race,
+disabled revenue-sync preservation, and concurrent sync uniqueness. The two
+existing route unit checks also passed independently with database mode off.
+Workspace typechecks, changed-file ESLint and whitespace validation passed.
+The race regression also re-enables Projects and verifies the 75% update.
+Private evidence: `audit-project-percent-feature-race-2026-09-08`.
