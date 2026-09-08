@@ -2,12 +2,42 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, pool } from "./db.ts";
 import { toUnits } from "./money.ts";
 import { commenceLease, createLeaseAgreement, postDueLeaseSchedules } from "./leases.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+/** Force both requests past discovery, then release their competing writes. */
+async function raceBehindFence<T>(table: "lease_agreement_schedule_lines" | "journal_entries", work: () => Promise<T>) {
+  const fence = await pool.connect();
+  let raced: Promise<PromiseSettledResult<T>[]> | undefined;
+  try {
+    await fence.query("begin");
+    await fence.query(`lock table ${table} in share mode`);
+    const pid = (await fence.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+    raced = Promise.allSettled([work(), work()]);
+    let parked = false;
+    for (let attempt = 0; attempt < 400; attempt++) {
+      const count = (await pool.query<{ n: number }>(`
+        with recursive blocked(pid) as (
+          select pid from pg_stat_activity where $1::int = any(pg_blocking_pids(pid))
+          union
+          select a.pid from pg_stat_activity a join blocked b on b.pid = any(pg_blocking_pids(a.pid))
+        ) select count(*)::int as n from blocked`, [pid])).rows[0]!.n;
+      if (count >= 2) { parked = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(parked, "both requests must reach the controlled lock interleave");
+    await fence.query("commit");
+    return await raced;
+  } finally {
+    await fence.query("rollback");
+    fence.release();
+    await raced;
+  }
+}
 
 interface LeaseAccounts {
   rouAsset: string;
@@ -149,4 +179,53 @@ test("a 13-month lease cannot elect the short-term exemption", { skip: !DB }, as
   } finally {
     await dropScratchOrg(org.orgId);
   }
+});
+
+for (const exemption of [null, "short_term"] as const) {
+  test(`concurrent lease commencement replays one ${exemption ?? "finance"} result`, { skip: !DB }, async () => {
+    const org = await createScratchOrg();
+    try {
+      const accounts = await seedLeaseAccounts(org);
+      const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+        subsidiaryId: org.subsidiaryId, leaseNumber: "LEASE-COMMENCE-RACE",
+        commencementOn: "2026-07-01", termPeriods: 3, paymentFrequency: "monthly",
+        paymentAmount: "1000", annualDiscountRatePercent: "6",
+        classificationInputs: { transfersOwnership: exemption === null }, exemption, accounts,
+      });
+      const results = await raceBehindFence("lease_agreement_schedule_lines", () => commenceLease(org.orgId, leaseId, null));
+      assert.deepEqual(results.map((result) => result.status === "fulfilled" ? "fulfilled" : result.reason?.cause?.message ?? String(result.reason)), ["fulfilled", "fulfilled"], "both commencement requests must succeed");
+      if (results[0]?.status !== "fulfilled" || results[1]?.status !== "fulfilled") return;
+      const canonical = (value: Awaited<ReturnType<typeof commenceLease>>) => ({
+        ...value, liability: toUnits(value.liability), rouAsset: toUnits(value.rouAsset),
+      });
+      assert.deepEqual(canonical(results[0].value), canonical(results[1].value));
+      const count = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${leaseId}`)).rows[0]!.n;
+      assert.equal(count, 3);
+      assert.equal(await glBalance(org.orgId, accounts.rouAsset), toUnits(results[0].value.rouAsset));
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+}
+
+test("concurrent lease schedule runners claim a due payment once", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const accounts = await seedLeaseAccounts(org);
+    const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+      subsidiaryId: org.subsidiaryId, leaseNumber: "LEASE-PAYMENT-RACE",
+      commencementOn: "2026-07-01", termPeriods: 3, paymentFrequency: "monthly",
+      paymentAmount: "1000", annualDiscountRatePercent: "6",
+      classificationInputs: { transfersOwnership: true }, accounts,
+    });
+    await commenceLease(org.orgId, leaseId, null);
+    const results = await raceBehindFence("journal_entries", () => postDueLeaseSchedules(org.orgId, "2026-07-31", null));
+    assert.deepEqual(results.map((result) => result.status === "fulfilled" ? "fulfilled" : result.reason?.cause?.message ?? String(result.reason)), ["fulfilled", "fulfilled"], "the losing retry must safely skip the claimed payment");
+    if (results[0]?.status !== "fulfilled" || results[1]?.status !== "fulfilled") return;
+    assert.equal(results.reduce((n, result) => n + (result.status === "fulfilled" ? result.value.posted : 0), 0), 1);
+    assert.equal(await glBalance(org.orgId, accounts.payment), -toUnits("1000"));
+    const posted = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from lease_agreement_schedule_lines
+       where org_id=${org.orgId} and lease_id=${leaseId} and payment_entry_id is not null and amortization_entry_id is not null`)).rows[0]!.n;
+    assert.equal(posted, 1);
+  } finally { await dropScratchOrg(org.orgId); }
 });

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, type SqlExecutor } from "./db.ts";
 import { add, cmp, fromUnits, isZero, neg, normalizeDecimal, normalizeMoney, sum, toUnits } from "./money.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { apportion } from "./revenue-recognition.ts";
@@ -501,8 +501,8 @@ type LeaseRow = {
   commencement_entry_id: string | null;
 };
 
-async function leaseRow(orgId: string, leaseId: string): Promise<LeaseRow> {
-  const r = (await db.execute<LeaseRow>(sql`
+async function leaseRow(orgId: string, leaseId: string, runner: SqlExecutor): Promise<LeaseRow> {
+  const r = (await runner.execute<LeaseRow>(sql`
     select id, subsidiary_id, lease_number, status, commencement_on::text as commencement_on, term_periods,
            payment_frequency, payment_timing, payment_amount::text as payment_amount,
            annual_discount_rate_percent::text as annual_discount_rate_percent,
@@ -510,7 +510,7 @@ async function leaseRow(orgId: string, leaseId: string): Promise<LeaseRow> {
            rou_asset_account_id, lease_liability_account_id, interest_expense_account_id,
            amortization_expense_account_id, lease_expense_account_id, payment_account_id,
            department_id, project_id, location_id, commencement_entry_id
-      from lease_agreements where org_id = ${orgId} and id = ${leaseId}`));
+      from lease_agreements where org_id = ${orgId} and id = ${leaseId} for update`));
   const row = r.rows[0];
   if (!row) throw new LeaseError("lease not found");
   return row;
@@ -590,31 +590,31 @@ export async function commenceLease(
   leaseId: string,
   actorId: string | null,
 ): Promise<CommenceResult> {
-  const lease = await leaseRow(orgId, leaseId);
-  if (lease.status === "active") {
-    return {
-      leaseId,
-      liability: lease.initial_liability ?? "0",
-      rouAsset: lease.initial_liability ?? "0",
-      commencementEntryId: lease.commencement_entry_id,
-      periods: lease.term_periods,
-    };
-  }
-  if (lease.status !== "draft") throw new LeaseError(`lease ${lease.lease_number} is ${lease.status}`);
+  return db.transaction(async (tx) => {
+    const lease = await leaseRow(orgId, leaseId, tx);
+    if (lease.status === "active") {
+      return {
+        leaseId,
+        liability: lease.initial_liability ?? "0",
+        rouAsset: lease.initial_liability ?? "0",
+        commencementEntryId: lease.commencement_entry_id,
+        periods: lease.term_periods,
+      };
+    }
+    if (lease.status !== "draft") throw new LeaseError(`lease ${lease.lease_number} is ${lease.status}`);
 
-  const frequencyMonths = FREQUENCY_MONTHS[lease.payment_frequency]!;
-  const periodsPerYear = PERIODS_PER_YEAR[lease.payment_frequency]!;
+    const frequencyMonths = FREQUENCY_MONTHS[lease.payment_frequency]!;
+    const periodsPerYear = PERIODS_PER_YEAR[lease.payment_frequency]!;
 
-  // Period boundaries: period i covers [start + i·f months, next boundary).
-  const boundaries: { start: string; end: string; dueOn: string }[] = [];
-  for (let i = 0; i < lease.term_periods; i++) {
-    const start = addMonths(lease.commencement_on, i * frequencyMonths);
-    const end = addDays(addMonths(lease.commencement_on, (i + 1) * frequencyMonths), -1);
-    const dueOn = lease.payment_timing === "advance" ? start : end;
-    boundaries.push({ start, end, dueOn });
-  }
+    // Period boundaries: period i covers [start + i·f months, next boundary).
+    const boundaries: { start: string; end: string; dueOn: string }[] = [];
+    for (let i = 0; i < lease.term_periods; i++) {
+      const start = addMonths(lease.commencement_on, i * frequencyMonths);
+      const end = addDays(addMonths(lease.commencement_on, (i + 1) * frequencyMonths), -1);
+      const dueOn = lease.payment_timing === "advance" ? start : end;
+      boundaries.push({ start, end, dueOn });
+    }
 
-  return await db.transaction(async (tx) => {
     if (lease.exemption) {
       // Off balance sheet: schedule rows carry the payments; nothing posts now.
       for (let i = 0; i < lease.term_periods; i++) {
@@ -689,6 +689,19 @@ export async function commenceLease(
   });
 }
 
+type LeaseSchedulePostingRow = {
+  line_id: string;
+  lease_id: string;
+  sequence: number;
+  due_on: string;
+  payment: string;
+  interest: string;
+  principal: string;
+  amortization: string | null;
+  single_cost: string | null;
+  rou_adjustment: string | null;
+};
+
 export interface PostLeaseScheduleResult {
   posted: number;
   skipped: number;
@@ -710,22 +723,8 @@ export async function postDueLeaseSchedules(
   asOfDate: string,
   actorId: string | null,
 ): Promise<PostLeaseScheduleResult> {
-  const due = (await db.execute<{
-      line_id: string;
-      lease_id: string;
-      sequence: number;
-      due_on: string;
-      payment: string;
-      interest: string;
-      principal: string;
-      amortization: string | null;
-      single_cost: string | null;
-      rou_adjustment: string | null;
-    }>(sql`
-    select l.id as line_id, l.lease_id, l.sequence, l.due_on::text as due_on,
-           l.payment::text as payment, l.interest::text as interest, l.principal::text as principal,
-           l.amortization::text as amortization, l.single_cost::text as single_cost,
-           l.rou_adjustment::text as rou_adjustment
+  const due = (await db.execute<{ line_id: string; lease_id: string }>(sql`
+    select l.id as line_id, l.lease_id
       from lease_agreement_schedule_lines l
       join lease_agreements a on a.id = l.lease_id and a.org_id = l.org_id
      where l.org_id = ${orgId} and a.status = 'active'
@@ -733,17 +732,21 @@ export async function postDueLeaseSchedules(
      order by l.due_on, l.sequence`));
 
   const result: PostLeaseScheduleResult = { posted: 0, skipped: 0, entries: [] };
-  const leases = new Map<string, LeaseRow>();
-
-  for (const line of due.rows) {
-    let lease = leases.get(line.lease_id);
-    if (!lease) {
-      lease = await leaseRow(orgId, line.lease_id);
-      leases.set(line.lease_id, lease);
-    }
-    const theLease = lease;
-
+  for (const candidate of due.rows) {
     await db.transaction(async (tx) => {
+      // Claim the aggregate first, then reload the due line. Discovery is not
+      // a posting snapshot: another runner may have completed it while we wait.
+      const theLease = await leaseRow(orgId, candidate.lease_id, tx);
+      if (theLease.status !== "active") { result.skipped++; return; }
+      const line = (await tx.execute<LeaseSchedulePostingRow>(sql`
+        select l.id as line_id, l.lease_id, l.sequence, l.due_on::text as due_on,
+               l.payment::text as payment, l.interest::text as interest, l.principal::text as principal,
+               l.amortization::text as amortization, l.single_cost::text as single_cost,
+               l.rou_adjustment::text as rou_adjustment
+          from lease_agreement_schedule_lines l
+         where l.id=${candidate.line_id} and l.lease_id=${candidate.lease_id} and l.org_id=${orgId}
+           and l.due_on <= ${asOfDate} and l.payment_entry_id is null for update`)).rows[0];
+      if (!line) { result.skipped++; return; }
       const entryIds: string[] = [];
       const tag = `${theLease.lease_number}-${line.sequence}`;
 

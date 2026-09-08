@@ -3274,3 +3274,24 @@ passed. This checkpoint includes the earlier payroll source-ownership fixes
 and canonical statement parameter correction; subsequent recognition and
 savepoint changes have the focused checks recorded above. Evidence:
 `audit-statement-fixture-parameter-2026-09-07/full-integration.log`.
+
+## Lease commencement and payment concurrency — 2026-09-08
+
+Controlled overlapping requests exposed missing authoritative claims in both
+lease workflows. Finance and short-term commencement retries collided on
+`lease_agreement_schedule_lease_seq`; payment retries collided on
+`journal_entries_org_number`. Sequential retry tests did not exercise either
+race.
+
+Commencement now locks and reads the lease within its transaction before checking
+status or measuring it. Scheduled posting locks the lease, reloads and claims
+the current due line, and skips work another runner completed. Discovery carries
+only IDs; accounts, amounts and dates come from the locked records.
+
+All 20 lease and present-value checks passed (2,600.916166 ms, no skips), including
+both concurrent commencement models and payment/amortization idempotency.
+Workspace typechecks, changed-file lint and the locked-dependency production
+build passed. The full unit gate passed 3,210/3,210 tests (117,550.331875 ms,
+no skips), covering the latest recognition, depreciation and FX changes too.
+Evidence: `audit-lease-concurrent-posting-2026-09-08/before.log`,
+`focused-final.log`, `typecheck.log`, `lint.log`, `unit.log`, and `build.log`.
