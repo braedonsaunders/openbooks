@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db, withTransactionSavepoint } from "./db.ts";
 import { loadControlAccounts } from "./control-accounts.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "./money.ts";
-import { loadSubsidiaryContext } from "./subsidiaries.ts";
+import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
  * Period-end UNREALIZED FX revaluation.
@@ -545,6 +545,29 @@ async function postRevaluationEntry(
          and subsidiary_id = ${subsidiaryId} and origin = 'fx_revaluation'
          and reverses_entry_id is null limit 1`));
     if (existing.rows.length > 0) return null;
+
+    const book = (await tx.execute<{ id: string }>(sql`select id from accounting_books
+      where org_id=${orgId} and id=${bookId} and is_primary and is_active and posts_gl for share`)).rows[0];
+    if (!book) throw new RevaluationError("revaluation requires an active primary posting book");
+    await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
+    const ctx = await loadSubsidiaryContext(tx, orgId);
+    const subsidiary = ctx.byId.get(subsidiaryId);
+    if (!subsidiary?.isActive) throw new RevaluationError("revaluation subsidiary is missing or inactive");
+    if (subsidiary.baseCurrency !== functionalCurrency) {
+      throw new RevaluationError("subsidiary functional currency changed; recompute revaluation");
+    }
+    const accountIds = [...new Set(lines.map((line) => line.accountId))];
+    await tx.execute(sql`select id from accounts where org_id=${orgId}
+      and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+    try {
+      await validateSubsidiaryRestrictions(tx, {
+        orgId, ctx, docSubsidiaryId: subsidiaryId,
+        lines: lines.map((line) => ({ ...line, subsidiaryId })),
+      });
+    } catch (error) {
+      if (error instanceof SubsidiaryError) throw new RevaluationError(error.message);
+      throw error;
+    }
 
     const insertEntry = async (
       entryNumber: string,
