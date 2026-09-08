@@ -3878,3 +3878,28 @@ A separate real database proof confirmed that dry-run inside an ambient
 transaction replaces persistent pay stubs because its rollback signal is caught
 without a nested savepoint. This remains under active remediation; passing scope
 checks do not resolve transaction rollback semantics.
+
+### Payroll previews and refused commits preserve ambient transactions (2026-09-08)
+
+Two preview regressions proved that dry-run and committed-run simulation replaced
+real stubs inside `withOrgTransaction`. Standalone previews already rolled back;
+the ambient path joined its caller without a savepoint, then swallowed the rollback
+signal. A separate real lock interleaving reached commit's projection replacement,
+changed configuration, and triggered its late freshness refusal. Catching that
+refusal inside the caller left projection rows, liability stamps, and time claims.
+
+Calculation and commit now use the existing transaction savepoint helper. Preview
+signals and late errors restore operation-owned writes before reaching the caller,
+while earlier caller work survives. Calculation retains repeatable-read isolation.
+Regressions compare complete payroll evidence, including record IDs and audit
+timestamps, and prove successful calculation/commit still persist afterward.
+
+Validation: 144/144 payroll integration checks (100,958.910375 ms), 61/61 additional
+legacy payroll/control/entitlement checks (5,673.532833 ms), 3,210/3,210 unit tests
+(108,905.389542 ms), workspace typechecks, changed-file lint (zero errors, two
+existing warnings), whitespace validation, and the locked production build passed.
+No tests were skipped. Evidence: `audit-payroll-dryrun-ambient-2026-09-08`.
+
+The creation page's employee and schedule pickers separately reproduce subsidiary
+privacy leaks in server-rendered client props. Those are under active remediation;
+this transaction change does not resolve them.

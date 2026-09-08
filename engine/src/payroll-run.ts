@@ -2,7 +2,7 @@ import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, payrollSubs
 import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from "./payroll-fences.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withTransactionSavepoint } from "./db.ts";
 import { PayrollError } from "./payroll-error.ts";
 import {
   add, cmp, fromUnits, mulDecimal, mulPercent, mulRatio, neg, roundDiv, roundMoney, sum, toUnits,
@@ -1579,7 +1579,9 @@ export async function calculatePayRun(input: CalculatePayRunInput): Promise<PayR
 
 async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayRunCalculation> {
   const { orgId, documentId, actorId } = input;
-  return await db.transaction(async (tx) => {
+  // db.transaction joins an ambient org transaction. Roll back our own writes
+  // before calculatePayRun catches the preview signal and returns its result.
+  return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
     const runRows = (await tx.execute<Record<string, string>>(sql`
       select r.*, d.status as doc_status, d.currency as doc_currency,
              d.subsidiary_id as doc_subsidiary_id,
@@ -1899,7 +1901,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
        where org_id = ${orgId} and document_id = ${documentId}
     `);
     return result;
-  }, { isolationLevel: "repeatable read" });
+  }), { isolationLevel: "repeatable read" });
 }
 
 /**
@@ -3556,7 +3558,9 @@ export async function commitPayRun(input: {
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<{ lines: number }> {
   const { orgId, documentId, actorId } = input;
-  return await db.transaction(async (tx) => {
+  // A caller may catch the late freshness refusal inside its own transaction.
+  // Restore our projection, liability stamps, and time claims before returning it.
+  return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
     const runRows = (await tx.execute<Record<string, string>>(sql`
       select r.*, d.status as doc_status, d.subsidiary_id as subsidiary_id from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
@@ -3752,7 +3756,7 @@ export async function commitPayRun(input: {
        where org_id = ${orgId} and id = ${documentId}
     `);
     return { lines: legs.length };
-  });
+  }));
 }
 
 /**
