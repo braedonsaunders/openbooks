@@ -3458,3 +3458,20 @@ committing while posting waits. Existing exact-source reversal tests pass.
 Evidence: `audit-psp-posting-policy-2026-09-08/before.log`, `focused-final.log`,
 `typecheck-final.log`, and `lint.log`. The separately running full integration
 checkpoint is frozen at e52f1367 and therefore excludes this later change.
+
+## Projects parent gate at revenue synchronization — 2026-09-08
+
+A real disabled-Projects invocation created a $1,000 project revenue contract
+and obligation at 25% completion while revenue recognition remained enabled.
+The transactional sync now checks the shared Projects feature registry while
+holding the organization settings row, before creating or updating any
+contract, obligation, or schedule. Independent revenue recognition remains
+available under its own gate.
+
+The regression verifies no contract creation while disabled, normal creation
+after enabling, byte-equivalent contract/obligation/schedule evidence while
+disabled again, and resumption using the same records at the changed completion
+percentage. All 53 focused project, recognition and HTTP boundary checks passed
+(6,078.446917 ms, no failures/skips); engine typecheck and changed-file lint
+passed. Evidence: `audit-project-revenue-feature-gate-2026-09-08/before.log`,
+`focused.log`, `typecheck.log`, and `lint.log`.

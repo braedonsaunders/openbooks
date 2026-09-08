@@ -4,6 +4,7 @@ import { cmp, formatMoney, mulRatio, normalizeMoney, toUnits } from "./money.ts"
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { buildAllRecognitionSchedulesInTransaction, revenueRecognitionFeatureEnabled } from "./revenue-recognition.ts";
 import { recognitionAccounts } from "./project-recognition.ts";
+import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 
 /**
  * Fixed-price project revenue through the ARM pipeline (source platform-shaped).
@@ -133,6 +134,7 @@ export async function syncProjectRevenueContractsInTransaction(
   allowedSubsidiaryIds?: readonly string[],
 ): Promise<ProjectRevenueSyncResult> {
   const result: ProjectRevenueSyncResult = { synced: [], problems: [] };
+  if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) return result;
   if (!(await revenueRecognitionFeatureEnabled(tx, orgId))) return result;
 
   const accts = await recognitionAccounts(orgId, tx);
