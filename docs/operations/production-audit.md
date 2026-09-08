@@ -4506,3 +4506,65 @@ invocation overlapped a duplicate runner, so its shared output was not used as
 the final receipt; both runners exited and the serial matrix was run cleanly.
 Evidence: `audit-promotion-domain-controls-2026-09-08`. These checks establish the
 listed controls; they do not certify every promotion payload or production workflow.
+
+### Bank reconciliation book scope and precise adjustments (2026-09-08)
+
+Four actual-service probes reproduced parallel-book contamination outside
+retainage. Manual matching accepted primary 100 plus tax 100 against a 200
+statement line; automatic matching claimed the tax representation after the
+primary representation was already matched; cleared totals returned 200 instead
+of 100; sign-off accepted a tax-only match. The first fixture attempt failed
+before these assertions because import results contain parsed lines rather than
+persisted IDs and direct reconciliation stamps correctly hit an append-only
+guard. Corrected fixtures use persisted line IDs and real or legacy match rows;
+`before-corrected.log` is the reproducing receipt.
+
+Matching, totals and sign-off now resolve exactly one active primary posting
+book. Secondary representations never become extra cash. Start/match/sign-off
+hold book policy locks, and sign-off records the book in its audit evidence.
+Continuous Close delegates to the same bank totals instead of maintaining a
+second balance query. Its regression verifies that the parallel-book mismatch
+produces a 100 finding. Existing signed-off rows and journal history are not
+rewritten. Legacy secondary-book matches in open sessions must be corrected
+before sign-off; merely balancing their numbers cannot make them valid.
+
+Both actual server-rendered bank pages offered three lines for a fixture with
+primary USD, tax USD and legacy CAD representations; only primary USD belonged
+in the matching list. They now filter the book and statement currency and expose
+transaction amounts, including matched evidence, instead of functional-currency
+amounts. A USD 100 line with a CAD 135 carrying amount therefore displays 100 in
+the matching workspace. Record currency overrides use the existing money
+provider, with four-decimal presentation where the reconciliation needs it.
+
+The adjustment dialog initialized a persisted 100.0001 balance using
+Number(...).toFixed(2). Changing only its date could therefore save 100.00.
+It now preserves the stored decimal string. Both workspaces use the shared
+bigint money sum for selected lines. Host Chrome verified that changing only
+the cutoff retained 100.0001 in the database and before/after audit record;
+both screens rendered 100000000000000.0001 + 0.0001 as
+100000000000000.0002. The final match-page browser check recorded no console
+errors. Screenshots were inspected, the browser/preview were closed and their
+disposable organization was removed.
+
+A separate transaction probe created a rejected 99 journal for a 100 statement,
+caught the rejection in the caller transaction and then created the valid 100
+match. Both journals survived before the fix. The journal-factory boundary now
+uses the existing savepoint helper, so the failed journal disappears while the
+caller write and valid match commit. Primary reassignment through Setup was
+also allowed after reconciliation records existed, which would reinterpret
+their book scope. Interactive writes and import preview now refuse that change
+and require a controlled book conversion. Ordinary primary renaming and new
+secondary books remain allowed. A database lock probe verifies first-session
+creation and primary reassignment serialize on the shared setup fence.
+
+The final banking/rules/detector/setup matrix passed 39/39, followed by the
+24-case setup matrix including two additional preview/concurrency checks:
+41 distinct integration cases passed without skips. The full unit run passed
+3,214/3,214 (116,856.196834 ms). Earlier check failures identified an obsolete
+detector source assertion and a promotion-test children-prop lint error; the
+former now requires delegation to bank totals and the latter uses JSX. The
+rename was staged before the successful unit run so tracked-file checks could
+resolve it. Full lint has zero errors and 696 warnings, with its ceiling reduced
+accordingly; explicit-any stays at 372. Final workspace types, changed-file lint
+and the exact-lock production build passed. Evidence:
+`audit-banking-book-scope-2026-09-08`. No production database or deployment was used.

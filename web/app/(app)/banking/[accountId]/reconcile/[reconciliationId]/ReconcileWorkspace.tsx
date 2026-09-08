@@ -1,6 +1,8 @@
 'use client'
 
+import { sum } from '@openbooks/engine/src/money.ts'
 import { useMoney } from '@/components/money-provider'
+import type { MoneyValue } from '@/lib/money-format'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -102,7 +104,7 @@ export function ReconcileWorkspace({
   basePath: string
   accountPath: string
   currentParams: Search
-  reconciliation: { id: string; status: string; throughDate: string; statementBalance: string }
+  reconciliation: { id: string; status: string; throughDate: string; statementBalance: string; currency: string }
   difference: string
   canReconcile: boolean
   stmtRows: StmtRow[]
@@ -115,7 +117,8 @@ export function ReconcileWorkspace({
   matchedTotal: number
   mParams: PaneParams
 }) {
-  const { money } = useMoney()
+  const { money: formatMoney } = useMoney(reconciliation.currency)
+  const money = (value: MoneyValue) => formatMoney(value, { maximumFractionDigits: 4 })
   const t = useTranslations('banking.workspace')
   const tBanking = useTranslations('banking')
   const tCommon = useTranslations('common')
@@ -126,7 +129,7 @@ export function ReconcileWorkspace({
   const [adjustOpen, setAdjustOpen] = useState(false)
   const [throughDate, setThroughDate] = useState(reconciliation.throughDate)
   const [statementBalance, setStatementBalance] = useState(() =>
-    Number(reconciliation.statementBalance).toFixed(2),
+    reconciliation.statementBalance,
   )
 
   const signedOff = reconciliation.status === 'signed_off'
@@ -135,7 +138,7 @@ export function ReconcileWorkspace({
 
   const stmtSelection = useMemo(() => stmtRows.find((r) => r.id === selectedStmt) ?? null, [stmtRows, selectedStmt])
   const glSelectionSum = useMemo(
-    () => glRows.filter((r) => selectedGl.has(r.id)).reduce((a, r) => a + Number(r.amount), 0),
+    () => sum(glRows.filter((r) => selectedGl.has(r.id)).map((r) => r.amount)),
     [glRows, selectedGl],
   )
 

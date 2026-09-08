@@ -1,6 +1,8 @@
 'use client'
 
+import { sum } from '@openbooks/engine/src/money.ts'
 import { useMoney } from '@/components/money-provider'
+import type { MoneyValue } from '@/lib/money-format'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -8,7 +10,7 @@ import { useTranslations } from 'next-intl'
 import { Ban, CheckCheck, FilePlus2, Link2, RotateCcw, Sparkles, Wand2, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  Badge, Button, Drawer, EmptyState, Label, SearchSelect, Select, Table, TableBody,
+  Badge, Button, Drawer, EmptyState, Label, SearchSelect, Table, TableBody,
   TableCell, TableHead, TableHeader, TableRow, cn,
 } from '@openbooks/ui'
 import { SearchInput } from '../../../../components/search-input'
@@ -19,7 +21,7 @@ import { promptDialog } from '../../../../lib/prompt'
 type Search = Record<string, string | string[] | undefined>
 type Opt = { id: string; label: string; unmatched?: number };
 interface Account { id: string; label: string }
-interface Session { id: string; throughDate: string; statementBalance: string }
+interface Session { id: string; throughDate: string; statementBalance: string; currency: string }
 interface ListParams {
   q?: string
   page: number
@@ -77,6 +79,7 @@ interface MatchActionResult {
 }
 
 const selectedRow = 'bg-teal-50 dark:bg-teal-950/40'
+const NO_SUGGESTIONS: ReadonlyMap<string, { ruleId: string; ruleName: string }> = new Map()
 
 export function MatchWorkspace({
   accounts, offsetAccounts, account, session, data, totals, currentParams, tab,
@@ -90,7 +93,8 @@ export function MatchWorkspace({
   currentParams: Search
   tab: 'match' | 'review' | 'excluded'
 }) {
-  const { money } = useMoney()
+  const { money: formatMoney } = useMoney(session?.currency)
+  const money = (value: MoneyValue) => formatMoney(value, { maximumFractionDigits: 4 })
   const t = useTranslations('banking.match')
   const tW = useTranslations('banking.workspace')
   const tCommon = useTranslations('common')
@@ -103,34 +107,39 @@ export function MatchWorkspace({
   const [offsetId, setOffsetId] = useState('')
   // Suggest-mode rule proposals for the current account's unmatched lines,
   // keyed by statement line id. Computed live via the rules preview (no post).
-  const [suggestions, setSuggestions] = useState<Map<string, { ruleId: string; ruleName: string }>>(new Map())
+  const accountId = account?.id
+  const sessionId = session?.id
+  const [suggestionResult, setSuggestionResult] = useState<{
+    accountId: string; sessionId: string; rows: Map<string, { ruleId: string; ruleName: string }>
+  } | null>(null)
+  const suggestions = suggestionResult && suggestionResult.accountId === accountId && suggestionResult.sessionId === sessionId
+    ? suggestionResult.rows : NO_SUGGESTIONS
 
   useEffect(() => {
-    if (!account || !session) {
-      setSuggestions(new Map())
-      return
-    }
+    if (!accountId || !sessionId) return
     const controller = new AbortController()
     fetch('/api/banking/rules/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accountId: account.id, onlyUnmatched: true, limit: 200 }),
+      body: JSON.stringify({ accountId, onlyUnmatched: true, limit: 200 }),
       signal: controller.signal,
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!d?.matches) return
+        if (controller.signal.aborted) return
         const next = new Map<string, { ruleId: string; ruleName: string }>()
-        for (const m of d.matches) {
+        for (const m of d?.matches ?? []) {
           if (m.action === 'categorize' && m.ruleMode === 'suggest' && m.ruleId) {
             next.set(m.lineId, { ruleId: m.ruleId, ruleName: m.ruleName ?? '' })
           }
         }
-        setSuggestions(next)
+        setSuggestionResult({ accountId, sessionId, rows: next })
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!controller.signal.aborted) setSuggestionResult({ accountId, sessionId, rows: new Map() })
+      })
     return () => controller.abort()
-  }, [account?.id, session?.id, data])
+  }, [accountId, sessionId, data])
 
   async function confirmSuggestion(lineId: string, ruleId: string) {
     if (!session) return
@@ -145,7 +154,7 @@ export function MatchWorkspace({
   }
 
   const glSelectionSum = useMemo(
-    () => (data?.glRows ?? []).filter((r) => selectedGl.has(r.id)).reduce((a, r) => a + Number(r.amount), 0),
+    () => sum((data?.glRows ?? []).filter((r) => selectedGl.has(r.id)).map((r) => r.amount)),
     [data, selectedGl],
   )
 
@@ -178,7 +187,8 @@ export function MatchWorkspace({
     if (!session) return
     const d = await call('POST', `/api/banking/reconciliations/${session.id}/auto-match`)
     if (!d) return
-    d.matched === 0 ? toast.info(tW('noAutoMatches')) : toast.success(tW('autoMatchedToast', { count: d.matched ?? 0, high: d.highConfidence ?? 0, medium: d.mediumConfidence ?? 0 }))
+    if (d.matched === 0) toast.info(tW('noAutoMatches'))
+    else toast.success(tW('autoMatchedToast', { count: d.matched ?? 0, high: d.highConfidence ?? 0, medium: d.mediumConfidence ?? 0 }))
     router.refresh()
   }
 
@@ -186,9 +196,8 @@ export function MatchWorkspace({
     if (!account) return
     const d = await call('POST', '/api/banking/rules/apply', { accountId: account.id })
     if (!d) return
-    d.matched === 0 && d.excluded === 0
-      ? toast.info(tBanking('rules.runNoneMatched', { scanned: d.scanned ?? 0 }))
-      : toast.success(tBanking('rules.runDone', { matched: d.matched ?? 0, excluded: d.excluded ?? 0 }))
+    if (d.matched === 0 && d.excluded === 0) toast.info(tBanking('rules.runNoneMatched', { scanned: d.scanned ?? 0 }))
+    else toast.success(tBanking('rules.runDone', { matched: d.matched ?? 0, excluded: d.excluded ?? 0 }))
     router.refresh()
   }
 
@@ -405,7 +414,7 @@ export function MatchWorkspace({
                   <TableRow><TableCell colSpan={5} className="text-center text-slate-500 dark:text-slate-400">{data.glParams.q ? tW('noGlLinesSearch') : tW('allGlLinesReconciled')}</TableCell></TableRow>
                 ) : data.glRows.map((l) => {
                   const sel = selectedGl.has(l.id)
-                  const toggle = () => setSelectedGl((p) => { const n = new Set(p); n.has(l.id) ? n.delete(l.id) : n.add(l.id); return n })
+                  const toggle = () => setSelectedGl((p) => { const n = new Set(p); if (n.has(l.id)) n.delete(l.id); else n.add(l.id); return n })
                   return (
                     <TableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={toggle}>
                       <TableCell className="w-8"><input type="checkbox" checked={sel} onChange={toggle} onClick={(e) => e.stopPropagation()} className="accent-teal-700" aria-label={tW('selectGlLineAria', { entry: l.entry_number, amount: money(l.amount) })} /></TableCell>

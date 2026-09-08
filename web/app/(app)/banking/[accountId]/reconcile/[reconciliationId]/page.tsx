@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { reconciliationTotals } from '@openbooks/engine/src/banking.ts'
+import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/src/banking.ts'
 import { Badge, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../../../components/page-layout'
 import { requirePermission, can } from '../../../../../../lib/authz'
@@ -21,7 +21,7 @@ const STMT_SORTS = {
 
 const GL_SORTS = {
   date: sql`je.posting_date`,
-  amount: sql`jl.amount`,
+  amount: sql`jl.txn_amount`,
   entry: sql`je.entry_number`,
 } as const
 
@@ -40,6 +40,7 @@ interface ReconciliationRow extends Record<string, unknown> {
   account_id: string
   through_date: string
   statement_balance: string
+  currency: string
   status: string
   signed_off_at: string | null
   signed_off_by_name: string | null
@@ -59,7 +60,6 @@ export default async function ReconcilePage({
   params: Promise<{ accountId: string; reconciliationId: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const { money } = await getMoneyFormatter()
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
   const t = await getTranslations('banking')
@@ -69,7 +69,7 @@ export default async function ReconcilePage({
   const basePath = `/banking/${accountId}/reconcile/${reconciliationId}`
 
   const reconRes = (await db.execute<ReconciliationRow>(sql`
-    select r.id, r.account_id, r.through_date, r.statement_balance, r.status,
+    select r.id, r.account_id, r.through_date, r.statement_balance, r.currency, r.status,
            r.signed_off_at, u.name as signed_off_by_name,
            a.number as account_number, a.name as account_name
       from reconciliations r
@@ -80,9 +80,11 @@ export default async function ReconcilePage({
   `))
   const recon = reconRes.rows[0]
   if (!recon) notFound()
+  const { money } = await getMoneyFormatter(authz.user.orgId, recon.currency)
 
   const ctx = { orgId: authz.user.orgId, userId: authz.user.id }
   const totals = await reconciliationTotals(reconciliationId, ctx)
+  const bookId = await reconciliationBookId(db, ctx.orgId)
   const signedOff = recon.status === 'signed_off'
 
   // -- left pane: unmatched statement lines (prefix stmt*) -------------------
@@ -93,7 +95,7 @@ export default async function ReconcilePage({
     allowedSorts: ['date', 'amount', 'description'] as const,
   })
   const stmtWhere = sql`s.account_id = ${accountId} and s.org_id = ${ctx.orgId}
-    and l.match_status = 'unmatched' and l.posted_on <= ${recon.through_date}
+    and l.currency = ${recon.currency} and l.match_status = 'unmatched' and l.posted_on <= ${recon.through_date}
     ${stmtParams.q ? sql` and (l.description ilike ${'%' + stmtParams.q + '%'} or l.counterparty_ref ilike ${'%' + stmtParams.q + '%'} or l.amount::text ilike ${'%' + stmtParams.q + '%'})` : sql``}`
 
   // -- right pane: unreconciled, unclaimed GL lines (prefix gl*) --------------
@@ -104,10 +106,11 @@ export default async function ReconcilePage({
     allowedSorts: ['date', 'amount', 'entry'] as const,
   })
   const glWhere = sql`jl.account_id = ${accountId} and jl.org_id = ${ctx.orgId}
+    and je.book_id = ${bookId} and jl.currency = ${recon.currency}
     and je.status = 'posted' and je.posting_date <= ${recon.through_date}
     and jl.reconciled_at is null
     and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
-    ${glParams.q ? sql` and (je.entry_number ilike ${'%' + glParams.q + '%'} or je.memo ilike ${'%' + glParams.q + '%'} or jl.memo ilike ${'%' + glParams.q + '%'} or jl.amount::text ilike ${'%' + glParams.q + '%'})` : sql``}`
+    ${glParams.q ? sql` and (je.entry_number ilike ${'%' + glParams.q + '%'} or je.memo ilike ${'%' + glParams.q + '%'} or jl.memo ilike ${'%' + glParams.q + '%'} or jl.txn_amount::text ilike ${'%' + glParams.q + '%'})` : sql``}`
 
   // -- matched this session (prefix m*) ---------------------------------------
   const mParams = parsePrefixedListParams(sp, 'm', {
@@ -139,7 +142,7 @@ export default async function ReconcilePage({
     signedOff
       ? Promise.resolve({ rows: [] })
       : db.execute<GlRow>(sql`
-          select jl.id, je.posting_date, je.entry_number, jl.amount,
+          select jl.id, je.posting_date, je.entry_number, jl.txn_amount as amount,
                  coalesce(jl.memo, je.memo) as memo, p.display_name as party
             from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
@@ -157,7 +160,7 @@ export default async function ReconcilePage({
     db.execute<MatchedRow>(sql`
       select m.id, m.statement_line_id, m.matched_by, m.confidence,
              sl.posted_on as stmt_date, sl.amount as stmt_amount, sl.description as stmt_description,
-             je.entry_number, je.posting_date as gl_date, jl.amount as gl_amount,
+             je.entry_number, je.posting_date as gl_date, jl.txn_amount as gl_amount,
              coalesce(jl.memo, je.memo) as gl_memo
         from reconciliation_matches m
         join bank_statement_lines sl on sl.id = m.statement_line_id and sl.org_id = m.org_id
@@ -208,15 +211,15 @@ export default async function ReconcilePage({
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className={stat}>
               <div className={statLabel}>{t('labels.statementBalance')}</div>
-              <div className="text-sm font-semibold tabular-nums">{money(totals.statementBalance)}</div>
+              <div className="text-sm font-semibold tabular-nums">{money(totals.statementBalance, { maximumFractionDigits: 4 })}</div>
             </div>
             <div className={stat}>
               <div className={statLabel}>{t('reconcile.stats.clearedGlBalance')}</div>
-              <div className="text-sm font-semibold tabular-nums">{money(totals.clearedBalance)}</div>
+              <div className="text-sm font-semibold tabular-nums">{money(totals.clearedBalance, { maximumFractionDigits: 4 })}</div>
             </div>
             <div className={stat}>
               <div className={statLabel}>{t('reconcile.stats.difference')}</div>
-              <DifferenceBadge difference={totals.difference} />
+              <DifferenceBadge difference={totals.difference} currency={recon.currency} />
             </div>
             <div className={stat}>
               <div className={statLabel}>{t('reconcile.stats.matched')}</div>
@@ -240,6 +243,7 @@ export default async function ReconcilePage({
           status: recon.status,
           throughDate: recon.through_date,
           statementBalance: String(recon.statement_balance),
+          currency: recon.currency,
         }}
         difference={totals.difference}
         canReconcile={canReconcile}

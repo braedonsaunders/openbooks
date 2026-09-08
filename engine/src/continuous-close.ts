@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { reconciliationTotals, SYSTEM_ACTOR_ID } from "./banking.ts";
 import { addCalendarDays, businessToday, parseIsoDate } from "./business-date.ts";
 import { db, schema, withBypassContext, withOrg, withOrgContext } from "./db.ts";
 import { fromUnits, toUnits } from "./money.ts";
@@ -304,27 +305,17 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
         statement_balance: string;
         number: string | null;
         name: string;
-        difference: string;
       }>(sql`
       select r.id, r.account_id, r.through_date, r.statement_balance::text,
-             a.number, a.name,
-           (r.statement_balance - (
-             select coalesce(sum(jl.txn_amount), 0)
-               from journal_lines jl
-               join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
-              where jl.org_id = ${orgId} and jl.account_id = r.account_id
-                and jl.currency = r.currency
-                and je.posting_date <= r.through_date
-                and (jl.reconciled_at is not null or jl.id in (select journal_line_id from reconciliation_matches rm
-                              where reconciliation_id = r.id
-                                and org_id = ${orgId}))
-           ))::text as difference
+             a.number, a.name
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.org_id = ${orgId} and r.status = 'in_progress'
     `));
 
-    for (const row of reconciliations.rows) {
+    for (const record of reconciliations.rows) {
+      const { difference } = await reconciliationTotals(record.id, { orgId, userId: SYSTEM_ACTOR_ID });
+      const row = { ...record, difference };
       if (toUnits(row.difference) === 0n) continue;
     const materiality = moneyAbs(row.difference);
     findings.push({
