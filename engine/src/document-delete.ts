@@ -59,7 +59,7 @@ export async function deleteDocument(
     if (!before) throw new DeleteError("document not found");
 
     if (doc.kind === "customer_invoice") {
-      await releaseBillingProvenance(tx, doc.orgId, documentId);
+      await releaseBillingProvenance(tx, doc.orgId, documentId, { actorId: userId, reason: audit.reason?.trim() || "draft_discarded" });
     }
     if (doc.kind === "vendor_bill") {
       await releaseVendorBillProvenance(tx, doc.orgId, documentId);

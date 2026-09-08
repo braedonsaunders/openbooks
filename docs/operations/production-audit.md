@@ -2824,3 +2824,28 @@ absence of unknown defects.
 A subsequent real posted-rent probe confirmed that controlled invoice voiding
 leaves the rent schedule invoiced and prevents corrected rebilling. Evidence:
 `audit-property-rebilling-2026-09-07/before.log`. That remediation is next.
+
+## Controlled rent invoice replacement — 2026-09-07
+
+Voiding a posted rent invoice left its schedule permanently invoiced. Deleting
+a generated draft failed the schedule's tenant-qualified document foreign key.
+The shared controlled void/delete path now releases rent reservations and records
+actor, reason and before/after evidence in the same transaction. Failed commands
+leave both reservation and evidence unchanged.
+
+The original invoice retains its unique billing key and schedule provenance.
+Each replacement uses a deterministic generation key linked to its predecessor;
+voided documents are never adopted as live invoices. Existing schedule locking
+serializes competing retries. No posted history or database constraint is removed.
+
+All 17 focused integration tests passed (9,776.186583 ms, zero skips), including
+repeated real posted reversals, draft deletion, concurrent replacement requests,
+refused void, transaction rollback, tenant isolation and prior billing races.
+All 3,209 unit tests passed (167,033.543667 ms, zero failures/skips). Workspace
+typechecks, exact-lock production build and changed-file lint passed. Quality
+ceilings remain 713 warnings and 381 explicit-any nodes. Evidence is under
+`audit-property-rebilling-2026-09-07`.
+
+Adjacent probes confirmed that lease termination strands prorated final rent
+and CAM-generated draft deletion fails its allocation foreign key. These are
+separate remaining corrections; this checkpoint does not close the broader audit.

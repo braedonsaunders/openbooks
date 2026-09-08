@@ -1170,8 +1170,17 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
       const ids = billRows.map((row) => row.id);
       const key = billingKey(leaseId, ids);
       const first = billRows[0]!;
-      const prior = (await db.execute<{ id: string }>(sql`select id from documents where org_id=${orgId} and custom->'propertyManagement'->>'billingKey'=${key}`));
-      let invoiceId = prior.rows[0]?.id;
+      const prior = (await db.execute<{ id: string; status: string }>(sql`
+        select id,status from documents where org_id=${orgId} and kind='customer_invoice'
+          and (custom->'propertyManagement'->>'billingKey'=${key}
+            or custom->'propertyManagement'->>'originalBillingKey'=${key})
+        order by created_at desc,id desc`));
+      let invoiceId = prior.rows.find(row => row.status !== 'voided')?.id;
+      // The predecessor keeps its globally unique billing key and immutable
+      // provenance. A replacement gets a deterministic key for this generation;
+      // the locked schedule remains the single reservation across generations.
+      const predecessorId = prior.rows[0]?.id;
+      const generationKey = predecessorId ? `${key}:after:${predecessorId}` : key;
       if (!invoiceId) {
         // Stored schedule lines and an existing invoice stay. Copying an
         // inventory / assembly / kit item onto a new invoice is Inventory configuration.
@@ -1192,7 +1201,9 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
           invoiceDate: through, dueDate: addDays(through, first.paymentTermsDays), autoPost: first.autoPost, lines,
           postingAuditSource: "property_rent_billing",
           custom: { propertyManagement: {
-            billingKey: key, leaseId, scheduleIds: ids, kind: "rent",
+            billingKey: generationKey, originalBillingKey: key,
+            ...(predecessorId ? { predecessorInvoiceId: predecessorId } : {}),
+            leaseId, scheduleIds: ids, kind: "rent",
             billingRunSource: actorId === null ? "scheduler" : "user",
             ...(actorId === null ? { actorKind: "system", actorReason: "scheduled lease rent billing" } : {}),
           } } });
