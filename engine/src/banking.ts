@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, inDbTransaction, schema, type SqlExecutor, withOrgTransaction } from "./db.ts";
+import { db, inDbTransaction, schema, type SqlExecutor, withOrgTransaction, withTransactionSavepoint } from "./db.ts";
 import { fromUnits, isZero, sum, toUnits } from "./money.ts";
 
 /**
@@ -1211,6 +1211,7 @@ export async function startReconciliation(
   assertRealDate(dateMatch[1]!, dateMatch[2]!, dateMatch[3]!, "Through date");
   const statementBalance = normalizeAmount(opts.statementBalance, "Statement balance");
   return db.transaction(async (tx) => {
+    await reconciliationBookId(tx, ctx.orgId);
     await tx.execute(sql`
       select pg_advisory_xact_lock(
         hashtextextended(${`bank-reconciliation:${ctx.orgId}:${account.id}`}, 0)
@@ -1270,11 +1271,28 @@ export interface ReconciliationTotals {
 type BankingSqlExecutor = SqlExecutor;
 type BankingTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+/** Bank statements describe physical cash once. Secondary accounting
+ * representations are not additional deposits or withdrawals. The primary
+ * book cannot be reassigned through setup once reconciliation records exist.
+ * Share setup's fence so starting the first session and changing the primary
+ * book cannot pass each other's checks. Writes hold both locks to commit. */
+export async function reconciliationBookId(executor: SqlExecutor, orgId: string): Promise<string> {
+  await executor.execute(sql`select pg_advisory_xact_lock_shared(hashtextextended(${`accounting-books:${orgId}`}, 0))`);
+  const books = (await executor.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
+    select id,is_active,posts_gl from accounting_books
+     where org_id=${orgId} and is_primary order by id for share`)).rows;
+  if (books.length !== 1 || !books[0]!.is_active || !books[0]!.posts_gl) {
+    throw new BankingError("Bank reconciliation requires exactly one active primary posting book");
+  }
+  return books[0]!.id;
+}
+
 async function reconciliationTotalsUsing(
   executor: BankingSqlExecutor,
   recon: ReconciliationRow,
   ctx: BankingContext,
 ): Promise<ReconciliationTotals> {
+  const bookId = await reconciliationBookId(executor, ctx.orgId);
   const r = (await executor.execute<{ cleared: string; matched_journal: string; matched_stmt: string; unmatched_stmt: string }>(sql`
     select
       coalesce((
@@ -1282,6 +1300,7 @@ async function reconciliationTotalsUsing(
           from journal_lines jl
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
          where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
+           and je.book_id = ${bookId}
            and jl.currency = ${recon.currency}
            and je.posting_date <= ${recon.through_date}
            and (jl.reconciled_at is not null
@@ -1316,8 +1335,10 @@ export async function reconciliationTotals(
   reconciliationId: string,
   ctx: BankingContext,
 ): Promise<ReconciliationTotals> {
-  const recon = await loadReconciliation(ctx.orgId, reconciliationId);
-  return reconciliationTotalsUsing(db, recon, ctx);
+  return withOrgTransaction(ctx.orgId, async () => {
+    const recon = await loadReconciliation(ctx.orgId, reconciliationId);
+    return reconciliationTotalsUsing(db, recon, ctx);
+  });
 }
 
 /** Keep `status` honest: balanced ⇔ difference is 0 (signed_off never changes). */
@@ -1359,6 +1380,7 @@ export interface AutoMatchResult {
  */
 export async function autoMatch(reconciliationId: string, ctx: BankingContext): Promise<AutoMatchResult> {
   return db.transaction(async (tx) => {
+    const bookId = await reconciliationBookId(tx, ctx.orgId);
     const reconResult = (await tx.execute<ReconciliationRow>(sql`
       select id, account_id, through_date, currency, statement_balance, status
         from reconciliations
@@ -1383,6 +1405,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
        where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
+         and je.book_id = ${bookId}
          and jl.currency = ${recon.currency}
          and je.posting_date <= ${recon.through_date}
          and jl.reconciled_at is null
@@ -1472,6 +1495,7 @@ async function createMatchInTransaction(
   journalLineIdsOrFactory: string[] | (() => Promise<string>),
   matchedBy: MatchOrigin,
 ): Promise<ReconciliationTotals> {
+  const bookId = await reconciliationBookId(tx, ctx.orgId);
   const reconResult = (await tx.execute<ReconciliationRow>(sql`
     select id, account_id, through_date, currency, statement_balance, status
       from reconciliations
@@ -1511,6 +1535,7 @@ async function createMatchInTransaction(
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
      where jl.id = any(${sql.param(journalLineIds)}::uuid[])
        and jl.org_id = ${ctx.orgId}
+       and je.book_id = ${bookId}
        and jl.account_id = ${recon.account_id}
        and jl.currency = ${recon.currency}
        and jl.reconciled_at is null
@@ -1566,7 +1591,9 @@ export async function createMatchWithJournal(
 ): Promise<ReconciliationTotals> {
   return withOrgTransaction(ctx.orgId, () =>
     inDbTransaction((tx) =>
-      createMatchInTransaction(tx, opts, ctx, opts.createJournal, opts.matchedBy ?? "rule"),
+      withTransactionSavepoint(tx, () =>
+        createMatchInTransaction(tx, opts, ctx, opts.createJournal, opts.matchedBy ?? "rule"),
+      ),
     ),
   );
 }
@@ -1810,6 +1837,7 @@ export async function markReconciled(
       `));
       return { journalLinesReconciled: existing.rows[0]!.count };
     }
+    const bookId = await reconciliationBookId(tx, ctx.orgId);
 
     const statementEvidence = (await tx.execute<{ count: number }>(sql`
       select count(*)::int as count
@@ -1862,6 +1890,7 @@ export async function markReconciled(
           or l.match_status <> 'matched'
           or bool_or(jl.account_id <> ${recon.account_id})
           or bool_or(jl.currency <> ${recon.currency})
+          or bool_or(je.book_id <> ${bookId})
           or bool_or(je.status <> 'posted')
           or bool_or(je.posting_date > ${recon.through_date})
           or bool_or(jl.reconciled_at is not null)
@@ -1870,7 +1899,7 @@ export async function markReconciled(
     `));
     if (invalidMatches.rows[0]) {
       throw new BankingError(
-        "Cannot sign off: one or more matches fail account, currency, cutoff, availability, or exact-amount cross-footing",
+        "Cannot sign off: one or more matches fail book, account, currency, cutoff, availability, or exact-amount cross-footing",
       );
     }
 
@@ -1879,6 +1908,7 @@ export async function markReconciled(
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
        where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
+         and je.book_id = ${bookId}
          and jl.currency = ${recon.currency}
          and je.posting_date <= ${recon.through_date}
          and (jl.reconciled_at is not null
@@ -1928,6 +1958,7 @@ export async function markReconciled(
         (${ctx.orgId}, 'reconciliations', ${recon.id}, 'approve',
          ${JSON.stringify({
            operation: "sign_off",
+           bookId,
            statementBalance: fromUnits(toUnits(recon.statement_balance)),
            currency: recon.currency,
            throughDate: recon.through_date,

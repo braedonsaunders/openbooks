@@ -6,8 +6,8 @@ import { cn } from '@openbooks/ui'
 export const isZeroAmount = (v: string) => /^-?0(\.0+)?$/.test(v.trim())
 
 /** The workspace's headline number: green only at exactly 0.00. */
-export function DifferenceBadge({ difference, className }: { difference: string; className?: string }) {
-  const { money } = useMoney()
+export function DifferenceBadge({ difference, currency, className }: { difference: string; currency: string; className?: string }) {
+  const { money } = useMoney(currency)
   const zero = isZeroAmount(difference)
   return (
     <span
@@ -19,7 +19,7 @@ export function DifferenceBadge({ difference, className }: { difference: string;
         className,
       )}
     >
-      {money(difference)}
+      {money(difference, { maximumFractionDigits: 4 })}
     </span>
   )
 }

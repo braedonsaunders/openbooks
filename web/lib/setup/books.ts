@@ -63,15 +63,18 @@ export async function saveSetupBook(
       currency = org.base_currency
     }
   }
-  if (options.dryRun) return options.id ?? null
-
   if (selected) {
     const scope = sql`org_id = ${orgId} and ${sql.identifier(flag)}
       ${options.id ? sql`and id <> ${options.id}` : sql``}`
     const prior = (await tx.execute<Record<string, unknown>>(sql`
       select * from ${table} where ${scope} order by id for update`)).rows
+    if (accounting && prior.length) {
+      const history = (await tx.execute(sql`
+        select id from reconciliations where org_id=${orgId} limit 1`)).rows[0]
+      if (history) throw new Error('Cannot reassign the primary book while bank reconciliation sessions or history exist; a controlled book conversion is required')
+    }
     const priorById = new Map(prior.map(row => [String(row.id), row]))
-    if (prior.length) {
+    if (prior.length && !options.dryRun) {
       const demoted = (await tx.execute<Record<string, unknown>>(sql`
         update ${table} set ${sql.identifier(flag)} = false,
           updated_at = now(), updated_by = ${actorId} where ${scope} returning *`)).rows
@@ -84,6 +87,7 @@ export async function saveSetupBook(
       }
     }
   }
+  if (options.dryRun) return options.id ?? null
 
   const stored = before
     ? await tx.execute<Record<string, unknown>>(sql`

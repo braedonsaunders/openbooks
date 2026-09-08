@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createElement } from "react";
+import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NextIntlClientProvider } from "next-intl";
 import { JsonValue } from "../app/(app)/admin/audit/AuditEventDrawer";
@@ -15,7 +15,8 @@ test("legacy and partial captures cannot be advanced by the review screen", () =
   }
 });
 test("promotion evidence preserves small numeric policy values instead of rounding them away", () => {
-  const html = renderToStaticMarkup(createElement(NextIntlClientProvider, { locale: "en", timeZone: "UTC", messages: {}, onError: () => undefined,
-    children: createElement(JsonValue, { value: { nested: [{ rate: 0.000000125 }] }, exactNumbers: true }) }));
+  const html = renderToStaticMarkup(<NextIntlClientProvider locale="en" timeZone="UTC" messages={{}} onError={() => undefined}>
+    <JsonValue value={{ nested: [{ rate: 0.000000125 }] }} exactNumbers />
+  </NextIntlClientProvider>);
   assert.match(html, /1\.25e-7/);
 });

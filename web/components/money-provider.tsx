@@ -10,10 +10,11 @@ export function MoneyProvider({ currency, children }: { currency: string; childr
   return <CurrencyContext.Provider value={currency}>{children}</CurrencyContext.Provider>
 }
 
-/** Locale comes from next-intl; currency comes from the authenticated org. */
-export function useMoney(): MoneyFormatter {
+/** Locale comes from next-intl; records may override the organization currency. */
+export function useMoney(recordCurrency?: string): MoneyFormatter {
   const locale = useLocale()
-  const currency = useContext(CurrencyContext)
+  const orgCurrency = useContext(CurrencyContext)
+  const currency = recordCurrency ?? orgCurrency
   if (!currency) throw new Error('useMoney must be used inside MoneyProvider')
   return useMemo(() => createMoneyFormatter(locale, currency), [locale, currency])
 }

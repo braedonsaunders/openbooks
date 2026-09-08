@@ -303,19 +303,15 @@ test("custom detector thresholds change inclusion and severity at exact boundari
   assert.equal(variance.severity, "critical");
 });
 
-test("reconciliation detector uses the same cutoff, currency, and transaction amount as sign-off", () => {
+test("reconciliation detector delegates to the authoritative bank totals", () => {
   const reconciliationStart = source.indexOf('const reconciliationPolicy = byKey.get("reconciliation_difference")');
   const staleStart = source.indexOf('const stalePolicy = byKey.get("stale_accounting_documents")', reconciliationStart);
   assert.notEqual(reconciliationStart, -1, "reconciliation detector exists");
   assert.notEqual(staleStart, -1, "reconciliation detector has a bounded query section");
   const reconciliationSource = source.slice(reconciliationStart, staleStart);
 
-  assert.match(reconciliationSource, /select coalesce\(sum\(jl\.txn_amount\), 0\)/);
-  assert.match(reconciliationSource, /join journal_entries je on[\s\S]*je\.status in \('posted', 'reversed'\)/);
-  assert.match(reconciliationSource, /where jl\.org_id = \$\{orgId\} and jl\.account_id = r\.account_id/);
-  assert.match(reconciliationSource, /and jl\.currency = r\.currency/);
-  assert.match(reconciliationSource, /and je\.posting_date <= r\.through_date/);
-  assert.match(reconciliationSource, /jl\.id in \(select journal_line_id from reconciliation_matches rm/);
-  assert.match(reconciliationSource, /and org_id = \$\{orgId\}\)\)/);
-  assert.doesNotMatch(reconciliationSource, /sum\(jl\.amount\)/);
+  // The database regression covers parallel books and the resulting finding.
+  // This composition guard prevents a second balance policy from reappearing.
+  assert.match(reconciliationSource, /await reconciliationTotals\(record\.id, \{ orgId, userId: SYSTEM_ACTOR_ID \}\)/);
+  assert.doesNotMatch(reconciliationSource, /journal_lines|journal_entries/);
 });

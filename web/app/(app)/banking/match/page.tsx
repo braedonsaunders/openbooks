@@ -1,7 +1,7 @@
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { reconciliationTotals } from '@openbooks/engine/src/banking.ts'
+import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/src/banking.ts'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
@@ -19,6 +19,7 @@ interface ReconciliationRow extends Record<string, unknown> {
   id: string
   through_date: string
   statement_balance: string
+  currency: string
   status: string
 }
 interface CountRow extends Record<string, unknown> { n: string | number }
@@ -48,7 +49,7 @@ export default async function MatchBankData({
       select a.id, a.number, a.name,
              coalesce((select count(*) from bank_statement_lines l
                          join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
-                        where s.account_id = a.id and s.org_id = a.org_id and l.org_id = a.org_id and l.match_status = 'unmatched'), 0) as unmatched
+                        where s.account_id = a.id and s.org_id = a.org_id and l.org_id = a.org_id and l.currency = a.currency_restriction and l.match_status = 'unmatched'), 0) as unmatched
         from accounts a
        where a.org_id = ${orgId} and a.reconcilable and not a.is_summary and a.is_active
        order by a.number nulls last
@@ -86,7 +87,7 @@ export default async function MatchBankData({
 
   // Find the account's open reconciliation (do NOT create on render).
   const openRes = (await db.execute<ReconciliationRow>(sql`
-    select id, through_date, statement_balance, status from reconciliations
+    select id, through_date, statement_balance, currency, status from reconciliations
      where org_id = ${orgId} and account_id = ${account.id} and status <> 'signed_off'
      order by created_at desc limit 1
   `))
@@ -97,19 +98,21 @@ export default async function MatchBankData({
   if (session) {
     const ctx = { orgId, userId: authz.user.id }
     totals = await reconciliationTotals(session.id, ctx)
+    const bookId = await reconciliationBookId(db, orgId)
 
     const stmtParams = parsePrefixedListParams(sp, 'stmt', { sort: 'date', dir: 'asc', perPage: 15, allowedSorts: ['date'] as const })
     const glParams = parsePrefixedListParams(sp, 'gl', { sort: 'date', dir: 'asc', perPage: 15, allowedSorts: ['date'] as const })
     const exParams = parsePrefixedListParams(sp, 'ex', { sort: 'date', dir: 'asc', perPage: 15, allowedSorts: ['date'] as const })
 
     const stmtWhere = sql`s.account_id = ${account.id} and s.org_id = ${orgId}
-      and l.match_status = 'unmatched' and l.posted_on <= ${session.through_date}
+      and l.currency = ${session.currency} and l.match_status = 'unmatched' and l.posted_on <= ${session.through_date}
       ${stmtParams.q ? sql` and (l.description ilike ${'%' + stmtParams.q + '%'} or l.counterparty_ref ilike ${'%' + stmtParams.q + '%'} or l.amount::text ilike ${'%' + stmtParams.q + '%'})` : sql``}`
     const glWhere = sql`jl.account_id = ${account.id} and jl.org_id = ${orgId}
+      and je.book_id = ${bookId} and jl.currency = ${session.currency}
       and je.status = 'posted' and je.posting_date <= ${session.through_date}
       and jl.reconciled_at is null
       and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
-      ${glParams.q ? sql` and (je.entry_number ilike ${'%' + glParams.q + '%'} or je.memo ilike ${'%' + glParams.q + '%'} or jl.memo ilike ${'%' + glParams.q + '%'} or jl.amount::text ilike ${'%' + glParams.q + '%'})` : sql``}`
+      ${glParams.q ? sql` and (je.entry_number ilike ${'%' + glParams.q + '%'} or je.memo ilike ${'%' + glParams.q + '%'} or jl.memo ilike ${'%' + glParams.q + '%'} or jl.txn_amount::text ilike ${'%' + glParams.q + '%'})` : sql``}`
     const exWhere = sql`s.account_id = ${account.id} and s.org_id = ${orgId} and l.match_status = 'excluded'
       ${exParams.q ? sql` and (l.description ilike ${'%' + exParams.q + '%'} or l.amount::text ilike ${'%' + exParams.q + '%'})` : sql``}`
 
@@ -121,7 +124,7 @@ export default async function MatchBankData({
          limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}`),
       db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${stmtWhere}`),
       db.execute<GlRow>(sql`
-        select jl.id, je.posting_date, je.entry_number, jl.amount, coalesce(jl.memo, je.memo) as memo, p.display_name as party
+        select jl.id, je.posting_date, je.entry_number, jl.txn_amount as amount, coalesce(jl.memo, je.memo) as memo, p.display_name as party
           from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
           left join parties p on p.id = jl.party_id and p.org_id = jl.org_id
          where ${glWhere} order by je.posting_date, jl.line_number
@@ -131,7 +134,7 @@ export default async function MatchBankData({
       db.execute<ReviewRow>(sql`
         select m.id, m.statement_line_id, m.confidence,
                sl.posted_on as stmt_date, sl.amount as stmt_amount, sl.description as stmt_description,
-               je.entry_number, jl.amount as gl_amount, coalesce(jl.memo, je.memo) as gl_memo
+               je.entry_number, jl.txn_amount as gl_amount, coalesce(jl.memo, je.memo) as gl_memo
           from reconciliation_matches m
           join bank_statement_lines sl on sl.id = m.statement_line_id and sl.org_id = m.org_id
           join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
@@ -163,7 +166,7 @@ export default async function MatchBankData({
         accounts={accounts}
         offsetAccounts={offsetAccounts}
         account={{ id: account.id, label: [account.number, account.name].filter(Boolean).join(' · ') }}
-        session={session ? { id: session.id, throughDate: session.through_date, statementBalance: String(session.statement_balance) } : null}
+        session={session ? { id: session.id, throughDate: session.through_date, statementBalance: String(session.statement_balance), currency: session.currency } : null}
         data={data}
         totals={totals}
         currentParams={sp}

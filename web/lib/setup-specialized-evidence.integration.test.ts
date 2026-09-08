@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
-import { db } from '@openbooks/engine/src/db.ts';
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/test-fixtures.ts';
 
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
@@ -141,3 +141,80 @@ for(const method of ['POST','PATCH'] as const){
   });
  }
 }
+
+for (const method of ['POST','PATCH'] as const) {
+ test(`primary-book ${method} cannot reinterpret bank reconciliation history`, {skip:!process.env.OPENBOOKS_DB_URL}, async()=>{
+  const org=await createScratchOrg();
+  try {
+   const actorId=await authenticate(org);
+   const {startReconciliation}=await import('@openbooks/engine/src/banking.ts');
+   await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
+   await startReconciliation({accountId:org.accounts.bank,throughDate:org.date,statementBalance:'100'},{orgId:org.orgId,userId:actorId});
+   const body={code:'NEW_PRIMARY',name:'New primary',isPrimary:true,isActive:true};
+   let id: string | undefined;
+   if(method==='PATCH') {
+    const created=await send('POST','accounting-books',{...body,isPrimary:false});
+    assert.equal(created.status,200);id=(await created.json()).id;
+   }
+   const response=await send(method,'accounting-books',{...body,...(id?{id}:{})});
+   assert.equal(response.status,400);
+   assert.match((await response.json()).error,/reconciliation.*controlled book conversion/i);
+   assert.deepEqual((await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`)).rows,[{id:org.bookId}]);
+  } finally {state.gate=null;await dropScratchOrg(org.orgId);}
+ });
+}
+
+test('book-switch preview enforces history while renaming the current primary remains allowed', {skip:!process.env.OPENBOOKS_DB_URL}, async()=>{
+ const org=await createScratchOrg();
+ try {
+  const actorId=await authenticate(org);
+  const {startReconciliation}=await import('@openbooks/engine/src/banking.ts');
+  const {saveSetupBook}=await import('./setup/books');
+  const {SETUP_ENTITY_BY_KEY}=await import('./setup/registry');
+  await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
+  await startReconciliation({accountId:org.accounts.bank,throughDate:org.date,statementBalance:'0'},{orgId:org.orgId,userId:actorId});
+  await assert.rejects(withOrgTransaction(org.orgId,()=>saveSetupBook(SETUP_ENTITY_BY_KEY.get('accounting-books')!,org.orgId,actorId,
+   {code:'PREVIEW',name:'Preview',isPrimary:true,isActive:true},db,{dryRun:true,source:'import'})),/controlled book conversion/);
+  const response=await send('PATCH','accounting-books',{id:org.bookId,code:'PRIMARY',name:'Renamed primary',isPrimary:true,isActive:true});
+  assert.equal(response.status,200,JSON.stringify(await response.json()));
+  assert.equal((await row('accounting_books',org.bookId))!.name,'Renamed primary');
+ } finally {state.gate=null;await dropScratchOrg(org.orgId);}
+});
+
+test('the first reconciliation and primary reassignment serialize on the shared book fence', {skip:!process.env.OPENBOOKS_DB_URL}, async()=>{
+ const org=await createScratchOrg();
+ let release:()=>void=()=>{};
+ let holding:Promise<unknown>|undefined,attempt:Promise<Response>|undefined;
+ try {
+  const actorId=await authenticate(org);
+  const {startReconciliation}=await import('@openbooks/engine/src/banking.ts');
+  await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
+  let ready:()=>void=()=>{};
+  const started=new Promise<void>(resolve=>{ready=resolve;});
+  const finish=new Promise<void>(resolve=>{release=resolve;});
+  holding=withOrgTransaction(org.orgId,async()=>{
+   await startReconciliation({accountId:org.accounts.bank,throughDate:org.date,statementBalance:'0'},{orgId:org.orgId,userId:actorId});
+   ready();await finish;
+  });
+  await Promise.race([started,holding.then(()=>{throw new Error('first transaction ended before the fence probe');})]);
+  attempt=send('POST','accounting-books',{code:'RACE',name:'Concurrent primary',isPrimary:true,isActive:true});
+  const key=`accounting-books:${org.orgId}`;
+  let waiting=false;
+  for(let i=0;i<200&&!waiting;i++) {
+   waiting=Boolean((await db.execute<{waiting:boolean}>(sql`select exists(select 1 from pg_locks
+    where locktype='advisory' and not granted and mode='ExclusiveLock'
+     and classid=((hashtextextended(${key},0)>>32)&4294967295)::oid
+     and objid=(hashtextextended(${key},0)&4294967295)::oid) as waiting`)).rows[0]!.waiting);
+   if(!waiting) await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  assert.ok(waiting,'setup waits on the shared accounting-book fence');
+  release();await holding;
+  const response=await attempt;
+  assert.equal(response.status,400);
+  assert.match((await response.json()).error,/controlled book conversion/);
+  assert.deepEqual((await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`)).rows,[{id:org.bookId}]);
+ } finally {
+  release();await Promise.allSettled([holding,attempt].filter(Boolean));
+  state.gate=null;await dropScratchOrg(org.orgId);
+ }
+});
