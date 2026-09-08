@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, pool } from "./db.ts";
 import { toUnits } from "./money.ts";
 import { levelLeaseRentStraightLine } from "./property-management.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
@@ -135,6 +135,87 @@ test("concurrent levelling runs serialize on the lease and post one accrual", { 
     assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
     assert.equal(await glBalance(org.orgId, org.accounts.revenue), -toUnits("2000"));
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+for (const policy of ["account", "location", "inactive subsidiary", "inactive book", "non-posting book", "foreign currency"] as const) {
+  test(`rent levelling refuses ${policy} before posting an accrual`, { skip: !DB }, async () => {
+    const org = await createScratchOrg();
+    try {
+      const slAccountId = randomUUID(), branchId = randomUUID();
+      await db.execute(sql`insert into accounts
+        (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+        values(${slAccountId},${org.orgId},'1160','Straight-line rent','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)`);
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+        values(${branchId},${org.orgId},${org.subsidiaryId},'Levelling branch','CAD','CA')`);
+      const leaseId = await seedLease(org,slAccountId);
+      if (policy === "account") await db.execute(sql`update accounts set subsidiary_id=${branchId},subsidiary_include_children=false
+        where org_id=${org.orgId} and id=${slAccountId}`);
+      if (policy === "location") {
+        await db.execute(sql`update managed_properties set location_id=${org.locationId} where org_id=${org.orgId}`);
+        await db.execute(sql`update locations set subsidiary_id=${branchId},subsidiary_include_children=false
+          where org_id=${org.orgId} and id=${org.locationId}`);
+      }
+      if (policy === "inactive subsidiary") {
+        await db.execute(sql`update managed_properties set subsidiary_id=${branchId} where org_id=${org.orgId}`);
+        await db.execute(sql`update subsidiaries set is_active=false where org_id=${org.orgId} and id=${branchId}`);
+      }
+      if (policy === "inactive book") await db.execute(sql`update accounting_books set is_active=false
+        where org_id=${org.orgId} and id=${org.bookId}`);
+      if (policy === "non-posting book") await db.execute(sql`update accounting_books set posts_gl=false
+        where org_id=${org.orgId} and id=${org.bookId}`);
+      if (policy === "foreign currency") await db.execute(sql`update managed_properties set currency='USD' where org_id=${org.orgId}`);
+      const run = () => levelLeaseRentStraightLine(org.orgId,null,{asOf:org.date,onlyLeaseId:leaseId});
+      await assert.rejects(run(), policy === "account" || policy === "location" ? /restricted to another subsidiary/
+        : policy === "inactive subsidiary" ? /inactive/ : policy === "foreign currency" ? /functional currency/ : /active primary posting book/);
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n,0);
+      await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
+        where org_id=${org.orgId} and id=${slAccountId}`);
+      await db.execute(sql`update locations set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
+        where org_id=${org.orgId} and id=${org.locationId}`);
+      await db.execute(sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${branchId}`);
+      await db.execute(sql`update accounting_books set is_active=true,posts_gl=true where org_id=${org.orgId} and id=${org.bookId}`);
+      await db.execute(sql`update managed_properties set currency='CAD' where org_id=${org.orgId}`);
+      assert.equal((await run())[0]!.delta,"2000.0000");
+      assert.equal((await run())[0]!.delta,"0.0000");
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+}
+
+test("rent levelling rechecks contractual amounts after waiting for a lease edit", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const writer = await pool.connect();
+  let pending: Promise<PromiseSettledResult<Awaited<ReturnType<typeof levelLeaseRentStraightLine>>>> | undefined;
+  try {
+    const leaseId = await seedLease(org,org.accounts.ar);
+    await writer.query("begin");
+    await writer.query("select set_config('app.bypass_rls','on',true)");
+    await writer.query("select id from property_leases where org_id=$1 and id=$2 for update",[org.orgId,leaseId]);
+    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+    pending = levelLeaseRentStraightLine(org.orgId,null,{asOf:org.date,onlyLeaseId:leaseId})
+      .then((value) => ({status:"fulfilled",value}),(reason: unknown) => ({status:"rejected",reason}));
+    let blocked = false;
+    for (let attempt=0;attempt<400;attempt++) {
+      const count = (await pool.query<{ n: number }>(
+        "select count(*)::int as n from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))",[pid])).rows[0]!.n;
+      if (count) { blocked=true; break; }
+      await new Promise((resolve) => setTimeout(resolve,10));
+    }
+    assert.ok(blocked,"levelling must wait for the lease edit");
+    await writer.query("update lease_charges set amount=20000 where org_id=$1 and lease_id=$2 and effective_from='2025-07-01'",[org.orgId,leaseId]);
+    await writer.query("commit");
+    const result = await pending;
+    assert.equal(result.status,"fulfilled");
+    if (result.status !== "fulfilled") assert.fail("updated lease must level successfully");
+    assert.equal(result.value[0]!.billedToDate,"20000.0000");
+    assert.equal(result.value[0]!.straightLineToDate,"14000.0000");
+    assert.equal(result.value[0]!.delta,"-6000.0000");
+    assert.equal(await glBalance(org.orgId,org.accounts.ar),toUnits("-6000"));
+  } finally {
+    await writer.query("rollback");
+    writer.release();
+    await pending;
     await dropScratchOrg(org.orgId);
   }
 });
