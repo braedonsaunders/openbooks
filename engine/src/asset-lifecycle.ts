@@ -5,6 +5,7 @@ import { isIsoCalendarDate } from "./business-date.ts";
 import { buildScheduleWithRunner, resolveAssetAccounts } from "./depreciation.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
 import { orgReportingFramework } from "./reporting-framework.ts";
+import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
  * Fixed-asset lifecycle posting — disposal by sale and write-off.
@@ -115,8 +116,9 @@ export function computeRemeasurement(args: {
 
 async function primaryBookId(orgId: string, exec: SqlExecutor = db): Promise<string> {
   const r = (await exec.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`));
-  if (!r.rows[0]) throw new AssetLifecycleError("no primary accounting book");
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl
+     limit 1 for share`));
+  if (!r.rows[0]) throw new AssetLifecycleError("no active primary posting book");
   return r.rows[0].id;
 }
 
@@ -279,6 +281,38 @@ async function assertAssetPostingDate(
   }
 }
 
+/** Validate new lifecycle legs under the same entity policy as native posting. */
+async function assertLifecyclePostingPolicy(
+  tx: SqlExecutor,
+  orgId: string,
+  asset: { subsidiary_id: string; department_id: string | null; project_id: string | null; location_id: string | null },
+  lines: DisposalLine[],
+): Promise<void> {
+  const accountIds = [...new Set(lines.map((line) => line.accountId))];
+  await tx.execute(sql`select id from accounts where org_id=${orgId}
+    and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+  const dimensions = [
+    { table: "departments", id: asset.department_id },
+    { table: "projects", id: asset.project_id },
+    { table: "locations", id: asset.location_id },
+  ] as const;
+  for (const dimension of dimensions) {
+    if (!dimension.id) continue;
+    await tx.execute(sql`select id from ${sql.raw(dimension.table)}
+      where org_id=${orgId} and id=${dimension.id} for share`);
+  }
+  try {
+    await validateSubsidiaryRestrictions(tx, {
+      orgId, ctx: await loadSubsidiaryContext(tx, orgId), docSubsidiaryId: asset.subsidiary_id,
+      lines: lines.map((line) => ({ ...line, subsidiaryId: asset.subsidiary_id,
+        departmentId: asset.department_id, projectId: asset.project_id, locationId: asset.location_id })),
+    });
+  } catch (error) {
+    if (error instanceof SubsidiaryError) throw new AssetLifecycleError(error.message);
+    throw error;
+  }
+}
+
 export interface DisposeResult {
   assetId: string;
   entryId: string;
@@ -305,6 +339,7 @@ export async function disposeAsset(
     // prior mutation and then sees its committed schedule/event state.
     await lockAssetRow(tx, orgId, assetId, opts.allowedSubsidiaryIds);
     const bookId = await primaryBookId(orgId, tx);
+    await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     await assertAssetPostingDate(tx, orgId, assetId, bookId, opts.date);
 
     const assetRes = (await tx.execute<AssetAccountRow & {
@@ -352,6 +387,7 @@ export async function disposeAsset(
       cost: asset.acquisition_cost, accumulated: effectiveAccumulated, proceeds, accounts,
     });
 
+    await assertLifecyclePostingPolicy(tx, orgId, asset, lines);
     const status: "disposed" | "written_off" = opts.writeOff || isZero(proceeds) ? "written_off" : "disposed";
 
     const entryRes = (await tx.execute<{ id: string }>(sql`
@@ -661,6 +697,7 @@ export async function remeasureAsset(
     // event and schedule state from the transaction ahead of it.
     await lockAssetRow(tx, orgId, assetId, opts.allowedSubsidiaryIds);
     const bookId = await primaryBookId(orgId, tx);
+    await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     await assertAssetPostingDate(tx, orgId, assetId, bookId, opts.date);
 
     const res = (await tx.execute<AssetAccountRow & {
@@ -713,6 +750,7 @@ export async function remeasureAsset(
     const policy = remeasurementPolicy({ framework, delta, unreversedImpairment });
     if (!policy.allowed) throw new AssetLifecycleError(policy.reason!);
 
+    await assertLifecyclePostingPolicy(tx, orgId, asset, lines);
     const kind: "revalued" | "impaired" = cmp(delta, "0") < 0 ? "impaired" : "revalued";
 
     // An asset can be remeasured repeatedly; the entry number must be unique
