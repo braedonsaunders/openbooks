@@ -4104,3 +4104,36 @@ Evidence: `audit-user-role-control-2026-09-08`.
 Direct SQL probes independently confirmed that the existing database last-role
 guard permits the same write skew without API involvement. Its forward-migration
 repair is the next active slice (`audit-active-user-role-guard-2026-09-08`).
+
+### Database enforcement preserves an active user's last assignment (2026-09-08)
+
+Two direct SQL transactions could each pass the deferred role guard and commit
+the deletion of different assignments, leaving an active user with none. Moving
+the only assignment to another user also bypassed the DELETE-only trigger.
+Forward migration 0096 locks the identity and a surviving assignment during the
+guard, and checks the previous owner after assignment moves. Concurrent stale
+snapshots/deadlocks refuse one transaction rather than commit invalid access.
+Controlled replacement, deactivation, reactivation with a role, and ordinary
+assignment metadata updates remain supported.
+
+Validation: 26/26 guard and API integration checks passed (9,040.421708 ms), plus
+3/3 guard checks on a freshly bootstrapped database (5,319.8325 ms). Direct SQL
+races cover both read committed and repeatable read. A real constrained runtime
+connection also refused deletion of the last assignment and preserved it.
+Upgrading a cloned 0095 database preserved seeded users, custom roles,
+assignments, journal entries and audit evidence exactly; bootstrap replay passed.
+Fresh bootstrap's initial missing organization-currency input was supplied, and
+bootstrap completed with runtime RLS posture verified. The complete unit suite
+passed 3,210/3,210 checks (111,513.269958 ms), with no skips. Workspace types,
+changed-file lint without warnings and whitespace checks passed. Runtime
+TypeScript is unchanged from the previously verified production build.
+
+The migration changes no historical rows or baseline digest. An application
+rollback may retain this compatible database guard; removing the guard would
+reopen the demonstrated integrity defect. Evidence:
+`audit-active-user-role-guard-2026-09-08`.
+
+Seven further storage probes confirmed missing role/assignment parent references,
+cross-tenant role/user references, and deletion of an assigned role. Those
+referential-integrity findings are the next active slice and are not resolved by
+0096 (`audit-role-reference-integrity-2026-09-08`).
