@@ -1,6 +1,6 @@
 import { depreciationPeriodCount } from "./depreciation-limits.ts";
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "./db.ts";
+import { db, type SqlExecutor, withTransactionSavepoint } from "./db.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { add, cmp, fromUnits, isZero, mulRatio, neg, normalizeMoney, toUnits } from "./money.ts";
 import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./depreciation-formula.ts";
@@ -757,7 +757,7 @@ export async function runDepreciation(
 
   for (const row of due.rows) {
     try {
-      const posted = await db.transaction(async (tx) => {
+      const posted = await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
         // Serialize against the authoritative asset edit path before reading
         // any account or dimension-bearing fields. The due query above is only
         // a candidate list; every posting input is reloaded after this lock.
@@ -975,7 +975,7 @@ export async function runDepreciation(
           assetNumber: claimed.asset_number,
           periodName: claimed.period_name,
         };
-      });
+      }));
 
       if (!posted) {
         result.skipped++;
