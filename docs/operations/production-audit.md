@@ -3738,3 +3738,33 @@ existing route unit checks also passed independently with database mode off.
 Workspace typechecks, changed-file ESLint and whitespace validation passed.
 The race regression also re-enables Projects and verifies the 75% update.
 Private evidence: `audit-project-percent-feature-race-2026-09-08`.
+
+### NRV valuation obeys the Inventory feature (2026-09-08)
+
+Confirmed on `fff4c2ac`: inventory write-down and IFRS recovery services still
+changed layer values and posted journals after `features.inventory=false`.
+Both real database refusal tests failed before the fix.
+
+Both services now acquire and check the authoritative Inventory feature inside
+their operation transaction before valuation work, holding the organization
+row through commit. Reporting-framework policy is read under that same lock.
+Tests preserve existing valuation evidence while disabled and confirm that
+re-enabling resumes the operation. Recovery here is a new valuation movement,
+with source-cost ceilings; this does not alter historical journal reversals.
+
+Validation: 21/21 NRV checks passed (7,846.197458 ms), workspace typechecks and
+changed-file ESLint passed. Private evidence:
+`audit-nrv-feature-gate-2026-09-08`.
+
+### Full integration checkpoint at 0083b76c (2026-09-08)
+
+The frozen archive passed **2,512/2,512 integration checks**, zero failures and
+zero skips, in 1,421,806.883791 ms. Fixture lifecycle evidence: four bootstraps,
+four teardowns, four schema-wide verifications, 2,120 leases/releases/resets,
+zero active leases and zero leak detections. This includes the PSP, project
+revenue, asset lifecycle, property deposit, lease, tax provision, rent levelling
+and FX fixes through `0083b76c`. It predates consolidation book validation,
+inventory book/NRV rollback, and the subsequent payroll/NRV/depreciation/Projects
+fixes. It is not a clean run of the newer commits.
+
+Full log: `audit-fx-posting-policy-2026-09-08/full-integration.log`.
