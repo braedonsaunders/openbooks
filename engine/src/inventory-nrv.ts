@@ -5,6 +5,7 @@ import { isIsoCalendarDate } from "./business-date.ts";
 import { fromUnits, mul, roundDiv, toUnits } from "./money.ts";
 import { getOnHandForEntity, lockInventoryPosition, postInventoryEntry } from "./inventory.ts";
 import { orgReportingFramework, type ReportingFramework } from "./reporting-framework.ts";
+import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
  * Lower of cost and net realisable value — IAS 2.28-33 / ASC 330-10-35.
@@ -239,8 +240,28 @@ async function itemAccounts(tx: Pick<typeof db, "execute">, orgId: string, itemI
   return { asset: row.asset_account_id, adjustment: row.adjustment_account_id };
 }
 
-async function postingContext(orgId: string, subsidiaryId: string, date: string) {
-  const r = (await db.execute<{ book_id: string | null; period_id: string | null; currency: string | null }>(sql`
+/** The caller holds the hierarchy fence before taking inventory position locks. */
+async function postingContext(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  subsidiaryId: string,
+  date: string,
+  accounts: { asset: string; adjustment: string },
+) {
+  const ctx = await loadSubsidiaryContext(tx, orgId);
+  await tx.execute(sql`select id from accounts where org_id=${orgId}
+    and id=any(${uuidArray([accounts.asset, accounts.adjustment])}::uuid[]) order by id for share`);
+  try {
+    await validateSubsidiaryRestrictions(tx, {
+      orgId, ctx, docSubsidiaryId: subsidiaryId,
+      // This checks account membership; actual valuation amounts follow below.
+      lines: [accounts.asset, accounts.adjustment].map((accountId) => ({ accountId, subsidiaryId, amount: "0" })),
+    });
+  } catch (error) {
+    if (error instanceof SubsidiaryError) throw new InventoryNrvError(error.message);
+    throw error;
+  }
+  const r = (await tx.execute<{ book_id: string | null; period_id: string | null; currency: string | null }>(sql`
     select (select id from accounting_books where org_id = ${orgId} and is_primary limit 1) as book_id,
            (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
               and starts_on <= ${date} and ends_on >= ${date} limit 1) as period_id,
@@ -311,6 +332,7 @@ export async function writeDownInventoryToNrv(
   const framework = await orgReportingFramework(orgId);
 
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+    await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     const accounts = await itemAccounts(tx, orgId, input.itemId);
     const layers = await remainingLayers(tx, orgId, input.itemId, input.stockLocationId);
@@ -370,6 +392,7 @@ export async function writeDownInventoryToNrv(
     let totalTargetUnits = 0n;
     const entities: NrvEntityPosting[] = [];
     for (const plan of plans) {
+      const ctx = await postingContext(tx, orgId, plan.subsidiaryId, input.date, accounts);
       const enriched = plan.layers.map((layer) => ({
         layer,
         value: valueAt(toUnits(layer.remaining_quantity), toUnits(layer.unit_cost)),
@@ -379,7 +402,6 @@ export async function writeDownInventoryToNrv(
         await setLayerValueExactly(tx, orgId, enriched[i]!.layer, enriched[i]!.value + shares[i]!, actorId);
       }
 
-      const ctx = await postingContext(orgId, plan.subsidiaryId, input.date);
       const amount = fromUnits(-plan.deltaUnits);
       const memo = input.memo ?? `NRV write-down — carrying value to ${fromUnits(plan.targetUnits)}`;
       const entryId = await postInventoryEntry(tx, {
@@ -473,11 +495,11 @@ export async function reverseInventoryWritedown(
       "write-down reversal is prohibited under US GAAP (ASC 330-10-35-14): the written-down amount is the new cost basis",
     );
   }
-  const ctx = await postingContext(orgId, input.subsidiaryId, input.date);
-
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+    await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     const accounts = await itemAccounts(tx, orgId, input.itemId);
+    const ctx = await postingContext(tx, orgId, input.subsidiaryId, input.date, accounts);
     const layers = await remainingLayers(
       tx,
       orgId,
