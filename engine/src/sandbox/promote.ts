@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, schema, withMaintenanceTransaction } from "../db.ts";
 import { assertUuid } from "./catalog.ts";
+import { remapRoleRestriction, sandboxSubsidiaryMap } from "./json-references.ts";
 
 /**
  * Promotion — config flows UP (sandbox → production) as a reviewable change set;
@@ -108,6 +109,9 @@ export async function buildChangeSet(
     const seedRow = seedRes.rows[0];
     if (!seedRow) throw new Error(`sandbox organization not found: ${row.org_id}`);
     const seed = assertUuid(seedRow.sandbox_seed);
+    const subsidiaryMap = await sandboxSubsidiaryMap(prod, sbx, seed);
+    const productionSubsidiaries = new Map([...subsidiaryMap.keys()].map(id => [id, id]));
+    const toProduction = new Map([...subsidiaryMap].map(([source, target]) => [target, source]));
 
     const cs = (await db
       .insert(schema.changeSets)
@@ -138,6 +142,10 @@ export async function buildChangeSet(
           left join "${t}" p on p.org_id = '${prod}' and ob_rebase(p.id, '${seed}') = s.id
          where s.org_id = '${sbx}'`));
       for (const d of diff.rows) {
+        if (t === "app_roles") {
+          d.sbx_row.subsidiary_restriction = remapRoleRestriction(d.sbx_row.subsidiary_restriction, toProduction, `promotion role ${d.sbx_id}`);
+          if (d.prod_row) d.prod_row.subsidiary_restriction = remapRoleRestriction(d.prod_row.subsidiary_restriction, productionSubsidiaries, `production role ${d.prod_id}`);
+        }
         if (contentSig(d.sbx_row) === contentSig(d.prod_row)) continue; // unchanged
         const targetId = d.prod_id ?? randomUUID();
         const payload = { ...d.sbx_row, id: targetId, org_id: prod, created_by: null, updated_by: null };
@@ -287,6 +295,12 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
           throw new Error(`promotion payload identity does not match ${t}/${target}`);
         }
         if (t === "app_roles") {
+          // Revalidate a captured scope against live, locked production rows;
+          // the target entity can disappear between capture and application.
+          const subsidiaries = (await db.execute<{ id: string }>(sql`
+            select id from subsidiaries where org_id=${prod} order by id for share`)).rows;
+          payload.subsidiary_restriction = remapRoleRestriction(payload.subsidiary_restriction,
+            new Map(subsidiaries.map(row => [row.id, row.id])), `promotion role ${target}`);
           if (!before && payload.is_built_in) throw new Error("built-in roles are managed by setup, not promotion");
           if (before) {
             if (before.is_built_in && before.key === "admin") throw new Error("the Administrator role cannot be edited by promotion");

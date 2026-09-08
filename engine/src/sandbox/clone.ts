@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrg } from "../db.ts";
 import { assertUuid, insertionOrder, loadCatalog, PARENT_FILTER, type TableInfo } from "./catalog.ts";
 import { loadMaskingPolicies, maskExpr, type MaskTransform } from "./masking.ts";
+import { rebaseClonedJsonReferences } from "./json-references.ts";
 
 /**
  * The deterministic UUID-rebase clone engine. Copies one org's rows into a
@@ -137,9 +138,11 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     ? await loadMaskingPolicies(opts.productionOrgId)
     : new Map<string, Map<string, MaskTransform>>();
 
-  // 'dev' copies only the customization layer; others copy the full rebase set.
+  // Dev also needs the legal-entity tree so copied roles have real scope
+  // targets. Keep it outside CUSTOMIZATION_LAYER: refresh must refresh that
+  // reference data even when preserving role customizations.
   let selected =
-    opts.tier === "dev" ? tables.filter((t) => CUSTOMIZATION_LAYER.has(t.name)) : tables;
+    opts.tier === "dev" ? tables.filter((t) => CUSTOMIZATION_LAYER.has(t.name) || t.name === "subsidiaries") : tables;
   if (opts.onlyTables) selected = selected.filter((t) => opts.onlyTables!.has(t.name));
   // Copy parents before children: 152 FKs are non-deferrable, so `set constraints
   // all deferred` alone can't guarantee a valid order.
@@ -166,6 +169,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       perTable.push({ table: t.name, rows: n });
       rowsCopied += n;
     }
+    await rebaseClonedJsonReferences({ ...opts, copiedTables: new Set(perTable.map(row => row.table)) });
   });
 
   return { tablesCopied: perTable.length, rowsCopied, perTable };

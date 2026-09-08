@@ -4235,3 +4235,43 @@ separate checkpoint, not evidence that this revision has completed that suite.
 Final workspace type checks and the exact-lock production build passed after
 the shared-query extraction. Changed-file lint has zero errors and five existing
 explicit-any warnings; whitespace checks passed.
+
+### Sandbox JSON identity integrity (2026-09-08)
+
+Two pre-fix real-clone probes confirmed that subtree and explicit-list role
+restrictions retained production subsidiary UUIDs. Two additional probes against
+the frozen 7c15e6e2 implementation confirmed production account UUIDs survived in
+subsidiary control-account overrides, and sandbox role scope UUIDs survived in
+production promotion payloads. All four assertions failed for those actual
+cross-environment references, not fixture setup.
+
+Cloning now remaps both JSON reference types inside the same transaction as the
+relational copy, using tenant-owned source/target matches. The organization-level
+control map continues using its existing remapper. Each changed role/subsidiary
+JSON map has before/after audit evidence. Invalid source references abort the
+clone. Development sandboxes copy the legal-entity reference tree needed for
+role policy, while still omitting accounts and journals and clearing financial
+control overrides. The tree remains outside the preserved customization set so
+refresh can refresh it. Keep-customizations refresh preserves native role
+policies, repairs proven legacy production references and refuses missing scope
+targets atomically; reset reconstructs the policy from production.
+
+Promotion translates scoped role JSON back through proven production counterparts
+before comparison and capture. An unchanged scoped role produces no spurious
+update, while a sandbox-only subsidiary cannot be promoted as a production role
+scope. Application revalidates captured scope against locked live production
+subsidiaries; a deleted target leaves the approved change set and production role
+unchanged. No permission is widened as a fallback for an unmapped reference.
+
+The eight new scenario checks and ten existing lifecycle/promotion checks passed
+18/18 without skips (14,558.471459 ms). Coverage includes full/masked/as-of/dev
+create, refresh and reset; actual actor visibility; control-account ownership;
+legacy repair; promotion round-trip; preserved assignments; invalid-source clone
+rollback; sandbox-only scope refusal; and target deletion after capture. An
+initial stale-scope test incorrectly assumed the fixture role's display name
+contained an underscore; it now compares the captured before-state. Workspace
+types, warning-free changed-file lint and the exact-lock production build passed.
+Evidence: `audit-sandbox-role-scope-2026-09-08`. No migration or production database
+change is required.
+The adjacent catalog, wipe-guard, organization-access and sandbox-session checks
+also passed 13/13 (4,501.171125 ms), for 31 focused/adjacent checks overall.
