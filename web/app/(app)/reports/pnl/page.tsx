@@ -1,11 +1,10 @@
 import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
 import { PageHeader } from '@openbooks/ui'
-import { db } from '@openbooks/engine/src/db.ts'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { dimensionOptions } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
+import { reportBookSelection } from '../../../../lib/report-books'
 import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { profitAndLossView } from '../../../../lib/statement-matrix'
 import { resolvePeriod } from '../../../../lib/periods'
@@ -19,20 +18,6 @@ import { ScheduleReportButton } from '../ScheduleReportButton'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 
 export const dynamic = 'force-dynamic'
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-/** Active accounting books, primary first — every report answers for one book,
- *  so the P&L exposes the choice rather than silently fusing parallel books. */
-async function bookOptions(orgId: string) {
-  const r = await db.execute<{ id: string; code: string; name: string; is_primary: boolean }>(sql`
-    select b.id, b.code, b.name, b.is_primary
-      from accounting_books b
-     where b.org_id = ${orgId} and b.is_active
-     order by b.is_primary desc, b.code
-  `)
-  return r.rows
-}
 
 export default async function PnL({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const t = await getTranslations('reports')
@@ -53,11 +38,7 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
   }
 
   const orgId = await resolveOrgId()
-  const books = await bookOptions(orgId)
-  // A hand-edited or stale ?book= falls back to the org's primary book — the
-  // same authoritative re-clamp the other filter params get.
-  const requestedBookId = sp.book && UUID.test(sp.book) && books.some((b) => b.id === sp.book) ? sp.book : undefined
-  const selectedBook = books.find((b) => b.id === requestedBookId) ?? books[0]
+  const { books, selectedBook } = await reportBookSelection(orgId, sp.book)
 
   const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
   const [view, opts, org] = await Promise.all([
@@ -124,7 +105,7 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
       <ReportPaper
         company={org?.name ?? ''}
         title={t('pnl.title')}
-        periodPhrase={t('pnl.dateRange', { from: period.from, to: period.to })}
+        periodPhrase={`${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`}
         note={scale.note || undefined}
         wide={view.columns.length > 4}
       >
@@ -132,7 +113,7 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
           view={view}
           scale={q.scale}
           currency={subView.currency ?? org?.base_currency}
-          drill={{ dims: q.dims, basis: q.basis, subsidiaryId: q.subsidiaryId }}
+          drill={{ dims: q.dims, basis: q.basis, subsidiaryId: q.subsidiaryId, bookId: selectedBook.id }}
         />
       </ReportPaper>
     </ListPageLayout>

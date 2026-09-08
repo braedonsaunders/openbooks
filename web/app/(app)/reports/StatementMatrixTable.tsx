@@ -49,7 +49,7 @@ export function StatementMatrixTable({
   scale?: ReportScale
   /** Currency code (e.g. 'CAD') → symbol shown on amount rows. */
   currency?: string
-  drill?: { dims: StatementDimFilter; basis: StatementBasis; subsidiaryId?: string; budgetScenarioId?: string }
+  drill?: { dims: StatementDimFilter; basis: StatementBasis; subsidiaryId?: string; bookId?: string; budgetScenarioId?: string }
 }) {
   const t = useTranslations('reports.filterBar')
   const format = useFormatter()
@@ -130,7 +130,8 @@ export function StatementMatrixTable({
   const toggle = (i: number) =>
     setCollapsed((prev) => {
       const next = new Set(prev)
-      next.has(i) ? next.delete(i) : next.add(i)
+      if (next.has(i)) next.delete(i)
+      else next.add(i)
       return next
     })
 
@@ -248,6 +249,7 @@ export function StatementMatrixTable({
                           reportDims: drill.dims,
                           basis: drill.basis,
                           subsidiaryId: drill.subsidiaryId,
+                          bookId: drill.bookId,
                           label: `${l.label} · ${c.label}`,
                           budgetScenarioId: drill.budgetScenarioId,
                         })

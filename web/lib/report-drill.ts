@@ -12,6 +12,7 @@ export type ReportDrillTarget =
       mode: StatementMode
       dims?: StatementDimFilter
       subsidiaryId?: string
+      bookId?: string
       basis?: StatementBasis
       partyIds?: string[]
       projectCustomerId?: string
@@ -155,6 +156,7 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
     const accountIds = uuidList(input.accountIds)
     const partyIds = uuidList(input.partyIds)
     const projectCustomerId = uuidValue(input.projectCustomerId)
+    const bookId = uuidValue(input.bookId)
     const projectSearch = input.projectSearch === undefined ? undefined : stringValue(input.projectSearch) ?? undefined
     const rawAccountTypes = Array.isArray(input.accountTypes) ? input.accountTypes : undefined
     const accountTypes = rawAccountTypes && rawAccountTypes.length <= 50
@@ -164,6 +166,7 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
     if (input.accountIds !== undefined && !accountIds) return null
     if (input.partyIds !== undefined && !partyIds) return null
     if (input.projectCustomerId !== undefined && !projectCustomerId) return null
+    if (input.bookId !== undefined && !bookId) return null
     if (input.projectSearch !== undefined && !projectSearch) return null
     if (projectCustomerId && input.unassignedProjectCustomer === true) return null
     if (input.accountTypes !== undefined && (!accountTypes || !rawAccountTypes || accountTypes.length !== rawAccountTypes.length)) return null
@@ -177,6 +180,7 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       mode: input.mode === 'balance' ? 'balance' : 'flow',
       dims: dimsValue(input.dims),
       subsidiaryId: uuidValue(input.subsidiaryId),
+      bookId,
       basis: input.basis === 'cash' ? 'cash' : 'accrual',
       partyIds,
       projectCustomerId,
