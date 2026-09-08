@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "./db.ts";
+import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import { allocateDocumentNumber } from "./document-numbering.ts";
 import {
   add,
@@ -953,6 +954,13 @@ export async function inventoryFeatureEnabled(
   return result.rows[0]?.enabled === true;
 }
 
+/** New stock activity holds the authoritative feature through its write transaction. */
+async function assertInventoryFeature(runner: Runner, orgId: string): Promise<void> {
+  if (!(await lockAndCheckOrgFeature(runner, orgId, "inventory"))) {
+    throw new InventoryError("inventory feature is disabled");
+  }
+}
+
 /** Post one balanced inventory journal (draft→lines→posted, origin 'inventory').
  *  Exported for the NRV remeasurement module, which shares this GL path. */
 export async function postInventoryEntry(
@@ -1071,6 +1079,7 @@ export async function receiveInventory(
   };
 
   const apply = async (tx: Runner): Promise<MovementResult> => {
+    await assertInventoryFeature(tx, orgId);
     const bookId = await primaryBookId(orgId, tx);
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     // Costing policy is locked and re-read after the position lock. The
@@ -1433,6 +1442,7 @@ export async function issueInventory(
   };
 
   const apply = async (tx: Runner): Promise<MovementResult> => {
+    await assertInventoryFeature(tx, orgId);
     const bookId = await primaryBookId(orgId, tx);
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     // Re-read the policy under the movement transaction's lock boundary so a
@@ -1805,6 +1815,7 @@ export async function adjustInventory(
   // delegated movement. Lock the position first to preserve the canonical
   // position → profile ordering used by receive/issue and avoid deadlocks.
   return db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
     const offset = profile.adjustmentAccountId ?? profile.cogsAccountId;
@@ -1941,6 +1952,7 @@ async function transferInventoryTx(
     throw new InventoryError("transfer quantity must be positive");
   if (input.fromStockLocationId === input.toStockLocationId)
     throw new InventoryError("transfer needs two different locations");
+  await assertInventoryFeature(tx, orgId);
   const period = await periodForDate(orgId, input.date, tx);
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
@@ -2739,6 +2751,7 @@ export async function buildAssembly(
   assertMovementOwner(ctx, input.subsidiaryId);
 
   return await db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     const bookId = await primaryBookId(orgId, tx);
     // There is no separately lockable BOM header. A SHARE table lock is the
     // narrowest PostgreSQL primitive that excludes every INSERT/UPDATE/DELETE,
@@ -4814,12 +4827,9 @@ export async function createTransferOrder(
     if (cmp(line.quantity, "0") <= 0)
       throw new InventoryError("transfer order line quantity must be positive");
   }
-  const documentNumber = await nextSequenceNumber(
-    orgId,
-    "transfer_order",
-    "TO-",
-  );
   return await db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
+    const documentNumber = await nextSequenceNumber(orgId, "transfer_order", "TO-", tx);
     const order = (await tx.execute<{ id: string }>(sql`
       insert into transfer_orders
         (org_id, document_number, status, from_stock_location_id, to_stock_location_id,
@@ -4969,6 +4979,7 @@ export async function shipTransferOrder(
   const shipDate = date ?? await businessToday(orgId);
   assertInventoryDate(shipDate, "ship date");
   return await db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
     if (order.status !== "draft")
       throw new InventoryError(
@@ -5036,6 +5047,7 @@ export async function receiveTransferOrder(
   const receiveDate = date ?? await businessToday(orgId);
   assertInventoryDate(receiveDate, "receive date");
   return await db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
     if (order.status !== "in_transit")
       throw new InventoryError(
@@ -5167,6 +5179,7 @@ export async function postLandedCostVoucher(
   }
 
   return db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     for (const key of [...targetKeys].sort()) {
       const separator = key.indexOf(":");
       await lockInventoryPosition(
