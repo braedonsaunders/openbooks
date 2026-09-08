@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { PayrollFilingData } from '@openbooks/engine/src/payroll-filing-registry.ts'
+import { isUuid } from '../../../lib/list-params'
 import type { Authz } from '../../../lib/authz'
 import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
@@ -150,24 +151,25 @@ function parsePayrollRow(
   filing: string,
   rowId: string,
 ): { employees: string[]; accounts: string[] } | null {
-  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
   const parts = rowId.split(':')
-  if (country === 'CA' && filing === 't4' && parts.length === 3 && uuid.test(parts[0]!)) {
-    return { employees: [parts[0]!], accounts: parts[2] && uuid.test(parts[2]!) ? [parts[2]!] : [] }
+  if (country === 'CA' && filing === 't4' && parts.length === 3 && isUuid(parts[0]!)) {
+    if (parts[2] && !isUuid(parts[2])) return null
+    return { employees: [parts[0]!], accounts: parts[2] ? [parts[2]] : [] }
   }
-  if (country === 'CA' && filing === 'roe' && uuid.test(rowId)) {
+  if (country === 'CA' && filing === 'roe' && isUuid(rowId)) {
     return { employees: [rowId], accounts: [] }
   }
   // Québec's RL-1 population is one row per employee, just like the ROE;
   // unlike T4 its row key is the employee UUID without province/account
   // suffixes.
-  if (country === 'CA' && filing === 'rl1' && uuid.test(rowId)) {
+  if (country === 'CA' && filing === 'rl1' && isUuid(rowId)) {
     return { employees: [rowId], accounts: [] }
   }
-  if (country === 'US' && filing === 'w2' && parts.length === 2 && uuid.test(parts[0]!)) {
-    return { employees: [parts[0]!], accounts: parts[1] && uuid.test(parts[1]!) ? [parts[1]!] : [] }
+  if (country === 'US' && filing === 'w2' && parts.length === 2 && isUuid(parts[0]!)) {
+    if (parts[1] && !isUuid(parts[1])) return null
+    return { employees: [parts[0]!], accounts: parts[1] ? [parts[1]] : [] }
   }
-  if (country === 'US' && filing === '941' && parts.length === 2 && uuid.test(parts[0]!)) {
+  if (country === 'US' && filing === '941' && parts.length === 2 && isUuid(parts[0]!)) {
     return { employees: [], accounts: [parts[0]!] }
   }
   return null
