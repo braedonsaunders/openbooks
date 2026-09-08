@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import {
@@ -164,6 +165,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   try {
     const result = await db.transaction(async (tx) => {
+      if (!(await lockAndCheckOrgFeature(tx, orgId, 'inventory'))) {
+        throw new InventoryError('inventory feature is disabled')
+      }
       // A missing profile cannot be row-locked. Serialize creation on its parent;
       // NO KEY UPDATE remains compatible with inventory's foreign-key checks.
       const parent = await tx.execute(sql`select id from items where id = ${id} and org_id = ${orgId} for no key update`)

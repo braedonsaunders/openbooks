@@ -3970,3 +3970,30 @@ Evidence: `audit-payroll-calculation-feature-2026-09-08`.
 Separately confirmed: standard-cost revaluation still bypasses disabled Inventory,
 and a caught missing-period/disabled-book refusal can leave repriced layers without
 balancing accounting. Those findings remain under active remediation.
+
+### Standard-cost revaluation preserves accounting and owner policy (2026-09-08)
+
+Real database proofs reproduced five defects: disabled Inventory still allowed
+revaluation; caught missing-period/disabled-book errors left changed cost layers;
+restricted accounts and inactive stock owners could receive postings; and using
+the inventory asset account as its own variance account changed layers while
+equal debit/credit legs cancelled in the ledger.
+
+Revaluation now uses the shared savepoint helper, locks and checks the Inventory
+feature, holds the subsidiary hierarchy and affected accounts, and validates all
+affected legal entities before changing layers. Period/book preflight precedes
+repricing. Asset and variance accounts must differ for a nonzero revaluation.
+Late database failures restore both layers and draft journals while preserving
+earlier caller work. The costing-profile route takes the feature lock before
+item/profile locks, so a concurrent disable cannot slip past its preflight.
+
+Validation: 118/118 broad inventory/costing checks passed (31,650.836916 ms).
+After adding the final same-account guard, 28/28 focused checks passed
+(4,628.190208 ms), including eight refusal scenarios, preserved caller work,
+successful retries with GL equal to layer value, and a real profile-write race.
+Workspace typechecks, changed-file lint without warnings, whitespace checks, and
+the final locked production build passed. No checks were skipped. Seven test-only
+tenants whose temporary names violated the scratch cleanup guard were restored
+and removed before rerunning the corrected fixtures. Evidence:
+`audit-inventory-standard-revaluation-2026-09-08`.
+The running full `66be48a8` checkpoint predates this revaluation work.

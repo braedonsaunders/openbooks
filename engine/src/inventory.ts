@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction, type SqlExecutor } from "./db.ts";
+import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "./db.ts";
 import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import { allocateDocumentNumber } from "./document-numbering.ts";
 import {
@@ -24,6 +24,8 @@ import {
 import {
   loadSubsidiaryContext,
   restrictionAdmits,
+  SubsidiaryError,
+  uuidArray,
   validateSubsidiaryRestrictions,
   type SubsidiaryContext,
 } from "./subsidiaries.ts";
@@ -629,83 +631,107 @@ export async function revalueOpenLayersToStandardCost(
     allowedSubsidiaryIds?: ReadonlySet<string> | null;
   },
 ): Promise<string[] | null> {
-  if (p.standardCost == null) {
-    throw new InventoryError(
-      "a standard cost must be configured before switching this item to standard costing",
-    );
-  }
-  const layers = (await tx.execute<{
-      id: string;
-      subsidiary_id: string;
-      remaining_quantity: string;
-      unit_cost: string;
-    }>(sql`
-    select id, subsidiary_id, remaining_quantity, unit_cost
-      from cost_layers
-     where org_id = ${orgId} and item_id = ${itemId} and remaining_quantity > 0
-     order by received_at, id
-     for update`));
-  const allowedSubsidiaryIds = p.allowedSubsidiaryIds;
-  if (allowedSubsidiaryIds != null && layers.rows.some(layer => !allowedSubsidiaryIds.has(layer.subsidiary_id))) {
-    throw new InventoryError("revaluation requires access to every subsidiary holding this item");
-  }
-  // Measure per owner while rewriting every layer onto standard cost.
-  const deltasByOwner = new Map<string, bigint>();
-  for (const layer of layers.rows) {
-    const delta =
-      toUnits(extendCost(layer.remaining_quantity, p.standardCost)) -
-      toUnits(extendCost(layer.remaining_quantity, layer.unit_cost));
-    deltasByOwner.set(
-      layer.subsidiary_id,
-      (deltasByOwner.get(layer.subsidiary_id) ?? 0n) + delta,
-    );
-  }
-  const changed = [...deltasByOwner].filter(([, delta]) => delta !== 0n);
-  if (changed.length === 0) return null;
-  if (!p.varianceAccountId) {
-    // Refuse BEFORE touching a single layer: with nowhere to book the
-    // variance, the revaluation would post DR asset / CR asset on ONE account
-    // (balanced, effectless) while the layers moved — GL and subledger would
-    // diverge forever.
-    throw new InventoryError(
-      "revaluing open layers to standard cost requires a variance account to book the revaluation on — configure one for this item before switching it to (or revising) standard costing",
-    );
-  }
-  for (const layer of layers.rows) {
-    await tx.execute(sql`
-      update cost_layers set unit_cost = ${p.standardCost}, updated_at = now(), updated_by = ${actorId}
-       where id = ${layer.id} and org_id = ${orgId}`);
-  }
+  // The caller owns the profile transaction and may catch this refusal.
+  // Keep layer repricing and every balancing journal one indivisible operation.
+  return withTransactionSavepoint(tx, async () => {
+    await assertInventoryFeature(tx, orgId);
+    await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
+    if (p.standardCost == null) {
+      throw new InventoryError(
+        "a standard cost must be configured before switching this item to standard costing",
+      );
+    }
+    const layers = (await tx.execute<{
+        id: string;
+        subsidiary_id: string;
+        remaining_quantity: string;
+        unit_cost: string;
+      }>(sql`
+      select id, subsidiary_id, remaining_quantity, unit_cost
+        from cost_layers
+       where org_id = ${orgId} and item_id = ${itemId} and remaining_quantity > 0
+       order by received_at, id
+       for update`));
+    const allowedSubsidiaryIds = p.allowedSubsidiaryIds;
+    if (allowedSubsidiaryIds != null && layers.rows.some(layer => !allowedSubsidiaryIds.has(layer.subsidiary_id))) {
+      throw new InventoryError("revaluation requires access to every subsidiary holding this item");
+    }
+    // Measure per owner while rewriting every layer onto standard cost.
+    const deltasByOwner = new Map<string, bigint>();
+    for (const layer of layers.rows) {
+      const delta =
+        toUnits(extendCost(layer.remaining_quantity, p.standardCost)) -
+        toUnits(extendCost(layer.remaining_quantity, layer.unit_cost));
+      deltasByOwner.set(
+        layer.subsidiary_id,
+        (deltasByOwner.get(layer.subsidiary_id) ?? 0n) + delta,
+      );
+    }
+    const changed = [...deltasByOwner].filter(([, delta]) => delta !== 0n);
+    if (changed.length === 0) return null;
+    if (!p.varianceAccountId) {
+      // Refuse BEFORE touching a single layer: with nowhere to book the
+      // variance, the revaluation would post DR asset / CR asset on ONE account
+      // (balanced, effectless) while the layers moved — GL and subledger would
+      // diverge forever.
+      throw new InventoryError(
+        "revaluing open layers to standard cost requires a variance account to book the revaluation on — configure one for this item before switching it to (or revising) standard costing",
+      );
+    }
+    if (p.varianceAccountId === p.assetAccountId) {
+      throw new InventoryError("the variance account must be distinct from the inventory asset account");
+    }
+    const ctx = await loadSubsidiaryContext(tx, orgId);
+    const accountIds = [p.assetAccountId, p.varianceAccountId];
+    await tx.execute(sql`select id from accounts where org_id=${orgId}
+      and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+    for (const [ownerSubsidiaryId] of changed) {
+      try {
+        await validateSubsidiaryRestrictions(tx, {
+          orgId, ctx, docSubsidiaryId: ownerSubsidiaryId,
+          lines: accountIds.map((accountId) => ({ accountId, subsidiaryId: ownerSubsidiaryId, amount: "0" })),
+        });
+      } catch (error) {
+        if (error instanceof SubsidiaryError) throw new InventoryError(error.message);
+        throw error;
+      }
+    }
+    const date = await businessToday(orgId);
+    const periodId = await periodForDate(orgId, date, tx);
+    if (!periodId) throw new InventoryError(`no accounting period for ${date}`);
+    const bookId = await primaryBookId(orgId, tx);
+    for (const layer of layers.rows) {
+      await tx.execute(sql`
+        update cost_layers set unit_cost = ${p.standardCost}, updated_at = now(), updated_by = ${actorId}
+         where id = ${layer.id} and org_id = ${orgId}`);
+    }
 
-  const date = await businessToday(orgId);
-  const periodId = await periodForDate(orgId, date, tx);
-  if (!periodId) throw new InventoryError(`no accounting period for ${date}`);
-  const bookId = await primaryBookId(orgId, tx);
-  const memo = p.memo ?? "Costing method revaluation to standard";
-  const entryIds: string[] = [];
-  for (const [ownerSubsidiaryId, deltaUnits] of changed) {
-    const currency = await subsidiaryCurrency(orgId, ownerSubsidiaryId, tx);
-    entryIds.push(await postInventoryEntry(tx, {
-      orgId,
-      bookId,
-      subsidiaryId: ownerSubsidiaryId,
-      actorId,
-      currency,
-      periodId,
-      date,
-      entryNumber: `INV-RCST-${date}-${itemId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
-      memo,
-      lines: [
-        { accountId: p.assetAccountId, amount: fromUnits(deltaUnits), memo },
-        {
-          accountId: p.varianceAccountId,
-          amount: fromUnits(-deltaUnits),
-          memo,
-        },
-      ],
-    }));
-  }
-  return entryIds;
+    const memo = p.memo ?? "Costing method revaluation to standard";
+    const entryIds: string[] = [];
+    for (const [ownerSubsidiaryId, deltaUnits] of changed) {
+      const currency = await subsidiaryCurrency(orgId, ownerSubsidiaryId, tx);
+      entryIds.push(await postInventoryEntry(tx, {
+        orgId,
+        bookId,
+        subsidiaryId: ownerSubsidiaryId,
+        actorId,
+        currency,
+        periodId,
+        date,
+        entryNumber: `INV-RCST-${date}-${itemId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
+        memo,
+        lines: [
+          { accountId: p.assetAccountId, amount: fromUnits(deltaUnits), memo },
+          {
+            accountId: p.varianceAccountId,
+            amount: fromUnits(-deltaUnits),
+            memo,
+          },
+        ],
+      }));
+    }
+    return entryIds;
+  });
 }
 
 /** Primary accounting book id. */
