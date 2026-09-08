@@ -2676,3 +2676,45 @@ blanket refusal. Canonical lint measured 720 warnings and explicit-any measured
 two-book probe has reproduced statement export selecting primary-book revenue
 100 instead of the requested secondary-book revenue 700, and statement drill
 state also omits the selected book. Those are the next remediation slice.
+
+## Accounting-book selection across statements and supporting rows — 2026-09-07
+
+A real two-book probe populated primary-book revenue 100 and secondary-book
+revenue 700. The P&L screen selected the secondary book, but `resolveReport`,
+which supplies statement exports and scheduled rendering, returned 100. The
+balance-sheet page had no matching book selection, and both statement drill
+state and the supporting-row loader dropped the book. Invalid, foreign, missing
+or inactive explicit selections silently changed the P&L back to its primary
+book instead of refusing the request.
+
+Pages and the shared renderer now use one tenant-bound active-book selection
+helper. Only an omitted selection defaults to the primary book; explicit
+unavailable selections fail closed, and valid UUID case is normalized. Balance
+Sheet composes the existing P&L `ReportFilterBar` book selector. The chosen book
+is identified on report paper and exported output and travels through the
+shared table, URL target parser and supporting-row query. Invalid drill book
+syntax returns 400; unavailable books return 422.
+
+Budget Actual cells had the same defect: they escaped their scenario into a
+primary-book ledger drill. All budget cells now retain scenario identity, and
+Actual supporting rows use the tenant-verified scenario book, including after
+that book is retired. The scenario remains the authority for historical budget
+comparisons; a retired scenario book is not substituted with another book.
+
+Validation: all 21 focused checks passed (23,039.931083 ms, no skips), covering
+real page props, the shared export/schedule renderer, CSV and XLSX output,
+drill routes, unavailable/foreign selections, case normalization and retired
+budget-book history, alongside report authorization and subsidiary regressions.
+All 3,209 unit tests passed (150,812.605750 ms; no failures/skips), web typecheck
+and the exact-lock production build passed. Canonical lint measured 719
+warnings after removing the shared table's unused-expression warning; its
+ceiling was tightened to match. Explicit-any remains 387.
+
+The locked production dependency audit reported zero known vulnerabilities.
+That is advisory-database evidence, not proof that dependencies contain no
+vulnerabilities. The full integration suite for `255ac64e` is still running in
+an immutable checkout with a disposable runtime DB role and isolated Redis.
+The next CRM slice has real failing probes: deactivation leaves active open
+opportunities behind, and draft/activation routes accept inactive parties.
+Evidence is under `audit-statement-book-selection-2026-09-07` and
+`audit-crm-party-lifecycle-2026-09-07`.

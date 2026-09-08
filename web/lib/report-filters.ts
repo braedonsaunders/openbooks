@@ -191,14 +191,15 @@ export function buildDrillTarget(args: {
   subsidiaryId?: string
   label: string
   budgetScenarioId?: string
+  bookId?: string
 }): ReportDrillTarget | null {
   const { column } = args
-  if (args.budgetScenarioId && (column.kind !== 'amount' || !column.to)) {
+  if (args.budgetScenarioId) {
     return {
       kind: 'budget',
       label: args.label,
       scenarioId: args.budgetScenarioId,
-      scope: column.kind === 'amount' ? 'budget' : 'variance',
+      scope: column.kind === 'amount' ? (column.to ? 'actual' : 'budget') : 'variance',
       accountIds: args.accountId ? [args.accountId] : undefined,
       accountTypes: args.drillTypes,
       dims: args.reportDims,
@@ -239,6 +240,7 @@ export function buildDrillTarget(args: {
     to,
     dims,
     subsidiaryId: args.subsidiaryId,
+    bookId: args.bookId,
     basis: args.basis,
   }
 }

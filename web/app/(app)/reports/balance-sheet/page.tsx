@@ -4,6 +4,8 @@ import { Badge, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { dimensionOptions } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
+import { resolveOrgId } from '../../../../lib/org-scope'
+import { reportBookSelection } from '../../../../lib/report-books'
 import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { balanceSheetView } from '../../../../lib/statement-matrix'
 import { decimalAdd, decimalCmp, decimalNeg } from '../../../../lib/statement-format'
@@ -26,10 +28,12 @@ export default async function BalanceSheet({
 }) {
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('reports')
+  const tb = await getTranslations('budgets')
   const sp = await searchParams
   const scheduleDefId = await reportScheduleAnchor('balance-sheet')
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
 
   const secTotal = (section: string) => t('statement.sectionTotal', { section })
   const labels = {
@@ -54,6 +58,7 @@ export default async function BalanceSheet({
       dims: q.dims,
       subsidiary: subView.subsidiary,
       showZero: q.showZero,
+      bookId: selectedBook.id,
     }),
     dimensionOptions(),
     orgInfo(),
@@ -72,7 +77,7 @@ export default async function BalanceSheet({
         <>
           <PageHeader
             title={t('balanceSheet.title')}
-            description={`${subView.label ? `${subView.label} · ` : ''}${t('balanceSheet.asOf', { date: period.to })}`}
+            description={`${selectedBook.name} · ${subView.label ? `${subView.label} · ` : ''}${t('balanceSheet.asOf', { date: period.to })}`}
             back={{ href: '/reports', label: t('hub.title') }}
           />
           <ReportFilterBar
@@ -89,6 +94,12 @@ export default async function BalanceSheet({
               scale: true,
               sections: true,
             }}
+            primaryFilter={books.length > 1 ? {
+              paramKey: 'book',
+              label: tb('list.bookFilter'),
+              value: selectedBook.id,
+              options: books.map(book => ({ value: book.id, label: book.name })),
+            } : undefined}
             dimensions={opts}
             subsidiaries={subView.picker}
             actions={
@@ -112,7 +123,7 @@ export default async function BalanceSheet({
       <ReportPaper
         company={org?.name ?? ''}
         title={t('balanceSheet.title')}
-        periodPhrase={t('balanceSheet.asOf', { date: period.to })}
+        periodPhrase={`${selectedBook.name} · ${t('balanceSheet.asOf', { date: period.to })}`}
         note={scaleFactor(q.scale).note || undefined}
         wide={view.columns.length > 4}
       >
@@ -124,6 +135,7 @@ export default async function BalanceSheet({
             dims: q.dims,
             basis: q.basis,
             subsidiaryId: q.subsidiaryId,
+            bookId: selectedBook.id,
           }}
         />
       </ReportPaper>

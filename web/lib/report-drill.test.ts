@@ -20,6 +20,7 @@ test('report drill targets round-trip through URL state', () => {
     basis: 'accrual',
     partyIds: [PARTY_ID],
     projectCustomerId: CUSTOMER_ID,
+    bookId: ACCOUNT_ID,
     projectSearch: 'dryer repair',
     activeProjectsOnly: true,
     profitSigned: true,
@@ -32,6 +33,7 @@ test('report drill targets round-trip through URL state', () => {
   assert.deepEqual(parsed.accountIds, [ACCOUNT_ID])
   assert.deepEqual(parsed.partyIds, [PARTY_ID])
   assert.equal(parsed.projectCustomerId, CUSTOMER_ID)
+  assert.equal(parsed.bookId, ACCOUNT_ID)
   assert.equal(parsed.projectSearch, 'dryer repair')
   assert.equal(parsed.activeProjectsOnly, true)
   assert.equal(parsed.profitSigned, true)
@@ -40,6 +42,9 @@ test('report drill targets round-trip through URL state', () => {
 })
 
 test('report drill parsing fails closed for malformed or overbroad URL input', () => {
+  for (const bookId of ['', 'invalid', null, 1]) {
+    assert.equal(parseReportDrillTarget(JSON.stringify({ kind: 'ledger', label: 'x', to: '2026-12-31', bookId })), null)
+  }
   assert.equal(parseReportDrillTarget(null), null)
   assert.equal(parseReportDrillTarget('{'), null)
   assert.equal(parseReportDrillTarget('x'.repeat(8_001)), null)

@@ -11,6 +11,7 @@ import { loadView } from './views'
 import { agingDetail, transactionDetail } from './reports'
 import { getMoneyFormatter } from './money-server'
 import type { ReportDrillResponse, ReportDrillTarget } from './report-drill'
+import { reportBookSelection } from './report-books'
 import type { StatementDimFilter } from './statement-matrix'
 import type { DimFilter } from './reports'
 import { subsidiaryVisibleFilter } from './subsidiaries'
@@ -146,14 +147,18 @@ function paginate<T>(rows: T[], page: number): T[] {
   return rows.slice(start, start + REPORT_DRILL_PAGE_SIZE)
 }
 
-async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>, authz: Authz, page: number): Promise<ReportDrillResponse> {
+async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>, authz: Authz, page: number, scenarioBookId?: string): Promise<ReportDrillResponse> {
   const { money } = await getMoneyFormatter(authz.user.orgId)
   const dims = scopedDims(target, authz)
+  // A scenario's persisted, tenant-verified book remains its historical basis
+  // even after retirement. URL-selected statement books use the active picker.
+  const bookId = scenarioBookId ?? (target.bookId === undefined ? undefined : (await reportBookSelection(authz.user.orgId, target.bookId)).selectedBook.id)
   const [tc, tr, result] = await Promise.all([
     getTranslations('common'),
     getTranslations('reports'),
     transactionDetail({
       accountIds: target.accountIds,
+      bookId,
       accountTypes: target.accountTypes,
       from: target.from,
       to: target.to,
@@ -475,7 +480,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
   const row = scenario.rows[0]
   if (!row) throw new Error('scenario_not_found')
   if (target.scope === 'actual') {
-    return ledgerData({ kind: 'ledger', label: target.label, accountIds: target.accountIds, accountTypes: target.accountTypes, from: row.from_date, to: row.to_date, mode: 'flow', dims: target.dims }, authz, page)
+    return ledgerData({ kind: 'ledger', label: target.label, accountIds: target.accountIds, accountTypes: target.accountTypes, from: row.from_date, to: row.to_date, mode: 'flow', dims: target.dims }, authz, page, row.book_id)
   }
   const [tc, tr] = await Promise.all([getTranslations('common'), getTranslations('reports')])
   const offset = (page - 1) * REPORT_DRILL_PAGE_SIZE

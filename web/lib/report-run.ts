@@ -51,6 +51,7 @@ import { isFeatureEnabled } from './features'
 import { requireReportAuthz, canAccessReportDefinition, type ReportAuthorization } from './report-execution-context'
 import { resolveSubsidiaryView } from './consolidation'
 import { STATEMENT_KIND_FEATURE } from './report-authz'
+import { reportBookSelection } from './report-books'
 
 /**
  * The single catalog of built-in report "kinds" and the one place that turns
@@ -175,7 +176,8 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     let view: StatementView | null = null
     let title = ''
     let periodPhrase = ''
-    const matrixOpts = { orgId, breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, subsidiary: subView.subsidiary, showZero: q.showZero }
+    const selectedBook = kind === 'budget' ? undefined : (await reportBookSelection(orgId, p.get('book'))).selectedBook
+    const matrixOpts = { orgId, bookId: selectedBook?.id, breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, subsidiary: subView.subsidiary, showZero: q.showZero }
     if (kind === 'pnl') {
       title = t('pnl.title')
       periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
@@ -232,6 +234,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       }
     }
     if (!view) throw new Error('no data')
+    if (selectedBook) periodPhrase = `${selectedBook.name} · ${periodPhrase}`
     return { render: 'view', view, title, periodPhrase }
   }
 
