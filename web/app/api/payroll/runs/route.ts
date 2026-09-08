@@ -1,3 +1,4 @@
+import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll-scope.ts";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -38,6 +39,7 @@ export async function GET() {
       join documents d on d.id = r.document_id and d.org_id = r.org_id
       left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
      where r.org_id = ${gate.user.orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}
+       ${payrollRunPopulationScopeFilter(gate.user.orgId, sql`r.document_id`, gate.allowedSubsidiaryIds)}
      order by r.pay_date desc, d.document_number desc`))
   return NextResponse.json({ runs: runs.rows })
 }

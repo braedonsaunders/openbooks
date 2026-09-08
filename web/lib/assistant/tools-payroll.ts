@@ -1,3 +1,4 @@
+import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll-scope.ts";
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
@@ -74,6 +75,7 @@ const listPayRuns: AssistantToolDef = {
     const runs = (await db.execute<Record<string, unknown>>(sql`
       ${PAY_RUN_SELECT}
        where r.org_id = ${authz.user.orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
+         ${payrollRunPopulationScopeFilter(authz.user.orgId, sql`r.document_id`, authz.allowedSubsidiaryIds)}
        order by r.pay_date desc, d.document_number desc
        limit ${limit}
     `));
@@ -99,6 +101,7 @@ const getPayRun: AssistantToolDef = {
     const runs = (await db.execute<Record<string, unknown>>(sql`
       ${PAY_RUN_SELECT}
        where r.org_id = ${authz.user.orgId} and r.document_id = ${a.documentId}
+         ${payrollRunPopulationScopeFilter(authz.user.orgId, sql`r.document_id`, authz.allowedSubsidiaryIds)}
     `));
     const run = runs.rows[0];
     // A run outside the caller's legal-entity scope is indistinguishable from

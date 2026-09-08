@@ -3816,3 +3816,33 @@ checks remain green. Workspace typechecks, changed-file ESLint and whitespace
 validation passed. Private evidence: `audit-payroll-run-read-scope-2026-09-08`.
 The 3,210-test unit/build checkpoint in the previous section predates this GET
 change; the running `71a3c2d1` full archive predates both payroll scope commits.
+
+### Payroll summaries and wizard share whole-population visibility (2026-09-08)
+
+Five further real database regressions failed on `ba29b8f1`: the collection API,
+shared payroll record list, assistant list/detail, and wizard page all exposed
+a root-owned run containing an inaccessible child-owned employee. The wizard
+returned employee data in its server-rendered props even after the detail API
+had been corrected.
+
+The existing payroll scope primitives now live in the dependency-light
+`payroll-scope.ts`, with their old exports preserved. A shared whole-population
+SQL predicate excludes any run containing inaccessible stubs or adjustments
+from summary readers. The wizard holds its run/document and employee ownership
+locks through response assembly, checks the same population policy, and passes
+scope to its roster, prior-pay comparison and engine-owned status loaders.
+Its existing shared UI composition is unchanged.
+
+Validation: 20/20 focused payroll checks passed (14,829.362459 ms), including all
+five corrected surfaces and both unrestricted and fully authorized multi-entity
+reads. Workspace typechecks, changed-file ESLint (no errors; existing warnings),
+whitespace validation, 3,210/3,210 unit tests with no skips (121,444.910042 ms),
+and the locked-dependency production build passed. Private evidence:
+`audit-payroll-run-population-scope-2026-09-08`.
+The production dependency audit also reported zero vulnerabilities from the
+locked installation (`audit-payroll-run-read-scope-2026-09-08/dependencies.log`).
+
+Separately confirmed during this validation: calculate/dry-run/commit still
+omit caller scope at dispatch. Their remediation must refuse an inaccessible
+whole population; forwarding a filter alone risks silently calculating a
+partial run. This finding remains under active remediation.
