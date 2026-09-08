@@ -3652,3 +3652,23 @@ Evidence: `audit-inventory-book-policy-2026-09-08/before.log`,
 `focused-final.log`, `unit.log`, `build.log`, `lint-full.log`; and
 `audit-nrv-ambient-rollback-2026-09-08/before.log`, `before-expanded.log`,
 `focused.log`, `typecheck.log`, and `lint.log`.
+
+### Payroll settlement source-book eligibility (2026-09-08)
+
+Confirmed on `4b37f875`: recording payment of a posted payroll run still posted a
+new settlement journal and marked the run paid when its source accounting book
+was inactive or had `posts_gl=false`. Both real PostgreSQL refusal regressions
+failed with “Missing expected rejection”; an eligible non-primary source book
+was already usable.
+
+`recordPayRunPayment` now locks the original accounting book with `FOR SHARE`
+and requires it to remain active and permit GL posting before any settlement
+writes. It deliberately retains the source book when another book becomes
+primary. No historical journal is changed.
+
+Validation: 12/12 focused payroll tests passed (5,869.580167 ms), covering both
+refusals, no payment/journal/application fragments, restored eligibility,
+primary-book replacement, mixed-entity settlement, scope and remittances.
+Engine typecheck and changed-file ESLint passed. Private before/after evidence:
+`audit-payroll-payment-book-policy-2026-09-08`. The full integration checkpoint
+running at `0083b76c` predates this fix and is not validation of this change.
