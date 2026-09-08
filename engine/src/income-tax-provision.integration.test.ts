@@ -1238,3 +1238,59 @@ test("a fingerprint-matching filing marks filed once its covered period is close
     await dropScratchOrg(org.orgId);
   }
 });
+
+for (const policy of ["account", "inactive subsidiary", "inactive book", "non-posting book"] as const) {
+  for (const phase of ["initial", "replacement"] as const) {
+  test(`tax provision ${phase} refuses ${policy} before posting or superseding history`, { skip: !DB }, async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Tax policy operator", "admin");
+      const accounts = await seedTaxControlAccounts(org.orgId);
+      const branchId = await createSubsidiary(org.orgId, "Tax policy branch", "CAD", org.subsidiaryId);
+      await seedEnactedRate(org.orgId, "Federal", "25", { userId: actorId });
+      const subsidiaryId = policy === "inactive subsidiary" ? branchId : org.subsidiaryId;
+      let runId = await computeProvisionRun(org.orgId, 2026, {
+        permanentDifferences: [{ description: "Non-deductible expense", amount: "1000", subsidiaryId }],
+      }, actorId);
+      let priorRunId: string | null = null;
+      if (phase === "replacement") {
+        priorRunId = runId;
+        await postProvisionRun(org.orgId, runId, actorId);
+        runId = await computeProvisionRun(org.orgId, 2026, {
+          permanentDifferences: [{ description: "Revised non-deductible expense", amount: "2000", subsidiaryId }],
+        }, actorId);
+      }
+      if (policy === "account") await db.execute(sql`update accounts set subsidiary_id=${branchId},subsidiary_include_children=false
+        where org_id=${org.orgId} and id=${accounts.expense}`);
+      if (policy === "inactive subsidiary") await db.execute(sql`update subsidiaries set is_active=false
+        where org_id=${org.orgId} and id=${branchId}`);
+      if (policy === "inactive book") await db.execute(sql`update accounting_books set is_active=false
+        where org_id=${org.orgId} and id=${org.bookId}`);
+      if (policy === "non-posting book") await db.execute(sql`update accounting_books set posts_gl=false
+        where org_id=${org.orgId} and id=${org.bookId}`);
+      await assert.rejects(postProvisionRun(org.orgId, runId, actorId), (error: unknown) => {
+        assert.ok(error instanceof IncomeTaxProvisionError);
+        assert.match(error.message, policy === "account" ? /restricted to another subsidiary/
+          : policy === "inactive subsidiary" ? /inactive/ : /active primary posting book/);
+        return true;
+      });
+      const state = (await db.execute<{ status: string; journals: number }>(sql`
+        select status,(select count(*)::int from journal_entries where org_id=${org.orgId}) as journals
+        from tax_provision_runs where org_id=${org.orgId} and id=${runId}`)).rows[0]!;
+      assert.deepEqual(state,{status:"draft",journals:phase === "replacement" ? 1 : 0});
+      if (priorRunId) {
+        const original = (await db.execute<{ status: string; entry_status: string }>(sql`
+          select r.status,e.status as entry_status from tax_provision_runs r
+          join journal_entries e on e.id=r.journal_entry_id and e.org_id=r.org_id
+          where r.org_id=${org.orgId} and r.id=${priorRunId}`)).rows[0]!;
+        assert.deepEqual(original,{status:"posted",entry_status:"posted"},"refusal cannot supersede or reverse prior history");
+      }
+      await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
+        where org_id=${org.orgId} and id=${accounts.expense}`);
+      await db.execute(sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${branchId}`);
+      await db.execute(sql`update accounting_books set is_active=true,posts_gl=true where org_id=${org.orgId} and id=${org.bookId}`);
+      assert.ok((await postProvisionRun(org.orgId,runId,actorId)).entryId);
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+}
+}

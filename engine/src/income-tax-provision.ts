@@ -15,6 +15,7 @@ import {
 } from "./money.ts";
 import { assertPeriodModulesOpen } from "./close.ts";
 import { assertFinalKernelBalance } from "./posting.ts";
+import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
  * ASC 740 / IAS 12 income-tax provision. A run measures, PER LEGAL ENTITY
@@ -1601,6 +1602,9 @@ export async function postProvisionRun(
         `provision draft for FY${run.fiscalYear} predates source-lineage binding — recompute it before posting`,
       );
     }
+    // Hold entity currency and control-account policy through replacement posting.
+    await db.execute(sql`select id from orgs where id=${orgId} for share`);
+    await db.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     const liveSources = await captureProvisionSources(
       orgId,
       run.fiscalYear,
@@ -1643,11 +1647,11 @@ export async function postProvisionRun(
 
     const bookId = (
       (await db.execute<{ id: string }>(sql`
-      select id from accounting_books where org_id = ${orgId} and is_primary limit 1
+      select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share
     `))
     ).rows[0]?.id;
     if (!bookId)
-      throw new IncomeTaxProvisionError("no primary accounting book");
+      throw new IncomeTaxProvisionError("no active primary posting book");
     const periodId = (
       (await db.execute<{ id: string }>(sql`
       select id from accounting_periods
@@ -1727,6 +1731,23 @@ export async function postProvisionRun(
     }
     if (plans.length === 0)
       throw new IncomeTaxProvisionError("provision is zero — nothing to post");
+
+    // Validate the complete forward replacement before unwinding prior history.
+    const policyLines = plans.flatMap((plan) => plan.lines.map((line) => ({
+      ...line, subsidiaryId: plan.entity.subsidiaryId,
+    })));
+    const accountIds = [...new Set(policyLines.map((line) => line.accountId))];
+    await db.execute(sql`select id from accounts where org_id=${orgId}
+      and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+    const ctx = await loadSubsidiaryContext(db, orgId);
+    try {
+      await validateSubsidiaryRestrictions(db, {
+        orgId, ctx, docSubsidiaryId: ctx.rootId, lines: policyLines,
+      });
+    } catch (error) {
+      if (error instanceof SubsidiaryError) throw new IncomeTaxProvisionError(error.message);
+      throw error;
+    }
 
     const entityIds = orderedEntities.map((e) => e.subsidiaryId);
     await assertPeriodModulesOpen(db, {
