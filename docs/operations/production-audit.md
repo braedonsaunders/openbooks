@@ -3233,3 +3233,19 @@ passed. Evidence:
 `audit-revenue-ambient-rollback-2026-09-08/regression-before.log`,
 `focused-final.log`, `unit.log`, `typecheck-final.log`, `lint-final.log`, and
 `build.log`.
+
+## Depreciation failure isolation inside tenant transactions — 2026-09-08
+
+A controlled failure on the second depreciation journal leg reproduced the
+same ambient-transaction defect independently: the caught error poisoned later
+asset postings and the final status update (PostgreSQL 25P02), rolling back the
+caller's unrelated changes. Each depreciation posting now uses the shared
+explicit savepoint so partial journals are removed before continuing.
+
+The regression verifies one failed asset remains in service, a valid asset
+posts and becomes fully depreciated, only its balanced two-line journal remains,
+and the caller's earlier update commits. All 55 focused depreciation and
+savepoint checks passed (7,748.210041 ms, no failures/skips); engine typecheck
+and changed-file lint passed. Evidence:
+`audit-depreciation-ambient-rollback-2026-09-08/before.log`, `focused.log`,
+`typecheck.log`, and `lint.log`.
