@@ -3598,3 +3598,30 @@ lint passed. Tests verify the original exposure journal is the only journal
 after refusal, correction permits one pair, and retry posts nothing. Evidence:
 `audit-fx-posting-policy-2026-09-08/before.log`, `focused.log`, `typecheck.log`,
 and `lint.log`.
+
+## Full integration checkpoint at e52f1367 — 2026-09-08
+
+The frozen full suite passed 2,467/2,467 tests, zero failures/skips, in
+1,419,442.964792 ms. Its receipt balanced 2,075 leases/releases/resets, four
+bootstraps/teardowns/schema verifications, and zero active leases or detected
+leaks. It covers the earlier payroll and project fixes through the Projects
+time-posting gate. The newer settlement, project-revenue, asset, property,
+lease-book, tax-provision and FX controls have the targeted/broad evidence
+recorded above; a new full suite is frozen at 0083b76c to cover them together.
+Evidence: `audit-project-time-feature-gate-2026-09-08/full-integration.log`.
+
+## Consolidation posting-book policy — 2026-09-08
+
+Ownership consolidation posted with primary-book GL posting disabled, and
+auto-elimination posted with either primary activation or GL posting disabled.
+Both posting phases now hold an active primary posting book. Four real cases
+verify refusal leaves source journals intact, creates no successful/running
+generation, and posts normally after correction. Existing failed-attempt
+ownership evidence is intentionally retained; the initial test incorrectly
+counted it as a successful generation and was corrected.
+
+All 24 consolidation and close-readiness checks passed (7,448.570208 ms, no
+failures/skips); engine typecheck and changed-file lint passed. Evidence:
+`audit-consolidation-book-policy-2026-09-08/before.log`, `focused.log`,
+`typecheck.log`, and `lint.log`. The running full suite remains frozen at
+0083b76c and excludes this newer consolidation change.
