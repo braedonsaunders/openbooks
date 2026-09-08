@@ -1,5 +1,7 @@
-import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, foreignKey, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
+import { orgs } from "./core";
+import { users } from "./extension";
 
 /**
  * IAM — role-based access control.
@@ -45,7 +47,9 @@ export const appRoles = pgTable(
   },
   (t) => [
     uniqueIndex("app_roles_org_key").on(t.orgId, t.key),
+    uniqueIndex("app_roles_org_id_id_unique").on(t.orgId, t.id),
     index("app_roles_org").on(t.orgId),
+    foreignKey({ name: "app_roles_org_id_fkey", columns: [t.orgId], foreignColumns: [orgs.id] }).onDelete("cascade"),
   ],
 );
 
@@ -69,6 +73,9 @@ export const roleAssignments = pgTable(
     uniqueIndex("role_assignments_org_user_role").on(t.orgId, t.userId, t.roleId),
     index("role_assignments_user").on(t.userId),
     index("role_assignments_role").on(t.roleId),
+    foreignKey({ name: "role_assignments_org_id_fkey", columns: [t.orgId], foreignColumns: [orgs.id] }).onDelete("cascade"),
+    foreignKey({ name: "role_assignments_user_id_fkey", columns: [t.orgId, t.userId], foreignColumns: [users.orgId, users.id] }).onDelete("cascade"),
+    foreignKey({ name: "role_assignments_role_id_fkey", columns: [t.orgId, t.roleId], foreignColumns: [appRoles.orgId, appRoles.id] }),
   ],
 );
 
@@ -132,10 +139,7 @@ export const userPermissionOverrides = pgTable(
 // ---------------------------------------------------------------------------
 // Foreign keys (SQL, for the integrator's generated migration):
 //
-// -- ALTER TABLE app_roles                 ADD FOREIGN KEY (org_id)  REFERENCES orgs(id)      ON DELETE CASCADE;
-// -- ALTER TABLE role_assignments          ADD FOREIGN KEY (org_id)  REFERENCES orgs(id)      ON DELETE CASCADE;
-// -- ALTER TABLE role_assignments          ADD FOREIGN KEY (user_id) REFERENCES users(id)     ON DELETE CASCADE;
-// -- ALTER TABLE role_assignments          ADD FOREIGN KEY (role_id) REFERENCES app_roles(id) ON DELETE CASCADE;
+// Role and assignment constraints are installed by forward migration 0097.
 // -- ALTER TABLE user_permission_overrides ADD FOREIGN KEY (org_id)  REFERENCES orgs(id)      ON DELETE CASCADE;
 // -- ALTER TABLE user_permission_overrides ADD FOREIGN KEY (user_id) REFERENCES users(id)     ON DELETE CASCADE;
 // ---------------------------------------------------------------------------

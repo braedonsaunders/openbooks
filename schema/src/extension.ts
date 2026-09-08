@@ -195,6 +195,7 @@ export const users = pgTable(
   },
   (t) => [
     uniqueIndex("users_org_email").on(t.orgId, t.email),
+    uniqueIndex("users_org_id_id_unique").on(t.orgId, t.id),
     // Login and first-use OIDC linking resolve a global, case-folded identity.
     index("users_login_email_ci").on(sql`lower(${t.email})`).where(sql`${t.isActive}`),
   ],

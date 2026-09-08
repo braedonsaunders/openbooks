@@ -260,18 +260,79 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
     }
 
     for (const it of items.rows) {
-      const t = it.table_name as string;
+      const t = it.table_name;
       if (!PROMOTABLE.includes(t)) throw new Error(`change set contains non-promotable table: ${t}`);
       const target = assertUuid(it.target_id);
-      if (it.op === "delete") {
-        await db.execute(sql.raw(`delete from "${t}" where id = '${target}' and org_id = '${prod}'`));
-        continue;
+      const table = sql`public.${sql.identifier(t)}`;
+      const prior = await db.execute<{ row: Record<string, unknown> }>(sql`
+        select to_jsonb(existing) as row from ${table} existing
+         where id = ${target} and org_id = ${prod} for update`);
+      const before = prior.rows[0]?.row ?? null;
+      if (it.op === "insert" ? before !== null : before === null) {
+        throw new Error(`promotion target ${t}/${target} ${it.op === "insert" ? "already exists" : "no longer exists"}; recapture the change set`);
       }
-      // update = delete-then-insert (idempotent); insert = plain insert.
-      await db.execute(sql.raw(`delete from "${t}" where id = '${target}' and org_id = '${prod}'`));
-      await db.execute(
-        sql`insert into ${sql.raw(`"${t}"`)} select * from jsonb_populate_record(null::${sql.raw(`"${t}"`)}, ${JSON.stringify(it.payload)}::jsonb)`,
-      );
+      let after: Record<string, unknown> | null = null;
+      if (it.op === "delete") {
+        if (t === "app_roles") {
+          if (before!.is_built_in) throw new Error("built-in roles cannot be deleted by promotion");
+          const held = await db.execute(sql`select id from role_assignments where org_id = ${prod} and role_id = ${target} limit 1`);
+          if (held.rows.length) throw new Error("an assigned role cannot be deleted by promotion; reassign its users first");
+        }
+        await db.execute(sql`delete from ${table} where id = ${target} and org_id = ${prod}`);
+      } else {
+        const payload = it.payload;
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)
+          || typeof payload.id !== "string" || payload.id.toLowerCase() !== target.toLowerCase()
+          || typeof payload.org_id !== "string" || payload.org_id.toLowerCase() !== prod.toLowerCase()) {
+          throw new Error(`promotion payload identity does not match ${t}/${target}`);
+        }
+        if (t === "app_roles") {
+          if (!before && payload.is_built_in) throw new Error("built-in roles are managed by setup, not promotion");
+          if (before) {
+            if (before.is_built_in && before.key === "admin") throw new Error("the Administrator role cannot be edited by promotion");
+            if (payload.key !== before.key || payload.is_built_in !== before.is_built_in) {
+              throw new Error("promotion cannot change a role's key or built-in identity");
+            }
+            if (before.is_built_in && (payload.name !== before.name || payload.description !== before.description)) {
+              throw new Error("only permissions and subsidiary restrictions can change on a built-in role");
+            }
+          }
+        }
+        const columns = (await db.execute<{ column_name: string }>(sql`
+          select column_name from information_schema.columns
+           where table_schema = 'public' and table_name = ${t} order by ordinal_position`)).rows.map((row) => row.column_name);
+        if (Object.keys(payload).some((key) => !columns.includes(key))) {
+          throw new Error(`promotion payload contains obsolete or unknown columns for ${t}; recapture the change set`);
+        }
+        const fields = columns.filter((column) => !STRUCTURAL.has(column) && Object.hasOwn(payload, column));
+        const incoming = sql`jsonb_populate_record(null::${table}, ${JSON.stringify(payload)}::jsonb) incoming`;
+        if (it.op === "update") {
+          const sets = fields.map((column) => sql`${sql.identifier(column)} = incoming.${sql.identifier(column)}`);
+          if (columns.includes("updated_at")) sets.push(sql`updated_at = clock_timestamp()`);
+          if (columns.includes("updated_by")) sets.push(sql`updated_by = ${actor}`);
+          if (!sets.length) throw new Error(`promotion has no updatable fields for ${t}/${target}`);
+          const updated = await db.execute<{ row: Record<string, unknown> }>(sql`
+            update ${table} existing set ${sql.join(sets, sql`, `)} from ${incoming}
+             where existing.id = ${target} and existing.org_id = ${prod} returning to_jsonb(existing) as row`);
+          after = updated.rows[0]!.row;
+        } else {
+          const names = [...fields, ...columns.filter((column) => STRUCTURAL.has(column))];
+          const values = names.map((column) => {
+            if (column === "id") return sql`${target}::uuid`;
+            if (column === "org_id") return sql`${prod}::uuid`;
+            if (column === "created_at" || column === "updated_at") return sql`clock_timestamp()`;
+            if (column === "created_by" || column === "updated_by") return sql`${actor}::uuid`;
+            return sql`incoming.${sql.identifier(column)}`;
+          });
+          const inserted = await db.execute<{ row: Record<string, unknown> }>(sql`
+            insert into ${table} as inserted (${sql.join(names.map((name) => sql.identifier(name)), sql`, `)})
+            select ${sql.join(values, sql`, `)} from ${incoming} returning to_jsonb(inserted) as row`);
+          after = inserted.rows[0]!.row;
+        }
+      }
+      await db.execute(sql`insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+        values (${prod}, ${t}, ${target}, ${it.op},
+          ${JSON.stringify({ operation: "apply_change_set", changeSetId: id, before, after })}::jsonb, ${actor})`);
     }
     await db.execute(sql`
       update change_sets

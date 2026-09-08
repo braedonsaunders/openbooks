@@ -43,6 +43,15 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
       insert into sandboxes (id, org_id, production_org_id, name, tier, masked, status)
       values (${sandboxId}, ${sbxOrgId}, ${prod.orgId}, 'Promote Diff Regression', 'full', false, 'ready')`);
 
+    // Real sandboxes clone role policy. Preserve that counterpart here, and
+    // use an unassigned custom role to exercise an intentional role deletion.
+    await db.execute(sql`insert into app_roles(id, org_id, key, name, description, is_built_in, permissions, subsidiary_restriction)
+      select ob_rebase(id, ${seed}::uuid), ${sbxOrgId}, key, name, description, is_built_in, permissions, subsidiary_restriction
+        from app_roles where org_id = ${prod.orgId}`);
+    const deletedRoleId = randomUUID();
+    await db.execute(sql`insert into app_roles(id, org_id, key, name, is_built_in, permissions)
+      values (${deletedRoleId}, ${prod.orgId}, 'unused_custom', 'Unused custom', false, '[]'::jsonb)`);
+
     // user_scripts — matched-identical pair, matched-changed pair, sandbox-only row.
     const pMatchedScript = randomUUID();
     const pChangedScript = randomUUID();
@@ -97,12 +106,6 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
       item_count: itemCount,
     });
 
-    // The scratch org's built-in role lives only in production, so the diff
-    // must also flag it as a promotable-table delete (app_roles is on the
-    // PROMOTABLE list).
-    const adminRoleId = (await db.execute<{ id: string }>(sql`
-      select id::text as id from app_roles where org_id = ${prod.orgId}`)).rows[0]!.id;
-
     const items = (await db.execute<ChangeSetItemRow>(sql`
       select table_name, target_id::text as "target_id", op, payload
         from change_set_items where change_set_id = ${changeSetId} order by table_name, op`));
@@ -130,8 +133,8 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
     assert.ok(del, "production-only saved_view must produce a delete item");
     assert.equal(del!.payload, null);
 
-    // Production-only built-in role → delete from a THIRD promotable table.
-    const roleDel = byKey.get(`app_roles:delete:${adminRoleId}`);
+    // Production-only unassigned custom role → delete from a THIRD promotable table.
+    const roleDel = byKey.get(`app_roles:delete:${deletedRoleId}`);
     assert.ok(roleDel, "production-only app_role must produce a delete item");
 
     // Matched-identical pairs in BOTH tables stay out of the change set.
@@ -173,6 +176,17 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
     const appliedViews = (await db.execute<{ id: string }>(sql`
       select id::text as id from saved_views where org_id = ${prod.orgId} order by id`));
     assert.deepEqual(appliedViews.rows.map((r) => r.id), [pMatchedView]);
+    const audit = await db.execute<{ table_name: string; changes: { before: Record<string, unknown> | null; after: Record<string, unknown> | null }; actor_id: string }>(sql`
+      select table_name, changes, actor_id from audit_log where org_id = ${prod.orgId}
+       and changes->>'changeSetId' = ${changeSetId}`);
+    assert.equal(audit.rows.length, 4, "every promoted configuration has before/after audit evidence");
+    assert.ok(audit.rows.every((row) => row.actor_id === applierId));
+    const scriptAudit = audit.rows.find((row) => row.table_name === "user_scripts" && row.changes.before?.id === pChangedScript)!;
+    assert.equal(scriptAudit.changes.before?.name, "Stale Name");
+    assert.equal(scriptAudit.changes.after?.name, "Renamed Script");
+    assert.equal(scriptAudit.changes.before?.created_at, scriptAudit.changes.after?.created_at, "updates preserve creation evidence");
+    assert.equal(scriptAudit.changes.after?.updated_by, applierId);
+    assert.equal((await db.execute(sql`select id from role_assignments where org_id = ${prod.orgId}`)).rows.length, 4, "promotion preserves every actor's assigned role");
     const status = (await db.execute<{ status: string; applied_by: string; approved_by: string; reviewed_by: string }>(sql`
       select status, applied_by, approved_by, reviewed_by from change_sets where id = ${changeSetId}`));
     assert.deepEqual(status.rows[0], {
@@ -191,4 +205,94 @@ async function rebase(id: string, seed: string): Promise<string> {
   const r = (await db.execute<{ rebased: string }>(sql`
     select ob_rebase(${id}::uuid, ${seed}::uuid)::text as rebased`));
   return r.rows[0]!.rebased;
+}
+
+async function rolePromotionFixture(kind: "update_assigned" | "delete_assigned" | "delete_builtin" | "update_admin") {
+  const prod = await createScratchOrg();
+  const actors = await Promise.all(["Creator", "Reviewer", "Approver", "Applier"].map((name) =>
+    createScratchUser(prod.orgId, name, "admin")));
+  const adminId = (await db.execute<{ id: string }>(sql`select id from app_roles where org_id = ${prod.orgId} and key = 'admin'`)).rows[0]!.id;
+  await db.execute(sql`update app_roles set is_built_in = true where id = ${adminId}`);
+  let roleId = adminId;
+  if (kind === "delete_builtin") {
+    roleId = (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
+      values (${prod.orgId}, 'controller', 'Controller', true, '[]'::jsonb) returning id`)).rows[0]!.id;
+  } else if (kind !== "update_admin") {
+    await createScratchUser(prod.orgId, "Role holder", "protected_custom");
+    roleId = (await db.execute<{ id: string }>(sql`select id from app_roles where org_id = ${prod.orgId} and key = 'protected_custom'`)).rows[0]!.id;
+  }
+  const sbxOrgId = randomUUID();
+  const seed = randomUUID();
+  const sandboxId = randomUUID();
+  await db.execute(sql`insert into orgs(id, name, base_currency, country, settings, env_kind, sandbox_of, sandbox_seed)
+    values (${sbxOrgId}, ${"Scratch " + sbxOrgId.slice(0, 8)}, 'CAD', 'CA', '{}'::jsonb, 'sandbox', ${prod.orgId}, ${seed})`);
+  await db.execute(sql`insert into sandboxes(id, org_id, production_org_id, name, tier, masked, status)
+    values (${sandboxId}, ${sbxOrgId}, ${prod.orgId}, 'Role promotion', 'full', false, 'ready')`);
+  await db.execute(sql`insert into app_roles(id, org_id, key, name, description, is_built_in, permissions, subsidiary_restriction)
+    select ob_rebase(id, ${seed}::uuid), ${sbxOrgId}, key, name, description, is_built_in, permissions, subsidiary_restriction
+      from app_roles where org_id = ${prod.orgId}`);
+  const sandboxRole = await rebase(roleId, seed);
+  if (kind.startsWith("delete")) await db.execute(sql`delete from app_roles where org_id = ${sbxOrgId} and id = ${sandboxRole}`);
+  else await db.execute(sql`update app_roles set name = 'Promoted role name' where org_id = ${sbxOrgId} and id = ${sandboxRole}`);
+  const { changeSetId, itemCount } = await buildChangeSet(sandboxId, "Role promotion", actors[0]!);
+  assert.equal(itemCount, 1);
+  await reviewChangeSet(changeSetId, actors[1]!);
+  await approveChangeSet(changeSetId, actors[2]!);
+  return { orgId: prod.orgId, sbxOrgId, roleId, changeSetId, actorId: actors[3]! };
+}
+
+test("promotion updates assigned roles in place and rolls back configuration when audit storage fails", { skip: !DB }, async () => {
+  const f = await rolePromotionFixture("update_assigned");
+  const trigger = `promotion_audit_${randomUUID().replaceAll("-", "")}`;
+  let installed = false;
+  try {
+    const snapshot = async () => ({
+      roles: (await db.execute(sql`select * from app_roles where org_id = ${f.orgId} order by id`)).rows,
+      assignments: (await db.execute(sql`select * from role_assignments where org_id = ${f.orgId} order by id`)).rows,
+      audit: (await db.execute(sql`select * from audit_log where org_id = ${f.orgId} order by id`)).rows,
+      changeSet: (await db.execute(sql`select * from change_sets where id = ${f.changeSetId}`)).rows,
+    });
+    const before = await snapshot();
+    await db.execute(sql.raw(`create function ${trigger}() returns trigger language plpgsql as $$ begin
+      if NEW.org_id = '${f.orgId}'::uuid and NEW.table_name = 'app_roles' then raise exception 'promotion audit unavailable'; end if;
+      return NEW; end $$`));
+    await db.execute(sql.raw(`create trigger ${trigger} before insert on audit_log for each row execute function ${trigger}()`));
+    installed = true;
+    await assert.rejects(applyChangeSet(f.changeSetId, f.actorId));
+    assert.deepEqual(await snapshot(), before);
+    await db.execute(sql.raw(`drop trigger ${trigger} on audit_log`)); installed = false;
+    await applyChangeSet(f.changeSetId, f.actorId);
+    const after = await snapshot();
+    assert.deepEqual(after.assignments, before.assignments, "role updates preserve every assignment row");
+    const roleBefore = before.roles.find((row) => row.id === f.roleId)!;
+    const roleAfter = after.roles.find((row) => row.id === f.roleId)!;
+    assert.equal(roleAfter.name, "Promoted role name");
+    assert.equal(roleAfter.updated_by, f.actorId);
+    assert.deepEqual(roleAfter.created_at, roleBefore.created_at);
+    assert.equal(roleAfter.created_by, roleBefore.created_by);
+    assert.equal(after.audit.length, before.audit.length + 1);
+    assert.equal(after.changeSet[0]!.status, "applied");
+  } finally {
+    if (installed) await db.execute(sql.raw(`drop trigger ${trigger} on audit_log`));
+    await db.execute(sql.raw(`drop function if exists ${trigger}()`));
+    await dropScratchOrgReporting(f.sbxOrgId); await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+for (const kind of ["delete_assigned", "delete_builtin", "update_admin"] as const) {
+  test(`promotion refuses ${kind} without changing production access`, { skip: !DB }, async () => {
+    const f = await rolePromotionFixture(kind);
+    try {
+      const snapshot = async () => ({
+        roles: (await db.execute(sql`select * from app_roles where org_id = ${f.orgId} order by id`)).rows,
+        assignments: (await db.execute(sql`select * from role_assignments where org_id = ${f.orgId} order by id`)).rows,
+        audit: (await db.execute(sql`select * from audit_log where org_id = ${f.orgId} order by id`)).rows,
+      });
+      const before = await snapshot();
+      const pattern = kind === "delete_assigned" ? /assigned role cannot be deleted/ : kind === "delete_builtin" ? /built-in roles cannot be deleted/ : /Administrator role cannot be edited/;
+      await assert.rejects(applyChangeSet(f.changeSetId, f.actorId), pattern);
+      assert.deepEqual(await snapshot(), before);
+      assert.equal((await db.execute(sql`select status from change_sets where id = ${f.changeSetId}`)).rows[0]!.status, "approved");
+    } finally { await dropScratchOrgReporting(f.sbxOrgId); await dropScratchOrgReporting(f.orgId); }
+  });
 }
