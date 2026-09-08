@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { PayrollError } from "./payroll-error.ts";
+import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./payroll-run.ts";
 
 export type PayRunAdjustmentMutation =
   | {
@@ -25,21 +26,46 @@ export async function mutatePayRunAdjustment(input: {
   orgId: string;
   documentId: string;
   actorId: string;
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   mutation: PayRunAdjustmentMutation;
 }): Promise<{ changed: boolean }> {
   const { orgId, documentId, actorId, mutation } = input;
   return db.transaction(async (tx) => {
-    const runRows = (await tx.execute<{ run_status: string; pay_schedule_id: string; document_status: string }>(sql`
-      select r.run_status, r.pay_schedule_id, d.status as document_status
+    const runRows = (await tx.execute<{ run_status: string; pay_schedule_id: string; document_status: string; subsidiary_id: string | null }>(sql`
+      select r.run_status, r.pay_schedule_id, d.status as document_status, d.subsidiary_id
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r, d
     `));
     const run = runRows.rows[0];
-    if (!run) throw new PayrollError("pay run not found");
+    if (!run || !payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.subsidiary_id)) {
+      throw new PayrollError("pay run not found");
+    }
     if (run.run_status === "committed" || run.document_status !== "draft") {
       throw new PayrollError("pay run is not editable");
+    }
+
+    const target = mutation.action === "delete"
+      ? (await tx.execute<{ employee_party_id: string }>(sql`
+          select employee_party_id from pay_run_adjustments
+           where org_id=${orgId} and pay_run_document_id=${documentId} and id=${mutation.adjustmentId}
+           for update`)).rows[0]?.employee_party_id
+      : mutation.employeePartyId;
+    if (mutation.action === "delete" && !target) throw new PayrollError("pay run adjustment not found");
+    if (input.allowedSubsidiaryIds != null) {
+      // A changed adjustment invalidates ALL stubs. Authorize the target and
+      // the complete snapshot first, and hold employment ownership stable.
+      const participants = (await tx.execute<{ id: string; subsidiary_id: string | null }>(sql`
+        select p.id,p.subsidiary_id from parties p
+         where p.org_id=${orgId} and (p.id=${target} or exists (
+           select 1 from pay_stubs s where s.org_id=p.org_id and s.employee_party_id=p.id
+             and s.pay_run_document_id=${documentId}))
+         order by p.id for share`)).rows;
+      if (!participants.some((party) => party.id === target)
+          || participants.some((party) => !payrollSubsidiaryInScope(input.allowedSubsidiaryIds, party.subsidiary_id))) {
+        throw new PayrollError("pay run not found");
+      }
     }
 
     const employeeId = mutation.action === "delete" ? null : mutation.employeePartyId;

@@ -160,6 +160,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             orgId: gate.user.orgId,
             documentId: id,
             actorId: gate.user.id,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
             mutation: { action: 'add', employeePartyId, componentId, amount: canonicalAmount, replaceComponent, note },
           })
         }
@@ -170,7 +171,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // Read-only: the exact legs commit would write, for the wizard's review
       // step. payroll.read suffices conceptually, but the wizard drives it and
       // the route is already gated payroll.run.
-      const result = await previewPayRunGl(gate.user.orgId, id)
+      const result = await previewPayRunGl(gate.user.orgId, id, gate.allowedSubsidiaryIds)
       return NextResponse.json({ ok: true, ...result })
     }
     if (body.action === 'add-adjustment') {
@@ -201,6 +202,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         orgId: gate.user.orgId,
         documentId: id,
         actorId: gate.user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         mutation: { action: 'add', employeePartyId, componentId, amount: normalizeMoney(amountRaw), hours: hoursRaw, replaceComponent, note },
       })
       return NextResponse.json({ ok: true })
@@ -211,6 +213,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         orgId: gate.user.orgId,
         documentId: id,
         actorId: gate.user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         mutation: { action: 'delete', adjustmentId: body.adjustmentId },
       })
       return NextResponse.json({ ok: true })
@@ -235,6 +238,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             orgId: gate.user.orgId,
             documentId: id,
             actorId: gate.user.id,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
             mutation: {
               action: keep.has(employeePartyId) ? 'include' : 'exclude',
               employeePartyId,
@@ -250,6 +254,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         orgId: gate.user.orgId,
         documentId: id,
         actorId: gate.user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         mutation: {
           action: body.action === 'exclude-employee' ? 'exclude' : 'include',
           employeePartyId: body.employeePartyId,
