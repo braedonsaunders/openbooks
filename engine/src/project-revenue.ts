@@ -172,7 +172,8 @@ export async function syncProjectRevenueContractsInTransaction(
        and pt.invoicing_profile->>'recognition' = 'percent_complete_cost'
        ${projectId ? sql`and p.id = ${projectId}` : sql``}
        ${subsidiaryScope}
-     order by p.code`));
+     order by p.code, p.id
+     for update of p`));
 
   let ruleId: string | null = null;
 

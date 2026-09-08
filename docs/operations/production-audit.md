@@ -3475,3 +3475,18 @@ percentage. All 53 focused project, recognition and HTTP boundary checks passed
 (6,078.446917 ms, no failures/skips); engine typecheck and changed-file lint
 passed. Evidence: `audit-project-revenue-feature-gate-2026-09-08/before.log`,
 `focused.log`, `typecheck.log`, and `lint.log`.
+
+## Concurrent project revenue synchronization — 2026-09-08
+
+Two simultaneous synchronizations of one fixed-price project both succeeded
+and created two contracts and two obligations. The regression holds contract
+insertion until both transactions reach the race; it observed `{contracts: 2,
+obligations: 2}` before the fix. Synchronization now locks qualifying project
+rows in deterministic code/id order before checking or creating the revenue
+records. Both callers converge on the same contract and obligation.
+
+All 54 focused project, recognition and HTTP boundary checks passed
+(7,007.105625 ms, no failures/skips); engine typecheck and changed-file lint
+passed. Evidence: `audit-project-revenue-concurrency-2026-09-08/before.log`,
+`focused.log`, `typecheck.log`, and `lint.log`. This prevents new duplicates in
+this service; no production data was inspected or rewritten.
