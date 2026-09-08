@@ -77,6 +77,14 @@ export async function recordPayRunPayment(input: {
       throw new PayrollError("post the pay run before recording its payment");
     }
 
+    // Settle in the original book even if another book became primary, but
+    // require that book to remain eligible for new postings through commit.
+    const book = (await tx.execute<{ id: string }>(sql`
+      select id from accounting_books where org_id=${orgId} and id=${run.book_id}
+        and is_active and posts_gl for share
+    `)).rows[0];
+    if (!book) throw new PayrollError("the pay run requires an active posting book for settlement");
+
     // A calculated run may predate the caller's restriction (or have been
     // calculated by an unrestricted administrator). Never let a restricted
     // caller settle only the visible part of a mixed-entity run: that would
