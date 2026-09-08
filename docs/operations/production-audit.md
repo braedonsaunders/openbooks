@@ -2929,3 +2929,45 @@ filing-account reconciliation command handles filing attribution only, not
 liability accounts. A separately guarded liability reconciliation path remains
 necessary; neither current setup nor a manual trigger bypass is an acceptable
 production repair. The full `a1381bba` integration run is still in progress.
+
+## Reviewed legacy liability reconciliation — 2026-09-07
+
+Forward migration 0095 adds evidence for a one-time unknown-to-reconciled
+liability transition. Existing amounts, account stamps and posted history are
+preserved. The database requires a tenant-owned posting liability account,
+unchanged payroll facts, committed source payroll, an actor and original
+evidence. Captured/reconciled attribution cannot be overwritten, and a legacy
+line cannot impersonate a new commit. The service checks payroll management
+permission and original pay-run legal-entity scope, holds the source document
+against voiding, and rolls failed batches back even inside caller transactions.
+
+The operational command copies the existing filing-reconciliation workflow:
+preview performs the guarded writes and audit inserts, then rolls back; apply
+records the reviewed mapping. Repeating an apply is refused. See
+[the runbook](payroll-liability-reconciliation.md). No production records were
+reconciled, and no baseline migration or protected posting/sync file changed.
+
+All 17 focused integration checks passed (34,608.899209 ms, no skips), including
+three new reconciliation cases for preview rollback, atomic failed batches,
+permission/entity/tenant refusals, immutable evidence, unchanged amounts and
+competing one-time updates. The actual CLI preview, apply and repeated-apply
+refusal passed. Workspace typechecks, exact-lock production build and changed-
+file lint passed. An isolated database bootstrapped from `a1381bba` was seeded
+with six real committed payroll lines and one unknown account. Applying the
+final 0095 file preserved every old amount/account/source; reviewed resolution
+then restored remittance reporting.
+
+The unit run passed 3,209 of 3,210 tests (147,020.629125 ms); its only failure
+was the canonical migration inventory missing the newly added filename. That
+explicit inventory was extended, and the complete canonical-baseline test file
+passed afterward. The initial migration-header convention failure was also
+corrected; the final upgrade used a fresh disposable database and the exact
+final migration, without altering any applied checksum. Quality ceilings
+remain 713 warnings and 381 explicit-any nodes. Evidence is under
+`audit-payroll-legacy-liabilities-2026-09-07`.
+
+The next confirmed defect is historical remittance scope: an employee transfer
+removes the original employer's access and exposes its earlier totals to the new
+employer. The corrected fixture records original scope 404/zero groups versus
+new scope 200/one group while the pay-run owner is unchanged. Evidence is under
+`audit-payroll-remittance-history-scope-2026-09-07/expanded-before.log`.

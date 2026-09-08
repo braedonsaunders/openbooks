@@ -527,8 +527,9 @@ export const payStubLines = pgTable(
      * debit this, never the component's current setup. */
     liabilityAccountId: uuid("liability_account_id"),
     liabilityAccountSource: text("liability_account_source", {
-      enum: ["unknown", "commit", "legacy_component"],
+      enum: ["unknown", "commit", "legacy_component", "reconciled"],
     }).notNull().default("unknown"),
+    liabilityAccountEvidence: jsonb("liability_account_evidence").$type<{ reason: string; reference: string }>(),
     ...auditColumns,
   },
   (t) => [
@@ -540,8 +541,14 @@ export const payStubLines = pgTable(
     }),
     index("pay_stub_lines_liability_account").on(t.orgId, t.liabilityAccountId),
     check("pay_stub_lines_liability_account_evidence", sql`
-      (${t.liabilityAccountSource} = 'unknown' and ${t.liabilityAccountId} is null) or
-      (${t.liabilityAccountSource} in ('commit', 'legacy_component') and ${t.liabilityAccountId} is not null)
+      (${t.liabilityAccountSource} = 'unknown' and ${t.liabilityAccountId} is null and ${t.liabilityAccountEvidence} is null) or
+      (${t.liabilityAccountSource} in ('commit', 'legacy_component') and ${t.liabilityAccountId} is not null and ${t.liabilityAccountEvidence} is null) or
+      (${t.liabilityAccountSource} = 'reconciled' and ${t.liabilityAccountId} is not null and ${t.liabilityAccountEvidence} is not null
+        and jsonb_typeof(${t.liabilityAccountEvidence}) = 'object'
+        and coalesce(jsonb_typeof(${t.liabilityAccountEvidence}->'reason') = 'string',false)
+        and coalesce(jsonb_typeof(${t.liabilityAccountEvidence}->'reference') = 'string',false)
+        and length(trim(${t.liabilityAccountEvidence}->>'reason')) > 0
+        and length(trim(${t.liabilityAccountEvidence}->>'reference')) > 0)
     `),
   ],
 );
