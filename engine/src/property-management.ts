@@ -926,6 +926,22 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, escal
 }
 
 function billingKey(leaseId: string, scheduleIds: string[]): string { return `rent:${leaseId}:${[...scheduleIds].sort().join(",")}`; }
+
+/** Called only while the generating source reservation is locked. */
+async function propertyBillingGeneration(orgId: string, key: string, kind: "customer_invoice" | "customer_credit") {
+  const prior = (await db.execute<{ id: string; status: string }>(sql`
+    select id,status from documents where org_id=${orgId} and kind=${kind}
+      and (custom->'propertyManagement'->>'billingKey'=${key}
+        or custom->'propertyManagement'->>'originalBillingKey'=${key})
+    order by created_at desc,id desc`));
+  const predecessorId = prior.rows[0]?.id;
+  return {
+    documentId: prior.rows.find(row => row.status !== 'voided')?.id,
+    predecessorId,
+    generationKey: predecessorId ? `${key}:after:${predecessorId}` : key,
+  };
+}
+
 export interface LeaseLevellingResult {
   leaseId: string;
   leaseNumber: string;
@@ -1174,17 +1190,10 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
       const ids = billRows.map((row) => row.id);
       const key = billingKey(leaseId, ids);
       const first = billRows[0]!;
-      const prior = (await db.execute<{ id: string; status: string }>(sql`
-        select id,status from documents where org_id=${orgId} and kind='customer_invoice'
-          and (custom->'propertyManagement'->>'billingKey'=${key}
-            or custom->'propertyManagement'->>'originalBillingKey'=${key})
-        order by created_at desc,id desc`));
-      let invoiceId = prior.rows.find(row => row.status !== 'voided')?.id;
-      // The predecessor keeps its globally unique billing key and immutable
-      // provenance. A replacement gets a deterministic key for this generation;
-      // the locked schedule remains the single reservation across generations.
-      const predecessorId = prior.rows[0]?.id;
-      const generationKey = predecessorId ? `${key}:after:${predecessorId}` : key;
+      const generation = await propertyBillingGeneration(orgId, key, "customer_invoice");
+      let invoiceId = generation.documentId;
+      // Posted predecessors retain their keys; replacements link each generation.
+      const { predecessorId, generationKey } = generation;
       if (!invoiceId) {
         // Stored schedule lines and an existing invoice stay. Copying an
         // inventory / assembly / kit item onto a new invoice is Inventory configuration.
@@ -1617,13 +1626,17 @@ export async function reopenFinalizedCamPool(orgId: string, actorId: string, poo
   if (!correctionReason) throw new PropertyManagementError("CAM correction reason is required");
   await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
-    const result = (await tx.execute<{ name: string; status: string; billed: boolean }>(sql`
-      select cp.name,cp.status,exists(select 1 from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id and a.invoice_document_id is not null) as billed
+    const result = (await tx.execute<{ name: string; status: string }>(sql`
+      select cp.name,cp.status
       from cam_pools cp where cp.org_id=${orgId} and cp.id=${poolId} for update
     `));
     const pool = result.rows[0];
     if (!pool || pool.status !== "finalized") throw new PropertyManagementError("Finalized CAM pool not found");
-    if (pool.billed) throw new PropertyManagementError("An invoiced CAM pool is immutable; correct the tenant documents and create a supplemental pool");
+    // A subquery evaluated before the pool lock wait can miss the biller that
+    // just committed. Read dependencies in a new statement after owning the lock.
+    const billed = (await tx.execute(sql`select id from cam_allocations
+      where org_id=${orgId} and pool_id=${poolId} and invoice_document_id is not null limit 1`));
+    if (billed.rows.length) throw new PropertyManagementError("An invoiced CAM pool is immutable; correct the tenant documents and create a supplemental pool");
     await tx.execute(sql`delete from cam_allocations where org_id=${orgId} and pool_id=${poolId}`);
     await tx.execute(sql`update cam_pools set status='open',actual_amount=null,finalized_at=null,finalized_by=null,updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${poolId}`);
     await audit(tx, orgId, "cam_pools", poolId, "reopen", actorId, { reason: correctionReason, before: { status: "finalized" }, after: { status: "open" }, name: pool.name });
@@ -1771,25 +1784,42 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
 export async function billCamReconciliation(orgId: string, actorId: string, poolId: string, invoiceDate?: string): Promise<{ documents: string[] }> {
   const date = validDate(invoiceDate ?? await businessToday(orgId), "CAM invoice date")!;
   await assertEnabled(db, orgId);
-  const allocations = (await db.execute<CamAllocationDbRow>(sql`select a.id,a.reconciliation_amount as amount,a.lease_id,l.tenant_id,l.lease_number,l.payment_terms_days,
-    p.subsidiary_id,p.location_id,p.currency,p.cam_income_account_id,cp.name from cam_allocations a join cam_pools cp on cp.id=a.pool_id and cp.org_id=a.org_id
-    join property_leases l on l.id=a.lease_id and l.org_id=a.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
-    where a.org_id=${orgId} and a.pool_id=${poolId} and cp.status='finalized' and a.invoice_document_id is null and a.reconciliation_amount<>0 order by l.lease_number`));
+  // Discovery supplies identities only. Pool reopening and billing share the
+  // pool lock, and complete invoice inputs are read under source/config locks.
+  const allocations = (await db.execute<{ id: string }>(sql`
+    select a.id from cam_allocations a join cam_pools cp on cp.id=a.pool_id and cp.org_id=a.org_id
+    where a.org_id=${orgId} and a.pool_id=${poolId} and cp.status in ('finalized','invoiced')
+      and a.invoice_document_id is null and a.reconciliation_amount<>0 order by a.id`));
   const documents: string[] = [];
-  for (const row of allocations.rows) {
+  for (const candidate of allocations.rows) {
     await withOrgTransaction(orgId, async () => {
-      const locked = (await db.execute<{ id: string }>(sql`select id from cam_allocations where org_id=${orgId} and id=${row.id} and invoice_document_id is null for update`));
-      if (!locked.rows[0]) return;
+      const pool = (await db.execute(sql`select id from cam_pools where org_id=${orgId} and id=${poolId}
+        and status in ('finalized','invoiced') for update`));
+      if (!pool.rows[0]) return;
+      await assertEnabled(db, orgId);
+      const locked = (await db.execute<CamAllocationDbRow>(sql`
+        select a.id,a.reconciliation_amount as amount,a.lease_id,l.tenant_id,l.lease_number,l.payment_terms_days,
+          p.subsidiary_id,p.location_id,p.currency,p.cam_income_account_id,cp.name
+        from cam_allocations a join cam_pools cp on cp.id=a.pool_id and cp.org_id=a.org_id
+        join property_leases l on l.id=a.lease_id and l.org_id=a.org_id
+        join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
+        where a.org_id=${orgId} and a.pool_id=${poolId} and a.id=${candidate.id}
+          and a.invoice_document_id is null and a.reconciliation_amount<>0
+        for update of a for share of l,p`));
+      const row = locked.rows[0];
+      if (!row) return;
       if (!row.cam_income_account_id) throw new PropertyManagementError("Configure the property CAM income account first");
       const credit = cmp(row.amount, "0") < 0; const amount = credit ? neg(row.amount) : row.amount; const key = `cam:${poolId}:${row.id}`;
-      const prior = (await db.execute<{ id: string }>(sql`select id from documents where org_id=${orgId} and custom->'propertyManagement'->>'billingKey'=${key}`));
-      let documentId = prior.rows[0]?.id;
+      const generation = await propertyBillingGeneration(orgId, key, credit ? "customer_credit" : "customer_invoice");
+      let documentId = generation.documentId;
       if (!documentId) {
         const generated = await createSubscriptionInvoice({ orgId, actorId, customerId: row.tenant_id, subsidiaryId: row.subsidiary_id, locationId: row.location_id,
           currency: row.currency, incomeAccountId: row.cam_income_account_id, itemId: null, taxCodeId: null, description: `${row.name} CAM reconciliation`,
           quantity: "1", unitPrice: amount, memo: `${row.lease_number} · ${row.name}`, invoiceDate: date,
           dueDate: credit ? null : addDays(date, row.payment_terms_days), autoPost: false, applyTax: false, documentKind: credit ? "customer_credit" : "customer_invoice",
-          custom: { propertyManagement: { billingKey: key, poolId, allocationId: row.id, leaseId: row.lease_id, kind: "cam_reconciliation" } } });
+          custom: { propertyManagement: { billingKey: generation.generationKey, originalBillingKey: key,
+            ...(generation.predecessorId ? { predecessorInvoiceId: generation.predecessorId } : {}),
+            poolId, allocationId: row.id, leaseId: row.lease_id, kind: "cam_reconciliation" } } });
         documentId = generated.invoiceId;
       }
       await db.execute(sql`update cam_allocations set invoice_document_id=${documentId},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${row.id} and invoice_document_id is null`);

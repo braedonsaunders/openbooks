@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
+import { compareDecimal } from "../../../lib/exact-decimal";
 import { Empty, Small, Status } from "./workspace-ui";
 import type { CamPool, Money, PropertyAction, PropertyWorkspace } from "./types";
 
@@ -128,7 +129,9 @@ export function CamTable({
                     Reopen for correction
                   </Button>
                 ) : null}
-                {permissions.bill && pool.status === "finalized" ? (
+                {permissions.bill && (pool.status === "finalized" || (pool.status === "invoiced" && allocations.some(
+                  allocation => !allocation.invoiceDocumentId && allocation.reconciliationAmount != null && compareDecimal(allocation.reconciliationAmount, "0") !== 0,
+                ))) ? (
                   <Button
                     size="sm"
                     disabled={busy}

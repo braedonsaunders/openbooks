@@ -84,3 +84,21 @@ test("CAM amount helper keeps organization-base formatting when no property curr
   assert.equal(formatCamAmount("900.1234567890", money), "ORG:900.1234567890");
   assert.deepEqual(calls, [{ value: "900.1234567890", options: undefined }]);
 });
+
+test("an invoiced CAM pool exposes replacement billing only for released nonzero allocations", () => {
+  for (const [amount, invoice, expected] of [
+    ["100.0000", null, true], ["-100.0000", null, true],
+    ["0.0000", null, false], ["100.0000", "existing-invoice", false],
+  ] as const) {
+    const data = structuredClone(workspace);
+    data.camPools[0]!.status = "invoiced";
+    data.camAllocations[0]!.reconciliationAmount = amount;
+    data.camAllocations[0]!.invoiceDocumentId = invoice;
+    const html = renderToStaticMarkup(createElement(CamTable, {
+      data, money: value => String(value), busy: false,
+      permissions: { manage: false, account: false, bill: true }, act: async () => null,
+    }));
+    assert.equal(html.includes("Create true-ups"), expected);
+    assert.equal(html.includes("Reopen for correction"), false);
+  }
+});

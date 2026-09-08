@@ -5,7 +5,7 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "./transaction-audit.ts";
-import { releaseBillingProvenance, releaseVendorBillProvenance } from "./billing-provenance.ts";
+import { releaseCamBillingProvenance, releaseBillingProvenance, releaseVendorBillProvenance } from "./billing-provenance.ts";
 
 /**
  * Physical deletion is intentionally limited to drafts. Once a document has
@@ -58,6 +58,9 @@ export async function deleteDocument(
     const before = await captureTransactionAuditSnapshot(tx, documentId, orgId);
     if (!before) throw new DeleteError("document not found");
 
+    if (doc.kind === "customer_invoice" || doc.kind === "customer_credit") {
+      await releaseCamBillingProvenance(tx, doc.orgId, documentId, { actorId: userId, reason: audit.reason?.trim() || "draft_discarded" });
+    }
     if (doc.kind === "customer_invoice") {
       await releaseBillingProvenance(tx, doc.orgId, documentId, { actorId: userId, reason: audit.reason?.trim() || "draft_discarded" });
     }

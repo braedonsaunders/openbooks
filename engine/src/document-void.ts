@@ -16,7 +16,7 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "./transaction-audit.ts";
-import { releaseBillingProvenance, releaseVendorBillProvenance } from "./billing-provenance.ts";
+import { releaseCamBillingProvenance, releaseBillingProvenance, releaseVendorBillProvenance } from "./billing-provenance.ts";
 
 export class DocumentVoidError extends Error {
   constructor(message: string, readonly status = 422) { super(message); }
@@ -448,6 +448,9 @@ export async function completeRequestedDocumentVoid(
         }
       }
 
+      if (String(doc.kind) === "customer_invoice" || String(doc.kind) === "customer_credit") {
+        await releaseCamBillingProvenance(tx, orgId, documentId, { actorId: String(doc.void_requested_by), reason: String(doc.void_reason) });
+      }
       if (String(doc.kind) === "customer_invoice") {
         await releaseBillingProvenance(tx, orgId, documentId, { actorId: String(doc.void_requested_by), reason: String(doc.void_reason) });
       }
