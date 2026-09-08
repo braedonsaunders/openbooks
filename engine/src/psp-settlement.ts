@@ -5,6 +5,7 @@ import { assertPeriodModulesOpen } from "./close.ts";
 import { cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
 import { sealJson } from "./secrets.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
+import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
  * PSP settlement import — Stripe / Recurly / Chargebee payout batches post
@@ -340,10 +341,11 @@ export function parseChargebeeSettlement(payload: {
 
 async function primaryBookId(orgId: string): Promise<string> {
   const r = (await db.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary limit 1
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl
+     limit 1 for share
   `));
   const id = r.rows[0]?.id;
-  if (!id) throw new PspSettlementError("no primary accounting book");
+  if (!id) throw new PspSettlementError("no active primary posting book");
   return id;
 }
 
@@ -527,12 +529,9 @@ export async function postSettlementBatch(
         external_ref: string;
         memo: string | null;
         journal_entry_id: string | null;
-        subsidiary_base_currency: string | null;
       }>(sql`
-      select b.*, s.base_currency as subsidiary_base_currency
+      select b.*
         from psp_settlement_batches b
-        left join subsidiaries s
-          on s.id = b.subsidiary_id and s.org_id = b.org_id
        where b.id = ${batchId} and b.org_id = ${orgId}
        for update of b
     `));
@@ -557,19 +556,24 @@ export async function postSettlementBatch(
         "bank, clearing, fee accounts and subsidiary are required to post",
       );
     }
-    if (!b.subsidiary_base_currency) {
+    const controls = (await db.execute<{ c: Record<string, string> | null }>(sql`
+      select settings->'controlAccounts' as c from orgs where id = ${orgId} for share
+    `));
+    const c = controls.rows[0]?.c ?? {};
+    // Keep hierarchy and functional currency stable through validation and posting.
+    await db.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
+    const ctx = await loadSubsidiaryContext(db, orgId);
+    const subsidiary = ctx.byId.get(b.subsidiary_id);
+    if (!subsidiary?.baseCurrency) {
       throw new PspSettlementError("settlement subsidiary is missing");
     }
-    if (b.currency !== b.subsidiary_base_currency) {
+    if (!subsidiary.isActive) throw new PspSettlementError(`subsidiary "${subsidiary.name}" is inactive`);
+    if (b.currency !== subsidiary.baseCurrency) {
       throw new PspSettlementError(
-        `cross-currency PSP settlement ${b.currency}→${b.subsidiary_base_currency} requires explicit rate and functional-currency evidence`,
+        `cross-currency PSP settlement ${b.currency}→${subsidiary.baseCurrency} requires explicit rate and functional-currency evidence`,
       );
     }
 
-    const controls = (await db.execute<{ c: Record<string, string> | null }>(sql`
-      select settings->'controlAccounts' as c from orgs where id = ${orgId}
-    `));
-    const c = controls.rows[0]?.c ?? {};
     const fxAcct = b.fx_account_id ?? c.fxRealizedGainLoss ?? null;
     if (!isZero(b.fx_amount) && !fxAcct) {
       throw new PspSettlementError(
@@ -656,6 +660,20 @@ export async function postSettlementBatch(
       throw new PspSettlementError(
         `settlement journal does not balance: ${fromUnits(bal)}`,
       );
+
+    const accountIds = [...new Set(jlines.map((line) => line.accountId))];
+    await db.execute(sql`select id from accounts where org_id=${orgId}
+      and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+    const subsidiaryId = b.subsidiary_id;
+    try {
+      await validateSubsidiaryRestrictions(db, {
+        orgId, ctx, docSubsidiaryId: subsidiaryId,
+        lines: jlines.map((line) => ({ ...line, subsidiaryId })),
+      });
+    } catch (error) {
+      if (error instanceof SubsidiaryError) throw new PspSettlementError(error.message);
+      throw error;
+    }
 
     const entryId = randomUUID();
     const entryNumber =

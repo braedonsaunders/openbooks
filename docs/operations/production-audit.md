@@ -3439,3 +3439,22 @@ production build passed. Full lint has zero errors and 709 warnings; removing
 an unused import lowers the enforced warning ceiling accordingly. Evidence:
 `audit-project-time-feature-gate-2026-09-08/before.log`, `overhead-before.log`,
 `focused.log`, `typecheck.log`, `unit.log`, `build.log`, and `lint-full.log`.
+
+## Payment-provider settlement posting policy — 2026-09-08
+
+Four real database regressions showed that a settlement could post to an
+account restricted to a different entity, an inactive subsidiary, an inactive
+primary book, or a primary book with GL posting disabled. The forward service
+now requires an active primary posting book, holds the organization policy,
+subsidiary hierarchy and selected accounts, and uses the shared entity
+restriction validator before inserting a journal. Currency is read from the
+locked hierarchy. Policy refusals retain the PSP domain error contract.
+
+All 37 focused settlement, subsidiary and HTTP boundary checks passed
+(6,073.205667 ms, zero failures/skips); engine typecheck and changed-file lint
+passed. Tests verify draft/source preservation, no journal fragments, valid
+parent-to-child account use, retry idempotency, and an account restriction
+committing while posting waits. Existing exact-source reversal tests pass.
+Evidence: `audit-psp-posting-policy-2026-09-08/before.log`, `focused-final.log`,
+`typecheck-final.log`, and `lint.log`. The separately running full integration
+checkpoint is frozen at e52f1367 and therefore excludes this later change.
