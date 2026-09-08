@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal, fixedDecimal } from "./exact-decimal.ts";
-import { db, type SqlExecutor, withOrg } from "./db.ts";
+import { db, type SqlExecutor, withOrg, withTransactionSavepoint } from "./db.ts";
 import { add, cmp, fromUnits, isZero, mulPercent, neg, roundDiv, sum, toUnits } from "./money.ts";
 import {
   periodInterest,
@@ -1453,7 +1453,7 @@ export async function runRevenueRecognition(
 
   for (const candidate of due) {
     try {
-      const posted = await db.transaction(async (tx) => {
+      const posted = await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
         // Rebuilds, event writes and cancellation share this aggregate lock.
         // Nothing from the preliminary scan is a financial posting input.
         const obligation = await tx.execute<{ id: string }>(sql`
@@ -1544,7 +1544,7 @@ export async function runRevenueRecognition(
            where id = ${row.line_id} and org_id = ${orgId}`);
 
         return { status: "posted" as const, entryId: eid, planned, row };
-      });
+      }));
       if (posted.status === "already_posted" || posted.status === "zero") {
         result.skipped++;
         continue;

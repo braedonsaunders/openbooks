@@ -3210,3 +3210,26 @@ explicit-any node; the enforced limits are now 379 explicit-any / 711 warnings.
 Evidence: `audit-revenue-posting-snapshot-2026-09-07/before.log`,
 `final-regressions.log`, `unit.log`, `typecheck.log`, `typecheck-final.log`,
 `lint-full.log`, and `build.log`.
+
+## Recognition failure isolation inside tenant transactions — 2026-09-08
+
+Nested `db.transaction` calls deliberately join the caller's tenant transaction.
+A caught recognition-line SQL failure therefore left that transaction aborted:
+the summary query failed and unrelated caller changes were lost. A regression
+injects a failure after the first journal leg and reproduces PostgreSQL 25P02.
+
+Recognition now wraps each posting unit in an explicit savepoint. A failed
+draft and all its lines roll back together; subsequent valid lines and the
+caller's unrelated writes can commit. The shared helper requires an already
+open transaction and uses unique names so nested savepoints remain independent.
+Ordinary transaction participation is unchanged.
+
+All 61 focused recognition, cancellation, tenant-context and RLS checks passed
+(20,713.468084 ms, no skips). Tests verify partial-journal removal, continuation,
+caller-write preservation, and independently caught nested application errors.
+All 3,210 unit tests passed (103,226.99225 ms, no skips), workspace typechecks
+and changed-file lint passed, and the production build with locked dependencies
+passed. Evidence:
+`audit-revenue-ambient-rollback-2026-09-08/regression-before.log`,
+`focused-final.log`, `unit.log`, `typecheck-final.log`, `lint-final.log`, and
+`build.log`.

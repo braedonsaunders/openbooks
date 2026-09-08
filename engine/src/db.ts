@@ -1,8 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { sql } from "drizzle-orm";
 import pg from "pg";
 import * as schema from "@openbooks/schema";
 import { resolveDatabaseEnvironment } from "./db-environment.ts";
@@ -506,6 +508,29 @@ type DbTransaction = Parameters<Parameters<typeof poolDb.transaction>[0]>[0];
  * the row generic intact, so `executor.execute<Row>(sql`…`)` is typed end to end.
  */
 export type SqlExecutor = { execute: typeof poolDb.execute };
+
+/**
+ * Isolate a unit whose caller intentionally catches failures inside an already
+ * open transaction. Ordinary nested transaction participation remains unchanged.
+ * Unique names keep nested uses independent; rollback removes partial writes
+ * and clears PostgreSQL's aborted state before the original error is rethrown.
+ */
+export async function withTransactionSavepoint<T>(
+  runner: SqlExecutor,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const name = sql.identifier(`openbooks_${randomUUID().replaceAll("-", "")}`);
+  await runner.execute(sql`savepoint ${name}`);
+  try {
+    const result = await fn();
+    await runner.execute(sql`release savepoint ${name}`);
+    return result;
+  } catch (error) {
+    await runner.execute(sql`rollback to savepoint ${name}`);
+    await runner.execute(sql`release savepoint ${name}`);
+    throw error;
+  }
+}
 
 /**
  * Run one database transaction, reusing the transaction pinned by an org
