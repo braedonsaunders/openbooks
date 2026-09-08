@@ -4035,3 +4035,38 @@ Additional probes found no stock-consumption rollback defect in the tested issue
 and assembly-build refusals. Separately, real audit-storage failures leave role
 creation and editing committed without audit evidence; those API findings are
 under active remediation (`audit-role-write-atomicity-2026-09-08`).
+
+### Role writes preserve audit evidence and current grant authority (2026-09-08)
+
+Real storage-failure probes confirmed that role creation and editing committed
+before their audit writes. Both now share a tenant transaction and savepoint with
+their audit evidence; creation includes dashboard defaults. Deletion uses the same
+savepoint boundary. Caught failures preserve earlier caller work.
+
+Two controlled PostgreSQL races also reproduced permission escalation: a stale
+edit restored a concurrently removed permission, and deletion assigned users a
+replacement role that had widened after preflight. Editing now locks the role
+before computing permission additions. Deletion locks both role records in UUID
+order before checking the replacement ceiling and granting assignments.
+
+Five malformed text-field probes threw server errors; these now return 400 before
+writes. Subsidiary restrictions normalize UUID case and deduplicate equivalent
+IDs, while still refusing subsidiaries in another organization. Role IDs and
+self-replacement checks also use UUID identity consistently.
+
+Validation: 35/35 focused role/user/dashboard/permission checks passed
+(58,028.295583 ms), including six audit-failure scenarios, two real permission
+races, unchanged refusal evidence, successful retries, malformed input and
+cross-tenant scope checks. Workspace typechecks, changed-file lint without
+warnings, whitespace checks and the locked production build passed. The complete
+unit run passed 3,208 of 3,210 checks; its two failures correctly detected that
+three removed explicit-any annotations had left the quality limits too high.
+The limits were tightened to 375 explicit anys and 706 lint warnings, and all
+22 CI-integrity checks then passed (47,855.845542 ms), including a full lint run.
+No checks were skipped. Evidence: `audit-role-write-atomicity-2026-09-08`.
+
+The adjacent user-management audit has confirmed uppercase-UUID self-action and
+unassignment defects, a role-grant permission race, lost ambient caller work on
+audit failure, and concurrent deletion/unassignment leaving an active user with
+zero roles. These remain under active remediation; this checkpoint does not
+claim their resolution (`audit-user-role-control-2026-09-08`).
