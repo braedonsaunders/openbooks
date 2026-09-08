@@ -3672,3 +3672,26 @@ primary-book replacement, mixed-entity settlement, scope and remittances.
 Engine typecheck and changed-file ESLint passed. Private before/after evidence:
 `audit-payroll-payment-book-policy-2026-09-08`. The full integration checkpoint
 running at `0083b76c` predates this fix and is not validation of this change.
+
+### NRV valuation legal-entity policy (2026-09-08)
+
+Confirmed on `c86fd5de`: both inventory NRV write-downs and IFRS recoveries
+posted through an asset account restricted to another legal entity, and also
+posted for an inactive stock-owning subsidiary. Four corrected real PostgreSQL
+regressions failed with “Missing expected rejection.” An initial inactive-root
+fixture was invalid (the database correctly prohibits that state); the evidence
+uses a valid child owner instead.
+
+Both operations now hold the subsidiary hierarchy through commit and validate
+their accounts under shared row locks using the existing subsidiary validator.
+Recovery resolves currency and posting context inside the transaction after
+taking those locks. The existing operation savepoint preserves all owners'
+layers, journals and recovery headroom when a caller catches a refusal,
+including when a later owner fails after an earlier owner's work began.
+
+Validation: 24/24 focused inventory/NRV checks passed (7,918.20925 ms), including
+five new policy cases, mixed-owner atomic refusal, restored-policy success,
+source-cost recovery ceilings, exact fractional valuation and disabled-book
+controls. Workspace typechecks, changed-file ESLint and `git diff --check`
+passed. Private evidence: `audit-nrv-posting-policy-2026-09-08`. The running
+`0083b76c` full integration archive predates this fix.
