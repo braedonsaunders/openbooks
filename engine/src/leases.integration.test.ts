@@ -328,3 +328,36 @@ test("lease posting rechecks account scope after a concurrent restriction edit c
     await dropScratchOrg(org.orgId);
   }
 });
+
+for (const phase of ["commencement", "payment"] as const) {
+  for (const flag of ["is_active", "posts_gl"] as const) {
+    test(`lease ${phase} refuses a primary book with ${flag} disabled`, { skip: !DB }, async () => {
+      const org = await createScratchOrg();
+      try {
+        const accounts = await seedLeaseAccounts(org);
+        const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+          subsidiaryId: org.subsidiaryId, leaseNumber: "LEASE-BOOK-POLICY",
+          commencementOn: "2026-07-01", termPeriods: 3, paymentFrequency: "monthly",
+          paymentAmount: "1000", annualDiscountRatePercent: "6",
+          classificationInputs: { transfersOwnership: true }, accounts,
+        });
+        if (phase === "payment") await commenceLease(org.orgId, leaseId, null);
+        await db.execute(sql`update accounting_books set ${sql.raw(flag)}=false
+          where org_id=${org.orgId} and id=${org.bookId}`);
+        const run = () => phase === "commencement"
+          ? commenceLease(org.orgId, leaseId, null)
+          : postDueLeaseSchedules(org.orgId, "2026-07-31", null);
+        await assert.rejects(run(), /active primary posting book/);
+        const state = (await db.execute<{ status: string; journals: number; claimed: number }>(sql`
+          select status,(select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
+            (select count(*)::int from lease_agreement_schedule_lines where org_id=${org.orgId}
+              and lease_id=${leaseId} and payment_entry_id is not null) as claimed
+          from lease_agreements where org_id=${org.orgId} and id=${leaseId}`)).rows[0]!;
+        assert.deepEqual(state,{status:phase === "payment" ? "active" : "draft",journals:phase === "payment" ? 1 : 0,claimed:0});
+        await db.execute(sql`update accounting_books set ${sql.raw(flag)}=true
+          where org_id=${org.orgId} and id=${org.bookId}`);
+        await run();
+      } finally { await dropScratchOrg(org.orgId); }
+    });
+  }
+}
