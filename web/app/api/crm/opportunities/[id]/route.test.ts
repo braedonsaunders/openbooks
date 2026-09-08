@@ -151,7 +151,7 @@ const mockSources = new Map<string, string>([
           }
           if (text.includes('from parties') || text.includes('from contacts') || text.includes('from users') || text.includes('from crm_sales_teams') || text.includes('from crm_lead_sources') || text.includes('from currencies') || text.includes('from items')) {
             if (state.txInvalidReference && text.includes('from ' + state.txInvalidReference)) return { rows: [] }
-            return { rows: [{ ok: 1 }] }
+            return { rows: [{ ok: 1, is_active: true }] }
           }
           if (text.includes('update crm_opportunities')) {
             const before = { ...(state.opportunity || {}) }

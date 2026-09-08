@@ -14,6 +14,8 @@ import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/
 
 export const runtime = 'nodejs'
 
+class PartyLifecycleError extends Error {}
+
 const PARTY_KINDS = ['company', 'person'] as const
 const PAYMENT_METHODS = ['eft', 'cheque', 'card', 'cash', 'other'] as const
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -286,27 +288,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.roles?.vendor !== undefined && vendorOnHold && (vendorHoldReason?.length ?? 0) < 5) {
     return bad('Vendor payment hold requires a reason of at least 5 characters')
   }
-  if (body.isActive === false && existingParty.is_active) {
-    const live = await db.execute<{
-      in_flight: number
-      open_balance_count: number
-    }>(sql`
-      select
-        count(*) filter (
-          where status in ('pending_approval', 'approved')
-        )::int as in_flight,
-        count(*) filter (
-          where status = 'posted' and coalesce(open_balance, 0) <> 0
-        )::int as open_balance_count
-        from documents
-       where org_id = ${user.orgId} and party_id = ${id}
-    `)
-    const row = live.rows[0]
-    if ((row?.in_flight ?? 0) > 0 || (row?.open_balance_count ?? 0) > 0) {
-      return bad('resolve in-flight transactions and open balances before deactivating this party')
-    }
-  }
-
   // -- identity ------------------------------------------------------------
   if (body.kind !== undefined && !PARTY_KINDS.includes(body.kind as (typeof PARTY_KINDS)[number])) {
     return bad('kind must be company or person')
@@ -361,6 +342,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   try {
     await db.transaction(async (tx) => {
+      if (body.isActive === false && existingParty.is_active) {
+        // Opportunity writers lock this same account before assigning or
+        // activating work. Check dependencies only after that lock settles.
+        const locked = await tx.execute(sql`
+          select id from parties where id=${id} and org_id=${user.orgId}
+            and updated_at=${body.expectedUpdatedAt}::timestamptz for update`)
+        if (!locked.rows.length) throw new PartyPatchConflictError()
+        const live = await tx.execute<{ documents: boolean; opportunities: boolean }>(sql`
+          select exists (
+            select 1 from documents where org_id=${user.orgId} and party_id=${id}
+              and (status in ('pending_approval','approved') or (status='posted' and coalesce(open_balance,0)<>0))
+          ) as documents, exists (
+            select 1 from crm_opportunities o
+            join crm_opportunity_statuses s on s.id=o.status_id and s.org_id=o.org_id
+            where o.org_id=${user.orgId} and o.party_id=${id} and o.is_active and not s.is_closed
+          ) as opportunities`)
+        if (live.rows[0]?.documents) throw new PartyLifecycleError('resolve in-flight transactions and open balances before deactivating this party')
+        if (live.rows[0]?.opportunities) throw new PartyLifecycleError('resolve open opportunities before deactivating this party')
+      }
       const updatedParty = await tx.execute<{ id: string }>(sql`
       update parties set
         kind = coalesce(${body.kind ?? null}, kind),
@@ -692,6 +692,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   } catch (e: unknown) {
     if (e instanceof PartyPatchValidationError) return e.response
+    if (e instanceof PartyLifecycleError) return bad(e.message)
     if (e instanceof PartyPatchConflictError) {
       return NextResponse.json(
         {
