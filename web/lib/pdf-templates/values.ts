@@ -232,11 +232,11 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
 
 /** Load + format the merge values for one record. Null when not found. */
 async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
-  const r = (await db.execute<Record<string, any>>(sql`
-    select s.*, r.period_start, r.period_end, d.document_number,
+  const r = (await db.execute<Record<string, unknown>>(sql`
+    select s.*, r.period_start, r.period_end, d.document_number, d.subsidiary_id,
            p.display_name as employee_name, p.email as employee_email
       from pay_stubs s
-      join pay_runs r on r.document_id = s.pay_run_document_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
       join documents d on d.id = r.document_id and d.org_id = r.org_id
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.id = ${id} and s.org_id = ${orgId}
@@ -245,7 +245,7 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
   if (!stub) return null
 
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
-  const { money } = createMoneyFormatter(locale, stub.currency_code ?? org.base_currency)
+  const { money } = createMoneyFormatter(locale, String(stub.currency_code ?? org.base_currency))
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.kind, l.description, l.hours, l.rate, l.amount
@@ -254,7 +254,9 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
      order by l.sequence
   `))
 
-  // YTD across committed runs up to and including this stub's pay date.
+  // YTD for this employer and currency through the stub's pay date. An
+  // employee transfer must not disclose another legal entity's payroll, and
+  // monetary totals cannot add a different currency into this printed amount.
   const ytd = (await db.execute<{ gross: string; net: string; tax: string }>(sql`
     select coalesce(sum(s.gross), 0) as gross, coalesce(sum(s.net_pay), 0) as net,
            coalesce(sum(
@@ -264,8 +266,11 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
            ), 0) as tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join documents d on d.id = r.document_id and d.org_id = r.org_id and d.kind = 'pay_run'
      where s.org_id = ${orgId} and s.employee_party_id = ${stub.employee_party_id}
        and s.tax_year = ${stub.tax_year} and s.pay_date <= ${stub.pay_date}
+       and d.subsidiary_id is not distinct from ${stub.subsidiary_id}
+       and s.currency_code = ${stub.currency_code}
   `))
 
   const byKind = (kind: string) => lines.rows
@@ -316,12 +321,12 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
  * that the ledger cannot match. `issuePayRunCheques` allocates first.
  */
 async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
-  const r = (await db.execute<Record<string, any>>(sql`
-    select s.*, r.period_start, r.period_end, d.document_number,
+  const r = (await db.execute<Record<string, unknown>>(sql`
+    select s.*, r.period_start, r.period_end, d.document_number, d.subsidiary_id,
            p.display_name as employee_name,
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country
       from pay_stubs s
-      join pay_runs r on r.document_id = s.pay_run_document_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
       join documents d on d.id = r.document_id and d.org_id = r.org_id
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
       left join lateral (
@@ -335,7 +340,7 @@ async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRe
   if (!stub) return null
 
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
-  const { money } = createMoneyFormatter(locale, stub.currency_code ?? org.base_currency)
+  const { money } = createMoneyFormatter(locale, String(stub.currency_code ?? org.base_currency))
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.kind, l.description, l.hours, l.rate, l.amount
@@ -560,8 +565,8 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
  * `scope` is the caller's allowedSubsidiaryIds: the sample is the most recent
  * record INSIDE that scope (the same predicate the record lists apply), so a
  * restricted designer never previews a hidden legal entity's record. Types
- * without a resolvable subsidiary (pay stubs) fail closed for any restricted
- * caller, exactly as the print route's own scope decision does.
+ * inherit the owning document's subsidiary; pay stubs use the original pay-run
+ * document, exactly as the print/email scope resolver does.
  */
 export async function findSamplePdfRecordId(
   recordType: string,
@@ -578,11 +583,13 @@ export async function findSamplePdfRecordId(
     return r.rows[0]?.id ?? null
   }
   if (meta.key === 'pay_stub' || meta.key === 'payroll_cheque') {
-    if (scope !== null) return null
     const r = (await db.execute<{ id: string }>(sql`
-      select id from pay_stubs where org_id = ${orgId}
-         and (${meta.key === 'pay_stub'} or cheque_number is not null)
-       order by created_at desc limit 1
+      select s.id from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id and d.kind = 'pay_run'
+       where s.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
+         and (${meta.key === 'pay_stub'} or (s.payment_method = 'cheque' and s.cheque_number is not null))
+       order by s.created_at desc, s.id desc limit 1
     `))
     return r.rows[0]?.id ?? null
   }

@@ -2632,3 +2632,47 @@ bootstrap/teardown/verification cycles, no leaks. Lint reports zero errors and
 regression drives receipt, replay, over-receipt refusal, receipt-governed
 billing, price variance, replay of the posting-effect drain and the
 no-clearing-account refusal end to end against the real posting engine.
+
+## Payroll PDF ownership and year-to-date isolation — 2026-09-07
+
+The pending commits through `a564b7a9` were verified with a fresh 3,209-test unit
+run (284,927.055333 ms, no failures or skips) and pushed normally to main. The
+previous `b64b0736` full integration run also completed: 2,301 passed, no failures
+or skips (1,149,000.970791 ms), with 1,901 balanced fixture leases/releases/resets,
+four bootstrap/teardown/verification cycles, no active leases and no leaks.
+
+The named pay-stub PDF gap was reproduced for both stubs and payroll cheques.
+Their shared print/email scope resolver returned a null subsidiary because the
+catalog types have no direct document kind; every subsidiary-restricted reader
+was refused, including one who owned the pay run. Template previews similarly
+returned no real payroll sample for any restricted designer. Both now resolve
+the tenant-bound pay-run document's subsidiary. A later employee transfer does
+not change the original payroll's ownership, and hidden, foreign and missing
+records remain refused.
+
+Tracing that newly accessible output exposed another defect: year-to-date
+amounts summed every committed stub for the employee across legal entities and
+currencies. A CAD 240 stub printed CAD 3,240 after including CAD 1,000 from another
+employer and USD 2,000. The value loader now limits YTD to the original pay-run
+entity and the stub's currency. The regression also includes another valid CAD
+60 stub for the same employer and proves it still accumulates: CAD 300 gross/net
+and CAD 15 tax, with the other entity/currency excluded. All print, preview,
+email and merged-run outputs share this loader.
+
+All 18 focused checks passed (14,276.224459 ms, zero skips), including real
+PostgreSQL ownership/transfer/sample/YTD cases and the existing print, send,
+preview and run-scope route tests. The two remaining untyped payroll row reads
+in this loader were replaced with unknown-valued rows and explicit currency
+conversion; quality ceilings were tightened by two. No schema migration,
+production data mutation or email delivery was needed. Evidence is under
+`audit-payroll-pdf-scope-2026-09-07`.
+
+Final validation passed all 3,209 unit tests (93,060.887959 ms; no failures or
+skips), workspace typechecks, changed-file lint and the production build using
+the exact locked dependencies. The route inventory assertion was updated to
+require payroll's document join and subsidiary predicate instead of the old
+blanket refusal. Canonical lint measured 720 warnings and explicit-any measured
+387; both ceilings match those counts. The broader audit remains open: a real
+two-book probe has reproduced statement export selecting primary-book revenue
+100 instead of the requested secondary-book revenue 700, and statement drill
+state also omits the selected book. Those are the next remediation slice.

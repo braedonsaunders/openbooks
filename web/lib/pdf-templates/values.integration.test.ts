@@ -60,8 +60,7 @@ test('findSamplePdfRecordId honours the caller subsidiary scope', { skip: !proce
     assert.equal(await findSamplePdfRecordId('customer_invoice', org.orgId, new Set()), null)
     assert.equal(await findSamplePdfRecordId('journal_entry', org.orgId, new Set()), null)
 
-    // Types without a resolvable subsidiary (pay stubs) fail closed for any
-    // restricted caller, matching the print route's own scope decision.
+    // This fixture contains no payroll records; neither payroll sample exists.
     assert.equal(await findSamplePdfRecordId('pay_stub', org.orgId, scope), null)
     assert.equal(await findSamplePdfRecordId('payroll_cheque', org.orgId, scope), null)
   } finally {
