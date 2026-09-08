@@ -3946,3 +3946,27 @@ evidence, re-enablement, an actual concurrent feature disable, and historical
 reversal. Workspace typechecks, changed-file lint without warnings, and whitespace
 checks passed. Evidence: `audit-inventory-movement-feature-2026-09-08`.
 The running full `66be48a8` archive predates these Inventory changes.
+
+### Payroll creation, calculation, and commit hold their feature gate (2026-09-08)
+
+Two direct-engine regressions confirmed successful calculation and commit after
+Payroll was explicitly disabled. Both now check and hold the authoritative
+organization feature before any run/evidence writes. Creation's existing check
+also uses the shared lock, closing the gap between reading the switch and creating
+the run. Preview/simulation share calculation's feature enforcement.
+
+Validation: 215/215 payroll integration, legacy control/entitlement, and web
+scope checks passed with no skips (153,308.983042 ms). Eight new cases cover
+disabled creation/calculation/dry-run/simulation/commit, preserved evidence,
+reenablement, and real concurrent disables of creation/calculation/commit.
+The ambient commit rollback regression now uses a late payroll-profile change:
+organization settings are protected by the new feature lock, while the independent
+profile still exercises the late freshness refusal. Workspace typechecks,
+3,210/3,210 unit tests (114,180.340459 ms), changed-file lint (zero errors, two
+existing warnings), whitespace checks, and the locked production build passed.
+These unit/build checks also include the preceding Inventory feature changes.
+Evidence: `audit-payroll-calculation-feature-2026-09-08`.
+
+Separately confirmed: standard-cost revaluation still bypasses disabled Inventory,
+and a caught missing-period/disabled-book refusal can leave repriced layers without
+balancing accounting. Those findings remain under active remediation.
