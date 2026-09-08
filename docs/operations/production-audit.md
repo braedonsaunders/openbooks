@@ -3490,3 +3490,24 @@ All 54 focused project, recognition and HTTP boundary checks passed
 passed. Evidence: `audit-project-revenue-concurrency-2026-09-08/before.log`,
 `focused.log`, `typecheck.log`, and `lint.log`. This prevents new duplicates in
 this service; no production data was inspected or rewritten.
+
+## Fixed-asset forward posting policy — 2026-09-08
+
+Ten real regressions demonstrated that disposal and remeasurement both
+accepted restricted adjustment accounts, restricted locations, inactive
+subsidiaries, inactive primary books and primary books with GL posting off.
+Both forward operations now require an active primary posting book and hold
+the subsidiary hierarchy before reading functional currency. A shared lifecycle
+helper holds all used accounts and dimensions and applies the native entity
+restriction validator before journal creation. Controlled historical reversals
+retain their exact-source behavior.
+
+All 47 focused lifecycle, date, reversal and arithmetic checks passed
+(10,530.574208 ms, no failures/skips), including unchanged asset status and no
+journal/event fragments after refusal, then successful posting after policy
+correction. All 3,210 unit tests passed (146,402.922125 ms, no skips), workspace
+typechecks and the locked-dependency production build passed, and full lint
+passed with zero errors and 709 warnings. These broad checks include the
+preceding settlement and project revenue fixes. Evidence:
+`audit-asset-lifecycle-posting-policy-2026-09-08/before.log`, `focused.log`,
+`unit.log`, `typecheck-full.log`, `build.log`, and `lint-full.log`.
