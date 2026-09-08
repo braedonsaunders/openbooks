@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withTransactionSavepoint } from "./db.ts";
 import { PayrollError } from "./payroll-error.ts";
+import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import {
   add, cmp, fromUnits, mulDecimal, mulPercent, mulRatio, neg, roundDiv, roundMoney, sum, toUnits,
 } from "./money.ts";
@@ -725,11 +726,7 @@ export async function createPayRun(input: {
 }): Promise<{ documentId: string; documentNumber: string }> {
   const { orgId, actorId } = input;
   return await db.transaction(async (tx) => {
-    const feature = (await tx.execute<{ enabled: boolean }>(sql`
-      select coalesce((settings->'features'->>'payroll')::boolean, false) as enabled
-        from orgs where id = ${orgId}
-    `));
-    if (!feature.rows[0]?.enabled) throw new PayrollError("Payroll feature is disabled");
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
     const s = (await tx.execute<(ScheduleRow & { subsidiary_id: string | null })>(sql`
       select id, frequency, periods_per_year, anchor_period_end, pay_date_offset_days, subsidiary_id
         from pay_schedules where org_id = ${orgId} and id = ${input.payScheduleId} and is_active
@@ -1582,6 +1579,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
   // db.transaction joins an ambient org transaction. Roll back our own writes
   // before calculatePayRun catches the preview signal and returns its result.
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
     const runRows = (await tx.execute<Record<string, string>>(sql`
       select r.*, d.status as doc_status, d.currency as doc_currency,
              d.subsidiary_id as doc_subsidiary_id,
@@ -3561,6 +3559,7 @@ export async function commitPayRun(input: {
   // A caller may catch the late freshness refusal inside its own transaction.
   // Restore our projection, liability stamps, and time claims before returning it.
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
     const runRows = (await tx.execute<Record<string, string>>(sql`
       select r.*, d.status as doc_status, d.subsidiary_id as subsidiary_id from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id

@@ -37,7 +37,7 @@ test("a caught late payroll commit refusal restores all evidence in an ambient t
       await blocker.query("select id from document_lines where org_id=$1 and id=$2 for update", [fx.orgId, line.id]);
       const pid = (await blocker.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
       pending = withOrgTransaction(fx.orgId, async () => {
-        await assert.rejects(commitPayRun(input), /inputs changed after it was last calculated \(settings\)/);
+        await assert.rejects(commitPayRun(input), /inputs changed after it was last calculated \(roster\)/);
         assert.deepEqual(await evidence(fx.orgId), before, "caught refusal must restore projection, liabilities, and time claims");
       }).then((value) => ({ status: "fulfilled", value }), (reason: unknown) => ({ status: "rejected", reason }));
       let blocked = false;
@@ -49,7 +49,9 @@ test("a caught late payroll commit refusal restores all evidence in an ambient t
       assert.ok(blocked, "commit must reach projection replacement after its initial freshness checks");
       await db.transaction(async (tx) => {
         await tx.execute(sql`set local lock_timeout='2s'`);
-        await tx.execute(sql`update orgs set updated_at=clock_timestamp() where id=${fx.orgId}`);
+        // Org settings are locked by the feature gate; a payroll profile is
+        // still an independent input whose late change must roll commit back.
+        await tx.execute(sql`update employee_payroll_profiles set updated_at=clock_timestamp() where org_id=${fx.orgId}`);
       });
       await blocker.query("commit");
       const result = await pending;
