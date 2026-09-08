@@ -3377,3 +3377,18 @@ settled branch, unchanged unpaid status/no draft fragments after refusals, and
 successful balanced payment after correction. Evidence:
 `audit-payroll-payment-bank-scope-2026-09-08/before.log`, `focused-final.log`,
 `typecheck.log`, and `lint.log`.
+
+## Project GL requires the authoritative posting book — 2026-09-08
+
+The project journal helper selected any active book, preferring the primary
+but silently falling back to the next code. It also ignored `posts_gl`. Three
+real regressions posted into an alternate posting book, an alternate forecast
+book, and a primary book with posting disabled.
+
+The helper now requires `is_primary`, `is_active` and `posts_gl`, and holds the
+book through the transaction. Missing eligibility produces a named refusal
+with no draft journal. Re-enabling the primary posts there even when an
+alternate sorts first. All ten focused GL, concurrency and recognition checks
+passed (3,633.589083 ms, no failures/skips); engine typecheck and changed-file
+lint passed. Evidence: `audit-project-gl-book-policy-2026-09-08/before.log`,
+`focused.log`, `typecheck.log`, and `lint.log`.

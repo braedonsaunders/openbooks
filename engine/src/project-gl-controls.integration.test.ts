@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
@@ -173,3 +174,34 @@ test(
     }
   },
 );
+
+for (const mode of ["secondary posting", "secondary forecast", "primary forecast"] as const) {
+  test(`project GL refuses implicit ${mode} book selection`, { skip: !DB }, async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const alternate = randomUUID();
+      await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
+        values(${alternate},${org.orgId},'AAA-ALTERNATE','Alternate book',false,true,${mode !== "secondary forecast"})`);
+      await db.execute(sql`update accounting_books set is_active=${mode === "primary forecast"},posts_gl=${mode !== "primary forecast"}
+        where org_id=${org.orgId} and id=${org.bookId}`);
+      const post = () => postProjectGlEntry({
+        orgId: org.orgId, actorId, origin: "manual", entryNumber: "PROJECT-BOOK-POLICY",
+        postingDate: org.date, memo: "Project book policy", subsidiaryId: org.subsidiaryId,
+        currency: "CAD", lines: [
+          { accountId: org.accounts.adjustment, amount: "10" },
+          { accountId: org.accounts.clearing, amount: "-10" },
+        ],
+      });
+      await assert.rejects(post, /no active primary GL book/);
+      const count = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n;
+      assert.equal(count, 0);
+      await db.execute(sql`update accounting_books set is_active=true,posts_gl=true where org_id=${org.orgId} and id=${org.bookId}`);
+      const id = await post();
+      const entry = (await db.execute<{ book_id: string }>(sql`
+        select book_id from journal_entries where org_id=${org.orgId} and id=${id}`)).rows[0]!;
+      assert.equal(entry.book_id, org.bookId, "the explicit primary wins over the earlier-sorting alternate");
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+}
