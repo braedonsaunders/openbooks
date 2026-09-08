@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, schema, withMaintenanceTransaction } from "../db.ts";
 import { assertUuid } from "./catalog.ts";
 import { remapRoleRestriction, sandboxSubsidiaryMap } from "./json-references.ts";
+import { lockAndCheckOrgFeature } from "../org-feature-lock.ts";
 import { isCataloguePermission, PERMISSION_CATALOGUE, permissionSetCovers, permissionsOutsideCeiling, resolveEffectivePermissions } from "../permissions.ts";
 
 /**
@@ -17,18 +18,22 @@ import { isCataloguePermission, PERMISSION_CATALOGUE, permissionSetCovers, permi
  * roles, account groups. Identity-bound tables (users, role_assignments) are
  * intentionally excluded.
  */
-const PROMOTABLE = [
-  "user_scripts",
-  "custom_field_defs",
-  "form_layouts",
-  "list_views",
-  "saved_reports",
-  "saved_views",
-  "statement_layouts",
-  "report_definitions",
-  "account_groups",
-  "app_roles",
-];
+/** The ordinary domain write authority is also required for promotion. Keep
+ * the allowlist and permission mapping together so new tables cannot silently
+ * inherit sandbox-management authority alone. */
+const PROMOTION_PERMISSIONS: Readonly<Record<string, string>> = {
+  user_scripts: "scripts.manage",
+  custom_field_defs: "admin.custom_fields.manage",
+  form_layouts: "admin.customization.manage",
+  list_views: "admin.customization.manage",
+  saved_reports: "reports.create",
+  saved_views: "reports.create",
+  statement_layouts: "reports.create",
+  report_definitions: "reports.create",
+  account_groups: "admin.setup.manage",
+  app_roles: "admin.roles.manage",
+};
+const PROMOTABLE = Object.keys(PROMOTION_PERMISSIONS);
 
 // Drizzle binds an interpolated JS array as a row constructor "( $1, $2 )"
 // without an array cast, so the catalog lookup dies on the second entry —
@@ -59,6 +64,7 @@ interface ChangeDiffRow extends Record<string, unknown> {
 interface IdRow extends Record<string, unknown> { id: string; expected_before: Record<string, unknown> }
 interface ChangeSetRow extends Record<string, unknown> {
   org_id: string;
+  sandbox_org_id: string | null;
   status: string;
   capture_complete: boolean;
   item_count: number;
@@ -108,6 +114,28 @@ function promotedRolePermissions(value: unknown): string[] {
     throw new Error("promotion role permissions must contain valid permission keys");
   }
   return [...new Set(value as string[])];
+}
+
+/** Ownership is a record-level control in addition to module permissions.
+ * Check both sides so an ownership/scope edit cannot authorize itself. A
+ * legacy sandbox owner is accepted only through its proven actor mapping. */
+async function assertPromotionOwner(
+  table: string, row: Record<string, unknown> | null, actor: string,
+  authority: ReadonlySet<string>, sandboxOrgId: string | null, legacy: boolean,
+): Promise<void> {
+  const field = USER_REFERENCE_COLUMNS[table];
+  if (!row || !field) return;
+  if (table === "list_views" ? row.scope !== "user" : authority.has("*")) return;
+  if (row[field] === actor) return;
+  if (legacy && sandboxOrgId && typeof row[field] === "string") {
+    const counterpart = await db.execute(sql`
+      select u.id from users u join orgs o on o.id=u.org_id
+       where o.id=${sandboxOrgId} and o.env_kind='sandbox'
+         and u.id=${row[field]} and u.id=ob_rebase(${actor}::uuid,o.sandbox_seed)
+       for share of u,o`);
+    if (counterpart.rows.length) return;
+  }
+  throw new Error(`${table} promotion requires the record owner`);
 }
 
 async function assertDistinctActors(
@@ -314,7 +342,7 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
   await withMaintenanceTransaction(null, async () => {
     await db.execute(sql`set local time zone 'UTC'`);
     const result = await db.execute<ChangeSetRow>(sql`
-      select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
+      select org_id, sandbox_org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
         from change_sets where id = ${id} for update`);
     const c = result.rows[0];
     if (!c) throw new Error(`change set not found: ${id}`);
@@ -343,8 +371,12 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
     for (const it of items.rows) {
       const t = it.table_name;
       if (!PROMOTABLE.includes(t)) throw new Error(`change set contains non-promotable table: ${t}`);
-      if (t === "app_roles" && !permissionSetCovers(authority, "admin.roles.manage")) {
-        throw new Error("role promotion requires admin.roles.manage");
+      const requiredPermission = PROMOTION_PERMISSIONS[t]!;
+      if (!permissionSetCovers(authority, requiredPermission)) {
+        throw new Error(`${t} promotion requires ${requiredPermission}`);
+      }
+      if (t === "user_scripts" && !(await lockAndCheckOrgFeature(db, prod, "scripts"))) {
+        throw new Error("scripts feature is disabled");
       }
       const target = assertUuid(it.target_id);
       const table = sql`public.${sql.identifier(t)}`;
@@ -360,8 +392,12 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
       if (it.op !== "insert" && !prior.rows[0]!.matches_base) {
         throw new Error(`promotion target ${t}/${target} changed since capture; recapture and review the change set`);
       }
+      await assertPromotionOwner(t, before, actor, authority, c.sandbox_org_id, true);
       let after: Record<string, unknown> | null = null;
       if (it.op === "delete") {
+        if (t === "report_definitions" && (before!.kind === "built_in" || before!.system)) {
+          throw new Error("built-in reports cannot be deleted by promotion");
+        }
         if (t === "app_roles") {
           if (before!.is_built_in) throw new Error("built-in roles cannot be deleted by promotion");
           const held = await db.execute(sql`select id from role_assignments where org_id = ${prod} and role_id = ${target} limit 1`);
@@ -380,6 +416,15 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
           const ownerId = typeof payload[userField] === "string" ? assertUuid(payload[userField]) : null;
           const owner = (await db.execute(sql`select id from users where org_id=${prod} and id=${ownerId} for key share`)).rows[0];
           if (!owner) throw new Error(`promotion ${t}/${target}: user reference must belong to production; recapture the change set`);
+        }
+        await assertPromotionOwner(t, payload, actor, authority, c.sandbox_org_id, false);
+        if (t === "report_definitions") {
+          if (!before && (payload.kind !== "custom" || payload.system)) {
+            throw new Error("built-in report identity is managed by setup, not promotion");
+          }
+          if (before && ["kind", "system", "report_type"].some(field => payload[field] !== before[field])) {
+            throw new Error("promotion cannot change report identity (kind, system, or report type)");
+          }
         }
         if (t === "app_roles") {
           const requested = promotedRolePermissions(payload.permissions);
