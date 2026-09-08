@@ -3768,3 +3768,31 @@ inventory book/NRV rollback, and the subsequent payroll/NRV/depreciation/Project
 fixes. It is not a clean run of the newer commits.
 
 Full log: `audit-fx-posting-policy-2026-09-08/full-integration.log`.
+
+### Payroll adjustment and GL-preview employee scope (2026-09-08)
+
+Confirmed on `71a3c2d1`: a root-scoped caller could add/delete adjustments,
+include/exclude an employee, apply bulk adjustments or set the roster for a
+child-owned employee through a root-owned run. GL preview also exposed the
+hidden employee's name and net pay. Seven real route/database regressions
+returned HTTP 200 before the fix.
+
+All adjustment dispatches now pass caller scope to the shared mutation service.
+It checks the run owner, locks the target employee and the complete calculated
+stub population, and refuses if any are inaccessible. Checking the whole
+snapshot is necessary because a successful edit invalidates every stub.
+Ownership locks prevent an employee transfer from bypassing the decision.
+GL preview now receives the existing engine's caller scope argument.
+
+Validation: 13/13 focused payroll tests passed (11,027.4185 ms), plus the existing
+end-to-end payroll surface scope test (7,141.523042 ms). Coverage includes all
+seven route refusals, unrestricted success, direct authorized writes, preserving
+hidden stubs when editing a visible employee, and concurrent employee transfer.
+Workspace typechecks, changed-file ESLint, 3,210/3,210 unit tests with no skips
+(136,349.848 ms), and the locked-dependency production build passed.
+Private evidence: `audit-payroll-run-action-scope-2026-09-08`.
+
+A separate run-detail GET disclosure was reproduced during this validation and
+is under remediation; this adjustment/preview fix does not close that finding.
+The full integration archive currently running at `71a3c2d1` predates these
+adjustment/preview changes.
