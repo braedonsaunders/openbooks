@@ -4070,3 +4070,37 @@ unassignment defects, a role-grant permission race, lost ambient caller work on
 audit failure, and concurrent deletion/unassignment leaving an active user with
 zero roles. These remain under active remediation; this checkpoint does not
 claim their resolution (`audit-user-role-control-2026-09-08`).
+
+### User-role controls serialize identity and assignment changes (2026-09-08)
+
+Real handler probes reproduced uppercase-UUID bypasses of self-grant and
+self-deactivation protections, and successful unassignment responses that left
+the equivalent role attached. IDs are now validated as strings and canonicalized
+before identity comparisons, locks, writes and audit evidence.
+
+Two controlled races assigned a role after its permissions widened beyond the
+caller or after the role was deleted. Grants now hold the role record through
+ceiling validation and assignment. User activation, unassignment and role deletion
+share user-row locks before evaluating remaining assignments. Assignment-row
+locks also reject stale repeatable-read snapshots. A controlled deletion versus
+unassignment race previously committed both requests and left an active user with
+zero roles; now exactly one operation succeeds and one is refused.
+
+Assign, unassign and activation audit failures now roll back their own work to a
+savepoint while preserving prior ambient caller work. The three old paths left
+the caller's transaction aborted after a caught storage error. Successful retries
+are checked against real user/assignment state and exactly one audit entry.
+
+Validation: 41/41 focused authorization checks passed (26,659.34 ms), including
+read-committed and repeatable-read concurrency, invalid UUID types, audit failures
+and successful retries. The initial repeatable-read fixture incorrectly set
+isolation after a query; it was corrected to open the transaction at that level.
+The complete unit suite passed 3,210/3,210 checks (149,393.858958 ms), with no skips.
+Workspace types, final web types, changed-file lint without warnings, whitespace
+checks and the locked production build passed. Removing another explicit-any
+assertion tightened the enforced limits to 374 explicit anys and 705 warnings.
+Evidence: `audit-user-role-control-2026-09-08`.
+
+Direct SQL probes independently confirmed that the existing database last-role
+guard permits the same write skew without API involvement. Its forward-migration
+repair is the next active slice (`audit-active-user-role-guard-2026-09-08`).

@@ -5,6 +5,7 @@ import {
   db,
   type SqlExecutor,
   withOrgTransaction,
+  withTransactionSavepoint,
 } from "@openbooks/engine/src/db.ts";
 import { permissionsOutsideCeiling } from "@openbooks/engine/src/permissions.ts";
 import { guardPermission } from "../../../../lib/authz";
@@ -52,52 +53,57 @@ export async function POST(req: Request) {
     roleId?: string;
     isActive?: boolean;
   };
-  if (!body.userId || !isUuid(body.userId)) {
+  if (typeof body.userId !== "string" || !isUuid(body.userId)) {
     return NextResponse.json({ error: "userId required" }, { status: 400 });
   }
-  const userId = body.userId;
+  const userId = body.userId.toLowerCase();
 
-  const target = await db.execute(sql`
-    select id from users where id = ${body.userId} and org_id = ${actor.orgId}`);
-  if (!target.rows[0])
-    return NextResponse.json({ error: "user not found" }, { status: 404 });
+  // All assignment and activation decisions serialize on the same user row.
+  // Grants lock their role first, matching role deletion's role → user order.
+  const lockTargetUser = async () => {
+    const target = await db.execute(sql`
+      select id from users where id = ${userId} and org_id = ${actor.orgId} for update`);
+    return target.rows.length > 0;
+  };
 
   switch (body.action) {
     case "assign": {
-      if (!body.roleId || !isUuid(body.roleId)) {
+      if (typeof body.roleId !== "string" || !isUuid(body.roleId)) {
         return NextResponse.json({ error: "roleId required" }, { status: 400 });
       }
-      const role = await db.execute<{ id: string; key: string; permissions: unknown }>(sql`
-        select id, key, permissions from app_roles where id = ${body.roleId} and org_id = ${actor.orgId}`);
-      if (!role.rows[0])
-        return NextResponse.json({ error: "role not found" }, { status: 404 });
-      if (!actor.isSuperAdmin) {
-        if (body.userId === actor.id) {
-          return NextResponse.json(
-            { error: "you cannot grant a role to yourself" },
-            { status: 403 },
-          );
+      const roleId = body.roleId.toLowerCase();
+      return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+        const role = await db.execute<{ id: string; key: string; permissions: unknown }>(sql`
+          select id, key, permissions from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`);
+        if (!role.rows[0])
+          return NextResponse.json({ error: "role not found" }, { status: 404 });
+        if (!actor.isSuperAdmin) {
+          if (userId === actor.id.toLowerCase()) {
+            return NextResponse.json(
+              { error: "you cannot grant a role to yourself" },
+              { status: 403 },
+            );
+          }
+          const rolePermissions = Array.isArray(role.rows[0].permissions)
+            ? role.rows[0].permissions.filter((p): p is string => typeof p === "string")
+            : [];
+          const missing = permissionsOutsideCeiling(gate.permissions, rolePermissions);
+          if (missing.length > 0) {
+            return NextResponse.json(
+              {
+                error: `cannot grant permissions you do not hold: ${missing.join(", ")}`,
+                missing,
+              },
+              { status: 403 },
+            );
+          }
         }
-        const rolePermissions = Array.isArray(role.rows[0].permissions)
-          ? role.rows[0].permissions.filter((p): p is string => typeof p === "string")
-          : [];
-        const missing = permissionsOutsideCeiling(gate.permissions, rolePermissions);
-        if (missing.length > 0) {
-          return NextResponse.json(
-            {
-              error: `cannot grant permissions you do not hold: ${missing.join(", ")}`,
-              missing,
-            },
-            { status: 403 },
-          );
-        }
-      }
-      return withOrgTransaction(actor.orgId, async () => {
-        const inserted = (await db.execute(sql`
+        if (!await lockTargetUser()) return NextResponse.json({ error: "user not found" }, { status: 404 });
+        const inserted = await db.execute<{ id: string }>(sql`
           insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
-          values (${actor.orgId}, ${body.userId}, ${body.roleId}, ${actor.id}, ${actor.id})
+          values (${actor.orgId}, ${userId}, ${roleId}, ${actor.id}, ${actor.id})
           on conflict (org_id, user_id, role_id) do nothing
-          returning id`)) as any;
+          returning id`);
         if (inserted.rows[0]) {
           await audit(db, {
             orgId: actor.orgId,
@@ -105,32 +111,34 @@ export async function POST(req: Request) {
             rowId: inserted.rows[0].id,
             action: "insert",
             changes: {
-              userId: [null, body.userId],
-              roleId: [null, body.roleId],
+              userId: [null, userId],
+              roleId: [null, roleId],
             },
             actorId: actor.id,
           });
         }
         return NextResponse.json({ ok: true });
-      });
+      }));
     }
     case "unassign": {
-      if (!body.roleId || !isUuid(body.roleId)) {
+      if (typeof body.roleId !== "string" || !isUuid(body.roleId)) {
         return NextResponse.json({ error: "roleId required" }, { status: 400 });
       }
-      return withOrgTransaction(actor.orgId, async () => {
+      const roleId = body.roleId.toLowerCase();
+      return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+        if (!await lockTargetUser()) return NextResponse.json({ error: "user not found" }, { status: 404 });
         await db.execute(sql`
-          select pg_advisory_xact_lock(hashtextextended(${`openbooks:user-roles:${actor.orgId}:${body.userId}`}, 0))
+          select pg_advisory_xact_lock(hashtextextended(${`openbooks:user-roles:${actor.orgId}:${userId}`}, 0))
         `);
         const assignments = await db.execute<{
           id: string;
           role_id: string;
         }>(sql`
           select id, role_id from role_assignments
-           where org_id = ${actor.orgId} and user_id = ${body.userId}
-           order by id
+           where org_id = ${actor.orgId} and user_id = ${userId}
+           order by id for update
         `);
-        if (!assignments.rows.some((row) => row.role_id === body.roleId)) {
+        if (!assignments.rows.some((row) => row.role_id === roleId)) {
           return NextResponse.json({ ok: true });
         }
         if (assignments.rows.length === 1) {
@@ -141,7 +149,7 @@ export async function POST(req: Request) {
         }
         const deleted = await db.execute<{ id: string }>(sql`
           delete from role_assignments
-           where org_id = ${actor.orgId} and user_id = ${body.userId} and role_id = ${body.roleId}
+           where org_id = ${actor.orgId} and user_id = ${userId} and role_id = ${roleId}
           returning id
         `);
         if (deleted.rows[0]) {
@@ -151,14 +159,14 @@ export async function POST(req: Request) {
             rowId: deleted.rows[0].id,
             action: "delete",
             changes: {
-              userId: [body.userId, null],
-              roleId: [body.roleId, null],
+              userId: [userId, null],
+              roleId: [roleId, null],
             },
             actorId: actor.id,
           });
         }
         return NextResponse.json({ ok: true });
-      });
+      }));
     }
     case "set-active": {
       if (typeof body.isActive !== "boolean") {
@@ -167,19 +175,20 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      if (body.userId === actor.id && !body.isActive) {
+      if (userId === actor.id.toLowerCase() && !body.isActive) {
         return NextResponse.json(
           { error: "you cannot deactivate your own account" },
           { status: 400 },
         );
       }
-      return withOrgTransaction(actor.orgId, async () => {
+      return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+        if (!await lockTargetUser()) return NextResponse.json({ error: "user not found" }, { status: 404 });
         if (body.isActive) {
           const assignment = await db.execute<{ "?column?": number }>(sql`
             select 1
               from role_assignments
-             where org_id = ${actor.orgId} and user_id = ${body.userId}
-             limit 1
+             where org_id = ${actor.orgId} and user_id = ${userId}
+             limit 1 for key share
           `);
           if (!assignment.rows[0]) {
             return NextResponse.json(
@@ -191,7 +200,7 @@ export async function POST(req: Request) {
         const updated = await db.execute(sql`
           with changed_identity as (
             update users set is_active = ${body.isActive}, updated_at = now(), updated_by = ${actor.id}
-             where id = ${body.userId} and org_id = ${actor.orgId} and is_active <> ${body.isActive}
+             where id = ${userId} and org_id = ${actor.orgId} and is_active <> ${body.isActive}
             returning id
           ), revoked_sessions as (
             update auth_sessions
@@ -216,7 +225,7 @@ export async function POST(req: Request) {
           });
         }
         return NextResponse.json({ ok: true });
-      });
+      }));
     }
     default:
       return NextResponse.json({ error: "unknown action" }, { status: 400 });
