@@ -1125,11 +1125,14 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
   await assertEnabled(db, orgId);
   // Discovery only chooses candidates. It is not the financial snapshot used
   // for invoicing: lease controls and schedule proration may change while we wait.
+  // Termination stops future rent, but its already-prorated earned schedules
+  // remain collectible. Never admit a legacy period crossing the termination date.
   const due = (await db.execute<{ id: string; leaseId: string }>(sql`
     select s.id,s.lease_id as "leaseId"
     from lease_schedule_lines s
     join property_leases l on l.id=s.lease_id and l.org_id=s.org_id
-    where s.org_id=${orgId} and s.status='scheduled' and s.due_on<=${through} and l.status in ('active','notice')
+    where s.org_id=${orgId} and s.status='scheduled' and s.due_on<=${through}
+      and (l.status in ('active','notice') or (l.status='terminated' and s.period_ends_on<=least(l.ends_on,l.move_out_on)))
       and l.auto_invoice and (${onlyLeaseId ?? null}::uuid is null or l.id=${onlyLeaseId ?? null})
       and (${onlyPropertyId ?? null}::uuid is null or l.property_id=${onlyPropertyId ?? null}) order by l.id,s.due_on,s.id
   `));
@@ -1143,7 +1146,7 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
       // inserts its replacement charge before releasing the old charge lock.
       const lease = (await db.execute<{ property_id: string }>(sql`
         select property_id from property_leases where org_id=${orgId} and id=${leaseId}
-          and status in ('active','notice') and auto_invoice
+          and status in ('active','notice','terminated') and auto_invoice
           and (${onlyPropertyId ?? null}::uuid is null or property_id=${onlyPropertyId ?? null})
         for no key update`)).rows[0];
       if (!lease) return;
@@ -1162,6 +1165,7 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
         join property_leases l on l.id=s.lease_id and l.org_id=s.org_id
         join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
         where s.org_id=${orgId} and s.lease_id=${leaseId} and s.status='scheduled' and s.due_on<=${through}
+          and (l.status in ('active','notice') or (l.status='terminated' and s.period_ends_on<=least(l.ends_on,l.move_out_on)))
           and s.id::text in (select jsonb_array_elements_text(${JSON.stringify(candidateIds)}::jsonb))
         order by s.id for update of s
       `));
