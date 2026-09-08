@@ -538,5 +538,8 @@ test('template preview demands the record type’s read authority and samples in
   assert.match(values, /export async function findSamplePdfRecordId\(\s*recordType: string,\s*orgId: string,\s*scope: ReadonlySet<string> \| null,?\s*\)/)
   assert.ok(count(values, 'subsidiaryVisibleFilter(sql`subsidiary_id`, scope)') >= 2,
     'document and journal samples both carry the shared visibility predicate')
-  assert.match(values, /if \(scope !== null\) return null/, 'types without a resolvable subsidiary fail closed for restricted callers')
+  assert.match(values, /join documents d on d\.id = r\.document_id and d\.org_id = r\.org_id and d\.kind = 'pay_run'/,
+    'payroll samples resolve ownership through the original tenant-bound pay-run document')
+  assert.match(values, /subsidiaryVisibleFilter\(sql`d\.subsidiary_id`, scope\)/,
+    'payroll samples must carry the same subsidiary visibility predicate')
 })
