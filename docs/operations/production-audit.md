@@ -2971,3 +2971,29 @@ removes the original employer's access and exposes its earlier totals to the new
 employer. The corrected fixture records original scope 404/zero groups versus
 new scope 200/one group while the pay-run owner is unchanged. Evidence is under
 `audit-payroll-remittance-history-scope-2026-09-07/expanded-before.log`.
+
+## Full integration checkpoint and fixture corrections — 2026-09-07
+
+The immutable `a1381bba` run completed with 2,410/2,412 passing tests, zero skips
+(1,519,803.123250 ms). Fixture ownership balanced all 2,014 leases, releases and
+resets, with zero active leases or leak detections. Both failing assertions
+were investigated rather than treating the focused pass as sufficient.
+
+The forecast boundary test manually inserted a second zero snapshot after the
+API had correctly started persisting one. It now verifies the API-created ID
+and retains its restricted-reader denial checks. The book-selection fixture
+used a superuser/schema-owner connection: its unqualified subsidiary picker
+could select another pooled scratch tenant. The test now explicitly selects
+its own entity while retaining primary/selected/invalid book and export/drill
+assertions. An independent controlled proof reproduced the missing amount with
+the schema owner and returned exactly 100.0000 for the default selection under
+the real NOSUPERUSER/NOBYPASSRLS runtime role. No production report code was
+changed for that fixture failure.
+
+All 26 affected checkpoint checks passed afterward (11,601.681833 ms, no skips).
+The subsequent full unit gate passed 3,210/3,210 (146,813.395375 ms, no skips);
+workspace typechecks and the locked-dependency production build passed. Evidence:
+`audit-property-rebilling-2026-09-07/full-integration.log`,
+`statement-runtime-proof.log`, and
+`audit-payroll-remittance-history-scope-2026-09-07/checkpoint-regressions.log`.
+A complete integration pass on the newer committed source is still required.
