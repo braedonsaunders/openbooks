@@ -12,6 +12,8 @@ import {
 import {
   intercompanyBalancingLegs,
   loadSubsidiaryContext,
+  validateSubsidiaryRestrictions,
+  uuidArray,
   SubsidiaryError,
 } from "./subsidiaries.ts";
 
@@ -98,9 +100,11 @@ export async function recordPayRunPayment(input: {
       if (hidden.rows[0]) throw new PayrollError("pay run not found");
     }
 
+    // Follow the shared posting lock order: hierarchy, accounts, then writes.
+    await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     const bank = (await tx.execute<{ id: string }>(sql`
       select id from accounts where org_id = ${orgId} and id = ${input.bankAccountId}
-        and type = 'asset_bank' and is_active
+        and type = 'asset_bank' and is_active for share
     `));
     if (!bank.rows[0]) throw new PayrollError("choose an active bank account");
 
@@ -177,18 +181,6 @@ export async function recordPayRunPayment(input: {
       }
     }
 
-    const entryNumber = `PAYD-${run.document_number}-${randomUUID().slice(0, 6)}`;
-    const entry = (await tx.execute<{ id: string }>(sql`
-      insert into journal_entries (org_id, book_id, subsidiary_id, entry_number, posting_date,
-                                   period_id, memo, status, origin, source_document_id,
-                                   created_by, updated_by)
-      values (${orgId}, ${run.book_id}, ${run.subsidiary_id}, ${entryNumber}, ${paidOn},
-              ${period.rows[0].id}, ${`Net pay ${run.document_number}`}, 'draft', 'payroll',
-              ${documentId}, ${actorId}, ${actorId})
-      returning id
-    `));
-    const entryId = entry.rows[0]!.id;
-
     let lineNumber = 1;
     // `txn_amount` is the pay-run currency (the currency the bank actually
     // leaves). `amount` is each employee subsidiary's functional amount, so it
@@ -214,6 +206,7 @@ export async function recordPayRunPayment(input: {
     });
     let intercompanyLegs: Awaited<ReturnType<typeof intercompanyBalancingLegs>>;
     try {
+      await tx.execute(sql`select id from intercompany_pairs where org_id=${orgId} order by id for share`);
       intercompanyLegs = await intercompanyBalancingLegs(tx, {
         orgId,
         ctx: subsidiaries,
@@ -221,10 +214,29 @@ export async function recordPayRunPayment(input: {
         originFxRate,
         lines: settlementLines,
       });
+      const postingLines = [...settlementLines, ...intercompanyLegs];
+      const accountIds = [...new Set(postingLines.map((line) => line.accountId))];
+      await tx.execute(sql`select id from accounts where org_id=${orgId}
+        and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+      await validateSubsidiaryRestrictions(tx, {
+        orgId, ctx: subsidiaries, docSubsidiaryId: originSubId, lines: postingLines,
+      });
     } catch (error) {
       if (error instanceof SubsidiaryError) throw new PayrollError(error.message);
       throw error;
     }
+
+    const entryNumber = `PAYD-${run.document_number}-${randomUUID().slice(0, 6)}`;
+    const entry = (await tx.execute<{ id: string }>(sql`
+      insert into journal_entries (org_id, book_id, subsidiary_id, entry_number, posting_date,
+                                   period_id, memo, status, origin, source_document_id,
+                                   created_by, updated_by)
+      values (${orgId}, ${run.book_id}, ${run.subsidiary_id}, ${entryNumber}, ${paidOn},
+              ${period.rows[0].id}, ${`Net pay ${run.document_number}`}, 'draft', 'payroll',
+              ${documentId}, ${actorId}, ${actorId})
+      returning id
+    `));
+    const entryId = entry.rows[0]!.id;
 
     const settlements: {
       fromLineId: string; toLineId: string; amount: string;
