@@ -3324,3 +3324,20 @@ Evidence: `audit-lease-posting-scope-2026-09-08/before.log`,
 `inactive-before.log`, `regression-before.log`, `focused-final.log`,
 `typecheck.log`, `lint-full.log`, `explicit-any.log`, `build.log`,
 `dependencies.json`, and `container-security.log`.
+
+## Payroll payment retains historical liability ownership — 2026-09-08
+
+A root-only payer was correctly denied a mixed-entity run until the branch
+employee transferred to the root. The same call then paid all 250, including
+150 still owed by the hidden branch. Both the refusal guard and payable-line
+query used the employee's current subsidiary instead of the posted liability.
+
+Both now use `journal_lines.subsidiary_id`. Regression coverage verifies that a
+transfer cannot authorize the hidden liability, while an employee moving away
+does not revoke the original employer's ability to pay its own posted liability.
+The unrestricted mixed-entity payment still balances each legal entity.
+
+All nine focused remittance, payment and engine-scope checks passed
+(4,148.945292 ms, no failures/skips); engine typecheck and changed-file lint
+passed. Evidence: `audit-payroll-payment-history-scope-2026-09-08/before.log`,
+`focused.log`, `typecheck.log`, and `lint.log`.

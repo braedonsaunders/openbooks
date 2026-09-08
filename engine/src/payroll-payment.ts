@@ -80,7 +80,8 @@ export async function recordPayRunPayment(input: {
     // caller settle only the visible part of a mixed-entity run: that would
     // mutate an authorized run while leaving its hidden employee liabilities
     // behind. Treat the whole run as opaque when any open net-pay item is out
-    // of scope, including an orphaned party row.
+    // of scope, including an orphaned party row. Ownership follows the posted
+    // liability; a later employee transfer must neither grant nor revoke it.
     if (input.allowedSubsidiaryIds != null) {
       const hidden = (await tx.execute<{ id: string }>(sql`
         select jl.id
@@ -90,7 +91,7 @@ export async function recordPayRunPayment(input: {
            and jl.account_id = ${netPayable} and jl.is_open_item and jl.party_id is not null
            and jl.amount < 0
            and (p.id is null or ${payrollSubsidiaryOutsideScopeFilter(
-             sql`p.subsidiary_id`, input.allowedSubsidiaryIds,
+             sql`jl.subsidiary_id`, input.allowedSubsidiaryIds,
            )})
          limit 1
       `));
@@ -115,7 +116,7 @@ export async function recordPayRunPayment(input: {
        where jl.org_id = ${orgId} and jl.entry_id = ${run.posted_entry_id}
          and jl.account_id = ${netPayable} and jl.is_open_item and jl.party_id is not null
          and jl.amount < 0
-         ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}
+         ${payrollSubsidiaryScopeFilter(sql`jl.subsidiary_id`, input.allowedSubsidiaryIds)}
        order by jl.line_number
        for update
     `));

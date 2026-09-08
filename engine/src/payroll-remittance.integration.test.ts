@@ -249,8 +249,15 @@ test(
       await postDocument(run.documentId, {
         control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
       });
+      const transferredTo = randomUUID();
+      await db.execute(sql`insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+        values(${transferredTo},${org.orgId},${org.subsidiaryId},'New employer','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`);
+      await db.execute(sql`update parties set subsidiary_id=${transferredTo}
+        where org_id=${org.orgId} and id=${employeeId}`);
       const payment = await recordPayRunPayment({
         orgId: org.orgId, actorId, documentId: run.documentId, bankAccountId: org.accounts.bank,
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
       });
       const stubNet = ((await db.execute<{ net_pay: string }>(sql`
         select net_pay from pay_stubs where pay_run_document_id = ${run.documentId}
@@ -408,6 +415,17 @@ test(
         values
           (${documentId}, ${org.orgId}, ${scheduleId}, '2026-07-01', '2026-07-15',
            '2026-07-15', 2026, 'committed', 'regular', ${actorId}, ${actorId})`);
+
+      const rootOnlyPayment = () => recordPayRunPayment({
+        orgId: org.orgId, actorId, documentId, bankAccountId: org.accounts.bank,
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      });
+      await assert.rejects(rootOnlyPayment, /pay run not found/);
+      // Current employment does not transfer an already-posted liability.
+      await db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId}
+        where org_id=${org.orgId} and id=${childEmployeeId}`);
+      await assert.rejects(rootOnlyPayment, /pay run not found/,
+        "moving the employee cannot authorize settlement of the hidden originating entity");
 
       const payment = await recordPayRunPayment({
         orgId: org.orgId,
