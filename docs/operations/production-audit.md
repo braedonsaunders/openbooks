@@ -3137,3 +3137,33 @@ Workspace typechecks, changed-file lint and the locked-dependency production
 build passed. Evidence: `audit-roe-source-scope-2026-09-07/before.log`,
 `regression-before.log`, `focused-final.log`, `unit.log`, `typecheck.log`,
 `lint.log`, and `build.log`.
+
+## Form 941 source ownership and unassigned quarters — 2026-09-07
+
+An account-only Form 941 row passed authorization for a visible EIN even when
+its original pay-run document belonged to a hidden entity; the real worksheet
+contained 100.0000 of that entity's Medicare wages. The shared filing guard now
+checks original source documents for each requested EIN, quarter and tax year,
+including voided-run ownership evidence needed by stored corrections. Missing
+source evidence fails closed.
+
+The row parser also rejected the registry's valid unassigned key (`:3`). It now
+accepts empty-or-valid account IDs with quarters 1–4. An unassigned aggregate
+requires root visibility even when mixed with visible assigned-account rows.
+Population and stored-row guards share one implementation.
+
+All 61 focused checks passed (10,073.954 ms, no failures/skips), covering hidden
+sources, visible sources, year/quarter boundaries, mixed unassigned accounts,
+empty/unrestricted scopes, malformed keys and voided history, plus annual,
+ROE and remittance regressions. Web typecheck and changed-file lint passed.
+Evidence: `audit-941-source-scope-2026-09-07/before.log`,
+`regression-before.log`, `focused.log`, `typecheck.log`, and `lint.log`.
+
+The full integration run on 79ff8918 completed with 2,426/2,428 passes, two
+statement-fixture failures, no skips, and 1,431,923.857583 ms elapsed. Its receipt
+balanced 2,031 leases/releases/resets, four bootstraps/teardowns/schema checks,
+and zero active leases or leak detections. Investigation found that the prior
+statement-fixture change used the ignored `subsidiary` key instead of the
+shared parser's `sub` key. That correction is still required; this checkpoint
+is not a passing full integration gate. Evidence:
+`audit-payroll-remittance-history-scope-2026-09-07/full-integration.log`.

@@ -106,19 +106,11 @@ export async function guardPayrollFilingData(
   data: PayrollFilingData,
   taxYear: number,
 ): Promise<Response | null> {
-  if (gate.allowedSubsidiaryIds === null) return null
-  const parsed = data.rows.map((row) => parsePayrollRow(country, filing, String(row[data.rowKey] ?? '')))
-  if (parsed.some((row) => row === null)) return notFound()
-  const employees = parsed.flatMap((row) => row!.employees)
-  const accounts = parsed.flatMap((row) => row!.accounts)
-  const employeeDenied = await guardPayrollFilingEmployees(gate, country, filing, employees, taxYear)
-  if (employeeDenied) return employeeDenied
-  // Employee-keyed filings (ROE/RL-1 and unassigned T4/W-2 rows) carry no
-  // account id; their employee-source guard is the scope decision. An
-  // aggregate account-only row (for example an unassigned Form 941) has no
-  // employee dimension and therefore follows the explicit root convention.
-  if (employees.length > 0 && accounts.length === 0) return null
-  return guardPayrollFilingAccounts(gate, accounts, true)
+  return guardPayrollFilingRowIds(
+    gate, country, filing,
+    data.rows.map(row => String(row[data.rowKey] ?? '')),
+    taxYear,
+  )
 }
 
 /** Same guard for stored amendment rows, where only opaque row ids are kept. */
@@ -130,8 +122,10 @@ export async function guardPayrollFilingRowIds(
   taxYear: number,
 ): Promise<Response | null> {
   if (gate.allowedSubsidiaryIds === null) return null
+  if (!Number.isInteger(taxYear) || taxYear < 2020 || taxYear > 2100) return notFound()
   const parsed = rowIds.map((rowId) => parsePayrollRow(country, filing, rowId))
   if (parsed.some((row) => row === null)) return notFound()
+  if (country === 'US' && filing === '941') return guardPayroll941Rows(gate, rowIds, taxYear)
   const employeeDenied = await guardPayrollFilingEmployees(gate, country, filing, parsed.flatMap((row) => row!.employees), taxYear)
   if (employeeDenied) return employeeDenied
   const employees = parsed.flatMap((row) => row!.employees)
@@ -140,11 +134,55 @@ export async function guardPayrollFilingRowIds(
   return guardPayrollFilingAccounts(gate, accounts, true)
 }
 
+/** Account-only quarter rows still contain source payroll owned by legal entities. */
+async function guardPayroll941Rows(
+  gate: Authz,
+  rowIds: readonly string[],
+  taxYear: number,
+): Promise<Response | null> {
+  if (rowIds.length === 0) return guardPayrollRoot(gate)
+  // The parser has validated every key, including the quarter range.
+  const requested = [...new Set(rowIds.map(id => id.toLowerCase()))].map(id => {
+    const [account, quarter] = id.split(':')
+    return { id, account: account || null, quarter: Number(quarter) }
+  })
+  const sources = (await db.execute<{
+    account: string | null; quarter: number; subsidiaryId: string | null;
+  }>(sql`
+    select distinct s.filing_account_id as account,
+           extract(quarter from s.pay_date)::int as quarter,
+           d.subsidiary_id as "subsidiaryId"
+      from pay_stubs s
+      join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
+      left join documents d on d.org_id = r.org_id and d.id = r.document_id
+     where s.org_id = ${gate.user.orgId} and s.tax_year = ${taxYear}
+       and s.country = 'US' and r.run_status in ('committed', 'voided')
+       and (${sql.join(requested.map(row => sql`(
+         s.filing_account_id is not distinct from ${row.account}::uuid
+         and extract(quarter from s.pay_date)::int = ${row.quarter}
+       )`), sql` or `)})
+  `)).rows
+  const resolved = new Set(sources.map(row => `${row.account ?? ''}:${row.quarter}`))
+  if (requested.some(row => !resolved.has(row.id))) return notFound()
+  for (const row of sources) {
+    const denied = guardSubsidiaryScope(gate, row.subsidiaryId)
+    if (denied) return denied
+  }
+  // An assigned account elsewhere in the population cannot erase the root
+  // boundary of an unassigned aggregate.
+  if (requested.some(row => row.account === null)) {
+    const denied = await guardPayrollRoot(gate)
+    if (denied) return denied
+  }
+  const accounts = requested.map(row => row.account).filter((id): id is string => id !== null)
+  return accounts.length ? guardPayrollFilingAccounts(gate, accounts, true) : null
+}
+
 /**
  * Annual slips derive ownership from original pay-run documents in the requested
  * year. Check the whole employee/year: annual caps and opening carry-in can
  * affect several account/province rows. A transfer must not move that evidence.
- * ROE uses current employment details and an unbounded recent-period window;
+ * ROE uses current employment details and a period window that can cross years;
  * it requires both current-profile and original-source visibility.
  */
 async function guardPayrollFilingEmployees(
@@ -248,8 +286,9 @@ function parsePayrollRow(
     if (parts[1] && !isUuid(parts[1])) return null
     return { employees: [parts[0]!], accounts: parts[1] ? [parts[1]] : [] }
   }
-  if (country === 'US' && filing === '941' && parts.length === 2 && isUuid(parts[0]!)) {
-    return { employees: [], accounts: [parts[0]!] }
+  if (country === 'US' && filing === '941' && parts.length === 2
+    && (!parts[0] || isUuid(parts[0])) && /^[1-4]$/.test(parts[1]!)) {
+    return { employees: [], accounts: parts[0] ? [parts[0]] : [] }
   }
   return null
 }
