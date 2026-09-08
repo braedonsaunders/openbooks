@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { FEATURE_BY_KEY } from '@openbooks/engine/src/feature-registry.ts'
 import { fileURLToPath } from 'node:url'
 import { getArticle } from './docs/index'
 import { MODULE_BY_KEY } from './nav/registry'
@@ -9,11 +10,7 @@ const source = (relativePath: string) =>
   readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), 'utf8')
 
 test('property management is a gated module enabled by its industry preset', () => {
-  const featureRegistry = source('./features.ts')
-  assert.match(
-    featureRegistry,
-    /key: 'propertyManagement'.*navModules: \['property-management'\]/,
-  )
+  assert.deepEqual(FEATURE_BY_KEY.get('propertyManagement')?.navModules, ['property-management'])
 
   const industryRegistry = source('./industries.ts')
   const propertyPreset = industryRegistry.match(

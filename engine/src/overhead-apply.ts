@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import { sql, type SQL } from "drizzle-orm";
 import { db, inDbTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
@@ -110,6 +111,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     // Lock the policy row through commit so a configuration change cannot
     // reinterpret half of one source claim.
     const settings = await overheadApplicationSettingsFrom(tx, orgId, true);
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) return none;
     if (settings.mode !== "net_zero_pair" || !settings.accountId) return none;
 
     const idArr = `{${timeEntryIds.join(",")}}`;

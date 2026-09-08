@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import test from 'node:test'
+import { FEATURES } from '@openbooks/engine/src/feature-registry.ts'
 
 /**
  * The feature registry states a contract: "a feature that's off disappears from
@@ -29,20 +30,12 @@ const GATE = /requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\
 const read = (path: string) => readFileSync(new URL(path, WEB), 'utf8')
 const exists = (path: string) => existsSync(new URL(path, WEB))
 
-/** The feature registry, parsed from source (`features.ts` is server-only). */
+/** Inspect the same pure registry used by the web and engine gates. */
 function featuresWithNav(): Array<{ key: string; navModules: string[] }> {
-  const source = read('lib/features.ts')
-  const list = source.slice(
-    source.indexOf('export const FEATURES'),
-    source.indexOf('\n]', source.indexOf('export const FEATURES')),
-  )
-  const out: Array<{ key: string; navModules: string[] }> = []
-  for (const entry of list.matchAll(/\{ key: '(\w+)'[^}]*\}/g)) {
-    const nav = /navModules: \[([^\]]*)\]/.exec(entry[0])
-    if (!nav) continue
-    out.push({ key: entry[1]!, navModules: [...nav[1]!.matchAll(/'([\w-]+)'/g)].map((m) => m[1]!) })
-  }
-  assert.ok(out.length > 0, 'could not parse the feature registry')
+  const out = FEATURES.flatMap((feature) => feature.navModules
+    ? [{ key: feature.key, navModules: feature.navModules }]
+    : [])
+  assert.ok(out.length > 0, 'feature registry has no navigation entries')
   return out
 }
 
