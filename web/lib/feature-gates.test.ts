@@ -5,9 +5,8 @@ import { FEATURES } from '@openbooks/engine/src/feature-registry.ts'
 
 /**
  * The feature registry states a contract: "a feature that's off disappears from
- * nav, its routes 404, and its setup surfaces hide." AGENTS.md restates it as a
- * rule — feature dependencies are enforced at the domain/service and API
- * boundaries, "not only by hiding UI".
+ * nav, its routes 404, and its setup surfaces hide." Feature dependencies are
+ * enforced at the domain/service and API boundaries, not only by hiding UI.
  *
  * An earlier version of this test asked only whether a feature key appeared in
  * SOME gate call anywhere under web/. That is far too weak, and it produced

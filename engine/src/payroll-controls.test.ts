@@ -249,10 +249,9 @@ test(
 /* ------------------------------------------------------------------ */
 
 /**
- * `run_status = 'voided'` needs the CHECK constraint widened, which is a
- * migration another agent owns (see .local/handoff-controls.md). Probe for it
- * so this test starts passing the moment it lands instead of silently never
- * running.
+ * `run_status = 'voided'` needs the CHECK constraint widened by a migration.
+ * Probe for it so this test starts passing the moment that lands instead of
+ * silently never running.
  */
 async function voidedRunStatusAllowed(): Promise<boolean> {
   if (!DB) return false;
@@ -271,7 +270,7 @@ test(
     skip: !DB
       ? "no database"
       : !VOIDED_ALLOWED
-        ? "pending migration: pay_runs_run_status must allow 'voided' — see .local/handoff-controls.md"
+        ? "pending migration: pay_runs_run_status must allow 'voided'"
         : false,
   },
   async () => {

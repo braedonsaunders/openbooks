@@ -53,7 +53,6 @@
     "check:repository-artifacts": "node scripts/check-repository-artifacts.mjs",
     "check:product-neutrality": "node scripts/check-product-neutrality.mjs",
     "check:credential-fetch-redirects": "node scripts/check-credential-fetch-redirects.mjs",
-    "check:register-reachability": "node scripts/check-register-reachability.mjs",
     "check:container-security": "node scripts/check-container-security.mjs",
     "check:explicit-any": "node scripts/check-explicit-any.mjs",
     "test:load-harness": "node --test scripts/load-smoke.test.mjs",

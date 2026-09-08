@@ -24,7 +24,7 @@ export const dynamic = 'force-dynamic'
  * Not a generic setup-registry entity, deliberately: the registry does
  * single-table CRUD, and a pattern is a parent plus a repeating list of hours
  * that must be written together. See engine/src/work-schedules.ts for the
- * model and .local/handoff-scheduled-hours.md for the rest of the slice.
+ * model.
  *
  * Scheduled hours are ordinary workforce configuration rather than confidential
  * pay data, but they DECIDE a day's holiday pay in several jurisdictions, so

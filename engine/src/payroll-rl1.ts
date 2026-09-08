@@ -51,7 +51,7 @@ const rl1Db = drizzle({ client: pool });
  * tenant configuration (see payroll-rl1xml.ts); an org holds one, so the
  * year's slips assemble into ONE return. Employers filing under several RQ
  * numbers need an RQ program type on payroll_filing_accounts first — a named
- * gap, not an approximation (see .local/handoff-quebec.md).
+ * gap, not an approximation.
  */
 
 const num = (value: unknown): string => (value == null ? "0" : String(value));
@@ -337,8 +337,8 @@ export async function rl1Return(orgId: string, taxYear: number): Promise<Rl1Retu
 
 /**
  * The year-end filing population, typed against the filing registry so the
- * CA pack declaration registers it as-is (see .local/handoff-quebec.md — the
- * declaration itself lives in engine/src/payroll/canada/filings.ts).
+ * CA pack declaration registers it as-is; that declaration lives in
+ * engine/src/payroll/canada/filings.ts.
  */
 export async function rl1Population(orgId: string, taxYear: number): Promise<PayrollFilingData> {
   return rl1Db.transaction(

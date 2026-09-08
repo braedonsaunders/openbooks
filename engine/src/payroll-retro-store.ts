@@ -943,7 +943,7 @@ export async function retroRunReview(
  * A retro-specific pre-flight finding, in the shape `payRunReadiness` flags.
  *
  * Kept here rather than in payroll-readiness.ts so the whole retro rule set
- * has one home; the pre-flight surfaces them (see .local/handoff-retro.md).
+ * has one home; the pre-flight surfaces them.
  * They are also ENFORCED — not merely displayed — at the two points where it
  * matters: `createRetroPayRun` cannot build a run that violates them, and
  * `retroEarningLinesForStub` refuses to produce lines for one that does.

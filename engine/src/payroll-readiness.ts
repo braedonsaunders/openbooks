@@ -1067,8 +1067,8 @@ export async function payRunStaleness(
            -- settings writers update orgs.settings without stamping
            -- updated_at, and there is no trigger. The audit_log row
            -- those writers DO insert ('orgs' / the org id) is the reliable
-           -- signal today. See .local/handoff-controls.md for the touch
-           -- trigger that would make the column authoritative.
+           -- signal today. A touch trigger on orgs.settings would make the
+           -- column authoritative and let this clause drop the audit_log leg.
            (exists (select 1 from orgs o
                      where o.id = r.org_id and o.updated_at > r.calculated_at)
             or exists (select 1 from audit_log al

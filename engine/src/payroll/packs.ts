@@ -65,7 +65,7 @@ export class PayrollPackError extends Error {}
  * What a statutory amount is computed FROM. This is the property — and the
  * ONLY property — that decides whether the amount must be recomputed when a
  * deduction changes, which is what the deduction-protection fixpoint in
- * `calculateStub` needs to know (.local/payroll-pipeline-contract.md).
+ * `calculateStub` needs to know.
  *
  * - `earnings` — assessed on gross / pensionable / insurable earnings or on
  *   hours. Protection only ever changes DEDUCTIONS, so an earnings-assessed
@@ -320,8 +320,8 @@ export interface PayrollCountryPack {
     ctx: PayrollEmployerLevyContext,
   ) => Promise<PayrollEmployerLevyFactors>;
   /**
-   * Phase 9 — one re-runnable statutory pass over the current line set
-   * (.local/payroll-pipeline-contract.md). REQUIRED on every installable pack.
+   * Phase 9 — one re-runnable statutory pass over the current line set.
+   * REQUIRED on every installable pack.
    */
   computeStatutory: (
     ctx: PayrollStatutoryComputeContext,

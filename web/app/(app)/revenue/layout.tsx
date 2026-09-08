@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic'
  *
  * The registry's contract is that a feature which is off "disappears from nav,
  * its routes 404". Nav hiding alone leaves the page reachable by direct URL and
- * by browser history, which is UI-only enforcement — the thing AGENTS.md
- * forbids. Gating in the layout covers every route in this segment at once.
+ * by browser history, which is UI-only enforcement, and the contract requires
+ * refusal. Gating in the layout covers every route in this segment at once.
  */
 export default async function RevenueLayout({ children }: { children: React.ReactNode }) {
   const authz = await getAuthz()

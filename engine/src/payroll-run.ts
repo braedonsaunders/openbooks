@@ -1762,8 +1762,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // key, so an employee who has dropped OFF the run (excluded, terminated,
     // moved schedule) leaves no orphaned bank movement behind. Per-employee
     // replacement inside calculateStub cannot see someone who is no longer
-    // being calculated. See .local/payroll-pipeline-contract.md, "Ledger
-    // writes".
+    // being calculated.
     //
     // A SIMULATION writes no entitlement movements at all, and therefore
     // deletes none. Not an optimization: `entitlement_ledger` is append-only
@@ -2895,7 +2894,7 @@ async function applyEntitlementPlanMovements(
 /**
  * Deduction protection over the CURRENT line set, driven to settlement by
  * the caller's statutory pass: fast path, single re-cap, or the alternating
- * fixpoint (.local/payroll-pipeline-contract.md). Each pass re-caps the
+ * fixpoint. Each pass re-caps the
  * ORIGINAL request, never the previous pass's capped amount. Returns the
  * protected orders (the live line objects), their uncapped requests, and
  * the settled result for shortfall reporting.
@@ -3191,7 +3190,7 @@ async function calculateStub(
   // lives in `statutoryHolidayLinesForStub`, which returns the earning lines.
   // Landing here, before phase 3, is what puts the day's pay in gross for
   // percent-of-gross components, vacation, union fringes, WCB and the
-  // statutory pass (.local/payroll-pipeline-contract.md).
+  // statutory pass.
   //
   // Gated on orgs.settings.payroll.statutoryHolidayPay (OFF for existing
   // tenants: the phase changes gross, so it is opted into, never inherited by
@@ -3268,8 +3267,6 @@ async function calculateStub(
   //   taxable_income — computed from income after pre-tax deductions, so a
   //                    pre-tax protected order moves it. Dropped before each
   //                    pass and re-derived from the deductions that pass takes.
-  //
-  // See .local/payroll-pipeline-contract.md.
   /** Earnings-assessed slots already emitted on this stub, `systemKey:kind`. */
   const emittedEarningsAssessed = new Set<string>();
 
@@ -3280,7 +3277,7 @@ async function calculateStub(
   // ---- Phase 8: pack-declared earnings-assessed employer levies ----------
   // WCB/WSIB and provincial EHT for the CA pack; other packs omit this hook.
   // Both accumulators consume against CALCULATED-OR-COMMITTED stubs — see
-  // .local/payroll-pipeline-contract.md and the pack's employer-levies module.
+  // the pack's employer-levies module.
   const employerLevies = await pack.applyEmployerLevies?.({
     tx, orgId, documentId, employeePartyId,
     employeeName: emp.display_name ?? employeePartyId,
@@ -3338,8 +3335,6 @@ async function calculateStub(
   //                case). Capping it raises taxable income, which lowers net,
   //                which lowers the cap, so statutory and protection are run
   //                alternately until the pass's input equals its output.
-  //
-  // See .local/payroll-pipeline-contract.md.
   const { lastProtection, protectedLines, protectionRequested } =
     await settleDeductionProtection({
       lines, gross,

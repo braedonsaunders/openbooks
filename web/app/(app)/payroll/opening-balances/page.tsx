@@ -24,8 +24,7 @@ export const dynamic = 'force-dynamic'
  * year), gated on payroll's own permissions, and loaded as a whole workforce
  * at adoption. The Setup registry expresses none of those three things: its
  * generic API is gated on `admin.setup.manage`, its drawer edits one record at
- * a time, and it has no per-row immutability hook. See
- * .local/handoff-openings.md.
+ * a time, and it has no per-row immutability hook.
  */
 export default async function PayrollOpeningBalancesPage({
   searchParams,

@@ -5,13 +5,10 @@ name: test
 #                 product-neutrality violation so broken code cannot reach main
 #   integration — full suite against a throwaway postgres:16, with a canary
 #                 that fails the job if the DB-backed tests silently skipped.
-#                 This job is the SOLE runner of the unit suite too: the old
-#                 unit job ran the identical `npm test` with an empty
-#                 OPENBOOKS_DB_URL (every DB file self-skips), a strict
-#                 file-for-file subset of this run, while paying a second
-#                 checkout + npm ci + runner per push. Deleted 2026-09: the
-#                 concurrency-4 override went with it, strictly reducing flake
-#                 surface toward the canonical --test-concurrency=1.
+#                 This job runs the unit suite too: a database-less run is a
+#                 strict file-for-file subset of this one (every DB file
+#                 self-skips on an empty OPENBOOKS_DB_URL), so splitting it
+#                 out would buy a second checkout and npm ci for no coverage.
 #   e2e         — Playwright browser smoke against the real app + real DB
 
 on:
@@ -92,8 +89,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          # Register reachability tests audit local main and historical closing
-          # commits; a shallow checkout turns those checks into a partial pass.
+          # Parts of the suite read the repository's own history; a shallow
+          # checkout leaves them nothing to inspect and they degrade into
+          # passes that assert nothing.
           fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -219,13 +217,11 @@ jobs:
 
       - name: Golden harness asserts the ledger invariants
         # The harness exits non-zero when any hard check fails (trial balance,
-        # subledger↔GL and inventory tie-outs), so a fix that breaks a ledger
-        # invariant fails HERE, before merge — not at the next audit. This is
-        # the SOLE harness run in CI: the trust.yml invariants copy was
-        # deleted 2026-09 as byte-identical duplication (same profile, seed,
-        # and window), and the trust publish job consumes the checkpoint
-        # emitted below. Pinned by scripts/ci-pipeline-integrity.test.mjs so
-        # it cannot be dropped or duplicated.
+        # subledger↔GL and inventory tie-outs), so a change that breaks a
+        # ledger invariant fails HERE, before merge. This is the SOLE harness
+        # run in CI; trust.yml consumes the checkpoint emitted below rather
+        # than recomputing it. Pinned by scripts/ci-pipeline-integrity.test.mjs
+        # so it cannot be dropped or duplicated.
         run: |
           ORG_ID=$(node -e '
             const { readFileSync } = require("node:fs");
@@ -237,16 +233,13 @@ jobs:
           npm --prefix engine run --silent harness -- "$ORG_ID"
 
       - name: Assert the simulated company exercised the required scenarios
-        # Folded in from the deleted sim-smoke.yml 2026-09: the only content
-        # there not already covered by this job was this coverage-kinds gate.
-        # sim-smoke ran byte-identical provision/run commands on a strict
-        # subset of this workflow's triggers, so the workflow itself earned
-        # no keep; this one line preserves its unique signal.
+        # A simulation that never reached a period close or a customer payment
+        # proves nothing about the invariants asserted above, so the run is
+        # required to have exercised each listed document kind.
         #
         # The sim CLI refuses to run without OPENBOOKS_SIM=1 for every
-        # subcommand, including this read-only one. sim-smoke.yml set the flag
-        # job-wide; folding the step into this job dropped it, so the gate
-        # failed on the interlock rather than on coverage.
+        # subcommand, including this read-only one; without the flag the step
+        # fails on the interlock rather than on coverage.
         env:
           OPENBOOKS_SIM: "1"
         run: npm --prefix engine run --silent sim -- coverage "$SIM_RUN" --require vendor_bill,vendor_payment,customer_invoice,customer_payment,period_close,period_immutability

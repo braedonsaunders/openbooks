@@ -1,9 +1,9 @@
 # Payment access and concurrent editing
 
-The September 2026 payment review found authorization differences between the
-server-rendered workspaces and their APIs, an incorrect allocation lookup, and
-two concurrent editing defects. This is a reviewed subset of the payment
-domain, not an exhaustive audit or a production-readiness certification.
+How the payment domain authorizes access and behaves under concurrent editing:
+the rules the server-rendered workspaces and their APIs must agree on. This
+describes a reviewed subset of the domain, not an exhaustive audit or a
+production-readiness certification.
 
 ## Access boundaries
 

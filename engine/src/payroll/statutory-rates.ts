@@ -38,7 +38,7 @@ import { US_PACK_RATES } from "./us/rates.ts";
  * a pack may declare a `legacyRows` reader for its pre-scoping blob, which is
  * consulted only when no row exists. That fallback is READ-ONLY — writes always
  * land on rows, so there is never a second writable source of truth for one
- * statutory number (see .local/handoff-rates.md).
+ * statutory number.
  */
 
 // ---------------------------------------------------------------------------
@@ -151,7 +151,7 @@ export interface PayrollPackRates {
 /**
  * The built-in declarations, authored in each pack's own rate module beside the
  * constants they sit next to — the same arrangement as `{us,canada}/filings.ts`
- * and destined for `PayrollCountryPack.statutoryRates` (.local/handoff-rates.md).
+ * and destined for `PayrollCountryPack.statutoryRates`.
  */
 const BUILT_INS: readonly PayrollPackRates[] = [CA_PACK_RATES, US_PACK_RATES];
 

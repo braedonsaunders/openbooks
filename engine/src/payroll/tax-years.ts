@@ -133,7 +133,7 @@ export interface PayrollTaxYearSupport {
  * The built-in declarations, authored in each pack's own rate module. Reached
  * as a list keyed by `country`, never as a hand-maintained map — the same shape
  * `declaredPayrollFilings()` uses, and destined for the same home
- * (`PayrollCountryPack.taxYears`; see .local/handoff-rates.md).
+ * (`PayrollCountryPack.taxYears`).
  */
 const BUILT_INS: readonly PayrollTaxYearSupport[] = [CA_TAX_YEARS, US_TAX_YEARS];
 
