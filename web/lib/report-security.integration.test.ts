@@ -90,7 +90,7 @@ test(
         createScratchUser(oid, 'Restricted report reader', 'review_reader'),
       )
       await withBypassContext(async () => {
-        await createScratchUser(
+        const otherActor = await createScratchUser(
           otherFixture.orgId,
           'Other organization administrator',
           'review_other_role',
@@ -98,8 +98,13 @@ test(
         await db.execute(
           sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${otherFixture.orgId} and key='review_other_role'`,
         )
-        await db.execute(sql`insert into role_assignments(user_id,org_id,role_id)
-    select ${uid},${otherFixture.orgId},id from app_roles where org_id=${otherFixture.orgId} and key='review_other_role'`)
+        await assert.rejects(db.execute(sql`insert into role_assignments(user_id,org_id,role_id)
+    select ${uid},${otherFixture.orgId},id from app_roles where org_id=${otherFixture.orgId} and key='review_other_role'`),
+        (error: unknown) => (error as { cause?: { constraint?: string } }).cause?.constraint === 'role_assignments_user_id_fkey')
+        // One login can reach the other company through its local acting user;
+        // those roles must never widen reports in the reader's home company.
+        await db.execute(sql`insert into user_org_access(member_user_id,org_id,acting_user_id)
+          values(${uid},${otherFixture.orgId},${otherActor})`)
       })
       state.user = {
         id: uid,
