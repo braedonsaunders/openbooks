@@ -33,7 +33,7 @@ export async function GET(req: Request) {
   const denied = await guardRemittancePeriod(gate, from, to)
   if (denied) return denied
   try {
-    const groups = await payrollRemittanceSummary(gate.user.orgId, { from, to })
+    const groups = await payrollRemittanceSummary(gate.user.orgId, { from, to }, gate.allowedSubsidiaryIds)
     return NextResponse.json({ groups })
   } catch (error) {
     if (error instanceof PayrollError) return NextResponse.json({ error: error.message }, { status: 422 })
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
   if (periodDenied) return periodDenied
   try {
     const bill = await createRemittanceBill(gate.user.orgId, gate.user.id, {
-      partyId, from, to, filingAccountId,
+      partyId, from, to, filingAccountId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
     return NextResponse.json({ ok: true, ...bill })
   } catch (e) {

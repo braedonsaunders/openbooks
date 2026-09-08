@@ -689,9 +689,9 @@ export async function createRemittanceBill(
     // live markers for this destination/account and reject any intersecting
     // date window, not only exact from/to equality.
     const overlap = (await tx.execute<{
-      document_number: string | null; from: string; to: string;
+      document_number: string | null; subsidiary_id: string | null; from: string; to: string;
     }>(sql`
-      select document_number,
+      select document_number, subsidiary_id,
              custom->'payrollRemittance'->>'from' as from,
              custom->'payrollRemittance'->>'to' as to
         from documents
@@ -705,6 +705,12 @@ export async function createRemittanceBill(
     `));
     const existing = overlap.rows[0];
     if (existing) {
+      // Keep the overlap fence org-wide: hiding a conflicting document must
+      // never permit a duplicate liability bill. Its identifying metadata is
+      // only available to actors who can read that document's legal entity.
+      if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, existing.subsidiary_id)) {
+        throw new PayrollError("nothing to remit to this vendor for the period");
+      }
       const exact = existing.from === input.from && existing.to === input.to;
       const refusal = exact
         ? duplicateRemittanceMessage({ documentNumber: existing.document_number })

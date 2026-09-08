@@ -3073,3 +3073,24 @@ skips), and the locked-dependency production build passed (`history-unit.log`
 and `history-build.log`). Follow-up review found that the remittance page/tool
 loader and GET route omit the engine's subsidiary argument; that caller gap is
 a separate confirmed repair item, despite the engine-level filtering passing.
+
+## Remittance transport and refusal isolation — 2026-09-07
+
+The earlier engine-level bill filter was insufficient: the shared page/tool
+loader and GET route omitted the actor's subsidiary argument. A real fixture
+returned `loaderLeaks: true, apiLeaks: true` for a matching hidden-entity bill.
+Both callers now pass the scope; POST also carries it into the transactional
+bill creator, preserving its vendor, target-entity and accrual checks.
+
+A second reproduction showed duplicate prevention revealing the hidden bill's
+number in its error text. The conflict query remains organization-wide so
+hidden liabilities cannot be billed twice, but the service checks the
+conflicting document's entity before returning identifying metadata. Hidden
+conflicts receive the ordinary non-disclosing refusal.
+
+All 59 focused checks passed (7,280.820458 ms, zero failures/skips), including
+real GET, shared page/tool loader, POST, unrestricted-reader control, unchanged
+bill count, and the existing remittance concurrency suite. Workspace
+typechecks and changed-file lint passed. Evidence:
+`audit-remittance-transport-scope-2026-09-07/before.log`, `overlap-before.log`,
+`focused.log`, `typecheck.log`, and `lint.log`.

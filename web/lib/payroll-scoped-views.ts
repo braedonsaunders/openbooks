@@ -55,7 +55,7 @@ export async function scopedRemittanceSummary(
 ): Promise<RemittanceGroup[] | null> {
   const denied = await guardRemittancePeriod(gate, range.from, range.to)
   if (denied) return null
-  return payrollRemittanceSummary(gate.user.orgId, range)
+  return payrollRemittanceSummary(gate.user.orgId, range, gate.allowedSubsidiaryIds)
 }
 
 /** Opening balances for a tax year, limited to the employees the caller may see. */
