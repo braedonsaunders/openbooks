@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { PayrollError } from "./payroll-error.ts";
-import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./payroll-run.ts";
+import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./payroll-scope.ts";
 
 export type PayRunAdjustmentMutation =
   | {

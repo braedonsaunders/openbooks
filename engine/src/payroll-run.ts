@@ -1,6 +1,7 @@
+import { payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./payroll-scope.ts";
 import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from "./payroll-fences.ts";
 import { createHash } from "node:crypto";
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { PayrollError } from "./payroll-error.ts";
 import {
@@ -686,46 +687,7 @@ export function nextPeriodAfter(
  */
 export type PayRunType = "regular" | "bonus" | "termination" | "retro";
 
-/** The role-derived subsidiary visibility a payroll engine caller carries. */
-export type PayrollSubsidiaryScope = ReadonlySet<string> | null | undefined;
-
-/**
- * Shared fail-closed SQL predicate for payroll engine reads. A null/undefined
- * scope is unrestricted; a present empty set matches nothing. Payroll records
- * are legal-entity-owned, so a null subsidiary never belongs to a restricted
- * caller (the same rule as the document API gate).
- */
-export function payrollSubsidiaryScopeFilter(
-  column: SQL,
-  allowedSubsidiaryIds: PayrollSubsidiaryScope,
-): SQL {
-  if (allowedSubsidiaryIds == null) return sql``;
-  const ids = [...allowedSubsidiaryIds];
-  return ids.length > 0
-    ? sql` and ${column} in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
-    : sql` and false`;
-}
-
-/** Predicate matching rows a restricted caller must not be allowed to read. */
-export function payrollSubsidiaryOutsideScopeFilter(
-  column: SQL,
-  allowedSubsidiaryIds: PayrollSubsidiaryScope,
-): SQL {
-  if (allowedSubsidiaryIds == null) return sql`false`;
-  const ids = [...allowedSubsidiaryIds];
-  return ids.length > 0
-    ? sql`${column} is null or ${column} not in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
-    : sql`true`;
-}
-
-/** In-memory twin for direct service guards and tests. */
-export function payrollSubsidiaryInScope(
-  allowedSubsidiaryIds: PayrollSubsidiaryScope,
-  subsidiaryId: string | null | undefined,
-): boolean {
-  if (allowedSubsidiaryIds == null) return true;
-  return subsidiaryId != null && subsidiaryId !== "" && allowedSubsidiaryIds.has(subsidiaryId);
-}
+export { payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, payrollSubsidiaryOutsideScopeFilter, type PayrollSubsidiaryScope } from "./payroll-scope.ts";
 
 const RUN_TYPE_MEMO: Record<PayRunType, string> = {
   regular: "Pay run",

@@ -1,3 +1,4 @@
+import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll-scope.ts";
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type {
@@ -348,6 +349,7 @@ export function payRunWhere(
   allowedSubsidiaryIds?: Set<string> | null,
 ): SQL {
   const parts: SQL[] = [documentWhere(kinds, view, adhoc, orgId, allowedSubsidiaryIds)];
+  parts.push(payrollRunPopulationScopeFilter(orgId, sql`d.id`, allowedSubsidiaryIds));
   for (const clause of view.filters) {
     const value = Array.isArray(clause.value) ? String(clause.value[0] ?? "") : String(clause.value ?? "");
     if (clause.key === "run_stage" && value) {
