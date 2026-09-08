@@ -125,7 +125,19 @@ function generateCopySql(
     }
   }
 
-  return `insert into "${t.name}" (${cols.join(", ")}) select ${exprs.join(", ")} from "${t.name}" where ${where}`;
+  // The subsidiary BEFORE trigger requires its parent to exist already.
+  // Deferred FKs cannot repair child-first insertion, and heap/index scan order
+  // changes after ordinary edits. Order the entire hierarchy by ancestor depth.
+  const tree = t.name === "subsidiaries" ? `with recursive source_tree as (
+    select id, 0 as depth from subsidiaries where org_id = '${prod}' and parent_id is null
+    union all
+    select child.id, parent.depth + 1 from subsidiaries child
+      join source_tree parent on parent.id = child.parent_id where child.org_id = '${prod}'
+  ) ` : "";
+  const order = t.name === "subsidiaries"
+    ? ` order by (select depth from source_tree where source_tree.id = subsidiaries.id), id`
+    : "";
+  return `${tree}insert into "${t.name}" (${cols.join(", ")}) select ${exprs.join(", ")} from "${t.name}" where ${where}${order}`;
 }
 
 export async function runClone(opts: CloneOptions): Promise<CloneResult> {

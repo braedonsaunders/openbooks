@@ -4353,3 +4353,66 @@ shortcut; its first run omitted the required placeholder password hash, which
 was corrected before the final run. Workspace types, warning-free changed-file
 lint, whitespace and exact-lock production build passed. Evidence:
 `audit-promotion-view-ownership-2026-09-08`. No production data was changed.
+
+### Captured production state and controlled sandbox teardown (2026-09-08)
+
+A real capture/review/approve/apply probe showed an approved configuration change
+could overwrite a later production edit. Forward migration 0098 adds an exact
+production-before snapshot and an explicit captured-base flag. Capture records
+the raw production state before normalizing sandbox references; application
+compares that snapshot under the target row lock. Stale updates/deletes, missing
+targets and insertion collisions fail closed, rolling back the entire change
+set. Capture and application use UTC for stable timestamp serialization.
+Historical captures remain unchanged and require recapture instead of inventing
+a production base for an already approved artifact.
+
+Upgrade verification exposed another real lifecycle failure: published project
+financial profiles prevented sandbox delete, refresh and reset. Three real
+lifecycle regressions reproduced it. Forward migration 0099 reuses the canonical
+sandbox-wipe authorization helper for DELETE only. Production history remains
+immutable even with the wipe flag; sandbox edits and ordinary sandbox deletes
+remain guarded. The actual lifecycle operations preserve production policy rows
+exactly. Neither migration edits the baseline or any published migration.
+
+The initial promotion matrix passed 37/37 and policy/teardown coverage passed
+7/7, without skips. Workspace types, warning-free changed-file lint and the
+exact-lock production build passed. The full unit run passed 3,209 of 3,210
+checks; its sole failure required the two new migrations to name themselves in
+the first comment. Those headers were corrected and all five migration-ordinal
+checks passed. Final migration files were then validated on separate fresh and
+upgrade databases rather than rewriting an applied checksum ledger. The upgrade
+probe preserved the real approved header/items exactly, refused legacy apply,
+and successfully deleted its owned sandbox afterward. Evidence:
+`audit-promotion-stale-capture-2026-09-08` and
+`audit-project-profile-sandbox-2026-09-08`. No production database was touched.
+
+### Parent-first sandbox hierarchy copy (2026-09-08)
+
+The final fresh-schema matrix exposed a separate clone defect: INSERT/SELECT
+copied subsidiaries without ordering parents before children. The immediate
+subsidiary-tree guard correctly rejected a child whose copied parent had not
+yet been inserted. Eight of 44 checks failed under that scan order, while
+standalone reruns passed. The frozen f76e6e9f full integration run independently
+finished with the same defect in two scenarios: 2,673/2,675 passed, no skips,
+1,463,871.641 ms. Its fixture lifecycle recorded 2,292 balanced leases/releases/
+resets, four bootstraps/teardowns/schema-wide verifications and zero leaks.
+
+Clone now computes subsidiary ancestor depth in a tenant-scoped recursive CTE
+and inserts parents first, with a deterministic ID tie-breaker. Deferred foreign
+keys and migration flags do not substitute for this ordering. Four regressions
+move a root's physical row after its descendants, then verify create and refresh
+for full, masked, development and as-of sandboxes. The original reproducer failed
+all four at the tree guard. Its first post-fix run exposed a test setup mistake:
+it nested a lifecycle call that owns its transaction inside another maintenance
+transaction. Removing that wrapper retained the parent-edit reproducer and
+restored the supported service contract. The final four cases and eight existing
+scope/reference checks passed 12/12 without skips (9,726.96925 ms).
+
+Types, warning-free changed-file lint and the exact-lock production build passed.
+Evidence: `audit-sandbox-tree-order-2026-09-08`; the full pre-fix result is in
+`audit-identity-fixture-contract-2026-09-08/full-integration.log`. A new full run
+must include this fix before declaring another passing full checkpoint.
+The final combined fresh-database promotion/ownership/authority/teardown matrix
+then passed 44/44 without skips (160,936.414792 ms), including all eight scenarios
+that failed before parent-first insertion. Together with the four new ordering
+regressions, the final targeted coverage exercises 48 distinct cases.

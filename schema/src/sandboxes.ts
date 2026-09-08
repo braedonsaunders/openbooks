@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -152,7 +154,21 @@ export const changeSetItems = pgTable(
     op: text("op", { enum: ["insert", "update", "delete"] }).notNull(),
     /** Sandbox row payload to apply (null for delete). */
     payload: jsonb("payload"),
+    /** Exact production record at capture; null for a planned insertion. */
+    expectedBefore: jsonb("expected_before").$type<Record<string, unknown> | null>(),
+    /** False on historical captures which cannot safely assert a base state. */
+    baseCaptured: boolean("base_captured").notNull().default(false),
     ...auditColumns,
   },
-  (t) => [index("change_set_items_set").on(t.changeSetId)],
+  (t) => [
+    index("change_set_items_set").on(t.changeSetId),
+    check("change_set_items_captured_base_valid", sql`
+      not ${t.baseCaptured} or coalesce(
+        (${t.op} = 'insert' and ${t.expectedBefore} is null) or
+        (${t.op} in ('update', 'delete') and ${t.expectedBefore} is not null
+          and jsonb_typeof(${t.expectedBefore}) = 'object'
+          and ${t.expectedBefore}->>'id' = ${t.targetId}::text
+          and ${t.expectedBefore}->>'org_id' = ${t.orgId}::text), false)
+    `),
+  ],
 );

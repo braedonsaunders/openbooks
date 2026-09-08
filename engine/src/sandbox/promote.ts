@@ -56,7 +56,7 @@ interface TableNameRow extends Record<string, unknown> { table_name: string }
 interface ChangeDiffRow extends Record<string, unknown> {
   sbx_id: string; prod_id: string | null; sbx_row: Record<string, unknown>; prod_row: Record<string, unknown> | null;
 }
-interface IdRow extends Record<string, unknown> { id: string }
+interface IdRow extends Record<string, unknown> { id: string; expected_before: Record<string, unknown> }
 interface ChangeSetRow extends Record<string, unknown> {
   org_id: string;
   status: string;
@@ -68,6 +68,7 @@ interface ChangeSetRow extends Record<string, unknown> {
 }
 interface ChangeSetItemRow extends Record<string, unknown> {
   table_name: string; target_id: string; op: "insert" | "update" | "delete"; payload: Record<string, unknown> | null;
+  expected_before: Record<string, unknown> | null; base_captured: boolean;
 }
 
 /** Every lifecycle transition must carry a real, active production user. */
@@ -138,6 +139,7 @@ export async function buildChangeSet(
   // failed catalog read or item insert therefore rolls back the header too;
   // no partially captured draft can become an applyable artifact.
   return withMaintenanceTransaction(null, async () => {
+    await db.execute(sql`set local time zone 'UTC'`);
     const s = await db.execute<SandboxTargetRow>(sql`
       select org_id, production_org_id from sandboxes where id = ${sandboxId}`);
     const row = s.rows[0];
@@ -190,6 +192,9 @@ export async function buildChangeSet(
           left join "${t}" p on p.org_id = '${prod}' and ob_rebase(p.id, '${seed}') = s.id
          where s.org_id = '${sbx}'`));
       for (const d of diff.rows) {
+        // Keep the raw production record before normalizing reference identities
+        // for comparison. A reviewed repair must still match that actual base.
+        const expectedBefore = d.prod_row ? structuredClone(d.prod_row) : null;
         const userField = USER_REFERENCE_COLUMNS[t];
         let repairsProductionReference = false;
         if (userField) {
@@ -214,12 +219,14 @@ export async function buildChangeSet(
           targetId,
           op: d.prod_id ? "update" : "insert",
           payload,
+          expectedBefore,
+          baseCaptured: true,
         });
         itemCount++;
       }
       // Deletes: production rows with no sandbox counterpart.
       const dels = await db.execute<IdRow>(sql.raw(`
-        select p.id from "${t}" p
+        select p.id, row_to_json(p) as expected_before from "${t}" p
          where p.org_id = '${prod}'
            and not exists (select 1 from "${t}" s where s.org_id = '${sbx}' and s.id = ob_rebase(p.id, '${seed}'))`));
       for (const dr of dels.rows) {
@@ -230,6 +237,8 @@ export async function buildChangeSet(
           targetId: dr.id,
           op: "delete",
           payload: null,
+          expectedBefore: dr.expected_before,
+          baseCaptured: true,
         });
         itemCount++;
       }
@@ -303,6 +312,7 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
   const id = assertUuid(changeSetId);
   const actor = requireActor(applierId, "change-set application");
   await withMaintenanceTransaction(null, async () => {
+    await db.execute(sql`set local time zone 'UTC'`);
     const result = await db.execute<ChangeSetRow>(sql`
       select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
         from change_sets where id = ${id} for update`);
@@ -319,10 +329,13 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
     ]);
 
     const items = await db.execute<ChangeSetItemRow>(sql`
-      select table_name, target_id, op, payload from change_set_items
+      select table_name, target_id, op, payload, expected_before, base_captured from change_set_items
        where change_set_id = ${id} and org_id = ${prod} order by created_at, id`);
     if (items.rows.length !== Number(c.item_count)) {
       throw new Error("change set item count does not match its captured snapshot");
+    }
+    if (items.rows.some(item => !item.base_captured)) {
+      throw new Error("change set has no captured production base; recapture and review it before applying");
     }
 
     const authority = await promotionAuthority(actor, prod);
@@ -335,12 +348,17 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
       }
       const target = assertUuid(it.target_id);
       const table = sql`public.${sql.identifier(t)}`;
-      const prior = await db.execute<{ row: Record<string, unknown> }>(sql`
-        select to_jsonb(existing) as row from ${table} existing
+      const prior = await db.execute<{ row: Record<string, unknown>; matches_base: boolean }>(sql`
+        select to_jsonb(existing) as row,
+               to_jsonb(existing) is not distinct from ${JSON.stringify(it.expected_before)}::jsonb as matches_base
+          from ${table} existing
          where id = ${target} and org_id = ${prod} for update`);
       const before = prior.rows[0]?.row ?? null;
       if (it.op === "insert" ? before !== null : before === null) {
         throw new Error(`promotion target ${t}/${target} ${it.op === "insert" ? "already exists" : "no longer exists"}; recapture the change set`);
+      }
+      if (it.op !== "insert" && !prior.rows[0]!.matches_base) {
+        throw new Error(`promotion target ${t}/${target} changed since capture; recapture and review the change set`);
       }
       let after: Record<string, unknown> | null = null;
       if (it.op === "delete") {
