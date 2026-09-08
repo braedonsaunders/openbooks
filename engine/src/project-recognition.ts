@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "./db.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions, uuidArray } from "./subsidiaries.ts";
-import { now } from "./clock.ts";
+import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import { businessToday } from "./business-date.ts";
 import { add, mul, neg, sum, isZero } from "./money.ts";
 
@@ -402,6 +402,7 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
     // Hold the settings row through commit so an account remap cannot split
     // one approval batch across two control-account policies.
     const accts = await recognitionAccountsFrom(tx, orgId, true);
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) return [];
     if (!accts.laborWip || !accts.laborClearing) return []; // inert until mapped
     const idArr = `{${timeEntryIds.join(",")}}`;
     const rows = (await tx.execute<LaborPostingSourceRow>(sql`

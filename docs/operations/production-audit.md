@@ -3419,3 +3419,23 @@ detections. This includes the recognition posting snapshot, all three financial
 batch savepoints, lease concurrency and lease entity controls. Later payroll
 and project fixes have the focused and unit evidence recorded above. Evidence:
 `audit-lease-posting-scope-2026-09-08/full-integration.log`.
+
+## Projects parent gate at time posting services — 2026-09-08
+
+With Projects disabled and time tracking enabled, both native labor costing
+and overhead application still posted journals and stamped approved time.
+The services now recheck the authoritative Projects gate while holding the
+organization settings row through posting. The existing feature registry and
+dependency resolver were extracted into a pure engine module and re-exported
+by the web feature module, preserving one definition and existing defaults.
+
+Four real database cases cover each service with Projects already disabled
+and with a disable committing while posting waits. Disabled posting preserves
+time and project data, re-enabling posts once, and controlled historical
+reversals remain available after disabling again. All 23 focused checks passed
+(13,831.214458 ms, no failures/skips). All 3,210 unit tests passed
+(134,033.133542 ms, no skips); workspace typechecks and the locked-dependency
+production build passed. Full lint has zero errors and 709 warnings; removing
+an unused import lowers the enforced warning ceiling accordingly. Evidence:
+`audit-project-time-feature-gate-2026-09-08/before.log`, `overhead-before.log`,
+`focused.log`, `typecheck.log`, `unit.log`, `build.log`, and `lint-full.log`.
