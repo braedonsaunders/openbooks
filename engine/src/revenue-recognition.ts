@@ -1338,26 +1338,34 @@ function recognitionObligationScope(orgId: string, allowedSubsidiaryIds?: readon
   )`;
 }
 
-/**
- * Post every due, unposted recognition line whose period ends on or before
- * `asOfDate`. Each line becomes one balanced journal entry (DR deferred / CR
- * recognized) posted through the kernel, origin = 'revenue_recognition'. A
- * closed GL period is skipped (not an error). Idempotent: a line with a
- * journal_entry_id is never reconsidered.
+type RecognitionPostingRow = {
+  line_id: string; planned: string; period_id: string; sequence: number;
+  book_id: string; period_name: string; period_ends_on: string;
+  method: RecognitionMethod; period_closed: boolean;
+  obligation_id: string; obligation_desc: string; contract_number: string;
+  obl_deferred: string | null; obl_recognized: string | null;
+  item_deferred: string | null; item_income: string | null;
+  rule_deferred: string | null; rule_recognized: string | null;
+  subsidiary_id: string | null; base_currency: string | null;
+  department_id: string | null; project_id: string | null;
+  location_id: string | null; class_id: string | null;
+  equipment_unit_id: string | null; extra_dims: Record<string, unknown>;
+};
+
+/** Discovery is advisory. The posting transaction reloads this same projection
+ * after owning the obligation, while locking the line and its native policy.
  */
-export async function runRevenueRecognition(
+async function recognitionPostingRows(
+  runner: SqlExecutor,
   orgId: string,
   asOfDate: string,
-  actorId: string | null,
   obligationId?: string,
   allowedSubsidiaryIds?: string[],
-): Promise<RunRecognitionResult> {
-  recognitionDate(asOfDate, "recognition as-of date");
-  await assertEnabled(db, orgId);
-  const subsidiaryContext = await loadSubsidiaryContext(db, orgId);
+  lineId?: string,
+  claim = false,
+): Promise<RecognitionPostingRow[]> {
   const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds);
-
-  const due = (await db.execute<any>(sql`
+  return (await runner.execute<RecognitionPostingRow>(sql`
     select l.id             as line_id,
            l.planned_amount as planned,
            l.period_id      as period_id,
@@ -1416,98 +1424,87 @@ export async function runRevenueRecognition(
             or (r.method = 'percent_complete' and p.starts_on <= ${asOfDate}))
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
        and ${obligationScope}
-     order by c.contract_number, o.description, l.sequence`));
+       ${lineId ? sql`and l.id = ${lineId}` : sql``}
+     order by c.contract_number, o.description, l.sequence
+     ${claim ? sql`for update of l for share of s, bk, c, r, p` : sql``}`)).rows;
+}
+
+/**
+ * Post every due, unposted recognition line whose period ends on or before
+ * `asOfDate`. Each line becomes one balanced journal entry (DR deferred / CR
+ * recognized) posted through the kernel, origin = 'revenue_recognition'. A
+ * closed GL period is skipped (not an error). Idempotent: a line with a
+ * journal_entry_id is never reconsidered.
+ */
+export async function runRevenueRecognition(
+  orgId: string,
+  asOfDate: string,
+  actorId: string | null,
+  obligationId?: string,
+  allowedSubsidiaryIds?: string[],
+): Promise<RunRecognitionResult> {
+  recognitionDate(asOfDate, "recognition as-of date");
+  await assertEnabled(db, orgId);
+  const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds);
+
+  const due = await recognitionPostingRows(db, orgId, asOfDate, obligationId, allowedSubsidiaryIds);
 
   const result: RunRecognitionResult = { posted: 0, skipped: 0, totalAmount: "0", entries: [], problems: [] };
 
-  for (const row of due.rows) {
-    const planned: string = row.planned;
-    if (isZero(planned)) {
-      await db.execute(sql`
-        update recognition_schedule_lines set recognized_amount = '0', updated_at = now() where id = ${row.line_id} and org_id = ${orgId}`);
-      result.skipped++;
-      continue;
-    }
-    if (row.period_closed) {
-      result.skipped++;
-      result.problems.push(`${row.contract_number} ${row.period_name}: GL period closed`);
-      continue;
-    }
-
-    const deferredAccountId = row.obl_deferred ?? row.item_deferred ?? row.rule_deferred;
-    const recognizedAccountId = row.obl_recognized ?? row.rule_recognized ?? row.item_income;
-    if (!deferredAccountId || !recognizedAccountId) {
-      result.skipped++;
-      result.problems.push(`${row.contract_number} ${row.obligation_desc}: deferred/recognized account not configured`);
-      continue;
-    }
-
-    // DR deferred (+planned), CR recognized (−planned) — balanced by construction.
-    const lines = [
-      { accountId: deferredAccountId, amount: planned },
-      { accountId: recognizedAccountId, amount: neg(planned) },
-    ];
-    try {
-      await validateSubsidiaryRestrictions(db, {
-        orgId,
-        ctx: subsidiaryContext,
-        docSubsidiaryId: row.subsidiary_id,
-        lines: lines.map((line) => ({
-          ...line,
-          subsidiaryId: row.subsidiary_id,
-          departmentId: row.department_id,
-          projectId: row.project_id,
-          locationId: row.location_id,
-          classId: row.class_id,
-        })),
-      });
-    } catch (error) {
-      result.problems.push(`${row.contract_number} ${row.period_name}: ${(error as Error).message}`);
-      continue;
-    }
-    const bal = sum(lines.map((l) => l.amount));
-    if (!isZero(bal)) {
-      result.problems.push(`${row.contract_number} ${row.period_name}: unbalanced (${bal})`);
-      continue;
-    }
-
-    // Scheduled lines post at period end; a percent_complete catch-up in the
-    // still-open current period posts at the measurement (as-of) date instead
-    // of future-dating to period end.
-    const postingDate: string =
-      row.method === "percent_complete" && asOfDate < row.period_ends_on ? asOfDate : row.period_ends_on;
+  for (const candidate of due) {
     try {
       const posted = await db.transaction(async (tx) => {
-        // Rebuilding, event recording and cancellation all lock this obligation
-        // before touching schedule lines. Recheck mutable eligibility after the
-        // preliminary scan and before claiming any line.
+        // Rebuilds, event writes and cancellation share this aggregate lock.
+        // Nothing from the preliminary scan is a financial posting input.
         const obligation = await tx.execute<{ id: string }>(sql`
           select o.id from performance_obligations o
-            join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
-           where o.org_id = ${orgId} and o.id = ${row.obligation_id}
-             and o.status <> 'cancelled' and not r.is_forecast
-             and ${obligationScope}
+           where o.org_id = ${orgId} and o.id = ${candidate.obligation_id}
            for update of o`);
         if (!obligation.rows[0]) return { status: "already_posted" as const };
-        // Claim the schedule line at the aggregate root. Concurrent runners
-        // serialize here; after the winner commits, the loser no longer
-        // satisfies journal_entry_id is null and cannot create a second entry.
-        // Recheck the GL close under the same lock so a period cannot close
-        // between the preliminary scan and the actual ledger write.
-        const claim = (await tx.execute<{ id: string; period_closed: boolean }>(sql`
-          select l.id,
-                 period_module_is_closed(
-                   ${orgId}, l.period_id, s.book_id, ${row.subsidiary_id}, 'gl'
-                 ) as period_closed
-            from recognition_schedule_lines l
-            join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
-           where l.id = ${row.line_id}
-             and l.org_id = ${orgId}
-             and l.journal_entry_id is null
-           for update of l`));
-        if (!claim.rows[0]) return { status: "already_posted" as const };
-        if (claim.rows[0].period_closed) return { status: "period_closed" as const };
-
+        await assertEnabled(tx, orgId);
+        const row = (await recognitionPostingRows(
+          tx, orgId, asOfDate, candidate.obligation_id, allowedSubsidiaryIds,
+          candidate.line_id, true,
+        ))[0];
+        if (!row) return { status: "already_posted" as const };
+        if (row.period_closed) return { status: "period_closed" as const };
+        const planned = row.planned;
+        if (isZero(planned)) {
+          await tx.execute(sql`
+            update recognition_schedule_lines set recognized_amount = '0',
+                   updated_at = now(), updated_by = ${actorId}
+             where id = ${row.line_id} and org_id = ${orgId} and journal_entry_id is null`);
+          return { status: "zero" as const };
+        }
+        const deferredAccountId = row.obl_deferred ?? row.item_deferred ?? row.rule_deferred;
+        const recognizedAccountId = row.obl_recognized ?? row.rule_recognized ?? row.item_income;
+        if (!deferredAccountId || !recognizedAccountId) {
+          return { status: "not_configured" as const, row };
+        }
+        if (!row.subsidiary_id || !row.base_currency) {
+          throw new RevenueRecognitionError("recognition legal entity and functional currency are required");
+        }
+        const subsidiaryId = row.subsidiary_id;
+        // Hold the legal-entity tree while validating the current account and
+        // dimension restrictions; discovery-time validation is not sufficient.
+        await tx.execute(sql`select id from subsidiaries where org_id = ${orgId} order by id for share`);
+        const subsidiaryContext = await loadSubsidiaryContext(tx, orgId);
+        const lines = [
+          { accountId: deferredAccountId, amount: planned },
+          { accountId: recognizedAccountId, amount: neg(planned) },
+        ];
+        await validateSubsidiaryRestrictions(tx, {
+          orgId, ctx: subsidiaryContext, docSubsidiaryId: subsidiaryId,
+          lines: lines.map(line => ({
+            ...line, subsidiaryId,
+            departmentId: row.department_id, projectId: row.project_id,
+            locationId: row.location_id, classId: row.class_id,
+          })),
+        });
+        const balance = sum(lines.map(line => line.amount));
+        if (!isZero(balance)) throw new RevenueRecognitionError(`unbalanced (${balance})`);
+        const postingDate = row.method === "percent_complete" && asOfDate < row.period_ends_on
+          ? asOfDate : row.period_ends_on;
         const entryRes = (await tx.execute<{ id: string }>(sql`
           insert into journal_entries
             (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
@@ -1546,30 +1543,34 @@ export async function runRevenueRecognition(
              set recognized_amount = ${planned}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
            where id = ${row.line_id} and org_id = ${orgId}`);
 
-        return { status: "posted" as const, entryId: eid };
+        return { status: "posted" as const, entryId: eid, planned, row };
       });
-
-      if (posted.status === "already_posted") {
+      if (posted.status === "already_posted" || posted.status === "zero") {
         result.skipped++;
+        continue;
+      }
+      if (posted.status === "not_configured") {
+        result.skipped++;
+        result.problems.push(`${posted.row.contract_number} ${posted.row.obligation_desc}: deferred/recognized account not configured`);
         continue;
       }
       if (posted.status === "period_closed") {
         result.skipped++;
-        result.problems.push(`${row.contract_number} ${row.period_name}: GL period closed`);
+        result.problems.push(`${candidate.contract_number} ${candidate.period_name}: GL period closed`);
         continue;
       }
       result.posted++;
-      result.totalAmount = add(result.totalAmount, planned);
+      result.totalAmount = add(result.totalAmount, posted.planned);
       result.entries.push({
-        contract: row.contract_number,
-        obligation: row.obligation_desc,
-        period: row.period_name,
-        amount: planned,
+        contract: posted.row.contract_number,
+        obligation: posted.row.obligation_desc,
+        period: posted.row.period_name,
+        amount: posted.planned,
         entryId: posted.entryId,
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      result.problems.push(`${row.contract_number} ${row.period_name}: ${msg.slice(0, 120)}`);
+      result.problems.push(`${candidate.contract_number} ${candidate.period_name}: ${msg.slice(0, 120)}`);
     }
   }
 

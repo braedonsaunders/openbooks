@@ -3183,3 +3183,30 @@ invalid books and retired scenario-book history. Web typecheck and changed-file
 lint passed. No production report behavior changed. Evidence:
 `audit-statement-fixture-parameter-2026-09-07/before.log`, `focused.log`,
 `typecheck.log`, and `lint.log`. A new full integration run is still required.
+
+## Revenue-recognition posting snapshot — 2026-09-08
+
+A controlled interleave changed an obligation's recognized account while a
+recognition run waited for its lock. After the edit committed, the run still
+credited 1,200.0000 to the old account: accounts, amounts, dimensions and posting
+dates had been computed from an unlocked discovery read.
+
+Discovery is now advisory. Each posting acquires the obligation and reloads
+the shared typed projection, locking the schedule line and native schedule,
+book, contract, rule and period records. Current scope, eligibility, period,
+account and dimension checks precede journal writes. The subsidiary tree is
+held during restriction validation. Zero-amount updates follow the same locked
+path, and results report the amount actually claimed. Missing accounts retain
+the skipped count and named refusal.
+
+Seven controlled races cover obligation/rule account edits, amount changes,
+zero-to-positive, positive-to-zero, forecast-only policy and missing accounts.
+All 51 final recognition/cancellation checks passed (6,118.837 ms, no skips).
+The broader unit gate passed 3,210/3,210 (111,764.889958 ms, no skips), workspace
+typechecks and locked-dependency production build passed, and full lint passed
+with zero errors and 711 warnings. Final engine typecheck passed after adding
+the explicit missing-account outcome. The typed projection removes one more
+explicit-any node; the enforced limits are now 379 explicit-any / 711 warnings.
+Evidence: `audit-revenue-posting-snapshot-2026-09-07/before.log`,
+`final-regressions.log`, `unit.log`, `typecheck.log`, `typecheck-final.log`,
+`lint-full.log`, and `build.log`.
