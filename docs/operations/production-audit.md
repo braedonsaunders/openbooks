@@ -4137,3 +4137,52 @@ Seven further storage probes confirmed missing role/assignment parent references
 cross-tenant role/user references, and deletion of an assigned role. Those
 referential-integrity findings are the next active slice and are not resolved by
 0096 (`audit-role-reference-integrity-2026-09-08`).
+
+### Role references and configuration promotion preserve identity evidence (2026-09-08)
+
+Forward migration 0097 adds validated organization references for roles and
+assignments, plus composite same-organization user/role references. Seven direct
+SQL probes previously accepted missing or foreign parents or deletion of an
+assigned role. The migration preflight names an exact offending relationship,
+row, organization and parent and refuses the upgrade without rewriting grants.
+Unique indexes and schema metadata match the new storage constraints.
+
+An upgrade rehearsal deliberately seeded one invalid grant. Bootstrap refused it,
+preserved both the invalid evidence and valid grants exactly, and left 0097
+unapplied. After removing only that deliberate test row, upgrade and replay
+passed; the valid grant remained unchanged and all four constraints validated.
+Fresh bootstrap and 8/8 direct-reference checks passed (3,735.094334 ms).
+
+The broader compatibility run exposed a real promotion defect: the existing
+fixture expected an assigned production role to be deleted. Promotion also
+implemented updates as delete-and-insert, incompatible with preserved references,
+and omitted per-record before/after audit evidence. Updates now change rows in
+place, preserve creation metadata and assign the actual applying actor. Every
+configuration mutation writes its before/after evidence in the same transaction.
+Promotion refuses assigned/built-in role deletion, Administrator edits, role
+identity changes, mismatched payload identity and missing/existing target drift.
+The fixture now models the role counterparts present in a real sandbox and uses
+an unassigned custom role for its intended deletion case.
+
+Five promotion checks passed (2,285.802125 ms), including assigned-role updates,
+audit-storage rollback, preserved assignments and protected-role refusals. The
+final combined run passed 45/45 checks (49,477.877042 ms), covering both identity
+guards, administration, sandbox create/refresh/reset/masking, promotion and org
+access. The final full unit suite passed 3,210/3,210 checks (118,379.569666 ms),
+with no skips. Workspace types, changed-file lint without warnings, whitespace
+checks and the locked production build passed. Evidence:
+`audit-role-reference-integrity-2026-09-08`.
+
+This is a forward-only migration. Existing invalid grants require reviewed
+reconciliation before upgrade; valid grants are not rewritten. An application
+rollback can retain the constraints, but the old destructive promotion code must
+not be used to update assigned roles. No production database was changed.
+
+### Full integration checkpoint at 332e435d (2026-09-08)
+
+The frozen inventory account-separation revision passed 2,612/2,612 integration
+checks with no skips (1,798,667.110833 ms). Fixture accounting reports 2,220
+balanced leases/releases/resets, four bootstraps and teardowns, four schema-wide
+verifications, and zero active leases or leaks. This checkpoint predates the
+authorization and migration work documented above. Evidence:
+`audit-inventory-account-alias-2026-09-08/full-integration.log`.
