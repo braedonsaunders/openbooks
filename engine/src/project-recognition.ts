@@ -101,10 +101,11 @@ export async function postProjectGlEntryWithinTransaction(
   if (!isZero(bal)) throw new Error(`unbalanced project GL entry (${bal})`);
 
   const book = (await tx.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_active
-     order by is_primary desc, code limit 1`));
+    select id from accounting_books
+     where org_id = ${orgId} and is_primary and is_active and posts_gl
+     limit 1 for share`));
   const bookId = book.rows[0]?.id;
-  if (!bookId) throw new Error("no active GL book");
+  if (!bookId) throw new Error("no active primary GL book");
   // journal_entries.subsidiary_id is NOT NULL. When the source row carries no
   // legal entity, the one authoritative org root is the default.
   let subId = subsidiaryId;
