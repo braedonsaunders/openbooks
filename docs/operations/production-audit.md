@@ -4186,3 +4186,52 @@ balanced leases/releases/resets, four bootstraps and teardowns, four schema-wide
 verifications, and zero active leases or leaks. This checkpoint predates the
 authorization and migration work documented above. Evidence:
 `audit-inventory-account-alias-2026-09-08/full-integration.log`.
+
+### Retainage release scope and cancellation recovery (2026-09-08)
+
+Confirmed the reported release-capacity defect in the real service: primary-book
+100 plus tax-book 100 accepted a 150 release. The same query also accepted an
+inactive/non-posting primary book and a project without a legal entity. Deleting
+a generated release invoice left an approved application with no progress lines;
+the actual generator then returned “Nothing to bill.” Those six regression
+assertions failed before remediation. An initial separate entity fixture failed
+because it attempted a second root subsidiary; that fixture was corrected to use
+a child entity before the final scope test.
+
+The release service and construction overview now share one held-balance query:
+only the primary posting book and the project's journal-line legal entity count.
+Journal `amount` is already in that entity's functional currency, so foreign
+transaction-currency lines retain their converted value. Release creation locks
+the project before reading its customer/entity, pins the organization settings,
+book and subsidiary, requires an active non-elimination entity and exactly one
+active primary posting book, and records the book/entity/currency in its audit.
+Pending releases still reserve capacity. A pending invoice edited into a
+different project, entity or currency, or a nonpositive total, blocks further
+release until corrected or cancelled rather than mixing incompatible amounts.
+
+Shared invoice cleanup now cancels retainage-release applications to `void`,
+clears their invoice link and records actor, reason, before/after status and
+original invoice identity atomically with the caller's delete/void transaction.
+The original application remains as evidence. A fresh release recalculates the
+available balance; ordinary progress applications still reopen to `approved`
+and regenerate their existing lines. Already stranded legacy releases receive
+an actionable error directing the operator to the existing controlled Void
+transition and a fresh release; no historical applications are silently rewritten.
+
+Twelve real-database retainage checks passed, including parallel books,
+competing draft reservations, entity scope, converted currency, reversal,
+changed-currency refusal, actual delete/void, progress regeneration, tenant
+isolation, rollback, idempotent cleanup and legacy recovery. The broader billing
+run passed 43/43 checks without skips (36,244.558208 ms). After discovering and
+removing the duplicated overview query, the final focused run passed 13/13
+checks (4,241.637458 ms), including a real construction GET that reports 100
+rather than 300 across two books and two entities. The full unit suite passed
+3,210/3,210 (124,947.976459 ms) before that final shared-query extraction; the
+extraction was exercised by the final engine/API checks. Removing one untyped
+project query lowered the explicit-any/lint ratchets to 373/704. Evidence:
+`audit-retainage-release-2026-09-08`. No migration or production data change is
+required. The full integration run at 7c15e6e2 predates these fixes and is a
+separate checkpoint, not evidence that this revision has completed that suite.
+Final workspace type checks and the exact-lock production build passed after
+the shared-query extraction. Changed-file lint has zero errors and five existing
+explicit-any warnings; whitespace checks passed.

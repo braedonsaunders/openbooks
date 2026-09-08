@@ -7,6 +7,7 @@ import {
   approvePayApplication,
   createPayApplication,
   generatePayApplicationInvoice,
+  projectRetainageHeldSql,
   releaseRetainage,
   requireIsoDate,
   revisedScheduleValue,
@@ -81,13 +82,7 @@ export async function GET(req: Request) {
        where pa.org_id = ${orgId} and pa.project_id = ${projectId} order by pa.application_number
     `),
     retainageAccountId
-      ? (db.execute<{ held: string }>(sql`
-          select coalesce(sum(jl.amount), 0) as held
-            from journal_lines jl
-            join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-           where jl.org_id = ${orgId} and jl.account_id = ${retainageAccountId} and jl.project_id = ${projectId}
-             and je.status in ('posted', 'reversed')
-        `))
+      ? db.execute<{ held: string }>(projectRetainageHeldSql(orgId, projectId, retainageAccountId))
       : Promise.resolve({ rows: [{ held: "0" }] }),
     projectCostSummary(orgId, projectId).catch(() => null),
   ]);

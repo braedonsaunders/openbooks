@@ -263,6 +263,21 @@ async function retainageReceivableAccount(tx: SqlExecutor, orgId: string): Promi
   return r.rows[0]?.acct ?? null;
 }
 
+/** Shared held balance for the release boundary and its overview. Amounts are
+ * in the journal LINE entity's functional currency, regardless of txn currency.
+ * A scalar primary-book lookup deliberately refuses ambiguous configuration. */
+export function projectRetainageHeldSql(orgId: string, projectId: string, accountId: string) {
+  return sql`
+    select coalesce(sum(jl.amount), 0) as held
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+      join projects p on p.id = jl.project_id and p.org_id = jl.org_id and p.subsidiary_id = jl.subsidiary_id
+     where jl.org_id = ${orgId} and jl.project_id = ${projectId} and jl.account_id = ${accountId}
+       and je.book_id = (select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl)
+       and je.status in ('posted', 'reversed')
+  `;
+}
+
 async function defaultIncomeAccount(tx: SqlExecutor, orgId: string): Promise<string | null> {
   const r = (await tx.execute<{ id: string }>(sql`
     select id from accounts where org_id = ${orgId} and type in ('income', 'income_other') and is_active
@@ -518,6 +533,9 @@ export async function generatePayApplicationInvoice(
     const app = appRes.rows[0];
     if (!app) throw new ConstructionBillingError("Application not found");
     if (app.status !== "approved") throw new ConstructionBillingError("Only an approved application can create an invoice");
+    if (app.kind === "retainage_release") {
+      throw new ConstructionBillingError("Void this release application and create a new retainage release to recalculate available funds");
+    }
     await assertApplicationProcedure(tx, orgId, app.project_id);
 
     const projRes = (await tx.execute<any>(sql`
@@ -651,37 +669,55 @@ export async function releaseRetainage(
 ): Promise<{ invoiceId: string; documentNumber: string; amount: string }> {
   requireIsoDate(periodEnd, "Period ending");
   return db.transaction(async (tx) => {
+    // Keep the control-account setting stable through the reservation.
+    await tx.execute(sql`select id from orgs where id = ${orgId} for share`);
     await assertProjectsEnabled(tx, orgId);
-    await assertApplicationProcedure(tx, orgId, projectId);
     const exactAmount = persistRetainageReleaseAmount(amount);
     if (cmp(exactAmount, "0") <= 0) throw new ConstructionBillingError("Release amount must be positive");
-    const projRes = (await tx.execute<any>(sql`
-      select p.id, p.customer_id, p.subsidiary_id, coalesce(s.base_currency, o.base_currency) as currency
-        from projects p join orgs o on o.id = p.org_id left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
-       where p.id = ${projectId} and p.org_id = ${orgId}
+    // This is also the serialization point for numbering and pending releases.
+    // Read the entity/customer only after acquiring the project lock.
+    const projRes = (await tx.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null }>(sql`
+      select id, customer_id, subsidiary_id
+        from projects where id = ${projectId} and org_id = ${orgId} for update
     `));
     const project = projRes.rows[0];
     if (!project?.customer_id) throw new ConstructionBillingError("Project has no customer to invoice");
+    await assertApplicationProcedure(tx, orgId, projectId);
+    const subsidiary = (await tx.execute<{ currency: string }>(sql`
+      select nullif(trim(base_currency), '') as currency from subsidiaries
+       where org_id = ${orgId} and id = ${project.subsidiary_id} and is_active and not is_elimination for share
+    `)).rows[0];
+    if (!subsidiary?.currency) throw new ConstructionBillingError("Retainage release requires an active project legal entity with a functional currency");
+    const books = (await tx.execute<{ id: string }>(sql`
+      select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl for share
+    `)).rows;
+    if (books.length !== 1) throw new ConstructionBillingError("Retainage release requires exactly one active primary posting book");
+    const bookId = books[0]!.id;
 
     const retAcct = await retainageReceivableAccount(tx, orgId);
     if (!retAcct) throw new ConstructionBillingError("No Retainage Receivable control account is configured");
 
     // Reserve against both posted GL retainage and draft release invoices so
     // two concurrent releases cannot overdraw the subledger before posting.
-    const projectLock = (await tx.execute<{ id: string }>(sql`
-      select id from projects where id = ${projectId} and org_id = ${orgId} for update
-    `));
-    if (!projectLock.rows.length) throw new ConstructionBillingError("Project not found");
-    const balance = (await tx.execute<{ held: string; reserved: string }>(sql`
-      select
-        coalesce((select sum(jl.amount)
-          from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-         where jl.org_id = ${orgId} and jl.project_id = ${projectId} and jl.account_id = ${retAcct} and je.status in ('posted', 'reversed')), 0) as held,
-        coalesce((select sum(d.total)
+    // jl.amount is already in the LINE entity's functional currency; jl.currency
+    // describes txn_amount, so filtering it would drop converted foreign invoices.
+    const balance = (await tx.execute<{ held: string; reserved: string; invalid_reservation: boolean }>(sql`
+      with pending as (
+        select d.total, d.currency, d.subsidiary_id, d.project_id
           from pay_applications pa join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
          where pa.org_id = ${orgId} and pa.project_id = ${projectId} and pa.kind = 'retainage_release'
-           and pa.status in ('invoiced', 'posted') and d.status <> 'posted'), 0) as reserved
+           and pa.status in ('invoiced', 'posted') and d.status not in ('posted', 'voided')
+      )
+      select
+        (${projectRetainageHeldSql(orgId, projectId, retAcct)}) as held,
+        coalesce((select sum(total) from pending), 0) as reserved,
+        exists(select 1 from pending where currency is distinct from ${subsidiary.currency}
+          or subsidiary_id is distinct from ${project.subsidiary_id}::uuid
+          or project_id is distinct from ${projectId}::uuid or total <= 0) as invalid_reservation
     `));
+    if (balance.rows[0]?.invalid_reservation) {
+      throw new ConstructionBillingError("Correct or cancel the pending retainage invoice whose amount, currency or legal entity no longer matches this project");
+    }
     const available = add(String(balance.rows[0]?.held ?? "0"), neg(String(balance.rows[0]?.reserved ?? "0")));
     if (cmp(exactAmount, available) > 0) throw new ConstructionBillingError("Release amount exceeds available retained funds");
 
@@ -690,7 +726,7 @@ export async function releaseRetainage(
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
                              project_id, subsidiary_id, memo, subtotal, tax_total, total, created_by)
       values (${orgId}, 'customer_invoice', ${documentNumber}, ${project.customer_id}, ${periodEnd},
-              ${project.currency}, 'draft', ${projectId}, ${project.subsidiary_id}, 'Retainage release',
+              ${subsidiary.currency}, 'draft', ${projectId}, ${project.subsidiary_id}, 'Retainage release',
               ${exactAmount}, '0', ${exactAmount}, ${userId})
       returning id
     `));
@@ -717,7 +753,7 @@ export async function releaseRetainage(
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'pay_applications', ${release.rows[0]!.id}, 'retainage_release',
-              ${JSON.stringify({ after: { projectId, applicationNumber, periodEnd, amount: exactAmount, availableBefore: available, invoiceId, documentNumber } })}::jsonb,
+              ${JSON.stringify({ after: { projectId, applicationNumber, periodEnd, amount: exactAmount, availableBefore: available, bookId, subsidiaryId: project.subsidiary_id, currency: subsidiary.currency, invoiceId, documentNumber } })}::jsonb,
               ${userId})
     `);
     return { invoiceId, documentNumber, amount: exactAmount };

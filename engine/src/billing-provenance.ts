@@ -61,19 +61,30 @@ export async function releaseBillingProvenance(
     update billing_requests set status = 'open', invoice_document_id = null
      where org_id = ${orgId} and invoice_document_id = ${documentId}
   `);
-  // A progress-billing application that produced this invoice is provenance in
-  // exactly the same sense as a billing request, and owes the same release.
-  //
-  // `pay_applications.invoice_document_id` carries no foreign key, so deleting
-  // the draft invoice succeeds and leaves the application stranded in
-  // 'invoiced': it can no longer be re-invoiced (the generator requires
-  // 'approved'), cannot be voided, and — because the cumulative
-  // `previous_completed` base counts every application in ('invoiced','posted')
-  // — its work-in-place stays permanently consumed. That silently burns
-  // billable capacity on the schedule of values with no way back.
+  // Progress applications retain their line basis and can regenerate. A release
+  // has no progress lines: cancel that reservation with evidence so a fresh
+  // release recalculates the current GL capacity instead of reopening an
+  // approved application that can never bill. Preserve the original row.
   await tx.execute(sql`
-    update pay_applications set status = 'approved', invoice_document_id = null, updated_at = now()
-     where org_id = ${orgId} and invoice_document_id = ${documentId} and status = 'invoiced'
+    with source as (
+      select id, status from pay_applications
+       where org_id = ${orgId} and invoice_document_id = ${documentId} and status in ('invoiced', 'posted')
+       for update
+    ), released as (
+      update pay_applications pa
+         set status = case when pa.kind = 'retainage_release' then 'void' else 'approved' end,
+             invoice_document_id = null, updated_at = now(), updated_by = ${audit.actorId}
+        from source where pa.id = source.id and pa.org_id = ${orgId}
+      returning pa.id, pa.kind, pa.status, source.status as previous_status
+    )
+    insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+    select ${orgId}, 'pay_applications', id, 'billing_released',
+      jsonb_build_object(
+        'kind', kind,
+        'before', jsonb_build_object('status', previous_status, 'invoice_document_id', ${documentId}::text),
+        'after', jsonb_build_object('status', status, 'invoice_document_id', null),
+        'reason', ${audit.reason}::text), ${audit.actorId}::uuid
+    from released
   `);
 }
 
