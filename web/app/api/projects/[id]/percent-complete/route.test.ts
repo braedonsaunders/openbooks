@@ -82,6 +82,9 @@ const mockSources = new Map<string, string>([
           execute: (query) => {
             const text = sqlText(query)
             state.calls.push({ kind: 'tx-execute', text })
+            if (text.includes('from orgs') && text.includes('for share')) {
+              return Promise.resolve({ rows: [{ features: { projects: true } }] })
+            }
             return Promise.resolve(state.respondTxExecute(text))
           },
         }),

@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { syncProjectRevenueContractsInTransaction } from '@openbooks/engine/src/project-revenue.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
@@ -41,6 +42,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   // rolls back the whole thing, so the displayed override never disagrees with
   // the obligation or with any book's schedule (audit fnd_mt982zsr_wd4f6o).
   const sync = await db.transaction(async (tx) => {
+    if (!(await lockAndCheckOrgFeature(tx, orgId, 'projects'))) {
+      return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
+    }
     const updated = (await tx.execute<{ id: string }>(sql`
       update projects
          set custom = jsonb_set(coalesce(custom, '{}'::jsonb), '{percentCompleteOverride}',
@@ -52,6 +56,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (!updated.rows[0]) return null
     return syncProjectRevenueContractsInTransaction(tx, orgId, gate.user.id, today, id)
   })
+  if (sync instanceof NextResponse) return sync
   if (!sync) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   return NextResponse.json({
