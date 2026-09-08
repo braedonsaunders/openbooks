@@ -51,7 +51,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "server-only": "^0.0.1",
-    "sharp": "0.35.0",
+    "sharp": "0.35.4",
     "sonner": "^2.0.7",
     "ssh2": "^1.17.0",
     "zod": "^4.4.3"
