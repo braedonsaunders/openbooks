@@ -2755,3 +2755,38 @@ a 1,000 invoice with the old date range and marked the 500 schedule invoiced.
 Evidence is under `audit-property-billing-snapshot-2026-09-07`. The broader full
 integration run for `255ac64e` remains in progress; this checkpoint is not a
 claim that the codebase has no remaining defects.
+
+## Rent billing reads its locked financial source — 2026-09-07
+
+Billing discovered due schedule rows before its transaction, later locked only
+their IDs, and still created invoices from the old discovery values. A real
+competing write reduced a scheduled charge from 1,000 to 500 and shortened its
+period to July 15 while billing waited; the resulting invoice still charged
+1,000 through July 31. The same race ignored revised charge descriptions and a
+lease's newly disabled auto-invoice control.
+
+Discovery now supplies only candidate IDs. The billing transaction locks and
+rechecks lease eligibility, holds property and charge configuration stable,
+and reads complete invoice inputs under the schedule locks. Lease-before-
+schedule ordering matches termination and lease edits; charge-before-schedule
+ordering matches escalations. The lease uses a non-key update lock so an
+in-flight escalation can insert replacement charges through their foreign-key
+checks without deadlocking the waiting biller. A real escalation service race
+proves that the invoice follows the newly prorated schedule and period.
+
+All 20 focused tests passed (10,163.381083 ms, no skips): proration, configuration
+and suspension races, the real escalation race, idempotent replay, property
+billing provenance, CAM controls and base-rent concurrency. All workspace
+typechecks and the exact-lock production build passed. Final unit verification
+passed all 3,209 tests (133,367.523416 ms; no failures/skips); an old feature-gate
+assertion's 4,000-character window was replaced with a function-scoped check
+that still requires the inventory refusal. Changed-file lint is clean; quality
+ceilings remain 718 warnings and 386 explicit-any nodes. No schema or protected
+posting/sync/deployment file changed. Evidence is under
+`audit-property-billing-snapshot-2026-09-07`.
+
+The next forecast probes have confirmed three defects: empty pipelines report
+201 Created with no persisted snapshot; impossible calendar dates reach SQL;
+and an unqualified override of 250 is duplicated as both CAD 250 and USD 250.
+Evidence is under `audit-crm-forecast-snapshots-2026-09-07`. The named voided-rent
+re-billing gap is separate and remains open.
