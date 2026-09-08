@@ -9,6 +9,8 @@ import { apportion } from "./revenue-recognition.ts";
 import { createSubscriptionInvoice } from "./subscription-billing.ts";
 import type { AdvancedBillingLine } from "./advanced-subscriptions.ts";
 import { inventoryFeatureEnabled } from "./inventory.ts";
+import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
+import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 
 export class PropertyManagementError extends Error {
   constructor(message: string, readonly status = 422) {
@@ -98,7 +100,7 @@ interface LateFeeRow extends Record<string, unknown> {
 interface DepositContextRow extends Record<string, unknown> {
   tenant_id: string; subsidiary_id: string; location_id: string | null; currency: string; base_currency: string;
   deposit_liability_account_id: string | null; default_bank_account_id: string | null;
-  deposit_account_type: string | null; book_id: string | null; period_id: string | null;
+  book_id: string | null; period_id: string | null;
 }
 interface DepositReversalRow extends Record<string, unknown> {
   kind: string; amount: string; lease_id: string; reversal_of_id: string | null; already_reversed: boolean;
@@ -1303,31 +1305,35 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
   }
 
   return db.transaction(async (tx) => {
-    await assertEnabled(tx, input.orgId);
+    if (!(await lockAndCheckOrgFeature(tx, input.orgId, "propertyManagement"))) {
+      throw new PropertyManagementError("Property management feature is disabled");
+    }
+    await tx.execute(sql`select id from subsidiaries where org_id=${input.orgId} order by id for share`);
     // The lease lock serializes balance-changing deposit activity. Journal,
     // application, and append-only subledger evidence commit as one unit.
     const ctx = (await tx.execute<DepositContextRow>(sql`
       select l.tenant_id,p.subsidiary_id,p.location_id,p.currency,s.base_currency,p.deposit_liability_account_id,p.default_bank_account_id,
-        da.type as deposit_account_type,
-        (select id from accounting_books where org_id=l.org_id and is_primary order by id limit 1) as book_id,
+        (select id from accounting_books where org_id=l.org_id and is_primary and is_active and posts_gl order by id limit 1 for share) as book_id,
         (select id from accounting_periods where org_id=l.org_id and not is_adjustment and starts_on<=${occurredOn} and ends_on>=${occurredOn}
-          and not period_module_is_closed(l.org_id,id,(select id from accounting_books where org_id=l.org_id and is_primary order by id limit 1),p.subsidiary_id,'gl')
+          and not period_module_is_closed(l.org_id,id,(select id from accounting_books where org_id=l.org_id and is_primary and is_active and posts_gl order by id limit 1 for share),p.subsidiary_id,'gl')
           order by starts_on desc limit 1) as period_id
       from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
       join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
-      left join accounts da on da.id=p.deposit_liability_account_id and da.org_id=p.org_id
       where l.org_id=${input.orgId} and l.id=${input.leaseId}
-      for update of l
+      for update of l for share of p, s
     `));
     const row = ctx.rows[0];
     if (!row) throw new PropertyManagementError("Lease not found");
-    if (!row.deposit_liability_account_id || !row.deposit_account_type || !["liability_current_other", "liability_long_term"].includes(row.deposit_account_type)) {
+    const liability = (await tx.execute<{ type: string }>(sql`select type from accounts
+      where org_id=${input.orgId} and id=${row.deposit_liability_account_id} for share`)).rows[0];
+    if (!row.deposit_liability_account_id || !liability || !["liability_current_other", "liability_long_term"].includes(liability.type)) {
       throw new PropertyManagementError("Configure a liability account for property security deposits");
     }
     if (row.currency !== row.base_currency) {
       throw new PropertyManagementError("Security-deposit journals require the property currency to match the subsidiary functional currency");
     }
-    if (!row.book_id || !row.period_id) throw new PropertyManagementError("A primary book and open GL period are required");
+    if (!row.book_id) throw new PropertyManagementError("An active primary posting book is required");
+    if (!row.period_id) throw new PropertyManagementError("An open GL period is required");
 
     const prior = (await tx.execute<{ kind: string; amount: string }>(sql`select kind,amount from security_deposit_transactions where org_id=${input.orgId} and lease_id=${input.leaseId}`));
     const nextBalance = depositBalance([...prior.rows, { kind: input.kind, amount }]);
@@ -1338,7 +1344,7 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     const bankId = ["received", "refunded"].includes(input.kind) ? input.bankAccountId ?? row.default_bank_account_id : null;
     if (["received", "refunded"].includes(input.kind) && !bankId) throw new PropertyManagementError("A bank account is required");
     if (bankId) {
-      const bank = (await tx.execute<{ type: string }>(sql`select type from accounts where org_id=${input.orgId} and id=${bankId} and is_active and not is_summary`));
+      const bank = (await tx.execute<{ type: string }>(sql`select type from accounts where org_id=${input.orgId} and id=${bankId} and is_active and not is_summary for share`));
       if (bank.rows[0]?.type !== "asset_bank") throw new PropertyManagementError("Security-deposit cash must use an active bank account");
     }
 
@@ -1356,7 +1362,7 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     if (!applied && !cashKind && offsetId) {
       if (!UUID_RE.test(offsetId)) throw new PropertyManagementError("Offset account is invalid");
       const offset = (await tx.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
-        select type,is_active,is_summary from accounts where org_id=${input.orgId} and id=${offsetId}`)).rows[0];
+        select type,is_active,is_summary from accounts where org_id=${input.orgId} and id=${offsetId} for share`)).rows[0];
       if (!offset) throw new PropertyManagementError("Offset account not found");
       if (!offset.is_active || offset.is_summary) throw new PropertyManagementError("Offset account must be an active posting account");
       if (offsetId === row.deposit_liability_account_id) throw new PropertyManagementError("Offset account cannot be the deposit liability account");
@@ -1378,6 +1384,21 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
       if (!targetLineId || !offsetId) throw new PropertyManagementError("Posted tenant invoice with sufficient open balance not found");
     } else if (!offsetId) {
       throw new PropertyManagementError("An offset account is required");
+    }
+
+    const accountIds = [...new Set([row.deposit_liability_account_id, offsetId!])];
+    await tx.execute(sql`select id from accounts where org_id=${input.orgId}
+      and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+    if (row.location_id) await tx.execute(sql`select id from locations
+      where org_id=${input.orgId} and id=${row.location_id} for share`);
+    try {
+      await validateSubsidiaryRestrictions(tx, {
+        orgId: input.orgId, ctx: await loadSubsidiaryContext(tx, input.orgId), docSubsidiaryId: row.subsidiary_id,
+        lines: accountIds.map((accountId) => ({ accountId, amount, subsidiaryId: row.subsidiary_id, locationId: row.location_id })),
+      });
+    } catch (error) {
+      if (error instanceof SubsidiaryError) throw new PropertyManagementError(error.message);
+      throw error;
     }
 
     const entryNumber = `DEP-${occurredOn}-${input.leaseId.slice(0, 8)}-${crypto.randomUUID().slice(0, 8)}`;
