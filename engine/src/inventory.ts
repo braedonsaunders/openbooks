@@ -94,6 +94,16 @@ export interface InventoryProfile extends InventoryAccounts {
 
 export class InventoryError extends Error {}
 
+/** An offset hitting the valuation account would break inventory GL = layer value. */
+export function inventoryOffsetAccountProblem(
+  assetAccountId: string,
+  offsetAccountId: string | null | undefined,
+  label: string,
+): string | null {
+  return offsetAccountId?.toLowerCase() === assetAccountId.toLowerCase()
+    ? `the ${label} account must be distinct from the inventory asset account` : null;
+}
+
 /**
  * The movement would touch stock or a warehouse owned by another legal
  * entity (or a position whose stock belongs to one). The API layer maps this
@@ -678,9 +688,8 @@ export async function revalueOpenLayersToStandardCost(
         "revaluing open layers to standard cost requires a variance account to book the revaluation on — configure one for this item before switching it to (or revising) standard costing",
       );
     }
-    if (p.varianceAccountId === p.assetAccountId) {
-      throw new InventoryError("the variance account must be distinct from the inventory asset account");
-    }
+    const accountProblem = inventoryOffsetAccountProblem(p.assetAccountId, p.varianceAccountId, "variance");
+    if (accountProblem) throw new InventoryError(accountProblem);
     const ctx = await loadSubsidiaryContext(tx, orgId);
     const accountIds = [p.assetAccountId, p.varianceAccountId];
     await tx.execute(sql`select id from accounts where org_id=${orgId}
@@ -1156,6 +1165,12 @@ export async function receiveInventory(
     // own entry to book the variance, so it requires a real offset (a clearing
     // acct).
     const postJournal = input.postJournal !== false;
+    if (postJournal) {
+      const accountProblem = inventoryOffsetAccountProblem(profile.assetAccountId, input.offsetAccountId, "receipt offset")
+        ?? (profile.costingMethod === "standard"
+          ? inventoryOffsetAccountProblem(profile.assetAccountId, profile.varianceAccountId, "variance") : null);
+      if (accountProblem) throw new InventoryError(accountProblem);
+    }
     if (!postJournal && !isZero(variance)) {
       throw new InventoryError(
         "standard-cost receipts require a received-not-billed account to book purchase variance",
@@ -1481,6 +1496,8 @@ export async function issueInventory(
       "issue",
     );
     const offset = input.offsetAccountId ?? profile.cogsAccountId;
+    const accountProblem = inventoryOffsetAccountProblem(profile.assetAccountId, offset, "issue offset");
+    if (accountProblem) throw new InventoryError(accountProblem);
     await assertStockLocationAdmitsSubsidiary(
       tx,
       orgId,
@@ -2856,6 +2873,12 @@ export async function buildAssembly(
       });
     }
 
+    if (assembly.costingMethod === "standard") {
+      for (const profile of [assembly, ...components.map((component) => component.profile)]) {
+        const accountProblem = inventoryOffsetAccountProblem(profile.assetAccountId, assembly.varianceAccountId, "variance");
+        if (accountProblem) throw new InventoryError(accountProblem);
+      }
+    }
     // A build touches every component plus the finished-good position.
     // Deterministic advisory locks make the availability check and all layer
     // updates one serializable operation without deadlocks between BOMs.
@@ -5302,6 +5325,12 @@ export async function postLandedCostVoucher(
     // Refuse before any layer, voucher, or journal mutation.
     for (let i = 0; i < resolved.length; i++) {
       const r = resolved[i]!;
+      if (shares[i] !== 0n) {
+        const accountProblem = inventoryOffsetAccountProblem(r.profile.assetAccountId, input.freightAccountId, "freight offset")
+          ?? (r.profile.costingMethod === "standard"
+            ? inventoryOffsetAccountProblem(r.profile.assetAccountId, r.profile.varianceAccountId, "variance") : null);
+        if (accountProblem) throw new InventoryError(accountProblem);
+      }
       if (
         shares[i] !== 0n &&
         r.profile.costingMethod === "standard" &&

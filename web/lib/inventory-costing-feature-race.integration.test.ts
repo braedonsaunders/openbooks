@@ -19,6 +19,35 @@ const { documentRevisionSql } = await import("@openbooks/engine/src/document-rev
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { PUT } = await import("../app/api/items/[id]/costing/route");
 
+for (const field of ["cogsAccountId", "adjustmentAccountId", "varianceAccountId", "receivedNotBilledAccountId"] as const) {
+  test(`costing profile refuses ${field} aliasing its asset account`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      state.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["items.manage"]), allowedSubsidiaryIds: null } as Authz;
+      const revision = (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision
+        from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.revision;
+      const evidence = async () => (await db.execute(sql`select to_jsonb(p) as profile,
+        (select count(*)::int from audit_log where org_id=${org.orgId} and table_name='item_inventory_profiles') as audits
+        from item_inventory_profiles p where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows;
+      const before = await evidence();
+      const body = { costingMethod: "fifo", tracking: "none", expectedUpdatedAt: revision,
+        assetAccountId: org.accounts.invAsset, cogsAccountId: org.accounts.cogs,
+        adjustmentAccountId: org.accounts.adjustment, varianceAccountId: org.accounts.adjustment,
+        receivedNotBilledAccountId: org.accounts.clearing };
+      const request = (value: object) => PUT(new Request("http://localhost/api/items/" + org.items.fifo + "/costing", {
+        method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(value),
+      }), { params: Promise.resolve({ id: org.items.fifo }) });
+      const denied = await request({ ...body, [field]: org.accounts.invAsset.toUpperCase() });
+      assert.equal(denied.status, 422);
+      assert.match((await denied.json()).error, /account must be distinct/);
+      assert.deepEqual(await evidence(), before);
+      const allowed = await request(body);
+      assert.equal(allowed.status, 200, JSON.stringify(await allowed.json()));
+    } finally { state.gate = null; await dropScratchOrg(org.orgId); }
+  });
+}
+
 test("costing profile write rechecks Inventory after a concurrent disable", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   const writer = await pool.connect();

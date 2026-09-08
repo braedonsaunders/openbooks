@@ -3997,3 +3997,41 @@ tenants whose temporary names violated the scratch cleanup guard were restored
 and removed before rerunning the corrected fixtures. Evidence:
 `audit-inventory-standard-revaluation-2026-09-08`.
 The running full `66be48a8` checkpoint predates this revaluation work.
+
+### Inventory valuation and offset accounts cannot alias (2026-09-08)
+
+Eight real database proofs found self-cancelling account configurations in
+standard receipts/builds/landed costs, NRV write-downs, and ordinary receipt,
+issue, adjustment, and landed-cost offsets. Stock value changed while the offset
+hit the same inventory account, breaking reconciliation despite balanced journals.
+
+A shared case-insensitive UUID comparison now rejects these account aliases
+before financial writes or stock consumption. It also protects NRV recovery and
+standard-cost revaluation, including uppercase UUID input. Costing-profile saves
+reject asset aliases in COGS, adjustment, variance, and received-not-billed fields
+so invalid policy cannot be introduced through the configuration API.
+
+Validation: 130/130 broad inventory checks passed (36,740.503542 ms), followed by
+24/24 focused engine/API checks (9,706.486209 ms) covering unchanged evidence and
+successful corrected operations with GL equal to layer value. The complete unit
+suite passed 3,210/3,210 tests (104,683.523041 ms). Its initial seven failures were
+in the costing-route mock, which lacked organization feature data and the nested
+savepoint export; the fixture was updated and all original revision/atomicity
+checks rerun. Its two explicit-any assertions were also replaced with a typed
+audit shape, and its final 10/10 tests and web typecheck passed. Workspace types,
+changed-file lint without warnings, whitespace checks, and the locked production
+build passed. Evidence: `audit-inventory-account-alias-2026-09-08`.
+
+### Full integration checkpoint at 66be48a8 (2026-09-08)
+
+The frozen repository passed 2,567/2,567 integration checks with no skips
+(1,270,424.303041 ms). Fixture accounting shows 2,175 balanced leases/releases/
+resets, four bootstraps/teardowns, and zero active leases or leaks. This checkpoint
+includes the payroll population and preview/commit rollback changes; subsequent
+Inventory and Payroll feature changes have the focused coverage documented above.
+Evidence: `audit-payroll-dryrun-ambient-2026-09-08/full-integration.log`.
+
+Additional probes found no stock-consumption rollback defect in the tested issue
+and assembly-build refusals. Separately, real audit-storage failures leave role
+creation and editing committed without audit evidence; those API findings are
+under active remediation (`audit-role-write-atomicity-2026-09-08`).
