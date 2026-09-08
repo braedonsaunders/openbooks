@@ -1,5 +1,6 @@
 {
   "recordTypes": {
+    "change_set": "変更セット",
     "vendor_bill": "仕入請求書",
     "vendor_credit": "仕入先クレジット",
     "customer_invoice": "得意先請求書",

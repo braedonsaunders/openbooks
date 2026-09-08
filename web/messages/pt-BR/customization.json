@@ -1,5 +1,6 @@
 {
   "recordTypes": {
+    "change_set": "Conjuntos de alterações",
     "vendor_bill": "Conta a pagar de fornecedor",
     "vendor_credit": "Crédito de fornecedor",
     "customer_invoice": "Fatura de cliente",

@@ -4416,3 +4416,44 @@ The final combined fresh-database promotion/ownership/authority/teardown matrix
 then passed 44/44 without skips (160,936.414792 ms), including all eight scenarios
 that failed before parent-first insertion. Together with the four new ordering
 regressions, the final targeted coverage exercises 48 distinct cases.
+
+### Persisted sandbox promotion review workflow (2026-09-08)
+
+The environment screen kept a capture only in client state and immediately
+called Apply while its change set was still draft. It exposed neither Review
+nor Approve and provided no persisted list for the independent actors, making
+the engine's required workflow impossible to finish through the product.
+
+Capture now opens a persisted change-set list/detail route. The list uses the
+existing EntityListView, customization catalog and entity source registry;
+record evidence uses PagedTable and UrlDrawer, with the same snapshot renderer
+as the audit-event drawer. Each artifact shows its captured production state,
+proposed configuration, lifecycle actors and timestamps. Small numeric policy
+values use exact rendering rather than the audit viewer's display rounding.
+The next action follows draft → reviewed → approved → applied and explains
+actor separation, incomplete captures and legacy captures needing recapture.
+The server retains authorization, tenant checks, independent actors and stale
+production-state checks. Domain failures reach the user without SQL details.
+Native capture/reset/delete prompts now use the shared prompt/confirmation UI.
+
+Four real server-action integration scenarios passed without skips: the complete
+four-user workflow, a later production edit, foreign-tenant reads/actions and
+missing manager permission. All 3,212 unit tests passed (133,715.065 ms), including
+legacy/partial UI gating and exact numeric snapshot rendering. Workspace types,
+changed-file lint and exact-lock production build passed after correcting the
+new test's required translation-provider children prop. Removing the old any
+cast and stabilizing the audit viewer's memo input lowered the ratchets to 372
+explicit-any nodes and 702 lint warnings.
+
+Host Chrome exercised capture, record evidence, independent review, approval
+and application against the production-mode build and the non-superuser local
+runtime database role. The final database artifact was applied, its four actor
+IDs were distinct and the intended role name was stored. The final browser
+reported zero console errors or warnings. The creator/reviewer had no next-step
+action after performing their own phase. Evidence and screenshots:
+`audit-promotion-workflow-ui-2026-09-08`. All records were disposable local
+fixtures; no production deployment, database or external integration was used.
+The same drawer was visually checked at 390×844: the document width remained
+390 pixels, with the shared table containing its horizontal overflow. The owned
+browser and preview server were closed after verification, and both fixture
+tenants were removed. Final copy handles singular counts and applied-state text.

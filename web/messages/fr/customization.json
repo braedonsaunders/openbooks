@@ -1,5 +1,6 @@
 {
   "recordTypes": {
+    "change_set": "Ensembles de modifications",
     "vendor_bill": "Facture fournisseur",
     "vendor_credit": "Avoir fournisseur",
     "customer_invoice": "Facture client",

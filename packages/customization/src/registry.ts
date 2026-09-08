@@ -1090,6 +1090,22 @@ const BANK_STATEMENT: RecordTypeMeta = {
   ],
 };
 
+const CHANGE_SET: RecordTypeMeta = {
+  key: "change_set",
+  labelKey: "customization.recordTypes.change_set",
+  category: "entity",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [], lineFields: [],
+  listColumns: [
+    { key: "name", labelKey: "common.labels.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "created", labelKey: "common.labels.created", kind: "date", sortable: true, sortKey: "created" },
+  ],
+  listFilters: [{ key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+    options: ["draft", "reviewed", "approved", "applied", "discarded"].map(value => ({ value })) }],
+};
+
 const BANK_RULE: RecordTypeMeta = {
   key: "bank_rule",
   labelKey: "customization.recordTypes.bank_rule",
@@ -1674,6 +1690,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   BANK_RECONCILIATION,
   BANK_STATEMENT,
   BANK_RULE,
+  CHANGE_SET,
   VENDOR,
   EMPLOYEE,
   FIELD_TICKET,

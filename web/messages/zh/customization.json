@@ -1,5 +1,6 @@
 {
   "recordTypes": {
+    "change_set": "变更集",
     "vendor_bill": "应付账单",
     "vendor_credit": "供应商贷记通知",
     "customer_invoice": "客户发票",

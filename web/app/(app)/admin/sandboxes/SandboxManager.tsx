@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { promptDialog } from "../../../../lib/prompt";
+import { confirmDialog } from "../../../../lib/confirm";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
 import {
-  applyChangeSetAction,
   createSandboxAction,
   deleteSandboxAction,
   promoteSandboxAction,
@@ -123,6 +126,7 @@ export function SandboxManager({
       </Card>
 
       <div className="space-y-3">
+        <Button asChild variant="outline"><Link href="/admin/sandboxes/change-sets">Review change sets</Link></Button>
         {sandboxes.length === 0 && (
           <p className="text-sm text-slate-500 dark:text-slate-400">No environments yet.</p>
         )}
@@ -169,7 +173,7 @@ export function SandboxManager({
                   disabled={pending || s.status !== "ready"}
                   onClick={() =>
                     start(async () => {
-                      if (confirm("Full reset discards sandbox customizations. Continue?"))
+                      if (await confirmDialog("Full reset discards sandbox customizations. Continue?"))
                         await resetSandboxAction(s.id);
                     })
                   }
@@ -194,7 +198,7 @@ export function SandboxManager({
                   disabled={pending}
                   onClick={() =>
                     start(async () => {
-                      if (confirm(`Delete "${s.name}" permanently?`)) await deleteSandboxAction(s.id);
+                      if (await confirmDialog(`Delete "${s.name}" permanently?`)) await deleteSandboxAction(s.id);
                     })
                   }
                 >
@@ -210,60 +214,19 @@ export function SandboxManager({
 }
 
 function PromoteButton({ sandboxId, disabled }: { sandboxId: string; disabled: boolean }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
-  const [captured, setCaptured] = useState<{ changeSetId: string; itemCount: number } | null>(null);
-  const [applied, setApplied] = useState(false);
-
-  if (captured && !applied) {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-slate-500 dark:text-slate-400">
-          {captured.itemCount} change(s) captured
-        </span>
-        {captured.itemCount > 0 ? (
-          <Button
-            variant="default"
-            size="sm"
-            disabled={pending}
-            onClick={() =>
-              start(async () => {
-                if (!confirm(`Apply ${captured.itemCount} configuration change(s) to production?`)) return;
-                await applyChangeSetAction(captured.changeSetId);
-                setApplied(true);
-              })
-            }
-            title="Apply the captured configuration changes to production"
-          >
-            Apply to production
-          </Button>
-        ) : null}
-        <Button variant="ghost" size="sm" disabled={pending} onClick={() => setCaptured(null)}>
-          Cancel
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-1">
-      <Button
-        variant="secondary"
-        size="sm"
-        disabled={disabled || pending}
-        onClick={() =>
-          start(async () => {
-            const name = prompt("Change set name", "Sandbox changes");
-            if (!name) return;
-            const r = await promoteSandboxAction(sandboxId, name);
-            setApplied(false);
-            setCaptured(r);
-          })
-        }
-        title="Capture the sandbox's customization changes as a reviewable change set"
-      >
-        Promote
-      </Button>
-      {applied && <span className="text-xs text-emerald-600 dark:text-emerald-400">Applied to production</span>}
-    </div>
-  );
+  const [error, setError] = useState<string | null>(null);
+  return <div className="space-y-1">
+    <Button variant="secondary" size="sm" disabled={disabled || pending} onClick={() => start(async () => {
+      const name = await promptDialog({ title: "Change set name", initialValue: "Sandbox changes", confirmLabel: "Capture changes" });
+      if (!name) return;
+      setError(null);
+      try {
+        const result = await promoteSandboxAction(sandboxId, name);
+        router.push(`/admin/sandboxes/change-sets?changeSet=${encodeURIComponent(result.changeSetId)}`);
+      } catch { setError("Capture did not complete. Check the change-set list before trying again."); }
+    })} title="Capture configuration changes for independent review and approval">Capture changes</Button>
+    {error && <p role="alert" className="text-xs text-red-700 dark:text-red-400">{error}</p>}
+  </div>;
 }
