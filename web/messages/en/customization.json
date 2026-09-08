@@ -1,5 +1,6 @@
 {
   "recordTypes": {
+    "change_set": "Change sets",
     "vendor_bill": "Vendor bill",
     "vendor_credit": "Vendor credit",
     "customer_invoice": "Customer invoice",

@@ -195,6 +195,31 @@ export interface EntityQuickFilter {
 }
 
 const SOURCES: Record<string, EntityListSource> = {
+  change_set: {
+    recordType: 'change_set', table: 'change_sets', alias: 'cs', baseJoins: sql``,
+    builtInExpr: { name: sql`cs.name`, status: sql`cs.status`, created: sql`to_char(cs.created_at, 'YYYY-MM-DD HH24:MI')` },
+    sorts: { name: sql`cs.name`, status: sql`cs.status`, created: sql`cs.created_at` },
+    defaultSort: sql`cs.created_at`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
+    where: (view, adhoc, orgId) => {
+      const parts = [sql`cs.org_id=${orgId}`];
+      if (adhoc.q) parts.push(sql`and cs.name ilike ${`%${adhoc.q}%`}`);
+      if (adhoc.filters?.status) parts.push(sql`and cs.status=${adhoc.filters.status}`);
+      for (const filter of view.filters) {
+        if (filter.key !== 'status') continue;
+        const values = (Array.isArray(filter.value) ? filter.value : [filter.value]).map(String);
+        if (filter.operator === 'eq') parts.push(sql`and cs.status=${values[0]}`);
+        else if (filter.operator === 'ne') parts.push(sql`and cs.status<>${values[0]}`);
+        else if (filter.operator === 'in' || filter.operator === 'not_in') {
+          const list = sql.join(values.map(value => sql`${value}`), sql`, `);
+          parts.push(values.length ? sql`and cs.status ${filter.operator === 'in' ? sql`in` : sql`not in`} (${list})`
+            : filter.operator === 'in' ? sql`and false` : sql`and true`);
+        }
+      }
+      return sql.join(parts, sql` `);
+    },
+    drawerParam: 'changeSet', basePath: '/admin/sandboxes/change-sets',
+  },
   customer: {
     recordType: 'customer',
     table: 'parties',

@@ -1,5 +1,6 @@
 {
   "recordTypes": {
+    "change_set": "Änderungssätze",
     "vendor_bill": "Eingangsrechnung",
     "vendor_credit": "Lieferantengutschrift",
     "customer_invoice": "Ausgangsrechnung",

@@ -63,22 +63,22 @@ function itemTitle(value: unknown, index: number, fallback: string, lineLabel: (
     : `${fallback} ${index + 1}`
 }
 
-function CompactValue({ value }: { value: unknown }) {
+function CompactValue({ value, exactNumbers = false }: { value: unknown; exactNumbers?: boolean }) {
   const t = useTranslations('admin.audit.drawer')
   const format = useFormatter()
   if (value === null || value === undefined) return <span className="text-slate-400">{t('notSet')}</span>
   if (Array.isArray(value)) return <span className="text-slate-500 dark:text-slate-400">{t('itemCount', { count: value.length })}</span>
   if (isObject(value)) return <span className="text-slate-500 dark:text-slate-400">{t('propertyCount', { count: Object.keys(value).length })}</span>
   if (typeof value === 'boolean') return <Badge variant={value ? 'success' : 'outline'}>{value ? t('yes') : t('no')}</Badge>
-  if (typeof value === 'number') return <span className="tabular-nums">{format.number(value, { maximumFractionDigits: 4 })}</span>
+  if (typeof value === 'number') return <span className="tabular-nums">{exactNumbers ? String(value) : format.number(value, { maximumFractionDigits: 4 })}</span>
   const text = String(value)
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)
   return <span className={cn('break-words', isUuid && 'font-mono text-xs text-slate-600 dark:text-slate-300')}>{text}</span>
 }
 
-function JsonValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
+export function JsonValue({ value, depth = 0, exactNumbers = false }: { value: unknown; depth?: number; exactNumbers?: boolean }) {
   const t = useTranslations('admin.audit.drawer')
-  if (!Array.isArray(value) && !isObject(value)) return <CompactValue value={value} />
+  if (!Array.isArray(value) && !isObject(value)) return <CompactValue value={value} exactNumbers={exactNumbers} />
 
   if (Array.isArray(value)) {
     if (value.length === 0) return <span className="text-slate-400">{t('emptyCollection')}</span>
@@ -87,7 +87,7 @@ function JsonValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
         <div className="flex flex-wrap gap-1.5">
           {value.map((item, index) => (
             <span key={index} className="rounded-md bg-slate-100 px-2 py-1 text-xs dark:bg-slate-800">
-              <CompactValue value={item} />
+              <CompactValue value={item} exactNumbers={exactNumbers} />
             </span>
           ))}
         </div>
@@ -105,7 +105,7 @@ function JsonValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
               <span className="shrink-0 text-xs font-normal text-slate-400">{t('itemPosition', { current: index + 1, total: value.length })}</span>
             </summary>
             <div className="border-t border-slate-200 p-3 dark:border-slate-800">
-              <JsonValue value={item} depth={depth + 1} />
+              <JsonValue value={item} depth={depth + 1} exactNumbers={exactNumbers} />
             </div>
           </details>
         ))}
@@ -127,7 +127,7 @@ function JsonValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
         >
           <dt className="text-xs font-medium tracking-wide text-slate-500 dark:text-slate-400">{humanize(key)}</dt>
           <dd className="min-w-0 text-sm text-slate-800 dark:text-slate-200">
-            <JsonValue value={entry} depth={depth + 1} />
+            <JsonValue value={entry} depth={depth + 1} exactNumbers={exactNumbers} />
           </dd>
         </div>
       ))}
@@ -207,7 +207,7 @@ export function AuditEventDrawer(props: AuditEventDrawerProps) {
   const { event } = props
   const t = useTranslations('admin.audit')
   const format = useFormatter()
-  const changes = isObject(event.changes) ? event.changes : {}
+  const changes = useMemo(() => isObject(event.changes) ? event.changes : {}, [event.changes])
   const hasBefore = Object.hasOwn(changes, 'before')
   const hasAfter = Object.hasOwn(changes, 'after')
   const tabs: DrawerTab[] = ['changes', ...(hasBefore ? ['before' as const] : []), ...(hasAfter ? ['after' as const] : [])]
