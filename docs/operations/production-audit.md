@@ -2790,3 +2790,37 @@ The next forecast probes have confirmed three defects: empty pipelines report
 and an unqualified override of 250 is duplicated as both CAD 250 and USD 250.
 Evidence is under `audit-crm-forecast-snapshots-2026-09-07`. The named voided-rent
 re-billing gap is separate and remains open.
+
+## Forecast snapshot evidence and currency controls — 2026-09-07
+
+Empty pipelines previously returned Created with no snapshot rows. Impossible
+calendar dates reached SQL, and an unqualified override of 250 was persisted
+as both CAD 250 and USD 250. Calculated snapshots also accepted override values
+and override snapshots accepted missing amounts. Real route probes reproduced
+these failures before correction.
+
+The shared calculator and route now validate calendar dates. Empty calculated
+forecasts persist explicit zero evidence, recording the selected currency or
+organization reporting basis. Nonzero overrides require an explicit currency
+when the pipeline does not identify exactly one currency, and snapshot kind
+must agree with the presence of an override. Currency selection is validated
+against the currency registry. The page uses the same calendar validation and
+shared typed forecast row. No amounts are converted or duplicated across currencies.
+
+All 18 focused tests passed (6,874.415375 ms, no skips), including six new
+route/page integration cases. All 3,209 unit tests passed (146,712.491125 ms;
+no failures or skips). Final web typecheck and exact-lock production build
+passed; changed-file lint is clean. Removing five untyped tuple entries
+tightened explicit-any to 381 and canonical lint warnings to 713. Evidence:
+`audit-crm-forecast-snapshots-2026-09-07`.
+
+The immutable full integration run at `255ac64e` completed: 2,390 tests passed,
+zero failures/skips, 1,607,841.639667 ms. Its fixture receipt records 1,991
+leases, releases and resets, zero active leases and zero leak detections.
+This validates that commit, not all later changes. The exact-lock production
+dependency audit reported zero known vulnerabilities. Neither result proves
+absence of unknown defects.
+
+A subsequent real posted-rent probe confirmed that controlled invoice voiding
+leaves the rent schedule invoiced and prevents corrected rebilling. Evidence:
+`audit-property-rebilling-2026-09-07/before.log`. That remediation is next.
