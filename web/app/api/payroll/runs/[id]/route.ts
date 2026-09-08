@@ -266,6 +266,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const result = await recordPayRunPayment({
         orgId: gate.user.orgId, actorId: gate.user.id, documentId: id,
         bankAccountId: body.bankAccountId,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
       return NextResponse.json({ ok: true, ...result })
     }

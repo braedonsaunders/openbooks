@@ -3341,3 +3341,20 @@ All nine focused remittance, payment and engine-scope checks passed
 (4,148.945292 ms, no failures/skips); engine typecheck and changed-file lint
 passed. Evidence: `audit-payroll-payment-history-scope-2026-09-08/before.log`,
 `focused.log`, `typecheck.log`, and `lint.log`.
+
+## Payroll payment HTTP scope propagation — 2026-09-08
+
+The engine's historical-liability guard was bypassed by the pay-run action API:
+the route checked only the document header and omitted `allowedSubsidiaryIds`
+when recording payment. A historical branch-liability journal was refused by
+the restricted direct service call, but the same caller's real HTTP action
+returned 200 and paid it. The route now passes its resolved scope to the engine.
+
+The integration regression uses the real route and financial services, replacing
+only the authenticated feature gate. It verifies the restricted response is 422
+with the existing non-disclosing error, the run remains unpaid, and an
+unrestricted caller can still pay successfully. All 18 focused transport,
+payment and scope checks passed (8,409.743958 ms, no failures/skips); web
+typecheck and changed-file lint passed. Evidence:
+`audit-payroll-payment-transport-scope-2026-09-08/before.log`, `focused.log`,
+`typecheck.log`, and `lint.log`.
