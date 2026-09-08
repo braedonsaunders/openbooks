@@ -4301,3 +4301,28 @@ assignment controls. Existing fixtures now grant their administrative actors
 actual permissions instead of relying on the former bypass. Workspace types,
 warning-free changed-file lint, whitespace and exact-lock production build passed.
 Evidence: `audit-sandbox-promotion-authority-2026-09-08`.
+
+### Full integration result and mapped-identity fixtures (2026-09-08)
+
+The frozen 7c15e6e2 run completed 2,646 integration checks: 2,644 passed and two
+failed, with no skips (1,412,842.188 ms). Fixture accounting remained balanced:
+2,263 leases/releases/resets, four bootstraps/teardowns/schema-wide verifications,
+and zero active leases or detected leaks. Both failures reproduced independently
+at `role_assignments_user_id_fkey` in fixtures that directly assigned a home-org
+user to a foreign organization's role. This is not the supported cross-company
+identity model: `user_org_access` maps the home identity to a target-local acting
+user, and only platform super admins act across production tenants directly.
+
+The engine-identity and report-security fixtures now explicitly assert rejection
+of the invalid cross-tenant assignment and create valid mapped-user access. The
+engine checks the target acting user's grants and active state while proving
+the home identity cannot borrow those grants. Report privacy still excludes the
+other company's roles and legal entities even when that login can switch there.
+The storage constraints and runtime authorization remain unchanged. All 12
+focused identity, role-reference, organization-access and report-security checks
+passed (7,170.453291 ms), with no skips. Evidence:
+`audit-identity-fixture-contract-2026-09-08`; full-run evidence remains in
+`audit-role-reference-integrity-2026-09-08/full-integration.log`. A full rerun of
+the newer revision is required before recording another passing full checkpoint.
+Workspace types and changed-file lint without warnings also passed for the
+fixture correction; no production build rerun is needed for test-only edits.

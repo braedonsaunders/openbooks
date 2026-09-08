@@ -25,12 +25,21 @@ test("engine authorization separates home identity from active-organization gran
     assert.equal(await actorHasPermission(db, target.orgId, actor, "gl.post"), false);
     const local = await createScratchUser(target.orgId, "Target role owner", "poster");
     await db.execute(sql`update app_roles set permissions='["gl.post"]'::jsonb where org_id=${target.orgId} and key='poster'`);
-    await db.execute(sql`insert into role_assignments (org_id,user_id,role_id)
-      select ${target.orgId},${actor},role_id from role_assignments where user_id=${local} and org_id=${target.orgId}`);
+    await assert.rejects(db.execute(sql`insert into role_assignments (org_id,user_id,role_id)
+      select ${target.orgId},${actor},role_id from role_assignments where user_id=${local} and org_id=${target.orgId}`),
+    (error: unknown) => (error as { cause?: { constraint?: string } }).cause?.constraint === "role_assignments_user_id_fkey");
+    // Cross-company access maps the login identity to a real target users row.
+    // The authentication layer resolves that mapping before calling the engine.
+    await db.execute(sql`insert into user_org_access(member_user_id,org_id,acting_user_id)
+      values(${actor},${target.orgId},${local})`);
     await withOrg(target.orgId, async () => {
-      assert.equal(await actorHasPermission(db, target.orgId, actor, "gl.post"), true);
-      assert.equal(await actorHasPermission(db, target.orgId, actor, "documents.manage"), false);
+      assert.equal(await actorHasPermission(db, target.orgId, actor, "gl.post"), false, "home identity cannot borrow the target actor's grants");
+      assert.equal(await actorHasPermission(db, target.orgId, local, "gl.post"), true);
+      assert.equal(await actorHasPermission(db, target.orgId, local, "documents.manage"), false);
     });
+    await db.execute(sql`update users set is_active=false where id=${local}`);
+    assert.equal(await actorHasPermission(db, target.orgId, local, "gl.post"), false);
+    assert.deepEqual(await withBypassContext(() => actorAllowedSubsidiaryIds(db, target.orgId, local)), new Set());
     await db.execute(sql`update users set is_active=false where id=${actor}`);
     assert.equal(await actorHasPermission(db, target.orgId, actor, "gl.post"), false);
     assert.deepEqual(await withBypassContext(() => actorAllowedSubsidiaryIds(db, target.orgId, actor)), new Set());
