@@ -3924,3 +3924,25 @@ and the locked production build passed. Evidence:
 `audit-payroll-create-picker-scope-2026-09-08`.
 The full integration archive running at `66be48a8` includes the payroll transaction
 and preceding scope fixes, but predates this page change.
+
+### Inventory write services enforce the authoritative feature gate (2026-09-08)
+
+Seven real database proofs reproduced new stock/accounting activity after
+`settings.features.inventory` was explicitly disabled: receipt, issue, adjustment,
+transfer, assembly build, transfer-order creation, and landed-cost capitalization.
+The direct services did not enforce the feature checked by their HTTP callers.
+
+New movement and document operations now hold the shared organization feature
+lock before their position/profile locks and writes. Transfer shipment and receipt
+take that lock before entering their delegated movement path. Transfer numbering
+was moved inside the guarded transaction so a refused creation consumes no number.
+Registry defaults remain authoritative, and controlled reversal of historical
+movements remains available after disabling the feature.
+
+Validation: 110/110 inventory/costing/NRV/ownership/transfer/reversal checks passed,
+with no skips (28,489.598416 ms). New regressions cover nine write entry points,
+caught refusals inside caller transactions, unchanged numbering and financial
+evidence, re-enablement, an actual concurrent feature disable, and historical
+reversal. Workspace typechecks, changed-file lint without warnings, and whitespace
+checks passed. Evidence: `audit-inventory-movement-feature-2026-09-08`.
+The running full `66be48a8` archive predates these Inventory changes.
