@@ -7,6 +7,7 @@ import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import {
   InventoryError,
+  inventoryOffsetAccountProblem,
   assertCostingPolicyChangeAllowed,
   CostingPolicyChangeBlockedError,
   lockItemInventoryProfile,
@@ -136,6 +137,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const adjustmentAccountId = accountRef(body.adjustmentAccountId)
   const varianceAccountId = accountRef(body.varianceAccountId)
   const receivedNotBilledAccountId = accountRef(body.receivedNotBilledAccountId)
+  for (const [label, accountId] of [
+    ['COGS', cogsAccountId], ['adjustment', adjustmentAccountId], ['variance', varianceAccountId],
+    ['received-not-billed', receivedNotBilledAccountId],
+  ] as const) {
+    const accountProblem = inventoryOffsetAccountProblem(assetAccountId, accountId, label)
+    if (accountProblem) return NextResponse.json({ error: accountProblem }, { status: 422 })
+  }
   const standardCost = moneyOrNull(body.standardCost)
   const reorderPoint = moneyOrNull(body.reorderPoint)
   const preferredStockLevel = moneyOrNull(body.preferredStockLevel)

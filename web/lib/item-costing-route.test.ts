@@ -11,6 +11,13 @@ import test from 'node:test'
 // in-transaction split makes a missing transaction observable.
 const stateKey = Symbol.for('openbooks.item-costing-route-test')
 type ProfileRow = Record<string, unknown>
+interface ProfileAuditChanges {
+  before: ProfileRow
+  after: ProfileRow
+  requested: { costingMethod: string; tracking: string }
+  recostingAuthorization: string | null
+  revision: { before: string | null; after: string | null }
+}
 interface DbCall {
   kind: 'execute' | 'tx-execute'
   text: string
@@ -96,6 +103,9 @@ const mockSources = new Map<string, string>([
         state.calls.push({ kind, text, params })
 
         const isTx = kind === 'tx-execute'
+        if (text.includes("settings->'features'") && text.includes('from orgs')) {
+          return { rows: [{ features: { inventory: true } }] }
+        }
         if (text.includes('from items where')) {
           return { rows: state.itemExists ? [{ '?column?': 1 }] : [] }
         }
@@ -171,6 +181,7 @@ const mockSources = new Map<string, string>([
       }
       export const schema = {}
       export function withOrgTransaction(_orgId, work) { return work() }
+      export function withTransactionSavepoint(_runner, work) { return work() }
       export async function withOrg(_orgId, work) { return work() }
       export async function withOrgContext(_orgId, work) { return work() }
       export async function withBypass(work) { return work() }
@@ -361,7 +372,7 @@ test('a reviewed save persists and audits the full policy change', async () => {
 
   const audit = routeState.committedAudits[0]!
   assert.equal(audit.action, 'update')
-  const changes = audit.changes as Record<string, any>
+  const changes = audit.changes as ProfileAuditChanges
   assert.equal(changes.before.costing_method, 'fifo')
   assert.equal(changes.after.costing_method, 'standard')
   assert.deepEqual(changes.requested, { costingMethod: 'standard', tracking: 'none' })
@@ -414,7 +425,7 @@ test('a fenced save under an exactly matching revision succeeds atomically', asy
   assert.equal(payload.updatedAt, NEXT_REVISION)
   assert.deepEqual(routeState.committedProfiles.get(ITEM_ID), NEXT_PROFILE)
   assert.equal(routeState.committedAudits.length, 1)
-  const changes = routeState.committedAudits[0]!.changes as Record<string, any>
+  const changes = routeState.committedAudits[0]!.changes as ProfileAuditChanges
   assert.equal(changes.revision.before, STORED_REVISION)
   assert.equal(changes.revision.after, NEXT_REVISION)
 

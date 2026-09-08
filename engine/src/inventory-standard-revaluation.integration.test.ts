@@ -15,7 +15,7 @@ async function evidence(orgId: string) {
   ) as state`)).rows[0]!.state;
 }
 
-for (const scenario of ["disabled feature", "disabled book", "missing period", "restricted account", "inactive owner", "later owner restriction", "missing account", "aliased accounts"] as const) {
+for (const scenario of ["disabled feature", "disabled book", "missing period", "restricted account", "inactive owner", "later owner restriction", "missing account", "aliased accounts", "uppercase aliased accounts"] as const) {
   test(`standard revaluation preserves financial evidence: ${scenario}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const org = await createScratchOrg();
     try {
@@ -36,7 +36,8 @@ for (const scenario of ["disabled feature", "disabled book", "missing period", "
       if (scenario === "inactive owner") await db.execute(sql`update subsidiaries set is_active=false where org_id=${org.orgId} and id=${ownerId}`);
       const before = await evidence(org.orgId);
       const options = { standardCost: "6", assetAccountId: scenario === "missing account" ? randomUUID() : org.accounts.invAsset,
-        varianceAccountId: scenario === "aliased accounts" ? org.accounts.invAsset : org.accounts.adjustment };
+        varianceAccountId: scenario === "aliased accounts" ? org.accounts.invAsset
+          : scenario === "uppercase aliased accounts" ? org.accounts.invAsset.toUpperCase() : org.accounts.adjustment };
       const run = () => revalueOpenLayersToStandardCost(db, org.orgId, actorId, org.items.fifo, options);
       await withSimClock(scenario === "missing period" ? "2026-08-15" : org.date, () => withOrgTransaction(org.orgId, async () => {
         await db.execute(sql`update orgs set name='Scratch revaluation caller work' where id=${org.orgId}`);
@@ -44,7 +45,7 @@ for (const scenario of ["disabled feature", "disabled book", "missing period", "
         else await assert.rejects(run(), scenario === "disabled feature" ? /inventory feature is disabled/i
           : scenario === "disabled book" ? /active primary posting book/
           : scenario === "missing period" ? /no accounting period/
-          : scenario === "aliased accounts" ? /variance account must be distinct/
+          : scenario.endsWith("aliased accounts") ? /variance account must be distinct/
           : scenario === "inactive owner" ? /inactive/ : /restricted to another subsidiary/);
         assert.deepEqual(await evidence(org.orgId), before, "caught refusal must restore all layers and journals");
       }));

@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, withTransactionSavepoint } from "./db.ts";
 import { isIsoCalendarDate } from "./business-date.ts";
 import { fromUnits, mul, roundDiv, toUnits } from "./money.ts";
-import { getOnHandForEntity, lockInventoryPosition, postInventoryEntry } from "./inventory.ts";
+import { getOnHandForEntity, inventoryOffsetAccountProblem, lockInventoryPosition, postInventoryEntry } from "./inventory.ts";
 import { orgReportingFramework, type ReportingFramework } from "./reporting-framework.ts";
 import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
@@ -238,6 +238,8 @@ async function itemAccounts(tx: Pick<typeof db, "execute">, orgId: string, itemI
       from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId} for share`));
   const row = r.rows[0];
   if (!row) throw new InventoryNrvError("item has no inventory profile");
+  const accountProblem = inventoryOffsetAccountProblem(row.asset_account_id, row.adjustment_account_id, "adjustment");
+  if (accountProblem) throw new InventoryNrvError(accountProblem);
   return { asset: row.asset_account_id, adjustment: row.adjustment_account_id };
 }
 
