@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, schema, withMaintenanceTransaction } from "../db.ts";
 import { assertUuid } from "./catalog.ts";
 import { remapRoleRestriction, sandboxSubsidiaryMap } from "./json-references.ts";
+import { isCataloguePermission, PERMISSION_CATALOGUE, permissionSetCovers, permissionsOutsideCeiling, resolveEffectivePermissions } from "../permissions.ts";
 
 /**
  * Promotion — config flows UP (sandbox → production) as a reviewable change set;
@@ -67,6 +68,33 @@ async function assertActiveActor(actorId: string, orgId: string): Promise<void> 
   const actor = await db.execute<{ id: string }>(sql`
     select id from users where id = ${actorId} and org_id = ${orgId} and is_active`);
   if (!actor.rows[0]) throw new Error(`actor ${actorId} is not an active user of the production organization`);
+}
+
+/** Freeze the applying actor's authority before any item can change a role.
+ * User administration takes the user write lock; role edits take the role write
+ * lock. Holding both here orders revocations with the whole promotion. */
+async function promotionAuthority(actorId: string, orgId: string): Promise<Set<string>> {
+  const actor = (await db.execute<{ is_super_admin: boolean; is_active: boolean }>(sql`
+    select is_super_admin,is_active from users where id=${actorId} and org_id=${orgId} for share`)).rows[0];
+  if (!actor?.is_active) throw new Error("promotion requires an active production actor");
+  await db.execute(sql`select id from role_assignments where org_id=${orgId} and user_id=${actorId} order by id for share`);
+  const roles = (await db.execute<{ permissions: string[] }>(sql`
+    select r.permissions from app_roles r where r.org_id=${orgId}
+      and exists(select 1 from role_assignments a where a.org_id=${orgId} and a.user_id=${actorId} and a.role_id=r.id)
+     order by r.id for share`)).rows;
+  const overrides = (await db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
+    select permission,effect from user_permission_overrides where org_id=${orgId} and user_id=${actorId} order by id for share`)).rows;
+  const permissions = actor.is_super_admin ? new Set(["*"]) : resolveEffectivePermissions({ rolePermissionSets: roles.map(row => row.permissions), overrides });
+  if (!permissionSetCovers(permissions, "admin.sandboxes.manage")) throw new Error("promotion requires admin.sandboxes.manage");
+  return permissions;
+}
+
+function promotedRolePermissions(value: unknown): string[] {
+  if (!Array.isArray(value) || value.some(key => typeof key !== "string" ||
+    !(isCataloguePermission(key) || key === "*" || (key.endsWith(".*") && PERMISSION_CATALOGUE.some(p => p.startsWith(key.slice(0, -1))))))) {
+    throw new Error("promotion role permissions must contain valid permission keys");
+  }
+  return [...new Set(value as string[])];
 }
 
 async function assertDistinctActors(
@@ -267,9 +295,14 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
       throw new Error("change set item count does not match its captured snapshot");
     }
 
+    const authority = await promotionAuthority(actor, prod);
+
     for (const it of items.rows) {
       const t = it.table_name;
       if (!PROMOTABLE.includes(t)) throw new Error(`change set contains non-promotable table: ${t}`);
+      if (t === "app_roles" && !permissionSetCovers(authority, "admin.roles.manage")) {
+        throw new Error("role promotion requires admin.roles.manage");
+      }
       const target = assertUuid(it.target_id);
       const table = sql`public.${sql.identifier(t)}`;
       const prior = await db.execute<{ row: Record<string, unknown> }>(sql`
@@ -295,6 +328,11 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
           throw new Error(`promotion payload identity does not match ${t}/${target}`);
         }
         if (t === "app_roles") {
+          const requested = promotedRolePermissions(payload.permissions);
+          const current = new Set(before ? promotedRolePermissions(before.permissions) : []);
+          const missing = permissionsOutsideCeiling(authority, requested.filter(key => !current.has(key)));
+          if (missing.length) throw new Error(`cannot grant permissions you do not hold: ${missing.join(", ")}`);
+          payload.permissions = requested;
           // Revalidate a captured scope against live, locked production rows;
           // the target entity can disappear between capture and application.
           const subsidiaries = (await db.execute<{ id: string }>(sql`

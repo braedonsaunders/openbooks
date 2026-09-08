@@ -4275,3 +4275,29 @@ Evidence: `audit-sandbox-role-scope-2026-09-08`. No migration or production data
 change is required.
 The adjacent catalog, wipe-guard, organization-access and sandbox-session checks
 also passed 13/13 (4,501.171125 ms), for 31 focused/adjacent checks overall.
+
+### Production role-promotion authority (2026-09-08)
+
+A real service probe confirmed that four independent actors holding only
+`admin.sandboxes.manage` could capture/review/approve/apply their own cloned role
+with `permissions: ['*']`. The applying production user changed from lacking
+`gl.post` to holding it. Separate lifecycle actors did not compensate for the
+missing domain permission and grant ceiling.
+
+Applying a change set now reads and locks the actor's live identity, assignments,
+roles and overrides before applying any item. It requires sandbox-management
+authority; role items additionally require role-management authority. New role
+grants must fit the actor's effective permission set, including deny overrides
+and wildcard matching, and invalid permission keys are rejected. The authority
+snapshot is fixed for the transaction, so an earlier promoted item cannot mint
+new authority for later items. Permission removal remains allowed and the
+existing platform-super-admin policy remains explicit.
+
+Nine authority scenarios plus thirteen promotion/reference scenarios passed
+22/22 without skips (15,928.301375 ms): missing sandbox/role authority, specific
+and wildcard escalation, deny overrides, an authorized added grant, removal of
+higher grants, super-admin behavior, malformed keys, and existing scope/audit/
+assignment controls. Existing fixtures now grant their administrative actors
+actual permissions instead of relying on the former bypass. Workspace types,
+warning-free changed-file lint, whitespace and exact-lock production build passed.
+Evidence: `audit-sandbox-promotion-authority-2026-09-08`.

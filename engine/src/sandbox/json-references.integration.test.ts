@@ -14,6 +14,7 @@ async function fixture(run: (org: Awaited<ReturnType<typeof createScratchOrg>>, 
   try {
     const actors: string[] = [];
     for (const name of ["Creator", "Reviewer", "Approver", "Applier"]) actors.push(await createScratchUser(org.orgId, name, "admin"));
+    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`);
     await createScratchUser(org.orgId, "Scoped subtree", "scoped_tree");
     await createScratchUser(org.orgId, "Scoped list", "scoped_list");
     const child = randomUUID();
