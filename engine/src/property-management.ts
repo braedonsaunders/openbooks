@@ -1123,30 +1123,49 @@ export async function levelLeaseRentStraightLine(
 export async function billDueLeaseCharges(orgId: string, actorId: string | null, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ billed: number; invoices: string[] }> {
   const through = validDate(asOf, "Billing date") ?? await businessToday(orgId);
   await assertEnabled(db, orgId);
-  const due = (await db.execute<DueLeaseChargeRow>(sql`
-    select s.id,s.lease_id as "leaseId",s.due_on as "dueOn",s.amount,s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",
-      c.description,c.income_account_id as "incomeAccountId",c.item_id as "itemId",c.tax_code_id as "taxCodeId",
-      l.tenant_id as "tenantId",l.lease_number as "leaseNumber",l.payment_terms_days as "paymentTermsDays",l.auto_post as "autoPost",
-      p.subsidiary_id as "subsidiaryId",p.location_id as "locationId",p.currency
-    from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
-    join property_leases l on l.id=s.lease_id and l.org_id=s.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
+  // Discovery only chooses candidates. It is not the financial snapshot used
+  // for invoicing: lease controls and schedule proration may change while we wait.
+  const due = (await db.execute<{ id: string; leaseId: string }>(sql`
+    select s.id,s.lease_id as "leaseId"
+    from lease_schedule_lines s
+    join property_leases l on l.id=s.lease_id and l.org_id=s.org_id
     where s.org_id=${orgId} and s.status='scheduled' and s.due_on<=${through} and l.status in ('active','notice')
       and l.auto_invoice and (${onlyLeaseId ?? null}::uuid is null or l.id=${onlyLeaseId ?? null})
       and (${onlyPropertyId ?? null}::uuid is null or l.property_id=${onlyPropertyId ?? null}) order by l.id,s.due_on,s.id
   `));
-  const groups = new Map<string, DueLeaseChargeRow[]>(); for (const row of due.rows) groups.set(row.leaseId, [...(groups.get(row.leaseId) ?? []), row]);
+  const groups = new Map<string, string[]>();
+  for (const row of due.rows) groups.set(row.leaseId, [...(groups.get(row.leaseId) ?? []), row.id]);
   const invoices: string[] = [];
-  for (const [leaseId, rows] of groups) {
+  for (const [leaseId, candidateIds] of groups) {
     await withOrgTransaction(orgId, async () => {
-      const candidateIds = rows.map((row) => row.id);
-      const locked = (await db.execute<{ id: string }>(sql`
-        select id from lease_schedule_lines
-        where org_id=${orgId} and status='scheduled'
-          and id::text in (select jsonb_array_elements_text(${JSON.stringify(candidateIds)}::jsonb))
-        order by id for update
+      // Lease before schedule matches termination/lease-edit lock order. A
+      // non-key lock still permits foreign-key checks when an escalation
+      // inserts its replacement charge before releasing the old charge lock.
+      const lease = (await db.execute<{ property_id: string }>(sql`
+        select property_id from property_leases where org_id=${orgId} and id=${leaseId}
+          and status in ('active','notice') and auto_invoice
+          and (${onlyPropertyId ?? null}::uuid is null or property_id=${onlyPropertyId ?? null})
+        for no key update`)).rows[0];
+      if (!lease) return;
+      await db.execute(sql`select id from managed_properties where org_id=${orgId} and id=${lease.property_id} for share`);
+      // Escalations lock a charge before its schedules. Freeze charge policy
+      // in that same order, then read the full invoice inputs under row locks.
+      await db.execute(sql`select id from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by id for share`);
+      await assertEnabled(db, orgId);
+      const locked = (await db.execute<DueLeaseChargeRow>(sql`
+        select s.id,s.lease_id as "leaseId",s.due_on as "dueOn",s.amount,s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",
+          c.description,c.income_account_id as "incomeAccountId",c.item_id as "itemId",c.tax_code_id as "taxCodeId",
+          l.tenant_id as "tenantId",l.lease_number as "leaseNumber",l.payment_terms_days as "paymentTermsDays",l.auto_post as "autoPost",
+          p.subsidiary_id as "subsidiaryId",p.location_id as "locationId",p.currency
+        from lease_schedule_lines s
+        join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
+        join property_leases l on l.id=s.lease_id and l.org_id=s.org_id
+        join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
+        where s.org_id=${orgId} and s.lease_id=${leaseId} and s.status='scheduled' and s.due_on<=${through}
+          and s.id::text in (select jsonb_array_elements_text(${JSON.stringify(candidateIds)}::jsonb))
+        order by s.id for update of s
       `));
-      const lockedIds = new Set(locked.rows.map((row) => row.id));
-      const billRows = rows.filter((row) => lockedIds.has(row.id));
+      const billRows = locked.rows;
       if (!billRows.length) return;
       const ids = billRows.map((row) => row.id);
       const key = billingKey(leaseId, ids);

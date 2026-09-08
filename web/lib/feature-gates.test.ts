@@ -2023,13 +2023,15 @@ test('the surfaces this test was written for are covered', () => {
     /error instanceof PropertyManagementError[\s\S]{0,120}status: error\.status/,
     'lease apply-escalation must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
+  const propertyBilling = read('../engine/src/property-management.ts')
+    .split('export async function billDueLeaseCharges')[1]?.split('\nexport ')[0] ?? ''
   assert.match(
-    read('../engine/src/property-management.ts'),
-    /export async function billDueLeaseCharges[\s\S]{0,4000}INVENTORY_ITEM_KINDS\.has/,
+    propertyBilling,
+    /!\(await inventoryFeatureEnabled\(db, orgId\)\)[\s\S]*INVENTORY_ITEM_KINDS\.has/,
     'billDueLeaseCharges must not persist inventory/assembly/kit items when Inventory is off — stored schedule lines and existing invoices stay',
   )
   assert.match(
-    read('../engine/src/property-management.ts'),
+    propertyBilling,
     /if \(!invoiceId\) \{[\s\S]{0,800}Inventory is disabled/,
     'billDueLeaseCharges must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
