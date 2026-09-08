@@ -713,8 +713,8 @@ async function primaryBookId(
   runner: Runner = db,
 ): Promise<string> {
   const r = (await runner.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`));
-  if (!r.rows[0]) throw new InventoryError("no primary accounting book");
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share`));
+  if (!r.rows[0]) throw new InventoryError("no active primary posting book");
   return r.rows[0].id;
 }
 
@@ -976,6 +976,9 @@ export async function postInventoryEntry(
   const bal = sum(p.lines.map((l) => l.amount));
   if (!isZero(bal))
     throw new InventoryError(`inventory entry does not balance (sum=${bal})`);
+  const book = (await tx.execute<{ id: string }>(sql`select id from accounting_books
+    where org_id=${p.orgId} and id=${p.bookId} and is_active and posts_gl for share`)).rows[0];
+  if (!book) throw new InventoryError("inventory journal requires an active posting book");
   const entryRes = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, custom, created_by, updated_by, posted_by)
@@ -1057,7 +1060,6 @@ export async function receiveInventory(
   const period = await periodForDate(orgId, input.date);
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
-  const bookId = await primaryBookId(orgId);
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
   const ctx = await loadSubsidiaryContext(db, orgId);
   assertMovementOwner(ctx, input.subsidiaryId);
@@ -1069,6 +1071,7 @@ export async function receiveInventory(
   };
 
   const apply = async (tx: Runner): Promise<MovementResult> => {
+    const bookId = await primaryBookId(orgId, tx);
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     // Costing policy is locked and re-read after the position lock. The
     // costing-policy writer takes the same profile lock before revaluing
@@ -1420,7 +1423,6 @@ export async function issueInventory(
   const period = await periodForDate(orgId, input.date, runner);
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
-  const bookId = await primaryBookId(orgId, runner);
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId, runner);
   const ctx = await loadSubsidiaryContext(runner, orgId);
   assertMovementOwner(ctx, input.subsidiaryId);
@@ -1431,6 +1433,7 @@ export async function issueInventory(
   };
 
   const apply = async (tx: Runner): Promise<MovementResult> => {
+    const bookId = await primaryBookId(orgId, tx);
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     // Re-read the policy under the movement transaction's lock boundary so a
     // concurrent costing-policy revision cannot price this issue from stale
@@ -2731,12 +2734,12 @@ export async function buildAssembly(
   const period = await periodForDate(orgId, input.date);
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
-  const bookId = await primaryBookId(orgId);
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
   const ctx = await loadSubsidiaryContext(db, orgId);
   assertMovementOwner(ctx, input.subsidiaryId);
 
   return await db.transaction(async (tx) => {
+    const bookId = await primaryBookId(orgId, tx);
     // There is no separately lockable BOM header. A SHARE table lock is the
     // narrowest PostgreSQL primitive that excludes every INSERT/UPDATE/DELETE,
     // including insertion of a new component for this assembly. It therefore
