@@ -19,7 +19,7 @@ import {
   payrollSubsidiaryScopeFilter,
   type PayrollSubsidiaryScope,
 } from "./payroll-run.ts";
-import { legacyStatutoryLiabilityAccount, statutoryRemittanceDeclaration } from "./payroll/packs.ts";
+import { statutoryRemittanceDeclaration } from "./payroll/packs.ts";
 
 type RemittanceExecutor = Pick<typeof db, "execute">;
 
@@ -145,10 +145,9 @@ export async function payrollRemittanceSummary(
       province: string; amount: string;
     }>(sql`
     select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
-           -- The account the line was CREDITED to at commit (0094). A pre-0094
-           -- line whose component named no account resolves, as it always did,
-           -- through the pack's legacy slot in resolveAccount below.
-           coalesce(l.liability_account_id, c.liability_account_id) as liability_account_id,
+           -- Historical accrual evidence only. Current component or statutory
+           -- account setup cannot establish where an older liability accrued.
+           l.liability_account_id,
            ${filingAccount} as filing_account_id, s.province,
            sum(l.amount) as amount
       from pay_stub_lines l
@@ -161,10 +160,13 @@ export async function payrollRemittanceSummary(
        and coalesce(c.system_key, '') <> all(${internalAccruals}::text[])
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      group by c.id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
-              coalesce(l.liability_account_id, c.liability_account_id), ${filingAccount}, s.province
+              l.liability_account_id, ${filingAccount}, s.province
      order by c.sequence, c.code
   `));
   if (rows.rows.length === 0) return [];
+  if (rows.rows.some(row => !row.liability_account_id && cmp(row.amount, "0") !== 0)) {
+    throw new PayrollError("Committed payroll has an unknown historical liability account. Reconcile its original payroll posting evidence before generating remittance reports or bills.");
+  }
 
   const context = (await executor.execute<{ filing_account_id: string | null; gross: string; employees: number }>(sql`
     select ${filingAccount} as filing_account_id,
@@ -209,8 +211,7 @@ export async function payrollRemittanceSummary(
     return settingsVendor(vendorKey);
   };
   const resolveAccount = (row: (typeof rows.rows)[0]): string | null =>
-    row.liability_account_id
-    ?? (row.system_key ? legacyStatutoryLiabilityAccount(row.system_key, rawSettings) : null);
+    row.liability_account_id;
 
   const groups = groupRemittanceRows({
     rows: rows.rows, contextByAccount, filingAccounts, resolveParty, resolveAccount,

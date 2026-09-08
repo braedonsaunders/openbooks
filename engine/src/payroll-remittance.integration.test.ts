@@ -68,7 +68,7 @@ async function addCommittedRemittanceAccrual(
   fixture: RemittanceFixture,
   input: { payDate: string; amount: string; employeeId?: string },
 ): Promise<void> {
-  const { org, actorId, componentId, scheduleId } = fixture;
+  const { org, actorId, componentId, liabilityAccountId, scheduleId } = fixture;
   const employeeId = input.employeeId ?? randomUUID();
   const documentId = randomUUID();
   const stubId = randomUUID();
@@ -108,10 +108,10 @@ async function addCommittedRemittanceAccrual(
   await db.execute(sql`
     insert into pay_stub_lines
       (id, org_id, stub_id, component_id, kind, description, amount, sequence,
-       created_by, updated_by)
+       liability_account_id, liability_account_source, created_by, updated_by)
     values
       (${lineId}, ${org.orgId}, ${stubId}, ${componentId}, 'deduction',
-       'Test withholding', ${input.amount}, 10, ${actorId}, ${actorId})`);
+       'Test withholding', ${input.amount}, 10, ${liabilityAccountId}, 'commit', ${actorId}, ${actorId})`);
 }
 
 async function waitForRemittanceFenceWaiter(key: string): Promise<void> {
