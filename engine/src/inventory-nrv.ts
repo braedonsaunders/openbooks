@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withTransactionSavepoint } from "./db.ts";
 import { isIsoCalendarDate } from "./business-date.ts";
 import { fromUnits, mul, roundDiv, toUnits } from "./money.ts";
 import { getOnHandForEntity, lockInventoryPosition, postInventoryEntry } from "./inventory.ts";
@@ -310,7 +310,7 @@ export async function writeDownInventoryToNrv(
 ): Promise<NrvResult> {
   const framework = await orgReportingFramework(orgId);
 
-  return await db.transaction(async (tx) => {
+  return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     const accounts = await itemAccounts(tx, orgId, input.itemId);
     const layers = await remainingLayers(tx, orgId, input.itemId, input.stockLocationId);
@@ -433,7 +433,7 @@ export async function writeDownInventoryToNrv(
       framework,
       entities,
     };
-  });
+  }));
 }
 
 export interface NrvReversalInput {
@@ -475,7 +475,7 @@ export async function reverseInventoryWritedown(
   }
   const ctx = await postingContext(orgId, input.subsidiaryId, input.date);
 
-  return await db.transaction(async (tx) => {
+  return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     const accounts = await itemAccounts(tx, orgId, input.itemId);
     const layers = await remainingLayers(
@@ -653,5 +653,5 @@ export async function reverseInventoryWritedown(
         },
       ],
     };
-  });
+  }));
 }

@@ -3625,3 +3625,30 @@ failures/skips); engine typecheck and changed-file lint passed. Evidence:
 `audit-consolidation-book-policy-2026-09-08/before.log`, `focused.log`,
 `typecheck.log`, and `lint.log`. The running full suite remains frozen at
 0083b76c and excludes this newer consolidation change.
+
+## Inventory book policy and NRV caller-transaction rollback — 2026-09-08
+
+Four real receipt/issue cases changed stock and posted with primary-book
+activation or GL posting disabled. Primary-book resolution now requires both
+flags and holds the book in the stock transaction; receipt, issue and assembly
+reads were moved inside that boundary. The shared inventory journal writer
+also checks the requested book's eligibility. A fifth regression verifies a
+receipt waits for a book edit, then refuses without journals, movements or
+cost layers.
+
+Failure testing also exposed an existing NRV atomicity gap: a write-down with
+no accounting period changed ten $5 units to $4 before throwing, and a caller
+catching the error could retain $40 of stock against $50 in the GL. The new
+book refusal reached the same gap in both write-down and recovery. Before
+shipping the book guard, both NRV operations were wrapped in the existing
+transaction-savepoint helper. Three caller-transaction regressions now preserve
+layers, journals, write-down/recovery evidence and the caller's prior write.
+
+All 32 combined inventory/NRV checks passed (10,454.983125 ms, no failures/skips),
+as did final workspace typechecks and changed-file lint. Before the final NRV
+savepoint addition, all 3,210 unit tests passed (154,804.905667 ms), the locked
+production build passed, and full lint passed with zero errors/709 warnings.
+Evidence: `audit-inventory-book-policy-2026-09-08/before.log`,
+`focused-final.log`, `unit.log`, `build.log`, `lint-full.log`; and
+`audit-nrv-ambient-rollback-2026-09-08/before.log`, `before-expanded.log`,
+`focused.log`, `typecheck.log`, and `lint.log`.
