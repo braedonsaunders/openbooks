@@ -2718,3 +2718,40 @@ The next CRM slice has real failing probes: deactivation leaves active open
 opportunities behind, and draft/activation routes accept inactive parties.
 Evidence is under `audit-statement-book-selection-2026-09-07` and
 `audit-crm-party-lifecycle-2026-09-07`.
+
+## Party retirement and CRM lifecycle serialization — 2026-09-07
+
+The named party-retirement gap was reproduced through real routes: an exact-
+revision, reason-bearing PATCH returned 200 and deactivated an account with an
+active open opportunity. A second probe created and activated CRM work for an
+already inactive account. Two-connection regressions also showed retirement
+missing work committed while it waited for the account lock, and activation
+missing account retirement committed while it waited for that same lock.
+
+Party retirement now obtains the account lock and rechecks both the existing
+transaction/balance dependencies and active non-closed opportunities inside the
+mutation transaction. Refusals preserve the party and audit history. Opportunity
+drafting checks account activity both before work and after taking the account
+lock; activation/reopening checks it against the locked account and status.
+Existing work on an inactive account can still be closed with the existing
+permission and loss-reason controls. A closed opportunity does not prevent
+account retirement. No historical CRM rows are deleted or reassigned.
+
+All 25 focused checks passed on the final source (9,975.952416 ms, no skips),
+including both real concurrency directions, audited retirement refusal, allowed
+closure, CRM write validation, exact revisions and restricted party reads.
+All 3,209 unit tests passed (115,982.827500 ms; no failures or skips). Replacing
+the route's untyped predecessor with its existing row type exposed a mutable
+closure narrowing error; capturing its prior probability resolved it, and the
+final locked-dependency production build and focused tests passed. Canonical
+lint measured 718 warnings and explicit-any measured 386; both ceilings were
+tightened accordingly. Evidence is under `audit-crm-party-lifecycle-2026-09-07`,
+including `concurrency-before-corrected.log` from the prior source.
+
+The next confirmed financial defect is property billing's stale schedule read:
+a competing transaction changed scheduled rent from 1,000 to 500 and shortened
+its end date while billing waited for the schedule lock. Billing still created
+a 1,000 invoice with the old date range and marked the 500 schedule invoiced.
+Evidence is under `audit-property-billing-snapshot-2026-09-07`. The broader full
+integration run for `255ac64e` remains in progress; this checkpoint is not a
+claim that the codebase has no remaining defects.

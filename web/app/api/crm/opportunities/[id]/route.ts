@@ -85,7 +85,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const existing = (await db.execute<any>(sql`
+  const existing = (await db.execute<LockedOpportunityRow>(sql`
     select o.*, s.is_closed, s.is_won from crm_opportunities o
     join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
     where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}`))
@@ -293,6 +293,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     if (!CATEGORIES.includes(category)) throw new OpportunityValidationError('invalid forecast category')
     if (!title) throw new OpportunityValidationError('title is required')
+    const willBeActive = body.isActive !== undefined ? body.isActive === true : (title !== 'New opportunity' && !!partyId)
+    if (partyId && willBeActive && !nextStatus.is_closed) {
+      // The account was locked above; a concurrent retirement cannot be
+      // missed or race this activation. Legacy work may still be closed.
+      const party = await tx.execute(sql`select is_active from parties where id=${partyId} and org_id=${user.orgId}`)
+      if (!party.rows[0]?.is_active) throw new OpportunityValidationError('an active account is required for open opportunities')
+    }
     if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, 'multiCurrency'))) {
       throw new OpportunityNotFound()
     }
@@ -384,7 +391,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (stored.rows.length) {
         // Rows written before inherited lines were stored as null carry a copy
         // of the then-current header rate; treat those as inherited too.
-        const inherited = stored.rows.map((line) => line.probability == null || Number(line.probability) === Number(current.probability))
+        const previousProbability = Number(current.probability)
+        const inherited = stored.rows.map((line) => line.probability == null || Number(line.probability) === previousProbability)
         const recalculated = computeOpportunityTotals(
           stored.rows.map((line, index) => ({
             quantity: '1',
@@ -420,7 +428,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         competitor_notes = ${body.competitorNotes !== undefined ? textOrNull(body.competitorNotes) : sql`competitor_notes`},
         win_loss_reason = ${winLossReason}, description = ${body.description !== undefined ? textOrNull(body.description) : sql`description`},
         closed_at = case when ${nextStatus.is_closed} then coalesce(closed_at, now()) else null end,
-        is_active = ${body.isActive !== undefined ? body.isActive === true : (title !== 'New opportunity' && !!partyId)},
+        is_active = ${willBeActive},
         updated_at = now(), updated_by = ${user.id}
       where id = ${id} and org_id = ${user.orgId}`)
     if (statusId !== current.status_id || probability !== Number(current.probability) || category !== current.forecast_category) {

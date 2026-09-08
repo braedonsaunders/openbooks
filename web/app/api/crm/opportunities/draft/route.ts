@@ -19,8 +19,9 @@ export async function POST(req: NextRequest) {
   const body = parsedBody.data as { partyId?: string }
   if (body.partyId && !isUuid(body.partyId)) return NextResponse.json({ error: 'invalid account' }, { status: 422 })
   if (body.partyId) {
-    const exists = (await db.execute(sql`select 1 from parties where id = ${body.partyId} and org_id = ${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)}`))
+    const exists = (await db.execute(sql`select is_active from parties where id = ${body.partyId} and org_id = ${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)}`))
     if (!exists.rows[0]) return NextResponse.json({ error: 'account not found' }, { status: 404 })
+    if (!exists.rows[0].is_active) return NextResponse.json({ error: 'an active account is required for new opportunities' }, { status: 422 })
   }
   await ensureCrmDefaults(user.orgId, user.id)
   const [number, org] = await Promise.all([
@@ -29,8 +30,9 @@ export async function POST(req: NextRequest) {
   ])
   const opportunity = await db.transaction(async (tx) => {
     if (body.partyId) {
-      const visible = await tx.execute(sql`select id from parties where id=${body.partyId} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)} for update`)
-      if (!visible.rows.length) return NextResponse.json({error:'not found'},{status:404})
+      const visible = await tx.execute(sql`select id, is_active from parties where id=${body.partyId} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)} for update`)
+      if (!visible.rows[0]) return NextResponse.json({error:'not found'},{status:404})
+      if (!visible.rows[0].is_active) return NextResponse.json({ error: 'an active account is required for new opportunities' }, { status: 422 })
     }
     const status = (await tx.execute(sql`
       select id, probability, default_forecast_category from crm_opportunity_statuses
