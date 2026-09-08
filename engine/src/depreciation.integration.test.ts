@@ -111,17 +111,18 @@ async function seedAsset(
             ${method}, ${unitsTotal ?? null}, '{}'::jsonb)`);
   await buildSchedule(assetId, org.orgId, actorId, org.bookId);
   const folderId = randomUUID();
-  const evidenceFileId = randomUUID();
-  await db.transaction(async (tx) => {
+  const evidenceFileId = await db.transaction(async (tx) => {
     await tx.execute(sql`
       insert into folders (id, org_id, name, record_table, record_id, created_by, updated_by)
       values (${folderId}, ${org.orgId}, 'Asset evidence', 'fixed_assets', ${assetId}, ${actorId}, ${actorId})`);
-    await tx.execute(sql`
-      insert into files (id, org_id, folder_id, name, file_type, content_type, size_bytes, created_by, updated_by)
-      values (${evidenceFileId}, ${org.orgId}, ${folderId}, 'meter-evidence.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId})`);
+    const evidenceFileId = (await tx.execute<{ id: string }>(sql`
+      insert into files (org_id, folder_id, name, file_type, content_type, size_bytes, created_by, updated_by)
+      values (${org.orgId}, ${folderId}, 'meter-evidence.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`)).rows[0]!.id;
+    assert.equal(evidenceFileId[14], "7", "evidence uses the native file ID generator");
     await tx.execute(sql`
       insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
       values (${org.orgId}, ${evidenceFileId}, 'fixed_assets', ${assetId}, ${actorId})`);
+    return evidenceFileId;
   });
   return { org, assetId, actorId, evidenceFileId };
 }
