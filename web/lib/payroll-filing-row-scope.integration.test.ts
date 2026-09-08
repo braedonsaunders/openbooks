@@ -53,16 +53,23 @@ test(
         accounts: [account],
       });
       assert.equal(
-        (await guardPayrollFilingRowIds(gate, "CA", "t4", [rowId]))?.status,
+        (await guardPayrollFilingRowIds(gate, "CA", "t4", [rowId], 2026))
+          ?.status,
         404,
       );
       assert.equal(
         (
-          await guardPayrollFilingData(gate, "CA", "t4", {
-            columns: [],
-            rowKey: "rowId",
-            rows: [{ rowId }],
-          })
+          await guardPayrollFilingData(
+            gate,
+            "CA",
+            "t4",
+            {
+              columns: [],
+              rowKey: "rowId",
+              rows: [{ rowId }],
+            },
+            2026,
+          )
         )?.status,
         404,
       );
@@ -70,7 +77,7 @@ test(
         sql`update payroll_filing_accounts set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${account}`,
       );
       assert.equal(
-        await guardPayrollFilingRowIds(gate, "CA", "t4", [rowId]),
+        await guardPayrollFilingRowIds(gate, "CA", "t4", [rowId], 2026),
         null,
         "visible native account remains usable",
       );
@@ -82,8 +89,15 @@ test(
         const country = filing === "t4" ? "CA" : "US";
         assert.equal(payrollRowScope(country, filing, malformed), null);
         assert.equal(
-          (await guardPayrollFilingRowIds(gate, country, filing, [malformed]))
-            ?.status,
+          (
+            await guardPayrollFilingRowIds(
+              gate,
+              country,
+              filing,
+              [malformed],
+              2026,
+            )
+          )?.status,
           404,
         );
       }

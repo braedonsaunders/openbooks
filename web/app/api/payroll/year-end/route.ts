@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'invalid year' }, { status: 422 })
   }
   const filings = await orgYearEndFilings(gate.user.orgId, year)
-  const denied = await guardPayrollYearEndFilings(gate, filings)
+  const denied = await guardPayrollYearEndFilings(gate, filings, year)
   if (denied) return denied
   return NextResponse.json({
     filings: filings.map((filing) => ({

@@ -55,7 +55,7 @@ for (const [file, rules] of Object.entries(PAGES)) {
 }
 
 test("the JSON routes share the loaders' scope decisions", () => {
-  assert.match(read("../app/api/payroll/year-end/route.ts"), /guardPayrollYearEndFilings\(gate, filings\)/);
+  assert.match(read("../app/api/payroll/year-end/route.ts"), /guardPayrollYearEndFilings\(gate, filings, year\)/);
   assert.match(read("../app/api/payroll/remittances/route.ts"), /guardRemittancePeriod\(gate, from, to\)/);
   assert.match(read("../app/api/payroll/opening-balances/route.ts"), /scopedOpeningBalances\(gate, year\)/);
   assert.match(

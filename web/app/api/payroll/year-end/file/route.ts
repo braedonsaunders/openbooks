@@ -46,7 +46,7 @@ async function serveFile(gate: Authz, input: FileInput) {
   const selected = params.employees
   const isRoeSelection = selected != null && country === 'CA' && filingKey === 'roe'
   if (section && !isRoeSelection) {
-    const denied = await guardPayrollFilingData(gate, country, filingKey, section.data)
+    const denied = await guardPayrollFilingData(gate, country, filingKey, section.data, year)
     if (denied) return denied
   }
   // ROE's pack-owned employee selection is an additional direct boundary. It
