@@ -3581,3 +3581,20 @@ warnings). The explicit-any guard remains at 378. Evidence:
 `audit-property-levelling-posting-policy-2026-09-08/before.log`,
 `concurrency-before.log`, `focused-final.log`, `unit.log`, `typecheck-full.log`,
 `build.log`, `lint-full.log`, and `explicit-any.log`.
+
+## FX revaluation posting policy — 2026-09-08
+
+Four real revaluation regressions posted adjustment/reversal pairs with a
+gain/loss account restricted to another entity, an inactive subsidiary, an
+inactive primary book or a primary book with GL posting disabled. The existing
+transaction/savepoint boundary now validates the locked book, hierarchy,
+functional currency and all used account restrictions before inserting either
+entry. Named refusals remain per-entity problems; controlled pair rollback and
+idempotency behavior are preserved.
+
+All 21 focused FX policy, pair-rollback, revaluation and arithmetic checks
+passed (5,022.443625 ms, no failures/skips); engine typecheck and changed-file
+lint passed. Tests verify the original exposure journal is the only journal
+after refusal, correction permits one pair, and retry posts nothing. Evidence:
+`audit-fx-posting-policy-2026-09-08/before.log`, `focused.log`, `typecheck.log`,
+and `lint.log`.
