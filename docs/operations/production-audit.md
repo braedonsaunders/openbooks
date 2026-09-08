@@ -3358,3 +3358,22 @@ payment and scope checks passed (8,409.743958 ms, no failures/skips); web
 typecheck and changed-file lint passed. Evidence:
 `audit-payroll-payment-transport-scope-2026-09-08/before.log`, `focused.log`,
 `typecheck.log`, and `lint.log`.
+
+## Payroll settlement account and entity controls — 2026-09-08
+
+A native calculated/committed/posted payroll run could be paid from a bank
+account restricted to another legal entity. The payment service checked active
+bank type but omitted the shared account-ownership policy.
+
+The settlement now holds the subsidiary hierarchy, bank, intercompany policy
+and all selected accounts while validating every new journal leg through the
+shared subsidiary policy. Draft-journal creation follows validation. The bank
+type/activity check also holds its row lock through posting.
+
+All 14 focused payment, API and posting-policy checks passed (8,955.9975 ms,
+no failures/skips); workspace typechecks and changed-file lint passed. Coverage
+includes a forbidden bank, a forbidden intercompany account, an inactive
+settled branch, unchanged unpaid status/no draft fragments after refusals, and
+successful balanced payment after correction. Evidence:
+`audit-payroll-payment-bank-scope-2026-09-08/before.log`, `focused-final.log`,
+`typecheck.log`, and `lint.log`.

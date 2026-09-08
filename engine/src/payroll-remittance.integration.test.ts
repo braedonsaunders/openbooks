@@ -255,6 +255,14 @@ test(
         values(${transferredTo},${org.orgId},${org.subsidiaryId},'New employer','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`);
       await db.execute(sql`update parties set subsidiary_id=${transferredTo}
         where org_id=${org.orgId} and id=${employeeId}`);
+      await db.execute(sql`update accounts set subsidiary_id=${transferredTo},subsidiary_include_children=false
+        where org_id=${org.orgId} and id=${org.accounts.bank}`);
+      await assert.rejects(recordPayRunPayment({
+        orgId: org.orgId, actorId, documentId: run.documentId, bankAccountId: org.accounts.bank,
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      }), /restricted to another subsidiary/, "payroll cannot credit a bank account owned by another legal entity");
+      await db.execute(sql`update accounts set subsidiary_id=null
+        where org_id=${org.orgId} and id=${org.accounts.bank}`);
       const payment = await recordPayRunPayment({
         orgId: org.orgId, actorId, documentId: run.documentId, bankAccountId: org.accounts.bank,
         allowedSubsidiaryIds: new Set([org.subsidiaryId]),
@@ -426,6 +434,22 @@ test(
         where org_id=${org.orgId} and id=${childEmployeeId}`);
       await assert.rejects(rootOnlyPayment, /pay run not found/,
         "moving the employee cannot authorize settlement of the hidden originating entity");
+
+      const payAll = () => recordPayRunPayment({
+        orgId: org.orgId, actorId, documentId, bankAccountId: org.accounts.bank,
+      });
+      await db.execute(sql`update accounts set subsidiary_id=${childSubsidiaryId},subsidiary_include_children=false
+        where org_id=${org.orgId} and id=${dueFromId}`);
+      await assert.rejects(payAll, /restricted to another subsidiary/,
+        "new intercompany balancing legs obey their own account ownership");
+      await db.execute(sql`update accounts set subsidiary_id=null where org_id=${org.orgId} and id=${dueFromId}`);
+      await db.execute(sql`update subsidiaries set is_active=false where org_id=${org.orgId} and id=${childSubsidiaryId}`);
+      await assert.rejects(payAll, /inactive/, "every settled entity must be active");
+      await db.execute(sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${childSubsidiaryId}`);
+      const beforePayment = (await db.execute<{ paid_at: string | null; entries: number }>(sql`
+        select r.paid_at,(select count(*)::int from journal_entries e where e.org_id=r.org_id) as entries
+          from pay_runs r where r.org_id=${org.orgId} and r.document_id=${documentId}`)).rows[0]!;
+      assert.deepEqual(beforePayment, { paid_at: null, entries: 1 }, "all refusals leave only the source journal");
 
       const payment = await recordPayRunPayment({
         orgId: org.orgId,
