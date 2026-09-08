@@ -23,18 +23,16 @@ import {
 
 const repositoryRoot = resolve(join(dirname(fileURLToPath(import.meta.url)), "..", ".."));
 const gateSourcePath = join(repositoryRoot, "scripts", "check-history-hygiene.mjs");
-const filterRepoBinary = (() => {
+// Prefer whatever is on PATH; fall back to the Homebrew prefix, which is not
+// on PATH for every shell the suite runs under.
+const filterRepoBinary = ["git-filter-repo", "/opt/homebrew/bin/git-filter-repo"].find((candidate) => {
   try {
-    return execFileSync("/opt/homebrew/bin/git-filter-repo", ["--version"], { encoding: "utf8" }) && "/opt/homebrew/bin/git-filter-repo";
+    execFileSync(candidate, ["--version"], { encoding: "utf8" });
+    return true;
   } catch {
-    try {
-      execFileSync("git-filter-repo", ["--version"], { encoding: "utf8" });
-      return "git-filter-repo";
-    } catch {
-      return undefined;
-    }
+    return false;
   }
-})();
+});
 
 const syntheticTokens = ["zzfixtcorp", "zzfixt_tenant7", "widgetfixtco"];
 const syntheticHashes = new Set(

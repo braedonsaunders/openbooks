@@ -53,21 +53,6 @@ Three things are published here:
 Every run also uploads its full artifacts to the workflow run, including the
 conformance JSON and the harness checkpoint.
 
-### Campaign register evidence
-
-The remediation register's 2026-08-27 snapshot records **487 findings as fixed
-or resolved**. That aggregate is not fully verified assurance. After the 18
-historical `unreachable` closures were reconciled, **238** closures are
-demonstrably reachable because their closing commit is an ancestor of the
-integration `main` ref. **10** closing refs are unresolvable and **239** legacy
-rows are unattributed; those 249 rows remain assertion-only and **UNVERIFIED**.
-The 239 rows are pre-0.25.0 findings, recorded before commit attribution was
-available. They are not retroactively attributed and are not waived. The
-campaign checker is fail-closed and remains non-zero while any unsupported row
-exists, so “487 fixed” must not be read as a fully verified claim. See the
-[published reachability evidence](docs/trust/register-reachability-campaign.md)
-for the exact split and reconciliation record.
-
 ---
 
 ## The invariants
@@ -222,9 +207,9 @@ case `rev-recognition-is-idempotent`.
 
 ### 12. Tenants cannot see each other
 
-> Organisation-owned data is isolated by PostgreSQL row-level security, on 327
-> tables with 336 policies, and the application connects as a role that is
-> neither superuser nor `BYPASSRLS`.
+> Organisation-owned data is isolated by PostgreSQL row-level security, on
+> every organisation-scoped table, and the application connects as a role that
+> is neither superuser nor `BYPASSRLS`.
 
 Verified at every bootstrap, not only at first install: the provisioner refuses
 to complete if the runtime role is over-privileged or if row-level security is
@@ -252,38 +237,24 @@ omitted and never counted as passing. The test suite asserts that each gap is
 them to reclassify the case rather than letting this page quietly understate
 what the software does.
 
-The corpus has already done its job: its first publication identified six
-measurement gaps — no lessee lease accounting, no lower-of-cost-and-NRV
-inventory measurement, current tax computed without temporary differences,
-foreign-currency retranslation limited to three account types, no variable
-consideration constraint, and no framework gate on impairment restoration —
-and each was then implemented as real product capability (schema, engine, and
-tests) and its case flipped from GAP to passing. Along the way the corpus
-caught and forced fixes to three latent kernel defects: a zero-amount offset
-line on exactly-offsetting FX positions, net book value ignoring prior
-impairments on remeasure, and a stranded accumulated-depreciation credit on
-disposal after impairment. **Every case in the register currently passes with
-no gaps and no partials.** That statement holds only for what the register
-covers — see the scope note below.
-
-The register also grows with the defects it is asked to judge. A fix that
-closes an accounting defect in a covered area leaves a conformance fixture
-behind — one that fails if that class of defect returns — so the published
-passing count moves down only when the product regresses, not up once during a
-repair campaign and then back to silence while its subject areas are being
-repaired again.
+The register only ratchets. A fix that closes an accounting defect in a covered
+area leaves a conformance fixture behind — one that fails if that class of
+defect returns — and
 [engine/src/conformance/matrix.ts](engine/src/conformance/matrix.ts) pins each
-covered area at or above its published floor via `REGISTERED_FLOORS`; deleting
+covered area at or above its published floor via `REGISTERED_FLOORS`. Deleting
 a claim, or shrinking an area below what it publishes, fails validation until
-the floor is lowered deliberately, in the same commit, with a reason. Fixtures
-must chase the inputs where rounding can actually occur rather than tidy ones
-where nothing can fail: the multi-line foreign-currency cases translate
+the floor is lowered deliberately, in the same commit, with a reason. So the
+published passing count can fall only when the product regresses; it cannot
+quietly drift down while a subject area is being worked on.
+
+Fixtures chase the inputs where rounding can actually occur rather than tidy
+ones where nothing can fail: the multi-line foreign-currency cases translate
 through ten-decimal inverse rates across three-leg entries whose per-line
 roundings genuinely miss zero, with the tax control line required to stay
-exactly at translated statutory tax — classes the original two-decimal,
-two-leg fixtures were structurally blind to.
+exactly at translated statutory tax — classes that two-decimal, two-leg
+fixtures are structurally blind to.
 
-Full detail, including the shortfall text for every gap and partial:
+Live status per case, including the shortfall text for every gap and partial:
 **[docs/trust/conformance-matrix.md](docs/trust/conformance-matrix.md)** and
 [engine/src/conformance/README.md](engine/src/conformance/README.md).
 

@@ -6,8 +6,7 @@ import type { SetupEntity } from './registry'
  * Lives in its own module only so the entry can be reviewed as one change; it
  * is an ordinary registry entity and MUST be spread into SETUP_ENTITIES in
  * registry.ts — that is what wires the generic CRUD API
- * (api/admin/setup/[entity]) and the ref-option loader. See
- * .local/handoff-holidays.md.
+ * (api/admin/setup/[entity]) and the ref-option loader.
  *
  * What this screen is, and is NOT:
  *

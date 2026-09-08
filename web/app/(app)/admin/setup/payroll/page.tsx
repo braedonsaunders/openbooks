@@ -95,15 +95,14 @@ const GROUPS: { key: 'foundations' | 'earnings' | 'entitlements' | 'payday'; tab
 
 /**
  * Derived earnings rules are an ordinary registry entity that has not been
- * spread into SETUP_ENTITIES yet (see .local/handoff-derived-earnings.md).
+ * spread into SETUP_ENTITIES yet.
  * Prefer the registered descriptor the moment it exists so there is never a
  * second copy of the entity's shape in play.
  */
 const derivedRulesEntity = (): SetupEntity =>
   SETUP_ENTITY_BY_KEY.get(PAY_DERIVED_RULES_ENTITY.key) ?? PAY_DERIVED_RULES_ENTITY
 
-/** Same arrangement for observed statutory holidays — see
- *  .local/handoff-holidays.md for the registry.ts spread. */
+/** Same arrangement for observed statutory holidays. */
 const holidaysEntity = (): SetupEntity =>
   SETUP_ENTITY_BY_KEY.get(PAYROLL_HOLIDAYS_ENTITY.key) ?? PAYROLL_HOLIDAYS_ENTITY
 

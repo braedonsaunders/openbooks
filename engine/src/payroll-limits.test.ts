@@ -310,9 +310,9 @@ test("hours and money caps compose on one component", () => {
 /**
  * A stand-in for the statutory pass, driven exactly as `calculateStub` drives
  * the real one: the support order is pre-tax, so the tax the pool is measured
- * net of depends on the amount the previous pass settled on. Mirrors the loop
- * in .local/handoff-limits.md so the decision helpers are proven on the shape
- * the pipeline actually uses.
+ * net of depends on the amount the previous pass settled on. Mirrors the run
+ * pipeline's own loop so the decision helpers are proven on the shape the
+ * pipeline actually uses.
  */
 function runToFixpoint(input: {
   gross: string

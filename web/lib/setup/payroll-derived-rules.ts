@@ -7,8 +7,7 @@ import type { SetupEntity } from './registry'
  * These live in their own module only so the entries can be reviewed as one
  * change; they are ordinary registry entities and MUST be spread into
  * SETUP_ENTITIES in registry.ts — that is what wires the generic CRUD API
- * (api/admin/setup/[entity]) and the ref-option loader. See
- * .local/handoff-derived-earnings.md.
+ * (api/admin/setup/[entity]) and the ref-option loader.
  */
 
 const DERIVED_TRIGGERS = [

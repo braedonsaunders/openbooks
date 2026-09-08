@@ -53,3 +53,8 @@ AGENTS.md
 engine/src/sim/PLAN.md
 engine/src/sim/OPERATOR.md
 engine/src/sim/personas/
+
+# working audit journals: dated, in-progress notes about defects under
+# investigation. Findings that matter graduate into tests, the conformance
+# corpus, or the maintained documentation rather than into a running log.
+docs/operations/production-audit.md

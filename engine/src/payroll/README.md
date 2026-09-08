@@ -3,7 +3,7 @@
 A pack is a jurisdiction's statutory engine plus its DECLARATIONS. Nothing in the
 generic payroll layer branches on a country: it reads what the pack declares, and
 where a pack has not declared something, it refuses by name rather than
-approximating (`.local/handoff-multicountry.md`, `packs.ts`).
+approximating. The declaration surface is `packs.ts`.
 
 | Declaration | Lives in | Read by |
 | --- | --- | --- |

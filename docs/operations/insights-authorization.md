@@ -1,7 +1,7 @@
 # Insights authorization and mutation integrity
 
-This change closes the Insights execution and saved-library access gaps found
-in the September 2026 production-hardening review.
+How Insights decides what a caller may execute, read, and change. This is the
+authorization contract for the Insights compiler and its saved library.
 
 ## Execution
 

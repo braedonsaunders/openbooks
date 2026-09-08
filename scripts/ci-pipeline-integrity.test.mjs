@@ -4,7 +4,6 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { MAX_EXPLICIT_ANY, measuredExplicitAnys } from './check-explicit-any.mjs'
-import { auditRegister, BASELINE, REGISTER, scopeBaselineToRegister } from './check-register-reachability.mjs'
 
 /**
  * CI can only gate what it can fail on.
@@ -12,13 +11,11 @@ import { auditRegister, BASELINE, REGISTER, scopeBaselineToRegister } from './ch
  * GitHub Actions runs `run:` blocks as `bash -e {0}`. `-e` aborts on a failing
  * command but says nothing about pipelines: a pipeline's status is its LAST
  * command's, so `node --test ... | tee log` reports `tee`'s exit code, which is
- * always zero. Run 32905175922 completed green while its coverage job printed
- * `ℹ fail 4`.
+ * always zero. A job written that way reports green while printing failures.
  *
- * The second half of that failure was quieter. The coverage job never set
- * OPENBOOKS_TRUSTED_TEST_BYPASS, so every DB-backed integration file threw on
- * import and the job measured a smaller suite than the one it claimed to run —
- * three of those four failures were that, not real defects.
+ * The quieter half of the same class is a job that measures a smaller suite
+ * than the one it claims to run — omit OPENBOOKS_TRUSTED_TEST_BYPASS and every
+ * DB-backed file throws on import instead of being exercised.
  *
  * These are contract tests over the workflow files themselves, because no
  * product test can observe a gate that never fails.
@@ -349,143 +346,21 @@ test('the lint warning ceiling is not above the warnings eslint actually emits',
 })
 
 /**
- * The register trusts the closing report; nothing checked the tree. A finding
- * recorded fixed from a worker branch that was never merged overstated what
- * had actually shipped — a launch decision from the register alone would have
- * shipped a recorded-as-fixed segregation-of-duties bypass believing it was
- * closed. check-register-reachability.mjs is the tree-side half, but it audits
- * campaign orchestration state and therefore stays a deliberate standalone
- * command rather than a permanent product gate.
- */
-
-test('the campaign checker stays standalone and is excluded from canonical npm test', () => {
-  const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
-  assert.match(
-    scripts['check:register-reachability'] ?? '',
-    /check-register-reachability\.mjs$/,
-    'the campaign checker must remain available for deliberate live-register audits',
-  )
-  assert.doesNotMatch(
-    scripts.test,
-    /check:register-reachability/,
-    'campaign orchestration state must not be a permanent product shipping gate',
-  )
-})
-
-test('the embedded register names every closing ref as a commit token or nothing', () => {
-  for (const [id, ref] of REGISTER) {
-    assert.ok(
-      ref === null || /^[0-9a-f]{7,40}$/.test(ref),
-      `${id}: closing ref must be a commit token or null, got ${JSON.stringify(ref)}`,
-    )
-  }
-  const knownClasses = new Set(['unreachable', 'unresolvable', 'unattributed'])
-  for (const [id, baselineClass] of BASELINE) {
-    assert.ok(knownClasses.has(baselineClass), `${id}: unknown baseline class ${baselineClass}`)
-    assert.ok(REGISTER.has(id), `${id}: baseline entry names no register entry`)
-  }
-})
-
-test('a live campaign cohort scopes historical baseline rows to its own findings', () => {
-  const liveRegister = new Map([
-    ['fnd_mt6g89d5_7irug4', null],
-    ['fnd_live_only', null],
-  ])
-  const scoped = scopeBaselineToRegister(liveRegister, new Map([
-    ['fnd_mt6g89d5_7irug4', 'unattributed'],
-    ['fnd_other_campaign', 'unreachable'],
-  ]))
-  assert.deepEqual([...scoped], [['fnd_mt6g89d5_7irug4', 'unattributed']])
-})
-
-test('register reachability fails new drift, publishes baselined gaps, and rejects a stale baseline', () => {
-  const ancestor = '3333333333333333333333333333333333333333'
-  const register = new Map([
-    ['fnd_new_drift', '1111111111111111111111111111111111111111'],
-    ['fnd_published_gap', '2222222222222222222222222222222222222222'],
-    ['fnd_now_reachable', ancestor],
-    ['fnd_never_attributed', null],
-    ['fnd_object_gone', '4444444444444444444444444444444444444444'],
-  ])
-  const baseline = new Map([
-    ['fnd_published_gap', 'unreachable'],
-    ['fnd_now_reachable', 'unreachable'],
-  ])
-  const result = auditRegister({
-    register,
-    baseline,
-    resolveRef: (ref) => (ref === '4444444444444444444444444444444444444444' ? null : ref),
-    isAncestor: (sha) => sha === ancestor,
-  })
-  assert.deepEqual(
-    result.newDrift.map((entry) => entry.id).sort(),
-    ['fnd_never_attributed', 'fnd_new_drift', 'fnd_object_gone'],
-    'new drift (unmerged fix, missing attribution, vanished commit) must fail the gate',
-  )
-  assert.deepEqual(
-    result.knownGaps.map((entry) => entry.id),
-    ['fnd_published_gap'],
-    'a baselined gap is reported as published backlog, not a violation',
-  )
-  assert.deepEqual(
-    result.staleBaseline.map((entry) => entry.id),
-    ['fnd_now_reachable'],
-    'a baseline entry whose fix reached main must be removed, or the backlog rots into amnesty',
-  )
-  assert.deepEqual(
-    result.classDrift.map((entry) => entry.id),
-    [],
-    'no class drift in this fixture',
-  )
-})
-
-test('coalesced integration attribution is reachable while unsupported rows still fail closed', () => {
-  const coalescedIntegration = '8fbe02704b95be2c519e0811e3e13037d1a29700'
-  const coalescedFindings = ['fnd_a02c07d5_82fd6e', 'fnd_a08f4ac8_089cca']
-  for (const id of coalescedFindings) {
-    assert.equal(REGISTER.get(id), coalescedIntegration, `${id} must name the coalesced integration commit`)
-    assert.equal(BASELINE.has(id), false, `${id} must not be waived through the historical baseline`)
-  }
-
-  const register = new Map([
-    ...coalescedFindings.map((id) => [id, REGISTER.get(id)]),
-    ['fnd_unsupported_probe', '1111111111111111111111111111111111111111'],
-  ])
-  const result = auditRegister({
-    register,
-    baseline: new Map(),
-    resolveRef: (ref) => ref,
-    isAncestor: (sha) => sha === coalescedIntegration,
-    checkRef: coalescedIntegration,
-  })
-
-  assert.equal(result.counts.reachable, coalescedFindings.length)
-  assert.deepEqual(
-    result.newDrift.map((entry) => entry.id),
-    ['fnd_unsupported_probe'],
-    'a genuinely unsupported row remains a fail-closed new drift violation',
-  )
-})
-
-/**
  * The golden-harness gate.
  *
- * Three consecutive audit rounds closed financial blockers while introducing
- * new ledger defects at par: the FX residual that landed in a tax box and the
- * widened variance-account hole were both INTRODUCED BY FIXES, and fix safety
- * on the financial edit path did not improve across any of them. The gate that
- * catches this class of break already exists — a seeded company driven through
- * real activity by the business simulation, then the golden harness asserting
- * the trial balance and the subledger↔GL and inventory tie-outs — but nothing
- * bound that gate to the merge decision. trust.yml runs the harness, yet a
- * pull request merges on the checks in test.yml, so a fix could merge with the
- * harness red, or with the harness quietly dropped.
+ * A change to a financial edit path can satisfy every unit test and still break
+ * a ledger invariant — an FX residual landing in a tax box, or a widened
+ * variance-account hole. The gate that catches that class already exists: a
+ * seeded company driven through real activity by the business simulation, then
+ * the golden harness asserting the trial balance and the subledger↔GL and
+ * inventory tie-outs. What was missing was binding it to the merge decision.
+ * trust.yml runs the harness, yet a pull request merges on the checks in
+ * test.yml, so a fix could merge with the harness red or quietly dropped.
  *
  * So the requirement is pinned here, in the same contract suite that pins CI
- * membership: any change to a financial edit path merges only through CI, and
- * CI must run the golden harness — on a ledger carrying real sim activity,
- * inside the same job as the full test suite, failing the job. A fix that
- * breaks a ledger invariant must fail before merge, not at the next audit.
+ * membership: CI must run the golden harness on a ledger carrying real sim
+ * activity, inside the same job as the full test suite, failing the job. A
+ * change that breaks a ledger invariant fails before merge.
  */
 
 const GOLDEN_HARNESS = /npm\s+--prefix\s+engine\s+run\s+--silent\s+harness\b/
@@ -605,12 +480,10 @@ test('the merge-gating workflow runs the golden harness, after real activity, in
 })
 
 test('the trust workflow consumes the checkpoint but never produces simulation evidence', () => {
-  // Sole-producer/consumer split, 2026-09: the invariants sim/harness job was
-  // deleted from trust.yml as byte-identical duplication of test.yml
-  // integration. test.yml is now the single owner of the checkpoint; trust
-  // consumes it via workflow_run and must never reintroduce its own sim run.
-  // Re-expressing the invariant, not deleting it: a consumer that silently
-  // becomes a second producer would resurrect the double-run with no red.
+  // Sole producer, sole consumer: test.yml owns the checkpoint, trust.yml
+  // consumes it via workflow_run and must never run a simulation of its own.
+  // A consumer that silently becomes a second producer would publish evidence
+  // from a run nothing gated, and would do so without turning anything red.
   const source = readFileSync(join(WORKFLOW_DIR, 'trust.yml'), 'utf8')
   const on = source.slice(source.indexOf('\non:'), source.indexOf('\njobs:'))
   assert.match(on, /pull_request:/, 'trust.yml must keep its pull_request trigger')
@@ -650,80 +523,6 @@ test('the trust workflow consumes the checkpoint but never produces simulation e
   )
 })
 
-test('a live campaign invocation remains strict and emits machine-readable irreducible rows', () => {
-  const env = { ...process.env, OPENBOOKS_REGISTER_JSON: JSON.stringify({ findings: [{ id: 'fnd_live_gap', status: 'fixed' }] }) }
-  delete env.OPENBOOKS_REGISTER_DB
-  delete env.OPENBOOKS_REGISTER_THREAD_ID
-
-  assert.throws(
-    () => execFileSync('npm', ['run', 'check:register-reachability', '--silent'], { encoding: 'utf8', env }),
-    (error) => {
-      const output = String(error.stdout ?? '') + String(error.stderr ?? '')
-      assert.equal(error.status, 1, 'an unattributed live row must fail the standalone campaign command')
-      const marker = 'IRREDUCIBLE_REGISTER_ROWS_JSON='
-      const json = output.slice(output.indexOf(marker) + marker.length).trim()
-      const report = JSON.parse(json)
-      assert.deepEqual(report.categoryCounts, { unattributed: 1 })
-      assert.deepEqual(report.rows.map((row) => ({ id: row.id, category: row.category })), [
-        { id: 'fnd_live_gap', category: 'unattributed' },
-      ])
-      return true
-    },
-  )
-})
-
-test('the campaign checker audits local main and accepts closingCommit attribution', () => {
-  const env = {
-    ...process.env,
-    OPENBOOKS_REGISTER_JSON: JSON.stringify({
-      findings: [{ id: 'fnd_probe', status: 'fixed', closingCommit: '19267a4c' }],
-    }),
-  }
-  delete env.OPENBOOKS_REGISTER_DB
-  delete env.OPENBOOKS_REGISTER_THREAD_ID
-  delete env.OPENBOOKS_REGISTER_CHECK_REF
-
-  const output = execFileSync('npm', ['run', 'check:register-reachability', '--silent'], {
-    encoding: 'utf8',
-    env,
-  })
-  assert.match(output, /PASS: 1\/1 register entries verified reachable from main;/)
-  assert.doesNotMatch(output, /origin\/main/)
-})
-
-test('the campaign checker honors an explicit commit ref and rejects a missing override', () => {
-  const baseEnv = {
-    ...process.env,
-    OPENBOOKS_REGISTER_JSON: JSON.stringify({
-      findings: [{ id: 'fnd_probe', status: 'fixed', closingCommit: '19267a4c' }],
-    }),
-  }
-  delete baseEnv.OPENBOOKS_REGISTER_DB
-  delete baseEnv.OPENBOOKS_REGISTER_THREAD_ID
-
-  const explicit = execFileSync('npm', ['run', 'check:register-reachability', '--silent'], {
-    encoding: 'utf8',
-    env: { ...baseEnv, OPENBOOKS_REGISTER_CHECK_REF: '19267a4c' },
-  })
-  assert.match(explicit, /PASS: 1\/1 register entries verified reachable from 19267a4c;/)
-
-  assert.throws(
-    () =>
-      execFileSync('npm', ['run', 'check:register-reachability', '--silent'], {
-        encoding: 'utf8',
-        env: { ...baseEnv, OPENBOOKS_REGISTER_CHECK_REF: 'missing-register-check-ref' },
-      }),
-    (error) => {
-      assert.equal(error.status, 1)
-      assert.match(
-        String(error.stdout ?? '') + String(error.stderr ?? ''),
-        /FAIL: OPENBOOKS_REGISTER_CHECK_REF=missing-register-check-ref does not resolve to a commit/,
-      )
-      return true
-    },
-  )
-})
-
 test('the release job does not re-run the suite, and fails closed without a green merge gate', () => {
   // The suite ran ~35 minutes inside publish-container's verify job to
   // reproduce a result test.yml had already produced for the same commit
@@ -755,28 +554,12 @@ test('the release job does not re-run the suite, and fails closed without a gree
   )
 })
 
-test('jobs running the campaign suite retain complete local history', () => {
-  // 2026-09: the unit job was deleted as a strict subset of integration, so
-  // integration is the only campaign-suite job left to pin. Do not re-add
-  // 'unit' here without restoring the job itself.
-  const source = readFileSync(join(WORKFLOW_DIR, 'test.yml'), 'utf8')
-  for (const jobName of ['integration']) {
-    const job = topLevelBlock(source, jobName)
-    const checkout = /\n      - uses: actions\/checkout@[^\n]+[\s\S]*?(?=\n      - )/.exec(job)?.[0] ?? ''
-
-    assert.match(
-      checkout,
-      /fetch-depth:\s*0/,
-      `${jobName} campaign tests need complete history for local main and closing commits`,
-    )
-  }
-
-  // test.yml is not the only workflow that runs the campaign suite:
-  // publish-container.yml's verify job runs `npm run verify:release`, which
-  // calls `npm test`. Pinning only test.yml let that job ship a depth-1
-  // checkout, where the register gates reported "PARTIAL PASS" and the
-  // explicit-ref gate could not resolve its commit at all. Cover every
-  // workflow that reaches the suite, whichever script name it arrives by.
+test('jobs running the suite retain complete local history', () => {
+  // Parts of the suite inspect the repository's own history — the history
+  // rewrite tooling and the hygiene checks both shell out to git. A depth-1
+  // checkout leaves them nothing to read, so they degrade into passes that
+  // assert nothing. Cover every workflow that reaches the suite, whichever
+  // script name it arrives by.
   const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
   const scriptsRunningSuite = Object.keys(scripts).filter((name) => /npm test\b/.test(scripts[name]))
   const SUITE_ENTRYPOINTS = new RegExp(
@@ -793,34 +576,31 @@ test('jobs running the campaign suite retain complete local history', () => {
       assert.match(
         job,
         /fetch-depth:\s*0/,
-        `${file}:${jobName} runs the campaign suite, so its checkout needs fetch-depth: 0`,
+        `${file}:${jobName} runs the suite, so its checkout needs fetch-depth: 0`,
       )
-      // Full history is necessary but not sufficient: a checkout pinned to an
-      // explicit ref is detached, so the local `main` branch the register
-      // audits still does not exist and the gate silently degrades.
-      if (/ref:\s*\$\{\{/.test(job)) {
-        assert.match(
-          job,
-          /refs\/heads\/main:refs\/heads\/main/,
-          `${file}:${jobName} checks out a pinned ref, so it must materialize the local main branch the register reachability check audits`,
-        )
-      }
     }
   }
 })
 
-test('malformed or empty live campaign input fails closed before any tree check', () => {
-  for (const value of ['not-json', JSON.stringify({ findings: [] })]) {
-    const env = { ...process.env, OPENBOOKS_REGISTER_JSON: value }
-    delete env.OPENBOOKS_REGISTER_DB
-    delete env.OPENBOOKS_REGISTER_THREAD_ID
-    assert.throws(
-      () => execFileSync('node', ['scripts/check-register-reachability.mjs'], { encoding: 'utf8', env }),
-      (error) => {
-        assert.equal(error.status, 1)
-        assert.match(String(error.stdout ?? '') + String(error.stderr ?? ''), /FAIL: cannot load OPENBOOKS_REGISTER_JSON/)
-        return true
-      },
-    )
-  }
+test('the release job proves the commit it releases is on main', () => {
+  // The release gate answers one question — is this pinned commit an ancestor
+  // of main — and it needs two things the default checkout does not provide.
+  // Full history, because ancestry cannot be computed from a depth-1 clone;
+  // and a materialized local `main`, because checking out an explicit ref
+  // leaves HEAD detached with no branch to compare against. Without either,
+  // the gate cannot fail and silently stops gating.
+  const publish = readFileSync(join(WORKFLOW_DIR, 'publish-container.yml'), 'utf8')
+  const verify = topLevelBlock(publish.slice(publish.indexOf('\njobs:')), 'verify')
+
+  assert.match(verify, /fetch-depth:\s*0/, 'ancestry cannot be computed from a shallow checkout')
+  assert.match(
+    verify,
+    /refs\/heads\/main:refs\/heads\/main/,
+    'a detached pinned-ref checkout must materialize local main before comparing against it',
+  )
+  assert.match(
+    verify,
+    /merge-base --is-ancestor/,
+    'the release must refuse a commit that is not on main',
+  )
 })

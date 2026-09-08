@@ -97,10 +97,9 @@ export interface FilingLifecycle {
 }
 
 /**
- * Message keys land in web/messages/**, which this slice does not own — see
- * .local/handoff-amendments.md for the paste-ready block. Until it is pasted
- * these fall back to the English sentence rather than rendering a raw key
- * path, which is the pattern the projects cockpit already uses.
+ * Message keys land in web/messages/**. Until a key exists there, these fall
+ * back to the English sentence rather than rendering a raw key path, which is
+ * the pattern the projects cockpit already uses.
  */
 export function useFilingText() {
   const t = useTranslations('payroll.filings')

@@ -4,12 +4,11 @@
 
 Stock lines on a purchase order bill on a three-way match: the vendor bill can
 only cover quantity that has been received (`quantity_fulfilled`), both through
-order conversion and through AP capture. Until 2026-09-06 nothing in the
-product produced that receipt leg: the only writer of `quantity_fulfilled` was
-sales fulfillment. Every purchase order carrying an inventory, assembly or kit
-line was therefore unbillable ("Fulfilled quantities do not cover any line
-yet" / `receipt_quantity_shortfall`), and stock could only be received by
-posting a bill with no order behind it.
+order conversion and through AP capture. Something has to produce that receipt
+leg. Without it, a purchase order carrying an inventory, assembly or kit line is
+unbillable ("Fulfilled quantities do not cover any line yet" /
+`receipt_quantity_shortfall`), and stock can only be received by posting a bill
+with no order behind it.
 
 ## The document
 
@@ -67,10 +66,9 @@ alongside bill receipts.
 
 ## Not covered
 
-- Reversing a goods receipt (received in error) has no dedicated action yet,
-  the same gap `sales_fulfillment` carries; the inventory reverse action can
-  reverse the movement but does not roll back `quantity_fulfilled`. A
-  controlled receipt reversal is the next slice.
+- Reversing a goods receipt (received in error) has no dedicated action, the
+  same gap `sales_fulfillment` carries; the inventory reverse action can
+  reverse the movement but does not roll back `quantity_fulfilled`.
 - Receipt-side landed cost and foreign-currency order prices follow the
   existing bill-side conventions (document amounts are used as functional
   cost), which this document does not change.

@@ -24,7 +24,7 @@ import type { PayrollAssessedOn } from "./payroll/packs.ts";
  *   job-charged overtime exempt"; the CRA money-purchase and US 402(g)
  *   elective-deferral limits), so nobody hand-computes it on a spreadsheet.
  *
- * Ordering in the run pipeline (.local/payroll-pipeline-contract.md): basis
+ * Ordering in the run pipeline: basis
  * caps run at component-computation time — they change the pre-tax deduction
  * the statutory pass consumes — and protection runs LAST, after the statutory
  * pass has fixed the withholdings the protected base is measured net of. When

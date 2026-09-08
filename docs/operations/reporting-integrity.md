@@ -1,8 +1,7 @@
-# Reporting integrity upgrade
+# Reporting integrity
 
-This change closes the reporting authorization, fractional package pricing,
-non-additive report total, test discovery, and test shutdown defects identified
-in the September 2026 repository review.
+How reporting authorizes execution and downloads, what evidence it retains with
+each run, and how package pricing and report totals are required to compose.
 
 ## Authorization and retained evidence
 

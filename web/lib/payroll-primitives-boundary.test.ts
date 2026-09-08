@@ -10,7 +10,7 @@ import {
  * declaration, not a database constraint.
  *
  * A CHECK constraint cannot enumerate an open pack registry, and the UI is
- * never the enforcement point (AGENTS.md), so both refusals live at the API
+ * never the enforcement point, so both refusals live at the API
  * boundary and are asserted here — the same pattern
  * `payroll-filing-accounts` / `filingAccountProblem` established.
  */
