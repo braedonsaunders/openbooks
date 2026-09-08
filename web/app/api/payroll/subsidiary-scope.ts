@@ -6,10 +6,9 @@ import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 /**
- * Payroll rows do not carry a second subsidiary column: the employee's party
- * is the legal-entity owner of a stub, while filing accounts may carry an
- * explicit entity of their own. Keep those two checks in one place so a route
- * cannot accidentally guard only the account (or only the employee).
+ * Current employee operations use party ownership. Historical payroll
+ * aggregates use their original pay-run ownership; employee transfers cannot
+ * move that history. Filing accounts have their own additional entity check.
  */
 export async function guardPayrollEmployees(
   gate: Authz,
@@ -252,16 +251,20 @@ export async function guardRemittancePeriod(
   to: string,
 ): Promise<Response | null> {
   if (gate.allowedSubsidiaryIds === null) return null
-  const rows = (await db.execute<{ employeeId: string; filingAccountId: string | null }>(sql`
-    select distinct s.employee_party_id as "employeeId",
+  const rows = (await db.execute<{ subsidiaryId: string | null; filingAccountId: string | null }>(sql`
+    select distinct d.subsidiary_id as "subsidiaryId",
            s.filing_account_id as "filingAccountId"
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
        and r.run_status = 'committed'
+      left join documents d on d.id=r.document_id and d.org_id=r.org_id
      where s.org_id = ${gate.user.orgId} and s.pay_date between ${from} and ${to}
   `)).rows
-  const employeeDenied = await guardPayrollEmployees(gate, rows.map((row) => row.employeeId))
-  if (employeeDenied) return employeeDenied
+  // Employee transfers do not transfer the earlier employer's payroll history.
+  for (const row of rows) {
+    const denied = guardSubsidiaryScope(gate, row.subsidiaryId)
+    if (denied) return denied
+  }
   const accountIds = rows.map((row) => row.filingAccountId).filter(Boolean)
   return accountIds.length ? guardPayrollFilingAccounts(gate, accountIds, true) : null
 }
