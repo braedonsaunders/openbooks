@@ -6,13 +6,11 @@ import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
-import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/src/business-date.ts'
+import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { calculateForecast } from '../../../../lib/crm'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
-
-const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 export async function GET(req: NextRequest) {
   const gate = await guardFeaturePermission('crm.forecasts.read', 'crm')
@@ -25,7 +23,7 @@ export async function GET(req: NextRequest) {
   const periodEnd = params.get('periodEnd') ?? defaultEnd
   const ownerUserId = params.get('ownerUserId')
   const salesTeamId = params.get('salesTeamId')
-  if (!DATE.test(periodStart) || !DATE.test(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })
+  if (!isIsoCalendarDate(periodStart) || !isIsoCalendarDate(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })
   if (ownerUserId && !isUuid(ownerUserId)) return NextResponse.json({ error: 'invalid owner' }, { status: 422 })
   if (salesTeamId && !isUuid(salesTeamId)) return NextResponse.json({ error: 'invalid sales team' }, { status: 422 })
   const [forecast, quotas, snapshots] = (await Promise.all([
@@ -59,7 +57,7 @@ export async function POST(req: NextRequest) {
   const body = (parsedBody.data)
   const periodStart = String(body.periodStart ?? '')
   const periodEnd = String(body.periodEnd ?? '')
-  if (!DATE.test(periodStart) || !DATE.test(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })
+  if (!isIsoCalendarDate(periodStart) || !isIsoCalendarDate(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })
   // An explicit null means the caller is targeting a team. When the key is
   // absent we retain the convenient personal-snapshot default.
   const ownerUserId = Object.prototype.hasOwnProperty.call(body, 'ownerUserId') ? body.ownerUserId : user.id
@@ -74,14 +72,41 @@ export async function POST(req: NextRequest) {
   const overrideAmount = overrideRaw === null ? null : normalizeMoney(overrideRaw)
   const kind = body.snapshotKind ?? (overrideAmount === null ? 'calculated' : 'rep_override')
   if (!['calculated', 'rep_override', 'manager_override'].includes(kind)) return NextResponse.json({ error: 'invalid snapshot kind' }, { status: 422 })
+  if ((kind === 'calculated') !== (overrideAmount === null)) {
+    return NextResponse.json({ error: 'snapshot kind must match the presence of an override amount' }, { status: 422 })
+  }
+  const requestedCurrency = typeof body.currency === 'string' ? body.currency.trim().toUpperCase() : null
+  if (body.currency != null && (!requestedCurrency || !/^[A-Z]{3}$/.test(requestedCurrency))) {
+    return NextResponse.json({ error: 'invalid forecast currency' }, { status: 422 })
+  }
   if (kind === 'manager_override' || (ownerUserId !== user.id && overrideAmount !== null)) {
     const overrideGate = await guardPermission('crm.forecasts.override')
     if (overrideGate instanceof NextResponse) return overrideGate
   }
   const forecast = await calculateForecast({ orgId: user.orgId, periodStart, periodEnd, ownerUserId, salesTeamId })
+  if (overrideAmount !== null && !requestedCurrency && forecast.length !== 1) {
+    return NextResponse.json({ error: 'choose one currency for the override amount' }, { status: 422 })
+  }
   const created = await db.transaction(async (tx) => {
+    if (requestedCurrency && !(await tx.execute(sql`select code from currencies where code=${requestedCurrency}`)).rows.length) {
+      return NextResponse.json({ error: 'invalid forecast currency' }, { status: 422 })
+    }
+    let rows = requestedCurrency ? forecast.filter(row => row.currency === requestedCurrency) : forecast
+    const emptyPipeline = rows.length === 0
+    if (emptyPipeline) {
+      // Zero activity is still forecast evidence. An explicit currency wins;
+      // otherwise use the organization's configured reporting basis and stamp
+      // that choice. No nonzero amount is converted or borrowed from a currency.
+      const currency = requestedCurrency ?? (await tx.execute<{ base_currency: string }>(sql`
+        select base_currency from orgs where id=${user.orgId}`)).rows[0]?.base_currency
+      if (!currency) return NextResponse.json({ error: 'organization reporting currency is required' }, { status: 422 })
+      rows = [{ currency, pipeline_amount: '0.0000', weighted_amount: '0.0000', worst_case_amount: '0.0000',
+        most_likely_amount: '0.0000', upside_amount: '0.0000', closed_amount: '0.0000' }]
+    }
+    const detail = { calculatedAt: new Date().toISOString(), emptyPipeline,
+      currencySource: requestedCurrency ? 'selected' : emptyPipeline ? 'organization_base_currency' : 'forecast' }
     const ids: string[] = []
-    for (const row of forecast) {
+    for (const row of rows) {
       const result = (await tx.execute<{ id: string }>(sql`
         insert into crm_forecast_snapshots
           (org_id, owner_user_id, sales_team_id, period_start, period_end, snapshot_kind, currency,
@@ -90,10 +115,11 @@ export async function POST(req: NextRequest) {
         values (${user.orgId}, ${ownerUserId}, ${salesTeamId}, ${periodStart}, ${periodEnd}, ${kind}, ${row.currency},
                 ${row.pipeline_amount}, ${row.weighted_amount}, ${row.worst_case_amount}, ${row.most_likely_amount},
                 ${row.upside_amount}, ${row.closed_amount}, ${overrideAmount}, ${body.note ?? null},
-                ${JSON.stringify({ calculatedAt: new Date().toISOString() })}::jsonb, ${user.id}, ${user.id}) returning id`))
+                ${JSON.stringify(detail)}::jsonb, ${user.id}, ${user.id}) returning id`))
       ids.push(result.rows[0]!.id)
     }
     return ids
   })
+  if (created instanceof NextResponse) return created
   return NextResponse.json({ ids: created }, { status: 201 })
 }

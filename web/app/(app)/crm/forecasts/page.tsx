@@ -19,26 +19,14 @@ import { DateRangeFilter } from '../../../../components/date-range-filter'
 import { SearchSelectFilter } from '../../../../components/filter-bar'
 import { KpiStrip } from '../../../../components/kpi-strip'
 import { ListPageLayout } from '../../../../components/page-layout'
-import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/src/business-date.ts'
+import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { can, requirePermission } from '../../../../lib/authz'
-import { calculateForecast } from '../../../../lib/crm'
+import { calculateForecast, type ForecastRow } from '../../../../lib/crm'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { getMoneyFormatter } from '../../../../lib/money-server'
 import { ForecastSnapshotButton } from '../ForecastSnapshotButton'
 
 export const dynamic = 'force-dynamic'
-
-const DATE = /^\d{4}-\d{2}-\d{2}$/
-
-type ForecastRow = {
-  currency: string
-  pipeline_amount: string
-  weighted_amount: string
-  worst_case_amount: string
-  most_likely_amount: string
-  upside_amount: string
-  closed_amount: string
-}
 
 type QuotaRow = {
   id: string
@@ -75,9 +63,9 @@ export default async function Forecasts({
   const defaultStart = startOfMonth(today)
   const requestedStart = pickString(sp.periodStart)
   const requestedEnd = pickString(sp.periodEnd)
-  const start = requestedStart && DATE.test(requestedStart) ? requestedStart : defaultStart
+  const start = requestedStart && isIsoCalendarDate(requestedStart) ? requestedStart : defaultStart
   const startBasedEnd = addCalendarDays(addCalendarMonthsStart(start, 3), -1)
-  const end = requestedEnd && DATE.test(requestedEnd) && requestedEnd >= start ? requestedEnd : startBasedEnd
+  const end = requestedEnd && isIsoCalendarDate(requestedEnd) && requestedEnd >= start ? requestedEnd : startBasedEnd
   const requestedOwner = pickString(sp.owner)
   const requestedTeam = pickString(sp.team)
   const ownerUserId = requestedOwner && isUuid(requestedOwner) ? requestedOwner : null
@@ -85,7 +73,7 @@ export default async function Forecasts({
   // opposite key; owner wins for manually constructed URLs containing both.
   const salesTeamId = !ownerUserId && requestedTeam && isUuid(requestedTeam) ? requestedTeam : null
 
-  const [forecast, quotasResult, snapshotsResult, ownersResult, teamsResult] = (await Promise.all([
+  const [forecast, quotasResult, snapshotsResult, ownersResult, teamsResult] = await Promise.all([
     calculateForecast({
       orgId: authz.user.orgId,
       periodStart: start,
@@ -94,7 +82,7 @@ export default async function Forecasts({
       salesTeamId,
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     }),
-    db.execute(sql`
+    db.execute<QuotaRow>(sql`
       select q.*, u.name owner_name, st.name team_name
         from crm_sales_quotas q
         left join users u on u.id = q.owner_user_id
@@ -106,7 +94,7 @@ export default async function Forecasts({
          ${salesTeamId ? sql`and q.sales_team_id = ${salesTeamId}` : sql``}
        order by q.period_start desc, coalesce(u.name, st.name), q.currency
     `),
-    db.execute(sql`
+    db.execute<SnapshotRow>(sql`
       select s.*, u.name owner_name, st.name team_name
         from crm_forecast_snapshots s
         left join users u on u.id = s.owner_user_id
@@ -119,20 +107,20 @@ export default async function Forecasts({
        order by s.as_of desc
        limit 50
     `),
-    db.execute(sql`
+    db.execute<{ id: string; name: string }>(sql`
       select id, name from users
        where org_id = ${authz.user.orgId} and is_active
        order by name
     `),
-    db.execute(sql`
+    db.execute<{ id: string; name: string }>(sql`
       select id, name from crm_sales_teams
        where org_id = ${authz.user.orgId} and is_active
        order by name
     `),
-  ])) as unknown as [any, any, any, any, any]
+  ])
 
-  const quotas = quotasResult.rows as QuotaRow[]
-  const snapshots = snapshotsResult.rows as SnapshotRow[]
+  const quotas = quotasResult.rows
+  const snapshots = snapshotsResult.rows
   const canManageForecasts = authz.allowedSubsidiaryIds === null && can(authz, 'crm.forecasts.manage')
   const canConfigureQuotas = can(authz, 'crm.setup.manage')
   const snapshotAction = canManageForecasts ? (
@@ -195,9 +183,9 @@ export default async function Forecasts({
       <div className="space-y-6">
         <section aria-labelledby="forecast-summary-heading" className="space-y-3">
           <SectionHeading id="forecast-summary-heading" icon={<Gauge size={17} />} title={t('forecasts.summary')} />
-          {(forecast as ForecastRow[]).length ? (
+          {forecast.length ? (
             <div className="space-y-4">
-              {(forecast as ForecastRow[]).map((row) => (
+              {forecast.map((row) => (
                 <div key={row.currency} className="space-y-2">
                   <Badge variant="secondary">{row.currency}</Badge>
                   <KpiStrip

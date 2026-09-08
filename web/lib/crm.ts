@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { db } from '@openbooks/engine/src/db.ts'
 import { isDocKindEnabled } from './documents'
+import { isIsoCalendarDate } from './crm-dates'
 
 export async function loadCrmAccount(partyId: string, orgId: string, allowed?: ReadonlySet<string> | null) {
   const profile = (await db.execute<Record<string, unknown>>(sql`
@@ -138,8 +139,21 @@ export interface ForecastScope {
   allowedSubsidiaryIds?: ReadonlySet<string> | null
 }
 
+export type ForecastRow = {
+  currency: string
+  pipeline_amount: string
+  weighted_amount: string
+  worst_case_amount: string
+  most_likely_amount: string
+  upside_amount: string
+  closed_amount: string
+}
+
 /** Exact forecast rollup performed by PostgreSQL numeric arithmetic. */
 export async function calculateForecast(scope: ForecastScope) {
+  if (!isIsoCalendarDate(scope.periodStart) || !isIsoCalendarDate(scope.periodEnd) || scope.periodEnd < scope.periodStart) {
+    throw new Error('invalid forecast period')
+  }
   const ownerFilter = scope.ownerUserId ? sql`and o.owner_user_id = ${scope.ownerUserId}` : sql``
   /**
    * A team forecast is the set of opportunities assigned to that team. Keep
@@ -157,7 +171,7 @@ export async function calculateForecast(scope: ForecastScope) {
            where od.org_id = ${scope.orgId}
               and od.document_id = d.id
          )` : sql``
-  const rows = (await db.execute<Record<string, string>>(sql`
+  const rows = (await db.execute<ForecastRow>(sql`
     with forecast_scope as (
       select o.id
         from crm_opportunities o
