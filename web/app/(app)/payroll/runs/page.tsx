@@ -4,6 +4,8 @@ import { ArrowUpRight } from 'lucide-react'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { nextPeriodAfter } from '@openbooks/engine/src/payroll-run.ts'
+import { payrollSubsidiaryScopeFilter } from '@openbooks/engine/src/payroll-scope.ts'
+import { uuidArray } from '@openbooks/engine/src/subsidiaries.ts'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
@@ -54,6 +56,11 @@ export default async function PayRunsPage({
           from pay_schedules s
           left join pay_runs r on r.pay_schedule_id = s.id and r.org_id = s.org_id
          where s.org_id = ${orgId} and s.is_active
+           ${payrollSubsidiaryScopeFilter(sql`coalesce(s.subsidiary_id, (
+             select root.id from subsidiaries root
+              where root.org_id = s.org_id and root.parent_id is null and root.is_active
+              order by root.created_at limit 1
+           ))`, authz.allowedSubsidiaryIds)}
          group by s.id, s.name, s.frequency, s.pay_date_offset_days, s.anchor_period_end
          order by s.name`))).rows)
     : []
@@ -88,6 +95,8 @@ export default async function PayRunsPage({
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
           join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
          where prof.org_id = ${orgId} and prof.is_active and er.terminated_on is not null
+           ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
+           and prof.pay_schedule_id = any(${uuidArray(schedules.map((schedule) => schedule.id))}::uuid[])
          order by prof.employee_party_id, er.terminated_on desc`))).rows)
     : []
 

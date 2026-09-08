@@ -3903,3 +3903,24 @@ No tests were skipped. Evidence: `audit-payroll-dryrun-ambient-2026-09-08`.
 The creation page's employee and schedule pickers separately reproduce subsidiary
 privacy leaks in server-rendered client props. Those are under active remediation;
 this transaction change does not resolve them.
+
+### Payroll creation pickers restrict server-rendered metadata (2026-09-08)
+
+Two real page regressions confirmed a root-restricted payroll actor received a
+child entity's schedule metadata and an employee's name, identity, schedule, and
+termination date in `NewRunButton` props. Filtering the eventual run list did not
+protect these separately assembled creation options.
+
+Schedule options now apply the shared payroll subsidiary predicate to their
+effective owner, resolving organization-wide schedules to the active root exactly
+as creation does. Final-pay candidates require both employee visibility and a
+schedule offered to the caller. Filtering happens before client props are built;
+the existing shared list, page layout, and creation controls remain the composition.
+
+Validation: 8/8 real database page/API/summary checks passed (7,156.2475 ms),
+including root-only, child-only, empty, combined, and unrestricted picker scopes.
+Workspace typechecks, changed-file lint without warnings, whitespace validation,
+and the locked production build passed. Evidence:
+`audit-payroll-create-picker-scope-2026-09-08`.
+The full integration archive running at `66be48a8` includes the payroll transaction
+and preceding scope fixes, but predates this page change.
