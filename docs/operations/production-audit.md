@@ -3846,3 +3846,35 @@ Separately confirmed during this validation: calculate/dry-run/commit still
 omit caller scope at dispatch. Their remediation must refuse an inaccessible
 whole population; forwarding a filter alone risks silently calculating a
 partial run. This finding remains under active remediation.
+
+### Payroll calculation and commit authorize the complete population (2026-09-08)
+
+Real route regressions reproduced calculation, dry-run, and commit returning
+hidden employee payroll when the caller could see only the run's header entity.
+Direct calculation with scope also silently filtered the roster before replacing
+the entire run. Both existing snapshots and fresh rosters reproduced the defect.
+
+Dispatch now carries caller scope through all three operations and freshness
+checks. Calculation authorizes the complete selected roster and existing evidence
+before component provisioning or payroll writes. Commit checks the complete
+population before projecting ledger lines. A shared locked ownership guard also
+serves adjustments, detail reads, and the wizard. Concurrent employee transfers
+refuse without changing payroll evidence; calculation retains repeatable-read
+isolation and can refuse with PostgreSQL serialization failure.
+
+Validation: 139/139 payroll integration checks passed with no skips
+(151,080.298584 ms), including hidden existing/fresh populations, authorized
+multi-entity calculation/commit, route dispatch, and real ownership races.
+Workspace typechecks, changed-file lint (zero errors; four existing warnings),
+3,210/3,210 unit tests (131,580.455084 ms), and the locked production build passed.
+Evidence: `audit-payroll-calculation-commit-scope-2026-09-08`.
+
+The independent frozen `71a3c2d1` repository integration checkpoint also passed:
+2,537/2,537 tests, no skips (1,491,607.924292 ms), 2,145 balanced fixture
+leases/releases/resets, zero active leases or leaks. That checkpoint predates
+the subsequent payroll scope changes; their coverage is stated separately above.
+
+A separate real database proof confirmed that dry-run inside an ambient
+transaction replaces persistent pay stubs because its rollback signal is caught
+without a nested savepoint. This remains under active remediation; passing scope
+checks do not resolve transaction rollback semantics.

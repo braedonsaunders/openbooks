@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { PayrollError } from "./payroll-error.ts";
-import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./payroll-scope.ts";
+import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./payroll-scope.ts";
 
 export type PayRunAdjustmentMutation =
   | {
@@ -53,20 +53,8 @@ export async function mutatePayRunAdjustment(input: {
            for update`)).rows[0]?.employee_party_id
       : mutation.employeePartyId;
     if (mutation.action === "delete" && !target) throw new PayrollError("pay run adjustment not found");
-    if (input.allowedSubsidiaryIds != null) {
-      // A changed adjustment invalidates ALL stubs. Authorize the target and
-      // the complete snapshot first, and hold employment ownership stable.
-      const participants = (await tx.execute<{ id: string; subsidiary_id: string | null }>(sql`
-        select p.id,p.subsidiary_id from parties p
-         where p.org_id=${orgId} and (p.id=${target} or exists (
-           select 1 from pay_stubs s where s.org_id=p.org_id and s.employee_party_id=p.id
-             and s.pay_run_document_id=${documentId}))
-         order by p.id for share`)).rows;
-      if (!participants.some((party) => party.id === target)
-          || participants.some((party) => !payrollSubsidiaryInScope(input.allowedSubsidiaryIds, party.subsidiary_id))) {
-        throw new PayrollError("pay run not found");
-      }
-    }
+    // A changed adjustment invalidates the complete run snapshot.
+    await lockAndCheckPayrollRunPopulation(tx, orgId, documentId, input.allowedSubsidiaryIds, [{ id: target! }]);
 
     const employeeId = mutation.action === "delete" ? null : mutation.employeePartyId;
     if (employeeId) {

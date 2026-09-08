@@ -21,7 +21,7 @@ const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fix
 const { mutatePayRunAdjustment } = await import("@openbooks/engine/src/payroll-run-adjustments.ts");
 const { GET, POST } = await import("../app/api/payroll/runs/[id]/route");
 
-for (const action of ["add-adjustment", "delete-adjustment", "exclude-employee", "include-employee", "bulk-adjustment", "set-scope", "preview-gl", "read", "read-adjustments"] as const) {
+for (const action of ["add-adjustment", "delete-adjustment", "exclude-employee", "include-employee", "bulk-adjustment", "set-scope", "preview-gl", "calculate", "dry-run", "commit", "read", "read-adjustments"] as const) {
   test(`payroll ${action} refuses an inaccessible employee in a visible run`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const fx = await seedAdoption();
     try {
