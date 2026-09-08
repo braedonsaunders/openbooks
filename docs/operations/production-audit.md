@@ -2849,3 +2849,27 @@ ceilings remain 713 warnings and 381 explicit-any nodes. Evidence is under
 Adjacent probes confirmed that lease termination strands prorated final rent
 and CAM-generated draft deletion fails its allocation foreign key. These are
 separate remaining corrections; this checkpoint does not close the broader audit.
+
+## Bill earned final rent after termination — 2026-09-07
+
+The real termination service prorated July rent from 1,000 to 483.8710 through
+July 15, but billing excluded every terminated lease and stranded that earned
+amount. Both discovery and the locked billing read now admit terminated leases
+only for schedule periods ending on or before their termination boundary.
+Auto-invoice suspension remains authoritative. Cancelled future periods and
+legacy unprorated periods crossing termination are never admitted.
+
+All 30 focused checks passed (10,274.244292 ms, no skips), including three new
+integration cases: exact final rent and future-period cancellation, suspension
+and unprorated-history refusal, and billing racing the actual termination
+transaction. Existing replacement, escalation, billing provenance and feature
+contracts also passed. Engine typecheck and changed-file lint passed. The
+previous commit's 3,209-unit/build gates remain recorded separately; this SQL
+admission correction was checked with its affected suites. Evidence is under
+`audit-property-final-rent-2026-09-07`.
+
+Full integration is running against immutable `a1381bba`. A further CAM
+concurrency probe proved that billing and pool reopening can both succeed
+while reopening deletes the newly billed allocation. Its initial waiter probe
+was corrected to recognize a queued lock waiter; actual defect evidence is
+`audit-property-rebilling-2026-09-07/cam-race-before-corrected.log`.
