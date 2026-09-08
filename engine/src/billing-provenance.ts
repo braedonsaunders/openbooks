@@ -96,3 +96,32 @@ export async function releaseVendorBillProvenance(
      where org_id = ${orgId} and vendor_bill_document_id = ${documentId} and status = 'billed'
   `);
 }
+
+/** Release a CAM invoice or credit reservation without reopening its frozen pool. */
+export async function releaseCamBillingProvenance(
+  tx: SqlExecutor,
+  orgId: string,
+  documentId: string,
+  audit: { actorId: string | null; reason: string },
+): Promise<void> {
+  // Pool-before-allocation ordering matches billing and controlled reopening.
+  await tx.execute(sql`
+    select id from cam_pools where org_id=${orgId} and id in (
+      select pool_id from cam_allocations where org_id=${orgId} and invoice_document_id=${documentId}
+    ) order by id for update
+  `);
+  await tx.execute(sql`
+    with released as (
+      update cam_allocations set invoice_document_id=null, updated_at=now(), updated_by=${audit.actorId}
+       where org_id=${orgId} and invoice_document_id=${documentId}
+       returning id
+    )
+    insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+    select ${orgId},'cam_allocations',id,'billing_released',
+      jsonb_build_object(
+        'before',jsonb_build_object('invoice_document_id',${documentId}::text),
+        'after',jsonb_build_object('invoice_document_id',null),
+        'reason',${audit.reason}::text),${audit.actorId}::uuid
+    from released
+  `);
+}

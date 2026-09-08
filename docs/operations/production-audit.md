@@ -2873,3 +2873,35 @@ concurrency probe proved that billing and pool reopening can both succeed
 while reopening deletes the newly billed allocation. Its initial waiter probe
 was corrected to recognize a queued lock waiter; actual defect evidence is
 `audit-property-rebilling-2026-09-07/cam-race-before-corrected.log`.
+
+## CAM correction and billing concurrency — 2026-09-07
+
+Deleting generated CAM invoice and credit drafts failed their allocation
+foreign keys. Separately, concurrent pool reopening and billing both succeeded
+while reopening deleted the allocation belonging to the new invoice. A pool
+lock alone was insufficient: the original reopening query evaluated its billed
+dependency subquery before waiting and retained that stale result afterward.
+
+CAM invoice/credit void and deletion now release reservations with actor, reason
+and before/after evidence in the same transaction. Finalized amounts and the
+invoiced pool state remain frozen. Billing accepts released allocations from
+those pools, uses the shared predecessor-linked generation keys, and holds the
+pool lock before reading locked allocation/configuration values. Reopening
+checks billing dependencies in a fresh statement after obtaining that lock.
+The existing CAM table exposes replacement billing for released nonzero amounts.
+
+All 25 focused integration checks passed (28,973.311750 ms, no skips), including
+seven new lifecycle cases: invoice/credit draft deletion, posted reversals,
+both reopen/bill race directions, competing replacements, tenant isolation and
+rollback of source release plus audit evidence. All three CAM rendering tests
+passed. All 3,210 unit tests passed (138,835.685334 ms; no failures/skips).
+Workspace typechecks, exact-lock production build and changed-file lint passed.
+Quality ceilings remain 713 warnings and 381 explicit-any nodes. Evidence is
+under `audit-cam-billing-lifecycle-2026-09-07`; the first direct UI invocation
+lacked the repository's TSX config, and the corrected invocation and canonical
+unit run both passed. No protected posting, sync or deployment file changed.
+
+The full immutable integration run at `a1381bba` remains active. The next
+confirmed payroll defect is the mutable account fallback for legacy liability
+lines with no saved account: changing component setup reinterprets an already
+committed period. Evidence is under `audit-payroll-legacy-liabilities-2026-09-07`.
