@@ -154,11 +154,11 @@ export async function payrollRemittanceSummary(
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
-      left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+      join documents source_document on source_document.id=r.document_id and source_document.org_id=r.org_id
      where l.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        and l.kind in ('deduction', 'employer_contribution')
        and coalesce(c.system_key, '') <> all(${internalAccruals}::text[])
-       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
+       ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by c.id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
               l.liability_account_id, ${filingAccount}, s.province
      order by c.sequence, c.code
@@ -174,9 +174,9 @@ export async function payrollRemittanceSummary(
            count(distinct s.employee_party_id)::int as employees
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-      left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+      join documents source_document on source_document.id=r.document_id and source_document.org_id=r.org_id
      where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
-       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
+       ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by ${filingAccount}
   `));
   const contextByAccount = new Map(
@@ -250,7 +250,8 @@ export async function payrollRemittanceSummary(
      where org_id = ${orgId} and kind = 'vendor_bill'
        and custom->'payrollRemittance'->>'from' <= ${range.to}
        and custom->'payrollRemittance'->>'to' >= ${range.from}
-       and status <> 'voided'`);
+       and status <> 'voided'
+       ${payrollSubsidiaryScopeFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}`);
   const partyName = new Map(parties.rows.map((p) => [p.id, p.display_name]));
   const accountLabel = new Map(accounts.rows.map((a) => [a.id, a.number ? `${a.number} · ${a.name}` : a.name]));
   for (const group of groups.values()) {

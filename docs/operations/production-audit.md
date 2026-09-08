@@ -2997,3 +2997,30 @@ workspace typechecks and the locked-dependency production build passed. Evidence
 `statement-runtime-proof.log`, and
 `audit-payroll-remittance-history-scope-2026-09-07/checkpoint-regressions.log`.
 A complete integration pass on the newer committed source is still required.
+
+## Historical remittance ownership and artifact isolation — 2026-09-07
+
+Moving an employee to another subsidiary previously denied the original
+employer's remittance history while letting the new entity read its earlier
+liabilities. The original pay-run document had not moved. Both the shared
+HTTP/page period guard and the engine's amounts/context queries now follow
+that original document's legal entity. Empty scopes remain deny-all and
+filing-account authorization remains an additional check.
+
+A second real fixture showed that filtered accruals still included matching
+remittance bill artifacts owned by another entity. Existing-bill discovery
+now applies the same legal-entity scope, protecting document identifiers and
+amounts as well as accrual totals.
+
+All 59 focused checks passed (11,160.972375 ms, no skips), including two new
+integration cases proving both directions of employee-transfer scope and
+hidden bill exclusion while confirming the unfiltered fixture contains the
+bill. All 3,210 unit tests passed (146,813.395375 ms, zero failures/skips).
+Workspace typechecks, locked-dependency production build and changed-file lint
+passed. Evidence: `audit-payroll-remittance-history-scope-2026-09-07`.
+
+The next year-end population probe confirms an availability defect: after an
+employee transfer the original employer receives 404 for its historical filing
+population. The new employer was also refused in that fixture; it is not
+evidence of year-end disclosure. Evidence:
+`audit-payroll-filing-history-scope-2026-09-07/before.log`.
