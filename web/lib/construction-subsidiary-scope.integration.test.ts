@@ -14,7 +14,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 }})
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/src/db.ts')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { randomUUID } = await import('node:crypto')
@@ -67,7 +67,25 @@ test('construction and subcontract routes enforce the caller subsidiary scope', 
     assert.equal(hiddenGet.status, 404); assert.deepEqual(await hiddenGet.json(), NOT_FOUND)
     const missingGet = await get(construction.GET, org.orgId, `projectId=${randomUUID()}`)
     assert.equal(missingGet.status, 404); assert.deepEqual(await missingGet.json(), NOT_FOUND)
-    assert.equal((await get(construction.GET, org.orgId, `projectId=${visible}`)).status, 200)
+    // The release overview must count the business balance once: an alternate
+    // book and another entity's project-tagged line are not extra retainage.
+    const taxBook = randomUUID()
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('retainageReceivable',${org.accounts.invAsset}::text)) where id=${org.orgId}`)
+    await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values(${taxBook},${org.orgId},'TAX','Tax',false,true,true)`)
+    for (const [book, entity] of [[org.bookId, org.subsidiaryId], [taxBook, org.subsidiaryId], [org.bookId, other]]) {
+      const entry = randomUUID()
+      await withOrgTransaction(org.orgId, async () => {
+        await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status)
+          values(${entry},${org.orgId},${book},${entity},${entry},${org.date},${org.periodId},'draft')`)
+        await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,project_id)
+          values(${org.orgId},${entry},1,${org.accounts.invAsset},${entity},100,'CAD',100,${visible}),
+                (${org.orgId},${entry},2,${org.accounts.revenue},${entity},-100,'CAD',-100,${visible})`)
+        await db.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${actor} where org_id=${org.orgId} and id=${entry}`)
+      })
+    }
+    const overview = await get(construction.GET, org.orgId, `projectId=${visible}`)
+    assert.equal(overview.status, 200)
+    assert.equal((await overview.json()).retainageHeld, '100.0000')
     for (const body of [
       { action: 'addSov', projectId: hidden, description: 'Excavation', scheduledValue: '1000' },
       { action: 'updateSov', id: hiddenSov, description: 'Renamed', scheduledValue: '1200' },
