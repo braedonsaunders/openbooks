@@ -3249,3 +3249,28 @@ savepoint checks passed (7,748.210041 ms, no failures/skips); engine typecheck
 and changed-file lint passed. Evidence:
 `audit-depreciation-ambient-rollback-2026-09-08/before.log`, `focused.log`,
 `typecheck.log`, and `lint.log`.
+
+## FX reversal failure isolation — 2026-09-08
+
+A real two-entity fixture rejects the first entity's mandatory FX reversal after
+its adjustment has posted. The caught SQL error previously aborted the ambient
+tenant transaction and the next entity's idempotency query failed with 25P02.
+The adjustment/reversal pair now shares an explicit savepoint. Failure removes
+both parts and leaves the caller transaction usable for subsequent entities.
+
+All 20 focused FX and ambient-rollback checks passed (4,978.79925 ms, no skips),
+including exact adjustment/reversal retention for the successful entity and
+preservation of the caller's earlier write. Engine typecheck and changed-file
+lint passed. Evidence: `audit-fx-ambient-rollback-2026-09-08/before.log`,
+`focused.log`, `typecheck.log`, and `lint.log`.
+
+## Full integration checkpoint at 66327181 — 2026-09-08
+
+The frozen full integration run passed 2,434/2,434 tests, with zero failures or
+skips, in 1,284,080.113708 ms. The fixture receipt balanced 2,042 leases,
+releases and resets, four bootstraps/teardowns/schema verifications, and zero
+active leases or leak detections. Both previously failing statement fixtures
+passed. This checkpoint includes the earlier payroll source-ownership fixes
+and canonical statement parameter correction; subsequent recognition and
+savepoint changes have the focused checks recorded above. Evidence:
+`audit-statement-fixture-parameter-2026-09-07/full-integration.log`.

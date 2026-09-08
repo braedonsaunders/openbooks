@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withTransactionSavepoint } from "./db.ts";
 import { loadControlAccounts } from "./control-accounts.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "./money.ts";
 import { loadSubsidiaryContext } from "./subsidiaries.ts";
@@ -534,7 +534,7 @@ async function postRevaluationEntry(
   if (!isZero(sum(lines.map((l) => l.amount)))) {
     throw new RevaluationError("revaluation entry does not balance");
   }
-  return db.transaction(async (tx) => {
+  return db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${revaluationLockKey(orgId, bookId, periodId, subsidiaryId)}, 0))`);
 
@@ -603,7 +603,7 @@ async function postRevaluationEntry(
     );
 
     return { entryId, reversalEntryId };
-  });
+  }));
 }
 
 /** Sort helper kept local so callers don't import money directly. */
