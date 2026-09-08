@@ -3392,3 +3392,30 @@ alternate sorts first. All ten focused GL, concurrency and recognition checks
 passed (3,633.589083 ms, no failures/skips); engine typecheck and changed-file
 lint passed. Evidence: `audit-project-gl-book-policy-2026-09-08/before.log`,
 `focused.log`, `typecheck.log`, and `lint.log`.
+
+## Project journal account and dimension controls — 2026-09-08
+
+The project journal helper posted both a branch-restricted account and a
+branch-owned project dimension into the root entity. It now validates the
+complete forward posting through the shared subsidiary policy while holding
+the hierarchy, accounts and referenced projects. Controlled historical reversals
+retain their existing exact-source behavior. The insert result is now typed;
+the enforced limits drop to 378 explicit-any nodes and 710 lint warnings.
+
+All 16 focused project/GL checks passed (5,439.017917 ms, no failures/skips),
+including refusal without draft fragments and valid descendant use. Workspace
+typechecks, the locked-dependency production build and full lint passed (zero
+errors, 710 warnings). All 3,210 unit tests passed (1,310,529.163833 ms, no skips),
+including the latest payroll changes. Evidence:
+`audit-project-gl-entity-policy-2026-09-08/before.log`, `focused.log`,
+`typecheck.log`, `explicit-any.log`, `unit.log`, `build.log`, and `lint-full.log`.
+
+## Full integration checkpoint at ce524573 — 2026-09-08
+
+The frozen full suite passed 2,457/2,457 tests, zero failures/skips, in
+1,241,408.376792 ms. Its receipt balanced 2,065 leases/releases/resets, four
+bootstraps/teardowns/schema verifications, and zero active leases or leak
+detections. This includes the recognition posting snapshot, all three financial
+batch savepoints, lease concurrency and lease entity controls. Later payroll
+and project fixes have the focused and unit evidence recorded above. Evidence:
+`audit-lease-posting-scope-2026-09-08/full-integration.log`.

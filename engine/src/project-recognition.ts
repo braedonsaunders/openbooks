@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "./db.ts";
+import { loadSubsidiaryContext, validateSubsidiaryRestrictions, uuidArray } from "./subsidiaries.ts";
 import { now } from "./clock.ts";
 import { businessToday } from "./business-date.ts";
 import { add, mul, neg, sum, isZero } from "./money.ts";
@@ -106,6 +107,7 @@ export async function postProjectGlEntryWithinTransaction(
      limit 1 for share`));
   const bookId = book.rows[0]?.id;
   if (!bookId) throw new Error("no active primary GL book");
+  await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
   // journal_entries.subsidiary_id is NOT NULL. When the source row carries no
   // legal entity, the one authoritative org root is the default.
   let subId = subsidiaryId;
@@ -141,12 +143,26 @@ export async function postProjectGlEntryWithinTransaction(
   if (per.rows[0]!.is_closed) {
     throw new Error(`the GL period covering ${postingDate} is closed`);
   }
-  const [entry] = (await tx.execute(sql`
+  const accountIds = [...new Set(lines.map((line) => line.accountId))];
+  await tx.execute(sql`select id from accounts where org_id=${orgId}
+    and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+  const projectIds = [...new Set(lines.map((line) => line.projectId).filter((id): id is string => !!id))];
+  if (projectIds.length) {
+    await tx.execute(sql`select id from projects where org_id=${orgId}
+      and id=any(${uuidArray(projectIds)}::uuid[]) order by id for share`);
+  }
+  const postingSubsidiaryId = subId;
+  await validateSubsidiaryRestrictions(tx, {
+    orgId, ctx: await loadSubsidiaryContext(tx, orgId), docSubsidiaryId: postingSubsidiaryId,
+    lines: lines.map((line) => ({ ...line, subsidiaryId: postingSubsidiaryId })),
+  });
+  const entry = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
     values (${orgId}, ${bookId}, ${subId}, ${entryNumber}, ${postingDate}, ${periodId}, ${memo},
             'draft', ${origin}, ${actorId}, ${actorId})
-    returning id`)).rows as any[];
+    returning id`)).rows[0];
+  if (!entry) throw new Error("project journal insert returned no entry");
   const eid = entry.id;
   let n = 1;
   for (const l of lines) {

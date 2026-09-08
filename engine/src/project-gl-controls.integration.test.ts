@@ -205,3 +205,37 @@ for (const mode of ["secondary posting", "secondary forecast", "primary forecast
     } finally { await dropScratchOrg(org.orgId); }
   });
 }
+
+for (const policy of ["account", "project"] as const) {
+  test(`project GL enforces ${policy} legal-entity restrictions`, { skip: !DB }, async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const branchId = randomUUID(), projectId = randomUUID();
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+        values(${branchId},${org.orgId},${org.subsidiaryId},'Project branch','CAD','CA')`);
+      await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+        values(${projectId},${org.orgId},${policy === "project" ? branchId : org.subsidiaryId},'PROJECT-SCOPE',
+               'Project scope',${org.customerId},'active',true,'{}'::jsonb)`);
+      if (policy === "account") await db.execute(sql`update accounts set subsidiary_id=${branchId},subsidiary_include_children=false
+        where org_id=${org.orgId} and id=${org.accounts.adjustment}`);
+      const post = (subsidiaryId: string) => postProjectGlEntry({
+        orgId: org.orgId, actorId, origin: "manual", entryNumber: "PROJECT-ENTITY-POLICY",
+        postingDate: org.date, memo: "Project entity policy", subsidiaryId, currency: "CAD",
+        lines: [
+          { accountId: org.accounts.adjustment, amount: "10", projectId },
+          { accountId: org.accounts.clearing, amount: "-10" },
+        ],
+      });
+      await assert.rejects(post(org.subsidiaryId), /restricted to another subsidiary/);
+      const count = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n;
+      assert.equal(count, 0);
+      await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
+        where org_id=${org.orgId} and id=${org.accounts.adjustment}`);
+      await db.execute(sql`update projects set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
+        where org_id=${org.orgId} and id=${projectId}`);
+      assert.ok(await post(branchId), "valid parent-to-child configuration remains usable");
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+}
