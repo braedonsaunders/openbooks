@@ -5,6 +5,7 @@ import { isIsoCalendarDate } from "./business-date.ts";
 import { fromUnits, mul, roundDiv, toUnits } from "./money.ts";
 import { getOnHandForEntity, lockInventoryPosition, postInventoryEntry } from "./inventory.ts";
 import { orgReportingFramework, type ReportingFramework } from "./reporting-framework.ts";
+import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
@@ -329,9 +330,11 @@ export async function writeDownInventoryToNrv(
   actorId: string | null,
   input: NrvWritedownInput,
 ): Promise<NrvResult> {
-  const framework = await orgReportingFramework(orgId);
-
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "inventory"))) {
+      throw new InventoryNrvError("inventory feature is disabled");
+    }
+    const framework = await orgReportingFramework(orgId);
     await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     const accounts = await itemAccounts(tx, orgId, input.itemId);
@@ -489,13 +492,16 @@ export async function reverseInventoryWritedown(
   input: NrvReversalInput,
 ): Promise<NrvResult> {
   if (!isIsoCalendarDate(input.date)) throw new InventoryNrvError("reversal date must be a valid YYYY-MM-DD date");
-  const framework = await orgReportingFramework(orgId);
-  if (framework !== "ifrs") {
-    throw new InventoryNrvError(
-      "write-down reversal is prohibited under US GAAP (ASC 330-10-35-14): the written-down amount is the new cost basis",
-    );
-  }
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "inventory"))) {
+      throw new InventoryNrvError("inventory feature is disabled");
+    }
+    const framework = await orgReportingFramework(orgId);
+    if (framework !== "ifrs") {
+      throw new InventoryNrvError(
+        "write-down reversal is prohibited under US GAAP (ASC 330-10-35-14): the written-down amount is the new cost basis",
+      );
+    }
     await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     const accounts = await itemAccounts(tx, orgId, input.itemId);
