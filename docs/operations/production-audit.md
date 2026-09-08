@@ -3511,3 +3511,21 @@ passed with zero errors and 709 warnings. These broad checks include the
 preceding settlement and project revenue fixes. Evidence:
 `audit-asset-lifecycle-posting-policy-2026-09-08/before.log`, `focused.log`,
 `unit.log`, `typecheck-full.log`, `build.log`, and `lint-full.log`.
+
+## Property security-deposit posting policy — 2026-09-08
+
+Five real receipt regressions posted with a bank or location restricted to a
+different entity, an inactive property subsidiary, an inactive primary book,
+or a primary book with GL posting disabled. Forward deposit posting now locks
+the authoritative feature setting, hierarchy, property context, eligible
+primary book, selected accounts and location. Liability/bank/offset type checks
+read locked account rows, and the native subsidiary validator runs before
+journal/subledger creation. Historical deposit reversals retain their existing
+source-based controls.
+
+All 29 focused deposit, balance-concurrency, property hardening and arithmetic
+checks passed (9,576.8475 ms, no failures/skips); engine typecheck and
+changed-file lint passed. Refusals leave no journal or deposit transaction, and
+correcting policy permits the preserved receipt. Evidence:
+`audit-property-deposit-posting-policy-2026-09-08/before.log`, `focused.log`,
+`typecheck.log`, and `lint.log`.
