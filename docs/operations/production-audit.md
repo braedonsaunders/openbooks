@@ -3114,3 +3114,26 @@ failures/skips), engine typecheck passed, and full repository lint passed with
 zero errors and exactly 712 warnings. Explicit-any verification passed at 380.
 Evidence: `audit-depreciation-native-evidence-2026-09-07/before.log`,
 `focused.log`, `typecheck.log`, `lint-full.log`, and `any.log`.
+
+## ROE historical-source and current-header isolation — 2026-09-07
+
+A transferred employee's new entity passed the ROE row guard while the real
+record contained 240.0000 of the original employer's insurable earnings.
+ROE authorization now requires current employee/profile-account visibility
+and the original pay-run entities contributing to its earnings window.
+The selected-employee file route uses this same boundary.
+
+The engine exposes ownership inputs using the existing frequency-to-period
+count declaration, across tax years. It also includes every source on the
+final pay date because separation-payment blocks read that whole date.
+Worksheet ties now order by pay date and stub ID, matching the ownership
+selector. Older sources outside both windows do not block access.
+
+All 64 focused checks passed (8,296.639042 ms, zero failures/skips), including
+transfer denial, selected-file denial, profile-account isolation, cross-year
+reads, a 13-period boundary, and a hidden final-date source outside that
+13-period window. All 3,210 unit tests passed (120,438.487583 ms, no skips).
+Workspace typechecks, changed-file lint and the locked-dependency production
+build passed. Evidence: `audit-roe-source-scope-2026-09-07/before.log`,
+`regression-before.log`, `focused-final.log`, `unit.log`, `typecheck.log`,
+`lint.log`, and `build.log`.

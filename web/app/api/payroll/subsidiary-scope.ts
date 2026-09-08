@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { roeSourceScope } from '@openbooks/engine/src/payroll-yearend.ts'
 import type { PayrollFilingData } from '@openbooks/engine/src/payroll-filing-registry.ts'
 import { isUuid } from '../../../lib/list-params'
 import type { Authz } from '../../../lib/authz'
@@ -144,7 +145,7 @@ export async function guardPayrollFilingRowIds(
  * year. Check the whole employee/year: annual caps and opening carry-in can
  * affect several account/province rows. A transfer must not move that evidence.
  * ROE uses current employment details and an unbounded recent-period window;
- * it keeps its separate current-employee boundary here.
+ * it requires both current-profile and original-source visibility.
  */
 async function guardPayrollFilingEmployees(
   gate: Authz,
@@ -156,6 +157,7 @@ async function guardPayrollFilingEmployees(
   if (!Number.isInteger(taxYear) || taxYear < 2020 || taxYear > 2100) return notFound()
   const annual = (country === 'CA' && (filing === 't4' || filing === 'rl1'))
     || (country === 'US' && filing === 'w2')
+  if (country === 'CA' && filing === 'roe') return guardPayrollRoeEmployees(gate, employeeIds)
   if (!annual) return guardPayrollEmployees(gate, employeeIds)
   const ids = [...new Set(employeeIds)]
   if (ids.length === 0) return null
@@ -190,6 +192,28 @@ async function guardPayrollFilingEmployees(
     ...ids.filter(id => !historical.has(id)),
     ...openings.map(row => row.employeeId),
   ])
+}
+
+/** ROE header and source evidence must both be visible before any bytes leave. */
+export async function guardPayrollRoeEmployees(
+  gate: Authz,
+  employeeIds: readonly string[],
+): Promise<Response | null> {
+  if (gate.allowedSubsidiaryIds === null) return null
+  const ids = [...new Set(employeeIds)]
+  if (ids.some(id => !isUuid(id))) return notFound()
+  const employeeDenied = await guardPayrollEmployees(gate, ids)
+  if (employeeDenied) return employeeDenied
+  const sources = await roeSourceScope(gate.user.orgId, ids)
+  if (new Set(sources.map(row => row.employeeId)).size !== ids.length) return notFound()
+  for (const row of sources) {
+    if (row.sourceDocumentId) {
+      const denied = guardSubsidiaryScope(gate, row.sourceSubsidiaryId)
+      if (denied) return denied
+    }
+  }
+  const accounts = sources.map(row => row.filingAccountId).filter((id): id is string => id !== null)
+  return accounts.length ? guardPayrollFilingAccounts(gate, accounts, true) : null
 }
 
 /** Parse the built-in filing row keys. Unknown pack row shapes fail closed. */

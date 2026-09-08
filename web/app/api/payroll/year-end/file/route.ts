@@ -6,7 +6,7 @@ import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
 import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import type { Authz } from '../../../../../lib/authz'
-import { guardPayrollEmployees, guardPayrollFilingData } from '../../subsidiary-scope'
+import { guardPayrollRoeEmployees, guardPayrollFilingData } from '../../subsidiary-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,7 +71,7 @@ async function serveFile(gate: Authz, input: FileInput) {
       return NextResponse.json({ error: 'invalid employee selection' }, { status: 422 })
     }
     const ids = entries.map((entry) => entry.split(':', 1)[0]!)
-    const denied = await guardPayrollEmployees(gate, ids)
+    const denied = await guardPayrollRoeEmployees(gate, ids)
     if (denied) return denied
   }
   try {

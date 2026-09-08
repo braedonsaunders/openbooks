@@ -558,7 +558,7 @@ export async function roeWorksheet(
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-     order by s.pay_date desc
+     order by s.pay_date desc, s.id desc
      limit ${limit}
   `));
   const periods = rows.rows.map((row) => ({
@@ -583,6 +583,49 @@ const ROE_PERIODS_BY_FREQUENCY: Record<string, number> = {
   semi_monthly: 25,
   monthly: 13,
 };
+
+/** Ownership inputs for the exact ROE earnings window and current header.
+ * The frequency declaration is shared with roeRecord. Block 17 reads every
+ * committed stub on the final pay date, including ties outside Block 15's
+ * period count, so those sources must also be authorized.
+ */
+export async function roeSourceScope(orgId: string, employeeIds: readonly string[]): Promise<{
+  employeeId: string;
+  filingAccountId: string | null;
+  sourceDocumentId: string | null;
+  sourceSubsidiaryId: string | null;
+}[]> {
+  if (employeeIds.length === 0) return [];
+  const periodCount = sql`case sched.frequency ${sql.join(
+    Object.entries(ROE_PERIODS_BY_FREQUENCY).map(([frequency, count]) => sql`when ${frequency} then ${count}::int`),
+    sql` `,
+  )} else 0 end`;
+  return (await db.execute<{
+    employeeId: string; filingAccountId: string | null;
+    sourceDocumentId: string | null; sourceSubsidiaryId: string | null;
+  }>(sql`
+    select prof.employee_party_id as "employeeId", prof.filing_account_id as "filingAccountId",
+           source.document_id as "sourceDocumentId", source.subsidiary_id as "sourceSubsidiaryId"
+      from employee_payroll_profiles prof
+      left join pay_schedules sched on sched.org_id = prof.org_id and sched.id = prof.pay_schedule_id
+      left join lateral (
+        select distinct history.document_id, d.subsidiary_id
+          from (
+            select s.pay_run_document_id as document_id, s.pay_date,
+                   row_number() over (order by s.pay_date desc, s.id desc) as position,
+                   max(s.pay_date) over () as final_pay_date
+              from pay_stubs s
+              join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
+             where s.org_id = prof.org_id and s.employee_party_id = prof.employee_party_id
+               and r.run_status = 'committed'
+          ) history
+          left join documents d on d.org_id = prof.org_id and d.id = history.document_id
+         where history.position <= ${periodCount} or history.pay_date = history.final_pay_date
+      ) source on true
+     where prof.org_id = ${orgId}
+       and prof.employee_party_id in (${sql.join(employeeIds.map(id => sql`${id}`), sql`, `)})
+  `)).rows;
+}
 
 /** ROE Block 6 pay-period type codes. */
 const ROE_PERIOD_TYPE: Record<string, string> = {
