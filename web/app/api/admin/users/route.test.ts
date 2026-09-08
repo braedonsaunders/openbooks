@@ -112,6 +112,11 @@ const mockSources = new Map<string, string>([
         },
         transaction: async (work) => work({}),
       }
+      export async function withTransactionSavepoint(_runner, work) {
+        const start = state.pending.length
+        try { return await work() }
+        catch (error) { state.pending.splice(start); throw error }
+      }
       export async function withOrgTransaction(_orgId, work) {
         state.transactionCalls++
         if (state.inTx) return work()

@@ -349,6 +349,25 @@ export async function DELETE(req: Request) {
       const escalation = ceilingViolation(gate, rolePermissionList(replacement.permissions));
       if (escalation) return escalation;
     }
+    // Grants hold the role before this user lock; unassignment and activation
+    // take the same user lock before inspecting the remaining assignments.
+    await tx.execute(sql`
+      select u.id from users u
+       where u.org_id = ${actor.orgId} and exists (
+         select 1 from role_assignments a
+          where a.org_id = u.org_id and a.user_id = u.id and a.role_id = ${id}
+       )
+       order by u.id for update of u`);
+    // Lock every remaining assignment for those users as well. A caller using
+    // repeatable read must refuse a concurrently deleted snapshot row rather
+    // than count it as a surviving role.
+    await tx.execute(sql`
+      select a.id from role_assignments a
+       where a.org_id = ${actor.orgId} and exists (
+         select 1 from role_assignments held
+          where held.org_id = a.org_id and held.user_id = a.user_id and held.role_id = ${id}
+       )
+       order by a.user_id, a.id for update of a`);
     const affected = await tx.execute<AffectedAssignment>(sql`
       select a.id, a.user_id, u.name as user_name, u.is_active,
              (select count(*)::int from role_assignments o
