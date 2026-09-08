@@ -49,6 +49,9 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
     await db.execute(sql`insert into app_roles(id, org_id, key, name, description, is_built_in, permissions, subsidiary_restriction)
       select ob_rebase(id, ${seed}::uuid), ${sbxOrgId}, key, name, description, is_built_in, permissions, subsidiary_restriction
         from app_roles where org_id = ${prod.orgId}`);
+    const sandboxOwner = await rebase(actorId, seed);
+    await db.execute(sql`insert into users(id,org_id,name,email,password_hash,is_active)
+      values(${sandboxOwner},${sbxOrgId},'Sandbox owner',${`owner-${sandboxOwner}@scratch.test`},'x',false)`);
     const deletedRoleId = randomUUID();
     await db.execute(sql`insert into app_roles(id, org_id, key, name, is_built_in, permissions)
       values (${deletedRoleId}, ${prod.orgId}, 'unused_custom', 'Unused custom', false, '[]'::jsonb)`);
@@ -85,7 +88,7 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
              (${prod.orgId}, ${pDeletedView}, 'gl-mtd', 'Month to Date GL', null,
               '{"kind":"report","report":"gl"}'::jsonb, '{"columns":["date"]}'::jsonb, 'global', ${actorId}),
              (${sbxOrgId}, ${sMatchedView}, 'ar-open', 'Open AR', 'Aging buckets',
-              '{"kind":"list","entity":"invoices"}'::jsonb, null, 'global', ${actorId})`);
+              '{"kind":"list","entity":"invoices"}'::jsonb, null, 'global', ${sandboxOwner})`);
 
     const { changeSetId, itemCount } = await buildChangeSet(sandboxId, "Promote Diff Regression", actorId);
     const cs = (await db.execute<{

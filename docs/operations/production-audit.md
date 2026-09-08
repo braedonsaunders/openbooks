@@ -4326,3 +4326,30 @@ passed (7,170.453291 ms), with no skips. Evidence:
 the newer revision is required before recording another passing full checkpoint.
 Workspace types and changed-file lint without warnings also passed for the
 fixture correction; no production build rerun is needed for test-only edits.
+
+### Promoted view ownership and sandbox deletion (2026-09-08)
+
+Real end-to-end probes found that promoting unchanged `saved_views` and
+`list_views` replaced each production owner with its sandbox counterpart. Both
+owner foreign keys use `ON DELETE CASCADE`, so removing the sandbox user could
+remove the misowned production view. Both ownership assertions failed after the
+actual capture/review/approve/apply sequence.
+
+Promotion now maps view owners and saved-report creator identities through
+proven production/sandbox user counterparts before comparison or capture.
+Unchanged records no longer produce false updates. Application locks and verifies
+the referenced production user, refusing previously captured sandbox identities.
+A proven legacy production owner pointing into this sandbox becomes an explicit
+repair item requiring the normal review/approval/application lifecycle; it is
+not silently changed during comparison.
+
+Seven new ownership cases and twenty-two existing scope/authority/promotion
+checks passed 29/29 without skips (23,964.911875 ms). The cases cover ordinary
+edits and legacy repairs for saved views, list views and saved reports, actual
+sandbox deletion without production-record loss, and refusal of an old owner
+payload with no production mutation. The hand-built multi-table fixture now has
+a rebased inactive sandbox owner instead of an impossible production-owner
+shortcut; its first run omitted the required placeholder password hash, which
+was corrected before the final run. Workspace types, warning-free changed-file
+lint, whitespace and exact-lock production build passed. Evidence:
+`audit-promotion-view-ownership-2026-09-08`. No production data was changed.
