@@ -2905,3 +2905,27 @@ The full immutable integration run at `a1381bba` remains active. The next
 confirmed payroll defect is the mutable account fallback for legacy liability
 lines with no saved account: changing component setup reinterprets an already
 committed period. Evidence is under `audit-payroll-legacy-liabilities-2026-09-07`.
+
+## Refuse mutable legacy payroll liability fallbacks — 2026-09-07
+
+A pre-0094 line with unknown liability evidence still resolved its account from
+the current component or statutory setting. A real legacy fixture changed the
+same committed CPP period's remittance account merely by repointing setup.
+Remittance reads now use only the saved account; a nonzero unresolved historical
+liability refuses reports and bill creation with an explicit evidence error.
+Changing either setup source cannot bypass that refusal. Known snapshots and
+unrelated periods remain usable. No legacy account is inferred or overwritten.
+
+All 27 focused checks passed (12,400.161583 ms, zero skips), including the new
+legacy refusal, zero bill artifacts on rejection, known snapshot stability,
+Quebec filing/remittance, overlapping-period and destination-fence races. The
+small committed-accrual race fixture now includes the liability stamp a real
+commit writes; its concurrency assertions are unchanged. Engine typecheck and
+changed-file lint passed. Evidence: `audit-payroll-legacy-liabilities-2026-09-07`.
+
+Operational limitation: unresolved legacy liability accounts require reviewed
+original evidence before affected remittance work can resume. The existing
+filing-account reconciliation command handles filing attribution only, not
+liability accounts. A separately guarded liability reconciliation path remains
+necessary; neither current setup nor a manual trigger bypass is an acceptable
+production repair. The full `a1381bba` integration run is still in progress.
