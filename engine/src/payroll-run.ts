@@ -1,4 +1,4 @@
-import { payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./payroll-scope.ts";
+import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./payroll-scope.ts";
 import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from "./payroll-fences.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -1641,44 +1641,10 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       );
     }
 
-    // Statutory holiday pay: read the gate once for the run, and provision the
-    // STAT/STATPREM pair for orgs that predate them BEFORE the component map
-    // is loaded — ctx.need is an assertion, never a discovery mechanism.
-    const statHolidayPay = await statutoryHolidayPayEnabled(
-      orgId, tx, input.allowedSubsidiaryIds,
-    );
-    if (statHolidayPay) {
-      await ensureStatutoryHolidayComponents(
-        tx, orgId, actorId, input.allowedSubsidiaryIds,
-      );
-    }
-
-    // The pack's statutory components, ensured for a tenant provisioned before
-    // the pack declared them — the same reason and the same idempotent path as
-    // the holiday pair above. `ctx.need` is an ASSERTION, never a discovery
-    // mechanism, and a levy a pack has just started emitting (state income tax)
-    // must not fail every existing tenant's next payroll with "seed payroll
-    // components first". Generic: it provisions whatever the run's own pack
-    // declares and branches on nothing.
-    await ensureComponents(tx, orgId, actorId, statutoryComponents(runContext.country));
-
-    const components = (await tx.execute<Record<string, unknown>>(sql`
-      select * from pay_components where org_id = ${orgId} and is_active order by sequence
-    `));
-    const byKey = new Map<string, Record<string, unknown>>();
-    for (const c of components.rows) {
-      if (c.system_key) byKey.set(`${c.system_key}:${c.kind}`, c);
-    }
-    const need = (systemKey: string, kind: string) => {
-      const c = byKey.get(`${systemKey}:${kind}`);
-      if (!c) throw new PayrollError(`missing system pay component ${systemKey}/${kind} — seed payroll components first`);
-      return c;
-    };
-
     // A subsidiary-scoped schedule pays only that entity's employees; an
     // org-wide schedule keeps everyone (the historical behaviour).
     const scheduleScope = (await tx.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${run.pay_schedule_id}
+      select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${run.pay_schedule_id} for share
     `));
     const scopedSubsidiaryId = scheduleScope.rows[0]?.subsidiary_id ?? null;
     const runType = (run.run_type as string) ?? "regular";
@@ -1723,11 +1689,49 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
            and prof.is_active
            and (er.terminated_on is null or er.terminated_on >= ${run.period_start})
            and (${scopedSubsidiaryId}::uuid is null or p.subsidiary_id = ${scopedSubsidiaryId}::uuid)
-           ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}
          order by p.id, er.terminated_on nulls last
       ) roster
       order by roster.display_name
     `));
+
+    // Authorize the complete selected roster and the snapshot we replace.
+    // A scoped filter here would silently drop employees and rewrite totals.
+    await lockAndCheckPayrollRunPopulation(tx, orgId, documentId, input.allowedSubsidiaryIds,
+      employees.rows.map((employee) => ({ id: employee.party_id!, subsidiaryId: employee.employee_subsidiary_id ?? null })));
+
+    // Statutory holiday pay: read the gate once for the run, and provision the
+    // STAT/STATPREM pair for orgs that predate them BEFORE the component map
+    // is loaded — ctx.need is an assertion, never a discovery mechanism.
+    const statHolidayPay = await statutoryHolidayPayEnabled(
+      orgId, tx, input.allowedSubsidiaryIds,
+    );
+    if (statHolidayPay) {
+      await ensureStatutoryHolidayComponents(
+        tx, orgId, actorId, input.allowedSubsidiaryIds,
+      );
+    }
+
+    // The pack's statutory components, ensured for a tenant provisioned before
+    // the pack declared them — the same reason and the same idempotent path as
+    // the holiday pair above. `ctx.need` is an ASSERTION, never a discovery
+    // mechanism, and a levy a pack has just started emitting (state income tax)
+    // must not fail every existing tenant's next payroll with "seed payroll
+    // components first". Generic: it provisions whatever the run's own pack
+    // declares and branches on nothing.
+    await ensureComponents(tx, orgId, actorId, statutoryComponents(runContext.country));
+
+    const components = (await tx.execute<Record<string, unknown>>(sql`
+      select * from pay_components where org_id = ${orgId} and is_active order by sequence
+    `));
+    const byKey = new Map<string, Record<string, unknown>>();
+    for (const c of components.rows) {
+      if (c.system_key) byKey.set(`${c.system_key}:${c.kind}`, c);
+    }
+    const need = (systemKey: string, kind: string) => {
+      const c = byKey.get(`${systemKey}:${kind}`);
+      if (!c) throw new PayrollError(`missing system pay component ${systemKey}/${kind} — seed payroll components first`);
+      return c;
+    };
 
     // Resolve the statutory employer headcount once for the run. It is
     // deliberately independent of this run's roster: Nebraska's special
@@ -3569,6 +3573,8 @@ export async function commitPayRun(input: {
     if (run.doc_status !== "draft" && run.doc_status !== "approved") {
       throw new PayrollError("pay run document is not editable");
     }
+    await lockAndCheckPayrollRunPopulation(tx, orgId, documentId, input.allowedSubsidiaryIds);
+
     // Fence the commit on the EMPLOYEE-AND-TAX-YEAR identity every racing run
     // must hold (see `employeeTaxYearFenceKey`) — not on this run's own row,
     // which a concurrent same-year run never contends on. Taken BEFORE the

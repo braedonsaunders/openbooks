@@ -1,8 +1,9 @@
+import { lockAndCheckPayrollRunPopulation } from "@openbooks/engine/src/payroll-scope.ts";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { calculatePayRun, commitPayRun, PayrollError, previewPayRunGl, payrollSubsidiaryInScope } from '@openbooks/engine/src/payroll-run.ts'
+import { calculatePayRun, commitPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
 import { recordPayRunPayment } from '@openbooks/engine/src/payroll-payment.ts'
 import { assertPayRunNotStale } from '@openbooks/engine/src/payroll-readiness.ts'
 import {
@@ -56,20 +57,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const denied = guardSubsidiaryScope(gate, run.subsidiaryId as string | null | undefined)
     if (denied) return denied
 
-    if (gate.allowedSubsidiaryIds != null) {
-      // Header totals and the detail form describe the whole run. Keep the run
-      // and employee ownership stable, and refuse a partially visible population.
-      const participants = (await tx.execute<{ subsidiary_id: string | null }>(sql`
-        select p.subsidiary_id from parties p
-         where p.org_id=${orgId} and (exists (
-           select 1 from pay_stubs st where st.org_id=p.org_id and st.employee_party_id=p.id
-             and st.pay_run_document_id=${id}) or exists (
-           select 1 from pay_run_adjustments a where a.org_id=p.org_id and a.employee_party_id=p.id
-             and a.pay_run_document_id=${id}))
-         order by p.id for share`)).rows
-      if (participants.some((party) => !payrollSubsidiaryInScope(gate.allowedSubsidiaryIds, party.subsidiary_id))) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
-      }
+    try {
+      await lockAndCheckPayrollRunPopulation(tx, orgId, id, gate.allowedSubsidiaryIds)
+    } catch (error) {
+      if (error instanceof PayrollError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      throw error
     }
 
     const [stubs, lines] = (await Promise.all([
@@ -151,6 +143,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const result = await calculatePayRun({
         orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
         dryRun: body.action === 'dry-run',
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
       return NextResponse.json({ ok: true, ...result })
     }
@@ -316,9 +309,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // stale tab or a scripted call cannot commit a calculation its inputs
       // outlived. (The wizard reads the same `payRunStaleness`; one source of
       // truth, two consumers — render and refuse.)
-      await assertPayRunNotStale(gate.user.orgId, id)
+      await assertPayRunNotStale(gate.user.orgId, id, db, gate.allowedSubsidiaryIds)
       await assertPayRunApprovalReleased(gate.user.orgId, id)
-      const result = await commitPayRun({ orgId: gate.user.orgId, documentId: id, actorId: gate.user.id })
+      const result = await commitPayRun({ orgId: gate.user.orgId, documentId: id, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
       return NextResponse.json({ ok: true, ...result })
     }
   } catch (e) {

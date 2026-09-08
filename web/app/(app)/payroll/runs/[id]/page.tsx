@@ -1,4 +1,5 @@
-import { payrollRunPopulationScopeFilter, payrollSubsidiaryScopeFilter } from "@openbooks/engine/src/payroll-scope.ts";
+import { PayrollError } from "@openbooks/engine/src/payroll-error.ts";
+import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryScopeFilter } from "@openbooks/engine/src/payroll-scope.ts";
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
@@ -64,16 +65,11 @@ export default async function PayRunPage({
     const run = runs.rows[0]
     if (!run) notFound()
 
-    if (authz.allowedSubsidiaryIds != null) {
-      // Keep the existing snapshot's employee ownership stable while assembling
-      // the wizard. The run lock also serializes recalculation and adjustments.
-      await db.execute(sql`select p.id from parties p where p.org_id=${orgId} and p.id in (
-        select employee_party_id from pay_stubs where org_id=${orgId} and pay_run_document_id=${id}
-        union select employee_party_id from pay_run_adjustments where org_id=${orgId} and pay_run_document_id=${id}
-      ) order by p.id for share`)
-      const visible = (await db.execute(sql`select 1 from pay_runs r where r.org_id=${orgId} and r.document_id=${id}
-        ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, authz.allowedSubsidiaryIds)}`)).rows[0]
-      if (!visible) notFound()
+    try {
+      await lockAndCheckPayrollRunPopulation(db, orgId, id, authz.allowedSubsidiaryIds)
+    } catch (error) {
+      if (error instanceof PayrollError) notFound()
+      throw error
     }
 
     // The roster resolves each employee's pay rail with the same ladder the
