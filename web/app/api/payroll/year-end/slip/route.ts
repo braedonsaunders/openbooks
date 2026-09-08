@@ -41,10 +41,10 @@ export async function GET(req: Request) {
   const section = (await orgYearEndFilings(gate.user.orgId, year))
     .find((candidate) => candidate.country === country && candidate.key === filingKey)
   if (section) {
-    const populationDenied = await guardPayrollFilingData(gate, country, filingKey, section.data)
+    const populationDenied = await guardPayrollFilingData(gate, country, filingKey, section.data, year)
     if (populationDenied) return populationDenied
   }
-  const denied = await guardPayrollFilingRowIds(gate, country, filingKey, [row])
+  const denied = await guardPayrollFilingRowIds(gate, country, filingKey, [row], year)
   if (denied) return denied
   try {
     const filing = yearEndFiling(

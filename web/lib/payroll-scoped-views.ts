@@ -45,7 +45,7 @@ export async function scopedYearEndFilings(
   taxYear: number,
 ): Promise<YearEndFilingSection[] | null> {
   const filings = await orgYearEndFilings(gate.user.orgId, taxYear)
-  const denied = await guardPayrollYearEndFilings(gate, filings)
+  const denied = await guardPayrollYearEndFilings(gate, filings, taxYear)
   return denied ? null : filings
 }
 

@@ -38,14 +38,14 @@ export async function GET(req: Request) {
      where org_id = ${gate.user.orgId} and submission_id = ${id}
   `)).rows
   const denied = await guardPayrollFilingRowIds(
-    gate, submission.country, submission.filing, rows.map((row) => row.rowId),
+    gate, submission.country, submission.filing, rows.map((row) => row.rowId), submission.taxYear,
   )
   if (denied) return denied
   if (rows.length === 0) {
     const section = (await orgYearEndFilings(gate.user.orgId, submission.taxYear))
       .find((candidate) => candidate.country === submission.country && candidate.key === submission.filing)
     if (section) {
-      const populationDenied = await guardPayrollFilingData(gate, submission.country, submission.filing, section.data)
+      const populationDenied = await guardPayrollFilingData(gate, submission.country, submission.filing, section.data, submission.taxYear)
       if (populationDenied) return populationDenied
     }
   }

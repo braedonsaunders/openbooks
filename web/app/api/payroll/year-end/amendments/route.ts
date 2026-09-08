@@ -52,13 +52,13 @@ export async function GET(req: Request) {
      where s.org_id = ${gate.user.orgId}
        and s.country = ${country} and s.filing_key = ${filing} and s.tax_year = ${year}
   `)).rows
-  const denied = await guardPayrollFilingRowIds(gate, country, filing, rows.map((row) => row.rowId))
+  const denied = await guardPayrollFilingRowIds(gate, country, filing, rows.map((row) => row.rowId), year)
   if (denied) return denied
   if (rows.length === 0) {
     const section = (await orgYearEndFilings(gate.user.orgId, year))
       .find((candidate) => candidate.country === country && candidate.key === filing)
     if (section) {
-      const populationDenied = await guardPayrollFilingData(gate, country, filing, section.data)
+      const populationDenied = await guardPayrollFilingData(gate, country, filing, section.data, year)
       if (populationDenied) return populationDenied
     }
   }
@@ -142,13 +142,13 @@ export async function POST(req: Request) {
   const country = body.country ?? ''
   const filing = body.filing ?? ''
   if (Array.isArray(body.rowIds)) {
-    const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds.map(String))
+    const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds.map(String), year)
     if (denied) return denied
   } else {
     const section = (await orgYearEndFilings(gate.user.orgId, year))
       .find((candidate) => candidate.country === country && candidate.key === filing)
     if (section) {
-      const denied = await guardPayrollFilingData(gate, country, filing, section.data)
+      const denied = await guardPayrollFilingData(gate, country, filing, section.data, year)
       if (denied) return denied
     }
   }

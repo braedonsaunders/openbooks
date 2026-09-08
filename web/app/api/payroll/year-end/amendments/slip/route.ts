@@ -41,7 +41,7 @@ export async function GET(req: Request) {
   }
   const country = url.searchParams.get('country') ?? ''
   const filing = url.searchParams.get('filing') ?? ''
-  const denied = await guardPayrollFilingRowIds(gate, country, filing, [row])
+  const denied = await guardPayrollFilingRowIds(gate, country, filing, [row], year)
   if (denied) return denied
   try {
     const slip = await filingCorrectionSlip(

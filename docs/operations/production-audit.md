@@ -3043,3 +3043,33 @@ passed. Evidence: `audit-payroll-filing-history-scope-2026-09-07/uuid-before.log
 `uuid-regression-before.log`, `uuid-focused.log`, `uuid-typecheck.log`, and
 `uuid-lint.log`. The historical employee-transfer filing defect remains a
 separate open audit item.
+
+## Annual filing ownership after employee transfer — 2026-09-07
+
+Annual T4/W-2/RL-1 access previously followed the employee's current party
+subsidiary. The original employer therefore lost its historical filing
+population after a transfer. The shared population and amendment-row guards
+now check original pay-run documents for the requested country and tax year;
+every HTTP route and the shared page/tool loader supplies that year. Voided
+pay runs remain ownership evidence for stored historical artifacts.
+
+The guard checks the employee's whole year because annual caps and opening
+carry-in can affect multiple account/province rows. Filing-account checks
+remain additional. Opening balances lack historical employer stamps, so
+nonzero carry-in still requires the current employee boundary in addition to
+any pay-run ownership. This deliberately does not invent an employer for
+unstamped imported money. ROE's current-employment, cross-year source scope
+remains a separate audit item.
+
+The new regression failed before the correction. All 61 focused checks passed
+(19,438.270375 ms, zero failures/skips), including original/new employer access,
+amendment rows, empty/unrestricted scopes, tax-year separation and opening-only
+and mixed opening/pay-run evidence. Web typecheck and changed-file lint passed.
+Evidence: `audit-payroll-filing-history-scope-2026-09-07/history-regression-before.log`,
+`history-focused.log`, `history-typecheck.log`, and `history-lint.log`.
+
+The full unit gate also passed 3,210/3,210 (148,866.245458 ms, zero failures or
+skips), and the locked-dependency production build passed (`history-unit.log`
+and `history-build.log`). Follow-up review found that the remittance page/tool
+loader and GET route omit the engine's subsidiary argument; that caller gap is
+a separate confirmed repair item, despite the engine-level filtering passing.

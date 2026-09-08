@@ -103,16 +103,17 @@ export async function guardPayrollFilingData(
   country: string,
   filing: string,
   data: PayrollFilingData,
+  taxYear: number,
 ): Promise<Response | null> {
   if (gate.allowedSubsidiaryIds === null) return null
   const parsed = data.rows.map((row) => parsePayrollRow(country, filing, String(row[data.rowKey] ?? '')))
   if (parsed.some((row) => row === null)) return notFound()
   const employees = parsed.flatMap((row) => row!.employees)
   const accounts = parsed.flatMap((row) => row!.accounts)
-  const employeeDenied = await guardPayrollEmployees(gate, employees)
+  const employeeDenied = await guardPayrollFilingEmployees(gate, country, filing, employees, taxYear)
   if (employeeDenied) return employeeDenied
   // Employee-keyed filings (ROE/RL-1 and unassigned T4/W-2 rows) carry no
-  // account id; their party guard above is the complete scope decision. An
+  // account id; their employee-source guard is the scope decision. An
   // aggregate account-only row (for example an unassigned Form 941) has no
   // employee dimension and therefore follows the explicit root convention.
   if (employees.length > 0 && accounts.length === 0) return null
@@ -125,16 +126,70 @@ export async function guardPayrollFilingRowIds(
   country: string,
   filing: string,
   rowIds: readonly string[],
+  taxYear: number,
 ): Promise<Response | null> {
   if (gate.allowedSubsidiaryIds === null) return null
   const parsed = rowIds.map((rowId) => parsePayrollRow(country, filing, rowId))
   if (parsed.some((row) => row === null)) return notFound()
-  const employeeDenied = await guardPayrollEmployees(gate, parsed.flatMap((row) => row!.employees))
+  const employeeDenied = await guardPayrollFilingEmployees(gate, country, filing, parsed.flatMap((row) => row!.employees), taxYear)
   if (employeeDenied) return employeeDenied
   const employees = parsed.flatMap((row) => row!.employees)
   const accounts = parsed.flatMap((row) => row!.accounts)
   if (employees.length > 0 && accounts.length === 0) return null
   return guardPayrollFilingAccounts(gate, accounts, true)
+}
+
+/**
+ * Annual slips derive ownership from original pay-run documents in the requested
+ * year. Check the whole employee/year: annual caps and opening carry-in can
+ * affect several account/province rows. A transfer must not move that evidence.
+ * ROE uses current employment details and an unbounded recent-period window;
+ * it keeps its separate current-employee boundary here.
+ */
+async function guardPayrollFilingEmployees(
+  gate: Authz,
+  country: string,
+  filing: string,
+  employeeIds: readonly string[],
+  taxYear: number,
+): Promise<Response | null> {
+  if (!Number.isInteger(taxYear) || taxYear < 2020 || taxYear > 2100) return notFound()
+  const annual = (country === 'CA' && (filing === 't4' || filing === 'rl1'))
+    || (country === 'US' && filing === 'w2')
+  if (!annual) return guardPayrollEmployees(gate, employeeIds)
+  const ids = [...new Set(employeeIds)]
+  if (ids.length === 0) return null
+  const rows = (await db.execute<{ employeeId: string; subsidiaryId: string | null }>(sql`
+    select distinct s.employee_party_id as "employeeId", d.subsidiary_id as "subsidiaryId"
+      from pay_stubs s
+      join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
+      left join documents d on d.org_id = r.org_id and d.id = r.document_id
+     where s.org_id = ${gate.user.orgId} and s.tax_year = ${taxYear}
+       and s.country = ${country} and r.run_status in ('committed', 'voided')
+       and s.employee_party_id in (${sql.join(ids.map(id => sql`${id}`), sql`, `)})
+  `)).rows
+  for (const row of rows) {
+    const denied = guardSubsidiaryScope(gate, row.subsidiaryId)
+    if (denied) return denied
+  }
+  // Opening balances have no historical legal-entity stamp. Preserve their
+  // current employee boundary as an ADDITIONAL check, never infer an employer
+  // for them from an unrelated pay run. Rows without any historical sources
+  // retain that same boundary (including opening-only slips).
+  const openings = (await db.execute<{ employeeId: string }>(sql`
+    select employee_party_id as "employeeId" from payroll_opening_balances
+     where org_id = ${gate.user.orgId} and tax_year = ${taxYear}
+       and employee_party_id in (${sql.join(ids.map(id => sql`${id}`), sql`, `)})
+       and (coalesce(pensionable_ytd, 0) <> 0 or coalesce(insurable_ytd, 0) <> 0
+         or coalesce(cpp_ytd, 0) <> 0 or coalesce(cpp2_ytd, 0) <> 0
+         or coalesce(ei_ytd, 0) <> 0 or coalesce(qpip_ytd, 0) <> 0
+         or coalesce(taxable_ytd, 0) <> 0 or coalesce(tax_ytd, 0) <> 0)
+  `)).rows
+  const historical = new Set(rows.map(row => row.employeeId))
+  return guardPayrollEmployees(gate, [
+    ...ids.filter(id => !historical.has(id)),
+    ...openings.map(row => row.employeeId),
+  ])
 }
 
 /** Parse the built-in filing row keys. Unknown pack row shapes fail closed. */
@@ -275,10 +330,11 @@ export async function guardRemittancePeriod(
 export async function guardPayrollYearEndFilings(
   gate: Authz,
   filings: readonly { country: string; key: string; data: PayrollFilingData }[],
+  taxYear: number,
 ): Promise<Response | null> {
   if (gate.allowedSubsidiaryIds === null) return null
   for (const filing of filings) {
-    const denied = await guardPayrollFilingData(gate, filing.country, filing.key, filing.data)
+    const denied = await guardPayrollFilingData(gate, filing.country, filing.key, filing.data, taxYear)
     if (denied) return denied
   }
   return null
