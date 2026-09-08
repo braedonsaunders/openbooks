@@ -688,11 +688,13 @@ for (const boundary of [
               )
             assert.equal((await saveForecast(req())).status, 404)
             await restrict(org.orgId, null)
-            assert.equal((await saveForecast(req())).status, 201)
-            await db.execute(
-              sql`insert into crm_forecast_snapshots(org_id,owner_user_id,period_start,period_end,snapshot_kind,currency,pipeline_amount,weighted_amount,worst_case_amount,most_likely_amount,upside_amount,closed_amount,created_by,updated_by) values (${org.orgId},${actor},${org.date},${org.date},'calculated','CAD','0','0','0','0','0','0',${actor},${actor})`,
-            )
-            assert.equal((await (await read()).json()).snapshots.length, 1)
+            const saved = await saveForecast(req())
+            assert.equal(saved.status, 201)
+            const { ids } = await saved.json()
+            assert.equal(ids.length, 1, 'empty forecasts still persist their evidence')
+            const snapshots = (await (await read()).json()).snapshots
+            assert.equal(snapshots.length, 1)
+            assert.equal(snapshots[0].id, ids[0])
             await restrict(org.orgId, [org.subsidiaryId])
             assert.deepEqual((await (await read()).json()).snapshots, [])
           } else if (boundary === 'forecast actuals') {

@@ -95,7 +95,10 @@ async function fixture(action: (org: Fixture, book: string, authz: import('./aut
   }
 }
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
-const params = (org: Fixture, book?: string) => ({ period: 'custom', from: org.date, to: org.date, ...(book === undefined ? {} : { book }) })
+// The schema-owner fixture connection bypasses RLS and pooled runs contain
+// several scratch tenants. Select this fixture's entity explicitly so this
+// accounting-book test does not depend on another tenant's picker ordering.
+const params = (org: Fixture, book?: string) => ({ period: 'custom', from: org.date, to: org.date, subsidiary: org.subsidiaryId, ...(book === undefined ? {} : { book }) })
 const request = (url: string) => new Request('http://test.local' + url)
 
 for (const kind of ['pnl', 'balance-sheet'] as const) {
