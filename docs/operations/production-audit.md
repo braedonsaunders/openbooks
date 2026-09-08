@@ -3295,3 +3295,32 @@ build passed. The full unit gate passed 3,210/3,210 tests (117,550.331875 ms,
 no skips), covering the latest recognition, depreciation and FX changes too.
 Evidence: `audit-lease-concurrent-posting-2026-09-08/before.log`,
 `focused-final.log`, `typecheck.log`, `lint.log`, `unit.log`, and `build.log`.
+
+## Lease journal legal-entity controls — 2026-09-08
+
+A real commencement posted 2,970.2481 to an account restricted to a different
+legal entity. Both commencement and scheduled payments also accepted a location
+owned by another entity. An independent pre-fix run posted into an inactive
+branch. The database guards cover account activity, summary status and currency,
+but these journal paths omitted the shared subsidiary policy.
+
+Lease posting now uses `validateSubsidiaryRestrictions` for accounts, native
+dimensions and entity activity. It holds the subsidiary hierarchy, referenced
+accounts/dimensions and posting context while validating and writing. Book and
+period context is read through the posting transaction. Refusals roll back the
+whole unit; legitimate descendant access remains supported.
+
+All 37 focused lease, scope and posting-policy checks passed (5,893.236708 ms,
+no failures/skips). They cover commencement/payment refusals, successful retry
+after correction, allowed descendant accounts and a concurrent account-scope
+edit. The inactive-entity fixture uses a branch: its initial root variant was
+correctly rejected by the existing tree guard and was corrected before the
+final run. Workspace typechecks and locked-dependency production build passed.
+Full lint remains at 711 warnings/zero errors; explicit-any remains 379. The
+locked production dependency audit reported zero vulnerabilities, and the
+container security check passed.
+
+Evidence: `audit-lease-posting-scope-2026-09-08/before.log`,
+`inactive-before.log`, `regression-before.log`, `focused-final.log`,
+`typecheck.log`, `lint-full.log`, `explicit-any.log`, `build.log`,
+`dependencies.json`, and `container-security.log`.

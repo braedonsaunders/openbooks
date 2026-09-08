@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
+import { loadSubsidiaryContext, validateSubsidiaryRestrictions, uuidArray } from "./subsidiaries.ts";
 import { add, cmp, fromUnits, isZero, neg, normalizeDecimal, normalizeMoney, sum, toUnits } from "./money.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { apportion } from "./revenue-recognition.ts";
@@ -516,11 +517,11 @@ async function leaseRow(orgId: string, leaseId: string, runner: SqlExecutor): Pr
   return row;
 }
 
-async function postingContext(orgId: string, subsidiaryId: string, date: string) {
-  const r = (await db.execute<{ book_id: string | null; period_id: string | null; currency: string | null }>(sql`
-    select (select id from accounting_books where org_id = ${orgId} and is_primary limit 1) as book_id,
+async function postingContext(runner: SqlExecutor, orgId: string, subsidiaryId: string, date: string) {
+  const r = (await runner.execute<{ book_id: string | null; period_id: string | null; currency: string | null }>(sql`
+    select (select id from accounting_books where org_id = ${orgId} and is_primary limit 1 for share) as book_id,
            (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
-              and starts_on <= ${date} and ends_on >= ${date} limit 1) as period_id,
+              and starts_on <= ${date} and ends_on >= ${date} limit 1 for share) as period_id,
            (select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}) as currency
   `));
   const row = r.rows[0];
@@ -544,7 +545,35 @@ async function postLeaseEntry(
 ): Promise<string> {
   const residual = args.lines.reduce((a, l) => add(a, l.amount), "0");
   if (!isZero(residual)) throw new LeaseError(`lease entry does not balance (${residual})`);
-  const ctx = await postingContext(args.orgId, args.lease.subsidiary_id, args.date);
+  // Apply the same native legal-entity policy as other posting workflows. Hold
+  // the hierarchy and referenced configuration throughout validation and writes.
+  await tx.execute(sql`select id from subsidiaries where org_id=${args.orgId} order by id for share`);
+  const accountIds = [...new Set(args.lines.map((line) => line.accountId))];
+  await tx.execute(sql`select id from accounts where org_id=${args.orgId}
+    and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+  const dimensions = [
+    { table: "departments", id: args.lease.department_id },
+    { table: "projects", id: args.lease.project_id },
+    { table: "locations", id: args.lease.location_id },
+  ] as const;
+  for (const dimension of dimensions) {
+    if (!dimension.id) continue;
+    await tx.execute(sql`select id from ${sql.raw(dimension.table)}
+      where org_id=${args.orgId} and id=${dimension.id} for share`);
+  }
+  await validateSubsidiaryRestrictions(tx, {
+    orgId: args.orgId,
+    ctx: await loadSubsidiaryContext(tx, args.orgId),
+    docSubsidiaryId: args.lease.subsidiary_id,
+    lines: args.lines.map((line) => ({
+      ...line,
+      subsidiaryId: args.lease.subsidiary_id,
+      departmentId: args.lease.department_id,
+      projectId: args.lease.project_id,
+      locationId: args.lease.location_id,
+    })),
+  });
+  const ctx = await postingContext(tx, args.orgId, args.lease.subsidiary_id, args.date);
   const entry = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)

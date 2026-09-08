@@ -229,3 +229,102 @@ test("concurrent lease schedule runners claim a due payment once", { skip: !DB }
     assert.equal(posted, 1);
   } finally { await dropScratchOrg(org.orgId); }
 });
+
+for (const phase of ["commencement", "payment"] as const) {
+  for (const restriction of ["account", "location", "inactive entity", "allowed descendant"] as const) {
+    test(`lease ${phase} enforces ${restriction} posting scope`, { skip: !DB }, async () => {
+      const org = await createScratchOrg();
+      try {
+        const accounts = await seedLeaseAccounts(org);
+        const branchId = randomUUID();
+        await db.execute(sql`
+          insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+          values(${branchId},${org.orgId},${org.subsidiaryId},'Lease branch','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`);
+        const allowed = restriction === "allowed descendant";
+        const subsidiaryId = allowed || restriction === "inactive entity" ? branchId : org.subsidiaryId;
+        const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+          subsidiaryId, leaseNumber: "LEASE-SCOPE", commencementOn: "2026-07-01",
+          termPeriods: 3, paymentFrequency: "monthly", paymentAmount: "1000",
+          annualDiscountRatePercent: "6", classificationInputs: { transfersOwnership: true },
+          accounts, locationId: org.locationId,
+        });
+        if (phase === "payment") await commenceLease(org.orgId, leaseId, null);
+        const accountId = phase === "commencement" ? accounts.rouAsset : accounts.payment;
+        if (restriction === "account" || allowed) {
+          await db.execute(sql`update accounts set subsidiary_id=${allowed ? org.subsidiaryId : branchId},
+            subsidiary_include_children=${allowed} where org_id=${org.orgId} and id=${accountId}`);
+        } else if (restriction === "location") {
+          await db.execute(sql`update locations set subsidiary_id=${branchId},subsidiary_include_children=false
+            where org_id=${org.orgId} and id=${org.locationId}`);
+        } else {
+          await db.execute(sql`update subsidiaries set is_active=false where org_id=${org.orgId} and id=${subsidiaryId}`);
+        }
+        const run = () => phase === "commencement"
+          ? commenceLease(org.orgId, leaseId, null)
+          : postDueLeaseSchedules(org.orgId, "2026-07-31", null);
+        if (allowed) {
+          await run();
+        } else {
+          await assert.rejects(run, /restricted to another subsidiary|inactive/);
+          const count = (await db.execute<{ n: number }>(sql`
+            select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='lease'`)).rows[0]!.n;
+          assert.equal(count, phase === "commencement" ? 0 : 1, "refusal leaves no partial journal");
+          await db.execute(sql`update accounts set subsidiary_id=null where org_id=${org.orgId} and id=${accountId}`);
+          await db.execute(sql`update locations set subsidiary_id=null where org_id=${org.orgId} and id=${org.locationId}`);
+          await db.execute(sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${subsidiaryId}`);
+          await run();
+        }
+        const lease = (await db.execute<{ status: string }>(sql`
+          select status from lease_agreements where org_id=${org.orgId} and id=${leaseId}`)).rows[0]!;
+        assert.equal(lease.status, "active");
+      } finally { await dropScratchOrg(org.orgId); }
+    });
+  }
+}
+
+test("lease posting rechecks account scope after a concurrent restriction edit commits", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const writer = await pool.connect();
+  let pending: Promise<PromiseSettledResult<Awaited<ReturnType<typeof commenceLease>>>> | undefined;
+  try {
+    const accounts = await seedLeaseAccounts(org);
+    const branchId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values(${branchId},${org.orgId},${org.subsidiaryId},'Restriction owner','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`);
+    const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+      subsidiaryId: org.subsidiaryId, leaseNumber: "LEASE-SCOPE-RACE", commencementOn: "2026-07-01",
+      termPeriods: 3, paymentFrequency: "monthly", paymentAmount: "1000", annualDiscountRatePercent: "6",
+      classificationInputs: { transfersOwnership: true }, accounts,
+    });
+    await writer.query("begin");
+    await writer.query("select set_config('app.bypass_rls','on',true)");
+    await writer.query("update accounts set subsidiary_id=$1,subsidiary_include_children=false where org_id=$2 and id=$3", [branchId, org.orgId, accounts.rouAsset]);
+    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+    pending = commenceLease(org.orgId, leaseId, null).then(
+      (value) => ({ status: "fulfilled", value }),
+      (reason: unknown) => ({ status: "rejected", reason }),
+    );
+    let blocked = false;
+    for (let attempt = 0; attempt < 400; attempt++) {
+      const count = (await pool.query<{ n: number }>(
+        "select count(*)::int as n from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))", [pid],
+      )).rows[0]!.n;
+      if (count) { blocked = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(blocked, "posting must wait for the authoritative account edit");
+    await writer.query("commit");
+    const outcome = await pending;
+    assert.equal(outcome.status, "rejected");
+    if (outcome.status === "rejected") assert.match(String(outcome.reason), /restricted to another subsidiary/);
+    const count = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='lease'`)).rows[0]!.n;
+    assert.equal(count, 0);
+  } finally {
+    await writer.query("rollback");
+    writer.release();
+    await pending;
+    await dropScratchOrg(org.orgId);
+  }
+});
