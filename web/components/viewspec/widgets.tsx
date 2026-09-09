@@ -1,6 +1,6 @@
 import { Fragment, type ComponentProps, type ReactNode } from 'react'
 import type { WidgetRef } from '@openbooks/viewspec'
-import { resolvePath } from '@openbooks/viewspec'
+import { isFieldRef, resolvePath } from '@openbooks/viewspec'
 import { ExportMenu } from '../../app/(app)/reports/ExportMenu'
 import { SaveViewButton } from '../../app/(app)/reports/SaveViewButton'
 import { ScheduleReportButton } from '../../app/(app)/reports/ScheduleReportButton'
@@ -9,6 +9,7 @@ import { SubsidiarySwitcher } from '../subsidiary-switcher'
 import { ModuleHomeTabs, LiveDirectory } from '../module-home/ui'
 import { TrendChart } from '../../app/(app)/analytics/_ui/charts'
 import { ApPulse, AttentionList, CommitmentsSection, DirectorySection } from '../../app/(app)/purchasing/sections'
+import { JournalEntryHeading } from '../../app/(app)/reports/journal/sections'
 
 /**
  * Widget registry — the closed set of interactive components a spec may place
@@ -112,6 +113,17 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ),
 
   /* --- reports ----------------------------------------------------------- */
+  'journal-entry-heading': (props) => (
+    <JournalEntryHeading
+      entryId={str(props, 'entryId') ?? ''}
+      docKind={(props.docKind as string | null) ?? null}
+      docId={(props.docId as string | null) ?? null}
+      entryNumber={(props.entryNumber as string | null) ?? null}
+      date={str(props, 'date') ?? ''}
+      originLabel={str(props, 'originLabel') ?? ''}
+      memo={(props.memo as string | null) ?? null}
+    />
+  ),
   'save-view': () => <SaveViewButton />,
   'export-menu': (props) => (
     <ExportMenu kind={str(props, 'kind')} params={stringRecord(props, 'params')} baseHref={str(props, 'baseHref')} />
@@ -127,6 +139,23 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       />
     )
   },
+}
+
+/**
+ * Resolve any field references in a widget's props against the current scope.
+ * One level deep — enough for per-item widgets inside `repeat`, and shallow
+ * enough that it stays a lookup rather than a traversal language.
+ */
+export function resolveWidgetProps(
+  props: Record<string, unknown> | undefined,
+  scope: unknown,
+): Record<string, unknown> {
+  if (!props) return {}
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(props)) {
+    out[key] = isFieldRef(value) ? resolvePath(scope, value.$) : value
+  }
+  return out
 }
 
 export class UnknownWidgetError extends Error {
@@ -149,7 +178,7 @@ export function WidgetSlot({ widgets, scope }: { widgets: WidgetRef[] | undefine
         // A Fragment, not a wrapper element: the native pages place these
         // widgets as direct children of the slot, and any real element here
         // (even display:contents) is markup the native render does not have.
-        return <Fragment key={`${ref.widget}-${index}`}>{renderer(ref.props ?? {})}</Fragment>
+        return <Fragment key={`${ref.widget}-${index}`}>{renderer(resolveWidgetProps(ref.props, scope))}</Fragment>
       })}
     </>
   )
@@ -159,11 +188,13 @@ export function WidgetSlot({ widgets, scope }: { widgets: WidgetRef[] | undefine
 export function WidgetBlockView({
   name,
   props,
+  scope,
 }: {
   name: string
   props: Record<string, unknown>
+  scope: unknown
 }) {
   const renderer = WIDGET_REGISTRY[name]
   if (!renderer) throw new UnknownWidgetError(`unknown widget: ${name}`)
-  return <>{renderer(props)}</>
+  return <>{renderer(resolveWidgetProps(props, scope))}</>
 }

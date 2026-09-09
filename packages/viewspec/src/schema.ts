@@ -42,6 +42,9 @@ const textCell = z.strictObject({
   fallback: value.optional(),
   tone: toneSchema.optional(),
   numeric: z.boolean().optional(),
+  prefix: z
+    .strictObject({ field: fieldRefSchema, className: z.string().max(200).optional() })
+    .optional(),
 })
 
 const moneyCell = z.strictObject({
@@ -100,7 +103,14 @@ const drillCell = z.strictObject({
   inner: leafCell,
 })
 
-export const cellSchema = z.union([leafCell, drillCell])
+/** Sibling of `drillCell`; wraps a leaf in a transaction drawer link. */
+const txnCell = z.strictObject({
+  kind: z.literal('txn'),
+  target: fieldRefSchema,
+  inner: leafCell,
+})
+
+export const cellSchema = z.union([leafCell, drillCell, txnCell])
 
 /* --------------------------------- widgets -------------------------------- */
 
@@ -228,6 +238,15 @@ export const blockSchema: z.ZodType<unknown> = z.lazy(() =>
       sub: value.optional(),
       tone: z.union([z.enum(['default', 'positive', 'warning', 'negative']), fieldRefSchema]).optional(),
       when: fieldRefSchema.optional(),
+    }),
+    z.strictObject({
+      kind: z.literal('repeat'),
+      items: fieldRefSchema,
+      itemKey: fieldRefSchema,
+      className: z.string().max(300).optional(),
+      itemClassName: z.string().max(300).optional(),
+      blocks: z.array(blockSchema).max(40),
+      empty: z.strictObject({ text: value, className: z.string().max(300).optional() }).optional(),
     }),
     z.strictObject({
       kind: z.literal('grid'),

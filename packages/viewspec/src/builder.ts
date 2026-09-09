@@ -22,6 +22,7 @@ import type {
   Column,
   DateCell,
   DrillCell,
+  TxnCell,
   FieldRef,
   FilterBarBlock,
   FilterBarControls,
@@ -46,6 +47,7 @@ import type {
   GridBlock,
   PanelBlock,
   StatTileBlock,
+  RepeatBlock,
 } from './types.ts'
 import { SPEC_VERSION } from './types.ts'
 
@@ -89,7 +91,10 @@ export const ROOT_SCOPE_KEY = '$root'
 
 /* ----------------------------- cell renderers ----------------------------- */
 
-export function text(f: FieldRef, opts: { fallback?: Value; tone?: Value<Tone>; numeric?: boolean } = {}): TextCell {
+export function text(
+  f: FieldRef,
+  opts: { fallback?: Value; tone?: Value<Tone>; numeric?: boolean; prefix?: TextCell['prefix'] } = {},
+): TextCell {
   return { kind: 'text', field: f, ...opts }
 }
 
@@ -121,6 +126,11 @@ export function recordLink(f: FieldRef, recordType: Value, id: FieldRef): Record
  *  type is `LeafCell`, so `drill(drill(...))` is a compile error. */
 export function drill(target: FieldRef, inner: LeafCell): DrillCell {
   return { kind: 'drill', target, inner }
+}
+
+/** Wrap a leaf cell in a transaction drawer link. Cannot nest, like `drill`. */
+export function txn(target: FieldRef, inner: LeafCell): TxnCell {
+  return { kind: 'txn', target, inner }
 }
 
 /* --------------------------------- widgets -------------------------------- */
@@ -197,6 +207,10 @@ export function panel(spec: Omit<PanelBlock, 'kind'>): PanelBlock {
 
 export function statTile(spec: Omit<StatTileBlock, 'kind'>): StatTileBlock {
   return { kind: 'stat-tile', ...spec }
+}
+
+export function repeat(spec: Omit<RepeatBlock, 'kind'>): RepeatBlock {
+  return { kind: 'repeat', ...spec }
 }
 
 /* ---------------------------------- page ---------------------------------- */
