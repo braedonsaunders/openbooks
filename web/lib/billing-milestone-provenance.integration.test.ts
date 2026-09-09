@@ -24,6 +24,9 @@ test('milestone billing stamps provenance only on the schedule rows it billed', 
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
+      const unbilledReceivable = randomUUID()
+      await db.execute(sql`insert into accounts(id,org_id,number,name,type,is_summary,is_active) values (${unbilledReceivable},${org.orgId},'1150','Unbilled Receivable','asset_current_other',false,true)`)
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,unbilledReceivable}', to_jsonb(${unbilledReceivable}::text), true) where id = ${org.orgId}`)
       const actor = (await seedFlowActors(org.orgId)).adminId
       const fixed = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'fixed_price')!
       const typeId = randomUUID(), project = randomUUID()

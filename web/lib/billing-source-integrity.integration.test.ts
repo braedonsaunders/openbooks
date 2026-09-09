@@ -24,6 +24,7 @@ for(const scenario of ['hidden cost','concurrent time','project move']) {
   const org=await createScratchOrg();
   let release=()=>{};let holder:Promise<unknown>|undefined;let runs:Promise<unknown>[]=[];
   try{
+   await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`);
    const actor=await createScratchUser(org.orgId,'Billing controller','reviewer');
    const project=randomUUID();
    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active) values (${project},${org.orgId},${org.subsidiaryId},'SOURCE','Source controls',${org.customerId},'active',true)`);
@@ -67,7 +68,7 @@ for(const scenario of ['hidden cost','concurrent time','project move']) {
     const outcomes=Promise.allSettled(runs);
     const deadline=Date.now()+10000;let blocked=0;
     while(Date.now()<deadline){
-     blocked=(await db.execute<{n:number}>(sql`select count(*)::int as n from pg_stat_activity where datname=current_database() and pid<>pg_backend_pid() and wait_event_type='Lock' and (query ilike '%time_entries%' or query ilike '%pg_advisory_xact_lock%' or query ilike '%insert into document_lines%')`)).rows[0]!.n;
+     blocked=(await db.execute<{n:number}>(sql`select count(*)::int as n from pg_stat_activity where datname=current_database() and pid<>pg_backend_pid() and wait_event_type='Lock' and (query ilike '%time_entries%' or query ilike '%from billing_requests br%' or query ilike '%pg_advisory_xact_lock%' or query ilike '%insert into document_lines%')`)).rows[0]!.n;
      if(blocked>=2)break;await new Promise(r=>setTimeout(r,25));
     }
     assert.ok(blocked>=2,'both generators reached the controlled contention point');

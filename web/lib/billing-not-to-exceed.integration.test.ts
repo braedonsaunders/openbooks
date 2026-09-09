@@ -25,6 +25,7 @@ test('not-to-exceed counts draft invoices and nets credits under the cap', {skip
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
       const actor = (await seedFlowActors(org.orgId)).adminId
       const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
       const typeId = randomUUID(), project = randomUUID()

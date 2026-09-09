@@ -25,6 +25,7 @@ for(const action of ['cancel','invoice','backup']) for(const scope of ['empty','
   test(`billing request scope: ${action} ${scope}`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
     const org=await createScratchOrg();
     try{
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`);
       const actor=await createScratchUser(org.orgId,'Billing controller','reviewer');
       await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
       session.user={id:actor,orgId:org.orgId,name:'Billing controller',email:'billing@scratch.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor};

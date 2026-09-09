@@ -4,7 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from './exact-decimal'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
-import { applyRollup, resolveInvoicingProfile } from './invoice-rollup'
+import { addInvoiceQuantities, applyRollup, resolveInvoicingProfile } from './invoice-rollup'
 import { roundCurrencyMoney } from '@openbooks/engine/src/currencies.ts'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { projectContractCapacityUsed } from './wip-billing'
@@ -32,7 +32,8 @@ function timeKindOf(name: unknown): 'regular' | 'overtime' | 'double_time' | nul
 }
 import { recognitionAccounts } from '@openbooks/engine/src/project-recognition.ts'
 import { loadProjectType } from './project-type'
-import { nextDocumentNumber } from './bills'
+import { computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from './bills'
+import { persistTaxQuote } from '@openbooks/engine/src/tax-rate-providers.ts'
 import { featureEnabled, type FeatureState } from './features'
 
 /**
@@ -97,7 +98,7 @@ export async function generateInvoiceFromBillingRequest(
   return db.transaction(async (tx) => {
     const projectGate = (await tx.execute<{ features: FeatureState | null }>(sql`
       select settings->'features' as features
-        from orgs where id = ${orgId}
+        from orgs where id = ${orgId} for share
     `))
     const featureState = projectGate.rows[0]?.features ?? {}
     if (!featureEnabled(featureState, 'projects')) throw new BillingError('Projects feature is disabled')
@@ -107,7 +108,7 @@ export async function generateInvoiceFromBillingRequest(
         join projects p on p.id = br.project_id and p.org_id = br.org_id
        where br.id = ${requestId} and br.org_id = ${orgId}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-       for update of br for share of p
+       for update of br, p
     `))
     const req = reqRes.rows[0]
     if (!req) throw new BillingError('Billing request not found')
@@ -167,21 +168,17 @@ export async function generateInvoiceFromBillingRequest(
       throw new BillingError('The billing currency has unsupported minor-unit precision')
     }
 
-    // A deterministic fallback income account (lowest number) for lines whose
-    // item has no income account, and for draw-amount invoices.
-    const defIncome = (await tx.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${orgId} and type in ('income', 'income_other') and is_active
-       order by number nulls last limit 1
-    `))
-    const defaultIncomeId = defIncome.rows[0]?.id ?? null
-
-    // Fixed-price with revenue recognition configured: the invoice must relieve
-    // the Unbilled receivable (contract asset) rather than credit income — the
-    // revenue was already recognized over-time, so crediting income again would
-    // double-count. Inert (falls back to income) unless the account is mapped.
-    const recog = await recognitionAccounts(orgId)
+    // Reuse the authoritative Company control accounts. A chart's sort order
+    // cannot choose the accounting policy for an unconfigured item or draw.
+    const recog = await recognitionAccounts(orgId, tx)
+    const defaultIncomeId = recog.projectRevenue ?? null
+    // A recognition policy must relieve its contract asset. Missing mapping
+    // cannot silently credit revenue a second time when an invoice is issued.
+    if (invoicing.revenueAccount === 'unbilled_receivable' && !recog.unbilledReceivable) {
+      throw new BillingError('Configure the Unbilled Receivable control account in Company Settings before billing this project')
+    }
     const fixedPriceCreditAcct =
-      invoicing.revenueAccount === 'unbilled_receivable' && recog.unbilledReceivable ? recog.unbilledReceivable : defaultIncomeId
+      invoicing.revenueAccount === 'unbilled_receivable' ? recog.unbilledReceivable! : defaultIncomeId
 
     // -- build the invoice lines ------------------------------------------
     interface BuiltLine {
@@ -415,8 +412,8 @@ export async function generateInvoiceFromBillingRequest(
           left join items i on i.id = dl.item_id and i.org_id = dl.org_id
           left join lateral (
             select jsonb_agg(jsonb_build_object(
-              'unitCode', c.unit_code, 'unitName', c.unit_name, 'quantity', c.quantity,
-              'rate', c.rate, 'amount', c.amount
+              'unitCode', c.unit_code, 'unitName', c.unit_name, 'quantity', c.quantity::text,
+              'rate', c.rate::text, 'amount', c.amount::text
             ) order by c.sequence) as components
               from charge_rate_components c
              where c.document_line_id = dl.id and c.org_id = dl.org_id and c.role = 'bill'
@@ -467,6 +464,11 @@ export async function generateInvoiceFromBillingRequest(
             unit: component.unitName ?? component.unitCode ?? cl.unit,
             equipmentUnitId: cl.equipment_unit_id,
             rateVersionId: cl.rate_version_id,
+            itemKind: cl.item_kind ?? null,
+            itemCategory: cl.item_category ?? null,
+            sourceKind: cl.kind ?? null,
+            departmentId: cl.department_id ?? null,
+            workedOn: cl.document_date ? String(cl.document_date).slice(0, 10) : null,
           }))
         } else {
           built.push({
@@ -496,33 +498,43 @@ export async function generateInvoiceFromBillingRequest(
         }
       }
 
-      // -- generalized invoice shaping (all config-driven; empty by default) ---
-      // (1) Lump-sum markup: bill the cost lines at base and add ONE markup line
-      //     for the aggregate markup, instead of embedding it in each line.
-      if (invoicing.markupPresentation === 'lump_sum') {
-        let markupTotal = '0'
-        for (const l of built) {
-          if (l.baseAmount == null || l.isLabor) continue
-          const delta = add(l.amount, negate(l.baseAmount))
-          if (cmp(delta, '0') > 0) {
-            markupTotal = add(markupTotal, delta)
-            l.amount = l.baseAmount
-            l.unitPrice = l.baseAmount
-            l.quantity = '1'
-          }
+    }
+
+    // Source charges are rounded before either presentation pass. Otherwise
+    // combining two sub-cent charges changes the customer's payable amount.
+    for (const line of built) {
+      line.amount = roundCurrencyMoney(line.amount, minorUnits)
+      if (line.baseAmount != null) line.baseAmount = roundCurrencyMoney(line.baseAmount, minorUnits)
+      if (line.quantity === '1') line.unitPrice = line.amount
+    }
+
+    if (invoicing.markupPresentation === 'lump_sum') {
+      const markupLines = new Map<string, BuiltLine>()
+      for (const line of built) {
+        if (line.baseAmount == null || line.isLabor) continue
+        const delta = add(line.amount, negate(line.baseAmount))
+        if (cmp(delta, '0') <= 0) continue
+        if (line.taxCodeId) {
+          throw new BillingError('Taxable markup requires embedded presentation to preserve its tax calculation. Select embedded markup in the project invoicing profile before billing')
         }
-        if (cmp(markupTotal, '0') > 0) {
-          built.push({
-            itemId: null, accountId: defaultIncomeId, description: 'Markup', quantity: '1',
-            unitPrice: markupTotal, amount: markupTotal, taxCodeId: null, employeeId: null,
+        const key = JSON.stringify([line.accountId, line.departmentId ?? null, line.workedOn ?? null])
+        const prior = markupLines.get(key)
+        if (prior) {
+          prior.amount = add(prior.amount, delta)
+          prior.unitPrice = prior.amount
+        } else {
+          markupLines.set(key, {
+            itemId: null, accountId: line.accountId, description: 'Markup', quantity: '1',
+            unitPrice: delta, amount: delta, taxCodeId: null, employeeId: null,
             timeEntryId: null, timeTypeId: null, sourceCostLineId: null,
-            // Computed by the engine rather than billed from work, so a rollup
-            // can present it beside the other charges the agreement combines.
-            sourceKind: 'charge',
+            sourceKind: 'charge', departmentId: line.departmentId, workedOn: line.workedOn,
           })
         }
+        line.amount = line.baseAmount
+        line.unitPrice = line.baseAmount
+        line.quantity = '1'
       }
-
+      built.push(...markupLines.values())
     }
 
     // Rebill markup is NOT taken from the rate card's markup term: that term is
@@ -538,11 +550,17 @@ export async function generateInvoiceFromBillingRequest(
       const grouped = new Map<string, (typeof built)[number]>()
       const kept: typeof built = []
       for (const l of built) {
-        const key = l.isLabor || !l.itemId ? null : `${l.itemId}|${l.unitPrice}|${l.accountId}|${l.taxCodeId}`
+        // Taxable sources retain their individual rounding bases. Other lines
+        // may combine only when their pricing and source attribution agree.
+        const key = l.isLabor || !l.itemId || l.taxCodeId ? null : JSON.stringify([
+          l.itemId, l.unitPrice, l.accountId, l.unit ?? null, l.departmentId ?? null,
+          l.equipmentUnitId ?? null, l.rateVersionId ?? null, l.workedOn ?? null,
+          l.sourceKind ?? null, l.hasLineMarkup ?? false,
+        ])
         if (!key) { kept.push(l); continue }
         const prior = grouped.get(key)
         if (!prior) { grouped.set(key, l); kept.push(l); continue }
-        prior.quantity = add(prior.quantity, l.quantity)
+        prior.quantity = addInvoiceQuantities(prior.quantity, l.quantity)
         prior.amount = add(prior.amount, l.amount)
         if (prior.baseAmount != null && l.baseAmount != null) prior.baseAmount = add(prior.baseAmount, l.baseAmount)
         const sourceCostLineIds = prior.sourceCostLineIds ?? (prior.sourceCostLineId ? [prior.sourceCostLineId] : [])
@@ -621,8 +639,9 @@ export async function generateInvoiceFromBillingRequest(
     // "Claimed" is the one shared definition WIP prebilling enforces too: every
     // non-voided invoice on the project (a draft already reserves what it will
     // bill), net of credits, plus open prebill worksheets. The project row is
-    // locked (for share) by the request read above, so two concurrent requests
+    // locked exclusively by the request read above, so two concurrent requests
     // cannot each observe the full remaining capacity.
+    let remainingCapacity: string | null = null
     if (invoicing.notToExceed && built.length) {
       const contractRes = (await tx.execute<{ contract: string }>(sql`
         select coalesce(contract_value, 0)::text as contract from projects where id = ${req.project_id} and org_id = ${orgId}
@@ -632,9 +651,13 @@ export async function generateInvoiceFromBillingRequest(
         const claimedToDate = await projectContractCapacityUsed(tx, orgId, req.project_id, ptype.financialProfile.invoicedToDate)
         const running = sum(built.map((l) => l.amount))
         const remaining = add(contract, negate(claimedToDate))
+        remainingCapacity = remaining
         if (cmp(remaining, '0') <= 0) throw new BillingError('The not-to-exceed budget is fully invoiced')
         const over = add(running, negate(remaining))
-        if (cmp(over, '0') > 0) {
+        // Tax-inclusive input amounts are not net contract consumption. Defer
+        // taxable cap decisions until the shared tax engine resolves the net.
+        // An untaxed adjustment cannot safely reduce a taxable charge.
+        if (cmp(over, '0') > 0 && !built.some((line) => line.taxCodeId)) {
           built.push({
             itemId: invoicing.notToExceedItemId ?? null, accountId: defaultIncomeId,
             description: 'Not-to-exceed cap adjustment', quantity: '1', unitPrice: negate(over),
@@ -647,31 +670,66 @@ export async function generateInvoiceFromBillingRequest(
 
     if (built.length === 0) throw new BillingError('Nothing available to bill for the selected criteria')
 
+    if (invoicing.revenueAccount === 'fixed' || invoicing.revenueAccount === 'unbilled_receivable') {
+      for (const line of built) line.accountId = fixedPriceCreditAcct
+    }
+
+    // Round source charges before presentation so regrouping cannot change the
+    // amount owed in currencies whose payable precision is below the ledger's.
+    for (const line of built) {
+      line.amount = roundCurrencyMoney(line.amount, minorUnits)
+      if (line.baseAmount != null) line.baseAmount = roundCurrencyMoney(line.baseAmount, minorUnits)
+      if (line.quantity === '1') line.unitPrice = line.amount
+    }
+
     // Present the invoice the way this customer has agreed to see it. Only the
     // PRESENTATION changes: provenance still points at the detail lines, so the
     // backup and every downstream reconciliation keep the full picture.
+    const rollupLines = built.map((l) => ({ ...l, sourceKind: l.sourceKind ?? null, itemCategory: l.itemCategory ?? null }))
+    const sourcePositions = new Map(rollupLines.map((line, index) => [line, index]))
     const rolled = applyRollup(
-      built.map((l) => ({ ...l, sourceKind: l.sourceKind ?? null, itemCategory: l.itemCategory ?? null })),
+      rollupLines,
       invoicing.rollup,
-      (group, amount, quantity) => ({
-        itemId: group.itemId ?? null,
-        accountId: defaultIncomeId,
-        description: group.label,
-        quantity,
-        unitPrice: amount,
-        amount,
-        taxCodeId: null,
-        employeeId: null,
-        timeEntryId: null,
-        timeTypeId: null,
-        sourceCostLineId: null,
-        sourceKind: null,
-        itemCategory: null,
-      }),
+      (group, amount, quantity, members) => {
+        const source = members[0]!
+        if (group.itemId && group.itemId !== source.itemId) {
+          throw new BillingError('Grouped presentation cannot replace a source billing item. Clear the group item or match its source item')
+        }
+        return {
+          ...source,
+          description: group.label,
+          quantity,
+          amount,
+          baseAmount: members.every((line) => line.baseAmount != null)
+            ? sum(members.map((line) => line.baseAmount!)) : undefined,
+          timeEntryId: null,
+          sourceCostLineId: null,
+        }
+      },
+      // A display group cannot merge different accounting, item, rate, tax,
+      // or source attribution. Taxable rows retain individual rounding bases.
+      (line) => JSON.stringify([
+        line.accountId, line.itemId, line.taxCodeId, line.unit ?? null, line.unitPrice,
+        line.employeeId, line.timeTypeId, line.departmentId ?? null,
+        line.equipmentUnitId ?? null, line.rateVersionId ?? null,
+        line.taxCodeId ? sourcePositions.get(line) : null,
+      ]),
     )
     const presentedLines = rolled.presented
-    if (built.some((l) => !l.accountId)) {
-      throw new BillingError('An income account is required — configure income accounts on the billable items')
+    const validatedAccounts = new Set<string>()
+    for (const line of [...built, ...presentedLines]) {
+      if (!line.accountId) {
+        throw new BillingError('Configure an income account on each billable item or the Project Revenue control account in Company Settings before billing')
+      }
+      if (validatedAccounts.has(line.accountId)) continue
+      const account = await tx.execute(sql`
+        select id from accounts where org_id = ${orgId} and id = ${line.accountId}
+          and is_active and not is_summary for share
+      `)
+      if (!account.rows.length) {
+        throw new BillingError('The configured project billing account must be active, non-summary, and belong to this organization')
+      }
+      validatedAccounts.add(line.accountId)
     }
     // Stored time/cost rows and existing invoices stay. Turning Inventory off
     // must refuse a generate that would persist inventory / assembly / kit.
@@ -702,6 +760,22 @@ export async function generateInvoiceFromBillingRequest(
       }
     }
 
+    // Use the same effective-dated tax calculation and evidence as the native
+    // invoice editor. A tax code without its amount/components is not a quote.
+    let totals: Awaited<ReturnType<typeof computeBillTotalsWithProvider>>
+    try {
+      totals = await computeBillTotalsWithProvider(
+        presentedLines.map((line) => ({ accountId: line.accountId!, amount: line.amount, taxCodeId: line.taxCodeId })),
+        await taxProfileMap(orgId, invoiceDate),
+        { orgId, kind: 'customer_invoice', currency, documentDate: invoiceDate, partyId: project.customer_id },
+      )
+    } catch (error) {
+      throw new BillingError(error instanceof Error ? error.message : String(error))
+    }
+    if (remainingCapacity !== null && cmp(totals.subtotal, remainingCapacity) > 0) {
+      throw new BillingError('The rounded invoice exceeds the remaining contract capacity. Adjust the selected charges or approved pricing before billing')
+    }
+
     // -- create the customer_invoice draft --------------------------------
     const documentNumber = await nextDocumentNumber(orgId, 'customer_invoice', 'INV-', project.subsidiary_id ?? undefined)
     const [created] = (await tx.execute(sql`
@@ -717,33 +791,35 @@ export async function generateInvoiceFromBillingRequest(
     `)).rows as unknown as [any]
     const invoiceId = created.id
 
-    // Keep rate arithmetic at ledger precision; round each payable line using
-    // the registered currency exponent before summing the document total.
-    for (const l of presentedLines) {
-      l.amount = roundCurrencyMoney(l.amount, minorUnits)
-      if (l.baseAmount != null) l.baseAmount = roundCurrencyMoney(l.baseAmount, minorUnits)
-      if (l.quantity === '1') l.unitPrice = l.amount
-    }
-
     // The invoice carries the PRESENTED lines; provenance is stamped from the
     // detail behind them. A rolled-up line bills many source rows, and every one
     // of those rows must still be marked billed or it becomes available again.
-    const amounts: string[] = []
     const presentedLineIds: string[] = []
     let lineNo = 1
-    for (const l of presentedLines) {
+    for (const [index, l] of presentedLines.entries()) {
+      const tax = totals.lines[index]!
       const [line] = (await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
-              quantity, unit, unit_price, amount, tax_code_id, employee_id, time_entry_id, time_type_id,
-              is_billable, equipment_unit_id, rate_version_id, bill_rate, bill_amount, created_by)
+              quantity, unit, unit_price, amount, tax_code_id, tax_input_amount, tax_amount, tax_overridden,
+              employee_id, time_entry_id, time_type_id,
+              is_billable, equipment_unit_id, rate_version_id, bill_rate, bill_amount, department_id, project_id, created_by)
         values (${orgId}, ${invoiceId}, ${lineNo}, ${l.itemId}, ${l.accountId}, ${l.description},
-              ${l.quantity}, ${l.unit ?? null}, ${l.unitPrice}, ${l.amount}, ${l.taxCodeId}, ${l.employeeId},
+              ${l.quantity}, ${l.unit ?? null}, ${l.unitPrice}, ${tax.amount}, ${l.taxCodeId},
+              ${tax.taxInputAmount}, ${tax.taxAmount}, ${tax.taxOverridden}, ${l.employeeId},
               ${l.timeEntryId}, ${l.timeTypeId}, true, ${l.equipmentUnitId ?? null}, ${l.rateVersionId ?? null},
-              ${l.unitPrice}, ${l.amount}, ${userId})
+              ${l.unitPrice}, ${tax.amount}, ${l.departmentId ?? null}, ${req.project_id}, ${userId})
         returning id
       `)).rows as unknown as [any]
+      await persistLineTaxComponents(tx, { orgId, documentLineId: String(line.id), components: tax.taxComponents, actorId: userId })
+      if (tax.providerQuote) {
+        await persistTaxQuote(orgId, tax.providerQuote.providerConfigId,
+          { ...tax.providerQuote.request, documentLineId: String(line.id) }, tax.providerQuote.result, userId, tx)
+        await tx.execute(sql`
+          update tax_rate_provider_configs set last_attempt_at=now(), last_success_at=now(), last_error=null
+           where id=${tax.providerQuote.providerConfigId} and org_id=${orgId}
+        `)
+      }
       presentedLineIds.push(String(line.id))
-      amounts.push(l.amount)
       lineNo++
     }
 
@@ -784,9 +860,8 @@ export async function generateInvoiceFromBillingRequest(
       }
     }
 
-    const subtotal = sum(amounts)
     await tx.execute(sql`
-      update documents set subtotal = ${subtotal}, tax_total = '0', total = ${add(subtotal, '0')}, updated_by = ${userId}
+      update documents set subtotal = ${totals.subtotal}, tax_total = ${totals.taxTotal}, total = ${totals.total}, updated_by = ${userId}
       where id = ${invoiceId} and org_id = ${orgId}
     `)
 

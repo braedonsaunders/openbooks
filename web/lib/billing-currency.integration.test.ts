@@ -17,6 +17,7 @@ for (const [currency, amount, expected] of [['JPY','100.5000','101.0000'],['JPY'
     await withBypassContext(async () => {
       const org = await createScratchOrg()
       try {
+        await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
         const actors = await seedFlowActors(org.orgId)
         const project = randomUUID()
         await db.execute(sql`update subsidiaries set base_currency=${currency} where id=${org.subsidiaryId} and org_id=${org.orgId}`)
@@ -36,6 +37,7 @@ for (const [markupPercent, expected] of [['1.2345','101234.5000'],['-10','90000.
     await withBypassContext(async () => {
       const org = await createScratchOrg()
       try {
+        if (expected !== null) await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
         const actor = (await seedFlowActors(org.orgId)).adminId
         const project = randomUUID(), cost = randomUUID(), line = randomUUID()
         await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom) values (${project},${org.orgId},${org.subsidiaryId},'MARKUP','Exact markup',${org.customerId},'active',true,${JSON.stringify({markupPercent})}::jsonb)`)
