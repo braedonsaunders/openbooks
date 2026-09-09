@@ -19,7 +19,9 @@ import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
  *
  * Percent complete is DATA, not an action: the manual override
  * (projects.custom.percentCompleteOverride, 0–100) wins; otherwise cost-to-cost
- * (posted project cost ÷ task budget). A change is a change in estimate — the
+ * (primary-book functional project cost through the as-of date ÷ task budget,
+ * scoped to the owning legal entity). This single business-progress measure
+ * is shared by all recognition books. A change is a change in estimate — the
  * schedule rebuild plans the cumulative catch-up (either direction)
  * prospectively into the as-of period (ASC 250 / ASC 606 over-time).
  *
@@ -154,20 +156,13 @@ export async function syncProjectRevenueContractsInTransaction(
 
   const projects = (await tx.execute<{
       id: string; code: string; name: string; customer_id: string | null; subsidiary_id: string | null;
-      starts_on: string | null; contract_value: string; pct_override: string | null; functional_currency: string | null;
+      starts_on: string | null; contract_value: string; pct_override: string | null;
     }>(sql`
     select p.id, p.code, p.name, p.customer_id, p.subsidiary_id, p.starts_on,
            coalesce(p.contract_value, 0)::numeric(19,4) as contract_value,
-           nullif(p.custom->>'percentCompleteOverride', '')::numeric as pct_override,
-           coalesce(s.base_currency, root.base_currency) as functional_currency
+           nullif(p.custom->>'percentCompleteOverride', '')::numeric as pct_override
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
-      left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
-      left join lateral (
-        select base_currency from subsidiaries
-         where org_id = p.org_id and parent_id is null and is_active and not is_elimination
-         limit 1
-      ) root on true
      where p.org_id = ${orgId} and p.is_active
        and pt.invoicing_profile->>'recognition' = 'percent_complete_cost'
        ${projectId ? sql`and p.id = ${projectId}` : sql``}
@@ -183,11 +178,19 @@ export async function syncProjectRevenueContractsInTransaction(
       result.problems.push(`${p.code}: project has no customer — cannot carry a revenue contract`);
       continue;
     }
-    if (!p.functional_currency) {
-      result.problems.push(`${p.code}: project has no authoritative functional currency`);
+    // An explicit owner must resolve in this organization. Only legacy null
+    // ownership may resolve to the unique active, non-elimination root; never
+    // borrow a root's currency for an invalid explicit owner.
+    const owners = (await tx.execute<{ id: string; base_currency: string }>(sql`
+      select id, base_currency from subsidiaries
+       where org_id = ${orgId} and is_active and not is_elimination
+         ${p.subsidiary_id ? sql`and id = ${p.subsidiary_id}` : sql`and parent_id is null`}
+       order by id for share`)).rows;
+    const owner = owners.length === 1 ? owners[0] : undefined;
+    if (!owner?.base_currency) {
+      result.problems.push(`${p.code}: project has no unique authoritative legal entity and functional currency`);
       continue;
     }
-    ruleId ??= await ensureProjectPocRule(orgId, actorId, tx);
 
     // -- percent complete: override (0..100) wins, else cost-to-cost ---------
     let percent: string;
@@ -208,6 +211,19 @@ export async function syncProjectRevenueContractsInTransaction(
       percent = cmp(override, "0") < 0 ? "0.0000" : cmp(override, "100") > 0 ? "100.0000" : override;
       overridden = true;
     } else {
+      // Book flags, not a mutable display code, identify the shared progress
+      // authority. Reject ambiguous identity even if only one candidate is
+      // active/posting, and retain its lock through all schedule writes.
+      const primaryBooks = (await tx.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
+        select id, is_active, posts_gl from accounting_books
+         where org_id = ${orgId} and is_primary order by id for share`)).rows;
+      const primary = primaryBooks.length === 1 ? primaryBooks[0] : undefined;
+      if (!primary?.is_active || !primary.posts_gl) {
+        result.problems.push(`${p.code}: cost-to-cost progress requires one authoritative active posting primary accounting book`);
+        continue;
+      }
+      // Functional amounts belong to the line's entity. An intercompany
+      // entry may originate in another entity without changing cost ownership.
       const cc = (await tx.execute<{ budget: string; actual: string }>(sql`
         select
           coalesce((select sum(t.estimated_cost) from project_tasks t
@@ -216,9 +232,15 @@ export async function syncProjectRevenueContractsInTransaction(
                     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
                     join accounts a on a.id = l.account_id and a.org_id = l.org_id
                    where l.org_id = ${orgId} and l.project_id = ${p.id} and e.status in ('posted', 'reversed')
+                     and e.book_id = ${primary.id}
+                     and l.subsidiary_id = ${owner.id} and e.posting_date <= ${asOfDate}::date
                      and a.type in ('expense','cogs','expense_other','expense_deferred')), 0) as actual`));
       percent = costToCostPercent(cc.rows[0]?.budget ?? "0", cc.rows[0]?.actual ?? "0");
     }
+
+    // Scope/estimate validation must finish before even the built-in rule is
+    // created, so rejected projects leave the recognition subledger untouched.
+    ruleId ??= await ensureProjectPocRule(orgId, actorId, tx);
 
     // -- ensure the contract --------------------------------------------------
     const startsOn = p.starts_on ?? asOfDate;
@@ -237,7 +259,7 @@ export async function syncProjectRevenueContractsInTransaction(
       const ins = (await tx.execute<{ id: string }>(sql`
         insert into revenue_contracts
           (org_id, customer_id, project_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
-        values (${orgId}, ${p.customer_id}, ${p.id}, ${p.code}, 'active', ${startsOn}, ${p.functional_currency}, ${p.contract_value}, ${actorId}, ${actorId})
+        values (${orgId}, ${p.customer_id}, ${p.id}, ${p.code}, 'active', ${startsOn}, ${owner.base_currency}, ${p.contract_value}, ${actorId}, ${actorId})
         returning id`));
       contractId = ins.rows[0]!.id;
       created = true;
