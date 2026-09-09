@@ -178,6 +178,12 @@ const PAGES = [
     minMatches: 1,
   },
   {
+    path: '/compliance/lien-waivers',
+    variants: ['', '?direction=received'],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,
