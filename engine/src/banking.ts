@@ -1195,6 +1195,42 @@ async function loadReconciliation(orgId: string, reconciliationId: string): Prom
   return recon;
 }
 
+function validateReconciliationDate(value: string): void {
+  const match = typeof value === "string" ? value.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+  if (!match) throw new BankingError("Through date must be YYYY-MM-DD");
+  assertRealDate(match[1]!, match[2]!, match[3]!, "Through date");
+}
+
+async function lockReconciliationAccount(
+  executor: SqlExecutor,
+  orgId: string,
+  accountId: string,
+): Promise<void> {
+  await executor.execute(sql`
+    select pg_advisory_xact_lock(
+      hashtextextended(${`bank-reconciliation:${orgId}:${accountId}`}, 0)
+    )
+  `);
+}
+
+async function requireCutoffAfterSignedHistory(
+  executor: SqlExecutor,
+  orgId: string,
+  accountId: string,
+  throughDate: string,
+): Promise<void> {
+  const latestSigned = (await executor.execute<{ through_date: string }>(sql`
+    select through_date from reconciliations
+     where org_id = ${orgId} and account_id = ${accountId} and status = 'signed_off'
+     order by through_date desc limit 1
+  `)).rows[0];
+  if (latestSigned && throughDate <= latestSigned.through_date) {
+    throw new BankingError(
+      `Through date must be after the last signed-off reconciliation (${latestSigned.through_date})`,
+    );
+  }
+}
+
 /**
  * Start a reconciliation session. One open session per account: a second
  * concurrent session would double-claim the same journal lines.
@@ -1204,19 +1240,11 @@ export async function startReconciliation(
   ctx: BankingContext,
 ): Promise<{ id: string }> {
   const account = await loadReconcilableAccount(ctx.orgId, opts.accountId);
-  const dateMatch = opts.throughDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!dateMatch) {
-    throw new BankingError("Through date must be YYYY-MM-DD");
-  }
-  assertRealDate(dateMatch[1]!, dateMatch[2]!, dateMatch[3]!, "Through date");
+  validateReconciliationDate(opts.throughDate);
   const statementBalance = normalizeAmount(opts.statementBalance, "Statement balance");
   return db.transaction(async (tx) => {
     await reconciliationBookId(tx, ctx.orgId);
-    await tx.execute(sql`
-      select pg_advisory_xact_lock(
-        hashtextextended(${`bank-reconciliation:${ctx.orgId}:${account.id}`}, 0)
-      )
-    `);
+    await lockReconciliationAccount(tx, ctx.orgId, account.id);
     const open = (await tx.execute<{ id: string }>(sql`
       select id from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${account.id} and status <> 'signed_off'
@@ -1227,20 +1255,7 @@ export async function startReconciliation(
         "This account already has an open reconciliation — finish or discard it first",
       );
     }
-    const latestSigned = (await tx.execute<{ through_date: string }>(sql`
-      select through_date
-        from reconciliations
-       where org_id = ${ctx.orgId}
-         and account_id = ${account.id}
-         and status = 'signed_off'
-       order by through_date desc
-       limit 1
-    `));
-    if (latestSigned.rows[0] && opts.throughDate <= latestSigned.rows[0].through_date) {
-      throw new BankingError(
-        `Through date must be after the last signed-off reconciliation (${latestSigned.rows[0].through_date})`,
-      );
-    }
+    await requireCutoffAfterSignedHistory(tx, ctx.orgId, account.id, opts.throughDate);
     const [recon] = await tx
       .insert(schema.reconciliations)
       .values({
@@ -1355,6 +1370,69 @@ async function refreshStatus(
      where id = ${recon.id} and org_id = ${ctx.orgId} and status <> 'signed_off'
   `);
   return totals;
+}
+
+/** Adjust a session under the same account fence as creation and sign-off.
+ * Its matches, totals, lifecycle status and audit snapshot must all describe
+ * the same committed cutoff and statement balance. */
+export async function adjustReconciliation(
+  reconciliationId: string,
+  opts: { throughDate?: string; statementBalance?: string },
+  ctx: BankingContext,
+): Promise<ReconciliationTotals | null> {
+  if (opts.throughDate !== undefined) validateReconciliationDate(opts.throughDate);
+  const statementBalance = opts.statementBalance === undefined
+    ? undefined
+    : normalizeAmount(opts.statementBalance, "Statement balance");
+  return db.transaction(async (tx) => {
+    await reconciliationBookId(tx, ctx.orgId);
+    const account = (await tx.execute<{ account_id: string }>(sql`
+      select account_id from reconciliations where id = ${reconciliationId} and org_id = ${ctx.orgId}
+    `)).rows[0];
+    if (!account) return null;
+    await lockReconciliationAccount(tx, ctx.orgId, account.account_id);
+    const before = (await tx.execute<ReconciliationRow>(sql`
+      select id, org_id, through_date, statement_balance, account_id, currency, status
+        from reconciliations
+       where id = ${reconciliationId} and org_id = ${ctx.orgId} and status <> 'signed_off'
+       for update
+    `)).rows[0];
+    if (!before) return null;
+    const throughDate = opts.throughDate ?? before.through_date;
+    await requireCutoffAfterSignedHistory(tx, ctx.orgId, before.account_id, throughDate);
+    const stranded = (await tx.execute<{ id: string }>(sql`
+      select m.id from reconciliation_matches m
+      join bank_statement_lines l on l.id = m.statement_line_id and l.org_id = m.org_id
+      join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+       where m.reconciliation_id = ${reconciliationId} and m.org_id = ${ctx.orgId}
+         and (l.posted_on > ${throughDate} or je.posting_date > ${throughDate})
+       limit 1
+    `)).rows[0];
+    if (stranded) {
+      throw new BankingError("Through date cannot exclude matched statement or journal lines; unmatch them first");
+    }
+    const after = (await tx.execute<ReconciliationRow>(sql`
+      update reconciliations
+         set through_date = ${throughDate},
+             statement_balance = ${statementBalance ?? before.statement_balance},
+             updated_at = now(), updated_by = ${ctx.userId}
+       where id = ${reconciliationId} and org_id = ${ctx.orgId}
+       returning id, account_id, through_date, currency, statement_balance, status
+    `)).rows[0]!;
+    const totals = await refreshStatus(after, ctx, tx);
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${ctx.orgId}, 'reconciliations', ${reconciliationId}, 'update',
+        ${JSON.stringify({
+          mode: "session_adjustment",
+          before: { throughDate: before.through_date, statementBalance: before.statement_balance, status: before.status },
+          after: { throughDate: after.through_date, statementBalance: after.statement_balance,
+            status: isZero(totals.difference) ? "balanced" : "in_progress" },
+        })}::jsonb, ${ctx.userId})
+    `);
+    return totals;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1821,6 +1899,21 @@ export async function markReconciled(
   ctx: BankingContext,
 ): Promise<{ journalLinesReconciled: number }> {
   return db.transaction(async (tx) => {
+    const account = (await tx.execute<{ account_id: string; status: string }>(sql`
+      select account_id, status from reconciliations where id = ${reconciliationId} and org_id = ${ctx.orgId}
+    `)).rows[0];
+    if (!account) throw new BankingError("Reconciliation not found");
+    // A completed sign-off is immutable evidence. Retrying it does not create
+    // a new accounting action or require today's book configuration to remain active.
+    if (account.status === "signed_off") {
+      const existing = (await tx.execute<{ count: number }>(sql`
+        select count(*)::int as count from journal_lines
+         where org_id = ${ctx.orgId} and reconciliation_id = ${reconciliationId}
+      `)).rows[0]!;
+      return { journalLinesReconciled: existing.count };
+    }
+    const bookId = await reconciliationBookId(tx, ctx.orgId);
+    await lockReconciliationAccount(tx, ctx.orgId, account.account_id);
     const r = (await tx.execute<ReconciliationRow>(sql`
       select id, account_id, through_date, currency, statement_balance, status
         from reconciliations
@@ -1837,7 +1930,7 @@ export async function markReconciled(
       `));
       return { journalLinesReconciled: existing.rows[0]!.count };
     }
-    const bookId = await reconciliationBookId(tx, ctx.orgId);
+    await requireCutoffAfterSignedHistory(tx, ctx.orgId, recon.account_id, recon.through_date);
 
     const statementEvidence = (await tx.execute<{ count: number }>(sql`
       select count(*)::int as count

@@ -83,6 +83,10 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.reconciliation-route-test')]
       const sqlText = globalThis.openbooksReconciliationSqlText
 
+      export const schema = {}
+      export const inDbTransaction = work => db.transaction(work)
+      export const withOrgTransaction = (_orgId, work) => work()
+      export const withTransactionSavepoint = (_tx, work) => work()
       export const db = {
         transaction: async (work) => {
           const transactionId = state.nextTransactionId++
@@ -90,6 +94,15 @@ const mockSources = new Map<string, string>([
           const transaction = {
             execute: async (query) => {
               const text = sqlText(query)
+              if (text.startsWith('select account_id from reconciliations')) {
+                return { rows: [{ account_id: 'account-1' }] }
+              }
+              if (text.includes('from accounting_books')) {
+                return { rows: [{ id: 'book-1', is_active: true, posts_gl: true }] }
+              }
+              if (text.includes('as cleared')) {
+                return { rows: [{ cleared: '0', matched_journal: '0', matched_stmt: '0', unmatched_stmt: '0' }] }
+              }
               if (text.includes('select id, org_id, through_date, statement_balance')) {
                 if (text.includes('for update')) {
                   const waitForPrevious = state.lockTail
@@ -106,6 +119,7 @@ const mockSources = new Map<string, string>([
                     org_id: 'org-1',
                     through_date: before.throughDate,
                     statement_balance: before.statementBalance,
+                    account_id: 'account-1', currency: 'CAD', status: 'in_progress',
                   }],
                 }
               }
@@ -117,6 +131,8 @@ const mockSources = new Map<string, string>([
                   rows: [{
                     through_date: after.throughDate,
                     statement_balance: after.statementBalance,
+                    id: '00000000-0000-4000-8000-000000000001',
+                    account_id: 'account-1', currency: 'CAD', status: 'in_progress',
                   }],
                 }
               }
@@ -142,21 +158,6 @@ const mockSources = new Map<string, string>([
       export async function parseJsonBody(request) {
         return { ok: true, data: await request.json() }
       }
-    `,
-  ],
-  [
-    'mock:banking',
-    `
-      export class BankingError extends Error {
-        constructor(message, status = 422) {
-          super(message)
-          this.status = status
-        }
-      }
-      export async function reconciliationTotals() {
-        return { matched: 0, unmatched: 0 }
-      }
-      export async function discardReconciliation() {}
     `,
   ],
   [
@@ -208,7 +209,6 @@ const mockUrls = new Map<string, string>([
   ['next/server', 'mock:next-server'],
   ['drizzle-orm', 'mock:drizzle'],
   ['@openbooks/engine/src/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/banking.ts', 'mock:banking'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../util', 'mock:util'],
@@ -218,6 +218,11 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // Exercise the extracted native adjustment service against the original
+    // serialized SQL fake; preserve the audit before/after assertion below.
+    if (specifier === './db.ts' && (context.parentURL ?? '').endsWith('/engine/src/banking.ts')) {
+      return { url: 'mock:db', shortCircuit: true }
+    }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
