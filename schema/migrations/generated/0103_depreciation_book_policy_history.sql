@@ -1,3 +1,4 @@
+-- OpenBooks forward migration 0103_depreciation_book_policy_history.
 -- Book overrides are historical accounting policy under the same contract as
 -- asset categories (0089). No tenant data or posted evidence is rewritten.
 CREATE OR REPLACE FUNCTION public.depreciation_book_policy_history_guard() RETURNS trigger
