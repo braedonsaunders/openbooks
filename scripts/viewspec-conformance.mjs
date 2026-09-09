@@ -191,6 +191,15 @@ const PAGES = [
     minMatches: 2,
   },
   {
+    path: '/platform/access',
+    // Uses the `sortable-th` header variant and a server-action control cell.
+    // Requires a super-admin session; without one the page redirects to the
+    // dashboard and BOTH renders would agree about the wrong page.
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,

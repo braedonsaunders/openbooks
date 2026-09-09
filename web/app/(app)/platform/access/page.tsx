@@ -23,6 +23,8 @@ import {
 import { revokeAccessAction } from "../actions";
 import { GrantAccessForm } from "../_components/GrantAccessForm";
 import { PlatformMutationButton } from "../_components/PlatformMutationButton";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadPlatformAccess, platformAccessSpec } from "./view";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +44,16 @@ export default async function PlatformAccessPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
+  if (sp.__viewspec === "1") {
+    const data = await loadPlatformAccess(sp);
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={platformAccessSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    );
+  }
   const statusParam = pickString(sp.status);
   const status =
     statusParam === "active" || statusParam === "inactive"

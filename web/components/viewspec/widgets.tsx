@@ -33,6 +33,9 @@ import { WaiverNumberCell } from '../../app/(app)/compliance/lien-waivers/sectio
 import { LienWaiverToolbar } from '../../app/(app)/compliance/lien-waivers/LienWaiverToolbar'
 import { LienWaiverDrawer } from '../../app/(app)/compliance/lien-waivers/LienWaiverDrawer'
 import { NewFilingButton } from '../../app/(app)/compliance/information-returns/NewFilingButton'
+import { IdentityCell, ActingCell, AccessControlCell } from '../../app/(app)/platform/access/sections'
+import { GrantAccessForm } from '../../app/(app)/platform/_components/GrantAccessForm'
+import { KeyRound } from 'lucide-react'
 import { SearchInput } from '../search-input'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
@@ -270,8 +273,13 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     // offer its create button without the spec expressing a component.
     const action = str(props, 'action')
     const renderer = action ? WIDGET_REGISTRY[action] : undefined
+    // Icons are components, so the spec names one from a closed map rather
+    // than carrying it — same rule as every other component reference.
+    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound /> }
+    const iconKey = str(props, 'icon')
     return (
       <EmptyState
+        icon={iconKey ? icons[iconKey] : undefined}
         title={str(props, 'title') ?? ''}
         description={str(props, 'description')}
         action={renderer ? renderer({}) : undefined}
@@ -290,6 +298,18 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       href={str(props, 'href') ?? ''}
       directionLabel={str(props, 'directionLabel') ?? ''}
     />
+  ),
+  'identity-cell': (props) => (
+    <IdentityCell name={str(props, 'name') ?? ''} detail={str(props, 'detail') ?? ''} />
+  ),
+  'acting-cell': (props) => (
+    <ActingCell name={str(props, 'name') ?? ''} email={str(props, 'email') ?? ''} />
+  ),
+  'access-control-cell': (props) => (
+    <AccessControlCell grantId={str(props, 'grantId') ?? ''} isActive={props.isActive === true} />
+  ),
+  'grant-access-form': (props) => (
+    <GrantAccessForm {...(props.options as ComponentProps<typeof GrantAccessForm>)} />
   ),
   'new-filing': (props) => (
     <NewFilingButton
