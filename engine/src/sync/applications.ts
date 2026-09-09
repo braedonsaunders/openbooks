@@ -469,28 +469,7 @@ export async function reconcileApplications(
  * healed.
  */
 export async function recomputeOpenBalances(orgId: string): Promise<number> {
-  const res = (await db.execute(sql`
-    update documents d
-       set open_balance = c.ob
-      from (
-        select d.id,
-               case when count(jl.id) = 0 then null
-                    else sum(abs(jl.amount)) - coalesce(sum(ap.applied), 0) end as ob
-          from documents d
-          -- LEFT join: a posted document with NO open-item lines must resolve
-          -- to null (matching recompute_document_open_balance), else a stale
-          -- stored balance on such a document can never be healed.
-          left join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.org_id = d.org_id and jl.is_open_item
-          left join lateral (
-            select sum(a.amount) as applied
-              from applications a
-             where (a.to_line_id = jl.id or a.from_line_id = jl.id)
-               and a.org_id = d.org_id
-               and a.unapplied_at is null
-          ) ap on true
-         where d.org_id = ${orgId} and d.status = 'posted' and d.posted_entry_id is not null
-         group by d.id
-      ) c
-     where d.id = c.id and d.org_id = ${orgId} and d.open_balance is distinct from c.ob`));
-  return res.rowCount ?? 0;
+  const res = await db.execute<{ healed: number }>(sql`
+    select public.recompute_document_open_balances(${orgId}::uuid) as healed`);
+  return res.rows[0]?.healed ?? 0;
 }

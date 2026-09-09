@@ -4,12 +4,18 @@ import { join } from "node:path";
 import test from "node:test";
 
 const source = readFileSync(join(import.meta.dirname, "applications.ts"), "utf8");
+const balanceMigration = readFileSync(
+  new URL("../../../schema/migrations/generated/0100_document_open_balance_currency.sql", import.meta.url),
+  "utf8",
+);
 
 test("open-balance heal pins the known tenant on the subsequent id write", () => {
   assert.match(
     source,
-    /where d\.id = c\.id and d\.org_id = \$\{orgId\} and d\.open_balance is distinct from c\.ob/,
+    /recompute_document_open_balances\(\$\{orgId\}::uuid\)/,
   );
+  assert.match(balanceMigration, /WHERE d\.id = b\.id AND d\.org_id = p_org/);
+  assert.match(balanceMigration, /d\.open_balance IS DISTINCT FROM b\.balance/);
 });
 
 test("application reconciliation resolves the document's current posted entry regardless of correction origin", () => {
