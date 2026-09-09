@@ -222,12 +222,7 @@ const tableBlock = z.strictObject({
   when: fieldRefSchema.optional(),
   variant: z.enum(['report', 'app']).optional(),
   sorting: z
-    .strictObject({
-      basePath: value,
-      sort: fieldRefSchema,
-      dir: fieldRefSchema,
-      header: z.enum(['sort-th', 'sortable-th']).optional(),
-    })
+.strictObject({ basePath: value, sort: fieldRefSchema, dir: fieldRefSchema })
     .optional(),
   leading: z.array(spanRowSchema).max(10).optional(),
   trailing: z.array(spanRowSchema).max(10).optional(),

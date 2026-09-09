@@ -63,22 +63,24 @@ function SortLink({
 }
 
 /**
- * Sortable header for tables built from the @openbooks/ui <Table> primitives
- * (hazard assessments, inspections, kiosk history). Caller passes `active`.
- */
-export function SortableTh({ className, ...props }: SortLinkProps & { className?: string }) {
-  return (
-    <TableHead className={className}>
-      <SortLink {...props} />
-    </TableHead>
-  )
-}
-
-/**
- * Sortable header for the raw `<table>` record lists (corrective actions,
- * incidents, people, …). Renders a plain `<th className="px-3 py-2">` so it
- * drops in next to the existing non-sortable `<th>` cells, and derives `active`
- * from the current `sort` so callers only thread `sort`/`dir` through once.
+ * The sortable column header.
+ *
+ * ONE component, deliberately. There used to be two — `SortableTh`, which
+ * wrapped the shared `TableHead`, and `SortTh`, which emitted a bare
+ * `<th className="px-3 py-2">`. Both were ported from another app together
+ * with doc comments naming pages ("hazard assessments", "corrective actions")
+ * that do not exist here, and the bare variant's stated justification — that
+ * it sits beside plain `<th>` cells in raw tables — did not hold: its callers
+ * were using the `@openbooks/ui` Table primitives, whose header cell IS
+ * `TableHead`.
+ *
+ * The result was a measurable defect on twelve pages: within one header row,
+ * sortable columns rendered 14px, sentence case and near-black while their
+ * non-sortable neighbours rendered 12px, uppercase, tracked and muted. Not a
+ * design choice — a header that forgot to be a header.
+ *
+ * `active` is derived from `sort` so callers thread the current sort through
+ * once rather than computing it per column.
  */
 export function SortTh({
   sort,
@@ -86,8 +88,8 @@ export function SortTh({
   ...props
 }: Omit<SortLinkProps, 'active'> & { sort: string; className?: string }) {
   return (
-    <th className={cn('px-3 py-2', className)}>
+    <TableHead className={className}>
       <SortLink {...props} active={sort === props.column} />
-    </th>
+    </TableHead>
   )
 }

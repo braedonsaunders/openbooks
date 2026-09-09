@@ -360,14 +360,6 @@ export interface TableSorting {
   /** The active sort column and direction, resolved by the loader. */
   sort: FieldRef
   dir: FieldRef
-  /**
-   * Which sortable-header component to render. The app has two and they are
-   * NOT interchangeable: `sort-th` emits a plain `<th className="px-3 py-2">`
-   * that sits beside raw `<th>` cells, while `sortable-th` wraps the shared
-   * TableHead with its own chrome. Picking the wrong one is a visible
-   * difference, so the spec names it rather than guessing.
-   */
-  header?: 'sort-th' | 'sortable-th'
 }
 
 export interface TableBlock extends BlockCommon {

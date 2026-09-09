@@ -14,7 +14,7 @@ import { FilterChips } from "../../../../components/filter-bar";
 import { Pagination } from "../../../../components/pagination";
 import { ListPageLayout } from "../../../../components/page-layout";
 import { SearchInput } from "../../../../components/search-input";
-import { SortableTh } from "../../../../components/sortable-th";
+import { SortTh } from "../../../../components/sortable-th";
 import { parseListParams, pickString } from "../../../../lib/list-params";
 import {
   platformGrantOptions,
@@ -116,43 +116,43 @@ export default async function PlatformAccessPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortableTh
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="member"
-                  active={params.sort === "member"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Member identity
-                </SortableTh>
-                <SortableTh
+                </SortTh>
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="organization"
-                  active={params.sort === "organization"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Target organization
-                </SortableTh>
-                <SortableTh
+                </SortTh>
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="actingUser"
-                  active={params.sort === "actingUser"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Acts as
-                </SortableTh>
+                </SortTh>
                 <TableHead>Status</TableHead>
-                <SortableTh
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="updated"
-                  active={params.sort === "updated"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Last changed
-                </SortableTh>
+                </SortTh>
                 <TableHead className="text-right">Control</TableHead>
               </TableRow>
             </TableHeader>

@@ -15,7 +15,7 @@ import { FilterChips } from "../../../../components/filter-bar";
 import { Pagination } from "../../../../components/pagination";
 import { ListPageLayout } from "../../../../components/page-layout";
 import { SearchInput } from "../../../../components/search-input";
-import { SortableTh } from "../../../../components/sortable-th";
+import { SortTh } from "../../../../components/sortable-th";
 import { parseListParams, pickString } from "../../../../lib/list-params";
 import { platformOrganizations } from "../../../../lib/platform-admin";
 import { enterOrganizationAction } from "../actions";
@@ -95,43 +95,43 @@ export default async function PlatformOrganizationsPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortableTh
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="name"
-                  active={params.sort === "name"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Organization
-                </SortableTh>
-                <SortableTh
+                </SortTh>
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="environment"
-                  active={params.sort === "environment"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Environment
-                </SortableTh>
+                </SortTh>
                 <TableHead>Country / currency</TableHead>
-                <SortableTh
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="users"
-                  active={params.sort === "users"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Users
-                </SortableTh>
-                <SortableTh
+                </SortTh>
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="sandboxes"
-                  active={params.sort === "sandboxes"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Sandboxes
-                </SortableTh>
+                </SortTh>
                 <TableHead className="text-right">Workspace</TableHead>
               </TableRow>
             </TableHeader>

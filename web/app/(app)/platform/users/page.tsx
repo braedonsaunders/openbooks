@@ -16,7 +16,7 @@ import { FilterChips } from "../../../../components/filter-bar";
 import { Pagination } from "../../../../components/pagination";
 import { ListPageLayout } from "../../../../components/page-layout";
 import { SearchInput } from "../../../../components/search-input";
-import { SortableTh } from "../../../../components/sortable-th";
+import { SortTh } from "../../../../components/sortable-th";
 import { parseListParams, pickString } from "../../../../lib/list-params";
 import { platformUsers } from "../../../../lib/platform-admin";
 
@@ -110,51 +110,51 @@ export default async function PlatformUsersPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortableTh
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="name"
-                  active={params.sort === "name"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   User
-                </SortableTh>
-                <SortableTh
+                </SortTh>
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="organization"
-                  active={params.sort === "organization"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Home organization
-                </SortableTh>
-                <SortableTh
+                </SortTh>
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="role"
-                  active={params.sort === "role"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Role
-                </SortableTh>
-                <SortableTh
+                </SortTh>
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="grants"
-                  active={params.sort === "grants"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Access
-                </SortableTh>
-                <SortableTh
+                </SortTh>
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="lastLogin"
-                  active={params.sort === "lastLogin"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Last login
-                </SortableTh>
+                </SortTh>
                 <TableHead className="text-right">Details</TableHead>
               </TableRow>
             </TableHeader>

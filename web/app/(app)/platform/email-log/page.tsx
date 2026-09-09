@@ -14,7 +14,7 @@ import { FilterChips } from "../../../../components/filter-bar";
 import { Pagination } from "../../../../components/pagination";
 import { ListPageLayout } from "../../../../components/page-layout";
 import { SearchInput } from "../../../../components/search-input";
-import { SortableTh } from "../../../../components/sortable-th";
+import { SortTh } from "../../../../components/sortable-th";
 import { parseListParams, pickString } from "../../../../lib/list-params";
 import {
   platformEmails,
@@ -115,51 +115,51 @@ export default async function PlatformEmailLogPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortableTh
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="created"
-                  active={params.sort === "created"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Created
-                </SortableTh>
-                <SortableTh
+                </SortTh>
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="organization"
-                  active={params.sort === "organization"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Organization
-                </SortableTh>
-                <SortableTh
+                </SortTh>
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="recipient"
-                  active={params.sort === "recipient"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Recipient
-                </SortableTh>
-                <SortableTh
+                </SortTh>
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="subject"
-                  active={params.sort === "subject"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Subject
-                </SortableTh>
-                <SortableTh
+                </SortTh>
+                <SortTh
                   basePath={BASE}
                   currentParams={sp}
                   column="status"
-                  active={params.sort === "status"}
+                  sort={params.sort}
                   dir={params.dir}
                 >
                   Status
-                </SortableTh>
+                </SortTh>
                 <TableHead>Evidence</TableHead>
               </TableRow>
             </TableHeader>

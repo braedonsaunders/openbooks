@@ -3,7 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
 import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
-import { SortableTh } from '../../../../components/sortable-th'
+import { SortTh } from '../../../../components/sortable-th'
 import { mergeHref } from '../../../../lib/list-params'
 const MATCH_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
   matched: 'success',
@@ -97,11 +97,11 @@ export async function StatementDrawer({
         <Table>
           <TableHeader>
             <TableRow>
-              <SortableTh {...sortProps} column="line" active={sort === 'line'}>#</SortableTh>
-              <SortableTh {...sortProps} column="date" active={sort === 'date'}>{tCommon('labels.date')}</SortableTh>
+              <SortTh {...sortProps} column="line" sort={sort}>#</SortTh>
+              <SortTh {...sortProps} column="date" sort={sort}>{tCommon('labels.date')}</SortTh>
               <TableHead>{tCommon('labels.description')}</TableHead>
               <TableHead>{t('labels.ref')}</TableHead>
-              <SortableTh {...sortProps} column="amount" active={sort === 'amount'} align="right">{tCommon('labels.amount')}</SortableTh>
+              <SortTh {...sortProps} column="amount" sort={sort} align="right">{tCommon('labels.amount')}</SortTh>
               <TableHead>{t('drawer.matchColumn')}</TableHead>
             </TableRow>
           </TableHeader>
