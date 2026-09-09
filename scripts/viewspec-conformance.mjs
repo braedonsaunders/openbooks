@@ -165,6 +165,12 @@ const PAGES = [
     minMatches: 1,
   },
   {
+    path: '/insights',
+    variants: ['', '?sort=name&dir=asc'],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,

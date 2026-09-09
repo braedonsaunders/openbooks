@@ -28,6 +28,8 @@ import { InsightsTabs } from './InsightsTabs'
 import { NewCardButton } from './NewCardButton'
 import { CardStudio } from './CardStudio'
 import { VIZ_META } from './viz-meta'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadInsights, insightsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +43,17 @@ export default async function InsightsCards({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadInsights(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={insightsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const [t, tCommon, tCatalog] = await Promise.all([
     getTranslations('insights'),
     getTranslations('common'),

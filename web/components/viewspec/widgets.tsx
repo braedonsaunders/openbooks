@@ -23,6 +23,9 @@ import { EmptyState } from '@openbooks/ui'
 import { DashboardNameCell } from '../../app/(app)/insights/dashboards/sections'
 import { NewDashboardButton } from '../../app/(app)/insights/dashboards/NewDashboardButton'
 import { InsightsTabs } from '../../app/(app)/insights/InsightsTabs'
+import { CardNameCell, VizCell } from '../../app/(app)/insights/sections'
+import { NewCardButton } from '../../app/(app)/insights/NewCardButton'
+import { CardStudio } from '../../app/(app)/insights/CardStudio'
 import { SearchInput } from '../search-input'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
@@ -272,6 +275,22 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     <InsightsTabs active={(str(props, 'active') ?? '') as ComponentProps<typeof InsightsTabs>['active']} />
   ),
   'new-dashboard': () => <NewDashboardButton />,
+  'new-card': () => <NewCardButton />,
+  'card-name-cell': (props) => (
+    <CardNameCell
+      name={str(props, 'name') ?? ''}
+      href={str(props, 'href') ?? ''}
+      description={(props.description as string | null) ?? null}
+    />
+  ),
+  'viz-cell': (props) => (
+    <VizCell vizType={str(props, 'vizType') ?? ''} label={str(props, 'label') ?? ''} />
+  ),
+  'card-studio': (props) => {
+    const studio = props.studio as ComponentProps<typeof CardStudio> | null
+    if (!studio) return null
+    return <CardStudio {...studio} />
+  },
   'dashboard-name-cell': (props) => (
     <DashboardNameCell
       name={str(props, 'name') ?? ''}
