@@ -19,15 +19,29 @@ import { ReportFilterBar } from '../ReportFilterBar'
 import { decimalCmp, decimalNeg, decimalSum } from '../../../../lib/statement-format'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { resolveOrgId } from '../../../../lib/org-scope'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadPartners, partnersSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 const PER_PAGE = 50
 
+/**
+ * Both renderings live here during conversion so the conformance harness can
+ * diff them against the same request and the same data. `?__viewspec=1`
+ * selects the spec path; the native path stays the default until the diff is
+ * clean, at which point the native branch is deleted and the spec becomes the
+ * only renderer. Nothing about the query parameter is user-facing.
+ */
 export default async function Partners({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadPartners(sp)
+    return <ModuleView spec={partnersSpec(data)} data={data} searchParams={sp} trusted />
+  }
   const authz = await requirePermission('reports.read')
   const scope = authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds]
   const { money } = await getMoneyFormatter()
