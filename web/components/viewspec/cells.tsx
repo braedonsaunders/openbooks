@@ -1,8 +1,10 @@
+import type { ComponentProps } from 'react'
 import Link from 'next/link'
 import { Badge } from '@openbooks/ui'
 import type { CellSpec, LeafCell } from '@openbooks/viewspec'
 import { resolvePath, resolveText, resolveValue } from '@openbooks/viewspec'
 import { ReportDrillLink } from '../../app/(app)/reports/ReportDrillLink'
+import { TxnLink } from '../../app/(app)/reports/TxnLink'
 import type { ReportDrillTarget } from '../../lib/report-drill'
 import { DRILL_LINK_CLASS, FALLBACK_CLASS } from './tone'
 
@@ -31,6 +33,14 @@ function LeafCellView({ spec, scope }: { spec: LeafCell; scope: unknown }) {
       const empty = raw === null || raw === undefined || raw === ''
       if (empty && spec.fallback !== undefined) {
         return <span className={FALLBACK_CLASS}>{resolveText(spec.fallback, scope)}</span>
+      }
+      if (spec.prefix) {
+        return (
+          <>
+            <span className={spec.prefix.className}>{String(resolvePath(scope, spec.prefix.field.$) ?? '')}</span>
+            {String(raw ?? '')}
+          </>
+        )
       }
       return <>{String(raw ?? '')}</>
     }
@@ -73,6 +83,19 @@ function LeafCellView({ spec, scope }: { spec: LeafCell; scope: unknown }) {
 }
 
 export function CellView({ spec, scope }: { spec: CellSpec; scope: unknown }) {
+  if (spec.kind === 'txn') {
+    // The loader emits the component's own link shape ({ kind: 'transaction',
+    // entryId, docKind, docId }) so the renderer performs no reshaping.
+    const target = resolvePath(scope, spec.target.$) as
+      | ComponentProps<typeof TxnLink>['target']
+      | undefined
+    if (!target) return <LeafCellView spec={spec.inner} scope={scope} />
+    return (
+      <TxnLink target={target} className={DRILL_LINK_CLASS}>
+        <LeafCellView spec={spec.inner} scope={scope} />
+      </TxnLink>
+    )
+  }
   if (spec.kind === 'drill') {
     const target = resolvePath(scope, spec.target.$) as ReportDrillTarget | undefined
     // No drill target resolved ⇒ render the inner value plainly. Statement rows

@@ -66,6 +66,12 @@ const PAGES = [
     expect: 'table tbody tr',
   },
   {
+    path: '/reports/journal',
+    // Grouped/repeating content: entries with nested line tables.
+    variants: ['', '?period=this_fiscal_year'],
+    expect: 'table tbody tr',
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,
@@ -176,6 +182,11 @@ function normalize(markup) {
       .replace(/\?__viewspec=1(&amp;|&)/g, '?')
       .replace(/(&amp;|&)__viewspec=1/g, '')
       .replace(/\?__viewspec=1/g, '')
+      // …and again URL-ENCODED, because links that carry a return path embed
+      // the current query inside a parameter value (drawerReturn=%2F…%3F…).
+      .replace(/%3F__viewspec%3D1(%26)/gi, '%3F')
+      .replace(/%26__viewspec%3D1/gi, '')
+      .replace(/%3F__viewspec%3D1/gi, '')
       .replace(/>\s+</g, '><')
       .replace(/\s+/g, ' ')
       .trim()

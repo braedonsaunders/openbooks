@@ -49,8 +49,14 @@ function alignClass(align: 'left' | 'right' | 'center' | undefined): string {
  * native pages. Doing it here rather than in the cell renderer keeps the
  * figure alignment attached to the column, which is where it belongs.
  */
+function leafOf(cell: TableBlock['columns'][number]['cell']) {
+  // Every wrapper kind must be unwrapped here. Adding one and forgetting this
+  // helper is how a converted cell silently loses its alignment or tone.
+  return cell.kind === 'drill' || cell.kind === 'txn' ? cell.inner : cell
+}
+
 function isNumericCell(cell: TableBlock['columns'][number]['cell']): boolean {
-  const leaf = cell.kind === 'drill' ? cell.inner : cell
+  const leaf = leafOf(cell)
   return leaf.kind === 'money' || leaf.kind === 'number'
 }
 
@@ -91,7 +97,7 @@ function TableBlockView({ spec, scope }: { spec: TableBlock; scope: unknown }) {
           return (
           <TableRow key={String(resolveText(spec.rowKey, rowScope) || `row-${rowIndex}`)}>
             {spec.columns.map((column, index) => {
-              const leaf = column.cell.kind === 'drill' ? column.cell.inner : column.cell
+              const leaf = leafOf(column.cell)
               // Only the value-bearing renderers carry a tone; date/badge/link
               // cells own their own presentation.
               const tone = toneClass(
@@ -243,7 +249,32 @@ export function BlockView({
 
     case 'widget': {
       if (block.when && !resolveValue(block.when as never, scope)) return null
-      return <WidgetBlockView name={block.widget} props={block.props ?? {}} />
+      return <WidgetBlockView name={block.widget} props={block.props ?? {}} scope={scope} />
+    }
+
+    case 'repeat': {
+      const items = resolveRows(block.items, scope)
+      if (items.length === 0) {
+        return block.empty ? (
+          <p className={block.empty.className}>{resolveText(block.empty.text, scope)}</p>
+        ) : null
+      }
+      const list = items.map((item, index) => {
+        // Same scoping contract as a table row: the item is the scope, the page
+        // stays reachable at `$root`.
+        const itemScope =
+          item !== null && typeof item === 'object' ? { ...(item as object), [ROOT_SCOPE_KEY]: scope } : item
+        const key = String(resolveText(block.itemKey, itemScope) || `item-${index}`)
+        const body = <BlockList blocks={block.blocks} scope={itemScope} searchParams={searchParams} />
+        return block.itemClassName !== undefined ? (
+          <div key={key} className={block.itemClassName}>
+            {body}
+          </div>
+        ) : (
+          <div key={key}>{body}</div>
+        )
+      })
+      return block.className ? <div className={block.className}>{list}</div> : <>{list}</>
     }
 
     case 'grid':

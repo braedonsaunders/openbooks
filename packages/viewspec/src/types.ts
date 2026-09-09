@@ -66,6 +66,13 @@ export interface TextCell {
   tone?: Value<Tone>
   /** Render as monospace tabular figures (the `tabular-nums` treatment). */
   numeric?: boolean
+  /**
+   * A second value rendered before the main one in its own span — the
+   * "account number then account name" idiom several report tables use. Two
+   * fields with different treatment in one cell is common enough to name;
+   * without it those cells would each need a bespoke widget.
+   */
+  prefix?: { field: FieldRef; className?: string }
 }
 
 /** Money and number cells expect the loader to have ALREADY formatted the
@@ -132,7 +139,23 @@ export type LeafCell =
   | LinkCell
   | RecordLinkCell
 
-export type CellSpec = LeafCell | DrillCell
+/**
+ * Wrapper: renders `inner` inside a transaction drawer link.
+ *
+ * Sibling of `drill`. The target ({entryId, docKind, docId}) is built by the
+ * loader and denormalized onto whatever row the cell sits in — deliberately,
+ * rather than reaching up to a parent scope. A nested table inside a `repeat`
+ * would otherwise need scope traversal to find its group's identity, and
+ * "precompute in the loader" is the cheaper answer that keeps the language
+ * from needing one.
+ */
+export interface TxnCell {
+  kind: 'txn'
+  target: FieldRef
+  inner: LeafCell
+}
+
+export type CellSpec = LeafCell | DrillCell | TxnCell
 
 export const LEAF_CELL_KINDS = [
   'text',
@@ -144,7 +167,7 @@ export const LEAF_CELL_KINDS = [
   'record-link',
 ] as const
 
-export const CELL_KINDS = [...LEAF_CELL_KINDS, 'drill'] as const
+export const CELL_KINDS = [...LEAF_CELL_KINDS, 'drill', 'txn'] as const
 
 /* -------------------------------------------------------------------------- */
 /* Widgets — host-registered interactive components a spec may place.          */
@@ -159,6 +182,13 @@ export const CELL_KINDS = [...LEAF_CELL_KINDS, 'drill'] as const
  */
 export interface WidgetRef {
   widget: string
+  /**
+   * Props may be literals OR field references, resolved against the CURRENT
+   * scope. That matters inside `repeat`: a widget rendered per item has to read
+   * that item, and baking literals in at spec-build time only works at page
+   * level. Resolution is one level deep and is still just a field lookup — no
+   * new power, the same indirection every other block uses.
+   */
   props?: Record<string, unknown>
   /** Omit the widget entirely when this loader-resolved flag is false. */
   when?: FieldRef
@@ -326,6 +356,36 @@ export interface StatTileBlock {
 }
 
 /**
+ * Render a block subtree once per item in a loader-provided collection.
+ *
+ * This is the same iteration `table` already performs over its rows, lifted to
+ * arbitrary blocks — the journal groups entries, each with its own heading and
+ * line table. It adds no new power: the collection comes from the loader, the
+ * subtree is fixed, and each item becomes the scope exactly as a table row
+ * does, with the page still reachable at `$root`.
+ *
+ * `empty` exists so a page can show "nothing here" without the language
+ * needing a negated conditional — the same reason `table` has one.
+ *
+ * Scope note worth reading before nesting: blocks inside a repeat resolve
+ * against the ITEM. Page-level values must go through `$root`, and a `table`
+ * nested here shadows it again — from one of its cells `$root` is the repeat
+ * item, not the page. Referencing a page field without `$root` fails silently
+ * as an empty cell, so denormalize onto the item when in doubt.
+ */
+export interface RepeatBlock {
+  kind: 'repeat'
+  items: FieldRef
+  itemKey: FieldRef
+  /** Wrapper around the whole list (spacing between groups). */
+  className?: string
+  /** Wrapper around each rendered item. */
+  itemClassName?: string
+  blocks: Block[]
+  empty?: { text: Value; className?: string }
+}
+
+/**
  * A host-registered domain component placed as a block.
  *
  * The escape valve for components that own real presentation logic — the
@@ -354,6 +414,7 @@ export type Block =
   | GridBlock
   | PanelBlock
   | StatTileBlock
+  | RepeatBlock
 
 export const BLOCK_KINDS = [
   'page-header',
@@ -367,6 +428,7 @@ export const BLOCK_KINDS = [
   'grid',
   'panel',
   'stat-tile',
+  'repeat',
 ] as const
 
 /* -------------------------------------------------------------------------- */
