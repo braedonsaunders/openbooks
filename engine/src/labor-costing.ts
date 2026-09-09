@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "./db.ts";
+import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import {
   add,
   cmp,
@@ -17,6 +18,13 @@ import {
   recognitionAccounts,
   reverseProjectGlEntryWithinTransaction,
 } from "./project-recognition.ts";
+
+export class LaborCostingFeatureDisabledError extends Error {
+  constructor() {
+    super("projects feature is disabled");
+    this.name = "LaborCostingFeatureDisabledError";
+  }
+}
 
 /**
  * Labor costing — resolve an employee's standard cost rate for a work date and
@@ -539,7 +547,9 @@ export async function laborClearingReconciliation(
   subsidiaryId: string,
 ): Promise<ClearingReconciliation | null> {
   return inDbTransaction(async (tx) => {
-    await tx.execute(sql`select id from orgs where id = ${orgId} for share`);
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+      throw new LaborCostingFeatureDisabledError();
+    }
     const accts = await recognitionAccounts(orgId, tx);
     if (!accts.laborClearing) return null;
     const bookId = await laborPrimaryBook(tx, orgId);
@@ -586,6 +596,11 @@ export async function postPayrollVariance(opts: {
         from orgs
        where id = ${orgId}
        for update`));
+    // Acquire the exclusive organization lock before the shared feature check:
+    // concurrent variance postings must never upgrade competing share locks.
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+      throw new LaborCostingFeatureDisabledError();
+    }
     const laborClearing = config.rows[0]?.labor_clearing;
     const varianceAccount = config.rows[0]?.payroll_variance;
     if (!laborClearing || !varianceAccount) {
