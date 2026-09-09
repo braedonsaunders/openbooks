@@ -816,8 +816,7 @@ export async function generateVendorPayApplicationBill(
     const detail = (await tx.execute<{ description: string; gross: string; account_id: string | null }>(sql`
       select l.sov_line_id, sov.description, sov.expense_account_id,
              (l.work_completed_this_period + l.materials_stored_current - l.previous_materials_stored)::text as gross,
-             coalesce(sov.expense_account_id, vr.default_expense_account_id,
-               (select id from accounts where org_id = ${orgId} and is_active and not is_summary and type in ('expense','cogs') order by number nulls last limit 1)) as account_id
+             coalesce(sov.expense_account_id, vr.default_expense_account_id) as account_id
         from vendor_pay_application_lines l
         join subcontract_sov_lines sov on sov.id = l.sov_line_id and sov.org_id = l.org_id
         join subcontracts s on s.id = sov.subcontract_id and s.org_id = sov.org_id
@@ -825,7 +824,24 @@ export async function generateVendorPayApplicationBill(
        where l.org_id = ${orgId} and l.pay_application_id = ${id}
        order by sov.sort_order
     `));
-    if (detail.rows.some((row) => cmp(row.gross, "0") > 0 && !row.account_id)) throw new SubcontractError("Every billed SOV line requires an expense account");
+    const validatedAccounts = new Set<string>();
+    for (const line of detail.rows) {
+      if (cmp(persistVendorBillLineGross(line.gross), "0") === 0) continue;
+      if (!line.account_id) {
+        throw new SubcontractError(`SOV line "${line.description}" requires an account. Configure its expense account or the vendor's default expense account before generating the bill.`);
+      }
+      if (validatedAccounts.has(line.account_id)) continue;
+      // Preserve explicit capitalization accounts as well as expense accounts.
+      // Hold the account stable until the bill and its source link are written.
+      const account = await tx.execute(sql`
+        select id from accounts where org_id = ${orgId} and id = ${line.account_id}
+          and is_active and not is_summary for share
+      `);
+      if (!account.rows.length) {
+        throw new SubcontractError(`The configured account for SOV line "${line.description}" must be an active, non-summary account in this organization. Correct its expense account or the vendor's default expense account before generating the bill.`);
+      }
+      validatedAccounts.add(line.account_id);
+    }
     const documentNumber = await nextDocumentNumber(tx, orgId, "BILL-");
     const document = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
