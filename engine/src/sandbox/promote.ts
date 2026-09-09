@@ -4,6 +4,7 @@ import { db, schema, withMaintenanceTransaction } from "../db.ts";
 import { assertUuid } from "./catalog.ts";
 import { remapRoleRestriction, sandboxSubsidiaryMap } from "./json-references.ts";
 import { lockAndCheckOrgFeature } from "../org-feature-lock.ts";
+import { computeScheduledScriptNextRunAt } from "../scripting.ts";
 import { isCataloguePermission, PERMISSION_CATALOGUE, permissionSetCovers, permissionsOutsideCeiling, resolveEffectivePermissions } from "../permissions.ts";
 
 /**
@@ -42,6 +43,9 @@ const PROMOTABLE = Object.keys(PROMOTION_PERMISSIONS);
 const PROMOTABLE_ARRAY = `{${PROMOTABLE.join(",")}}`;
 
 const STRUCTURAL = new Set(["id", "org_id", "created_at", "updated_at", "created_by", "updated_by"]);
+// Execution evidence and scheduler cursors belong to their environment. They
+// are neither configuration differences nor reasons to invalidate a review.
+const SCRIPT_RUNTIME = new Set(["last_run_at", "next_run_at"]);
 const USER_REFERENCE_COLUMNS: Readonly<Record<string, string>> = {
   saved_views: "owner_id",
   list_views: "owner_id",
@@ -147,10 +151,12 @@ async function assertDistinctActors(
   }
 }
 
-function contentSig(row: Record<string, unknown> | null): string {
+function contentSig(table: string, row: Record<string, unknown> | null): string {
   if (!row) return "";
   const o: Record<string, unknown> = {};
-  for (const k of Object.keys(row).sort()) if (!STRUCTURAL.has(k)) o[k] = row[k];
+  for (const k of Object.keys(row).sort()) {
+    if (!STRUCTURAL.has(k) && !(table === "user_scripts" && SCRIPT_RUNTIME.has(k))) o[k] = row[k];
+  }
   return JSON.stringify(o);
 }
 
@@ -237,7 +243,7 @@ export async function buildChangeSet(
           d.sbx_row.subsidiary_restriction = remapRoleRestriction(d.sbx_row.subsidiary_restriction, toProduction, `promotion role ${d.sbx_id}`);
           if (d.prod_row) d.prod_row.subsidiary_restriction = remapRoleRestriction(d.prod_row.subsidiary_restriction, productionSubsidiaries, `production role ${d.prod_id}`);
         }
-        if (!repairsProductionReference && contentSig(d.sbx_row) === contentSig(d.prod_row)) continue; // unchanged
+        if (!repairsProductionReference && contentSig(t, d.sbx_row) === contentSig(t, d.prod_row)) continue; // unchanged
         const targetId = d.prod_id ?? randomUUID();
         const payload = { ...d.sbx_row, id: targetId, org_id: prod, created_by: null, updated_by: null };
         await db.insert(schema.changeSetItems).values({
@@ -380,9 +386,17 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
       }
       const target = assertUuid(it.target_id);
       const table = sql`public.${sql.identifier(t)}`;
+      const runtimeColumns = t === "user_scripts" ? "{last_run_at,next_run_at}" : "{}";
+      // Insert captures carry a null base, and jsonb `- text[]` rejects
+      // non-objects — strip runtime cursors only from object bases so new
+      // scripts can still promote.
+      const expectedBefore = JSON.stringify(it.expected_before);
       const prior = await db.execute<{ row: Record<string, unknown>; matches_base: boolean }>(sql`
         select to_jsonb(existing) as row,
-               to_jsonb(existing) is not distinct from ${JSON.stringify(it.expected_before)}::jsonb as matches_base
+               (to_jsonb(existing) - ${runtimeColumns}::text[]) is not distinct from
+               (case when jsonb_typeof(${expectedBefore}::jsonb) = 'object'
+                     then ${expectedBefore}::jsonb - ${runtimeColumns}::text[]
+                     else ${expectedBefore}::jsonb end) as matches_base
           from ${table} existing
          where id = ${target} and org_id = ${prod} for update`);
       const before = prior.rows[0]?.row ?? null;
@@ -410,6 +424,17 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
           || typeof payload.id !== "string" || payload.id.toLowerCase() !== target.toLowerCase()
           || typeof payload.org_id !== "string" || payload.org_id.toLowerCase() !== prod.toLowerCase()) {
           throw new Error(`promotion payload identity does not match ${t}/${target}`);
+        }
+        if (t === "user_scripts") {
+          // Ignore even legacy captures' runtime values. Preserve the current
+          // production cursor unless scheduling policy itself is changing.
+          for (const field of SCRIPT_RUNTIME) delete payload[field];
+          const next = payload.trigger_point === "scheduled"
+            ? computeScheduledScriptNextRunAt(typeof payload.cron === "string" ? payload.cron : null)
+            : null;
+          const schedulingChanged = !before || ["trigger_point", "cron", "is_active"].some(field => payload[field] !== before[field]);
+          if (schedulingChanged) payload.next_run_at = payload.is_active ? next?.toISOString() ?? null : null;
+          if (!before) payload.last_run_at = null;
         }
         const userField = USER_REFERENCE_COLUMNS[t];
         if (userField && payload[userField] !== null) {
