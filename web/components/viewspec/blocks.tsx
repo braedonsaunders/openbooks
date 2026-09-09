@@ -5,13 +5,22 @@ import { ROOT_SCOPE_KEY, resolveNumber, resolveRows, resolveText, resolveValue }
 import { Pagination } from '../pagination'
 import { HomePanel, HomeStatTile } from '../module-home/client'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table as ReportTableRoot,
+  TableBody as ReportTableBody,
+  TableCell as ReportTableCell,
+  TableHead as ReportTableHead,
+  TableHeader as ReportTableHeader,
+  TableRow as ReportTableRow,
 } from '../../app/(app)/reports/ReportTable'
+import {
+  Table as AppTableRoot,
+  TableBody as AppTableBody,
+  TableCell as AppTableCell,
+  TableHead as AppTableHead,
+  TableHeader as AppTableHeader,
+  TableRow as AppTableRow,
+  EmptyState,
+} from '@openbooks/ui'
 import { ReportPaper } from '../../app/(app)/reports/ReportPaper'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CellView } from './cells'
@@ -79,7 +88,16 @@ function leafOf(cell: TableBlock['columns'][number]['cell']) {
 
 /** A spanning summary row (opening / closing / totals). Resolves against the
  *  table's own scope, not a row scope. */
-function SpanRowView({ row, scope }: { row: NonNullable<TableBlock['leading']>[number]; scope: unknown }) {
+function SpanRowView({
+  row,
+  scope,
+  primitives,
+}: {
+  row: NonNullable<TableBlock['leading']>[number]
+  scope: unknown
+  primitives: ReturnType<typeof tablePrimitives>
+}) {
+  const { TableRow, TableCell } = primitives
   return (
     <TableRow className={row.className}>
       <TableCell colSpan={row.labelColSpan} className={row.labelClassName}>
@@ -108,14 +126,51 @@ function isNumericCell(cell: TableBlock['columns'][number]['cell']): boolean {
   return leaf.kind === 'money' || leaf.kind === 'number'
 }
 
+/**
+ * The app has two genuinely different tables and they are not interchangeable:
+ * report primitives carry statement typography with no card, hover or row
+ * dividers; app primitives are the list-page table with card chrome, a sticky
+ * header and row entrance staggering. Picking the wrong one is a visible
+ * difference, so the variant selects the whole primitive set rather than
+ * toggling classes on one.
+ */
+function tablePrimitives(variant: TableBlock['variant']) {
+  return variant === 'app'
+    ? {
+        Table: AppTableRoot,
+        TableHeader: AppTableHeader,
+        TableBody: AppTableBody,
+        TableRow: AppTableRow,
+        TableHead: AppTableHead,
+        TableCell: AppTableCell,
+      }
+    : {
+        Table: ReportTableRoot,
+        TableHeader: ReportTableHeader,
+        TableBody: ReportTableBody,
+        TableRow: ReportTableRow,
+        TableHead: ReportTableHead,
+        TableCell: ReportTableCell,
+      }
+}
+
 function TableBlockView({ spec, scope: rawScope }: { spec: TableBlock; scope: unknown }) {
   // Seed `$root` when absent so a page-level table resolves `$root.x` the same
   // way a nested one does. Without this, moving a table into or out of a
   // `repeat` would silently change what its headers resolve to.
   const scope = nestedScope(rawScope, rawScope)
+  const primitives = tablePrimitives(spec.variant)
+  const { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } = primitives
   const rows = resolveRows(spec.rows, scope)
   if (rows.length === 0 && spec.empty && !spec.leading && !spec.trailing) {
-    return (
+    // App list pages use the shared EmptyState; report papers use the plain
+    // centred paragraph they already render.
+    return spec.variant === 'app' ? (
+      <EmptyState
+        title={resolveText(spec.empty.title, scope)}
+        description={resolveText(spec.empty.description, scope) || undefined}
+      />
+    ) : (
       <div className="px-4 py-10 text-center">
         <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
           {resolveText(spec.empty.title, scope)}
@@ -140,7 +195,9 @@ function TableBlockView({ spec, scope: rawScope }: { spec: TableBlock; scope: un
         </TableRow>
       </TableHeader>
       <TableBody>
-        {spec.leading?.map((row, index) => <SpanRowView key={`lead-${index}`} row={row} scope={scope} />)}
+        {spec.leading?.map((row, index) => (
+          <SpanRowView key={`lead-${index}`} row={row} scope={scope} primitives={primitives} />
+        ))}
         {rows.map((row, rowIndex) => {
           // Cells resolve against the row, with the page scope reachable at
           // `$root` for shared constants (placeholder text, labels). One fixed
@@ -167,7 +224,9 @@ function TableBlockView({ spec, scope: rawScope }: { spec: TableBlock; scope: un
           </TableRow>
           )
         })}
-        {spec.trailing?.map((row, index) => <SpanRowView key={`trail-${index}`} row={row} scope={scope} />)}
+        {spec.trailing?.map((row, index) => (
+          <SpanRowView key={`trail-${index}`} row={row} scope={scope} primitives={primitives} />
+        ))}
       </TableBody>
     </Table>
   )

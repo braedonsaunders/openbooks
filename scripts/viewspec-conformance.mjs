@@ -83,6 +83,12 @@ const PAGES = [
     expect: 'table tbody tr',
   },
   {
+    path: '/data/import/history',
+    // First app-variant list table (card chrome, sticky header, EmptyState).
+    variants: [''],
+    expect: 'table, [data-empty-state], h2, h3',
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,
@@ -240,6 +246,33 @@ function sortClassLists(markup) {
   })
 }
 
+/**
+ * Canonicalize inline style attributes.
+ *
+ * The same declarations serialize two ways depending on how they were set:
+ * framer-motion's SSR output is `opacity:1;transform:none`, while a style the
+ * browser has since written through the CSSOM comes back as
+ * `opacity: 1; transform: none;`. Which one you get depends on whether a row's
+ * entrance animation had finished at read time — a race, not a difference.
+ *
+ * Declarations are preserved exactly; only spacing, trailing semicolons and
+ * order are normalized, so a changed or missing property still fails.
+ */
+function normalizeStyles(markup) {
+  return markup.replace(/style="([^"]*)"/g, (_all, style) => {
+    const declarations = style
+      .split(';')
+      .map((d) => d.trim())
+      .filter(Boolean)
+      .map((d) => {
+        const index = d.indexOf(':')
+        return index === -1 ? d : `${d.slice(0, index).trim()}:${d.slice(index + 1).trim()}`
+      })
+      .sort()
+    return `style="${declarations.join(';')}"`
+  })
+}
+
 function tokenize(markup) {
   return markup.match(/<[^>]+>|[^<]+/g) ?? []
 }
@@ -378,7 +411,7 @@ async function checkVariant(page, path, variant, expectSelector) {
   await assertStylesLoaded(page)
   const nativePath = await renderPath(page)
   if (nativePath !== 'native') throw new Error(`${nativeUrl} rendered via ${nativePath}, expected native`)
-  const nativeMarkup = sortClassLists(sortAttributes(normalize(await page.locator('main').innerHTML())))
+  const nativeMarkup = normalizeStyles(sortClassLists(sortAttributes(normalize(await page.locator('main').innerHTML()))))
   const nativeShot = await captureSettled(page)
   const ink = await assertNotBlank(nativeShot, `${path}${variant} native`)
 
@@ -389,7 +422,7 @@ async function checkVariant(page, path, variant, expectSelector) {
       `${specUrl(path, variant)} rendered via ${chosen}, expected viewspec — the server is probably serving a build that predates the conversion`,
     )
   }
-  const specMarkup = sortClassLists(sortAttributes(normalize(await page.locator('main').innerHTML())))
+  const specMarkup = normalizeStyles(sortClassLists(sortAttributes(normalize(await page.locator('main').innerHTML()))))
   const specShot = await captureSettled(page)
   await assertNotBlank(specShot, `${path}${variant} spec`)
 
