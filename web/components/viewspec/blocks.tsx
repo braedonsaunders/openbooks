@@ -3,6 +3,7 @@ import { PageHeader, cn } from '@openbooks/ui'
 import type { Block, PaperBlock, TableBlock, Tone } from '@openbooks/viewspec'
 import { ROOT_SCOPE_KEY, resolveNumber, resolveRows, resolveText, resolveValue } from '@openbooks/viewspec'
 import { Pagination } from '../pagination'
+import { SortTh } from '../sortable-th'
 import { HomePanel, HomeStatTile } from '../module-home/client'
 import {
   Table as ReportTableRoot,
@@ -154,7 +155,15 @@ function tablePrimitives(variant: TableBlock['variant']) {
       }
 }
 
-function TableBlockView({ spec, scope: rawScope }: { spec: TableBlock; scope: unknown }) {
+function TableBlockView({
+  spec,
+  scope: rawScope,
+  searchParams,
+}: {
+  spec: TableBlock
+  scope: unknown
+  searchParams: Record<string, string | string[] | undefined>
+}) {
   // Seed `$root` when absent so a page-level table resolves `$root.x` the same
   // way a nested one does. Without this, moving a table into or out of a
   // `repeat` would silently change what its headers resolve to.
@@ -187,11 +196,34 @@ function TableBlockView({ spec, scope: rawScope }: { spec: TableBlock; scope: un
     <Table>
       <TableHeader>
         <TableRow>
-          {spec.columns.map((column, index) => (
-            <TableHead key={index} className={cn(alignClass(column.align), column.headerClassName) || undefined}>
-              {resolveText(column.header, scope)}
-            </TableHead>
-          ))}
+          {spec.columns.map((column, index) => {
+            const label = resolveText(column.header, scope)
+            const headClass = cn(alignClass(column.align), column.headerClassName) || undefined
+            // A column with a sort key renders the shared sort link header
+            // instead of a plain one — the same component the native lists use,
+            // so the markup is identical rather than approximated.
+            if (column.sort && spec.sorting) {
+              return (
+                <SortTh
+                  key={index}
+                  basePath={resolveText(spec.sorting.basePath, scope)}
+                  currentParams={searchParams}
+                  column={column.sort}
+                  sort={resolveText(spec.sorting.sort, scope)}
+                  dir={(resolveText(spec.sorting.dir, scope) as 'asc' | 'desc') || 'asc'}
+                  align={column.align === 'right' ? 'right' : 'left'}
+                  className={column.headerClassName}
+                >
+                  {label}
+                </SortTh>
+              )
+            }
+            return (
+              <TableHead key={index} className={headClass}>
+                {label}
+              </TableHead>
+            )
+          })}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -350,7 +382,7 @@ export function BlockView({
       return <PaperBlockView spec={block} scope={scope} searchParams={searchParams} />
 
     case 'table':
-      return <TableBlockView spec={block} scope={scope} />
+      return <TableBlockView spec={block} scope={scope} searchParams={searchParams} />
 
     case 'pagination': {
       const pager = (

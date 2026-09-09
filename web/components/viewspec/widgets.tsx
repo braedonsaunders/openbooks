@@ -20,6 +20,9 @@ import { ViewNameCell, ViewActionsCell } from '../../app/(app)/knowledge/views/s
 import { NewViewButton } from '../../app/(app)/knowledge/views/NewViewButton'
 import { ViewStudio } from '../../app/(app)/knowledge/views/ViewStudio'
 import { EmptyState } from '@openbooks/ui'
+import { DashboardNameCell } from '../../app/(app)/insights/dashboards/sections'
+import { NewDashboardButton } from '../../app/(app)/insights/dashboards/NewDashboardButton'
+import { InsightsTabs } from '../../app/(app)/insights/InsightsTabs'
 import { SearchInput } from '../search-input'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
@@ -252,8 +255,29 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       reconciled={props.reconciled === true}
     />
   ),
-  'empty-state': (props) => (
-    <EmptyState title={str(props, 'title') ?? ''} description={str(props, 'description')} />
+  'empty-state': (props) => {
+    // `action` names a widget rather than carrying JSX, so an empty state can
+    // offer its create button without the spec expressing a component.
+    const action = str(props, 'action')
+    const renderer = action ? WIDGET_REGISTRY[action] : undefined
+    return (
+      <EmptyState
+        title={str(props, 'title') ?? ''}
+        description={str(props, 'description')}
+        action={renderer ? renderer({}) : undefined}
+      />
+    )
+  },
+  'insights-tabs': (props) => (
+    <InsightsTabs active={(str(props, 'active') ?? '') as ComponentProps<typeof InsightsTabs>['active']} />
+  ),
+  'new-dashboard': () => <NewDashboardButton />,
+  'dashboard-name-cell': (props) => (
+    <DashboardNameCell
+      name={str(props, 'name') ?? ''}
+      href={str(props, 'href') ?? ''}
+      description={(props.description as string | null) ?? null}
+    />
   ),
   'new-saved-view': () => <NewViewButton />,
   'view-name-cell': (props) => (
