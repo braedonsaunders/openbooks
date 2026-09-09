@@ -53,10 +53,17 @@ const VIEWPORT = { width: 1440, height: 900 }
 const PAGES = [
   {
     path: '/reports/partners',
-    variants: ['', '?kind=payable', '?kind=receivable', '?kind=receivable&q=zzzznomatch'],
+    variants: [
+      '',
+      '?kind=payable',
+      '?kind=receivable',
+      // Deliberate empty result: assert the empty branch, not row content.
+      { query: '?kind=receivable&q=zzzznomatch', expect: 'table thead th', minMatches: 1 },
+    ],
     // Proof the page actually rendered. Without a positive content assertion a
     // capture taken during the loading screen compares blank against blank.
-    expect: 'table thead th',
+    expect: 'table tbody tr',
+    minMatches: 3,
   },
   {
     path: '/reports/pnl',
@@ -64,29 +71,34 @@ const PAGES = [
     // dimension breakout, and a scaled presentation.
     variants: ['', '?compare=prior_period', '?breakout=month', '?scale=thousands', '?showZero=1'],
     expect: 'table tbody tr',
+    minMatches: 5,
   },
   {
     path: '/reports/journal',
     // Grouped/repeating content: entries with nested line tables.
     variants: ['', '?period=this_fiscal_year'],
     expect: 'table tbody tr',
+    minMatches: 5,
   },
   {
     path: '/reports/general-ledger',
     // Repeating groups WITH spanning opening/closing summary rows.
     variants: ['', '?period=this_fiscal_year'],
     expect: 'table tbody tr',
+    minMatches: 5,
   },
   {
     path: '/reports/orders',
     variants: [''],
     expect: 'table tbody tr',
+    minMatches: 3,
   },
   {
     path: '/data/import/history',
     // First app-variant list table (card chrome, sticky header, EmptyState).
     variants: [''],
-    expect: 'table, [data-empty-state], h2, h3',
+    expect: 'table tbody tr',
+    minMatches: 3,
   },
   {
     path: '/purchasing',
@@ -116,7 +128,7 @@ async function login(page) {
  * fade matters because `PageContainer` animates opacity on mount; screenshotting
  * mid-animation produces a diff that is pure timing noise.
  */
-async function renderSettled(page, url, expectSelector) {
+async function renderSettled(page, url, expectSelector, minMatches = 0) {
   await page.goto(url, { waitUntil: 'networkidle' })
   await page.waitForSelector('main', { state: 'attached' })
   // Suspense fallbacks leave `<template id="B:n">` placeholders behind.
@@ -132,6 +144,18 @@ async function renderSettled(page, url, expectSelector) {
   // exists once its real content has rendered.
   if (expectSelector) {
     await page.waitForSelector(expectSelector, { state: 'visible', timeout: 30_000 })
+  }
+  // A page that legitimately renders its EMPTY state is not blank, so the ink
+  // and byte-count guards pass it happily while proving nothing about the
+  // table path. `minMatches` demands real content: import history passed at
+  // 2068 bytes with zero rows before this existed.
+  if (expectSelector && minMatches > 0) {
+    const found = await page.locator(expectSelector).count()
+    if (found < minMatches) {
+      throw new Error(
+        `${url} matched ${found} of "${expectSelector}", need ${minMatches} — the page has no data, so this comparison would prove nothing`,
+      )
+    }
   }
   // Wait out the brand splash. It is a root-layout overlay held for
   // MIN_VISIBLE_MS (2s) plus a 400ms fade on EVERY document load, so a capture
@@ -405,9 +429,9 @@ async function assertNotBlank(shot, label) {
   return inkRatio
 }
 
-async function checkVariant(page, path, variant, expectSelector) {
+async function checkVariant(page, path, variant, expectSelector, minMatches) {
   const nativeUrl = `${BASE}${path}${variant}`
-  await renderSettled(page, nativeUrl, expectSelector)
+  await renderSettled(page, nativeUrl, expectSelector, minMatches)
   await assertStylesLoaded(page)
   const nativePath = await renderPath(page)
   if (nativePath !== 'native') throw new Error(`${nativeUrl} rendered via ${nativePath}, expected native`)
@@ -415,7 +439,7 @@ async function checkVariant(page, path, variant, expectSelector) {
   const nativeShot = await captureSettled(page)
   const ink = await assertNotBlank(nativeShot, `${path}${variant} native`)
 
-  await renderSettled(page, specUrl(path, variant), expectSelector)
+  await renderSettled(page, specUrl(path, variant), expectSelector, minMatches)
   const chosen = await renderPath(page)
   if (chosen !== 'viewspec') {
     throw new Error(
@@ -480,10 +504,17 @@ async function main() {
 
     for (const entry of pages) {
       const results = []
-      for (const variant of entry.variants) {
+      for (const raw of entry.variants) {
+        // A variant may be a bare query string, or an object overriding the
+        // page's expectations — an intentional empty-result case has to opt out
+        // of the data-presence requirement rather than weaken it for everyone.
+        const variant = typeof raw === 'string' ? raw : raw.query
+        const expect = (typeof raw === 'string' ? undefined : raw.expect) ?? entry.expect
+        const minMatches =
+          typeof raw === 'string' ? (entry.minMatches ?? 0) : (raw.minMatches ?? entry.minMatches ?? 0)
         let result
         try {
-          result = await checkVariant(page, entry.path, variant, entry.expect)
+          result = await checkVariant(page, entry.path, variant, expect, minMatches)
         } catch (error) {
           failures += 1
           console.error(`✗ ${entry.path}${variant}\n    ${error.message}`)
