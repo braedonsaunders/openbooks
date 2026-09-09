@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, inDbTransaction, schema } from "./db.ts";
+import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "./billing-source-integrity.ts";
 import {
   add,
   cmp,
@@ -1703,6 +1704,13 @@ export async function postDocument(
     .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
     .orderBy(asc(schema.documentLines.lineNumber));
 
+  try {
+    await assertGeneratedBillingPostable(db, doc.orgId, documentId, { document: doc, lines });
+  } catch (error) {
+    if (error instanceof BillingSourceIntegrityError) throw new PostingError(error.message);
+    throw error;
+  }
+
   // Fail closed before before_post scripts/flows can emit downstream evidence.
   // The tax component snapshot and the resolved org fallback are the only
   // authoritative destinations; AP/AR are never silently substituted.
@@ -1943,6 +1951,12 @@ export async function postDocument(
     // same lock: whichever operation acquires the row first wins, and the
     // other re-checks after it commits.
     await tx.execute(sql`select id from orgs where id = ${doc.orgId} for update`);
+    try {
+      await assertGeneratedBillingPostable(tx, doc.orgId, documentId, { document: effectiveDoc, lines: postingLines }, true);
+    } catch (error) {
+      if (error instanceof BillingSourceIntegrityError) throw new PostingError(error.message);
+      throw error;
+    }
     if (deps.migration)
       await tx.execute(sql`set local openbooks.migration = on`);
     const auditBefore = options.audit
