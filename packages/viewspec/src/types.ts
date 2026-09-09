@@ -73,6 +73,8 @@ export interface TextCell {
    * without it those cells would each need a bespoke widget.
    */
   prefix?: { field: FieldRef; className?: string }
+  /** Symmetric to `prefix`; the trailing "· email" idiom on owner cells. */
+  suffix?: { field: FieldRef; className?: string }
 }
 
 /** Money and number cells expect the loader to have ALREADY formatted the
@@ -105,6 +107,7 @@ export interface LinkCell {
   kind: 'link'
   field: FieldRef
   href: FieldRef
+  className?: string
 }
 
 /**
@@ -337,7 +340,14 @@ export interface TableBlock {
   /** Stable React key per row. */
   rowKey: FieldRef
   columns: Column[]
+  /** Replaces the whole table when the collection is empty. */
   empty?: { title: Value; description?: Value }
+  /**
+   * Alternative empty treatment: a single spanning row INSIDE the table, so
+   * the column headers stay visible. Several admin lists prefer this to the
+   * table vanishing. When both are set, this wins.
+   */
+  emptyRow?: { text: Value; colSpan: number; className?: string }
 }
 
 export interface PaginationBlock {

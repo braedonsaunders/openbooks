@@ -13,6 +13,8 @@ import { JournalEntryHeading } from '../../app/(app)/reports/journal/sections'
 import { AccountHeading, EntryCell } from '../../app/(app)/reports/general-ledger/sections'
 import { ResourceCell, RowCountsCell } from '../../app/(app)/data/import/history/sections'
 import { PartyHeading } from '../../app/(app)/reports/registers/sections'
+import { SearchInput } from '../search-input'
+import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
 
@@ -176,6 +178,19 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       closingDrill={props.closingDrill as ComponentProps<typeof PartyHeading>['closingDrill']}
     />
   ),
+  /* --- admin lists -------------------------------------------------------- */
+  'search-input': (props) => <SearchInput placeholder={str(props, 'placeholder')} />,
+  /** A monospaced inline code cell (key previews, identifiers). */
+  'code-cell': (props) => (
+    <code className="font-mono text-[12px] text-slate-500 dark:text-slate-400">
+      {str(props, 'text') ?? ''}
+    </code>
+  ),
+  'new-api-key': () => <NewKeyButton />,
+  'api-key-drawer': (props) => (
+    <KeyDrawer keyRow={(props.keyRow as ComponentProps<typeof KeyDrawer>['keyRow']) ?? null} />
+  ),
+
   'save-view': () => <SaveViewButton />,
   'export-menu': (props) => (
     <ExportMenu kind={str(props, 'kind')} params={stringRecord(props, 'params')} baseHref={str(props, 'baseHref')} />

@@ -45,6 +45,9 @@ const textCell = z.strictObject({
   prefix: z
     .strictObject({ field: fieldRefSchema, className: z.string().max(200).optional() })
     .optional(),
+  suffix: z
+    .strictObject({ field: fieldRefSchema, className: z.string().max(200).optional() })
+    .optional(),
 })
 
 const moneyCell = z.strictObject({
@@ -76,6 +79,7 @@ const linkCell = z.strictObject({
   kind: z.literal('link'),
   field: fieldRefSchema,
   href: fieldRefSchema,
+  className: z.string().max(200).optional(),
 })
 
 const recordLinkCell = z.strictObject({
@@ -216,6 +220,13 @@ const tableBlock = z.strictObject({
   rowKey: fieldRefSchema,
   columns: z.array(columnSchema).min(1).max(60),
   empty: z.strictObject({ title: value, description: value.optional() }).optional(),
+  emptyRow: z
+    .strictObject({
+      text: value,
+      colSpan: z.number().int().min(1).max(60),
+      className: z.string().max(200).optional(),
+    })
+    .optional(),
 })
 
 const paginationBlock = z.strictObject({

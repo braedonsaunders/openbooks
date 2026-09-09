@@ -11,6 +11,8 @@ import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { dateTime } from '../../../../lib/format'
 import { NewKeyButton, KeyDrawer } from './KeyDrawer'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadApiKeys, apiKeysSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +21,17 @@ export default async function ApiKeysPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadApiKeys(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={apiKeysSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('api.keys.manage')
   await requireFeatureEnabled(authz.user.orgId, 'apiAccess')
   const t = await getTranslations('admin.apiKeys')

@@ -162,7 +162,7 @@ function TableBlockView({ spec, scope: rawScope }: { spec: TableBlock; scope: un
   const primitives = tablePrimitives(spec.variant)
   const { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } = primitives
   const rows = resolveRows(spec.rows, scope)
-  if (rows.length === 0 && spec.empty && !spec.leading && !spec.trailing) {
+  if (rows.length === 0 && spec.empty && !spec.emptyRow && !spec.leading && !spec.trailing) {
     // App list pages use the shared EmptyState; report papers use the plain
     // centred paragraph they already render.
     return spec.variant === 'app' ? (
@@ -198,6 +198,13 @@ function TableBlockView({ spec, scope: rawScope }: { spec: TableBlock; scope: un
         {spec.leading?.map((row, index) => (
           <SpanRowView key={`lead-${index}`} row={row} scope={scope} primitives={primitives} />
         ))}
+        {rows.length === 0 && spec.emptyRow ? (
+          <TableRow>
+            <TableCell colSpan={spec.emptyRow.colSpan} className={spec.emptyRow.className}>
+              {resolveText(spec.emptyRow.text, scope)}
+            </TableCell>
+          </TableRow>
+        ) : null}
         {rows.map((row, rowIndex) => {
           // Cells resolve against the row, with the page scope reachable at
           // `$root` for shared constants (placeholder text, labels). One fixed
