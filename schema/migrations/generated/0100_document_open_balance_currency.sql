@@ -1,3 +1,4 @@
+-- OpenBooks forward migration 0100_document_open_balance_currency.
 -- Cached document balances are denominated in the document currency, not the
 -- functional currency of its journal. Only the posted_entry_id representation
 -- contributes; parallel books must never be added together.

@@ -41,7 +41,7 @@ test('invoice generation persists cost-line qty, rate, and amount through exact-
   assert.match(helper, /canonicalDecimal\(value, 8\)/)
 
   const costLoopStart = billing.indexOf('for (const cl of costRows.rows)')
-  const costLoopEnd = billing.indexOf('Lump-sum markup', costLoopStart)
+  const costLoopEnd = billing.indexOf('for (const line of built)', costLoopStart)
   assert.ok(costLoopStart >= 0 && costLoopEnd > costLoopStart, 'cost-line invoice loop is present')
   const costLoop = billing.slice(costLoopStart, costLoopEnd)
   assert.match(costLoop, /persistInvoiceDecimal\(cl\.amount \?\? '0'/)
