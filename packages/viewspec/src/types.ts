@@ -63,6 +63,8 @@ export interface TextCell {
   field: FieldRef
   /** Rendered when the field is null/undefined/''. Italic subtle treatment. */
   fallback?: Value
+  /** Override the fallback's class (aging uses a dimmer em-dash placeholder). */
+  fallbackClassName?: string
   tone?: Value<Tone>
   /** Render as monospace tabular figures (the `tabular-nums` treatment). */
   numeric?: boolean
@@ -215,7 +217,20 @@ export interface WidgetRef {
 /* Blocks                                                                      */
 /* -------------------------------------------------------------------------- */
 
-export interface PageHeaderBlock {
+/**
+ * Every block may carry `when`: a loader-resolved flag that omits the block
+ * entirely when falsy.
+ *
+ * This is presence, not branching. A page showing one of two tables gives the
+ * loader TWO independent flags (`isDetail`, `isSummary`) rather than the spec
+ * gaining a negation — which keeps the language free of an operator that would
+ * make the argument against arithmetic and comparisons much weaker.
+ */
+export interface BlockCommon {
+  when?: FieldRef
+}
+
+export interface PageHeaderBlock extends BlockCommon {
   kind: 'page-header'
   title: Value
   description?: Value
@@ -233,6 +248,10 @@ export interface PageHeaderBlock {
 export interface FilterBarControls {
   search?: boolean
   period?: boolean
+  /** Always-visible explicit From/To fields rather than the period preset. */
+  dateRange?: boolean
+  /** Balance-style: custom period collapses to a single "as of" date. */
+  asOf?: boolean
   breakout?: boolean
   compare?: boolean
   basis?: boolean
@@ -243,7 +262,7 @@ export interface FilterBarControls {
   sections?: boolean
 }
 
-export interface FilterBarBlock {
+export interface FilterBarBlock extends BlockCommon {
   kind: 'filter-bar'
   controls: FilterBarControls
   searchPlaceholder?: Value
@@ -274,14 +293,14 @@ export interface ToggleLinkGroup {
 }
 
 /** A one-line summary above the content ("Total outstanding: $X"). */
-export interface SummaryLineBlock {
+export interface SummaryLineBlock extends BlockCommon {
   kind: 'summary-line'
   label: Value
   value: CellSpec
 }
 
 /** The printable report sheet wrapper. */
-export interface PaperBlock {
+export interface PaperBlock extends BlockCommon {
   kind: 'paper'
   company?: Value
   title: Value
@@ -314,6 +333,7 @@ export interface Column {
  */
 export interface TableSpanRow {
   label: Value
+  /** 1 renders a plain cell with no colspan attribute, matching a normal row. */
   labelColSpan: number
   labelClassName?: string
   className?: string
@@ -328,7 +348,7 @@ export interface TableSpanRow {
  */
 export type TableVariant = 'report' | 'app'
 
-export interface TableBlock {
+export interface TableBlock extends BlockCommon {
   kind: 'table'
   variant?: TableVariant
   /** Rows rendered before the collection (opening balances). */
@@ -350,7 +370,7 @@ export interface TableBlock {
   emptyRow?: { text: Value; colSpan: number; className?: string }
 }
 
-export interface PaginationBlock {
+export interface PaginationBlock extends BlockCommon {
   kind: 'pagination'
   basePath: Value
   total: FieldRef
@@ -379,13 +399,13 @@ export interface TextBlock {
  * naturally bounded — Tailwind compiles a fixed set of utilities, so a spec can
  * only name classes the bundle already contains and cannot invent new CSS.
  */
-export interface GridBlock {
+export interface GridBlock extends BlockCommon {
   kind: 'grid'
   className?: string
   blocks: Block[]
 }
 
-export interface PanelBlock {
+export interface PanelBlock extends BlockCommon {
   kind: 'panel'
   title: Value
   iconKey?: Value
@@ -424,7 +444,7 @@ export interface StatTileBlock {
  * nesting preserves it rather than re-pointing it — so a table's headers
  * resolve the same whether or not the table sits inside a repeat.
  */
-export interface RepeatBlock {
+export interface RepeatBlock extends BlockCommon {
   kind: 'repeat'
   items: FieldRef
   itemKey: FieldRef

@@ -105,6 +105,7 @@ export function text(
     numeric?: boolean
     prefix?: TextCell['prefix']
     suffix?: TextCell['suffix']
+    fallbackClassName?: string
   } = {},
 ): TextCell {
   return { kind: 'text', field: f, ...opts }

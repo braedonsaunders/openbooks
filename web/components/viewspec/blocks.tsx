@@ -100,7 +100,7 @@ function SpanRowView({
   const { TableRow, TableCell } = primitives
   return (
     <TableRow className={row.className}>
-      <TableCell colSpan={row.labelColSpan} className={row.labelClassName}>
+      <TableCell colSpan={row.labelColSpan > 1 ? row.labelColSpan : undefined} className={row.labelClassName}>
         {resolveText(row.label, scope)}
       </TableCell>
       {row.cells.map((entry, index) => {
@@ -270,6 +270,8 @@ export function BlockView({
   scope: unknown
   searchParams: Record<string, string | string[] | undefined>
 }) {
+  // Uniform presence check: any block may be omitted by a loader-resolved flag.
+  if ('when' in block && block.when && !resolveValue(block.when as never, scope)) return null
   switch (block.kind) {
     case 'page-header':
       return (

@@ -33,7 +33,11 @@ function LeafCellView({ spec, scope }: { spec: LeafCell; scope: unknown }) {
       const raw = resolvePath(scope, spec.field.$)
       const empty = raw === null || raw === undefined || raw === ''
       if (empty && spec.fallback !== undefined) {
-        return <span className={FALLBACK_CLASS}>{resolveText(spec.fallback, scope)}</span>
+        return (
+          <span className={spec.fallbackClassName ?? FALLBACK_CLASS}>
+            {resolveText(spec.fallback, scope)}
+          </span>
+        )
       }
       if (spec.prefix || spec.suffix) {
         // An affix whose value resolves empty renders NOTHING, not an empty
