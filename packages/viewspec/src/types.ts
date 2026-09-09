@@ -398,9 +398,11 @@ export interface PaginationBlock extends BlockCommon {
   bare?: boolean
 }
 
-export interface TextBlock {
+export interface TextBlock extends BlockCommon {
   kind: 'text'
   content: Value
+  /** Base type scale. Most report notes are xs; section prose is sm. */
+  size?: 'xs' | 'sm'
   tone?: Value<Tone>
   /** Spacing and other presentational extras, appended after the tone. */
   className?: string
@@ -422,7 +424,18 @@ export interface TextBlock {
 export interface GridBlock extends BlockCommon {
   kind: 'grid'
   className?: string
+  /** The element to render. `section` matters where the native page used one:
+   *  the element name is part of the document, not decoration. */
+  as?: 'div' | 'section'
   blocks: Block[]
+}
+
+/** A section heading. Distinct from `text` because an <h2> is not a <p>. */
+export interface HeadingBlock extends BlockCommon {
+  kind: 'heading'
+  level: 2 | 3
+  content: Value
+  className?: string
 }
 
 export interface PanelBlock extends BlockCommon {
@@ -503,6 +516,7 @@ export type Block =
   | TextBlock
   | WidgetBlock
   | GridBlock
+  | HeadingBlock
   | PanelBlock
   | StatTileBlock
   | RepeatBlock
@@ -517,6 +531,7 @@ export const BLOCK_KINDS = [
   'text',
   'widget',
   'grid',
+  'heading',
   'panel',
   'stat-tile',
   'repeat',

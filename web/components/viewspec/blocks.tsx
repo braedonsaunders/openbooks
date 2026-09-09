@@ -401,7 +401,9 @@ export function BlockView({
       if (block.when && !resolveValue(block.when as never, scope)) return null
       const tone = toneClass(resolveValue(block.tone as never, scope) as Tone | undefined)
       return (
-        <p className={cn('text-xs', tone, block.className) || undefined}>{resolveText(block.content, scope)}</p>
+        <p className={cn(block.size === 'sm' ? 'text-sm' : 'text-xs', tone, block.className) || undefined}>
+          {resolveText(block.content, scope)}
+        </p>
       )
     }
 
@@ -434,12 +436,23 @@ export function BlockView({
       return block.className ? <div className={block.className}>{list}</div> : <>{list}</>
     }
 
-    case 'grid':
-      return (
-        <div className={block.className}>
-          <BlockList blocks={block.blocks} scope={scope} searchParams={searchParams} />
-        </div>
+    case 'grid': {
+      const children = <BlockList blocks={block.blocks} scope={scope} searchParams={searchParams} />
+      return block.as === 'section' ? (
+        <section className={block.className}>{children}</section>
+      ) : (
+        <div className={block.className}>{children}</div>
       )
+    }
+
+    case 'heading': {
+      const content = resolveText(block.content, scope)
+      return block.level === 3 ? (
+        <h3 className={block.className}>{content}</h3>
+      ) : (
+        <h2 className={block.className}>{content}</h2>
+      )
+    }
 
     case 'panel':
       return (

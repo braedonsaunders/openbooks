@@ -50,6 +50,7 @@ import type {
   PanelBlock,
   StatTileBlock,
   RepeatBlock,
+  HeadingBlock,
 } from './types.ts'
 import { SPEC_VERSION } from './types.ts'
 
@@ -214,13 +215,21 @@ export function pagination(spec: Omit<PaginationBlock, 'kind'>): PaginationBlock
 
 export function textBlock(
   content: Value,
-  opts: { tone?: Value<Tone>; className?: string; when?: FieldRef } = {},
+  opts: { size?: TextBlock['size']; tone?: Value<Tone>; className?: string; when?: FieldRef } = {},
 ): TextBlock {
   return { kind: 'text', content, ...opts }
 }
 
-export function grid(className: string | undefined, blocks: Block[]): GridBlock {
-  return { kind: 'grid', ...(className ? { className } : {}), blocks }
+export function grid(
+  className: string | undefined,
+  blocks: Block[],
+  opts: { as?: GridBlock['as'] } = {},
+): GridBlock {
+  return { kind: 'grid', ...(className ? { className } : {}), ...opts, blocks }
+}
+
+export function heading(level: 2 | 3, content: Value, className?: string): HeadingBlock {
+  return { kind: 'heading', level, content, ...(className ? { className } : {}) }
 }
 
 export function panel(spec: Omit<PanelBlock, 'kind'>): PanelBlock {
