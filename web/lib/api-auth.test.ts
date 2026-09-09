@@ -25,47 +25,6 @@ import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/test-fix
 const DB = !!env.OPENBOOKS_DB_URL;
 const migration = readFileSync("schema/migrations/generated/0031_api_key_explicit_scopes.sql", "utf8");
 
-test("migration 0031 freezes legacy empty scope sets into the explicit current catalogue snapshot", () => {
-  // The backfill targets exactly the legacy empty rows and stamps an explicit
-  // snapshot — never a sentinel, wildcard, or inherit marker.
-  assert.match(migration, /UPDATE public\.api_keys/);
-  assert.match(migration, /WHERE scopes = '\[\]'::jsonb/);
-  assert.doesNotMatch(migration, /'inherit_all'|'full_scope'|'\*'/);
-  const snapshot = JSON.parse(
-    migration.match(/SET scopes = '(\[[\s\S]*?\])'::jsonb/)?.[1] ?? "null",
-  ) as string[];
-  assert.deepEqual(snapshot, [...PERMISSION_CATALOGUE]);
-
-  // Storage owns the invariant afterwards: the empty shape is unrepresentable
-  // and the '[]' default is gone, so omitted scopes fail at write time.
-  assert.match(migration, /ALTER COLUMN scopes DROP DEFAULT/);
-  assert.match(
-    migration,
-    /ADD CONSTRAINT api_keys_scopes_non_empty\s+CHECK \(jsonb_typeof\(scopes\) = 'array' AND jsonb_array_length\(scopes\) > 0\)/,
-  );
-});
-
-test("the resolver fails closed on empty, malformed, or non-catalogue scope sets", () => {
-  const source = readFileSync("web/lib/api-auth.ts", "utf8");
-  // The inherit branch is gone; an empty or malformed scope array resolves to
-  // nothing instead of the owner's permission set.
-  assert.match(
-    source,
-    /if \(!Array\.isArray\(keyRow\.scopes\) \|\| keyRow\.scopes\.length === 0\) return null;/,
-  );
-  assert.match(
-    source,
-    /if \(scopeSet\.size === 0\) return null;/,
-  );
-  assert.doesNotMatch(
-    source,
-    /Array\.isArray\(keyRow\.scopes\) \? keyRow\.scopes : \[\]/,
-  );
-  assert.doesNotMatch(source, /Empty scopes = inherit/);
-  // Scopes are exact catalogue keys only — a direct-write wildcard is inert.
-  assert.match(source, /keyRow\.scopes\.filter\(\(s\) => isCataloguePermission\(s\)\)/);
-});
-
 // ---------------------------------------------------------------------------
 // Real route seam: the actual POST/PATCH handlers with only the session gate
 // seammed to a fixture actor; DB, transactions, and audit evidence are real.
@@ -141,6 +100,49 @@ function jsonRequest(body: unknown, method: "POST" | "PATCH" = "POST"): Request 
     body: JSON.stringify(body),
   });
 }
+
+// Complete asynchronous setup before registering tests so --test-force-exit
+// cannot finish the initial queue while later tests are still being loaded.
+test("migration 0031 freezes legacy empty scope sets into the explicit current catalogue snapshot", () => {
+  // The backfill targets exactly the legacy empty rows and stamps an explicit
+  // snapshot — never a sentinel, wildcard, or inherit marker.
+  assert.match(migration, /UPDATE public\.api_keys/);
+  assert.match(migration, /WHERE scopes = '\[\]'::jsonb/);
+  assert.doesNotMatch(migration, /'inherit_all'|'full_scope'|'\*'/);
+  const snapshot = JSON.parse(
+    migration.match(/SET scopes = '(\[[\s\S]*?\])'::jsonb/)?.[1] ?? "null",
+  ) as string[];
+  assert.deepEqual(snapshot, [...PERMISSION_CATALOGUE]);
+
+  // Storage owns the invariant afterwards: the empty shape is unrepresentable
+  // and the '[]' default is gone, so omitted scopes fail at write time.
+  assert.match(migration, /ALTER COLUMN scopes DROP DEFAULT/);
+  assert.match(
+    migration,
+    /ADD CONSTRAINT api_keys_scopes_non_empty\s+CHECK \(jsonb_typeof\(scopes\) = 'array' AND jsonb_array_length\(scopes\) > 0\)/,
+  );
+});
+
+test("the resolver fails closed on empty, malformed, or non-catalogue scope sets", () => {
+  const source = readFileSync("web/lib/api-auth.ts", "utf8");
+  // The inherit branch is gone; an empty or malformed scope array resolves to
+  // nothing instead of the owner's permission set.
+  assert.match(
+    source,
+    /if \(!Array\.isArray\(keyRow\.scopes\) \|\| keyRow\.scopes\.length === 0\) return null;/,
+  );
+  assert.match(
+    source,
+    /if \(scopeSet\.size === 0\) return null;/,
+  );
+  assert.doesNotMatch(
+    source,
+    /Array\.isArray\(keyRow\.scopes\) \? keyRow\.scopes : \[\]/,
+  );
+  assert.doesNotMatch(source, /Empty scopes = inherit/);
+  // Scopes are exact catalogue keys only — a direct-write wildcard is inert.
+  assert.match(source, /keyRow\.scopes\.filter\(\(s\) => isCataloguePermission\(s\)\)/);
+});
 
 test("POST refuses to mint a key whose scopes are omitted or empty", async () => {
   const omitted = await POST(jsonRequest({ name: "Omitted scopes" }));

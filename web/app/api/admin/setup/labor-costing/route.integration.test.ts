@@ -39,14 +39,6 @@ const laborCostingWizardSource = readFileSync(
   "utf8",
 );
 
-test("the labor-costing wizard saves fallback wages with configured currency and exact decimals", () => {
-  assert.match(
-    laborCostingWizardSource,
-    /action:\s*'save-rate',[\s\S]{0,200}currency,[\s\S]{0,100}rate:\s*exactFallbackRate/,
-  );
-  assert.doesNotMatch(laborCostingWizardSource, /rate:\s*Number\(fallbackRate\)/);
-});
-
 // Pure mirrors of web/lib/authz.ts's in-memory gates (the real module pulls in
 // the session/cookie stack the plain runner cannot load). guardPermission is
 // the seam; the scope helpers must behave exactly like production.
@@ -312,6 +304,16 @@ async function assertNothingPersisted(orgId: string): Promise<void> {
      where org_id = ${orgId} and table_name = 'orgs'`);
   assert.equal(audits.rows[0]!.n, 0);
 }
+
+// Complete asynchronous setup before registering tests so --test-force-exit
+// cannot finish the initial queue while later tests are still being loaded.
+test("the labor-costing wizard saves fallback wages with configured currency and exact decimals", () => {
+  assert.match(
+    laborCostingWizardSource,
+    /action:\s*'save-rate',[\s\S]{0,200}currency,[\s\S]{0,100}rate:\s*exactFallbackRate/,
+  );
+  assert.doesNotMatch(laborCostingWizardSource, /rate:\s*Number\(fallbackRate\)/);
+});
 
 test("a valid save persists policy, control accounts, and audit evidence in one unit", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const f = await seed();

@@ -10,6 +10,15 @@ const {createScratchOrg,dropScratchOrg,seedFlowActors}=await import('@openbooks/
 const {setupResource}=await import('./setup-resources.ts');
 const {SETUP_ENTITY_BY_KEY}=await import('../setup/registry.ts');
 
+const auth={gate:null as null|{user:{orgId:string,id:string}}};Object.assign(globalThis,{__bookPolicyProbe:auth});
+registerHooks({resolve(specifier,context,next){
+ if(specifier.endsWith('/lib/authz')&&context.parentURL?.includes('/api/admin/setup/'))return{shortCircuit:true,url:'data:text/javascript,export async function guardPermission(){return globalThis.__bookPolicyProbe.gate}'};
+ if(specifier.startsWith('@/'))return next(pathToFileURL(process.cwd()+'/web/'+specifier.slice(2)+'.ts').href,context);
+ return next(specifier,context);
+}});
+const {PATCH}=await import('../../app/api/admin/setup/[entity]/route.ts');
+// Complete asynchronous setup before registering tests so --test-force-exit
+// cannot finish the initial queue while later tests are still being loaded.
 for(const scenario of ['first-rate-book','demote-rate-book','demote-accounting-book'] as const){
  test(`bulk setup preserves book authority: ${scenario}`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
   const org=await createScratchOrg();
@@ -37,13 +46,6 @@ for(const scenario of ['first-rate-book','demote-rate-book','demote-accounting-b
  });
 }
 
-const auth={gate:null as null|{user:{orgId:string,id:string}}};Object.assign(globalThis,{__bookPolicyProbe:auth});
-registerHooks({resolve(specifier,context,next){
- if(specifier.endsWith('/lib/authz')&&context.parentURL?.includes('/api/admin/setup/'))return{shortCircuit:true,url:'data:text/javascript,export async function guardPermission(){return globalThis.__bookPolicyProbe.gate}'};
- if(specifier.startsWith('@/'))return next(pathToFileURL(process.cwd()+'/web/'+specifier.slice(2)+'.ts').href,context);
- return next(specifier,context);
-}});
-const {PATCH}=await import('../../app/api/admin/setup/[entity]/route.ts');
 test('interactive promotion cannot replace an active default with an inactive book',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
  const org=await createScratchOrg();
  try{

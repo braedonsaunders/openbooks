@@ -654,175 +654,6 @@ function fulfilledResponse(result: PromiseSettledResult<Response>, label: string
   return result.value
 }
 
-test('a malformed [id] segment is a plain 404 on every order handler, never a uuid cast failure', async () => {
-  const json = { 'content-type': 'application/json' }
-  for (const id of ['abc', 'new', '00000000-0000-4000-8000-00000000000g', '']) {
-    harness.reset('draft')
-    const route = (path = '') => `http://openbooks.test/api/estimates/${id}${path}`
-    const bound = { params: Promise.resolve({ id }) }
-    const responses = await Promise.all([
-      GET(new Request(route()), bound),
-      PATCH(new Request(route(), { method: 'PATCH', headers: json, body: JSON.stringify({ memo: 'x', expectedUpdatedAt: harness.document.updatedAt }) }), bound),
-      DELETE(new Request(route(), { method: 'DELETE', headers: json, body: JSON.stringify({ expectedUpdatedAt: harness.document.updatedAt }) }), bound),
-      CONVERT(new Request(route('/convert'), { method: 'POST', headers: json, body: JSON.stringify({ targetKind: 'sales_order', expectedUpdatedAt: harness.document.updatedAt }) }), bound),
-    ])
-    for (const [index, response] of responses.entries()) {
-      assert.equal(response.status, 404, `${['GET', 'PATCH', 'DELETE', 'convert'][index]} ${JSON.stringify(id)}`)
-      assert.deepEqual(await response.json(), { error: 'not found' })
-    }
-    assert.equal(harness.lockAttempts, 0)
-    assert.equal(harness.headerWrites, 0)
-    assert.equal(harness.deleteCalls, 0)
-    assert.equal(harness.convertCalls, 0)
-  }
-})
-
-test('issuing serializes a stale draft replacement and rejects it after approval', async () => {
-  harness.reset('draft')
-  const control = harness.pauseNextSubmit()
-  const issue = patch({ status: 'approved' })
-  await control.entered
-
-  const staleEdit = patch({ memo: 'stale concurrent memo' })
-  let lockAttemptsWhileIssueWasPaused = 0
-  try {
-    await waitForConcurrentPath(
-      () => harness.lockAttempts >= 2 || harness.headerWrites > 0,
-      'the stale edit to reach the lifecycle boundary',
-    )
-    lockAttemptsWhileIssueWasPaused = harness.lockAttempts
-  } finally {
-    control.release()
-  }
-
-  const [issueResult, editResult] = await Promise.allSettled([issue, staleEdit])
-  const issueResponse = fulfilledResponse(issueResult, 'issue request')
-  const editResponse = fulfilledResponse(editResult, 'stale edit request')
-  assert.equal(lockAttemptsWhileIssueWasPaused, 2)
-  assert.equal(issueResponse.status, 200)
-  assert.equal(editResponse.status, 422)
-  assert.deepEqual(await editResponse.json(), { error: 'only draft orders can be edited' })
-  assert.equal(harness.document.status, 'approved')
-  assert.equal(harness.document.memo, 'original memo')
-  assert.equal(harness.headerWrites, 0)
-})
-
-test('issuing serializes draft discard and prevents deletion of the issued order', async () => {
-  harness.reset('draft')
-  const control = harness.pauseNextSubmit()
-  const issue = patch({ status: 'approved' })
-  await control.entered
-
-  const deleteRequest = discard()
-  let deleteCallsWhileIssueHeldTheLock = 0
-  let lockAttemptsWhileIssueWasPaused = 0
-  try {
-    await waitForConcurrentPath(
-      () => harness.lockAttempts >= 2 || harness.deleteCalls > 0,
-      'draft discard to reach the lifecycle boundary',
-    )
-    deleteCallsWhileIssueHeldTheLock = harness.deleteCalls
-    lockAttemptsWhileIssueWasPaused = harness.lockAttempts
-  } finally {
-    control.release()
-  }
-
-  const settled = await Promise.allSettled([issue, deleteRequest])
-  const issueResponse = fulfilledResponse(settled[0], 'issue request')
-  const deleteResponse = fulfilledResponse(settled[1], 'draft discard request')
-  assert.equal(lockAttemptsWhileIssueWasPaused, 2)
-  assert.equal(deleteCallsWhileIssueHeldTheLock, 0)
-  assert.deepEqual([issueResponse.status, deleteResponse.status], [200, 422])
-  assert.deepEqual(await deleteResponse.json(), {
-    error: 'Q-LOCK-001 is approved and cannot be deleted — use the controlled void/cancel action',
-  })
-  assert.equal(harness.deleteCalls, 1)
-  assert.equal(harness.deleted, false)
-  assert.equal(harness.document.status, 'approved')
-})
-
-test('two concurrent issue requests perform one lifecycle transition', async () => {
-  harness.reset('draft')
-  const control = harness.pauseNextSubmit()
-  const first = patch({ status: 'approved' })
-  await control.entered
-
-  const second = patch({ status: 'approved' })
-  let lockAttemptsWhileTheFirstIssueWasPaused = 0
-  try {
-    await waitForConcurrentPath(
-      () => harness.lockAttempts >= 2 || harness.submitCalls >= 2,
-      'the duplicate issue request to reach the lifecycle boundary',
-    )
-    lockAttemptsWhileTheFirstIssueWasPaused = harness.lockAttempts
-  } finally {
-    control.release()
-  }
-
-  const settled = await Promise.allSettled([first, second])
-  const firstResponse = fulfilledResponse(settled[0], 'first issue request')
-  const secondResponse = fulfilledResponse(settled[1], 'duplicate issue request')
-  assert.equal(lockAttemptsWhileTheFirstIssueWasPaused, 2)
-  assert.deepEqual([firstResponse.status, secondResponse.status], [200, 422])
-  assert.deepEqual(await secondResponse.json(), { error: 'only a draft can be issued' })
-  assert.equal(harness.submitCalls, 1)
-  assert.equal(harness.document.status, 'approved')
-})
-
-test('concurrent void requests reserve once before any before_void effect', async () => {
-  harness.reset('approved')
-  const control = harness.pauseNextVoid()
-  const first = patch({ status: 'voided', reason: 'customer cancelled' })
-  await control.entered
-
-  const second = patch({ status: 'voided', reason: 'duplicate request' })
-  let callsWhileTheFirstLockWasHeld = 0
-  let lockAttemptsWhileTheFirstVoidWasPaused = 0
-  try {
-    await waitForConcurrentPath(
-      () => harness.lockAttempts >= 2 || harness.voidCalls >= 2,
-      'the duplicate void request to reach the lifecycle boundary',
-    )
-    callsWhileTheFirstLockWasHeld = harness.voidCalls
-    lockAttemptsWhileTheFirstVoidWasPaused = harness.lockAttempts
-  } finally {
-    control.release()
-  }
-
-  const settled = await Promise.allSettled([first, second])
-  const firstResponse = fulfilledResponse(settled[0], 'first void request')
-  const secondResponse = fulfilledResponse(settled[1], 'duplicate void request')
-  assert.equal(lockAttemptsWhileTheFirstVoidWasPaused, 2)
-  assert.equal(callsWhileTheFirstLockWasHeld, 2)
-  assert.deepEqual([firstResponse.status, secondResponse.status], [200, 422])
-  assert.deepEqual(await secondResponse.json(), {
-    error: 'the order changed while the void request was being created',
-  })
-  assert.equal(harness.beforeVoidCalls, 1)
-  assert.equal(harness.beforeVoidInsideTransaction, 1)
-  assert.equal(harness.voidCalls, 2)
-  assert.equal(harness.voidReservations, 1)
-  assert.equal(harness.document.status, 'voided')
-  assert.equal(harness.auditLog.length, 1)
-  assert.equal(harness.flowEffects.length, 1)
-})
-
-test('a caught void failure rolls back its audit and flow effects before returning 422', async () => {
-  harness.reset('approved')
-  harness.voidFailure = 'void approval routing failed; the document was not voided'
-
-  const response = await patch({ status: 'voided', reason: 'customer cancelled' })
-
-  assert.equal(response.status, 422)
-  assert.deepEqual(await response.json(), { error: harness.voidFailure })
-  assert.equal(harness.document.status, 'approved')
-  assert.equal(harness.document.voidRequestedAt, null)
-  assert.equal(harness.beforeVoidCalls, 1)
-  assert.equal(harness.beforeVoidInsideTransaction, 1)
-  assert.deepEqual(harness.auditLog, [])
-  assert.deepEqual(harness.flowEffects, [])
-})
-
 const STALE_TOKEN = '2026-08-01T00:00:00.000000Z'
 
 async function expectRevisionRefusal(
@@ -842,78 +673,6 @@ async function expectRevisionRefusal(
   assert.equal(harness.convertCalls, 0)
   if (!opts.expectEngineCall) assert.equal(harness.voidCalls, 0)
 }
-
-test('every mutating order request requires an exact revision token', async () => {
-  harness.reset('draft')
-
-  await expectRevisionRefusal(() => patch({ memo: 'tokenless memo' }, { token: null }))
-  await expectRevisionRefusal(() => patch({ status: 'approved' }, { token: null }))
-  await expectRevisionRefusal(() => discard({ token: null }))
-  await expectRevisionRefusal(() => convert({ targetKind: 'sales_order' }, { token: null }))
-  assert.equal(harness.document.status, 'draft')
-  assert.equal(harness.document.memo, 'original memo')
-
-  harness.reset('approved')
-  await expectRevisionRefusal(() =>
-    patch({ status: 'voided', reason: 'customer cancelled' }, { token: null }))
-  assert.equal(harness.document.status, 'approved')
-})
-
-test('a stale revision token rejects every mutation before any side effect', async () => {
-  harness.reset('draft')
-
-  await expectRevisionRefusal(() => patch({ memo: 'stale memo' }, { token: STALE_TOKEN }))
-  await expectRevisionRefusal(() => patch({ status: 'approved' }, { token: STALE_TOKEN }))
-  await expectRevisionRefusal(() => discard({ token: STALE_TOKEN }))
-  await expectRevisionRefusal(() =>
-    convert({ targetKind: 'sales_order' }, { token: STALE_TOKEN }))
-  assert.equal(harness.document.status, 'draft')
-  assert.equal(harness.document.memo, 'original memo')
-
-  harness.reset('approved')
-  // The route's probe fences the stale void before the engine claim runs.
-  await expectRevisionRefusal(() =>
-    patch({ status: 'voided', reason: 'customer cancelled' }, { token: STALE_TOKEN }))
-  assert.equal(harness.document.status, 'approved')
-  assert.equal(harness.document.voidRequestedAt, null)
-  assert.deepEqual(harness.auditLog, [])
-})
-
-test('an exact revision token admits draft save, issue, and discard', async () => {
-  harness.reset('draft')
-  const saved = await patch({ memo: 'freshly saved memo' })
-  assert.equal(saved.status, 200)
-  assert.equal(harness.headerWrites, 1)
-
-  const issued = await patch({ status: 'approved' })
-  assert.equal(issued.status, 200)
-  assert.equal(harness.submitCalls, 1)
-  assert.equal(harness.document.status, 'approved')
-
-  harness.reset('draft')
-  const discarded = await discard()
-  assert.equal(discarded.status, 200)
-  assert.deepEqual(await discarded.json(), { ok: true })
-  assert.equal(harness.deleteCalls, 1)
-  assert.equal(harness.deleted, true)
-})
-
-test('void and convert honor the exact revision of their source', async () => {
-  harness.reset('approved')
-  const voided = await patch({ status: 'voided', reason: 'customer cancelled' })
-  assert.equal(voided.status, 200)
-  assert.equal(harness.voidReservations, 1)
-  assert.equal(harness.beforeVoidCalls, 1)
-  assert.equal(harness.beforeVoidInsideTransaction, 1)
-  assert.equal(harness.document.status, 'voided')
-  assert.equal(harness.auditLog.length, 1)
-  assert.equal(harness.flowEffects.length, 1)
-
-  harness.reset('draft')
-  const converted = await convert({ targetKind: 'sales_order' })
-  assert.equal(converted.status, 200)
-  assert.equal(harness.convertCalls, 1)
-})
 
 interface PoolIssueDocument {
   id: string
@@ -1433,6 +1192,249 @@ function poolPatch(id: string): Promise<Response> {
     { params: Promise.resolve({ id }) },
   )
 }
+
+// Complete asynchronous setup before registering tests so --test-force-exit
+// cannot finish the initial queue while later tests are still being loaded.
+test('a malformed [id] segment is a plain 404 on every order handler, never a uuid cast failure', async () => {
+  const json = { 'content-type': 'application/json' }
+  for (const id of ['abc', 'new', '00000000-0000-4000-8000-00000000000g', '']) {
+    harness.reset('draft')
+    const route = (path = '') => `http://openbooks.test/api/estimates/${id}${path}`
+    const bound = { params: Promise.resolve({ id }) }
+    const responses = await Promise.all([
+      GET(new Request(route()), bound),
+      PATCH(new Request(route(), { method: 'PATCH', headers: json, body: JSON.stringify({ memo: 'x', expectedUpdatedAt: harness.document.updatedAt }) }), bound),
+      DELETE(new Request(route(), { method: 'DELETE', headers: json, body: JSON.stringify({ expectedUpdatedAt: harness.document.updatedAt }) }), bound),
+      CONVERT(new Request(route('/convert'), { method: 'POST', headers: json, body: JSON.stringify({ targetKind: 'sales_order', expectedUpdatedAt: harness.document.updatedAt }) }), bound),
+    ])
+    for (const [index, response] of responses.entries()) {
+      assert.equal(response.status, 404, `${['GET', 'PATCH', 'DELETE', 'convert'][index]} ${JSON.stringify(id)}`)
+      assert.deepEqual(await response.json(), { error: 'not found' })
+    }
+    assert.equal(harness.lockAttempts, 0)
+    assert.equal(harness.headerWrites, 0)
+    assert.equal(harness.deleteCalls, 0)
+    assert.equal(harness.convertCalls, 0)
+  }
+})
+
+test('issuing serializes a stale draft replacement and rejects it after approval', async () => {
+  harness.reset('draft')
+  const control = harness.pauseNextSubmit()
+  const issue = patch({ status: 'approved' })
+  await control.entered
+
+  const staleEdit = patch({ memo: 'stale concurrent memo' })
+  let lockAttemptsWhileIssueWasPaused = 0
+  try {
+    await waitForConcurrentPath(
+      () => harness.lockAttempts >= 2 || harness.headerWrites > 0,
+      'the stale edit to reach the lifecycle boundary',
+    )
+    lockAttemptsWhileIssueWasPaused = harness.lockAttempts
+  } finally {
+    control.release()
+  }
+
+  const [issueResult, editResult] = await Promise.allSettled([issue, staleEdit])
+  const issueResponse = fulfilledResponse(issueResult, 'issue request')
+  const editResponse = fulfilledResponse(editResult, 'stale edit request')
+  assert.equal(lockAttemptsWhileIssueWasPaused, 2)
+  assert.equal(issueResponse.status, 200)
+  assert.equal(editResponse.status, 422)
+  assert.deepEqual(await editResponse.json(), { error: 'only draft orders can be edited' })
+  assert.equal(harness.document.status, 'approved')
+  assert.equal(harness.document.memo, 'original memo')
+  assert.equal(harness.headerWrites, 0)
+})
+
+test('issuing serializes draft discard and prevents deletion of the issued order', async () => {
+  harness.reset('draft')
+  const control = harness.pauseNextSubmit()
+  const issue = patch({ status: 'approved' })
+  await control.entered
+
+  const deleteRequest = discard()
+  let deleteCallsWhileIssueHeldTheLock = 0
+  let lockAttemptsWhileIssueWasPaused = 0
+  try {
+    await waitForConcurrentPath(
+      () => harness.lockAttempts >= 2 || harness.deleteCalls > 0,
+      'draft discard to reach the lifecycle boundary',
+    )
+    deleteCallsWhileIssueHeldTheLock = harness.deleteCalls
+    lockAttemptsWhileIssueWasPaused = harness.lockAttempts
+  } finally {
+    control.release()
+  }
+
+  const settled = await Promise.allSettled([issue, deleteRequest])
+  const issueResponse = fulfilledResponse(settled[0], 'issue request')
+  const deleteResponse = fulfilledResponse(settled[1], 'draft discard request')
+  assert.equal(lockAttemptsWhileIssueWasPaused, 2)
+  assert.equal(deleteCallsWhileIssueHeldTheLock, 0)
+  assert.deepEqual([issueResponse.status, deleteResponse.status], [200, 422])
+  assert.deepEqual(await deleteResponse.json(), {
+    error: 'Q-LOCK-001 is approved and cannot be deleted — use the controlled void/cancel action',
+  })
+  assert.equal(harness.deleteCalls, 1)
+  assert.equal(harness.deleted, false)
+  assert.equal(harness.document.status, 'approved')
+})
+
+test('two concurrent issue requests perform one lifecycle transition', async () => {
+  harness.reset('draft')
+  const control = harness.pauseNextSubmit()
+  const first = patch({ status: 'approved' })
+  await control.entered
+
+  const second = patch({ status: 'approved' })
+  let lockAttemptsWhileTheFirstIssueWasPaused = 0
+  try {
+    await waitForConcurrentPath(
+      () => harness.lockAttempts >= 2 || harness.submitCalls >= 2,
+      'the duplicate issue request to reach the lifecycle boundary',
+    )
+    lockAttemptsWhileTheFirstIssueWasPaused = harness.lockAttempts
+  } finally {
+    control.release()
+  }
+
+  const settled = await Promise.allSettled([first, second])
+  const firstResponse = fulfilledResponse(settled[0], 'first issue request')
+  const secondResponse = fulfilledResponse(settled[1], 'duplicate issue request')
+  assert.equal(lockAttemptsWhileTheFirstIssueWasPaused, 2)
+  assert.deepEqual([firstResponse.status, secondResponse.status], [200, 422])
+  assert.deepEqual(await secondResponse.json(), { error: 'only a draft can be issued' })
+  assert.equal(harness.submitCalls, 1)
+  assert.equal(harness.document.status, 'approved')
+})
+
+test('concurrent void requests reserve once before any before_void effect', async () => {
+  harness.reset('approved')
+  const control = harness.pauseNextVoid()
+  const first = patch({ status: 'voided', reason: 'customer cancelled' })
+  await control.entered
+
+  const second = patch({ status: 'voided', reason: 'duplicate request' })
+  let callsWhileTheFirstLockWasHeld = 0
+  let lockAttemptsWhileTheFirstVoidWasPaused = 0
+  try {
+    await waitForConcurrentPath(
+      () => harness.lockAttempts >= 2 || harness.voidCalls >= 2,
+      'the duplicate void request to reach the lifecycle boundary',
+    )
+    callsWhileTheFirstLockWasHeld = harness.voidCalls
+    lockAttemptsWhileTheFirstVoidWasPaused = harness.lockAttempts
+  } finally {
+    control.release()
+  }
+
+  const settled = await Promise.allSettled([first, second])
+  const firstResponse = fulfilledResponse(settled[0], 'first void request')
+  const secondResponse = fulfilledResponse(settled[1], 'duplicate void request')
+  assert.equal(lockAttemptsWhileTheFirstVoidWasPaused, 2)
+  assert.equal(callsWhileTheFirstLockWasHeld, 2)
+  assert.deepEqual([firstResponse.status, secondResponse.status], [200, 422])
+  assert.deepEqual(await secondResponse.json(), {
+    error: 'the order changed while the void request was being created',
+  })
+  assert.equal(harness.beforeVoidCalls, 1)
+  assert.equal(harness.beforeVoidInsideTransaction, 1)
+  assert.equal(harness.voidCalls, 2)
+  assert.equal(harness.voidReservations, 1)
+  assert.equal(harness.document.status, 'voided')
+  assert.equal(harness.auditLog.length, 1)
+  assert.equal(harness.flowEffects.length, 1)
+})
+
+test('a caught void failure rolls back its audit and flow effects before returning 422', async () => {
+  harness.reset('approved')
+  harness.voidFailure = 'void approval routing failed; the document was not voided'
+
+  const response = await patch({ status: 'voided', reason: 'customer cancelled' })
+
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), { error: harness.voidFailure })
+  assert.equal(harness.document.status, 'approved')
+  assert.equal(harness.document.voidRequestedAt, null)
+  assert.equal(harness.beforeVoidCalls, 1)
+  assert.equal(harness.beforeVoidInsideTransaction, 1)
+  assert.deepEqual(harness.auditLog, [])
+  assert.deepEqual(harness.flowEffects, [])
+})
+
+test('every mutating order request requires an exact revision token', async () => {
+  harness.reset('draft')
+
+  await expectRevisionRefusal(() => patch({ memo: 'tokenless memo' }, { token: null }))
+  await expectRevisionRefusal(() => patch({ status: 'approved' }, { token: null }))
+  await expectRevisionRefusal(() => discard({ token: null }))
+  await expectRevisionRefusal(() => convert({ targetKind: 'sales_order' }, { token: null }))
+  assert.equal(harness.document.status, 'draft')
+  assert.equal(harness.document.memo, 'original memo')
+
+  harness.reset('approved')
+  await expectRevisionRefusal(() =>
+    patch({ status: 'voided', reason: 'customer cancelled' }, { token: null }))
+  assert.equal(harness.document.status, 'approved')
+})
+
+test('a stale revision token rejects every mutation before any side effect', async () => {
+  harness.reset('draft')
+
+  await expectRevisionRefusal(() => patch({ memo: 'stale memo' }, { token: STALE_TOKEN }))
+  await expectRevisionRefusal(() => patch({ status: 'approved' }, { token: STALE_TOKEN }))
+  await expectRevisionRefusal(() => discard({ token: STALE_TOKEN }))
+  await expectRevisionRefusal(() =>
+    convert({ targetKind: 'sales_order' }, { token: STALE_TOKEN }))
+  assert.equal(harness.document.status, 'draft')
+  assert.equal(harness.document.memo, 'original memo')
+
+  harness.reset('approved')
+  // The route's probe fences the stale void before the engine claim runs.
+  await expectRevisionRefusal(() =>
+    patch({ status: 'voided', reason: 'customer cancelled' }, { token: STALE_TOKEN }))
+  assert.equal(harness.document.status, 'approved')
+  assert.equal(harness.document.voidRequestedAt, null)
+  assert.deepEqual(harness.auditLog, [])
+})
+
+test('an exact revision token admits draft save, issue, and discard', async () => {
+  harness.reset('draft')
+  const saved = await patch({ memo: 'freshly saved memo' })
+  assert.equal(saved.status, 200)
+  assert.equal(harness.headerWrites, 1)
+
+  const issued = await patch({ status: 'approved' })
+  assert.equal(issued.status, 200)
+  assert.equal(harness.submitCalls, 1)
+  assert.equal(harness.document.status, 'approved')
+
+  harness.reset('draft')
+  const discarded = await discard()
+  assert.equal(discarded.status, 200)
+  assert.deepEqual(await discarded.json(), { ok: true })
+  assert.equal(harness.deleteCalls, 1)
+  assert.equal(harness.deleted, true)
+})
+
+test('void and convert honor the exact revision of their source', async () => {
+  harness.reset('approved')
+  const voided = await patch({ status: 'voided', reason: 'customer cancelled' })
+  assert.equal(voided.status, 200)
+  assert.equal(harness.voidReservations, 1)
+  assert.equal(harness.beforeVoidCalls, 1)
+  assert.equal(harness.beforeVoidInsideTransaction, 1)
+  assert.equal(harness.document.status, 'voided')
+  assert.equal(harness.auditLog.length, 1)
+  assert.equal(harness.flowEffects.length, 1)
+
+  harness.reset('draft')
+  const converted = await convert({ targetKind: 'sales_order' })
+  assert.equal(converted.status, 200)
+  assert.equal(harness.convertCalls, 1)
+})
 
 test('before_submit uses isolated governed capacity when duplicate issuers saturate the request pool', async () => {
   poolHarness.reset()

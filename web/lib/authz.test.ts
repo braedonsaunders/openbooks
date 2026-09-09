@@ -18,19 +18,6 @@ async function routeFiles(directory: string): Promise<string[]> {
   return nested.flat();
 }
 
-test("API routes never use the redirecting page authorization gate", async () => {
-  const redirectGateImport = /import\s*\{[^}]*\brequirePermission\b[^}]*\}\s*from\s*["'][^"']*\/authz["']/s;
-  const redirectGateCall = /(^|[^.\w])requirePermission\s*\(/m;
-  const offenders: string[] = [];
-  for (const file of await routeFiles(apiRoot)) {
-    const source = await readFile(file, "utf8");
-    if (redirectGateImport.test(source) || redirectGateCall.test(source)) {
-      offenders.push(relative(apiRoot, file));
-    }
-  }
-  assert.deepEqual(offenders, [], "API handlers must use guardPermission and return its JSON response");
-});
-
 type GateMode = "allowed" | "forbidden" | "unauthorized";
 type GateResult = NextResponse | {
   user: { id: string; orgId: string };
@@ -139,6 +126,21 @@ async function assertJsonError(
   assert.equal(response.headers.get("location"), null, "API denials must not redirect");
   assert.deepEqual(await response.json(), { error });
 }
+
+// Complete asynchronous setup before registering tests so --test-force-exit
+// cannot finish the initial queue while later tests are still being loaded.
+test("API routes never use the redirecting page authorization gate", async () => {
+  const redirectGateImport = /import\s*\{[^}]*\brequirePermission\b[^}]*\}\s*from\s*["'][^"']*\/authz["']/s;
+  const redirectGateCall = /(^|[^.\w])requirePermission\s*\(/m;
+  const offenders: string[] = [];
+  for (const file of await routeFiles(apiRoot)) {
+    const source = await readFile(file, "utf8");
+    if (redirectGateImport.test(source) || redirectGateCall.test(source)) {
+      offenders.push(relative(apiRoot, file));
+    }
+  }
+  assert.deepEqual(offenders, [], "API handlers must use guardPermission and return its JSON response");
+});
 
 test("a signed-out GET returns a 401 JSON response without reaching the database", async () => {
   reset("unauthorized");

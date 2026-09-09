@@ -141,6 +141,28 @@ async function seedPayRun(options: {
 /* C1 — the approval gate must not fail open before submission         */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* C2 — a voided pay run must be un-counted everywhere                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * `run_status = 'voided'` needs the CHECK constraint widened by a migration.
+ * Probe for it so this test starts passing the moment that lands instead of
+ * silently never running.
+ */
+async function voidedRunStatusAllowed(): Promise<boolean> {
+  if (!DB) return false;
+  const r = (await db.execute<{ def: string }>(sql`
+    select pg_get_constraintdef(oid) as def from pg_constraint
+     where conrelid = 'pay_runs'::regclass and conname = 'pay_runs_run_status'
+  `));
+  return !r.rows[0] || r.rows[0].def.includes("'voided'");
+}
+
+const VOIDED_ALLOWED = await voidedRunStatusAllowed();
+
+// Complete asynchronous setup before registering tests so --test-force-exit
+// cannot finish the initial queue while later tests are still being loaded.
 test(
   "an approval policy is not released just because no gate exists yet",
   { skip: !DB },
@@ -243,26 +265,6 @@ test(
     }
   },
 );
-
-/* ------------------------------------------------------------------ */
-/* C2 — a voided pay run must be un-counted everywhere                 */
-/* ------------------------------------------------------------------ */
-
-/**
- * `run_status = 'voided'` needs the CHECK constraint widened by a migration.
- * Probe for it so this test starts passing the moment that lands instead of
- * silently never running.
- */
-async function voidedRunStatusAllowed(): Promise<boolean> {
-  if (!DB) return false;
-  const r = (await db.execute<{ def: string }>(sql`
-    select pg_get_constraintdef(oid) as def from pg_constraint
-     where conrelid = 'pay_runs'::regclass and conname = 'pay_runs_run_status'
-  `));
-  return !r.rows[0] || r.rows[0].def.includes("'voided'");
-}
-
-const VOIDED_ALLOWED = await voidedRunStatusAllowed();
 
 test(
   "voiding a pay run retires it from statutory YTD, T4 and the remittance summary",
