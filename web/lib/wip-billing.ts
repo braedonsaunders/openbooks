@@ -1001,16 +1001,26 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
       }
     }
 
-    const invoiceNumber = await nextDocumentNumber(orgId, 'customer_invoice', 'INV-', worksheet.subsidiary_id)
-
-    const defaultIncome = (await tx.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${orgId} and type in ('income', 'income_other') and is_active
-       order by number nulls last limit 1
-    `))
-    const fallbackIncomeAccountId = defaultIncome.rows[0]?.id
-    if (!fallbackIncomeAccountId && lines.rows.some((line) => !line.income_account_id)) {
-      throw new WipBillingError('Configure an income account before converting this prebill')
+    // Approval freezes each source line's account. Never substitute another
+    // chart account or re-read the item's current policy during conversion.
+    // Validate before reserving a number, and retain the account locks until
+    // conversion commits so deactivation cannot race the generated invoice.
+    for (const line of lines.rows) {
+      if (!line.income_account_id) {
+        throw new WipBillingError(`Prebill line ${line.line_number} has no configured income account. Correct the source accounting configuration, void this prebill, and create a new prebill for approval.`)
+      }
+      const account = (await tx.execute<{ id: string }>(sql`
+        select id from accounts
+         where org_id = ${orgId} and id = ${line.income_account_id}
+           and is_active and not is_summary
+         for share
+      `))
+      if (!account.rows[0]) {
+        throw new WipBillingError(`Prebill line ${line.line_number} requires an active, non-summary account in this organization. Correct the source accounting configuration, void this prebill, and create a new prebill for approval.`)
+      }
     }
+
+    const invoiceNumber = await nextDocumentNumber(orgId, 'customer_invoice', 'INV-', worksheet.subsidiary_id)
 
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`billing-request-number:${orgId}`}, 0))`)
     const requestNumberResult = (await tx.execute<{ n: string }>(sql`
@@ -1065,7 +1075,7 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
       const calculated = computeLineTaxes(inputAmount, taxConfig)
       const amount = calculated.netAmount
       const taxAmount = calculated.taxTotal
-      const accountId = line.income_account_id ?? fallbackIncomeAccountId
+      const accountId = line.income_account_id
       const invoiceLineResult = (await tx.execute<{ id: string }>(sql`
         insert into document_lines (
           org_id, document_id, line_number, item_id, account_id, description,
