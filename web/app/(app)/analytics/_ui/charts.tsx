@@ -55,8 +55,13 @@ function valAxis(money: MoneyLabel, fmt: 'money' | 'pct' | 'raw' = 'money'): ECh
   }
 }
 
-export function Chart({ option, height }: { option: EChartsOption; height: number }) {
-  return <InsightChart option={option} height={height} />
+/** Chart height. A number is an explicit pixel height; `'fill'` makes the
+ * canvas take its parent's height, for fit-to-viewport cockpit panels whose
+ * body is already sized by the layout. */
+export type ChartHeight = number | 'fill'
+
+export function Chart({ option, height }: { option: EChartsOption; height: ChartHeight }) {
+  return <InsightChart option={option} height={height === 'fill' ? undefined : height} />
 }
 
 /** Multi-series line / area over month labels. */
@@ -248,7 +253,7 @@ export function Donut({
   colors,
 }: {
   data: { name: string; value: number }[]
-  height?: number
+  height?: ChartHeight
   /** Tooltip value rendering — defaults to money; pass a formatter for non-currency values (e.g. hours). */
   valueFormat?: (v: number) => string
   /** Per-slice color override (positional); falls back to the shared palette. */

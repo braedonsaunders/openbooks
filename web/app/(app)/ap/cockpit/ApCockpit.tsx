@@ -84,7 +84,10 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
           />
         </CockpitPanel>
 
-        <div className="flex min-h-0 flex-col gap-5">
+        {/* Supporting rail — scrolls as a column (the banking/purchasing home
+            idiom) so the panels below the fold stay reachable on short
+            viewports instead of the vendor table collapsing to nothing. */}
+        <div className="flex min-h-0 flex-col gap-5 overflow-y-auto">
           <CockpitPanel title={t('panels.aging')} icon={ListOrdered} hint={`${moneyCompact(data.outstanding)} · ${formatExactPercent(data.summary.pctCurrent)} ${t('current')}`} className="shrink-0">
             <AgingBars buckets={data.summary.buckets} accent="text-red-600 dark:text-red-400" />
           </CockpitPanel>
@@ -97,7 +100,9 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
             />
           </CockpitPanel>
 
-          <CockpitPanel title={t('panels.byVendor')} icon={Building2} bodyClassName="min-h-0 overflow-hidden p-0" className="min-h-0 flex-1">
+          {/* Grows into the rail's leftover height, but never collapses: below
+              its floor the rail scrolls instead of squeezing the table away. */}
+          <CockpitPanel title={t('panels.byVendor')} icon={Building2} bodyClassName="min-h-0 overflow-hidden p-0" className="min-h-80 flex-1">
             <div className="h-full overflow-y-auto">
               {data.byVendor.length === 0 ? (
                 <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">{t('noPayables')}</p>

@@ -45,6 +45,11 @@
   "dashboard": {
     "title": "Gastos",
     "description": "Centro de control de informes de gastos — la cola de aprobación, gasto por empleado y categoría, y la tendencia del gasto.",
+    "tabs": {
+      "overview": "Resumen",
+      "breakdown": "Desglose"
+    },
+    "windowHint": "Últimos 12 meses",
     "vitals": {
       "pending": "Pendiente de aprobación",
       "pendingSub": "{count} informes",

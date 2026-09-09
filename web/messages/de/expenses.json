@@ -45,6 +45,11 @@
   "dashboard": {
     "title": "Ausgaben",
     "description": "Spesen-Kontrollzentrum — Freigabe-Pipeline, Ausgaben nach Mitarbeiter und Kategorie sowie der Ausgabentrend.",
+    "tabs": {
+      "overview": "Überblick",
+      "breakdown": "Aufschlüsselung"
+    },
+    "windowHint": "Rollierende 12 Monate",
     "vitals": {
       "pending": "Freigabe ausstehend",
       "pendingSub": "{count} Berichte",
