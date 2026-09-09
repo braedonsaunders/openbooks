@@ -50,7 +50,8 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
         await db.execute(sql`update app_roles set permissions='["close.read","close.run","close.approve","close.reopen","periods.manage"]'::jsonb, subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:[org.subsidiaryId]})}::jsonb where org_id=${org.orgId} and key='close_auditor'`)
       })
       state.user = { id:actor, orgId:org.orgId, name:'Close auditor', email:'close@scratch.test', roles:[], isSuperAdmin:false, envKind:'production', productionOrgId:org.orgId, homeOrgId:org.orgId, homeUserId:actor }
-      // Even a declared single-entity run currently contains org-wide diagnostics.
+      // Close lifecycle access remains restricted to organization-wide operators,
+      // including when the run itself captures a single-entity scope.
       const runId = await withBypassContext(() => startCloseRun({orgId:org.orgId, periodId:org.periodId, bookId:org.bookId, actorId:actor, subsidiaryIds:[org.subsidiaryId]}))
       const taskId = await withBypassContext(async () => (await db.execute<{id:string}>(sql`select id from close_run_tasks where run_id=${runId} and org_id=${org.orgId} order by sort_order limit 1`)).rows[0]!.id)
       const params = { params: Promise.resolve({id:runId, taskId}) }
@@ -101,7 +102,20 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
       // the workflow, and subsequent scope revocation cannot replay a binder.
       await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and key='close_auditor'`))
       await withOrgContext(org.orgId, async () => {
-        if (boundary === 'creation') assert.equal((await create(request(target))).status,200)
+        if (boundary === 'creation') {
+          // For an unrestricted caller, omitted and explicit null scopes both
+          // request an organization-wide run; neither may widen a captured run.
+          for (const body of [target, {...target,subsidiaryIds:null}]) {
+            const conflict = await create(request(body))
+            assert.equal(conflict.status,422)
+            assert.deepEqual(await conflict.json(),{error:'existing close run has a different subsidiary scope'})
+          }
+          const captured = await db.execute<{id:string;scope:{subsidiaryIds:string[]}}>(sql`select id,scope from close_runs where org_id=${org.orgId} and period_id=${org.periodId} and book_id=${org.bookId}`)
+          assert.deepEqual(captured.rows,[{id:runId,scope:{subsidiaryIds:[org.subsidiaryId]}}])
+          const resumed = await create(request({...target,subsidiaryIds:[org.subsidiaryId]}))
+          assert.equal(resumed.status,200)
+          assert.deepEqual(await resumed.json(),{ok:true,runId})
+        }
         if (boundary === 'actions') assert.equal((await action(request({action:'refresh'}),params)).status,200)
         if (boundary === 'application') {
           const context = {authz:(await getAuthz())!,source:'mcp' as const,requestId:randomUUID(),apiKeyId:null}
