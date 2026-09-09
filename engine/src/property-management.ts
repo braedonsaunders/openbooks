@@ -110,7 +110,7 @@ interface DepositReversalRow extends Record<string, unknown> {
 interface CamPoolDbRow extends Record<string, unknown> {
   id: string; property_id: string; status: string; location_id: string | null; period_starts_on: string;
   period_ends_on: string; expense_account_ids: string[]; allocation_basis: "rentable_area" | "equal" | "custom";
-  budget_amount: string; subsidiary_id: string;
+  budget_amount: string; subsidiary_id: string; currency: string;
 }
 interface CamLeaseRow extends Record<string, unknown> {
   id: string; cam_share_percent: string | null; rentable_area: string | null; overlap_start: string;
@@ -1688,9 +1688,26 @@ export async function reopenFinalizedCamPool(orgId: string, actorId: string, poo
 export async function finalizeCamPool(orgId: string, actorId: string, poolId: string): Promise<{ actualAmount: string; allocations: number }> {
   return db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
-    const poolResult = (await tx.execute<CamPoolDbRow>(sql`select cp.*,p.location_id,p.subsidiary_id from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${orgId} and cp.id=${poolId} for update`));
+    const poolResult = (await tx.execute<CamPoolDbRow>(sql`select cp.*,p.location_id,p.subsidiary_id,p.currency from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${orgId} and cp.id=${poolId} for update`));
     const pool = poolResult.rows[0]; if (!pool || !["draft","open"].includes(pool.status)) throw new PropertyManagementError("Open CAM pool not found");
     if (!pool.location_id) throw new PropertyManagementError("Property needs a location dimension before CAM actuals can be calculated");
+
+    // A tenant recovers one economic cost, irrespective of its parallel book
+    // representations. The primary posting book is the authoritative CAM
+    // basis; retain that identity through finalization and record it in audit.
+    const books = (await tx.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
+      select id,is_active,posts_gl from accounting_books
+       where org_id=${orgId} and is_primary order by id for share`)).rows;
+    if (books.length !== 1 || !books[0]!.is_active || !books[0]!.posts_gl) {
+      throw new PropertyManagementError("CAM actuals require exactly one active primary posting book");
+    }
+    const bookId = books[0]!.id;
+    const subsidiary = (await tx.execute<{ base_currency: string }>(sql`
+      select base_currency from subsidiaries where org_id=${orgId} and id=${pool.subsidiary_id}
+        and is_active and not is_elimination for share`)).rows[0];
+    if (!subsidiary || pool.currency !== subsidiary.base_currency) {
+      throw new PropertyManagementError("CAM actuals require the property currency to match its active subsidiary's functional currency");
+    }
 
     // A finalized pool's actuals are immutable, but the source GL is live:
     // an expense posted into the covered window after the sum below yet
@@ -1704,12 +1721,12 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
     //    posting therefore either fully commits before our reads begin, and
     //    is counted by them, or parks behind this transaction until it ends -
     //    where its own closed-module check rejects it. Scope covers every
-    //    active book and every period overlapping the CAM dates, standard or
+    //    authoritative book and every period overlapping the CAM dates, standard or
     //    adjustment; ordering by (period, book) keeps concurrent finalizations
     //    deadlock-free.
     const coveredScopes = (await tx.execute<{ period_id: string; book_id: string }>(sql`
       select p.id as period_id,b.id as book_id from accounting_periods p
-        join accounting_books b on b.org_id=${orgId} and b.is_active
+        join accounting_books b on b.org_id=${orgId} and b.id=${bookId}
         where p.org_id=${orgId} and p.starts_on<=${pool.period_ends_on} and p.ends_on>=${pool.period_starts_on}
         order by p.id,b.id`));
     if (!coveredScopes.rows.length) throw new PropertyManagementError("No accounting periods overlap the CAM pool's dates");
@@ -1720,7 +1737,7 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
     //    so a queued journal cannot merely wait out finalization and post late.
     const openScope = (await tx.execute<{ name: string; code: string }>(sql`
       select p.name,b.code from accounting_periods p
-        join accounting_books b on b.org_id=${orgId} and b.is_active
+        join accounting_books b on b.org_id=${orgId} and b.id=${bookId}
         where p.org_id=${orgId} and p.starts_on<=${pool.period_ends_on} and p.ends_on>=${pool.period_starts_on}
           and not period_module_is_closed(${orgId},p.id,b.id,${pool.subsidiary_id},'gl')
         order by p.name,b.code limit 1`)).rows[0];
@@ -1729,7 +1746,8 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
       select coalesce(sum(jl.amount),0)::text as amount, count(*)::int as lines,
         coalesce(max(greatest(je.posted_at,je.updated_at))::text,'') as last_change
       from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
-      where jl.org_id=${orgId} and je.status='posted' and je.posting_date between ${pool.period_starts_on} and ${pool.period_ends_on} and jl.location_id=${pool.location_id}
+      where jl.org_id=${orgId} and je.book_id=${bookId} and jl.subsidiary_id=${pool.subsidiary_id}
+        and je.status in ('posted','reversed') and je.posting_date between ${pool.period_starts_on} and ${pool.period_ends_on} and jl.location_id=${pool.location_id}
         and jl.account_id::text in(select jsonb_array_elements_text(${JSON.stringify(pool.expense_account_ids)}::jsonb))`);
     const actual = await sourceTotals();
     const actualAmount = exactMoney(actual.rows[0]?.amount ?? "0", "CAM actual amount");
@@ -1789,9 +1807,12 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
       throw new PropertyManagementError("CAM source ledgers changed while finalizing; resolve the entries and retry");
     }
     const finalizeSourceFingerprint = createHash("sha256").update(canonicalJson({
-      kind: "cam_finalize.v2",
+      kind: "cam_finalize.v3",
       poolId,
       propertyId: pool.property_id,
+      bookId,
+      subsidiaryId: pool.subsidiary_id,
+      currency: pool.currency,
       periodStartsOn: pool.period_starts_on,
       periodEndsOn: pool.period_ends_on,
       locationId: pool.location_id,
@@ -1815,6 +1836,9 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
     await tx.execute(sql`update cam_pools set actual_amount=${actualAmount},status='finalized',finalized_at=now(),finalized_by=${actorId},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${poolId}`);
     await audit(tx, orgId, "cam_pools", poolId, "finalize", actorId, {
       locationId: pool.location_id,
+      bookId,
+      subsidiaryId: pool.subsidiary_id,
+      currency: pool.currency,
       before: { status: pool.status },
       after: { status: "finalized", actualAmount, allocationCount: weighted.length, budgetAllocationTotal: sum(budgetAllocations), actualAllocationTotal: sum(actualAllocations) },
       sourceFingerprint: finalizeSourceFingerprint,

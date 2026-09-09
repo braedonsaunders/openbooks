@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { reverseProjectGlEntry } from "./project-recognition.ts";
 import {
   PropertyManagementError,
   billCamReconciliation,
@@ -122,6 +123,108 @@ async function closeGlModule(fixture: CamFixture, actorId: string, periodId = fi
     values (${fixture.org.orgId}, ${periodId}, ${fixture.org.bookId}, ${fixture.org.subsidiaryId},
             'gl', 'closed', now(), ${actorId}, 'CAM finalization requires frozen source periods',
             ${actorId}, ${actorId})`);
+}
+
+for (const scenario of ["parallel-book", "secondary-open-book", "other-entity", "foreign-property-currency", "reversed-expense"] as const) {
+  test(`CAM accounting basis excludes ${scenario}`, { skip: !DB }, async () => {
+    const fixture = await seedCamProperty();
+    try {
+      const actor = await createScratchUser(fixture.org.orgId, "CAM basis operator", "admin");
+      await postLedgerExpense(fixture, "1000");
+      if (scenario === "parallel-book" || scenario === "secondary-open-book") {
+        const bookId = randomUUID();
+        await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
+          values(${bookId},${fixture.org.orgId},'CAM-TAX','Parallel tax book',false,true,true)`);
+        const parallel = { ...fixture, org: { ...fixture.org, bookId } };
+        await postLedgerExpense(parallel, "1000");
+        if (scenario === "parallel-book") await closeGlModule(parallel, actor);
+      }
+      if (scenario === "other-entity") {
+        const subsidiaryId = randomUUID();
+        await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,country,base_currency,is_active)
+          values(${subsidiaryId},${fixture.org.orgId},${fixture.org.subsidiaryId},'Other legal entity','CA','CAD',true)`);
+        await postLedgerExpense({ ...fixture, org: { ...fixture.org, subsidiaryId } }, "300");
+      }
+      if (scenario === "foreign-property-currency") {
+        await db.execute(sql`update managed_properties set currency='USD'
+          where org_id=${fixture.org.orgId} and id=${fixture.propertyId}`);
+      }
+      if (scenario === "reversed-expense") {
+        const source = (await db.execute<{ id: string }>(sql`select id from journal_entries
+          where org_id=${fixture.org.orgId} and memo='CAM source activity'`)).rows[0]!;
+        const reversalId = await reverseProjectGlEntry(fixture.org.orgId, actor, source.id, "Correct reversed CAM expense", "2026-07-15");
+        const reversalLine = (await db.execute<{ location: string | null; amount: string }>(sql`
+          select location_id as location,amount::text from journal_lines where org_id=${fixture.org.orgId}
+            and entry_id=${reversalId} and account_id=${fixture.ledgerAccount}`)).rows[0]!;
+        assert.deepEqual(reversalLine, { location: fixture.org.locationId, amount: "-1000.0000" });
+        await postLedgerExpense(fixture, "1200");
+      }
+      const created = await createCamPool({
+        orgId: fixture.org.orgId, actorId: actor, propertyId: fixture.propertyId,
+        name: `CAM basis ${scenario}`, fiscalYear: 2026, periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31",
+        allocationBasis: "equal", budgetAmount: "1000", expenseAccountIds: [fixture.ledgerAccount],
+      });
+      await closeGlModule(fixture, actor);
+      if (scenario === "foreign-property-currency") {
+        await assert.rejects(() => finalizeCamPool(fixture.org.orgId, actor, created.id), /CAM.*functional currency/u);
+        const row = (await db.execute<{ status: string; actual: string | null; allocations: number }>(sql`
+          select status,actual_amount::text as actual,(select count(*)::int from cam_allocations
+            where org_id=${fixture.org.orgId} and pool_id=${created.id}) as allocations
+          from cam_pools where org_id=${fixture.org.orgId} and id=${created.id}`)).rows[0]!;
+        assert.deepEqual(row, { status: "open", actual: null, allocations: 0 });
+      } else {
+        const expected = scenario === "reversed-expense" ? "1200.0000" : "1000.0000";
+        const result = await finalizeCamPool(fixture.org.orgId, actor, created.id);
+        assert.equal(result.actualAmount, expected);
+        const basis = (await camAudits(fixture.org.orgId, "cam_pools", created.id, "finalize"))[0]!.changes;
+        assert.equal(basis.bookId, fixture.org.bookId);
+        assert.equal(basis.subsidiaryId, fixture.org.subsidiaryId);
+        assert.equal(basis.currency, "CAD");
+        const billed = await billCamReconciliation(fixture.org.orgId, actor, created.id, "2026-07-15");
+        assert.equal(billed.documents.length, 1);
+        const invoice = (await db.execute<{ total: string }>(sql`select total::text from documents
+          where org_id=${fixture.org.orgId} and id=${billed.documents[0]}`)).rows[0]!;
+        assert.equal(invoice.total, expected);
+      }
+    } finally {
+      await dropScratchOrg(fixture.org.orgId);
+    }
+  });
+}
+
+for (const policy of ["missing", "inactive", "non-posting", "ambiguous"] as const) {
+  test(`CAM refuses ${policy} primary-book authority before allocating`, { skip: !DB }, async () => {
+    const fixture = await seedCamProperty();
+    try {
+      const actor = await createScratchUser(fixture.org.orgId, "CAM authority operator", "admin");
+      await postLedgerExpense(fixture, "1000");
+      const created = await createCamPool({
+        orgId: fixture.org.orgId, actorId: actor, propertyId: fixture.propertyId,
+        name: "CAM authority", fiscalYear: 2026, periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31",
+        allocationBasis: "equal", budgetAmount: "1000", expenseAccountIds: [fixture.ledgerAccount],
+      });
+      await closeGlModule(fixture, actor);
+      // Represent legacy/imported invalid policy only during fixture setup.
+      // Finalization executes after this transaction, with every guard active.
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`set local openbooks.migration='on'`);
+        if (policy === "missing") await tx.execute(sql`update accounting_books set is_primary=false where org_id=${fixture.org.orgId}`);
+        if (policy === "inactive") await tx.execute(sql`update accounting_books set is_active=false where org_id=${fixture.org.orgId}`);
+        if (policy === "non-posting") await tx.execute(sql`update accounting_books set posts_gl=false where org_id=${fixture.org.orgId}`);
+        if (policy === "ambiguous") await tx.execute(sql`insert into accounting_books(org_id,code,name,is_primary,is_active,posts_gl)
+          values(${fixture.org.orgId},'CAM-AMBIGUOUS','Ambiguous primary',true,true,true)`);
+      });
+      await assert.rejects(() => finalizeCamPool(fixture.org.orgId, actor, created.id), /CAM.*exactly one active primary posting book/u);
+      const row = (await db.execute<{ status: string; actual: string | null; allocations: number }>(sql`
+        select status,actual_amount::text as actual,(select count(*)::int from cam_allocations
+          where org_id=${fixture.org.orgId} and pool_id=${created.id}) as allocations
+        from cam_pools where org_id=${fixture.org.orgId} and id=${created.id}`)).rows[0]!;
+      assert.deepEqual(row, { status: "open", actual: null, allocations: 0 });
+      assert.equal((await camAudits(fixture.org.orgId, "cam_pools", created.id, "finalize")).length, 0);
+    } finally {
+      await dropScratchOrg(fixture.org.orgId);
+    }
+  });
 }
 
 test("a shared-source expense feeds exactly one CAM reconciliation", { skip: !DB }, async () => {

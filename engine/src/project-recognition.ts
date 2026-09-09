@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
-import { db, inDbTransaction } from "./db.ts";
+import { and, eq, sql } from "drizzle-orm";
+import { db, inDbTransaction, schema } from "./db.ts";
+import { reversalJournalLines } from "./reversal-journal-lines.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions, uuidArray } from "./subsidiaries.ts";
 import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import { businessToday } from "./business-date.ts";
@@ -270,24 +271,20 @@ export async function reverseProjectGlEntryWithinTransaction(
   if (period.rows[0].is_closed) {
     throw new Error(`the GL period covering ${reversalDate} is closed`);
   }
-  const lines = (await tx.execute(sql`
-    select account_id, amount, currency, txn_amount, project_id, party_id, memo, subsidiary_id
-      from journal_lines where entry_id = ${entryId} and org_id = ${orgId} order by line_number`));
-  const [rev] = (await tx.execute(sql`
+  const lines = await tx.select().from(schema.journalLines)
+    .where(and(eq(schema.journalLines.entryId, entryId), eq(schema.journalLines.orgId, orgId)))
+    .orderBy(schema.journalLines.lineNumber);
+  const rev = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)
     values (${orgId}, ${h.book_id}, ${h.subsidiary_id}, ${h.entry_number + "-R"}, ${reversalDate}, ${period.rows[0].id},
             ${`Reversal of ${h.entry_number} — ${reason}`}, 'draft', ${h.origin}, ${entryId}, ${actorId}, ${actorId})
-    returning id`)).rows as any[];
-  let n = 1;
-  for (const l of lines.rows) {
-    await tx.execute(sql`
-      insert into journal_lines
-        (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, project_id, party_id, memo)
-      values (${orgId}, ${rev.id}, ${n}, ${l.account_id}, ${l.subsidiary_id}, ${neg(String(l.amount))}, ${l.currency},
-              ${neg(String(l.txn_amount ?? l.amount))}, 1, ${l.project_id}, ${l.party_id}, ${l.memo})`);
-    n++;
-  }
+    returning id`)).rows[0]!;
+  // Preserve the exact original FX and dimensional evidence. Losing location
+  // (or any other dimension) leaves an un-reversed balance in that subledger.
+  if (lines.length) await tx.insert(schema.journalLines).values(
+    reversalJournalLines(lines, { entryId: rev.id, orgId }),
+  );
   await tx.execute(sql`
     update journal_entries
        set status = 'posted', posted_at = now(), posted_by = ${actorId},
