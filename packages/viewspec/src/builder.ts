@@ -23,6 +23,8 @@ import type {
   DateCell,
   DrillCell,
   TxnCell,
+  WidgetCell,
+  TableSpanRow,
   FieldRef,
   FilterBarBlock,
   FilterBarControls,
@@ -176,6 +178,15 @@ export function summaryLine(label: Value, value: CellSpec): SummaryLineBlock {
 
 export function paper(spec: Omit<PaperBlock, 'kind'>): PaperBlock {
   return { kind: 'paper', ...spec }
+}
+
+/** A host-registered component rendered inside a cell. */
+export function widgetCell(name: string, props?: Record<string, unknown>): WidgetCell {
+  return { kind: 'widget', widget: name, ...(props ? { props } : {}) }
+}
+
+export function spanRow(spec: TableSpanRow): TableSpanRow {
+  return spec
 }
 
 export function column(header: Value, cell: CellSpec, opts: Omit<Column, 'header' | 'cell'> = {}): Column {

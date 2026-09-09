@@ -10,6 +10,7 @@ import { ModuleHomeTabs, LiveDirectory } from '../module-home/ui'
 import { TrendChart } from '../../app/(app)/analytics/_ui/charts'
 import { ApPulse, AttentionList, CommitmentsSection, DirectorySection } from '../../app/(app)/purchasing/sections'
 import { JournalEntryHeading } from '../../app/(app)/reports/journal/sections'
+import { AccountHeading, EntryCell } from '../../app/(app)/reports/general-ledger/sections'
 
 /**
  * Widget registry — the closed set of interactive components a spec may place
@@ -122,6 +123,23 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       date={str(props, 'date') ?? ''}
       originLabel={str(props, 'originLabel') ?? ''}
       memo={(props.memo as string | null) ?? null}
+    />
+  ),
+  'account-heading': (props) => (
+    <AccountHeading
+      accountId={str(props, 'accountId') ?? ''}
+      from={str(props, 'from') ?? ''}
+      to={str(props, 'to') ?? ''}
+      number={(props.number as string | null) ?? null}
+      name={str(props, 'name') ?? ''}
+    />
+  ),
+  'entry-cell': (props) => (
+    <EntryCell
+      entryId={str(props, 'entryId') ?? ''}
+      docKind={(props.docKind as string | null) ?? null}
+      docId={(props.docId as string | null) ?? null}
+      entryNumber={(props.entryNumber as string | null) ?? null}
     />
   ),
   'save-view': () => <SaveViewButton />,

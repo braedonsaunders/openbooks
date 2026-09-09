@@ -55,6 +55,32 @@ function leafOf(cell: TableBlock['columns'][number]['cell']) {
   return cell.kind === 'drill' || cell.kind === 'txn' ? cell.inner : cell
 }
 
+/** A spanning summary row (opening / closing / totals). Resolves against the
+ *  table's own scope, not a row scope. */
+function SpanRowView({ row, scope }: { row: NonNullable<TableBlock['leading']>[number]; scope: unknown }) {
+  return (
+    <TableRow className={row.className}>
+      <TableCell colSpan={row.labelColSpan} className={row.labelClassName}>
+        {resolveText(row.label, scope)}
+      </TableCell>
+      {row.cells.map((entry, index) => {
+        // Tone is applied by the container here exactly as it is for body
+        // cells; a span row that skipped it would silently drop the negative
+        // treatment on a closing balance.
+        const leaf = leafOf(entry.cell)
+        const tone = toneClass(
+          'tone' in leaf ? (resolveValue(leaf.tone as never, scope) as Tone | undefined) : undefined,
+        )
+        return (
+          <TableCell key={index} className={cn(alignClass(entry.align), entry.className, tone) || undefined}>
+            <CellView spec={entry.cell} scope={scope} />
+          </TableCell>
+        )
+      })}
+    </TableRow>
+  )
+}
+
 function isNumericCell(cell: TableBlock['columns'][number]['cell']): boolean {
   const leaf = leafOf(cell)
   return leaf.kind === 'money' || leaf.kind === 'number'
@@ -62,7 +88,7 @@ function isNumericCell(cell: TableBlock['columns'][number]['cell']): boolean {
 
 function TableBlockView({ spec, scope }: { spec: TableBlock; scope: unknown }) {
   const rows = resolveRows(spec.rows, scope)
-  if (rows.length === 0 && spec.empty) {
+  if (rows.length === 0 && spec.empty && !spec.leading && !spec.trailing) {
     return (
       <div className="px-4 py-10 text-center">
         <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
@@ -81,13 +107,14 @@ function TableBlockView({ spec, scope }: { spec: TableBlock; scope: unknown }) {
       <TableHeader>
         <TableRow>
           {spec.columns.map((column, index) => (
-            <TableHead key={index} className={alignClass(column.align) || undefined}>
+            <TableHead key={index} className={cn(alignClass(column.align), column.headerClassName) || undefined}>
               {resolveText(column.header, scope)}
             </TableHead>
           ))}
         </TableRow>
       </TableHeader>
       <TableBody>
+        {spec.leading?.map((row, index) => <SpanRowView key={`lead-${index}`} row={row} scope={scope} />)}
         {rows.map((row, rowIndex) => {
           // Cells resolve against the row, with the page scope reachable at
           // `$root` for shared constants (placeholder text, labels). One fixed
@@ -115,6 +142,7 @@ function TableBlockView({ spec, scope }: { spec: TableBlock; scope: unknown }) {
           </TableRow>
           )
         })}
+        {spec.trailing?.map((row, index) => <SpanRowView key={`trail-${index}`} row={row} scope={scope} />)}
       </TableBody>
     </Table>
   )

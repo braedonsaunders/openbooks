@@ -72,6 +72,12 @@ const PAGES = [
     expect: 'table tbody tr',
   },
   {
+    path: '/reports/general-ledger',
+    // Repeating groups WITH spanning opening/closing summary rows.
+    variants: ['', '?period=this_fiscal_year'],
+    expect: 'table tbody tr',
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,
