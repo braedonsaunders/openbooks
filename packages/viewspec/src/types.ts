@@ -174,6 +174,12 @@ export interface PageHeaderBlock {
   description?: Value
   back?: { href: Value; label: Value }
   actions?: WidgetRef[]
+  /**
+   * Wrapper class for the actions slot. Pages that place more than one control
+   * there wrap them in a flex row; without this the widgets render as bare
+   * siblings and the layout differs from the native page.
+   */
+  actionsClassName?: string
 }
 
 /** Which controls the shared report filter bar shows. Mirrors its real props. */
@@ -281,6 +287,45 @@ export interface TextBlock {
 }
 
 /**
+ * Layout containers.
+ *
+ * `className` is a deliberate, bounded concession. Cockpit pages use bespoke
+ * responsive grids (`grid-cols-2 sm:grid-cols-3 lg:grid-cols-5`), and encoding
+ * every such arrangement as a named layout would grow the vocabulary one page
+ * at a time without ever converging. A class string is presentational only: it
+ * cannot execute, cannot reach data, and cannot mount a component. It is also
+ * naturally bounded — Tailwind compiles a fixed set of utilities, so a spec can
+ * only name classes the bundle already contains and cannot invent new CSS.
+ */
+export interface GridBlock {
+  kind: 'grid'
+  className?: string
+  blocks: Block[]
+}
+
+export interface PanelBlock {
+  kind: 'panel'
+  title: Value
+  iconKey?: Value
+  hint?: Value
+  className?: string
+  bodyClassName?: string
+  blocks: Block[]
+}
+
+/** A compact metric tile. Values arrive already formatted by the loader. */
+export interface StatTileBlock {
+  kind: 'stat-tile'
+  iconKey: Value
+  accent: Value
+  label: Value
+  value: Value
+  sub?: Value
+  tone?: Value<'default' | 'positive' | 'warning' | 'negative'>
+  when?: FieldRef
+}
+
+/**
  * A host-registered domain component placed as a block.
  *
  * The escape valve for components that own real presentation logic — the
@@ -306,6 +351,9 @@ export type Block =
   | PaginationBlock
   | TextBlock
   | WidgetBlock
+  | GridBlock
+  | PanelBlock
+  | StatTileBlock
 
 export const BLOCK_KINDS = [
   'page-header',
@@ -316,6 +364,9 @@ export const BLOCK_KINDS = [
   'pagination',
   'text',
   'widget',
+  'grid',
+  'panel',
+  'stat-tile',
 ] as const
 
 /* -------------------------------------------------------------------------- */
@@ -328,6 +379,9 @@ export type PageLayout = 'list' | 'detail'
 export interface PageSpec {
   specVersion: typeof SPEC_VERSION
   layout: PageLayout
+  /** Override for the layout's body wrapper — cockpit pages pass a flex
+   *  column so the content fits the viewport and scrolls inside panels. */
+  bodyClassName?: string
   /** Blocks rendered into the layout's sticky header region. */
   header: Block[]
   /** Blocks rendered into the scrolling body. */

@@ -1,10 +1,9 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { cn, PageHeader } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { HomeStatTile, HomePanel } from '../../../components/module-home/client'
-import { LiveDirectory, ModuleHomeTabs, type DirectoryItem } from '../../../components/module-home/ui'
+import { ModuleHomeTabs, type DirectoryItem } from '../../../components/module-home/ui'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import { TrendChart } from '../analytics/_ui/charts'
 import { SubsidiarySwitcher } from '../../../components/subsidiary-switcher'
@@ -12,9 +11,11 @@ import { getAuthz, can, assertCan } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
 import { reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
-import { purchasingHome, type VendorExposureRow } from '../../../lib/module-home/purchasing'
+import { purchasingHome } from '../../../lib/module-home/purchasing'
 import { getMoneyFormatter } from '@/lib/money-server'
-import { CommitmentsTable } from './CommitmentsTable'
+import { ApPulse, AttentionList, CommitmentsSection, DirectorySection } from './sections'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadPurchasing, purchasingSpec, needsAttention, weekLabel } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +37,17 @@ export default async function PurchasingHomePage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const spec = await searchParams
+    const data = await loadPurchasing(spec)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={purchasingSpec(data)} data={data} searchParams={spec} trusted />
+      </>
+    )
+  }
   const { moneyCompact } = await getMoneyFormatter()
   const authz = await getAuthz()
   if (!authz) redirect('/login')
@@ -177,37 +189,28 @@ export default async function PurchasingHomePage({
             bodyClassName="min-h-0 overflow-y-auto p-0"
             className="min-h-[24rem] lg:col-span-2"
           >
-            {data.topExposure.length === 0 ? (
-              <p className="px-6 py-16 text-center text-sm text-slate-400 dark:text-slate-500">{t('home.hero.empty')}</p>
-            ) : (
-              <CommitmentsTable rows={data.topExposure} showPurchaseOrders={data.ordersEnabled} />
-            )}
+            <CommitmentsSection
+              rows={data.topExposure}
+              showPurchaseOrders={data.ordersEnabled}
+              empty={t('home.hero.empty')}
+            />
           </HomePanel>
 
           <div className="flex min-h-0 flex-col gap-5 overflow-y-auto">
             <HomePanel title={t('home.pulse.title')} icon="gauge" bodyClassName="p-0" className="shrink-0">
-              <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-slate-800">
-                <div className="px-3 py-2.5 text-center">
-                  <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">{moneyCompact(data.apOutstanding)}</p>
-                  <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('home.pulse.open')}</p>
-                </div>
-                <div className="px-3 py-2.5 text-center">
-                  <p className={cn('text-sm font-bold tabular-nums', data.apOverdue > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100')}>
-                    {moneyCompact(data.apOverdue)}
-                  </p>
-                  <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('home.pulse.overdue')}</p>
-                </div>
-                <div className="px-3 py-2.5 text-center">
-                  <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">{moneyCompact(data.dueNext7)}</p>
-                  <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('home.pulse.due7')}</p>
-                </div>
-              </div>
-              <Link
-                href={`/ap${subQs}` as never}
-                className="block border-t border-slate-100 px-4 py-2 text-center text-xs font-semibold text-teal-600 transition-colors hover:text-teal-700 dark:border-slate-800 dark:text-teal-400 dark:hover:text-teal-300"
-              >
-                {t('home.pulse.cta')} →
-              </Link>
+              <ApPulse
+                outstanding={moneyCompact(data.apOutstanding)}
+                overdue={moneyCompact(data.apOverdue)}
+                dueNext7={moneyCompact(data.dueNext7)}
+                overdueIsNegative={data.apOverdue > 0}
+                labels={{
+                  open: t('home.pulse.open'),
+                  overdue: t('home.pulse.overdue'),
+                  due7: t('home.pulse.due7'),
+                  cta: t('home.pulse.cta'),
+                }}
+                href={`/ap${subQs}`}
+              />
             </HomePanel>
 
             <HomePanel title={t('home.trend.title')} icon="area-chart" hint={t('home.trend.hint')} className="shrink-0">
@@ -219,40 +222,10 @@ export default async function PurchasingHomePage({
               />
             </HomePanel>
 
-            {directory.length > 0 ? (
-              <div className="shrink-0">
-                <h3 className="mb-2 px-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  {t('home.directory.title')}
-                </h3>
-                <LiveDirectory items={directory} />
-              </div>
-            ) : null}
+            <DirectorySection items={directory} title={t('home.directory.title')} />
 
             <HomePanel title={t('home.attention.title')} icon="triangle-alert" bodyClassName="p-0" className="shrink-0">
-              {attention.length === 0 ? (
-                <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-                  {t('home.attention.allClear')}
-                </p>
-              ) : (
-                <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-                  {attention.map((item, i) => (
-                    <li key={i}>
-                      <Link
-                        href={item.href as never}
-                        className="flex items-start gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                      >
-                        <span
-                          className={cn(
-                            'mt-1.5 h-2 w-2 shrink-0 rounded-full',
-                            item.tone === 'negative' ? 'bg-red-500' : 'bg-amber-500',
-                          )}
-                        />
-                        <span className="min-w-0 flex-1 text-slate-700 dark:text-slate-300">{item.text}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <AttentionList items={attention} allClear={t('home.attention.allClear')} />
             </HomePanel>
           </div>
         </div>
@@ -261,29 +234,3 @@ export default async function PurchasingHomePage({
   )
 }
 
-type T = Awaited<ReturnType<typeof getTranslations<'purchasing'>>>
-
-function needsAttention(exposure: VendorExposureRow[], unpostedExpenses: number, t: T, moneyCompact: (value: number) => string) {
-  const items: { tone: 'negative' | 'warning'; text: string; href: string }[] = []
-  for (const r of exposure) {
-    if (r.overdue > 0) {
-      items.push({
-        tone: r.overdue > r.billedOpen / 2 ? 'negative' : 'warning',
-        text: t('home.attention.overdueVendor', { vendor: r.name, amount: moneyCompact(r.overdue) }),
-        href: '/ap',
-      })
-    }
-  }
-  if (unpostedExpenses > 0) {
-    items.push({ tone: 'warning', text: t('home.attention.unpostedExpenses', { count: unpostedExpenses }), href: '/expenses/reports' })
-  }
-  return items.slice(0, 6)
-}
-
-function weekLabel(weekStart: string): string {
-  return new Date(weekStart + 'T00:00:00Z').toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  })
-}

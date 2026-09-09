@@ -43,6 +43,9 @@ import type {
   Value,
   WidgetBlock,
   WidgetRef,
+  GridBlock,
+  PanelBlock,
+  StatTileBlock,
 } from './types.ts'
 import { SPEC_VERSION } from './types.ts'
 
@@ -184,12 +187,30 @@ export function textBlock(
   return { kind: 'text', content, ...opts }
 }
 
+export function grid(className: string | undefined, blocks: Block[]): GridBlock {
+  return { kind: 'grid', ...(className ? { className } : {}), blocks }
+}
+
+export function panel(spec: Omit<PanelBlock, 'kind'>): PanelBlock {
+  return { kind: 'panel', ...spec }
+}
+
+export function statTile(spec: Omit<StatTileBlock, 'kind'>): StatTileBlock {
+  return { kind: 'stat-tile', ...spec }
+}
+
 /* ---------------------------------- page ---------------------------------- */
 
-export function page(spec: { layout?: PageSpec['layout']; header?: Block[]; body: Block[] }): PageSpec {
+export function page(spec: {
+  layout?: PageSpec['layout']
+  bodyClassName?: string
+  header?: Block[]
+  body: Block[]
+}): PageSpec {
   return {
     specVersion: SPEC_VERSION,
     layout: spec.layout ?? 'list',
+    ...(spec.bodyClassName ? { bodyClassName: spec.bodyClassName } : {}),
     header: spec.header ?? [],
     body: spec.body,
   }

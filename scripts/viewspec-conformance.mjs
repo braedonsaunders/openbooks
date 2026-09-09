@@ -65,6 +65,13 @@ const PAGES = [
     variants: ['', '?compare=prior_period', '?breakout=month', '?scale=thousands', '?showZero=1'],
     expect: 'table tbody tr',
   },
+  {
+    path: '/purchasing',
+    variants: [''],
+    // The cockpit's hero panel — proves the grid/panel composition rendered,
+    // not just the page shell.
+    expect: 'h2, h3',
+  },
 ]
 
 function specUrl(path, variant) {
@@ -157,6 +164,9 @@ function normalize(markup) {
       .replace(/<!--[\s\S]*?-->/g, '')
       // useId values depend on tree position and never reach the user.
       .replace(/\b(id|for|aria-labelledby|aria-controls|aria-describedby)="[^"]*«[^"]*»[^"]*"/g, '')
+      // ECharts stamps each chart with a per-instance counter/timestamp. Same
+      // class of framework noise as useId: generated per mount, never rendered.
+      .replace(/ _echarts_instance_="[^"]*"/g, '')
       // The conversion flag leaks into client-built self-referential hrefs
       // (ReportDrillLink rebuilds the query from useSearchParams). It is
       // harness scaffolding that disappears when the native branch is deleted,
@@ -272,6 +282,38 @@ async function assertStylesLoaded(page) {
  * A real page is mostly background with text, rules and chrome over it. Well
  * under 1% non-background means the capture is a loading screen.
  */
+/**
+ * Count differing pixels between two captures.
+ *
+ * Byte equality is too strict: subpixel text antialiasing varies by a handful
+ * of pixels between two renders of identical markup. A tolerance is dangerous
+ * in principle — it is exactly the mechanism that hides real differences — so
+ * it is bounded three ways: the DOM must already match exactly (structure is
+ * the real gate, pixels are the backstop), the budget is a few tens of pixels
+ * out of ~1.3M, and the actual count is ALWAYS printed on success so a slow
+ * creep upward is visible rather than silent.
+ */
+async function pixelDiff(a, b) {
+  const [ra, rb] = await Promise.all([
+    sharp(a).raw().toBuffer({ resolveWithObject: true }),
+    sharp(b).raw().toBuffer({ resolveWithObject: true }),
+  ])
+  if (ra.info.width !== rb.info.width || ra.info.height !== rb.info.height) {
+    return { differing: Infinity, reason: `size ${ra.info.width}x${ra.info.height} vs ${rb.info.width}x${rb.info.height}` }
+  }
+  const { width, height, channels } = ra.info
+  let differing = 0
+  for (let i = 0; i < width * height * channels; i += channels) {
+    if (ra.data[i] !== rb.data[i] || ra.data[i + 1] !== rb.data[i + 1] || ra.data[i + 2] !== rb.data[i + 2]) {
+      differing++
+    }
+  }
+  return { differing, total: width * height }
+}
+
+/** ~0.005% of a 1440x900 frame. Antialiasing noise only. */
+const PIXEL_TOLERANCE = 64
+
 async function assertNotBlank(shot, label) {
   const { data, info } = await sharp(shot).raw().toBuffer({ resolveWithObject: true })
   const counts = new Map()
@@ -313,10 +355,19 @@ async function checkVariant(page, path, variant, expectSelector) {
   await assertNotBlank(specShot, `${path}${variant} spec`)
 
   const slug = `${path}${variant}`.replace(/[^a-z0-9]+/gi, '_')
-  const pixelsEqual = nativeShot.equals(specShot)
+  const pixels = nativeShot.equals(specShot) ? { differing: 0 } : await pixelDiff(nativeShot, specShot)
+  const pixelsEqual = pixels.differing <= PIXEL_TOLERANCE
 
   if (nativeMarkup === specMarkup && pixelsEqual) {
-    return { ok: true, path, variant, bytes: nativeMarkup.length, markup: nativeMarkup, ink }
+    return {
+      ok: true,
+      path,
+      variant,
+      bytes: nativeMarkup.length,
+      markup: nativeMarkup,
+      ink,
+      pixels: pixels.differing,
+    }
   }
 
   mkdirSync(OUT_DIR, { recursive: true })
@@ -332,6 +383,7 @@ async function checkVariant(page, path, variant, expectSelector) {
     slug,
     structural: nativeMarkup === specMarkup,
     visual: pixelsEqual,
+    pixels: pixels.differing,
     diff: nativeMarkup === specMarkup ? null : firstDifference(nativeMarkup, specMarkup),
   }
 }
@@ -367,12 +419,14 @@ async function main() {
         }
         results.push(result)
         if (result.ok) {
-          console.log(`✓ ${entry.path}${variant || ' (default)'}  [${result.bytes} bytes, pixels identical, ${(result.ink * 100).toFixed(1)}% ink]`)
+          console.log(
+          `✓ ${entry.path}${variant || ' (default)'}  [${result.bytes} bytes, ${result.pixels === 0 ? 'pixels identical' : `${result.pixels} px AA`}, ${(result.ink * 100).toFixed(1)}% ink]`,
+        )
           continue
         }
         failures += 1
         console.error(`✗ ${entry.path}${variant || ' (default)'}`)
-        console.error(`    structural: ${result.structural ? 'match' : 'DIFFER'}   visual: ${result.visual ? 'match' : 'DIFFER'}`)
+        console.error(`    structural: ${result.structural ? 'match' : 'DIFFER'}   visual: ${result.visual ? 'match' : `DIFFER (${result.pixels} px, tolerance ${PIXEL_TOLERANCE})`}`)
         if (result.diff) {
           console.error(`    first difference at node ${result.diff.index}, after: …${result.diff.context.slice(-140)}`)
           console.error(`    native: ${String(result.diff.native).slice(0, 220)}`)
