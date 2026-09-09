@@ -45,6 +45,11 @@
   "dashboard": {
     "title": "费用",
     "description": "费用报销控制中心——审批流水线、按员工和类别的支出，以及费用支出趋势。",
+    "tabs": {
+      "overview": "概览",
+      "breakdown": "明细"
+    },
+    "windowHint": "滚动 12 个月",
     "vitals": {
       "pending": "待审批",
       "pendingSub": "{count} 份报销单",

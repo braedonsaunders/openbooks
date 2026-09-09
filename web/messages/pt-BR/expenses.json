@@ -45,6 +45,11 @@
   "dashboard": {
     "title": "Despesas",
     "description": "Central de controle de relatórios de despesas — fila de aprovação, gasto por funcionário e categoria, e a tendência das despesas.",
+    "tabs": {
+      "overview": "Visão geral",
+      "breakdown": "Detalhamento"
+    },
+    "windowHint": "Últimos 12 meses",
     "vitals": {
       "pending": "Aguardando aprovação",
       "pendingSub": "{count} relatórios",

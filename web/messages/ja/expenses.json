@@ -45,6 +45,11 @@
   "dashboard": {
     "title": "経費",
     "description": "経費精算コントロールセンター — 承認パイプライン、従業員別・カテゴリ別の支出、経費支出のトレンド。",
+    "tabs": {
+      "overview": "概要",
+      "breakdown": "内訳"
+    },
+    "windowHint": "直近12か月",
     "vitals": {
       "pending": "承認待ち",
       "pendingSub": "{count} 件",

@@ -30,6 +30,7 @@ export default async function ExpensesHome() {
 
   return (
     <ListPageLayout
+      className="flex h-full min-h-0 flex-col"
       header={
         <PageHeader
           title={t('dashboard.title')}
@@ -43,9 +44,7 @@ export default async function ExpensesHome() {
         />
       }
     >
-      <div className="min-h-0 flex-1 overflow-y-auto pb-4">
-        <ExpensesDashboard data={data} />
-      </div>
+      <ExpensesDashboard data={data} />
     </ListPageLayout>
   )
 }

@@ -45,6 +45,11 @@
   "dashboard": {
     "title": "Dépenses",
     "description": "Centre de contrôle des notes de frais — file d'approbation, dépenses par employé et par catégorie, et tendance des frais.",
+    "tabs": {
+      "overview": "Vue d'ensemble",
+      "breakdown": "Répartition"
+    },
+    "windowHint": "12 derniers mois glissants",
     "vitals": {
       "pending": "En attente d'approbation",
       "pendingSub": "{count} notes",
