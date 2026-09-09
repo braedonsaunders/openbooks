@@ -36,9 +36,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { chromium } from 'playwright'
+import sharp from 'sharp'
 
 const BASE = process.env.VIEWSPEC_BASE_URL ?? 'http://localhost:4780'
-const EMAIL = process.env.VIEWSPEC_EMAIL ?? 'viewspec@local.test'
+const EMAIL = process.env.VIEWSPEC_EMAIL ?? 'viewspec@sim.test'
 const PASSWORD = process.env.VIEWSPEC_PASSWORD ?? 'viewspec-dev'
 const OUT_DIR = process.env.VIEWSPEC_OUT ?? join(process.cwd(), 'tmp', 'viewspec')
 const VIEWPORT = { width: 1440, height: 900 }
@@ -53,6 +54,9 @@ const PAGES = [
   {
     path: '/reports/partners',
     variants: ['', '?kind=payable', '?kind=receivable', '?kind=receivable&q=zzzznomatch'],
+    // Proof the page actually rendered. Without a positive content assertion a
+    // capture taken during the loading screen compares blank against blank.
+    expect: 'table thead th',
   },
 ]
 
@@ -75,22 +79,59 @@ async function login(page) {
  * fade matters because `PageContainer` animates opacity on mount; screenshotting
  * mid-animation produces a diff that is pure timing noise.
  */
-async function renderSettled(page, url) {
+async function renderSettled(page, url, expectSelector) {
   await page.goto(url, { waitUntil: 'networkidle' })
   await page.waitForSelector('main', { state: 'attached' })
+  // Suspense fallbacks leave `<template id="B:n">` placeholders behind.
   await page.waitForFunction(
     () => {
       const main = document.querySelector('main')
-      if (!main) return false
-      // Suspense fallbacks leave `<template id="B:n">` placeholders behind.
-      if (main.querySelector('template[id^="B:"]')) return false
-      return main.textContent.trim().length > 0
+      return !!main && !main.querySelector('template[id^="B:"]')
     },
     { timeout: 30_000 },
   )
+  // The positive assertion. `textContent.length > 0` is not enough — the
+  // loading screen satisfies it — so each page names an element that only
+  // exists once its real content has rendered.
+  if (expectSelector) {
+    await page.waitForSelector(expectSelector, { state: 'visible', timeout: 30_000 })
+  }
+  // Wait out the brand splash. It is a root-layout overlay held for
+  // MIN_VISIBLE_MS (2s) plus a 400ms fade on EVERY document load, so a capture
+  // taken before it clears photographs the splash instead of the page — which
+  // is identical on both sides and passes a pixel comparison meaninglessly.
+  // Matching any full-viewport fixed overlay rather than the splash's own
+  // classes keeps this correct if another overlay is introduced later.
+  await page.waitForFunction(
+    () =>
+      ![...document.querySelectorAll('body *')].some((el) => {
+        const style = getComputedStyle(el)
+        if (style.position !== 'fixed' || style.visibility === 'hidden') return false
+        if (parseFloat(style.opacity) <= 0.01) return false
+        const rect = el.getBoundingClientRect()
+        return rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9
+      }),
+    { timeout: 30_000 },
+  )
   await page.evaluate(() => document.fonts?.ready)
-  // Settle mount transitions so the screenshot is of the resting state.
-  await page.waitForTimeout(400)
+}
+
+/**
+ * Screenshot the resting state.
+ *
+ * NOT `animations: 'disabled'`: that rewinds finite animations to their first
+ * frame, and this app's entrance animations start at opacity 0, so it renders
+ * a blank page — identically blank on both sides, which passes a pixel
+ * comparison while proving nothing. Instead let entrance animations finish,
+ * then hard-stop everything still moving. The brand logo runs an infinite
+ * 12s stroke-redraw cycle; `animation: none` drops it to its resting fully
+ * drawn state, which is deterministic.
+ */
+async function captureSettled(page) {
+  await page.waitForTimeout(900)
+  await page.addStyleTag({
+    content: '*, *::before, *::after { animation: none !important; transition: none !important; }',
+  })
   await page.evaluate(() => {
     for (const el of document.querySelectorAll('main *')) {
       const style = getComputedStyle(el)
@@ -98,6 +139,8 @@ async function renderSettled(page, url) {
       if (style.transform !== 'none') el.style.transform = 'none'
     }
   })
+  await page.waitForTimeout(120)
+  return await page.screenshot({ fullPage: true, caret: 'hide' })
 }
 
 function normalize(markup) {
@@ -120,6 +163,25 @@ function normalize(markup) {
       .replace(/\s+/g, ' ')
       .trim()
   )
+}
+
+/**
+ * Sort attributes within each tag.
+ *
+ * Attribute ORDER carries no meaning in HTML and is not user-visible, but
+ * React's hydration writes some attributes in a different sequence than the
+ * server did (a controlled `<input>` gets `type` reapplied before `value`),
+ * so two identical renders can serialize differently purely by timing. Sorting
+ * removes that noise without hiding anything real: attribute presence and
+ * every value are preserved exactly, so a genuinely different class list, a
+ * missing attribute, or a changed value still fails.
+ */
+function sortAttributes(markup) {
+  return markup.replace(/<([a-zA-Z][\w-]*)((?:\s+[^\s=>]+(?:="[^"]*")?)+)\s*(\/?)>/g, (_all, tag, attrs, selfClose) => {
+    const pairs = attrs.match(/[^\s=]+(?:="[^"]*")?/g) ?? []
+    pairs.sort()
+    return `<${tag}${pairs.length ? ' ' + pairs.join(' ') : ''}${selfClose}>`
+  })
 }
 
 function tokenize(markup) {
@@ -157,21 +219,97 @@ function assertVariantsDiffer(results) {
   return null
 }
 
-async function checkVariant(page, path, variant) {
-  const nativeUrl = `${BASE}${path}${variant}`
-  await renderSettled(page, nativeUrl)
-  const nativeMarkup = normalize(await page.locator('main').innerHTML())
-  const nativeShot = await page.screenshot({ fullPage: true })
+/**
+ * Confirm the page actually took the branch we think it did.
+ *
+ * The converted page emits `<meta name="x-viewspec-render">` on the spec path
+ * only, hoisted into <head> and therefore outside the compared <main>. Without
+ * this check a server still running a build that predates the conversion would
+ * serve the native page for BOTH urls and the harness would report a perfect
+ * pass — which is exactly what happened before it existed.
+ */
+async function renderPath(page) {
+  return await page.evaluate(() =>
+    document.querySelector('meta[name="x-viewspec-render"]') ? 'viewspec' : 'native',
+  )
+}
 
-  await renderSettled(page, specUrl(path, variant))
-  const specMarkup = normalize(await page.locator('main').innerHTML())
-  const specShot = await page.screenshot({ fullPage: true })
+/**
+ * The stylesheet must actually load. A pixel comparison between two UNSTYLED
+ * pages passes trivially, so an app rendering without CSS invalidates the
+ * visual half of every result.
+ */
+async function assertStylesLoaded(page) {
+  const status = await page.evaluate(async () => {
+    const link = document.querySelector('link[rel="stylesheet"]')
+    if (!link) return 'no-stylesheet-link'
+    const res = await fetch(link.href)
+    if (!res.ok) return `stylesheet ${res.status}`
+    const text = await res.text()
+    // A real Tailwind build defines the utilities the app is written in.
+    return /\.flex\b/.test(text) && /\.text-sm\b/.test(text) ? 'ok' : 'stylesheet-missing-utilities'
+  })
+  if (status !== 'ok') throw new Error(`styles not loaded: ${status}`)
+}
+
+
+/**
+ * Reject a capture that is essentially empty.
+ *
+ * This harness has produced three false passes, and every one shared a shape:
+ * both sides rendered the SAME nothing (a streaming fallback, a stale build,
+ * an animation rewound to opacity 0) and the comparison happily reported a
+ * match. A pixel comparison cannot tell "identical" from "identically blank",
+ * so the content has to be asserted independently of the diff.
+ *
+ * A real page is mostly background with text, rules and chrome over it. Well
+ * under 1% non-background means the capture is a loading screen.
+ */
+async function assertNotBlank(shot, label) {
+  const { data, info } = await sharp(shot).raw().toBuffer({ resolveWithObject: true })
+  const counts = new Map()
+  const total = info.width * info.height
+  for (let i = 0; i < data.length; i += info.channels) {
+    const key = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2]
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  let dominant = 0
+  for (const n of counts.values()) if (n > dominant) dominant = n
+  const inkRatio = 1 - dominant / total
+  if (inkRatio < 0.01) {
+    throw new Error(
+      `${label} capture is blank (${(inkRatio * 100).toFixed(2)}% non-background) — the page had not rendered`,
+    )
+  }
+  return inkRatio
+}
+
+async function checkVariant(page, path, variant, expectSelector) {
+  const nativeUrl = `${BASE}${path}${variant}`
+  await renderSettled(page, nativeUrl, expectSelector)
+  await assertStylesLoaded(page)
+  const nativePath = await renderPath(page)
+  if (nativePath !== 'native') throw new Error(`${nativeUrl} rendered via ${nativePath}, expected native`)
+  const nativeMarkup = sortAttributes(normalize(await page.locator('main').innerHTML()))
+  const nativeShot = await captureSettled(page)
+  const ink = await assertNotBlank(nativeShot, `${path}${variant} native`)
+
+  await renderSettled(page, specUrl(path, variant), expectSelector)
+  const chosen = await renderPath(page)
+  if (chosen !== 'viewspec') {
+    throw new Error(
+      `${specUrl(path, variant)} rendered via ${chosen}, expected viewspec — the server is probably serving a build that predates the conversion`,
+    )
+  }
+  const specMarkup = sortAttributes(normalize(await page.locator('main').innerHTML()))
+  const specShot = await captureSettled(page)
+  await assertNotBlank(specShot, `${path}${variant} spec`)
 
   const slug = `${path}${variant}`.replace(/[^a-z0-9]+/gi, '_')
   const pixelsEqual = nativeShot.equals(specShot)
 
   if (nativeMarkup === specMarkup && pixelsEqual) {
-    return { ok: true, path, variant, bytes: nativeMarkup.length, markup: nativeMarkup }
+    return { ok: true, path, variant, bytes: nativeMarkup.length, markup: nativeMarkup, ink }
   }
 
   mkdirSync(OUT_DIR, { recursive: true })
@@ -214,7 +352,7 @@ async function main() {
       for (const variant of entry.variants) {
         let result
         try {
-          result = await checkVariant(page, entry.path, variant)
+          result = await checkVariant(page, entry.path, variant, entry.expect)
         } catch (error) {
           failures += 1
           console.error(`✗ ${entry.path}${variant}\n    ${error.message}`)
@@ -222,7 +360,7 @@ async function main() {
         }
         results.push(result)
         if (result.ok) {
-          console.log(`✓ ${entry.path}${variant || ' (default)'}  [${result.bytes} bytes, pixels identical]`)
+          console.log(`✓ ${entry.path}${variant || ' (default)'}  [${result.bytes} bytes, pixels identical, ${(result.ink * 100).toFixed(1)}% ink]`)
           continue
         }
         failures += 1

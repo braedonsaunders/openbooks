@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import type { WidgetRef } from '@openbooks/viewspec'
 import { resolvePath } from '@openbooks/viewspec'
 import { ExportMenu } from '../../app/(app)/reports/ExportMenu'
@@ -73,7 +73,10 @@ export function WidgetSlot({ widgets, scope }: { widgets: WidgetRef[] | undefine
         if (ref.when && !resolvePath(scope, ref.when.$)) return null
         const renderer = WIDGET_REGISTRY[ref.widget]
         if (!renderer) throw new UnknownWidgetError(`unknown widget: ${ref.widget}`)
-        return <span key={`${ref.widget}-${index}`} style={{ display: 'contents' }}>{renderer(ref.props ?? {})}</span>
+        // A Fragment, not a wrapper element: the native pages place these
+        // widgets as direct children of the slot, and any real element here
+        // (even display:contents) is markup the native render does not have.
+        return <Fragment key={`${ref.widget}-${index}`}>{renderer(ref.props ?? {})}</Fragment>
       })}
     </>
   )
