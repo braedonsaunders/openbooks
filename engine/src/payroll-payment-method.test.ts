@@ -259,8 +259,9 @@ const hours = async (fx: Fixture, employeeId: string, workedOn: string, qty: str
 test(
   "a mixed run puts EFT employees on the bank file and cheque employees on paper — never both",
   { skip: !DB },
-  async () => {
+  async (t) => {
     const fx = await payrollOrg();
+    t.after(() => dropScratchOrgReporting(fx.orgId));
     // Four rails, on purpose: an explicit EFT, an employee with no preference
     // and no bank details (cheque by default), a payroll override that keeps
     // somebody on paper DESPITE holding approved bank details, and an EFT
