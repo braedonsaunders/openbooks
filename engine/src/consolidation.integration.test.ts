@@ -4,8 +4,9 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient, QueryResult } from "pg";
 import { refreshCloseRun, setPeriodLockState, startCloseRun } from "./close.ts";
-import { deriveConsolidatedRates, runAutoElimination, runOwnershipConsolidation } from "./consolidation.ts";
+import { deriveConsolidatedRates, runAutoElimination, runCombinedConsolidation, runOwnershipConsolidation } from "./consolidation.ts";
 import { db, pool, withOrgTransaction } from "./db.ts";
+import { reverseProjectGlEntry } from "./project-recognition.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -1734,3 +1735,262 @@ for (const phase of ["ownership", "elimination"] as const) {
     });
   }
 }
+
+
+test("historical consolidated FX stays within its fiscal calendar", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const foreignId = randomUUID();
+    const otherCalendarId = randomUUID();
+    const otherPeriodId = randomUUID();
+    const targetPeriodId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values (${foreignId},${org.orgId},${org.subsidiaryId},'Foreign operation','USD','US','{}'::jsonb,false,true,'{}'::jsonb)`);
+    await db.execute(sql`
+      insert into fiscal_calendars (id,org_id,name)
+      values (${otherCalendarId},${org.orgId},'Separate reporting calendar')`);
+    await db.execute(sql`
+      insert into accounting_periods
+        (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
+      values (${otherPeriodId},${org.orgId},${otherCalendarId},2026,8,'Other August','2026-08-01','2026-08-31',false)`);
+    await db.execute(sql`
+      insert into accounting_periods
+        (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
+      select ${targetPeriodId},${org.orgId},fiscal_calendar_id,2026,9,'2026-09','2026-09-01','2026-09-30',false
+        from accounting_periods where id=${org.periodId}`);
+    await db.execute(sql`
+      insert into consolidated_fx_rates
+        (org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate,source)
+      values
+        (${org.orgId},${org.periodId},'USD','CAD','1.3','1.3','1.3','manual'),
+        (${org.orgId},${otherPeriodId},'USD','CAD','9','9','9','manual')`);
+    await db.execute(sql`
+      insert into fx_rates (org_id,from_currency,to_currency,as_of,rate_type,rate)
+      values (${org.orgId},'USD','CAD','2026-09-15','spot','1.4')`);
+    assert.equal(await deriveConsolidatedRates(org.orgId,targetPeriodId,actorId),1);
+    const rates = await db.execute<{ historical_rate: string; current_rate: string }>(sql`
+      select historical_rate::text,current_rate::text from consolidated_fx_rates
+       where org_id=${org.orgId} and period_id=${targetPeriodId}`);
+    assert.deepEqual(rates.rows,[{ historical_rate: '1.3000000000',current_rate: '1.4000000000' }]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+
+for (const adjustment of [false,true]) {
+  test(`ownership refuses an earlier close when acquisition elimination is in a later ${adjustment ? "adjustment" : "regular"} period`, { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await seedOwnershipConsolidationFixture(org);
+    const augustId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_periods
+        (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
+      select ${augustId},${org.orgId},fiscal_calendar_id,2026,${adjustment ? 13 : 8},${adjustment ? 'July adjustment' : '2026-08'},
+        ${adjustment ? '2026-07-31' : '2026-08-01'},${adjustment ? '2026-07-31' : '2026-08-31'},${adjustment}
+        from accounting_periods where id=${org.periodId}`);
+    const august = await runOwnershipConsolidation(org.orgId,augustId,actorId);
+    const original = await db.execute<{ kind: string }>(sql`
+      select kind from ownership_consolidation_entries where run_id=${august.runId}`);
+    assert.deepEqual(original.rows,[{kind:'acquisition'}]);
+    await assert.rejects(runOwnershipConsolidation(org.orgId,org.periodId,actorId),
+      (error: unknown) => /acquisition.*later period/.test(errorText(error)));
+    const julyPosted = await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from ownership_consolidation_runs
+       where org_id=${org.orgId} and period_id=${org.periodId} and status='posted'`);
+    assert.equal(julyPosted.rows[0]!.n,0,'an incomplete earlier close must not report a posted generation');
+    const originalStatus = await db.execute<{status: string}>(sql`
+      select status from journal_entries where id=${august.entryIds[0]}`);
+    assert.deepEqual(originalStatus.rows,[{status:'posted'}],'refusal preserves the later posted acquisition');
+    if (!adjustment) {
+      await reverseProjectGlEntry(org.orgId,actorId,august.entryIds[0]!,
+        'Correct acquisition consolidation chronology','2026-08-31');
+      const july = await runOwnershipConsolidation(org.orgId,org.periodId,actorId);
+      const julyKinds = await db.execute<{kind: string}>(sql`
+        select kind from ownership_consolidation_entries where run_id=${july.runId} order by kind`);
+      assert.deepEqual(julyKinds.rows,[{kind:'acquisition'},{kind:'nci_income'}]);
+      const correctedAugust = await runOwnershipConsolidation(org.orgId,augustId,actorId);
+      assert.equal(correctedAugust.entryIds.length,0,'the chronological rerun carries July acquisition without duplication');
+      const acquisitionNet = await db.execute<{amount: string}>(sql`
+        select sum(l.amount)::text as amount from journal_lines l
+        join journal_entries e on e.id=l.entry_id and e.status in ('posted','reversed')
+        join accounts a on a.id=l.account_id
+        where e.org_id=${org.orgId} and e.origin='translation' and a.number='1400'`);
+      assert.equal(acquisitionNet.rows[0]!.amount,'-900.0000','the controlled recovery preserves exactly one cumulative investment elimination');
+    }
+
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+}
+
+
+for (const phase of ["ownership","combined"] as const) {
+  test(`concurrent first-use ${phase} periods cannot duplicate the acquisition`, { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const park = await openTreeTransaction();
+  let runs: PromiseSettledResult<{runId: string; entryIds: string[]}>[] = [];
+  let pending: Promise<PromiseSettledResult<{runId: string; entryIds: string[]}>[]> | undefined;
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const { accounts } = await seedOwnershipConsolidationFixture(org);
+    const augustId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_periods
+        (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
+      select ${augustId},${org.orgId},fiscal_calendar_id,2026,8,'2026-08','2026-08-01','2026-08-31',false
+        from accounting_periods where id=${org.periodId}`);
+    await park.client.query('select id from accounts where id=any($1::uuid[]) for update',[[...accounts.values()]]);
+    const run = (periodId: string) => phase === "ownership"
+      ? runOwnershipConsolidation(org.orgId,periodId,actorId)
+      : runCombinedConsolidation(org.orgId,periodId,actorId).then((result) => result.ownership);
+    pending = Promise.allSettled([run(org.periodId),run(augustId)]);
+    let bothComputing = false;
+    for (let attempt = 0; attempt < 400; attempt++) {
+      const blocked = await pool.query<{n: number}>(
+        'select count(*)::int as n from pg_stat_activity where pg_blocking_pids(pid) @> array[$1::int]',[park.pid]);
+      if (blocked.rows[0]!.n === 2) { bothComputing = true; break; }
+      await new Promise((resolve) => setTimeout(resolve,10));
+    }
+    assert.equal(bothComputing,true,'both periods read the missing acquisition before either commits');
+    await park.client.query('rollback');
+    runs = await pending;
+    assert.equal(runs.filter((run) => run.status === 'fulfilled').length,1,
+      'exactly one competing first acquisition may commit');
+    const failed = runs.find((run) => run.status === 'rejected');
+    assert.ok(failed && failed.status === 'rejected');
+    assert.match(errorText(failed.reason),/changed concurrently|could not serialize/);
+    const evidence = await db.execute<{n: number}>(sql`
+      select count(*)::int as n from ownership_consolidation_entries oce
+      join journal_entries e on e.id=oce.journal_entry_id and e.status='posted'
+      where oce.org_id=${org.orgId} and oce.kind='acquisition'`);
+    assert.equal(evidence.rows[0]!.n,1,'the once-per-acquisition ledger invariant survives concurrent periods');
+  } finally {
+    await park.client.query('rollback').catch(() => undefined);
+    if (pending) await pending;
+    park.client.release();
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+}
+
+for (const phase of ["ownership","combined"] as const) {
+  test(`${phase} consolidation refuses an ambient transaction with weaker isolation`, { skip: !DB }, async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedOwnershipConsolidationFixture(org);
+      await assert.rejects(withOrgTransaction(org.orgId, async () => {
+        if (phase === "ownership") await runOwnershipConsolidation(org.orgId,org.periodId,actorId);
+        else await runCombinedConsolidation(org.orgId,org.periodId,actorId);
+      }),
+      /must own its source-snapshot transaction/);
+      const posted = await db.execute<{n: number}>(sql`
+        select count(*)::int as n from ownership_consolidation_runs where org_id=${org.orgId}`);
+      assert.equal(posted.rows[0]!.n,0,'the refused caller owns rollback of all attempted consolidation evidence');
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+}
+
+
+for (const originalMonth of [7,8]) {
+  test(`ownership retains period-scoped acquisition evidence when month ${originalMonth} is reversed in September`, { skip: !DB }, async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedOwnershipConsolidationFixture(org);
+      const augustId = randomUUID();
+      const septemberId = randomUUID();
+      for (const [id,month,start,end] of [
+        [augustId,8,'2026-08-01','2026-08-31'],
+        [septemberId,9,'2026-09-01','2026-09-30'],
+      ] as const) {
+        await db.execute(sql`
+          insert into accounting_periods
+            (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
+          select ${id},${org.orgId},fiscal_calendar_id,2026,${month},${`2026-0${month}`},${start},${end},false
+            from accounting_periods where id=${org.periodId}`);
+      }
+      const original = await runOwnershipConsolidation(org.orgId,originalMonth === 7 ? org.periodId : augustId,actorId);
+      const acquisition = (await db.execute<{id: string}>(sql`
+        select journal_entry_id as id from ownership_consolidation_entries
+         where run_id=${original.runId} and kind='acquisition'`)).rows[0]!;
+      await reverseProjectGlEntry(org.orgId,actorId,acquisition.id,
+        'Correct acquisition in a later open period','2026-09-15');
+      if (originalMonth === 8) {
+        await assert.rejects(runOwnershipConsolidation(org.orgId,org.periodId,actorId),
+          /acquisition.*later period/);
+      } else {
+        const july = await runOwnershipConsolidation(org.orgId,org.periodId,actorId);
+        const newAcquisitions = await db.execute<{n: number}>(sql`
+          select count(*)::int as n from ownership_consolidation_entries
+           where run_id=${july.runId} and kind='acquisition'`);
+        assert.equal(newAcquisitions.rows[0]!.n,0,'September reversal does not erase acquisition evidence at the July cutoff');
+      }
+      const augustNet = await db.execute<{amount: string}>(sql`
+        select sum(l.amount)::text as amount from journal_lines l
+        join journal_entries e on e.id=l.entry_id and e.status in ('posted','reversed')
+        join accounting_periods p on p.id=e.period_id
+        join accounts a on a.id=l.account_id
+        where e.org_id=${org.orgId} and e.origin='translation' and a.number='1400' and p.ends_on<='2026-08-31'`);
+      assert.equal(augustNet.rows[0]!.amount,'-900.0000','July recomputation must never double historical August acquisition');
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+}
+
+
+test("ownership preserves cutoff balances across a later reversal and restoration", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await seedOwnershipConsolidationFixture(org);
+    const augustId = randomUUID();
+    const septemberId = randomUUID();
+    for (const [id,month,start,end] of [
+      [augustId,8,'2026-08-01','2026-08-31'],
+      [septemberId,9,'2026-09-01','2026-09-30'],
+    ] as const) {
+      await db.execute(sql`
+        insert into accounting_periods
+          (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
+        select ${id},${org.orgId},fiscal_calendar_id,2026,${month},${`2026-0${month}`},${start},${end},false
+          from accounting_periods where id=${org.periodId}`);
+    }
+    const original = await runOwnershipConsolidation(org.orgId,org.periodId,actorId);
+    const acquisition = (await db.execute<{id: string}>(sql`
+      select journal_entry_id as id from ownership_consolidation_entries
+       where run_id=${original.runId} and kind='acquisition'`)).rows[0]!;
+    const reversalId = await reverseProjectGlEntry(org.orgId,actorId,acquisition.id,
+      'Reverse acquisition for controlled correction','2026-08-15');
+    assert.ok(reversalId);
+    await reverseProjectGlEntry(org.orgId,actorId,reversalId,
+      'Restore acquisition by reversing the correction','2026-09-15');
+    const cutoffBalances = async () => (await db.execute<{end: string; amount: string}>(sql`
+      select cutoff.ends_on::text as "end",coalesce(sum(l.amount),0)::text as amount
+      from accounting_periods cutoff
+      join accounting_periods p on p.org_id=cutoff.org_id and p.ends_on<=cutoff.ends_on
+      join journal_entries e on e.org_id=p.org_id and e.period_id=p.id and e.status in ('posted','reversed')
+      join journal_lines l on l.entry_id=e.id and l.org_id=e.org_id
+      join accounts a on a.id=l.account_id and a.number='1400'
+      where cutoff.org_id=${org.orgId} and e.origin='translation'
+      group by cutoff.ends_on order by cutoff.ends_on`)).rows;
+    const expected = [
+      {end:'2026-07-31',amount:'-900.0000'},
+      {end:'2026-08-31',amount:'0.0000'},
+      {end:'2026-09-30',amount:'-900.0000'},
+    ];
+    assert.deepEqual(await cutoffBalances(),expected,'the native reversal chain creates three distinct historical positions');
+    await runOwnershipConsolidation(org.orgId,org.periodId,actorId);
+    await assert.rejects(runOwnershipConsolidation(org.orgId,augustId,actorId),/acquisition.*later period/);
+    await runOwnershipConsolidation(org.orgId,septemberId,actorId);
+    assert.deepEqual(await cutoffBalances(),expected,'reruns preserve all three cutoffs and refuse the ambiguous August replay');
+  } finally { await dropScratchOrg(org.orgId); }
+});

@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { periodLockBlocksPosting } from "./close.ts";
 import { CurrencyError, updateFxRate } from "./currencies.ts";
-import { db } from "./db.ts";
+import { db, orgContext, withOrgContext } from "./db.ts";
+import { financialClosePeriodScope } from "./fx-revaluation.ts";
 import { fromUnits, isZero, mulPercent, mulRate, neg, sum, toUnits } from "./money.ts";
 import { assertFinalKernelBalance } from "./posting.ts";
 import { loadSubsidiaryContext } from "./subsidiaries.ts";
@@ -31,7 +32,7 @@ import { loadSubsidiaryContext } from "./subsidiaries.ts";
  *
  *  - runCombinedConsolidation: the Period Close page's "consolidate" command —
  *    rate derivation, ownership adjustments, and auto-elimination executed as
- *    ONE REPEATABLE READ transaction. A failure in any phase rolls back the
+ *    ONE SERIALIZABLE transaction. A failure in any phase rolls back the
  *    derived rates, the ownership journals, and the elimination entry
  *    together: the command either fully commits or fully aborts, never
  *    half-applies durable ledger state while reporting failure. Every phase
@@ -47,6 +48,30 @@ export class ConsolidationError extends Error {}
 
 /** Anything a phase can run against: the pooled `db` or one open transaction. */
 type Runner = Pick<typeof db, "execute">;
+
+/** Acquisition identity spans periods, so competing generations need predicate
+ * conflict detection, not only the per-period advisory locks. Own this boundary:
+ * db.transaction deliberately participates in an ambient transaction and would
+ * otherwise silently discard the requested SERIALIZABLE isolation.
+ */
+async function withOwnershipSourceTransaction<T>(orgId: string, work: (tx: Runner) => Promise<T>): Promise<T> {
+  if (orgContext.getStore()?.txDb) {
+    throw new ConsolidationError("ownership consolidation must own its source-snapshot transaction");
+  }
+  try {
+    return await withOrgContext(orgId, () => db.transaction(work, { isolationLevel: "serializable" }));
+  } catch (error) {
+    let current: unknown = error;
+    for (let depth = 0; depth < 6 && current && typeof current === "object"; depth++) {
+      const failure = current as { code?: string; cause?: unknown };
+      if (failure.code === "40001") {
+        throw new ConsolidationError("consolidation sources changed concurrently (could not serialize access); retry the complete consolidation");
+      }
+      current = failure.cause;
+    }
+    throw error;
+  }
+}
 
 function persistDerivedFxRate(value: unknown): string {
   try {
@@ -96,8 +121,8 @@ async function runOwnershipConsolidationIn(
   const context = await loadSubsidiaryContext(tx, orgId);
   const elimination = [...context.byId.values()].find((row) => row.isElimination && row.isActive);
   if (!elimination) throw new ConsolidationError("no active elimination subsidiary for ownership adjustments");
-  const periodResult = (await tx.execute<{ id: string; starts_on: string; ends_on: string; name: string }>(sql`
-    select id, starts_on, ends_on, name from accounting_periods where id=${periodId} and org_id=${orgId}
+  const periodResult = (await tx.execute<{ id: string; starts_on: string; ends_on: string; name: string; is_adjustment: boolean; fiscal_calendar_id: string; period_number: number }>(sql`
+    select id, starts_on, ends_on, name, is_adjustment, fiscal_calendar_id, period_number from accounting_periods where id=${periodId} and org_id=${orgId}
   `));
   const period = periodResult.rows[0];
   if (!period) throw new ConsolidationError(`period ${periodId} not found`);
@@ -110,7 +135,7 @@ async function runOwnershipConsolidationIn(
   // transaction: a material policy edit (ownership_interest_guard's
   // immutability tuple) must own the row exclusively, so it waits until the
   // run commits and then faces the used-policy check against the committed
-  // evidence — and under REPEATABLE READ an edit that already committed makes
+  // evidence — and under SERIALIZABLE an edit that already committed makes
   // this locking read fail with a serialization error instead of silently
   // computing a generation from superseded terms.
   const interests = (await tx.execute<OwnershipInterest>(sql`
@@ -237,16 +262,48 @@ async function runOwnershipConsolidationIn(
       // acquisition, and that successor must not re-eliminate equity the
       // group already eliminated. Identity = (subsidiary, acquisition date)
       // across every policy row; a genuine re-acquisition carries a new date.
-      const acquisitionExists = (await tx.execute(sql`
-        select 1 from ownership_consolidation_entries oce
-         join subsidiary_ownership_interests policy on policy.id=oce.interest_id and policy.org_id=oce.org_id
-         join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted' and je.book_id=${bookId}
-        where oce.org_id=${orgId} and oce.kind='acquisition' and je.reverses_entry_id is null
-          and policy.subsidiary_id=${interest.subsidiary_id}
-          and policy.acquisition_date=${interest.acquisition_date}
-          and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.org_id=${orgId} and rev.status='posted') limit 1
-      `));
-      if (!acquisitionExists.rows[0] && interest.acquisition_date <= period.ends_on) {
+      const acquisitions = (await tx.execute<{ in_scope: boolean; balance: number; future_activity: boolean }>(sql`
+        with recursive roots as (
+          select e.id,e.period_id,${financialClosePeriodScope(period)} as in_scope
+            from ownership_consolidation_entries oce
+            join subsidiary_ownership_interests policy on policy.id=oce.interest_id and policy.org_id=oce.org_id
+            join journal_entries e on e.id=oce.journal_entry_id and e.org_id=oce.org_id
+              and e.status in ('posted','reversed') and e.book_id=${bookId}
+           where oce.org_id=${orgId} and oce.kind='acquisition' and e.reverses_entry_id is null
+             and policy.subsidiary_id=${interest.subsidiary_id}
+             and policy.acquisition_date=${interest.acquisition_date}
+        ), history as (
+          select id as acquisition_id,id,period_id,in_scope,1 as polarity from roots
+          union all
+          select h.acquisition_id,e.id,e.period_id,${financialClosePeriodScope(period)},-h.polarity
+            from history h join journal_entries e on e.reverses_entry_id=h.id
+           where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
+        ), period_balances as (
+          select acquisition_id,period_id,bool_or(in_scope) as in_scope,sum(polarity)::int as balance
+            from history group by acquisition_id,period_id
+        )
+        select roots.in_scope,
+               coalesce(sum(p.balance) filter (where p.in_scope),0)::int as balance,
+               bool_or(not p.in_scope and p.balance<>0) as future_activity
+          from roots join period_balances p on p.acquisition_id=roots.id
+         group by roots.id,roots.in_scope
+      `)).rows;
+      // Follow immutable reversal/restoration lineage, never the original's
+      // mutable status alone. Each exact mirror flips its predecessor's sign.
+      // A zero balance can be replaced only when later assigned periods carry
+      // no remaining movement: otherwise an earlier replacement would duplicate
+      // a later acquisition/restoration. Same-period mirrors net to zero and
+      // retain the supported controlled-reversal recovery path.
+      const acquisitionExists = acquisitions.filter((row) => row.balance !== 0 || row.future_activity);
+      if (acquisitionExists.some((row) => !row.in_scope || row.balance !== 1)) {
+        throw new ConsolidationError(
+          "acquisition elimination affects a later period; reconcile its original and reversal period assignments before consolidating the earlier period",
+        );
+      }
+      if (acquisitionExists.length > 1) {
+        throw new ConsolidationError("multiple effective acquisition eliminations require reconciliation before consolidation");
+      }
+      if (!acquisitionExists[0] && interest.acquisition_date <= period.ends_on) {
         const equity = (await tx.execute<{ account_id: string; amount: string }>(sql`
           select l.account_id,coalesce(sum(l.amount),0)::text as amount
             from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
@@ -307,15 +364,10 @@ export async function runOwnershipConsolidation(
   userId: string,
 ): Promise<{ runId: string; entryIds: string[] }> {
   try {
-    // REPEATABLE READ pins one snapshot for every deciding read (interests,
-    // prior generations, per-interest activity): a source posting that commits
-    // mid-run is excluded wholesale from this generation and absorbed by the
-    // replacement on the next run, instead of tearing the generation
-    // half-included under READ COMMITTED's per-statement snapshots.
-    return await db.transaction(
-      (tx) => runOwnershipConsolidationIn(orgId, periodId, userId, tx),
-      { isolationLevel: "repeatable read" },
-    );
+    // A consistent source snapshot also protects the across-period acquisition
+    // predicate: two first-use periods cannot both commit an acquisition.
+    return await withOwnershipSourceTransaction(orgId,
+      (tx) => runOwnershipConsolidationIn(orgId, periodId, userId, tx));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await db.execute(sql`
@@ -442,11 +494,11 @@ async function deriveConsolidatedRatesIn(
            join accounting_periods p on p.id = cf.period_id and p.org_id = cf.org_id
           where cf.org_id = ${orgId} and cf.from_currency = ${pair.from} and cf.to_currency = ${pair.to}
             and p.id <> ${period.id}
+            and p.fiscal_calendar_id = ${period.fiscal_calendar_id}
             and (
               p.ends_on < ${period.starts_on}
               or (
                 ${period.is_adjustment}
-                and p.fiscal_calendar_id = ${period.fiscal_calendar_id}
                 and p.ends_on = ${period.ends_on}
                 and p.period_number < ${period.period_number}
               )
@@ -742,7 +794,7 @@ async function runAutoEliminationIn(
 /**
  * The Period Close page's combined "consolidate" command: refresh the
  * period's derived consolidated rates, post ownership adjustments, and post
- * auto-elimination — all inside ONE REPEATABLE READ transaction.
+ * auto-elimination — all inside ONE SERIALIZABLE transaction.
  *
  * This is the fix for the partial-commit command: previously each phase ran
  * in its own transaction, so a residual failure in elimination returned 422
@@ -754,7 +806,7 @@ async function runAutoEliminationIn(
  * per-phase invocations serialize without deadlock. Concurrent refreshes of
  * the same period's derived rate rows surface Postgres's serialization error
  * (40001) instead of silently interleaving — fail-closed and safe to retry,
- * matching the isolation posture of the per-phase commands.
+ * preserving the same fail-closed retry contract for every phase.
  */
 export async function runCombinedConsolidation(
   orgId: string,
@@ -765,12 +817,11 @@ export async function runCombinedConsolidation(
   ownership: { runId: string; entryIds: string[] };
   elimination: { entryId: string | null; lineCount: number };
 }> {
-  return db.transaction(
+  return withOwnershipSourceTransaction(orgId,
     async (tx) => ({
       ratesWritten: await deriveConsolidatedRatesIn(orgId, periodId, tx, userId),
       ownership: await runOwnershipConsolidationIn(orgId, periodId, userId, tx),
       elimination: await runAutoEliminationIn(orgId, periodId, userId, tx),
     }),
-    { isolationLevel: "repeatable read" },
   );
 }
