@@ -13,6 +13,8 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { dateTime } from '../../../../lib/format'
 import { BUILT_IN_SCRIPT_KINDS, customRecordTypeKey, isCustomRecordKind } from '../../../../lib/script-kinds'
 import { NewScriptButton, ScriptDrawer } from './ScriptDrawer'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadScripts, scriptsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +34,17 @@ export default async function Scripts({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadScripts(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={scriptsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('scripts.manage')
   await requireFeatureEnabled(authz.user.orgId, 'scripts')
   const orgId = authz.user.orgId

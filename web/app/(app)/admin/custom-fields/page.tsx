@@ -13,6 +13,8 @@ import { Pagination } from '../../../../components/pagination'
 import { buildListDrawerHref, parseListParams, pickString, isUuid } from '../../../../lib/list-params'
 import { disabledCustomFieldTargets } from '../../../../lib/customization/gates'
 import { FieldDrawer, NewFieldButton } from './FieldDrawer'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadCustomFields, customFieldsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +37,17 @@ export default async function CustomFields({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadCustomFields(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={customFieldsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('admin.custom_fields.manage')
   const t = await getTranslations('admin.customFields')
   const tCommon = await getTranslations('common')
