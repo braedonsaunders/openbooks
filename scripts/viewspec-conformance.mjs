@@ -113,6 +113,18 @@ const PAGES = [
     expect: 'table thead th',
   },
   {
+    path: '/admin/custom-fields',
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/admin/scripts',
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,

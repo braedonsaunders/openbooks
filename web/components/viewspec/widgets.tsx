@@ -14,7 +14,10 @@ import { AccountHeading, EntryCell } from '../../app/(app)/reports/general-ledge
 import { ResourceCell, RowCountsCell } from '../../app/(app)/data/import/history/sections'
 import { PartyHeading } from '../../app/(app)/reports/registers/sections'
 import { SearchInput } from '../search-input'
+import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
+import { FieldDrawer, NewFieldButton } from '../../app/(app)/admin/custom-fields/FieldDrawer'
+import { NewScriptButton, ScriptDrawer } from '../../app/(app)/admin/scripts/ScriptDrawer'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
 
@@ -180,6 +183,15 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ),
   /* --- admin lists -------------------------------------------------------- */
   'search-input': (props) => <SearchInput placeholder={str(props, 'placeholder')} />,
+  'filter-chips': (props) => (
+    <FilterChips
+      basePath={str(props, 'basePath')}
+      currentParams={(props.currentParams as ComponentProps<typeof FilterChips>['currentParams']) ?? {}}
+      paramKey={str(props, 'paramKey') ?? ''}
+      label={str(props, 'label') ?? ''}
+      options={(props.options as ComponentProps<typeof FilterChips>['options']) ?? []}
+    />
+  ),
   /** A monospaced inline code cell (key previews, identifiers). */
   'code-cell': (props) => (
     <code className="font-mono text-[12px] text-slate-500 dark:text-slate-400">
@@ -191,6 +203,22 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     <KeyDrawer keyRow={(props.keyRow as ComponentProps<typeof KeyDrawer>['keyRow']) ?? null} />
   ),
 
+  'new-custom-field': () => <NewFieldButton />,
+  'custom-field-drawer': (props) => (
+    <FieldDrawer
+      def={(props.def as ComponentProps<typeof FieldDrawer>['def']) ?? null}
+      hiddenKinds={(props.hiddenKinds as string[]) ?? []}
+      hiddenTables={(props.hiddenTables as string[]) ?? []}
+    />
+  ),
+  'new-script': () => <NewScriptButton />,
+  'script-drawer': (props) => (
+    <ScriptDrawer
+      script={(props.script as ComponentProps<typeof ScriptDrawer>['script']) ?? null}
+      runs={(props.runs as ComponentProps<typeof ScriptDrawer>['runs']) ?? []}
+      customTypes={(props.customTypes as ComponentProps<typeof ScriptDrawer>['customTypes']) ?? []}
+    />
+  ),
   'save-view': () => <SaveViewButton />,
   'export-menu': (props) => (
     <ExportMenu kind={str(props, 'kind')} params={stringRecord(props, 'params')} baseHref={str(props, 'baseHref')} />

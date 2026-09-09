@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react'
 import Link from 'next/link'
 import { Badge } from '@openbooks/ui'
-import type { CellSpec, LeafCell } from '@openbooks/viewspec'
+import type { CellSpec, LeafCell, TextCell } from '@openbooks/viewspec'
 import { resolvePath, resolveText, resolveValue } from '@openbooks/viewspec'
 import { ReportDrillLink } from '../../app/(app)/reports/ReportDrillLink'
 import { TxnLink } from '../../app/(app)/reports/TxnLink'
@@ -36,19 +36,19 @@ function LeafCellView({ spec, scope }: { spec: LeafCell; scope: unknown }) {
         return <span className={FALLBACK_CLASS}>{resolveText(spec.fallback, scope)}</span>
       }
       if (spec.prefix || spec.suffix) {
+        // An affix whose value resolves empty renders NOTHING, not an empty
+        // span: the native pages write `{kind ? <span>…</span> : null}`, so an
+        // always-present span would be markup they do not have.
+        const affix = (part: NonNullable<TextCell['prefix']>) => {
+          const value = resolvePath(scope, part.field.$)
+          if (value === null || value === undefined || value === '') return null
+          return <span className={part.className}>{String(value)}</span>
+        }
         return (
           <>
-            {spec.prefix ? (
-              <span className={spec.prefix.className}>
-                {String(resolvePath(scope, spec.prefix.field.$) ?? '')}
-              </span>
-            ) : null}
+            {spec.prefix ? affix(spec.prefix) : null}
             {String(raw ?? '')}
-            {spec.suffix ? (
-              <span className={spec.suffix.className}>
-                {String(resolvePath(scope, spec.suffix.field.$) ?? '')}
-              </span>
-            ) : null}
+            {spec.suffix ? affix(spec.suffix) : null}
           </>
         )
       }
