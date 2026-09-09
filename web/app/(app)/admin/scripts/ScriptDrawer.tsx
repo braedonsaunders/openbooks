@@ -161,8 +161,8 @@ export function ScriptDrawer({
         endpointSlug: isEndpoint ? endpointSlug.trim() : null,
         source,
         cron: isScheduled ? cron : null,
-        timeoutMs: Number(timeoutMs) || 2000,
-        sortOrder: Number(sortOrder) || 100,
+        timeoutMs: timeoutMs.trim() === '' ? 2000 : Number(timeoutMs),
+        sortOrder: sortOrder.trim() === '' ? 100 : Number(sortOrder),
         isActive,
       }),
     })

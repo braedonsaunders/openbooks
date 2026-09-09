@@ -132,3 +132,21 @@ test("promotion refuses invalid scheduled policy without applying configuration 
     assert.equal((await db.execute(sql`select id from audit_log where org_id=${f.orgId} and changes->>'changeSetId'=${id}`)).rows.length, 0);
   });
 });
+
+for (const [label, updates, error] of [
+  ["trigger", { trigger_point: "record_after_submit" }, /invalid trigger/],
+  ["source", { source: "return 1" }, /function main/],
+  ["negative timeout", { timeout_ms: -1 }, /timeoutMs/],
+  ["oversized timeout", { timeout_ms: 10001 }, /timeoutMs/],
+  ["endpoint slug", { trigger_point: "endpoint", endpoint_slug: "Invalid Slug" }, /endpoint slug/],
+] as Array<[string, Record<string, unknown>, RegExp]>) {
+  test(`promotion refuses invalid script ${label}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    await fixture(async f => {
+      await db.execute(sql`update user_scripts set ${sql.join(Object.entries(updates).map(([key,value]) => sql`${sql.identifier(key)}=${value}`),sql`, `)} where org_id=${f.sandboxOrgId}`);
+      const id = await f.approve();
+      await assert.rejects(applyChangeSet(id, f.applier), error);
+      assert.equal((await db.execute(sql`select status from change_sets where id=${id}`)).rows[0]!.status, "approved");
+      assert.equal((await db.execute(sql`select id from audit_log where org_id=${f.orgId} and changes->>'changeSetId'=${id}`)).rows.length, 0);
+    });
+  });
+}
