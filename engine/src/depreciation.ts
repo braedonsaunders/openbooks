@@ -260,13 +260,31 @@ async function primaryBookId(runner: SqlExecutor, orgId: string): Promise<string
 }
 
 /** Resolve the (non-adjustment) accounting period covering a date, or null. */
-async function periodForDate(runner: SqlExecutor, orgId: string, date: string): Promise<string | null> {
+async function periodForDate(runner: SqlExecutor, orgId: string, calendarId: string, date: string): Promise<string | null> {
   const res = (await runner.execute<{ id: string }>(sql`
     select id from accounting_periods
-     where org_id = ${orgId} and is_adjustment = false
+     where org_id = ${orgId} and fiscal_calendar_id = ${calendarId} and is_adjustment = false
        and starts_on <= ${date} and ends_on >= ${date}
      limit 1`));
   return res.rows[0]?.id ?? null;
+}
+
+/** Retain the schedule's calendar; a new schedule uses the org's active default. */
+async function assetDepreciationCalendar(runner: SqlExecutor, orgId: string, assetId: string, bookId: string): Promise<string> {
+  const retained = (await runner.execute<{ id: string }>(sql`
+    select distinct period.fiscal_calendar_id as id
+      from depreciation_schedules schedule
+      join depreciation_schedule_lines line on line.schedule_id = schedule.id and line.org_id = schedule.org_id
+      join accounting_periods period on period.id = line.period_id and period.org_id = line.org_id
+     where schedule.org_id = ${orgId} and schedule.asset_id = ${assetId} and schedule.book_id = ${bookId}
+  `)).rows;
+  if (retained.length > 1) throw new Error("asset depreciation schedule spans multiple fiscal calendars");
+  if (retained[0]) return retained[0].id;
+  const defaults = (await runner.execute<{ id: string }>(sql`
+    select id from fiscal_calendars where org_id = ${orgId} and is_default and is_active for share
+  `)).rows;
+  if (defaults.length !== 1) throw new Error("asset depreciation requires one active default fiscal calendar");
+  return defaults[0]!.id;
 }
 
 export interface BuildScheduleResult {
@@ -276,21 +294,13 @@ export interface BuildScheduleResult {
   skippedMonths: string[];
 }
 
-/**
- * (Re)build the primary-book depreciation schedule for an asset from its
- * current cost / salvage / in-service / life / method. Any existing schedule
- * lines that have NOT yet posted are replaced; posted lines are preserved so a
- * rebuild after some periods have run never disturbs history.
- *
- * Called from the asset save path and by "Run depreciation".
- */
-export async function buildScheduleWithRunner(
+/** Resolve the native depreciation policy and its plan before remeasurements. */
+async function loadUnremeasuredAssetPlan(
   runner: SqlExecutor,
   assetId: string,
   orgId: string,
-  actorId: string | null,
   forBookId?: string,
-): Promise<BuildScheduleResult> {
+) {
   const assetRes = (await runner.execute<{
       id: string;
       category_id: string;
@@ -307,21 +317,25 @@ export async function buildScheduleWithRunner(
     select id, org_id, category_id, in_service_on, acquisition_cost, salvage_value,
            depreciation_method, depreciation_method_id, useful_life_months, depreciation_rate_percent,
            depreciation_convention, depreciation_units_total
-      from fixed_assets where id = ${assetId} and org_id = ${orgId}`));
+      from fixed_assets where id = ${assetId} and org_id = ${orgId} for update`));
   const asset = assetRes.rows[0];
   if (!asset) throw new Error("asset not found");
   if (!asset.in_service_on) throw new Error("asset has no in-service date");
 
   const catRes = (await runner.execute<{ default_method: DepreciationMethod; default_depreciation_method_id: string | null; default_life_months: number | null; default_convention: string | null }>(sql`
     select default_method, default_depreciation_method_id, default_life_months, default_convention
-      from asset_categories where id = ${asset.category_id} and org_id = ${orgId}`));
+      from asset_categories where id = ${asset.category_id} and org_id = ${orgId} for update`));
   const category = catRes.rows[0];
   if (!category) throw new Error("asset category not found");
 
   const bookId = forBookId ?? (await primaryBookId(runner, orgId));
+  const calendarId = await assetDepreciationCalendar(runner, orgId, assetId, bookId);
 
   // Multi-book: a per-book policy for this category overrides the method / life /
   // rate / convention on this book; else the asset custom + category defaults.
+  // The category fence serializes policy writes (0103). Do not lock the policy
+  // tuple: an UPDATE owns it before its trigger waits for this category, which
+  // would invert our lock order. MVCC reads the committed policy while it waits.
   const policyRes = (await runner.execute<{ method: DepreciationMethod; depreciation_method_id: string | null; life_months: number | null; rate_percent: string | null; units_total: string | null; convention: string | null }>(sql`
     select method, depreciation_method_id, life_months, rate_percent, units_total, convention from depreciation_book_policies
      where org_id = ${orgId} and book_id = ${bookId} and category_id = ${asset.category_id} limit 1`));
@@ -337,6 +351,24 @@ export async function buildScheduleWithRunner(
     pol?.rate_percent != null ? String(pol.rate_percent) : asset.depreciation_rate_percent;
   const unitsTotal: string | null = pol?.units_total != null ? String(pol.units_total) : asset.depreciation_units_total;
   const convention = (pol?.convention ?? asset.depreciation_convention ?? category.default_convention ?? null) as ScheduleInput["convention"];
+  // Older deployments permitted book-default edits after use. Never silently
+  // reinterpret retained schedule policy as if a changed default were history.
+  // Convention was not captured on legacy schedule headers, so this comparison
+  // deliberately makes no claim to reconstruct a missing convention snapshot.
+  const drift = (await runner.execute(sql`
+    select 1 from depreciation_schedules schedule
+     where schedule.org_id = ${orgId} and schedule.asset_id = ${assetId} and schedule.book_id = ${bookId}
+       and row(schedule.method, schedule.depreciation_method_id, schedule.life_months, schedule.rate_percent, schedule.units_total)
+           is distinct from row(${method}::text, ${depreciationMethodId}::uuid, ${lifeMonths || null}::integer, ${ratePercent}::numeric, ${unitsTotal}::numeric)
+       and (exists (select 1 from depreciation_schedule_lines line where line.org_id = schedule.org_id
+             and line.schedule_id = schedule.id and line.posted_amount is not null)
+         or exists (select 1 from asset_events event join journal_entries entry
+             on entry.id = event.journal_entry_id and entry.org_id = event.org_id
+            where event.org_id = schedule.org_id and event.asset_id = schedule.asset_id
+              and entry.book_id = schedule.book_id and entry.status in ('posted', 'reversed')))
+     limit 1
+  `)).rows[0];
+  if (drift) throw new Error("historical depreciation policy differs from the retained schedule; reconcile the policy before rebuilding or restoring impairment");
   if ((depreciationMethodId || (method !== "manual" && method !== "units_of_production")) && (!lifeMonths || lifeMonths <= 0)) {
     throw new Error("asset has no useful life (months)");
   }
@@ -393,6 +425,85 @@ export async function buildScheduleWithRunner(
     });
   }
 
+  return { asset, bookId, calendarId, method, depreciationMethodId, lifeMonths, ratePercent, unitsTotal, plan };
+}
+
+/**
+ * Carrying amount without impairment, using the same native policy as schedule
+ * generation and only depreciation effective by the requested date. IAS 36.117
+ * requires this depreciated ceiling, rather than the original impairment loss.
+ * Input-driven methods replay retained evidence against the original basis.
+ */
+export async function unimpairedAssetCarryingValue(
+  runner: SqlExecutor,
+  assetId: string,
+  orgId: string,
+  bookId: string,
+  asOfDate: string,
+): Promise<string> {
+  const { asset, calendarId, method, depreciationMethodId, unitsTotal, plan } =
+    await loadUnremeasuredAssetPlan(runner, assetId, orgId, bookId);
+  let depreciation = "0";
+  if (!depreciationMethodId && (method === "manual" || method === "units_of_production")) {
+    const evidence = (await runner.execute<{ manual_amount: string | null; production_units: string | null }>(sql`
+      select input.manual_amount::text, input.production_units::text
+        from depreciation_schedules schedule
+        join depreciation_schedule_lines line on line.schedule_id = schedule.id and line.org_id = schedule.org_id
+        join depreciation_inputs input on input.id = line.input_id and input.org_id = line.org_id
+        join accounting_periods period on period.id = line.period_id and period.org_id = line.org_id
+       where schedule.org_id = ${orgId} and schedule.asset_id = ${assetId} and schedule.book_id = ${bookId}
+         and input.voided_at is null and period.ends_on <= ${asOfDate}
+       order by line.sequence
+    `)).rows;
+    let usedUnits = "0";
+    for (const input of evidence) {
+      if (method === "manual") {
+        if (input.manual_amount === null) throw new Error("manual depreciation evidence is unavailable for the restoration ceiling");
+        depreciation = add(depreciation, input.manual_amount);
+      } else {
+        if (input.production_units === null || unitsTotal === null) {
+          throw new Error("production evidence is unavailable for the restoration ceiling");
+        }
+        depreciation = add(depreciation, computeUnitsOfProductionCharge({
+          cost: asset.acquisition_cost, salvage: asset.salvage_value, lifetimeUnits: unitsTotal,
+          periodUnits: input.production_units, unitsAlreadyRecorded: usedUnits,
+          depreciationAlreadyPlanned: depreciation,
+        }));
+        usedUnits = add(usedUnits, input.production_units);
+      }
+    }
+  } else {
+    const periods = (await runner.execute<{ starts_on: string; ends_on: string }>(sql`
+      select starts_on::text, ends_on::text from accounting_periods
+       where org_id = ${orgId} and fiscal_calendar_id = ${calendarId} and not is_adjustment and starts_on <= ${asOfDate}
+       order by starts_on for share
+    `)).rows;
+    for (const line of plan) {
+      if (line.periodMonth > asOfDate) continue;
+      const period = periods.find(period => period.starts_on <= line.periodMonth && period.ends_on >= line.periodMonth);
+      if (!period) throw new Error(`accounting period missing for restoration ceiling (${line.periodMonth})`);
+      if (period.ends_on <= asOfDate) {
+        depreciation = add(depreciation, line.planned);
+      }
+    }
+  }
+  const carrying = add(asset.acquisition_cost, neg(depreciation));
+  return cmp(carrying, asset.salvage_value) < 0 ? add(asset.salvage_value, "0") : carrying;
+}
+
+/**
+ * Rebuild only the unposted plan from native policy and retained remeasurements.
+ * Posted depreciation evidence is preserved verbatim.
+ */
+export async function buildScheduleWithRunner(
+  runner: SqlExecutor,
+  assetId: string,
+  orgId: string,
+  actorId: string | null,
+  forBookId?: string,
+): Promise<BuildScheduleResult> {
+  const { asset, bookId, calendarId, method, depreciationMethodId, lifeMonths, ratePercent, unitsTotal, plan } =
+    await loadUnremeasuredAssetPlan(runner, assetId, orgId, forBookId);
   return await (async (tx: SqlExecutor) => {
     // find (or create) the primary-book schedule for this asset
     const existing = (await tx.execute<{ id: string; method: DepreciationMethod; depreciation_method_id: string | null }>(sql`
@@ -445,7 +556,24 @@ export async function buildScheduleWithRunner(
     // repair the periods already posted — that is a controlled adjustment, not
     // something a rebuild may do silently — but it stops the schedule from
     // planning value the asset does not have.
-    const depreciableBase = add(asset.acquisition_cost, neg(asset.salvage_value));
+    // A reversal can leave earlier remeasurements in force. Their journals
+    // changed this book's carrying value without changing acquisition cost or
+    // posted depreciation. Rebuilding from cost alone would depreciate those
+    // impairment losses a second time (or omit a retained revaluation).
+    const remeasurement = (await tx.execute<{ delta: string; events: number }>(sql`
+      select coalesce(sum(event.amount) filter (
+               where entry.status = 'posted' and not exists (
+                 select 1 from asset_events reversal
+                  where reversal.org_id = event.org_id and reversal.reverses_event_id = event.id)
+             ), 0)::text as delta,
+             count(*)::int as events
+        from asset_events event
+        join journal_entries entry on entry.id = event.journal_entry_id and entry.org_id = event.org_id
+       where event.org_id = ${orgId} and event.asset_id = ${assetId}
+         and entry.book_id = ${bookId} and entry.status in ('posted', 'reversed')
+         and event.kind in ('impaired', 'revalued')
+    `)).rows[0]!;
+    const depreciableBase = add(add(asset.acquisition_cost, remeasurement.delta), neg(asset.salvage_value));
     const postedTotal = posted.rows.reduce((total, row) => add(total, row.posted_amount), "0");
     const remainingBase = cmp(depreciableBase, postedTotal) > 0
       ? add(depreciableBase, neg(postedTotal))
@@ -458,18 +586,31 @@ export async function buildScheduleWithRunner(
     }
 
     const skippedMonths: string[] = [];
-    let lineCount = 0;
-    let plannedSoFar = "0";
+    const unpostedPlan: { periodId: string; plan: ScheduleLinePlan }[] = [];
     for (const p of plan) {
-      const periodId = await periodForDate(tx, orgId, p.periodMonth);
+      const periodId = await periodForDate(tx, orgId, calendarId, p.periodMonth);
       if (!periodId) {
         skippedMonths.push(p.periodMonth);
         continue;
       }
       if (postedPeriods.has(periodId)) continue; // already posted — keep as is
+      unpostedPlan.push({ periodId, plan: p });
+    }
+    // Match remeasureAsset's remaining-life straight-line contract. Merely
+    // capping the original formula would exhaust an impaired asset too early.
+    // Even a fully reversed impairment can have changed posted depreciation;
+    // restore the remaining basis without rewriting that posted evidence.
+    const rebaseUnits = toUnits(remainingBase);
+    const perPeriod = unpostedPlan.length > 0 ? rebaseUnits / BigInt(unpostedPlan.length) : 0n;
+    let lineCount = 0;
+    let plannedSoFar = "0";
+    for (const [index, { periodId, plan: p }] of unpostedPlan.entries()) {
       const roomLeft = add(remainingBase, neg(plannedSoFar));
       if (cmp(roomLeft, "0") <= 0) break; // basis exhausted by what already posted
-      const amount = cmp(p.planned, roomLeft) > 0 ? roomLeft : p.planned;
+      const proposed = remeasurement.events > 0
+        ? index === unpostedPlan.length - 1 ? roomLeft : fromUnits(perPeriod)
+        : p.planned;
+      const amount = cmp(proposed, roomLeft) > 0 ? roomLeft : proposed;
       await tx.execute(sql`
         insert into depreciation_schedule_lines
           (org_id, schedule_id, period_id, sequence, planned_amount, source, created_by, updated_by)
@@ -704,6 +845,62 @@ export interface RunDepreciationResult {
   totalAmount: string;
   entries: { assetNumber: string; period: string; amount: string; entryId: string }[];
   problems: string[];
+}
+
+/** Keep the lifecycle state aligned with the current primary-book carrying value. */
+export async function reconcileAssetDepreciationStatusWithRunner(
+  runner: SqlExecutor,
+  orgId: string,
+  actorId: string | null,
+  assetId?: string,
+  allowedSubsidiaryIds?: readonly string[],
+): Promise<void> {
+  // Obtain a fresh carrying-value snapshot after any competing lifecycle write.
+  // The caller keeps these locks through its financial transaction.
+  await runner.execute(sql`
+    select id from fixed_assets
+     where org_id = ${orgId} and status in ('in_service', 'fully_depreciated')
+       ${allowedSubsidiaryIds ? sql`and subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
+       ${assetId ? sql`and id = ${assetId}` : sql``}
+     order by id for update`);
+  await runner.execute(sql`
+    with carrying as materialized (
+      select a.id, a.status as previous_status, book.id as book_id,
+             a.acquisition_cost + coalesce((
+               select sum(event.amount) from asset_events event
+                 join journal_entries entry on entry.id = event.journal_entry_id and entry.org_id = event.org_id
+                where event.org_id = a.org_id and event.asset_id = a.id
+                  and entry.book_id = book.id and entry.status = 'posted'
+                  and event.kind in ('impaired', 'revalued')
+                  and not exists (select 1 from asset_events reversal
+                    where reversal.org_id = event.org_id and reversal.reverses_event_id = event.id)
+             ), 0) - coalesce((
+               select sum(line.posted_amount) from depreciation_schedules schedule
+                 join depreciation_schedule_lines line on line.schedule_id = schedule.id and line.org_id = schedule.org_id
+                where schedule.org_id = a.org_id and schedule.asset_id = a.id and schedule.book_id = book.id
+             ), 0) as amount,
+             a.salvage_value
+        from fixed_assets a
+        join accounting_books book on book.org_id = a.org_id and book.is_primary and book.is_active and book.posts_gl
+       where a.org_id = ${orgId} and a.status in ('in_service', 'fully_depreciated')
+         ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
+         ${assetId ? sql`and a.id = ${assetId}` : sql``}
+    ), changed as (
+    update fixed_assets asset
+       set status = case when carrying.amount <= carrying.salvage_value then 'fully_depreciated' else 'in_service' end,
+           updated_at = now(), updated_by = ${actorId}
+      from carrying
+     where asset.org_id = ${orgId} and asset.id = carrying.id
+       and asset.status <> case when carrying.amount <= carrying.salvage_value then 'fully_depreciated' else 'in_service' end
+    returning asset.id, carrying.previous_status, asset.status, carrying.amount, carrying.salvage_value, carrying.book_id
+    )
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    select ${orgId}, 'fixed_assets', id, 'update', jsonb_build_object(
+      'before', jsonb_build_object('status', previous_status),
+      'after', jsonb_build_object('status', status),
+      'reason', 'Reconcile asset lifecycle with primary-book carrying value',
+      'bookId', book_id, 'carryingValue', amount::text, 'salvageValue', salvage_value::text
+    ), ${actorId} from changed`);
 }
 
 /**
@@ -1004,21 +1201,7 @@ export async function runDepreciation(
     }
   }
 
-  // Flip fully-depreciated assets (NBV reached salvage — no unposted lines left
-  // and accumulated == cost − salvage) to 'fully_depreciated'.
-  await db.execute(sql`
-    update fixed_assets a
-       set status = 'fully_depreciated', updated_at = now()
-     where a.org_id = ${orgId} and a.status = 'in_service'
-       ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
-       ${assetId ? sql`and a.id = ${assetId}` : sql``}
-       and exists (
-         select 1 from depreciation_schedules s
-           join accounting_books b on b.id = s.book_id and b.org_id = s.org_id and b.posts_gl and b.is_active and b.is_primary
-           join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
-          where s.org_id = a.org_id and s.asset_id = a.id
-          group by s.id
-          having coalesce(sum(l.posted_amount), 0) >= a.acquisition_cost - a.salvage_value)`);
+  await db.transaction(tx => reconcileAssetDepreciationStatusWithRunner(tx, orgId, actorId, assetId, allowedSubsidiaryIds));
 
   return result;
 }

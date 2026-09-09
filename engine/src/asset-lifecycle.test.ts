@@ -23,7 +23,7 @@ test("disposal snapshots carrying value after locking the asset row", () => {
   const transaction = dispose.indexOf("return db.transaction");
   const lock = dispose.indexOf("await lockAssetRow(tx, orgId, assetId, opts.allowedSubsidiaryIds)", transaction);
   const assetRead = dispose.indexOf("select a.id", transaction);
-  const deltaRead = dispose.indexOf("await netRemeasurementDelta(orgId, assetId, tx)", transaction);
+  const deltaRead = dispose.indexOf("await netRemeasurementDelta(orgId, assetId, bookId, tx)", transaction);
   const compute = dispose.indexOf("computeDisposal({", transaction);
 
   assert.ok(transaction >= 0, "disposal must post in one database transaction");
