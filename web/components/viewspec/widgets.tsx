@@ -26,6 +26,9 @@ import { InsightsTabs } from '../../app/(app)/insights/InsightsTabs'
 import { CardNameCell, VizCell } from '../../app/(app)/insights/sections'
 import { NewCardButton } from '../../app/(app)/insights/NewCardButton'
 import { CardStudio } from '../../app/(app)/insights/CardStudio'
+import { RecordCountCell, InNavCell } from '../../app/(app)/records/types/sections'
+import { NewTypeButton } from '../../app/(app)/records/types/NewTypeButton'
+import { TypeBuilderDrawer } from '../../app/(app)/records/types/TypeBuilderDrawer'
 import { SearchInput } from '../search-input'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
@@ -276,6 +279,22 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ),
   'new-dashboard': () => <NewDashboardButton />,
   'new-card': () => <NewCardButton />,
+  'new-record-type': () => <NewTypeButton />,
+  'record-count-cell': (props) => (
+    <RecordCountCell
+      count={str(props, 'count') ?? ''}
+      href={str(props, 'href') ?? ''}
+      linked={props.linked === true}
+    />
+  ),
+  'in-nav-cell': (props) => (
+    <InNavCell shown={props.shown === true} label={str(props, 'label') ?? ''} />
+  ),
+  'type-builder-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof TypeBuilderDrawer> | null
+    if (!drawer) return null
+    return <TypeBuilderDrawer {...drawer} />
+  },
   'card-name-cell': (props) => (
     <CardNameCell
       name={str(props, 'name') ?? ''}
