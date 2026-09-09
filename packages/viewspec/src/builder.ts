@@ -99,7 +99,13 @@ export const ROOT_SCOPE_KEY = '$root'
 
 export function text(
   f: FieldRef,
-  opts: { fallback?: Value; tone?: Value<Tone>; numeric?: boolean; prefix?: TextCell['prefix'] } = {},
+  opts: {
+    fallback?: Value
+    tone?: Value<Tone>
+    numeric?: boolean
+    prefix?: TextCell['prefix']
+    suffix?: TextCell['suffix']
+  } = {},
 ): TextCell {
   return { kind: 'text', field: f, ...opts }
 }
@@ -120,8 +126,8 @@ export function badge(f: FieldRef, opts: { variant?: BadgeCell['variant'] } = {}
   return { kind: 'badge', field: f, ...opts }
 }
 
-export function link(f: FieldRef, href: FieldRef): LinkCell {
-  return { kind: 'link', field: f, href }
+export function link(f: FieldRef, href: FieldRef, className?: string): LinkCell {
+  return { kind: 'link', field: f, href, ...(className ? { className } : {}) }
 }
 
 export function recordLink(f: FieldRef, recordType: Value, id: FieldRef): RecordLinkCell {

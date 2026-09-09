@@ -35,11 +35,20 @@ function LeafCellView({ spec, scope }: { spec: LeafCell; scope: unknown }) {
       if (empty && spec.fallback !== undefined) {
         return <span className={FALLBACK_CLASS}>{resolveText(spec.fallback, scope)}</span>
       }
-      if (spec.prefix) {
+      if (spec.prefix || spec.suffix) {
         return (
           <>
-            <span className={spec.prefix.className}>{String(resolvePath(scope, spec.prefix.field.$) ?? '')}</span>
+            {spec.prefix ? (
+              <span className={spec.prefix.className}>
+                {String(resolvePath(scope, spec.prefix.field.$) ?? '')}
+              </span>
+            ) : null}
             {String(raw ?? '')}
+            {spec.suffix ? (
+              <span className={spec.suffix.className}>
+                {String(resolvePath(scope, spec.suffix.field.$) ?? '')}
+              </span>
+            ) : null}
           </>
         )
       }
@@ -70,7 +79,7 @@ function LeafCellView({ spec, scope }: { spec: LeafCell; scope: unknown }) {
       // A link with no resolved href degrades to text rather than rendering a
       // dead anchor — the loader owning href means absence is a data state.
       if (typeof href !== 'string' || href === '') return <>{label}</>
-      return <Link href={href}>{label}</Link>
+      return <Link href={href} className={spec.className}>{label}</Link>
     }
 
     case 'record-link': {
