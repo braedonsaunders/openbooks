@@ -35,7 +35,14 @@ import { LienWaiverDrawer } from '../../app/(app)/compliance/lien-waivers/LienWa
 import { NewFilingButton } from '../../app/(app)/compliance/information-returns/NewFilingButton'
 import { IdentityCell, ActingCell, AccessControlCell } from '../../app/(app)/platform/access/sections'
 import { GrantAccessForm } from '../../app/(app)/platform/_components/GrantAccessForm'
-import { KeyRound } from 'lucide-react'
+import { KeyRound, Building2 } from 'lucide-react'
+import {
+  OrgNameCell,
+  OrgEnvironmentCell,
+  OrgLocaleCell,
+  OrgUsersCell,
+  OrgOpenCell,
+} from '../../app/(app)/platform/organizations/sections'
 import { SearchInput } from '../search-input'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
@@ -275,7 +282,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const renderer = action ? WIDGET_REGISTRY[action] : undefined
     // Icons are components, so the spec names one from a closed map rather
     // than carrying it — same rule as every other component reference.
-    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound /> }
+    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 /> }
     const iconKey = str(props, 'icon')
     return (
       <EmptyState
@@ -299,6 +306,23 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       directionLabel={str(props, 'directionLabel') ?? ''}
     />
   ),
+  'org-name-cell': (props) => (
+    <OrgNameCell name={str(props, 'name') ?? ''} subtitle={str(props, 'subtitle') ?? ''} />
+  ),
+  'org-environment-cell': (props) => (
+    <OrgEnvironmentCell
+      envKind={str(props, 'envKind') ?? ''}
+      variant={(str(props, 'variant') ?? 'secondary') as ComponentProps<typeof OrgEnvironmentCell>['variant']}
+      parentNote={str(props, 'parentNote') ?? ''}
+    />
+  ),
+  'org-locale-cell': (props) => (
+    <OrgLocaleCell country={str(props, 'country') ?? ''} currency={str(props, 'currency') ?? ''} />
+  ),
+  'org-users-cell': (props) => (
+    <OrgUsersCell active={str(props, 'active') ?? ''} total={str(props, 'total') ?? ''} />
+  ),
+  'org-open-cell': (props) => <OrgOpenCell orgId={str(props, 'orgId') ?? ''} />,
   'identity-cell': (props) => (
     <IdentityCell name={str(props, 'name') ?? ''} detail={str(props, 'detail') ?? ''} />
   ),

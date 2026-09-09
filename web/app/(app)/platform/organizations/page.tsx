@@ -19,6 +19,8 @@ import { SortTh } from "../../../../components/sortable-th";
 import { parseListParams, pickString } from "../../../../lib/list-params";
 import { platformOrganizations } from "../../../../lib/platform-admin";
 import { enterOrganizationAction } from "../actions";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadPlatformOrganizations, platformOrganizationsSpec } from "./view";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +33,16 @@ export default async function PlatformOrganizationsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
+  if (sp.__viewspec === "1") {
+    const data = await loadPlatformOrganizations(sp);
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={platformOrganizationsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    );
+  }
   const environmentParam = pickString(sp.environment);
   const environment =
     environmentParam === "production" ||
