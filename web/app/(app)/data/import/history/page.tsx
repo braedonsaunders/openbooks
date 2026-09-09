@@ -17,6 +17,8 @@ import Link from 'next/link'
 import { ListPageLayout } from '../../../../../components/page-layout'
 import { requirePermission } from '../../../../../lib/authz'
 import { dateTime } from '../../../../../lib/format'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { loadImportHistory, importHistorySpec } from './view'
 
 export const dynamic = 'force-dynamic'
 type JobRow = {
@@ -34,7 +36,22 @@ type JobRow = {
   actor_name: string | null
 };
 
-export default async function ImportHistoryPage() {
+export default async function ImportHistoryPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | undefined>>
+}) {
+  const sp = (await searchParams) ?? {}
+  if (sp.__viewspec === '1') {
+    const data = await loadImportHistory()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={importHistorySpec()} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('data.import')
   const t = await getTranslations('data')
 

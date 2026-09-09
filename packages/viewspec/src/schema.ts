@@ -68,7 +68,7 @@ const badgeCell = z.strictObject({
   kind: z.literal('badge'),
   field: fieldRefSchema,
   variant: z
-    .union([z.enum(['default', 'outline', 'secondary', 'destructive']), fieldRefSchema])
+    .union([z.enum(['default', 'secondary', 'outline', 'destructive', 'warning', 'success']), fieldRefSchema])
     .optional(),
 })
 

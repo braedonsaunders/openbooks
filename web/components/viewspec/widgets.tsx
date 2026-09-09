@@ -11,6 +11,9 @@ import { TrendChart } from '../../app/(app)/analytics/_ui/charts'
 import { ApPulse, AttentionList, CommitmentsSection, DirectorySection } from '../../app/(app)/purchasing/sections'
 import { JournalEntryHeading } from '../../app/(app)/reports/journal/sections'
 import { AccountHeading, EntryCell } from '../../app/(app)/reports/general-ledger/sections'
+import { ResourceCell, RowCountsCell } from '../../app/(app)/data/import/history/sections'
+import { Button } from '@openbooks/ui'
+import Link from 'next/link'
 
 /**
  * Widget registry — the closed set of interactive components a spec may place
@@ -140,6 +143,26 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       docKind={(props.docKind as string | null) ?? null}
       docId={(props.docId as string | null) ?? null}
       entryNumber={(props.entryNumber as string | null) ?? null}
+    />
+  ),
+  /** A primary action button that navigates — the common page-header action. */
+  'link-button': (props) => {
+    const href = str(props, 'href')
+    if (!href) return null
+    return (
+      <Button asChild>
+        <Link href={href as never}>{str(props, 'label') ?? ''}</Link>
+      </Button>
+    )
+  },
+  'resource-cell': (props) => (
+    <ResourceCell label={str(props, 'label') ?? ''} fileName={(props.fileName as string | null) ?? null} />
+  ),
+  'row-counts-cell': (props) => (
+    <RowCountsCell
+      created={Number(props.created ?? 0)}
+      updated={Number(props.updated ?? 0)}
+      failed={Number(props.failed ?? 0)}
     />
   ),
   'save-view': () => <SaveViewButton />,

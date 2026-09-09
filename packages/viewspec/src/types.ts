@@ -97,7 +97,7 @@ export interface DateCell {
 export interface BadgeCell {
   kind: 'badge'
   field: FieldRef
-  variant?: Value<'default' | 'outline' | 'secondary' | 'destructive'>
+  variant?: Value<'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'>
 }
 
 /** An ordinary link. `href` is resolved by the loader, not built by the spec. */
