@@ -1351,7 +1351,13 @@ export async function handleProviderWebhook(
             "openbooks.external_ref": event.externalRef,
             "openbooks.webhook_status": event.status,
           },
-          () => withOrg(candidate.orgId, () => processWebhookEvent(candidate.orgId, provider, event)),
+          () => withOrg(candidate.orgId, async () => {
+            // Settlement reads and retains the primary book before posting a
+            // receipt. Fence the outer event first, matching org -> book order
+            // through draft preparation, approval, and the posting kernel.
+            await db.execute(sql`select id from orgs where id = ${candidate.orgId} for update`);
+            return processWebhookEvent(candidate.orgId, provider, event);
+          }),
         );
       } catch (error) {
         // A tenant transaction failure rolls back only this event. Keep going

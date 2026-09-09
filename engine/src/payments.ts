@@ -878,6 +878,10 @@ export async function postPaymentWithApplications(
   if (!preflight || !isPaymentKind(preflight.kind)) throw new PaymentError("payment document not found");
 
   const result = await withOrg(preflight.orgId, async () => {
+    // Match the kernel's organization -> book lock order. Holding a shared
+    // book/advisory lock before upgrading the organization lock can deadlock
+    // with setup's feature fence followed by an exclusive book edit.
+    await db.execute(sql`select id from orgs where id = ${preflight.orgId} for update`);
     // Serialize both the payment aggregate and every application endpoint.
     await db.execute(sql`select id from documents where id = ${paymentDocId} and org_id = ${preflight.orgId} for update`);
     const [doc] = await db.select().from(schema.documents).where(and(eq(schema.documents.id, paymentDocId), eq(schema.documents.orgId, preflight.orgId)));

@@ -148,7 +148,12 @@ for (const policy of ["inactive", "nonposting", "ambiguous"] as const) {
       const ctx = { orgId: org.orgId, userId: actor };
       await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
       const recon = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: "0" }, ctx);
-      if (policy === "ambiguous") await db.execute(sql`insert into accounting_books(org_id,code,name,is_primary) values(${org.orgId},'ALSO_PRIMARY','Ambiguous primary',true)`);
+      if (policy === "ambiguous") await db.transaction(async tx => {
+        // Deliberately reproduce legacy ambiguous data: ordinary SQL now
+        // refuses adding another primary after reconciliation history exists.
+        await tx.execute(sql`set local openbooks.migration=on`);
+        await tx.execute(sql`insert into accounting_books(org_id,code,name,is_primary) values(${org.orgId},'ALSO_PRIMARY','Ambiguous primary',true)`);
+      });
       else await db.execute(sql`update accounting_books set is_active=${policy !== 'inactive'},posts_gl=${policy !== 'nonposting'} where org_id=${org.orgId} and id=${org.bookId}`);
       await assert.rejects(reconciliationTotals(recon.id, ctx), /exactly one active primary posting book/);
       await assert.rejects(autoMatch(recon.id, ctx), /exactly one active primary posting book/);
