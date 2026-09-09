@@ -44,56 +44,58 @@ function errorMessage(error: unknown): string {
   return messages.join(': ')
 }
 
-test('uninstall captures every cascading app row before the delete, with before/after evidence', () => {
-  const body = functionBody(storeSource, 'deleteApp')
-  const versions = body.indexOf('from app_versions')
-  const files = body.indexOf('from app_files')
-  const runs = body.indexOf('from app_runs')
-  const storage = body.indexOf('from app_storage')
-  const audit = body.indexOf("event: 'app_uninstall'")
-  const deleteIndex = body.indexOf('delete from apps')
+function registerSourceTests(): void {
+  test('uninstall captures every cascading app row before the delete, with before/after evidence', () => {
+    const body = functionBody(storeSource, 'deleteApp')
+    const versions = body.indexOf('from app_versions')
+    const files = body.indexOf('from app_files')
+    const runs = body.indexOf('from app_runs')
+    const storage = body.indexOf('from app_storage')
+    const audit = body.indexOf("event: 'app_uninstall'")
+    const deleteIndex = body.indexOf('delete from apps')
 
-  assert.match(body, /await db\.transaction\(async \(tx\) =>/)
-  assert.ok(versions >= 0 && files > versions && runs > files && storage > runs)
-  assert.ok(audit > storage, 'the audit insert must follow all evidence reads')
-  assert.ok(deleteIndex > audit, 'the destructive cascade must be last')
-  assert.match(body, /versions: versions\.rows/)
-  assert.match(body, /files: files\.rows/)
-  assert.match(body, /runs: runs\.rows/)
-  assert.match(body, /storage: storage\.rows/)
-  assert.match(body, /before:\s*\{/)
-  assert.match(body, /after:\s*null/)
-  assert.match(body, /actor_id\)/)
-})
-
-test('status transitions carry actor and before/after evidence in the same transaction', () => {
-  const body = functionBody(storeSource, 'setAppStatus')
-  const update = body.indexOf('update apps')
-  const audit = body.indexOf('insert into audit_log')
-  assert.match(body, /userId: string/)
-  assert.match(body, /for update/)
-  assert.match(body, /event: 'app_status_changed'/)
-  assert.match(body, /before: \{ key: app\.key, name: app\.name, status: app\.status \}/)
-  assert.match(body, /after: \{ key: app\.key, name: app\.name, status \}/)
-  assert.ok(update >= 0 && audit > update)
-  assert.match(routeSource, /setAppStatus\(gate\.user\.orgId, gate\.user\.id, key, body\.status\)/)
-})
-
-test('authoring entry points create a new active version and leave the prior version untouched', () => {
-  assert.match(storeSource, /async function snapshotActiveVersion\(/)
-  const snapshot = functionBody(storeSource, 'snapshotActiveVersion')
-  assert.match(snapshot, /insert into app_versions[\s\S]*?'active'/)
-  assert.match(snapshot, /insert into app_files[\s\S]*?select org_id, app_id, \$\{versionId\}/)
-  assert.match(snapshot, /update app_versions[\s\S]*?set status = 'superseded'/)
-  assert.match(snapshot, /update apps[\s\S]*?set active_version_id = \$\{versionId\}/)
-
-  for (const name of ['updateAppMeta', 'writeAppFile', 'deleteAppFile']) {
-    const body = functionBody(storeSource, name)
     assert.match(body, /await db\.transaction\(async \(tx\) =>/)
-    assert.match(body, /snapshotActiveVersion\(/, `${name} must snapshot before authoring`)
-  }
-  assert.match(routeSource, /deleteApp\(gate\.user\.orgId, gate\.user\.id, key\)/)
-})
+    assert.ok(versions >= 0 && files > versions && runs > files && storage > runs)
+    assert.ok(audit > storage, 'the audit insert must follow all evidence reads')
+    assert.ok(deleteIndex > audit, 'the destructive cascade must be last')
+    assert.match(body, /versions: versions\.rows/)
+    assert.match(body, /files: files\.rows/)
+    assert.match(body, /runs: runs\.rows/)
+    assert.match(body, /storage: storage\.rows/)
+    assert.match(body, /before:\s*\{/)
+    assert.match(body, /after:\s*null/)
+    assert.match(body, /actor_id\)/)
+  })
+
+  test('status transitions carry actor and before/after evidence in the same transaction', () => {
+    const body = functionBody(storeSource, 'setAppStatus')
+    const update = body.indexOf('update apps')
+    const audit = body.indexOf('insert into audit_log')
+    assert.match(body, /userId: string/)
+    assert.match(body, /for update/)
+    assert.match(body, /event: 'app_status_changed'/)
+    assert.match(body, /before: \{ key: app\.key, name: app\.name, status: app\.status \}/)
+    assert.match(body, /after: \{ key: app\.key, name: app\.name, status \}/)
+    assert.ok(update >= 0 && audit > update)
+    assert.match(routeSource, /setAppStatus\(gate\.user\.orgId, gate\.user\.id, key, body\.status\)/)
+  })
+
+  test('authoring entry points create a new active version and leave the prior version untouched', () => {
+    assert.match(storeSource, /async function snapshotActiveVersion\(/)
+    const snapshot = functionBody(storeSource, 'snapshotActiveVersion')
+    assert.match(snapshot, /insert into app_versions[\s\S]*?'active'/)
+    assert.match(snapshot, /insert into app_files[\s\S]*?select org_id, app_id, \$\{versionId\}/)
+    assert.match(snapshot, /update app_versions[\s\S]*?set status = 'superseded'/)
+    assert.match(snapshot, /update apps[\s\S]*?set active_version_id = \$\{versionId\}/)
+
+    for (const name of ['updateAppMeta', 'writeAppFile', 'deleteAppFile']) {
+      const body = functionBody(storeSource, name)
+      assert.match(body, /await db\.transaction\(async \(tx\) =>/)
+      assert.match(body, /snapshotActiveVersion\(/, `${name} must snapshot before authoring`)
+    }
+    assert.match(routeSource, /deleteApp\(gate\.user\.orgId, gate\.user\.id, key\)/)
+  })
+}
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
@@ -112,6 +114,10 @@ if (DB) {
     updateAppMeta,
     writeAppFile,
   } = await import('./store.ts')
+
+  // Register the entire queue after imports; --test-force-exit must not
+  // finish source checks while database cases are still being loaded.
+  registerSourceTests()
 
   assert.ok(env.OPENBOOKS_DB_URL)
 
@@ -330,4 +336,6 @@ if (DB) {
       await withBypass(() => dropScratchOrg(fx.org.orgId))
     }
   })
+} else {
+  registerSourceTests()
 }

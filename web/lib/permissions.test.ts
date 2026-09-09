@@ -13,34 +13,6 @@ import {
 } from './permissions.ts'
 import { NextResponse } from 'next/server'
 
-test('a user without an explicit role assignment receives no role permissions', () => {
-  const permissions = resolveEffectivePermissions({
-    rolePermissionSets: [],
-    overrides: [],
-  })
-  assert.deepEqual([...permissions], [])
-})
-
-test('explicit role assignments are unioned and deny overrides win', () => {
-  const permissions = resolveEffectivePermissions({
-    rolePermissionSets: [['ap.read', 'ap.create'], ['reports.read']],
-    overrides: [
-      { permission: 'ap.create', effect: 'deny' },
-      { permission: 'banking.read', effect: 'grant' },
-    ],
-  })
-  assert.deepEqual([...permissions].sort(), ['ap.read', 'banking.read', 'reports.read'])
-})
-
-test('specific denies override a full wildcard grant while preserving other permissions', () => {
-  const permissions = resolveEffectivePermissions({
-    rolePermissionSets: [['*']],
-    overrides: [{ permission: 'gl.post', effect: 'deny' }],
-  })
-  assert.equal(permissionSetCovers(permissions, 'gl.post'), false)
-  assert.equal(permissionSetCovers(permissions, 'gl.read'), true)
-})
-
 /**
  * Representative SoD controls for inventory money movement
  * (fnd_mt9g743u_w8y6mv). The routes gate each verb through
@@ -49,55 +21,6 @@ test('specific denies override a full wildcard grant while preserving other perm
  * fencing, cross-entity denial, reversal atomicity, and audit-failure proofs
  * live in web/lib/permission-registry.test.ts and are equivalent coverage.
  */
-
-test('a catalog maintainer holding items.manage alone is refused every financial inventory action', () => {
-  // The route consults these exact mappings, so asserting them asserts the
-  // production write path, and every demanded key must be role-assignable.
-  const demanded = [
-    ...Object.values(INVENTORY_ACTION_PERMISSIONS),
-    ...Object.values(INVENTORY_ADVANCED_ACTION_PERMISSIONS),
-  ]
-  for (const perm of demanded) {
-    assert.ok(
-      (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
-      `${perm} must be seeded so someone can hold it`,
-    )
-    assert.equal(
-      permissionSetCovers(new Set(['items.manage']), perm),
-      false,
-      `items.manage must not carry ${perm}: catalog maintenance is not ledger authority`,
-    )
-  }
-  // Reversal is deliberately distinct from posting (maker/checker).
-  assert.equal(INVENTORY_ACTION_PERMISSIONS.reverse, 'items.reverse')
-  for (const [action, perm] of Object.entries(INVENTORY_ACTION_PERMISSIONS)) {
-    if (action !== 'reverse') {
-      assert.equal(perm, 'items.post', `${action} moves value and demands posting authority`)
-    }
-  }
-})
-
-test('principals with the right financial authority are still allowed through', () => {
-  // A poster clears every forward verb; wildcard grants keep working.
-  const poster = new Set(['gl.post', 'items.post'])
-  for (const [action, perm] of Object.entries(INVENTORY_ACTION_PERMISSIONS)) {
-    if (action === 'reverse') continue
-    assert.equal(permissionSetCovers(poster, perm), true, `${action} allowed for items.post`)
-  }
-  assert.equal(permissionSetCovers(new Set(['items.*']), 'items.reverse'), true)
-  // Built-ins split the duties: controller unwinds, accountant only posts,
-  // and no read-only/approval/sales role touches value at all.
-  const holds = (role: string, perm: string) =>
-    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm)
-  assert.equal(holds('controller', 'items.post'), true)
-  assert.equal(holds('controller', 'items.reverse'), true)
-  assert.equal(holds('accountant', 'items.post'), true)
-  assert.equal(holds('accountant', 'items.reverse'), false)
-  for (const role of ['approver', 'viewer', 'sales_manager', 'sales_rep']) {
-    assert.equal(holds(role, 'items.post'), false, `${role} must not post`)
-    assert.equal(holds(role, 'items.reverse'), false, `${role} must not reverse`)
-  }
-})
 
 /**
  * Organization-wide outbound email transport authority (fnd_mt989v18_3b1g7c).
@@ -271,100 +194,7 @@ async function postTestSend(to: string): Promise<Response> {
   )
 }
 
-test('a users-admin without setup authority cannot mutate the org email transport or send through it', async () => {
-  resetEmailAuthority(['admin.users.manage'])
-
-  const saved = await putConfig({
-    enabled: true,
-    provider: 'smtp',
-    smtpHost: 'smtp.attacker.example',
-    secret: 'replaced-secret',
-  })
-  assert.equal(saved.status, 403)
-
-  const sent = await postTestSend('victim@example.com')
-  assert.equal(sent.status, 403)
-
-  // Denial is total: no config write/read, no email_log row, no provider send.
-  assert.deepEqual(emailState.engineCalls, [])
-  assert.deepEqual(emailState.sendCalls, [])
-})
-
-test('setup authority reaches every email handler without holding users-manage', async () => {
-  resetEmailAuthority(['admin.setup.manage'])
-
-  const { configRoutes } = await emailRoutesReady
-  const read = await configRoutes.GET()
-  assert.equal(read.status, 200)
-  assert.deepEqual(await read.json(), {
-    enabled: false,
-    provider: 'smtp',
-    fromEmail: 'noreply@example.com',
-    hasSecret: false,
-    updatedAt: '2026-09-05T00:00:00.123450Z',
-  })
-
-  const saved = await putConfig({
-    enabled: true,
-    provider: 'smtp',
-    smtpHost: 'smtp.example.com',
-    secret: 's3cret',
-  })
-  assert.equal(saved.status, 200)
-  // The exact normalized save input — secret still plaintext here; the shared
-  // engine service seals it (unchanged by this slice).
-  assert.deepEqual(emailState.engineCalls[1], {
-    fn: 'saveOrgEmailConfig',
-    orgId: 'org-1',
-    input: {
-      enabled: true,
-      provider: 'smtp',
-      fromName: undefined,
-      fromEmail: undefined,
-      replyTo: undefined,
-      mailgunDomain: undefined,
-      mailgunRegion: undefined,
-      smtpHost: 'smtp.example.com',
-      smtpPort: undefined,
-      smtpSecure: false,
-      smtpUsername: undefined,
-      secret: 's3cret',
-    },
-  })
-
-  const sent = await postTestSend('colleague@example.com')
-  assert.equal(sent.status, 200)
-  assert.deepEqual(await sent.json(), { ok: true, provider: 'smtp', messageId: 'msg-1' })
-  assert.deepEqual(
-    emailState.engineCalls.map((call) => call.fn),
-    [
-      'readOrgEmailConfigView', // GET
-      'saveOrgEmailConfig', // PUT persist
-      'resolveOrgEmailTransport', // POST transport resolve
-      'insertEmailLog', // POST email_log row
-      'markEmailSent', // POST success marker
-    ],
-  )
-  assert.equal(emailState.sendCalls.length, 1)
-})
-
-test('built-in roles split email transport authority from user administration', () => {
-  // admin.setup.manage must stay seedable so someone can actually hold it.
-  assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes('admin.setup.manage'))
-  const holds = (role: string, perm: string) =>
-    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm)
-  // The controller owns org configuration (including the outbound transport)
-  // but never people administration — the SoD this slice pins in.
-  assert.equal(holds('controller', 'admin.setup.manage'), true)
-  assert.equal(holds('controller', 'admin.users.manage'), false)
-  // Full administrators keep both sides.
-  assert.equal(holds('admin', 'admin.setup.manage'), true)
-  assert.equal(holds('admin', 'admin.users.manage'), true)
-})
-
-// Register the three email-authority cases before awaiting route evaluation.
-// With --test-force-exit, tests declared after a top-level await can be omitted
-// from the run if the earlier queue drains first.
+// Finish loading the email routes before installing the provision-route hooks.
 await emailRoutesReady
 
 // --- Income-tax provision posting authorization ------------------------------
@@ -552,6 +382,176 @@ function postProvision(id: string): Promise<Response> {
     params: Promise.resolve({ id }),
   })
 }
+
+// Complete asynchronous setup before registering tests so --test-force-exit
+// cannot finish the initial queue while later tests are still being loaded.
+test('a user without an explicit role assignment receives no role permissions', () => {
+  const permissions = resolveEffectivePermissions({
+    rolePermissionSets: [],
+    overrides: [],
+  })
+  assert.deepEqual([...permissions], [])
+})
+
+test('explicit role assignments are unioned and deny overrides win', () => {
+  const permissions = resolveEffectivePermissions({
+    rolePermissionSets: [['ap.read', 'ap.create'], ['reports.read']],
+    overrides: [
+      { permission: 'ap.create', effect: 'deny' },
+      { permission: 'banking.read', effect: 'grant' },
+    ],
+  })
+  assert.deepEqual([...permissions].sort(), ['ap.read', 'banking.read', 'reports.read'])
+})
+
+test('specific denies override a full wildcard grant while preserving other permissions', () => {
+  const permissions = resolveEffectivePermissions({
+    rolePermissionSets: [['*']],
+    overrides: [{ permission: 'gl.post', effect: 'deny' }],
+  })
+  assert.equal(permissionSetCovers(permissions, 'gl.post'), false)
+  assert.equal(permissionSetCovers(permissions, 'gl.read'), true)
+})
+
+test('a catalog maintainer holding items.manage alone is refused every financial inventory action', () => {
+  // The route consults these exact mappings, so asserting them asserts the
+  // production write path, and every demanded key must be role-assignable.
+  const demanded = [
+    ...Object.values(INVENTORY_ACTION_PERMISSIONS),
+    ...Object.values(INVENTORY_ADVANCED_ACTION_PERMISSIONS),
+  ]
+  for (const perm of demanded) {
+    assert.ok(
+      (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
+      `${perm} must be seeded so someone can hold it`,
+    )
+    assert.equal(
+      permissionSetCovers(new Set(['items.manage']), perm),
+      false,
+      `items.manage must not carry ${perm}: catalog maintenance is not ledger authority`,
+    )
+  }
+  // Reversal is deliberately distinct from posting (maker/checker).
+  assert.equal(INVENTORY_ACTION_PERMISSIONS.reverse, 'items.reverse')
+  for (const [action, perm] of Object.entries(INVENTORY_ACTION_PERMISSIONS)) {
+    if (action !== 'reverse') {
+      assert.equal(perm, 'items.post', `${action} moves value and demands posting authority`)
+    }
+  }
+})
+
+test('principals with the right financial authority are still allowed through', () => {
+  // A poster clears every forward verb; wildcard grants keep working.
+  const poster = new Set(['gl.post', 'items.post'])
+  for (const [action, perm] of Object.entries(INVENTORY_ACTION_PERMISSIONS)) {
+    if (action === 'reverse') continue
+    assert.equal(permissionSetCovers(poster, perm), true, `${action} allowed for items.post`)
+  }
+  assert.equal(permissionSetCovers(new Set(['items.*']), 'items.reverse'), true)
+  // Built-ins split the duties: controller unwinds, accountant only posts,
+  // and no read-only/approval/sales role touches value at all.
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm)
+  assert.equal(holds('controller', 'items.post'), true)
+  assert.equal(holds('controller', 'items.reverse'), true)
+  assert.equal(holds('accountant', 'items.post'), true)
+  assert.equal(holds('accountant', 'items.reverse'), false)
+  for (const role of ['approver', 'viewer', 'sales_manager', 'sales_rep']) {
+    assert.equal(holds(role, 'items.post'), false, `${role} must not post`)
+    assert.equal(holds(role, 'items.reverse'), false, `${role} must not reverse`)
+  }
+})
+
+test('a users-admin without setup authority cannot mutate the org email transport or send through it', async () => {
+  resetEmailAuthority(['admin.users.manage'])
+
+  const saved = await putConfig({
+    enabled: true,
+    provider: 'smtp',
+    smtpHost: 'smtp.attacker.example',
+    secret: 'replaced-secret',
+  })
+  assert.equal(saved.status, 403)
+
+  const sent = await postTestSend('victim@example.com')
+  assert.equal(sent.status, 403)
+
+  // Denial is total: no config write/read, no email_log row, no provider send.
+  assert.deepEqual(emailState.engineCalls, [])
+  assert.deepEqual(emailState.sendCalls, [])
+})
+
+test('setup authority reaches every email handler without holding users-manage', async () => {
+  resetEmailAuthority(['admin.setup.manage'])
+
+  const { configRoutes } = await emailRoutesReady
+  const read = await configRoutes.GET()
+  assert.equal(read.status, 200)
+  assert.deepEqual(await read.json(), {
+    enabled: false,
+    provider: 'smtp',
+    fromEmail: 'noreply@example.com',
+    hasSecret: false,
+    updatedAt: '2026-09-05T00:00:00.123450Z',
+  })
+
+  const saved = await putConfig({
+    enabled: true,
+    provider: 'smtp',
+    smtpHost: 'smtp.example.com',
+    secret: 's3cret',
+  })
+  assert.equal(saved.status, 200)
+  // The exact normalized save input — secret still plaintext here; the shared
+  // engine service seals it (unchanged by this slice).
+  assert.deepEqual(emailState.engineCalls[1], {
+    fn: 'saveOrgEmailConfig',
+    orgId: 'org-1',
+    input: {
+      enabled: true,
+      provider: 'smtp',
+      fromName: undefined,
+      fromEmail: undefined,
+      replyTo: undefined,
+      mailgunDomain: undefined,
+      mailgunRegion: undefined,
+      smtpHost: 'smtp.example.com',
+      smtpPort: undefined,
+      smtpSecure: false,
+      smtpUsername: undefined,
+      secret: 's3cret',
+    },
+  })
+
+  const sent = await postTestSend('colleague@example.com')
+  assert.equal(sent.status, 200)
+  assert.deepEqual(await sent.json(), { ok: true, provider: 'smtp', messageId: 'msg-1' })
+  assert.deepEqual(
+    emailState.engineCalls.map((call) => call.fn),
+    [
+      'readOrgEmailConfigView', // GET
+      'saveOrgEmailConfig', // PUT persist
+      'resolveOrgEmailTransport', // POST transport resolve
+      'insertEmailLog', // POST email_log row
+      'markEmailSent', // POST success marker
+    ],
+  )
+  assert.equal(emailState.sendCalls.length, 1)
+})
+
+test('built-in roles split email transport authority from user administration', () => {
+  // admin.setup.manage must stay seedable so someone can actually hold it.
+  assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes('admin.setup.manage'))
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm)
+  // The controller owns org configuration (including the outbound transport)
+  // but never people administration — the SoD this slice pins in.
+  assert.equal(holds('controller', 'admin.setup.manage'), true)
+  assert.equal(holds('controller', 'admin.users.manage'), false)
+  // Full administrators keep both sides.
+  assert.equal(holds('admin', 'admin.setup.manage'), true)
+  assert.equal(holds('admin', 'admin.users.manage'), true)
+})
 
 test('the provision post route denies reports-only and out-of-scope principals before any write', async () => {
   resetProvisionPost()
