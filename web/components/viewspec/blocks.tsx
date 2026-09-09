@@ -49,6 +49,28 @@ function alignClass(align: 'left' | 'right' | 'center' | undefined): string {
  * native pages. Doing it here rather than in the cell renderer keeps the
  * figure alignment attached to the column, which is where it belongs.
  */
+/**
+ * The page scope, for `$root` resolution.
+ *
+ * `$root` always means the PAGE, at any nesting depth. Each nesting level
+ * therefore PRESERVES an existing `$root` instead of pointing it at itself —
+ * otherwise a table inside a repeat would shadow it and `$root.someLabel`
+ * would silently resolve to nothing, rendering an empty cell that looks fine
+ * until the DOM is diffed. That happened twice before this existed.
+ */
+function rootOf(scope: unknown): unknown {
+  if (scope !== null && typeof scope === 'object' && ROOT_SCOPE_KEY in (scope as object)) {
+    return (scope as Record<string, unknown>)[ROOT_SCOPE_KEY]
+  }
+  return scope
+}
+
+/** Scope for a nested item: its own fields, plus the page at `$root`. */
+function nestedScope(item: unknown, scope: unknown): unknown {
+  if (item === null || typeof item !== 'object') return item
+  return { ...(item as object), [ROOT_SCOPE_KEY]: rootOf(scope) }
+}
+
 function leafOf(cell: TableBlock['columns'][number]['cell']) {
   // Every wrapper kind must be unwrapped here. Adding one and forgetting this
   // helper is how a converted cell silently loses its alignment or tone.
@@ -86,7 +108,11 @@ function isNumericCell(cell: TableBlock['columns'][number]['cell']): boolean {
   return leaf.kind === 'money' || leaf.kind === 'number'
 }
 
-function TableBlockView({ spec, scope }: { spec: TableBlock; scope: unknown }) {
+function TableBlockView({ spec, scope: rawScope }: { spec: TableBlock; scope: unknown }) {
+  // Seed `$root` when absent so a page-level table resolves `$root.x` the same
+  // way a nested one does. Without this, moving a table into or out of a
+  // `repeat` would silently change what its headers resolve to.
+  const scope = nestedScope(rawScope, rawScope)
   const rows = resolveRows(spec.rows, scope)
   if (rows.length === 0 && spec.empty && !spec.leading && !spec.trailing) {
     return (
@@ -119,8 +145,7 @@ function TableBlockView({ spec, scope }: { spec: TableBlock; scope: unknown }) {
           // Cells resolve against the row, with the page scope reachable at
           // `$root` for shared constants (placeholder text, labels). One fixed
           // name, not a parent-traversal operator.
-          const rowScope =
-            row !== null && typeof row === 'object' ? { ...(row as object), [ROOT_SCOPE_KEY]: scope } : row
+          const rowScope = nestedScope(row, scope)
           return (
           <TableRow key={String(resolveText(spec.rowKey, rowScope) || `row-${rowIndex}`)}>
             {spec.columns.map((column, index) => {
@@ -272,7 +297,9 @@ export function BlockView({
     case 'text': {
       if (block.when && !resolveValue(block.when as never, scope)) return null
       const tone = toneClass(resolveValue(block.tone as never, scope) as Tone | undefined)
-      return <p className={cn('text-xs', tone) || undefined}>{resolveText(block.content, scope)}</p>
+      return (
+        <p className={cn('text-xs', tone, block.className) || undefined}>{resolveText(block.content, scope)}</p>
+      )
     }
 
     case 'widget': {
@@ -290,8 +317,7 @@ export function BlockView({
       const list = items.map((item, index) => {
         // Same scoping contract as a table row: the item is the scope, the page
         // stays reachable at `$root`.
-        const itemScope =
-          item !== null && typeof item === 'object' ? { ...(item as object), [ROOT_SCOPE_KEY]: scope } : item
+        const itemScope = nestedScope(item, scope)
         const key = String(resolveText(block.itemKey, itemScope) || `item-${index}`)
         const body = <BlockList blocks={block.blocks} scope={itemScope} searchParams={searchParams} />
         return block.itemClassName !== undefined ? (

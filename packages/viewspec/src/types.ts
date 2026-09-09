@@ -350,6 +350,8 @@ export interface TextBlock {
   kind: 'text'
   content: Value
   tone?: Value<Tone>
+  /** Spacing and other presentational extras, appended after the tone. */
+  className?: string
   /** Omit the block entirely when this loader-resolved flag is false. */
   when?: FieldRef
 }
@@ -405,11 +407,10 @@ export interface StatTileBlock {
  * `empty` exists so a page can show "nothing here" without the language
  * needing a negated conditional — the same reason `table` has one.
  *
- * Scope note worth reading before nesting: blocks inside a repeat resolve
- * against the ITEM. Page-level values must go through `$root`, and a `table`
- * nested here shadows it again — from one of its cells `$root` is the repeat
- * item, not the page. Referencing a page field without `$root` fails silently
- * as an empty cell, so denormalize onto the item when in doubt.
+ * Scope note: blocks inside a repeat resolve against the ITEM, so page-level
+ * values must go through `$root`. `$root` always means the PAGE at any depth —
+ * nesting preserves it rather than re-pointing it — so a table's headers
+ * resolve the same whether or not the table sits inside a repeat.
  */
 export interface RepeatBlock {
   kind: 'repeat'

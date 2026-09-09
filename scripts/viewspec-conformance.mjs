@@ -78,6 +78,11 @@ const PAGES = [
     expect: 'table tbody tr',
   },
   {
+    path: '/reports/orders',
+    variants: [''],
+    expect: 'table tbody tr',
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,
@@ -215,6 +220,23 @@ function sortAttributes(markup) {
     const pairs = attrs.match(/[^\s=]+(?:="[^"]*")?/g) ?? []
     pairs.sort()
     return `<${tag}${pairs.length ? ' ' + pairs.join(' ') : ''}${selfClose}>`
+  })
+}
+
+/**
+ * Sort the class list inside every class attribute.
+ *
+ * Utility ORDER in the attribute does not affect what Tailwind renders —
+ * precedence comes from the order utilities are defined in the compiled CSS,
+ * not from the order they appear on the element. So two elements with the same
+ * SET of classes are visually identical, and comparing them as ordered strings
+ * would fail on nothing but authoring sequence. Sorting preserves the set
+ * exactly, so a missing or extra class still fails.
+ */
+function sortClassLists(markup) {
+  return markup.replace(/class="([^"]*)"/g, (_all, classes) => {
+    const sorted = classes.trim().split(/\s+/).filter(Boolean).sort().join(' ')
+    return `class="${sorted}"`
   })
 }
 
@@ -356,7 +378,7 @@ async function checkVariant(page, path, variant, expectSelector) {
   await assertStylesLoaded(page)
   const nativePath = await renderPath(page)
   if (nativePath !== 'native') throw new Error(`${nativeUrl} rendered via ${nativePath}, expected native`)
-  const nativeMarkup = sortAttributes(normalize(await page.locator('main').innerHTML()))
+  const nativeMarkup = sortClassLists(sortAttributes(normalize(await page.locator('main').innerHTML())))
   const nativeShot = await captureSettled(page)
   const ink = await assertNotBlank(nativeShot, `${path}${variant} native`)
 
@@ -367,7 +389,7 @@ async function checkVariant(page, path, variant, expectSelector) {
       `${specUrl(path, variant)} rendered via ${chosen}, expected viewspec — the server is probably serving a build that predates the conversion`,
     )
   }
-  const specMarkup = sortAttributes(normalize(await page.locator('main').innerHTML()))
+  const specMarkup = sortClassLists(sortAttributes(normalize(await page.locator('main').innerHTML())))
   const specShot = await captureSettled(page)
   await assertNotBlank(specShot, `${path}${variant} spec`)
 

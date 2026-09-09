@@ -229,6 +229,7 @@ const textBlock = z.strictObject({
   kind: z.literal('text'),
   content: value,
   tone: toneSchema.optional(),
+  className: z.string().max(300).optional(),
   when: fieldRefSchema.optional(),
 })
 

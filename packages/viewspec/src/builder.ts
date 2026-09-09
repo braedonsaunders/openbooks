@@ -81,9 +81,13 @@ export function field(path: string): FieldRef {
  * that constant onto every row would work and would be wasteful; instead the
  * renderer exposes the page scope at `$root`.
  *
- * This is deliberately the ONLY scope escape. It is a fixed, single-level
- * name, not a parent-traversal operator, so it adds one reachable object
- * rather than a way to walk arbitrary scopes.
+ * This is deliberately the ONLY scope escape, and it always resolves to the
+ * PAGE — not "one level up". Nesting preserves it, so the same reference means
+ * the same thing at any depth. It is a fixed name, not a traversal operator:
+ * it adds one reachable object rather than a way to walk arbitrary scopes.
+ *
+ * Safe to use at page level too, so a table can be moved into or out of a
+ * `repeat` without rewriting its headers.
  */
 export function rootRef<T>(): <K extends Extract<keyof T, string>>(path: K | `${K}.${string}`) => FieldRef {
   return (path) => ({ $: `${ROOT_SCOPE_KEY}.${path}` })
@@ -203,7 +207,7 @@ export function pagination(spec: Omit<PaginationBlock, 'kind'>): PaginationBlock
 
 export function textBlock(
   content: Value,
-  opts: { tone?: Value<Tone>; when?: FieldRef } = {},
+  opts: { tone?: Value<Tone>; className?: string; when?: FieldRef } = {},
 ): TextBlock {
   return { kind: 'text', content, ...opts }
 }
