@@ -491,7 +491,7 @@ async function postRevaluationEntry(
     await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     const ctx = await loadSubsidiaryContext(tx, orgId);
     const subsidiary = ctx.byId.get(subsidiaryId);
-    if (!subsidiary?.isActive) throw new RevaluationError("revaluation subsidiary is missing or inactive");
+    if (!subsidiary) throw new RevaluationError("revaluation subsidiary is missing");
     const functionalCurrency = subsidiary.baseCurrency;
     // Freeze account policy before computing exposure membership and validating
     // the configured offset. Historical accounts with obsolete monetary policy
@@ -512,6 +512,9 @@ async function postRevaluationEntry(
     const effective = await loadEffectiveAdjustments(orgId, bookId, subsidiaryId, scope);
     const monetaryLines = requiredAdjustments(positions, effective);
     if (monetaryLines.length === 0) return null;
+    // Default runs include inactive entities. A zero adjustment is a valid
+    // no-op; an actual correction still requires an active posting entity.
+    if (!subsidiary.isActive) throw new RevaluationError("revaluation subsidiary is inactive");
     if (!nextPeriodId || !nextStartsOn) throw new RevaluationError(missingReversalPeriodReason());
     const netDelta = sum(monetaryLines.map((line) => line.amount));
     const lines = isZero(netDelta) ? monetaryLines
