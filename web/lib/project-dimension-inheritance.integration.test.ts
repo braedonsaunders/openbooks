@@ -29,6 +29,7 @@ test(
       installTrustedTestDatabaseBypass();
       const org = await createScratchOrg();
       try {
+        await db.execute(sql\`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(\${org.accounts.revenue}::text), true) where id = \${org.orgId}\`);
         const projectA = randomUUID();
         const projectB = randomUUID();
         await db.execute(sql\`
