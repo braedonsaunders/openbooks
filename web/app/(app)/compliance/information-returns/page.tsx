@@ -25,6 +25,8 @@ import {
 import { getMoneyFormatter } from '@/lib/money-server'
 import { complianceTabs } from '../tabs'
 import { NewFilingButton } from './NewFilingButton'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadInformationReturns, informationReturnsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +48,22 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'secondary' | 'outline
  * with the readiness queue underneath — the list of vendors that will make a
  * filing wrong if nobody chases them before January.
  */
-export default async function InformationReturnsPage() {
+export default async function InformationReturnsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | undefined>>
+} = {}) {
+  const sp = (await searchParams) ?? {}
+  if (sp.__viewspec === '1') {
+    const data = await loadInformationReturns()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={informationReturnsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('compliance.read')
   const orgId = authz.user.orgId
   await requireComplianceFeature(orgId)

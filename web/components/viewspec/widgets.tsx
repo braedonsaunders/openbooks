@@ -32,12 +32,13 @@ import { TypeBuilderDrawer } from '../../app/(app)/records/types/TypeBuilderDraw
 import { WaiverNumberCell } from '../../app/(app)/compliance/lien-waivers/sections'
 import { LienWaiverToolbar } from '../../app/(app)/compliance/lien-waivers/LienWaiverToolbar'
 import { LienWaiverDrawer } from '../../app/(app)/compliance/lien-waivers/LienWaiverDrawer'
+import { NewFilingButton } from '../../app/(app)/compliance/information-returns/NewFilingButton'
 import { SearchInput } from '../search-input'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
 import { FieldDrawer, NewFieldButton } from '../../app/(app)/admin/custom-fields/FieldDrawer'
 import { NewScriptButton, ScriptDrawer } from '../../app/(app)/admin/scripts/ScriptDrawer'
-import { Button } from '@openbooks/ui'
+import { Badge, Button } from '@openbooks/ui'
 import Link from 'next/link'
 
 /**
@@ -290,6 +291,12 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       directionLabel={str(props, 'directionLabel') ?? ''}
     />
   ),
+  'new-filing': (props) => (
+    <NewFilingButton
+      formTypes={(props.formTypes as ComponentProps<typeof NewFilingButton>['formTypes']) ?? []}
+      defaultYear={Number(props.defaultYear ?? 0)}
+    />
+  ),
   'lien-waiver-toolbar': (props) => (
     <LienWaiverToolbar
       direction={str(props, 'direction') ?? ''}
@@ -311,6 +318,16 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       linked={props.linked === true}
     />
   ),
+  /** A badge when present, an em-dash placeholder when not. Generic because
+   *  several lists use exactly this "flag or nothing" cell. */
+  'badge-or-dash': (props) => {
+    if (props.shown !== true) return <span className={str(props, 'dashClassName') ?? 'text-slate-300 dark:text-slate-600'}>—</span>
+    return (
+      <Badge variant={(str(props, 'variant') ?? 'default') as ComponentProps<typeof Badge>['variant']}>
+        {str(props, 'label') ?? ''}
+      </Badge>
+    )
+  },
   'in-nav-cell': (props) => (
     <InNavCell shown={props.shown === true} label={str(props, 'label') ?? ''} />
   ),

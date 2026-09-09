@@ -184,6 +184,13 @@ const PAGES = [
     minMatches: 2,
   },
   {
+    path: '/compliance/information-returns',
+    // Two tables plus a real <section> with heading and prose.
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,
