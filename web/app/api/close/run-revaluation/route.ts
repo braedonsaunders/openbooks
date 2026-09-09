@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { runRevaluation } from '@openbooks/engine/src/fx-revaluation.ts'
+import { RevaluationFeatureDisabledError, runRevaluation } from '@openbooks/engine/src/fx-revaluation.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -13,9 +13,10 @@ interface Body {
 /**
  * Run period-end unrealized FX revaluation for an accounting period: restate
  * foreign-currency monetary balances (bank / AR / AP) to the period-end spot
- * rate, booking the unrealized gain/loss (origin='revaluation') and a mirror
- * reversal on the first day of the next period. Idempotent — an already-revalued
- * subsidiary is skipped. Requires orgs.settings.controlAccounts.fxUnrealizedGainLoss.
+ * rate, booking the remaining unrealized gain/loss (origin='fx_revaluation')
+ * and its next-period mirror. Changed balances or rates receive incremental
+ * corrections; unchanged reruns post nothing. Requires
+ * orgs.settings.controlAccounts.fxUnrealizedGainLoss.
  * The multiCurrency feature must also be on — a disabled FX module cannot
  * still post unrealized gain/loss through this close action.
  */
@@ -40,6 +41,9 @@ export async function POST(req: Request) {
     )
     return NextResponse.json(result)
   } catch (e: unknown) {
+    if (e instanceof RevaluationFeatureDisabledError) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({ error: msg }, { status: 500 })
   }

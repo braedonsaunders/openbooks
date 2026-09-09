@@ -9,6 +9,8 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors } from "./test-fixture
 for (const policy of ["account", "inactive subsidiary", "inactive book", "non-posting book"] as const) {
   test(`FX revaluation refuses ${policy} before its adjustment/reversal pair`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
     const org=await createScratchOrg();
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
     try {
       const actorId=(await seedFlowActors(org.orgId)).adminId;
       const branchId=randomUUID(),entryId=randomUUID();

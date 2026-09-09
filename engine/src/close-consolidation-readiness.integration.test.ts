@@ -67,6 +67,8 @@ test("a group that eliminates cleanly at consolidated rates has no intercompany 
   // across entities of different currencies, so a reconciled CAD/USD group
   // (120 CAD due-from vs 100 USD due-to at 1.20) reported a residual forever.
   const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const usdId = randomUUID();
@@ -138,6 +140,8 @@ test("fx readiness is satisfied when the revaluation engine has nothing to post 
   // skips), yet the check demanded one; and the check hard-coded three
   // account types while the engine honours accounts.monetary.
   const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     await db.execute(sql`
@@ -208,6 +212,8 @@ test("a missing following period is reported as its own actionable fx exception 
   // for the mandatory reversal, so the run was stuck on "unrevalued" with no
   // hint that generating periods was the fix.
   const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     await db.execute(sql`

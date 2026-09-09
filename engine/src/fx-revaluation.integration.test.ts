@@ -15,6 +15,8 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("period-end FX revaluation rejects a balance-sheet unrealized gain/loss account", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
   try {
     // A legacy/direct settings write can point the P&L leg at an active,
     // postable balance-sheet account. The shared control-account loader must
@@ -47,6 +49,8 @@ test("period-end FX revaluation rejects a balance-sheet unrealized gain/loss acc
  */
 test("period-end FX revaluation posts every subsidiary with distinct journal numbers", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
 
@@ -135,8 +139,8 @@ test("period-end FX revaluation posts every subsidiary with distinct journal num
     assert.deepEqual(rerun.problems, []);
     assert.deepEqual(rerun.posted, []);
     assert.deepEqual(rerun.skipped.map((s) => s.reason), [
-      "already revalued for this period",
-      "already revalued for this period",
+      "no revaluation needed",
+      "no revaluation needed",
     ]);
     const afterRerun = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from journal_entries
