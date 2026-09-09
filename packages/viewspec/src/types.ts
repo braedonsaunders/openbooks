@@ -376,6 +376,11 @@ export interface PaginationBlock extends BlockCommon {
   total: FieldRef
   page: FieldRef
   perPage: FieldRef
+  /**
+   * Most list pages wrap the pager in a `mt-3` spacer; a few place it flush.
+   * Rendering the spacer unconditionally would be markup those pages lack.
+   */
+  bare?: boolean
 }
 
 export interface TextBlock {

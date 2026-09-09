@@ -152,6 +152,12 @@ const PAGES = [
     expect: 'table tbody tr',
   },
   {
+    path: '/knowledge/views',
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,

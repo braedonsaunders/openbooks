@@ -16,6 +16,10 @@ import { PartyHeading } from '../../app/(app)/reports/registers/sections'
 import { PartyLinkCell } from '../../app/(app)/reports/aging/sections'
 import { AgingStrip } from '../../app/(app)/reports/statements/[partyId]/sections'
 import { StatementRows, ReconciliationNote } from '../../app/(app)/reports/StatementRows'
+import { ViewNameCell, ViewActionsCell } from '../../app/(app)/knowledge/views/sections'
+import { NewViewButton } from '../../app/(app)/knowledge/views/NewViewButton'
+import { ViewStudio } from '../../app/(app)/knowledge/views/ViewStudio'
+import { EmptyState } from '@openbooks/ui'
 import { SearchInput } from '../search-input'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
@@ -192,6 +196,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       currentParams={(props.currentParams as ComponentProps<typeof FilterChips>['currentParams']) ?? {}}
       paramKey={str(props, 'paramKey') ?? ''}
       label={str(props, 'label') ?? ''}
+      allLabel={str(props, 'allLabel')}
       options={(props.options as ComponentProps<typeof FilterChips>['options']) ?? []}
     />
   ),
@@ -247,6 +252,31 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       reconciled={props.reconciled === true}
     />
   ),
+  'empty-state': (props) => (
+    <EmptyState title={str(props, 'title') ?? ''} description={str(props, 'description')} />
+  ),
+  'new-saved-view': () => <NewViewButton />,
+  'view-name-cell': (props) => (
+    <ViewNameCell
+      name={str(props, 'name') ?? ''}
+      href={str(props, 'href') ?? ''}
+      description={(props.description as string | null) ?? null}
+    />
+  ),
+  'view-actions-cell': (props) => (
+    <ViewActionsCell
+      runHref={str(props, 'runHref') ?? ''}
+      runLabel={str(props, 'runLabel') ?? ''}
+      editHref={str(props, 'editHref') ?? ''}
+      editLabel={str(props, 'editLabel') ?? ''}
+      canEdit={props.canEdit === true}
+    />
+  ),
+  'view-studio': (props) => {
+    const studio = props.studio as ComponentProps<typeof ViewStudio> | null
+    if (!studio) return null
+    return <ViewStudio {...studio} />
+  },
   'save-view': () => <SaveViewButton />,
   'export-menu': (props) => (
     <ExportMenu kind={str(props, 'kind')} params={stringRecord(props, 'params')} baseHref={str(props, 'baseHref')} />

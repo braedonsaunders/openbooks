@@ -243,6 +243,7 @@ const paginationBlock = z.strictObject({
   total: fieldRefSchema,
   page: fieldRefSchema,
   perPage: fieldRefSchema,
+  bare: z.boolean().optional(),
 })
 
 const textBlock = z.strictObject({
