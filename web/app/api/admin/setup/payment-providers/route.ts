@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/db.ts";
+import { db, orgContext, withOrgTransaction } from "@openbooks/engine/src/db.ts";
 import {
   PaymentAcceptanceError,
   configSecrets,
@@ -219,72 +219,95 @@ export async function POST(req: Request) {
     // Rule write + audit evidence commit together or not at all; both audit
     // sides are captured rows, never the request payload restated.
     try {
-      await withOrgTransaction(orgId, async () => {
-        const beforeRow = id
-          ? (
-              await db.execute<SurchargeRuleSnapshot>(sql`
-                select ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
-                  from payment_surcharge_rules
-                 where org_id = ${orgId} and id = ${id}
-              `)
-            ).rows[0] ?? null
-          : null;
-        if (id && !beforeRow) throw new SurchargeRuleMissing();
+      // GiST exclusion checks can deadlock when concurrent inserts each wait
+      // on the other's uncommitted index entry. PostgreSQL aborts the victim,
+      // so retry the entire transaction (including audit) after rollback. No
+      // external side effects occur here. A fresh preflight can then observe
+      // the winner and return the ordinary effective-dating conflict.
+      // An enclosing tenant transaction owns its rollback; never retry on
+      // that same aborted connection or commit any of its work here.
+      const ambientTransaction = orgContext.getStore();
+      const ownsTransaction = !ambientTransaction?.txDb || ambientTransaction.bypass;
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          await withOrgTransaction(orgId, async () => {
+            const beforeRow = id
+              ? (
+                  await db.execute<SurchargeRuleSnapshot>(sql`
+                    select ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
+                      from payment_surcharge_rules
+                     where org_id = ${orgId} and id = ${id}
+                     for update
+                  `)
+                ).rows[0] ?? null
+              : null;
+            if (id && !beforeRow) throw new SurchargeRuleMissing();
 
-        // Same provider tier + overlapping effective window + overlapping
-        // method coverage = shadowing. This preflight gives an admin a useful
-        // message; migration 0023's exclusion constraint is the authoritative
-        // concurrency guard when two transactions both pass this read.
-        // Disjoint methods (card-only vs bank-debit-only) never compete.
-        const clash = await db.execute<{ id: string }>(sql`
-          select id from payment_surcharge_rules
-           where org_id = ${orgId} and is_active
-             and provider is not distinct from ${values.provider}
-             and id is distinct from ${id}
-             and daterange(effective_from, effective_to, '[]')
-                 && daterange(${values.effectiveFrom}::date, ${values.effectiveTo}::date, '[]')
-             and not ((payment_method = 'card' and ${values.paymentMethod} = 'bank_debit')
-                   or (payment_method = 'bank_debit' and ${values.paymentMethod} = 'card'))
-           limit 1
-        `);
-        if (clash.rows[0]) throw new SurchargeRuleDatingConflict(values.effectiveFrom);
+            // Same provider tier + overlapping effective window + overlapping
+            // method coverage = shadowing. This preflight gives an admin a useful
+            // message; migration 0023's exclusion constraint is the authoritative
+            // concurrency guard when two transactions both pass this read.
+            // Disjoint methods (card-only vs bank-debit-only) never compete.
+            const clash = await db.execute<{ id: string }>(sql`
+              select id from payment_surcharge_rules
+               where org_id = ${orgId} and is_active
+                 and provider is not distinct from ${values.provider}
+                 and id is distinct from ${id}
+                 and daterange(effective_from, effective_to, '[]')
+                     && daterange(${values.effectiveFrom}::date, ${values.effectiveTo}::date, '[]')
+                 and not ((payment_method = 'card' and ${values.paymentMethod} = 'bank_debit')
+                       or (payment_method = 'bank_debit' and ${values.paymentMethod} = 'card'))
+               limit 1
+            `);
+            if (clash.rows[0]) throw new SurchargeRuleDatingConflict(values.effectiveFrom);
 
-        if (id) {
-          const updated = await db.execute<SurchargeRuleSnapshot>(sql`
-            update payment_surcharge_rules set
-              name = ${values.name}, calculation = ${values.calculation}, percent = ${values.percent},
-              fixed_amount = ${values.fixedAmount}, cap_amount = ${values.capAmount},
-              fee_income_account_id = ${values.feeIncomeAccountId}, provider = ${values.provider},
-              payment_method = ${values.paymentMethod}, effective_from = ${values.effectiveFrom},
-              effective_to = ${values.effectiveTo}, updated_at = now(), updated_by = ${gate.user.id}
-            where org_id = ${orgId} and id = ${id}
-            returning ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
-          `);
-          const afterRow = updated.rows[0];
-          if (!afterRow) throw new SurchargeRuleMissing();
-          await db.execute(sql`
-            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'payment_surcharge_rules', ${id}, 'update',
-                    ${JSON.stringify({ rule: [beforeRow, afterRow] })}::jsonb, ${gate.user.id})
-          `);
-        } else {
-          const inserted = await db.execute<SurchargeRuleSnapshot & { id: string }>(sql`
-            insert into payment_surcharge_rules
-              (org_id, name, calculation, percent, fixed_amount, cap_amount, fee_income_account_id,
-               provider, payment_method, effective_from, effective_to, created_by, updated_by)
-            values (${orgId}, ${values.name}, ${values.calculation}, ${values.percent}, ${values.fixedAmount},
-                    ${values.capAmount}, ${values.feeIncomeAccountId}, ${values.provider}, ${values.paymentMethod},
-                    ${values.effectiveFrom}, ${values.effectiveTo}, ${gate.user.id}, ${gate.user.id})
-            returning id, ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
-          `);
-          const afterRow = inserted.rows[0]!;
-          await db.execute(sql`
-            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'payment_surcharge_rules', ${afterRow.id}, 'insert',
-                    ${JSON.stringify({ rule: [null, afterRow] })}::jsonb, ${gate.user.id})
-          `);
+            if (id) {
+              const updated = await db.execute<SurchargeRuleSnapshot>(sql`
+                update payment_surcharge_rules set
+                  name = ${values.name}, calculation = ${values.calculation}, percent = ${values.percent},
+                  fixed_amount = ${values.fixedAmount}, cap_amount = ${values.capAmount},
+                  fee_income_account_id = ${values.feeIncomeAccountId}, provider = ${values.provider},
+                  payment_method = ${values.paymentMethod}, effective_from = ${values.effectiveFrom},
+                  effective_to = ${values.effectiveTo}, updated_at = now(), updated_by = ${gate.user.id}
+                where org_id = ${orgId} and id = ${id}
+                returning ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
+              `);
+              const afterRow = updated.rows[0];
+              if (!afterRow) throw new SurchargeRuleMissing();
+              await db.execute(sql`
+                insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+                values (${orgId}, 'payment_surcharge_rules', ${id}, 'update',
+                        ${JSON.stringify({ rule: [beforeRow, afterRow] })}::jsonb, ${gate.user.id})
+              `);
+            } else {
+              const inserted = await db.execute<SurchargeRuleSnapshot & { id: string }>(sql`
+                insert into payment_surcharge_rules
+                  (org_id, name, calculation, percent, fixed_amount, cap_amount, fee_income_account_id,
+                   provider, payment_method, effective_from, effective_to, created_by, updated_by)
+                values (${orgId}, ${values.name}, ${values.calculation}, ${values.percent}, ${values.fixedAmount},
+                        ${values.capAmount}, ${values.feeIncomeAccountId}, ${values.provider}, ${values.paymentMethod},
+                        ${values.effectiveFrom}, ${values.effectiveTo}, ${gate.user.id}, ${gate.user.id})
+                returning id, ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
+              `);
+              const afterRow = inserted.rows[0]!;
+              await db.execute(sql`
+                insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+                values (${orgId}, 'payment_surcharge_rules', ${afterRow.id}, 'insert',
+                        ${JSON.stringify({ rule: [null, afterRow] })}::jsonb, ${gate.user.id})
+              `);
+            }
+          });
+          break;
+        } catch (error) {
+          if (postgresErrorCode(error) !== "40P01") throw error;
+          if (!ownsTransaction || attempt >= 2) {
+            return NextResponse.json(
+              { error: "surcharge rule save conflicted with another transaction; retry the save" },
+              { status: 409 },
+            );
+          }
         }
-      });
+      }
     } catch (e) {
       if (e instanceof SurchargeRuleMissing) {
         return NextResponse.json({ error: "surcharge rule not found" }, { status: 404 });
@@ -317,6 +340,7 @@ export async function POST(req: Request) {
           select ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
             from payment_surcharge_rules
            where org_id = ${orgId} and id = ${body.id}
+           for update
         `);
         const beforeRow = before.rows[0];
         if (!beforeRow || !beforeRow.isActive) throw new SurchargeRuleMissing();
