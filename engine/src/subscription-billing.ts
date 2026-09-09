@@ -251,14 +251,20 @@ export function prorationDocument(adjustment: string): { kind: "customer_invoice
 }
 
 async function resolveIncomeAccount(orgId: string, incomeAccountId: string | null): Promise<string> {
-  if (incomeAccountId) return incomeAccountId;
-  const def = (await db.execute<{ id: string }>(sql`
-    select id from accounts where org_id = ${orgId} and type in ('income', 'income_other') and is_active
-     order by number nulls last limit 1
-  `));
-  const id = def.rows[0]?.id;
-  if (!id) throw new SubscriptionError("no income account configured for the plan");
-  return id;
+  if (!incomeAccountId) {
+    throw new SubscriptionError("Configure the income account on the billing plan or charge component before creating an invoice");
+  }
+  // The generator pins one tenant transaction, retaining this lock through
+  // invoice creation and optional posting. Explicit non-income accounts remain
+  // valid for configured deferral/other accounting policies.
+  const account = (await db.execute<{ id: string }>(sql`
+    select id from accounts where org_id = ${orgId} and id = ${incomeAccountId}
+      and is_active and not is_summary for share
+  `)).rows[0];
+  if (!account) {
+    throw new SubscriptionError("The configured billing income account must be an active, non-summary account in this organization");
+  }
+  return account.id;
 }
 
 export interface InvoiceSpec {
@@ -356,6 +362,15 @@ function subscriptionBillingProvenance(
  * the effective-dated component snapshot and receive an itemized invoice.
  */
 export async function createSubscriptionInvoice(
+  spec: InvoiceSpec,
+): Promise<{ invoiceId: string; documentNumber: string; posted: boolean; total: string }> {
+  // Reuse an existing tenant transaction (subscription/property billing), and
+  // give direct callers the same atomic account validation + numbering + write
+  // boundary. withOrg refuses switching tenants inside an active transaction.
+  return withOrg(spec.orgId, () => createSubscriptionInvoiceInTransaction(spec));
+}
+
+async function createSubscriptionInvoiceInTransaction(
   spec: InvoiceSpec,
 ): Promise<{ invoiceId: string; documentNumber: string; posted: boolean; total: string }> {
   const invoiceLines: AdvancedBillingLine[] = spec.lines?.length ? spec.lines : [{
