@@ -25,7 +25,7 @@ import {
 } from '@openbooks/ui'
 import { SearchInput } from '../../../../../../components/search-input'
 import { Pagination } from '../../../../../../components/pagination'
-import { SortableTh } from '../../../../../../components/sortable-th'
+import { SortTh } from '../../../../../../components/sortable-th'
 import { confirmDialog } from '../../../../../../lib/confirm'
 import { isZeroAmount } from './DifferenceBadge'
 
@@ -282,9 +282,9 @@ export function ReconcileWorkspace({
               <TableHeader>
                 <TableRow>
                   {!readOnly ? <TableHead className="w-8" /> : null}
-                  <SortableTh basePath={basePath} currentParams={currentParams} column="date" active={stmtParams.sort === 'date'} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{tCommon('labels.date')}</SortableTh>
-                  <SortableTh basePath={basePath} currentParams={currentParams} column="description" active={stmtParams.sort === 'description'} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{tCommon('labels.description')}</SortableTh>
-                  <SortableTh basePath={basePath} currentParams={currentParams} column="amount" active={stmtParams.sort === 'amount'} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage" align="right">{tCommon('labels.amount')}</SortableTh>
+                  <SortTh basePath={basePath} currentParams={currentParams} column="date" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{tCommon('labels.date')}</SortTh>
+                  <SortTh basePath={basePath} currentParams={currentParams} column="description" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{tCommon('labels.description')}</SortTh>
+                  <SortTh basePath={basePath} currentParams={currentParams} column="amount" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage" align="right">{tCommon('labels.amount')}</SortTh>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -345,10 +345,10 @@ export function ReconcileWorkspace({
               <TableHeader>
                 <TableRow>
                   {!readOnly ? <TableHead className="w-8" /> : null}
-                  <SortableTh basePath={basePath} currentParams={currentParams} column="date" active={glParams.sort === 'date'} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage">{tCommon('labels.date')}</SortableTh>
-                  <SortableTh basePath={basePath} currentParams={currentParams} column="entry" active={glParams.sort === 'entry'} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage">{tBanking('labels.entry')}</SortableTh>
+                  <SortTh basePath={basePath} currentParams={currentParams} column="date" sort={glParams.sort} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage">{tCommon('labels.date')}</SortTh>
+                  <SortTh basePath={basePath} currentParams={currentParams} column="entry" sort={glParams.sort} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage">{tBanking('labels.entry')}</SortTh>
                   <TableHead>{tCommon('labels.memo')}</TableHead>
-                  <SortableTh basePath={basePath} currentParams={currentParams} column="amount" active={glParams.sort === 'amount'} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage" align="right">{tCommon('labels.amount')}</SortableTh>
+                  <SortTh basePath={basePath} currentParams={currentParams} column="amount" sort={glParams.sort} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage" align="right">{tCommon('labels.amount')}</SortTh>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -414,13 +414,13 @@ export function ReconcileWorkspace({
         <Table>
           <TableHeader>
             <TableRow>
-              <SortableTh basePath={basePath} currentParams={currentParams} column="date" active={mParams.sort === 'date'} dir={mParams.dir} sortParamKey="mSort" dirParamKey="mDir" pageParamKey="mPage">{t('columns.bankDate')}</SortableTh>
+              <SortTh basePath={basePath} currentParams={currentParams} column="date" sort={mParams.sort} dir={mParams.dir} sortParamKey="mSort" dirParamKey="mDir" pageParamKey="mPage">{t('columns.bankDate')}</SortTh>
               <TableHead>{t('columns.bankDescription')}</TableHead>
               <TableHead className="text-right">{t('columns.bankAmount')}</TableHead>
               <TableHead>{tBanking('labels.entry')}</TableHead>
               <TableHead>{t('columns.glMemo')}</TableHead>
               <TableHead className="text-right">{t('columns.glAmount')}</TableHead>
-              <SortableTh basePath={basePath} currentParams={currentParams} column="by" active={mParams.sort === 'by'} dir={mParams.dir} sortParamKey="mSort" dirParamKey="mDir" pageParamKey="mPage">{t('columns.matchedBy')}</SortableTh>
+              <SortTh basePath={basePath} currentParams={currentParams} column="by" sort={mParams.sort} dir={mParams.dir} sortParamKey="mSort" dirParamKey="mDir" pageParamKey="mPage">{t('columns.matchedBy')}</SortTh>
               {!readOnly ? <TableHead /> : null}
             </TableRow>
           </TableHeader>

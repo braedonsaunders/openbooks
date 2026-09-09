@@ -3,7 +3,7 @@ import { PageHeader, cn } from '@openbooks/ui'
 import type { Block, PaperBlock, TableBlock, Tone } from '@openbooks/viewspec'
 import { ROOT_SCOPE_KEY, resolveNumber, resolveRows, resolveText, resolveValue } from '@openbooks/viewspec'
 import { Pagination } from '../pagination'
-import { SortTh, SortableTh } from '../sortable-th'
+import { SortTh } from '../sortable-th'
 import { HomePanel, HomeStatTile } from '../module-home/client'
 import {
   Table as ReportTableRoot,
@@ -203,24 +203,6 @@ function TableBlockView({
             // instead of a plain one — the same component the native lists use,
             // so the markup is identical rather than approximated.
             if (column.sort && spec.sorting) {
-              const sortValue = resolveText(spec.sorting.sort, scope)
-              const dirValue = (resolveText(spec.sorting.dir, scope) as 'asc' | 'desc') || 'asc'
-              if (spec.sorting.header === 'sortable-th') {
-                return (
-                  <SortableTh
-                    key={index}
-                    basePath={resolveText(spec.sorting.basePath, scope)}
-                    currentParams={searchParams}
-                    column={column.sort}
-                    active={sortValue === column.sort}
-                    dir={dirValue}
-                    align={column.align === 'right' ? 'right' : 'left'}
-                    className={column.headerClassName}
-                  >
-                    {label}
-                  </SortableTh>
-                )
-              }
               return (
                 <SortTh
                   key={index}

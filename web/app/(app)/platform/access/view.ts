@@ -153,7 +153,7 @@ export function platformAccessSpec(data: PlatformAccessData): PageSpec {
             variant: 'app',
             rows: f('rows'),
             rowKey: item('id'),
-            sorting: { basePath: BASE, sort: f('sort'), dir: f('dir'), header: 'sortable-th' },
+            sorting: { basePath: BASE, sort: f('sort'), dir: f('dir') },
             columns: [
               column(
                 'Member identity',
