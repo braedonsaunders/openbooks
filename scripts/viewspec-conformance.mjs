@@ -101,6 +101,12 @@ const PAGES = [
     minMatches: 3,
   },
   {
+    path: '/reports/registers',
+    variants: ['', '?side=ap'],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,
@@ -129,7 +135,12 @@ async function login(page) {
  * mid-animation produces a diff that is pure timing noise.
  */
 async function renderSettled(page, url, expectSelector, minMatches = 0) {
-  await page.goto(url, { waitUntil: 'networkidle' })
+  // `domcontentloaded`, not `networkidle`: a large page with many client
+  // components (a register with thousands of transaction links) never reaches
+  // network idle within any sane timeout, while serving in ~60ms. Readiness is
+  // asserted explicitly below — suspense drained, content selector visible,
+  // overlays cleared — which is stricter than idle anyway.
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
   await page.waitForSelector('main', { state: 'attached' })
   // Suspense fallbacks leave `<template id="B:n">` placeholders behind.
   await page.waitForFunction(

@@ -266,6 +266,8 @@ export interface FilterBarBlock {
 export interface ToggleLinkGroup {
   kind: 'toggle-links'
   links: Array<{ href: Value; label: Value; activeWhen: FieldRef }>
+  /** Render the standard hairline separator after the links. */
+  divider?: boolean
 }
 
 /** A one-line summary above the content ("Total outstanding: $X"). */

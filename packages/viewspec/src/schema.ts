@@ -163,6 +163,7 @@ const filterBarBlock = z.strictObject({
       links: z
         .array(z.strictObject({ href: value, label: value, activeWhen: fieldRefSchema }))
         .max(8),
+      divider: z.boolean().optional(),
     })
     .optional(),
   actions: z.array(widgetRefSchema).max(12).optional(),
