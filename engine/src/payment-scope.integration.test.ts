@@ -299,9 +299,14 @@ for (const mode of ["inactive", "non-posting", "missing"] as const) {
     async () => {
       const { org, actor, target, payment } = await fixture();
       try {
-        await db.execute(sql`update accounting_books set
-        is_active=${mode !== "inactive"},posts_gl=${mode !== "non-posting"},is_primary=${mode !== "missing"}
-        where id=${org.bookId}`);
+        await db.transaction(async (tx) => {
+          // Seed legacy missing-primary policy after history only for this fixture.
+          // Payment validation below runs after the migration exemption ends.
+          if (mode === "missing") await tx.execute(sql`set local openbooks.migration=on`);
+          await tx.execute(sql`update accounting_books set
+          is_active=${mode !== "inactive"},posts_gl=${mode !== "non-posting"},is_primary=${mode !== "missing"}
+          where id=${org.bookId}`);
+        });
         await assert.rejects(
           openItemsForParty(org.customerId, "ar", org.orgId),
           /active primary posting book/,
