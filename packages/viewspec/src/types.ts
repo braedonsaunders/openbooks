@@ -155,7 +155,21 @@ export interface TxnCell {
   inner: LeafCell
 }
 
-export type CellSpec = LeafCell | DrillCell | TxnCell
+/**
+ * A host-registered component rendered inside a cell.
+ *
+ * The same escape valve the `widget` block provides, at cell granularity: some
+ * cells hold a small composite (an entry link beside a document-type badge)
+ * that is a component, not a value. Props may be field refs, resolved against
+ * the row exactly as a widget block's are.
+ */
+export interface WidgetCell {
+  kind: 'widget'
+  widget: string
+  props?: Record<string, unknown>
+}
+
+export type CellSpec = LeafCell | DrillCell | TxnCell | WidgetCell
 
 export const LEAF_CELL_KINDS = [
   'text',
@@ -167,7 +181,7 @@ export const LEAF_CELL_KINDS = [
   'record-link',
 ] as const
 
-export const CELL_KINDS = [...LEAF_CELL_KINDS, 'drill', 'txn'] as const
+export const CELL_KINDS = [...LEAF_CELL_KINDS, 'drill', 'txn', 'widget'] as const
 
 /* -------------------------------------------------------------------------- */
 /* Widgets — host-registered interactive components a spec may place.          */
@@ -278,7 +292,27 @@ export interface Column {
   cell: CellSpec
   /** Sort key; presence renders the sortable header control. */
   sort?: string
+  /** Applied to body cells. */
   className?: string
+  /** Applied to the header cell — column widths live here, not on the body. */
+  headerClassName?: string
+}
+
+/**
+ * A row whose first cell spans several columns: the opening/closing balances
+ * and totals that accounting tables put above and below their lines.
+ *
+ * Named rather than left to a bespoke widget because it is an idiom, not a
+ * one-off — ledgers, registers, aging and trial balance all use it. These rows
+ * resolve against the TABLE's scope, not a row scope, since they summarise the
+ * whole table rather than belonging to its collection.
+ */
+export interface TableSpanRow {
+  label: Value
+  labelColSpan: number
+  labelClassName?: string
+  className?: string
+  cells: Array<{ cell: CellSpec; align?: Align; className?: string }>
 }
 
 /**
@@ -292,6 +326,10 @@ export type TableVariant = 'report' | 'app'
 export interface TableBlock {
   kind: 'table'
   variant?: TableVariant
+  /** Rows rendered before the collection (opening balances). */
+  leading?: TableSpanRow[]
+  /** Rows rendered after it (closing balances, totals). */
+  trailing?: TableSpanRow[]
   /** Field on ViewData holding the row array. Each row becomes the cell scope. */
   rows: FieldRef
   /** Stable React key per row. */

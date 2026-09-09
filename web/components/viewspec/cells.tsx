@@ -7,6 +7,7 @@ import { ReportDrillLink } from '../../app/(app)/reports/ReportDrillLink'
 import { TxnLink } from '../../app/(app)/reports/TxnLink'
 import type { ReportDrillTarget } from '../../lib/report-drill'
 import { DRILL_LINK_CLASS, FALLBACK_CLASS } from './tone'
+import { WidgetBlockView } from './widgets'
 
 /**
  * Cell renderers — the leaves of the block registry.
@@ -83,6 +84,9 @@ function LeafCellView({ spec, scope }: { spec: LeafCell; scope: unknown }) {
 }
 
 export function CellView({ spec, scope }: { spec: CellSpec; scope: unknown }) {
+  if (spec.kind === 'widget') {
+    return <WidgetBlockView name={spec.widget} props={spec.props ?? {}} scope={scope} />
+  }
   if (spec.kind === 'txn') {
     // The loader emits the component's own link shape ({ kind: 'transaction',
     // entryId, docKind, docId }) so the renderer performs no reshaping.

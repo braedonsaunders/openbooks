@@ -110,7 +110,14 @@ const txnCell = z.strictObject({
   inner: leafCell,
 })
 
-export const cellSchema = z.union([leafCell, drillCell, txnCell])
+/** A host-registered component inside a cell; name checked by the renderer. */
+const widgetCell = z.strictObject({
+  kind: z.literal('widget'),
+  widget: z.string().min(1).max(64).regex(/^[a-z][a-z0-9-]*$/, 'widget must be a slug'),
+  props: z.record(z.string(), z.unknown()).optional(),
+})
+
+export const cellSchema = z.union([leafCell, drillCell, txnCell, widgetCell])
 
 /* --------------------------------- widgets -------------------------------- */
 
@@ -180,11 +187,30 @@ const columnSchema = z.strictObject({
   cell: cellSchema,
   sort: z.string().max(60).optional(),
   className: z.string().max(200).optional(),
+  headerClassName: z.string().max(200).optional(),
+})
+
+const spanRowSchema = z.strictObject({
+  label: value,
+  labelColSpan: z.number().int().min(1).max(60),
+  labelClassName: z.string().max(200).optional(),
+  className: z.string().max(200).optional(),
+  cells: z
+    .array(
+      z.strictObject({
+        cell: cellSchema,
+        align: alignSchema.optional(),
+        className: z.string().max(200).optional(),
+      }),
+    )
+    .max(20),
 })
 
 const tableBlock = z.strictObject({
   kind: z.literal('table'),
   variant: z.enum(['report', 'app']).optional(),
+  leading: z.array(spanRowSchema).max(10).optional(),
+  trailing: z.array(spanRowSchema).max(10).optional(),
   rows: fieldRefSchema,
   rowKey: fieldRefSchema,
   columns: z.array(columnSchema).min(1).max(60),

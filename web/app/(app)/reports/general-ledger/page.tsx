@@ -19,6 +19,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, reportTo
 import { ReportDrillLink } from '../ReportDrillLink'
 import { AccountRegisterLink } from '../../../../components/account-register-link'
 import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadGeneralLedger, generalLedgerSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +29,17 @@ export default async function GeneralLedgerPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadGeneralLedger(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={generalLedgerSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('reports')
   const tc = await getTranslations('common')
