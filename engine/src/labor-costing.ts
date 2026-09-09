@@ -440,6 +440,19 @@ export interface ClearingReconciliation {
 type LaborTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type LaborExecutor = Pick<LaborTransaction, "execute">;
 
+/** Caller locks the organization first; retain book authority through posting. */
+async function laborPrimaryBook(executor: LaborExecutor, orgId: string): Promise<string> {
+  const books = (await executor.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
+    select id, is_active, posts_gl from accounting_books
+     where org_id = ${orgId} and is_primary
+     order by id for share`)).rows;
+  const book = books[0];
+  if (books.length !== 1 || !book?.is_active || !book.posts_gl) {
+    throw new Error("labor reconciliation requires exactly one active posting primary GL book");
+  }
+  return book.id;
+}
+
 async function laborClearingReconciliationFrom(
   executor: LaborExecutor,
   orgId: string,
@@ -447,6 +460,7 @@ async function laborClearingReconciliationFrom(
   periodEnd: string,
   subsidiaryId: string,
   laborClearingAccountId: string,
+  bookId: string,
 ): Promise<ClearingReconciliation> {
   // Reversed originals AND their posted mirrors are both included everywhere so
   // reversal pairs cancel instead of double- or half-counting.
@@ -458,6 +472,7 @@ async function laborClearingReconciliationFrom(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
      where l.org_id = ${orgId} and l.account_id = ${laborClearingAccountId}
+       and e.book_id = ${bookId}
        and l.subsidiary_id = ${subsidiaryId}
        and e.posting_date >= ${periodStart} and e.posting_date <= ${periodEnd}`));
   const open = (await executor.execute<{ balance: string }>(sql`
@@ -465,6 +480,7 @@ async function laborClearingReconciliationFrom(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
      where l.org_id = ${orgId} and l.account_id = ${laborClearingAccountId}
+       and e.book_id = ${bookId}
        and l.subsidiary_id = ${subsidiaryId}`));
   // The drill reads the job-tagged labor WIP debit, whose ledger amount is
   // already positive. Keep the headline's clearing-credit negation separate.
@@ -474,6 +490,7 @@ async function laborClearingReconciliationFrom(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed') and e.origin = 'labor_burden'
       join projects p on p.id = l.project_id and p.org_id = l.org_id
      where l.org_id = ${orgId} and l.project_id is not null
+       and e.book_id = ${bookId}
        and l.subsidiary_id = ${subsidiaryId}
        and e.posting_date >= ${periodStart} and e.posting_date <= ${periodEnd}
      group by l.project_id, p.name
@@ -510,7 +527,8 @@ async function laborClearingReconciliationFrom(
 /**
  * The wash: standard labor postings CREDIT the clearing account at approval;
  * the payroll journal (imported through data-io or entered manually) DEBITS
- * the same account when actuals land. This reads both sides for a period.
+ * the same account when actuals land. This reads both sides for a period in
+ * the authoritative primary book, which also receives the variance posting.
  * Doctrine: the estimated components dissolve here — after payroll posts, job
  * labor cost is anchored by real GL and the residue is the payroll variance.
  */
@@ -520,21 +538,26 @@ export async function laborClearingReconciliation(
   periodEnd: string,
   subsidiaryId: string,
 ): Promise<ClearingReconciliation | null> {
-  const accts = await recognitionAccounts(orgId);
-  if (!accts.laborClearing) return null;
-  return laborClearingReconciliationFrom(
-    db,
-    orgId,
-    periodStart,
-    periodEnd,
-    subsidiaryId,
-    accts.laborClearing,
-  );
+  return inDbTransaction(async (tx) => {
+    await tx.execute(sql`select id from orgs where id = ${orgId} for share`);
+    const accts = await recognitionAccounts(orgId, tx);
+    if (!accts.laborClearing) return null;
+    const bookId = await laborPrimaryBook(tx, orgId);
+    return laborClearingReconciliationFrom(
+      tx,
+      orgId,
+      periodStart,
+      periodEnd,
+      subsidiaryId,
+      accts.laborClearing,
+      bookId,
+    );
+  });
 }
 
 /**
  * Post the period's residue out of clearing into the payroll variance account
- * (Deltek's pattern): DR variance / CR clearing when standards exceeded
+ * (Deltek's pattern): DR clearing / CR variance when standards exceeded
  * payroll, mirrored otherwise. Idempotent per period — re-posting reverses
  * the prior variance entry first, so re-runs after late payroll converge.
  */
@@ -546,8 +569,8 @@ export async function postPayrollVariance(opts: {
   subsidiaryId: string;
 }): Promise<{ entryId: string | null; variance: string }> {
   const { orgId, actorId, periodStart, periodEnd, subsidiaryId } = opts;
-  // Business key of the current variance journal is (subsidiary, period-end);
-  // the stored entry number is unique per physical journal because re-runs
+  // Business key of the current variance journal is (primary book, subsidiary,
+  // period-end). The stored entry number is unique per physical journal because re-runs
   // reverse the prior generation and repost (journal_entries_org_number).
   const entryNumberBase = `PVAR-${periodEnd}-${subsidiaryId.slice(0, 8)}`;
   return inDbTransaction(async (tx) => {
@@ -570,11 +593,15 @@ export async function postPayrollVariance(opts: {
         "labor clearing and payroll variance accounts must be configured",
       );
     }
+    const bookId = await laborPrimaryBook(tx, orgId);
 
+    // Reversal mirrors are permanent history, never a current variance to undo.
     const prior = (await tx.execute<{ id: string }>(sql`
       select id
         from journal_entries
        where org_id = ${orgId} and origin = 'payroll_variance' and status = 'posted'
+         and book_id = ${bookId}
+         and reverses_entry_id is null
          and subsidiary_id = ${subsidiaryId}
          and posting_date = ${periodEnd}
        order by created_at desc, id desc
@@ -603,13 +630,14 @@ export async function postPayrollVariance(opts: {
       periodEnd,
       subsidiaryId,
       laborClearing,
+      bookId,
     );
     const variance = rec.periodVariance;
     if (isZero(variance)) return { entryId: null, variance: "0" };
 
-    // Advance past every prior physical journal (posted, reversed, and their
-    // -R mirrors) for this business key so the insert cannot collide with
-    // controlled history.
+    // Keep numbering org-wide across books: advance past every prior physical
+    // journal (posted, reversed, and their -R mirrors) for this business key so
+    // the insert cannot collide with controlled history.
     const generations = (await tx.execute<{ n: number }>(sql`
       select count(*)::int as n
         from journal_entries
