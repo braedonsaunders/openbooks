@@ -1,4 +1,4 @@
-import { fromUnits, toUnits } from "./money.ts";
+import { fromUnits, roundDiv, toUnits } from "./money.ts";
 
 /**
  * Inventory costing — the pure, exact math behind the subledger. Quantities and
@@ -41,6 +41,31 @@ function divUnits(value: bigint, qty: bigint): bigint {
 /** Exact q × unitCost as a decimal string (both numeric(19,4)). */
 export function extendCost(quantity: string, unitCost: string): string {
   return fromUnits(mulUnits(toUnits(quantity), toUnits(unitCost)));
+}
+
+/** Represent an exact carried value with at most two adjacent 4dp rates. */
+export function exactCostFragments(quantity: string, value: string, sourceUnitCost?: string): { quantity: string; unitCost: string }[] {
+  const q = toUnits(quantity);
+  const v = toUnits(value);
+  if (q <= 0n || v < 0n) throw new Error("exact inventory layers require positive quantity and non-negative value");
+  if (sourceUnitCost !== undefined && toUnits(extendCost(quantity, sourceUnitCost)) === v) {
+    return [{ quantity: fromUnits(q), unitCost: sourceUnitCost }];
+  }
+  const lowRate = (v * SCALE) / q;
+  const lowValue = mulUnits(q, lowRate);
+  if (lowValue === v) return [{ quantity: fromUnits(q), unitCost: fromUnits(lowRate) }];
+  const highRate = lowRate + 1n;
+  if (mulUnits(q, highRate) === v) return [{ quantity: fromUnits(q), unitCost: fromUnits(highRate) }];
+  // One whole unit at the adjacent rate adds exactly one 4dp money unit.
+  // The high-rate fragment has integral quantity, so splitting the low-rate
+  // extension introduces no additional rounding. An unrepresentable single
+  // rate implies 0 < highQuantity < q (fractions <= one unit need no split).
+  const highQuantity = (v - lowValue) * SCALE;
+  if (highQuantity <= 0n || highQuantity >= q) throw new Error("inventory value cannot be represented exactly");
+  return [
+    { quantity: fromUnits(q - highQuantity), unitCost: fromUnits(lowRate) },
+    { quantity: fromUnits(highQuantity), unitCost: fromUnits(highRate) },
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +132,9 @@ export function consumeFifo(layers: CostLayer[], quantity: string, fallbackUnitC
     if (avail <= 0n) continue;
     const take = avail < need ? avail : need;
     const cu = toUnits(layer.unitCost);
-    const cost = mulUnits(take, cu);
+    // Consume the reduction in the stored layer value. Rounding take × rate
+    // independently can create/destroy a money unit on fractional withdrawals.
+    const cost = mulUnits(avail, cu) - mulUnits(avail - take, cu);
     consumptions.push({
       layerId: layer.id,
       quantity: fromUnits(take),
@@ -177,7 +204,7 @@ export function issueMovingAverage(state: MovingAverageState, quantity: string):
   } else if (onQty <= 0n) {
     costUnits = 0n; // no basis; caller handles negative-stock fallback
   } else {
-    costUnits = divUnits(mulUnits(onVal, issQty), onQty);
+    costUnits = roundDiv(onVal * issQty, onQty);
   }
   const unitCost = onQty !== 0n ? divUnits(onVal, onQty) : 0n;
   return {
