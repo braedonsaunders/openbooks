@@ -193,6 +193,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0100_document_open_balance_currency.sql",
     "0101_application_book_scope.sql",
     "0102_primary_book_history_guard.sql",
+    "0103_depreciation_book_policy_history.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
