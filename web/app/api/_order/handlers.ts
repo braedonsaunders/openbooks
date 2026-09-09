@@ -55,15 +55,20 @@ export function makeGET(cfg: OrderHandlerConfig) {
     if (gate instanceof NextResponse) return gate
     const { id } = await params
     if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    const owned = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${gate.user.orgId}`,
-    ))
-    if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
-    if (denied) return denied
-    const order = await loadOrder(id, gate.user.orgId, cfg.kind)
-    if (!order) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    return NextResponse.json(order)
+    return withOrgTransaction(gate.user.orgId, async () => {
+      // Draft writers lock this aggregate before replacing its header/lines.
+      // Hold its ownership stable from authorization through payload loading;
+      // a concurrent rehome must not disclose the new subsidiary's values.
+      const owned = (await db.execute<{ subsidiaryId: string | null }>(
+        sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${gate.user.orgId} for share`,
+      ))
+      if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+      if (denied) return denied
+      const order = await loadOrder(id, gate.user.orgId, cfg.kind)
+      if (!order) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return NextResponse.json(order)
+    })
   }
 }
 
