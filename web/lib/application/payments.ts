@@ -149,6 +149,10 @@ export async function postPayment(
     request: { documentId: input.documentId, allocations: input.allocations ?? null },
     execute: async () => {
       try {
+        // A final-action draft save can retain book locks. Match the posting
+        // kernel's org -> document/book order at the outer transaction boundary.
+        await db.execute(sql`select id from orgs where id = ${context.authz.user.orgId} for update`);
+
         if (header.status === "draft") {
           // Persist the final-action allocation set before submission. The
           // approval reviewer must approve the same workpaper that posting

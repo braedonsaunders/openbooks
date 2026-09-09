@@ -66,6 +66,10 @@ export async function POST(req: Request) {
 
   try {
     const outcome = await withOrgTransaction(authz.user.orgId, async () => {
+      // Draft save already locks allocation books; take the posting aggregate
+      // fence before that save and before the document row, not only in the kernel.
+      await db.execute(sql`select id from orgs where id = ${authz.user.orgId} for update`)
+
       const locked = (await db.execute<{ kind: PaymentKind; status: string }>(sql`
         select kind, status from documents
          where id = ${documentId} and org_id = ${authz.user.orgId}

@@ -29,6 +29,14 @@ export async function saveSetupBook(
   const table = sql.identifier(entity.table)
   const source = options.source ? { source: options.source } : {}
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${entity.key}:${orgId}`}, 0))`)
+  if (accounting) {
+    // First-history journal inserts retain the primary row before the FK
+    // checks their explicit (possibly secondary) book. Match that order even
+    // when the requested edit targets a secondary book being promoted.
+    await tx.execute(sql`select id from accounting_books
+      where org_id = ${orgId} and is_primary order by id for update`)
+  }
+
 
   const before = options.id
     ? (await tx.execute<Record<string, unknown>>(sql`
@@ -70,8 +78,9 @@ export async function saveSetupBook(
       select * from ${table} where ${scope} order by id for update`)).rows
     if (accounting && prior.length) {
       const history = (await tx.execute(sql`
-        select id from reconciliations where org_id=${orgId} limit 1`)).rows[0]
-      if (history) throw new Error('Cannot reassign the primary book while bank reconciliation sessions or history exist; a controlled book conversion is required')
+        select id from journal_entries where org_id=${orgId}
+        union all select id from reconciliations where org_id=${orgId} limit 1`)).rows[0]
+      if (history) throw new Error('Cannot reassign the primary book while journal entries or bank reconciliation sessions/history exist; a controlled book conversion is required')
     }
     const priorById = new Map(prior.map(row => [String(row.id), row]))
     if (prior.length && !options.dryRun) {

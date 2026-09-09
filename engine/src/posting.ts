@@ -1919,30 +1919,6 @@ export async function postDocument(
   await validateRequiredDimensions(db, doc.orgId, subApplied.lines);
 
   const postingDate = effectiveDoc.postingDate ?? effectiveDoc.documentDate;
-  const period = await resolvePostingPeriod(db, effectiveDoc, postingDate);
-
-  const [book] = await db
-    .select()
-    .from(schema.accountingBooks)
-    .where(
-      sql`${schema.accountingBooks.orgId} = ${doc.orgId} and ${schema.accountingBooks.isPrimary} = true`,
-    );
-  if (!book)
-    throw new PostingError("primary accounting book is not configured");
-  try {
-    await assertPeriodModulesOpen(db, {
-      orgId: doc.orgId,
-      periodId: period.id,
-      bookId: book.id,
-      subsidiaryIds: subApplied.lines.map((line) => line.subsidiaryId),
-      modules: [closeModuleForDocument(doc.kind)],
-      allowImportedLocks: deps.migration,
-    });
-  } catch (error) {
-    if (error instanceof CloseError) throw new PostingError(error.message);
-    throw error;
-  }
-
   // -- write entry + lines + flip document, atomically ---------------------
   const entryId = await inDbTransaction(async (tx) => {
     // Setup wizard mutations and posting both serialize on the organization
@@ -1951,6 +1927,32 @@ export async function postDocument(
     // same lock: whichever operation acquires the row first wins, and the
     // other re-checks after it commits.
     await tx.execute(sql`select id from orgs where id = ${doc.orgId} for update`);
+    // Resolve the authority only after the organization fence. Reading it
+    // before the transaction can retain a demoted book while setup commits.
+    // Hold the book row through the first journal insert so its history guard
+    // cannot pass concurrently with this organization's first posting.
+    const books = (await tx.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
+      select id, is_active, posts_gl from accounting_books
+       where org_id = ${doc.orgId} and is_primary order by id for share
+    `)).rows;
+    if (books.length !== 1 || !books[0]!.is_active || !books[0]!.posts_gl)
+      throw new PostingError("posting requires exactly one active primary posting book");
+    const book = books[0]!;
+    const period = await resolvePostingPeriod(tx, effectiveDoc, postingDate);
+    try {
+      await assertPeriodModulesOpen(tx, {
+        orgId: doc.orgId,
+        periodId: period.id,
+        bookId: book.id,
+        subsidiaryIds: subApplied.lines.map((line) => line.subsidiaryId),
+        modules: [closeModuleForDocument(doc.kind)],
+        allowImportedLocks: deps.migration,
+      });
+    } catch (error) {
+      if (error instanceof CloseError) throw new PostingError(error.message);
+      throw error;
+    }
+
     try {
       await assertGeneratedBillingPostable(tx, doc.orgId, documentId, { document: effectiveDoc, lines: postingLines }, true);
     } catch (error) {
