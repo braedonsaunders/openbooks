@@ -68,7 +68,6 @@ export async function PATCH(req: Request) {
   if (err) return validationResponse(err)
 
   const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
-  const nextRunAt = cron && body.isActive !== false ? computeScheduledScriptNextRunAt(cron) : null
   const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
   const missing = await db.transaction(async (tx) => {
     if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -76,6 +75,13 @@ export async function PATCH(req: Request) {
       select * from user_scripts where id = ${body.id} and org_id = ${user.orgId} for update
     `))
     if (!before.rows[0]) return true
+    // Derive policy changes against the live locked row. Ordinary edits must
+    // retain the scheduler's cursor, including PostgreSQL microseconds.
+    const schedulingChanged = before.rows[0].trigger_point !== body.triggerPoint
+      || before.rows[0].cron !== cron || before.rows[0].is_active !== (body.isActive !== false)
+    const nextRunAt = schedulingChanged
+      ? (cron && body.isActive !== false ? computeScheduledScriptNextRunAt(cron) : null)
+      : sql`next_run_at`
     const updated = (await tx.execute<Record<string, unknown>>(sql`
       update user_scripts set
         name = ${body.name}, trigger_point = ${body.triggerPoint}, document_kind = ${body.documentKind ?? null},

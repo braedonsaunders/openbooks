@@ -36,11 +36,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const user = gate.user
   const { id } = await params
 
-  const existing = (await db.execute<{ trigger_point: string; cron: string | null }>(sql`
-    select trigger_point, cron from user_scripts where id = ${id} and org_id = ${user.orgId}
+  const existing = (await db.execute<{ trigger_point: string; cron: string | null; is_active: boolean; cursor: string | null }>(sql`
+    select trigger_point, cron, is_active, next_run_at::text as cursor from user_scripts where id = ${id} and org_id = ${user.orgId}
   `))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const kind = existing.rows[0].trigger_point
+  if (!existing.rows[0].is_active) return NextResponse.json({ error: 'Activate this script before running it.', code: 'SCRIPT_INACTIVE' }, { status: 409 })
+  if (kind !== 'scheduled' && kind !== 'bulk') return NextResponse.json({ error: 'Run now is available only for scheduled and bulk scripts.', code: 'SCRIPT_TRIGGER_NOT_RUNNABLE' }, { status: 422 })
 
   try {
     if (kind === 'bulk') {
@@ -69,9 +71,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     }
 
     const outcome = await runScheduledScript(id, user.orgId, { actorId: user.id })
-    // Advance next_run_at for scheduled scripts
+    // Source runs outside a transaction. Advance only the captured scheduling
+    // policy/cursor; a concurrent editor or scheduler tick owns its new value.
     if (next) {
-      await db.execute(sql`update user_scripts set next_run_at = ${next} where id = ${id} and org_id = ${user.orgId}`)
+      await db.execute(sql`update user_scripts set next_run_at = ${next}
+        where id = ${id} and org_id = ${user.orgId} and trigger_point = 'scheduled' and is_active
+          and cron is not distinct from ${existing.rows[0].cron}
+          and next_run_at is not distinct from ${existing.rows[0].cursor}::timestamptz`)
     }
     return NextResponse.json(outcome)
   } catch (e) {

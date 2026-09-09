@@ -410,6 +410,10 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
       await assertPromotionOwner(t, before, actor, authority, c.sandbox_org_id, true);
       let after: Record<string, unknown> | null = null;
       if (it.op === "delete") {
+        if (t === "user_scripts") {
+          const history = await db.execute(sql`select id from script_runs where org_id = ${prod} and script_id = ${target} limit 1`);
+          if (history.rows.length) throw new Error("This script has run history and cannot be deleted. Deactivate it instead to preserve its audit history.");
+        }
         if (t === "report_definitions" && (before!.kind === "built_in" || before!.system)) {
           throw new Error("built-in reports cannot be deleted by promotion");
         }

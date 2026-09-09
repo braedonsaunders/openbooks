@@ -150,3 +150,19 @@ for (const [label, updates, error] of [
     });
   });
 }
+
+test("promotion refuses script deletion with run history and preserves the approved artifact atomically", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  await fixture(async f => {
+    await db.execute(sql`delete from user_scripts where org_id=${f.sandboxOrgId}`);
+    const id = await f.approve();
+    // Execution occurring after approval must not turn a deletion into an FK
+    // failure or discard the historical record.
+    const script = (await db.execute<{ id: string }>(sql`select id from user_scripts where org_id=${f.orgId}`)).rows[0]!;
+    await db.execute(sql`insert into script_runs(org_id,script_id,status,created_by) values(${f.orgId},${script.id},'ok',${f.applier})`);
+    await assert.rejects(applyChangeSet(id, f.applier), /has run history.*Deactivate.*preserve/);
+    assert.equal((await db.execute(sql`select id from user_scripts where org_id=${f.orgId} and id=${script.id}`)).rows.length, 1);
+    assert.equal((await db.execute(sql`select id from script_runs where org_id=${f.orgId} and script_id=${script.id}`)).rows.length, 1);
+    assert.equal((await db.execute(sql`select status from change_sets where id=${id}`)).rows[0]!.status, "approved");
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${f.orgId} and changes->>'changeSetId'=${id}`)).rows.length, 0);
+  });
+});
