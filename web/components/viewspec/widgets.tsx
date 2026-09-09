@@ -29,6 +29,9 @@ import { CardStudio } from '../../app/(app)/insights/CardStudio'
 import { RecordCountCell, InNavCell } from '../../app/(app)/records/types/sections'
 import { NewTypeButton } from '../../app/(app)/records/types/NewTypeButton'
 import { TypeBuilderDrawer } from '../../app/(app)/records/types/TypeBuilderDrawer'
+import { WaiverNumberCell } from '../../app/(app)/compliance/lien-waivers/sections'
+import { LienWaiverToolbar } from '../../app/(app)/compliance/lien-waivers/LienWaiverToolbar'
+import { LienWaiverDrawer } from '../../app/(app)/compliance/lien-waivers/LienWaiverDrawer'
 import { SearchInput } from '../search-input'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
@@ -280,6 +283,27 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'new-dashboard': () => <NewDashboardButton />,
   'new-card': () => <NewCardButton />,
   'new-record-type': () => <NewTypeButton />,
+  'waiver-number-cell': (props) => (
+    <WaiverNumberCell
+      waiverNumber={str(props, 'waiverNumber') ?? ''}
+      href={str(props, 'href') ?? ''}
+      directionLabel={str(props, 'directionLabel') ?? ''}
+    />
+  ),
+  'lien-waiver-toolbar': (props) => (
+    <LienWaiverToolbar
+      direction={str(props, 'direction') ?? ''}
+      status={str(props, 'status') ?? ''}
+      projects={props.projects as ComponentProps<typeof LienWaiverToolbar>['projects']}
+      vendors={props.vendors as ComponentProps<typeof LienWaiverToolbar>['vendors']}
+      canManage={props.canManage === true}
+    />
+  ),
+  'lien-waiver-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof LienWaiverDrawer> | null
+    if (!drawer) return null
+    return <LienWaiverDrawer {...drawer} />
+  },
   'record-count-cell': (props) => (
     <RecordCountCell
       count={str(props, 'count') ?? ''}
