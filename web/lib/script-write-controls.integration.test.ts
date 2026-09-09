@@ -154,3 +154,45 @@ for (const method of ["POST", "PATCH"] as const) {
     }
   });
 }
+
+test("script DELETE rechecks the feature under its row lock", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  const blocker = await pool.connect();
+  let request: Promise<Response> | undefined;
+  try {
+    const actor = await createScratchUser(org.orgId, "Script administrator", "admin");
+    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}','{"scripts":true}'::jsonb) where id=${org.orgId}`);
+    session.user = { id: actor, orgId: org.orgId, name: "Script administrator", email: "script@scratch.test", roles: [], isSuperAdmin: false,
+      envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
+    const original = (await db.execute<{ id: string }>(sql`insert into user_scripts(org_id,name,trigger_point,source,is_active)
+      values(${org.orgId},'Original','before_submit','function main(ctx) {}',false) returning id`)).rows[0]!;
+    // Hold the org row so the delete's locked feature recheck waits behind us.
+    await blocker.query("begin");
+    await blocker.query("select set_config('app.current_org',$1,true)", [org.orgId]);
+    await blocker.query("select 1 from orgs where id=$1 for update", [org.orgId]);
+    const blockerPid = (await blocker.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+    request = withOrgContext(org.orgId, () => DELETE(new Request("http://audit.local/api/admin/scripts/" + original.id, { method: "DELETE" }),
+      { params: Promise.resolve({ id: original.id }) }));
+    let waiting = false;
+    for (let i = 0; i < 200; i++) {
+      waiting = (await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where ${blockerPid} = any(pg_blocking_pids(pid))) as waiting`)).rows[0]!.waiting;
+      if (waiting) break;
+      await delay(10);
+    }
+    assert.ok(waiting, "script delete reached the locked feature recheck");
+    // Revoke while the delete waits, then release: the in-transaction
+    // recheck must observe the revocation and refuse the delete.
+    await blocker.query("update orgs set settings=jsonb_set(settings,'{features,scripts}','false') where id=$1", [org.orgId]);
+    await blocker.query("commit");
+    assert.equal((await request).status, 404);
+    assert.deepEqual((await db.execute(sql`select name from user_scripts where org_id=${org.orgId}`)).rows, [{ name: "Original" }]);
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='user_scripts'`)).rows.length, 0);
+  } finally {
+    await blocker.query("rollback");
+    blocker.release();
+    await request?.catch(() => undefined);
+    session.user = null;
+    await dropScratchOrgReporting(org.orgId);
+  }
+});

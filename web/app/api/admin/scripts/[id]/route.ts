@@ -6,9 +6,8 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
 
-/** DELETE — permanently remove a script. Drafts and inactive scripts can be
- *  deleted freely; an active script is deactivated first (its script_runs
- *  rows are kept for audit). */
+/** DELETE — remove only scripts without execution evidence. Scripts with run
+ * history must be deactivated instead so their audit trail remains intact. */
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('scripts.manage', 'scripts')
   if (gate instanceof NextResponse) return gate
@@ -23,6 +22,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       select * from user_scripts where id = ${id} and org_id = ${user.orgId} for update
     `))
     if (!existing.rows[0]) return true
+    const history = await tx.execute(sql`select id from script_runs where script_id = ${id} and org_id = ${user.orgId} limit 1`)
+    if (history.rows.length) return NextResponse.json({
+      error: 'This script has run history and cannot be deleted. Deactivate it instead to preserve its audit history.',
+      code: 'SCRIPT_HAS_RUN_HISTORY',
+    }, { status: 409 })
     await tx.execute(sql`delete from user_scripts where id = ${id} and org_id = ${user.orgId}`)
     await tx.execute(sql`
       insert into audit_log
