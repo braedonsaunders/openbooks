@@ -15,6 +15,7 @@ import { ResourceCell, RowCountsCell } from '../../app/(app)/data/import/history
 import { PartyHeading } from '../../app/(app)/reports/registers/sections'
 import { PartyLinkCell } from '../../app/(app)/reports/aging/sections'
 import { AgingStrip } from '../../app/(app)/reports/statements/[partyId]/sections'
+import { StatementRows, ReconciliationNote } from '../../app/(app)/reports/StatementRows'
 import { SearchInput } from '../search-input'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
@@ -234,6 +235,16 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       totalLabel={str(props, 'totalLabel') ?? ''}
       total={str(props, 'total') ?? ''}
       totalDrill={props.totalDrill as ComponentProps<typeof AgingStrip>['totalDrill']}
+    />
+  ),
+  'statement-rows': (props) => (
+    <StatementRows rows={(props.rows as ComponentProps<typeof StatementRows>['rows']) ?? []} />
+  ),
+  'reconciliation-note': (props) => (
+    <ReconciliationNote
+      label={str(props, 'label') ?? ''}
+      status={str(props, 'status') ?? ''}
+      reconciled={props.reconciled === true}
     />
   ),
   'save-view': () => <SaveViewButton />,

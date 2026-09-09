@@ -140,6 +140,18 @@ const PAGES = [
     minMatches: 3,
   },
   {
+    path: '/reports/cash-flow',
+    // Heterogeneous statement rows rendered from a flattened row list.
+    variants: [{ query: '', expect: 'table tbody tr', minMatches: 6 }],
+    expect: 'table tbody tr',
+  },
+  {
+    path: '/reports/cash-flow-indirect',
+    // Second consumer of the shared statement-row component.
+    variants: [{ query: '', expect: 'table tbody tr', minMatches: 6 }],
+    expect: 'table tbody tr',
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,
