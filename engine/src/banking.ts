@@ -1789,6 +1789,10 @@ export async function restoreStatementLine(statementLineId: string, ctx: Banking
     `));
     const candidate = candidateResult.rows[0];
     if (!candidate) throw new BankingError("Only excluded lines can be restored");
+    // Cover sessions that do not exist yet or whose cutoff does not overlap
+    // yet. Header locks alone cannot serialize their creation/extension and
+    // sign-off with an exclusion restore that has not committed.
+    await lockReconciliationAccount(tx, ctx.orgId, candidate.account_id);
     // Reconciliation sessions lock their header before touching statement
     // lines. Acquire the same locks first so restore cannot deadlock with a
     // concurrent match/unmatch/sign-off transaction.
