@@ -268,16 +268,18 @@ test("payroll reads applications committed while waiting for the liability lock"
   }
 });
 
-test("payroll refuses a legacy liability denominated differently from its run without relabeling cash", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("payroll rejects a mismatched liability at storage without creating cash or paid state", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const fx = await seedAdoption();
   try {
     const { input } = await calculatedRun(fx);
     await commitPayRun(input);
     const bank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${fx.orgId} and type='asset_bank'`)).rows[0]!.id;
-    // Construct a legacy/manual projection while all rows are draft. Every
-    // posting and application constraint remains enabled; posted history is
-    // never edited. The original CAD run has a USD net-pay line at par.
-    await db.transaction(async tx => {
+    // Attempt a manual projection of a CAD run with a USD net-pay line at par.
+    // The document balance guard must reject the link and roll back the entire
+    // posting transaction, before this mismatch can reach payroll settlement.
+    // Keep all constraints enabled and never rewrite posted evidence.
+    let attemptedEntryId: string | undefined;
+    await assert.rejects(db.transaction(async tx => {
       const entry = (await tx.execute<{ id: string }>(sql`
         insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,source_document_id,created_by,updated_by)
         select d.org_id,b.id,d.subsidiary_id,${`LEGACY-${input.documentId}`},r.pay_date,p.id,'draft','payroll',d.id,${fx.actorId},${fx.actorId}
@@ -285,6 +287,7 @@ test("payroll refuses a legacy liability denominated differently from its run wi
         join accounting_books b on b.org_id=d.org_id and b.is_primary
         join accounting_periods p on p.org_id=d.org_id and not p.is_adjustment and r.pay_date between p.starts_on and p.ends_on
         where d.org_id=${fx.orgId} and d.id=${input.documentId} returning id`)).rows[0]!.id;
+      attemptedEntryId = entry;
       await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,party_id,is_open_item)
         select dl.org_id,${entry},dl.line_number,dl.account_id,coalesce(dl.subsidiary_id,d.subsidiary_id),dl.amount,
           case when dl.party_id is not null and dl.amount<0 then 'USD' else 'CAD' end,
@@ -297,13 +300,31 @@ test("payroll refuses a legacy liability denominated differently from its run wi
       await tx.execute(sql`update documents set status='posted',posted_entry_id=${entry},
         posting_period_id=(select period_id from journal_entries where org_id=${fx.orgId} and id=${entry})
         where org_id=${fx.orgId} and id=${input.documentId}`);
+    }), (error: unknown) => {
+      const cause = (error as { cause?: { code?: string; message?: string } }).cause;
+      assert.ok(attemptedEntryId);
+      assert.equal(cause?.code, "23514");
+      assert.equal(cause?.message,
+        `document open-item currency mismatch: org ${fx.orgId}, posted entry ${attemptedEntryId}, expected currency CAD`);
+      return true;
     });
-    await assert.rejects(() => recordPayRunPayment({ ...input, bankAccountId: bank }), /remaining net-pay items must use the pay run currency/);
-    const state = (await db.execute<{ paid_at: string | null; entries: number; applications: number }>(sql`
-      select paid_at,(select count(*)::int from journal_entries where org_id=${fx.orgId}) as entries,
+    await assert.rejects(() => recordPayRunPayment({ ...input, bankAccountId: bank }), /post the pay run before recording its payment/);
+    const state = (await db.execute<{
+      paid_at: string | null; paid_entry_id: string | null; run_status: string;
+      document_status: string; posted_entry_id: string | null; currency: string;
+      entries: number; lines: number; applications: number;
+    }>(sql`
+      select r.paid_at,r.paid_entry_id,r.run_status,d.status as document_status,d.posted_entry_id,d.currency,
+        (select count(*)::int from journal_entries where org_id=${fx.orgId}) as entries,
+        (select count(*)::int from journal_lines where org_id=${fx.orgId}) as lines,
         (select count(*)::int from applications where org_id=${fx.orgId}) as applications
-      from pay_runs where org_id=${fx.orgId} and document_id=${input.documentId}`)).rows[0]!;
-    assert.deepEqual(state, { paid_at: null, entries: 1, applications: 0 });
+      from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id
+      where r.org_id=${fx.orgId} and r.document_id=${input.documentId}`)).rows[0]!;
+    assert.deepEqual(state, {
+      paid_at: null, paid_entry_id: null, run_status: "committed",
+      document_status: "draft", posted_entry_id: null, currency: "CAD",
+      entries: 0, lines: 0, applications: 0,
+    });
   } finally {
     await dropScratchOrgReporting(fx.orgId);
   }
