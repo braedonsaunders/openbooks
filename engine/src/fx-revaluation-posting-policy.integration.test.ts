@@ -6,6 +6,32 @@ import { db } from "./db.ts";
 import { runRevaluation } from "./fx-revaluation.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "./test-fixtures.ts";
 
+test("FX revaluation skips inactive entities with no adjustment in default and explicit scope", {
+  skip: !process.env.OPENBOOKS_DB_URL,
+}, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const branchId = randomUUID();
+    await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{features}',
+      coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb),'{controlAccounts}',
+      coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('fxUnrealizedGainLoss',${org.accounts.fxGainLoss}::text))
+      where id=${org.orgId}`);
+    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active)
+      values(${branchId},${org.orgId},${org.subsidiaryId},'Inactive empty entity','CAD','CA',false)`);
+    for (const scope of [undefined, [branchId]]) {
+      const result = await runRevaluation(org.orgId, org.periodId, actorId, scope);
+      assert.deepEqual(result.problems, []);
+      assert.deepEqual(result.posted, []);
+      assert.ok(result.skipped.some((item) => item.subsidiaryId === branchId && item.reason === 'no revaluation needed'));
+    }
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries
+      where org_id=${org.orgId}`)).rows[0]!.n, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 for (const policy of ["account", "inactive subsidiary", "inactive book", "non-posting book"] as const) {
   test(`FX revaluation refuses ${policy} before its adjustment/reversal pair`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
     const org=await createScratchOrg();
