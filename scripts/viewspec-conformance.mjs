@@ -171,6 +171,13 @@ const PAGES = [
     minMatches: 1,
   },
   {
+    path: '/records/types',
+    // Widest use of sorting so far: five of seven columns sort.
+    variants: ['', '?sort=records&dir=desc'],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,
