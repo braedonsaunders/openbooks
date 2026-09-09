@@ -1,19 +1,19 @@
 /* AppKit token bridge.
  *
- * The vendored `@appkit/*` packages (see vendor/appkit) style themselves with
+ * The `@braedonsaunders/appkit-*` packages style themselves with
  * AppKit's semantic token utilities — `bg-surface`, `text-fg-muted`,
  * `border-border`, `bg-primary-subtle`. the own components use raw
  * Tailwind palette classes, so those utilities do not otherwise exist in this
  * build. This file declares them.
  *
- * It is AppKit's own `@appkit/tokens/tokens.css`, minus the Tailwind import and
+ * It is AppKit's own `@braedonsaunders/appkit-tokens/tokens.css`, minus the Tailwind import and
  * dark-mode variant (globals.css already owns both). The channel values are
  * AppKit's defaults, which are already the OpenBooks palette: teal-700 brand on
  * slate surfaces. Rebranding either side means editing the channels here, never
- * a vendored component.
+ * an AppKit component.
  *
- * Regenerate from node_modules/@appkit/tokens/tokens.css when the vendored
- * tarball is refreshed.
+ * Regenerate from node_modules/@braedonsaunders/appkit-tokens/tokens.css when the
+ * AppKit dependency is upgraded.
  */
 
 

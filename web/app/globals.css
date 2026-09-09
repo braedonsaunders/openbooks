@@ -5,12 +5,12 @@
    (toggled by the theme switcher) instead of the OS `prefers-color-scheme`. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Semantic colour tokens for the vendored AppKit packages (see vendor/appkit).
+/* Semantic colour tokens for the `@braedonsaunders/appkit-*` packages (npm: `@braedonsaunders/appkit-*`).
    This is the single definition of `--color-bg` / `--color-fg` / `--color-primary`
    and friends — the raw triples that used to sit in the base layer below were
    only read by packages/ui/src/styles.css, which this app never imports. */
 @import './appkit-bridge.css';
-@import '@appkit/scheduling/styles.css';
+@import '@braedonsaunders/appkit-scheduling/styles.css';
 
 @layer base {
   /* Tailwind v4 compat: restore v3 default border color (gray-200) so bare

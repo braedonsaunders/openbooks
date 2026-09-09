@@ -5,7 +5,7 @@ import {
   registerToolCatalog,
   type McpCatalogTool,
   type McpToolAuditEvent,
-} from "@appkit/mcp";
+} from "@braedonsaunders/appkit-mcp";
 import {
   insertApiKeyEvent,
   takeClaimedCommandEvidence,

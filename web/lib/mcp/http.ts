@@ -6,7 +6,7 @@ import {
   mcpMethodNotAllowed,
   mcpPreflightResponse,
   resolveMcpRequestId,
-} from "@appkit/mcp";
+} from "@braedonsaunders/appkit-mcp";
 import {
   enforceRateLimit,
   guardApiKeyFeature,

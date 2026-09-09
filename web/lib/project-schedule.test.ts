@@ -123,7 +123,7 @@ const hooks = registerHooks({
     if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/db.ts') return { url: 'mock:db', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/money.ts') return { url: 'mock:money', shortCircuit: true }
-    if (specifier === '@appkit/scheduling') return { url: 'mock:scheduling', shortCircuit: true }
+    if (specifier === '@braedonsaunders/appkit-scheduling') return { url: 'mock:scheduling', shortCircuit: true }
     return nextResolve(specifier, _context)
   },
   load(url, _context, nextLoad) {

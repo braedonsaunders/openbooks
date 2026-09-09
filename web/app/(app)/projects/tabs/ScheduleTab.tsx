@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { emptySchedule, type ScheduleData } from '@appkit/scheduling'
-import { ScheduleWorkspace, SchedulingProvider, type ScheduleAdapter } from '@appkit/scheduling/react'
+import { emptySchedule, type ScheduleData } from '@braedonsaunders/appkit-scheduling'
+import { ScheduleWorkspace, SchedulingProvider, type ScheduleAdapter } from '@braedonsaunders/appkit-scheduling/react'
 
 /**
  * The project Schedule tab.
  *
- * The plan itself is `@appkit/scheduling` (see vendor/appkit); everything here
+ * The plan itself is `@braedonsaunders/appkit-scheduling`; everything here
  * is the host side of that contract: load the project's plan, translate the
  * surface into the tenant's locale, and turn every edit into an authorized API
  * call. After a successful write the whole plan is re-fetched, because a single
