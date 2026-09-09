@@ -5,7 +5,7 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "./transaction-audit.ts";
-import { releaseCamBillingProvenance, releaseBillingProvenance, releaseVendorBillProvenance } from "./billing-provenance.ts";
+import { releaseCamBillingProvenance, releaseBillingProvenance, releaseVendorBillProvenance, releaseVendorRetainageProvenance } from "./billing-provenance.ts";
 
 /**
  * Physical deletion is intentionally limited to drafts. Once a document has
@@ -66,6 +66,10 @@ export async function deleteDocument(
     }
     if (doc.kind === "vendor_bill") {
       await releaseVendorBillProvenance(tx, doc.orgId, documentId);
+      // The retainage release reservation must go before the document row it
+      // references; the FK would otherwise reject the delete with 23503.
+      // Voided bills keep their row as posted-history provenance instead.
+      await releaseVendorRetainageProvenance(tx, doc.orgId, documentId, { actorId: userId, reason: audit.reason?.trim() || "draft_discarded" });
     }
     await tx.execute(
       sql`delete from document_links where org_id = ${doc.orgId} and (from_document_id = ${documentId} or to_document_id = ${documentId})`,
