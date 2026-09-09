@@ -13,6 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { ReportDrillLink } from '../ReportDrillLink'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadOrders, ordersSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +37,22 @@ const openOrderPredicate = sql`
  * pages: it's an analytical roll-up, not a per-row list column. Conversion is
  * derived from document_links (from order → downstream invoice/bill).
  */
-export default async function OrdersReport() {
+export default async function OrdersReport({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | undefined>>
+}) {
+  const sp = (await searchParams) ?? {}
+  if (sp.__viewspec === '1') {
+    const data = await loadOrders()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={ordersSpec()} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const { money } = await getMoneyFormatter()
   const authz = await requirePermission('reports.read')
   await requireFeatureEnabled(authz.user.orgId, 'orders')
