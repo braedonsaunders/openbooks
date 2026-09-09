@@ -5,6 +5,7 @@ import { assertUuid } from "./catalog.ts";
 import { remapRoleRestriction, sandboxSubsidiaryMap } from "./json-references.ts";
 import { lockAndCheckOrgFeature } from "../org-feature-lock.ts";
 import { computeScheduledScriptNextRunAt } from "../scripting.ts";
+import { validateScriptConfiguration } from "../script-config.ts";
 import { isCataloguePermission, PERMISSION_CATALOGUE, permissionSetCovers, permissionsOutsideCeiling, resolveEffectivePermissions } from "../permissions.ts";
 
 /**
@@ -426,6 +427,13 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
           throw new Error(`promotion payload identity does not match ${t}/${target}`);
         }
         if (t === "user_scripts") {
+          const invalid = validateScriptConfiguration({
+            name: payload.name, triggerPoint: payload.trigger_point, source: payload.source,
+            documentKind: payload.document_kind, endpointSlug: payload.endpoint_slug,
+            cron: payload.cron, timeoutMs: payload.timeout_ms, sortOrder: payload.sort_order,
+            isActive: payload.is_active,
+          });
+          if (invalid) throw new Error(`script promotion: ${invalid.message}`);
           // Ignore even legacy captures' runtime values. Preserve the current
           // production cursor unless scheduling policy itself is changing.
           for (const field of SCRIPT_RUNTIME) delete payload[field];

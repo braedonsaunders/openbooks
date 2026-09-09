@@ -2,60 +2,15 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
 import {
   computeScheduledScriptNextRunAt,
-  InvalidScheduledScriptCronError,
   INVALID_SCHEDULED_SCRIPT_CRON_CODE,
 } from '@openbooks/engine/src/scripting.ts'
+import { validateScriptConfiguration as validate, type ScriptValidationError as ValidationError } from '@openbooks/engine/src/script-config.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
-
-const TRIGGERS = ['before_submit', 'before_post', 'after_post', 'before_void', 'scheduled', 'endpoint', 'bulk', 'client']
-const SLUG_RE = /^[a-z][a-z0-9-]*$/
-
-type ValidationError = { message: string; code?: string; field?: string }
-
-function validate(body: Record<string, unknown>): ValidationError | null {
-  if (!body.name || String(body.name).length > 200) return { message: 'name required' }
-  if (!TRIGGERS.includes(String(body.triggerPoint))) return { message: 'invalid trigger point' }
-  const src = String(body.source ?? '')
-  if (!src || src.length > 100_000) return { message: 'source required (max 100k chars)' }
-  if (!/function\s+main\s*\(/.test(src)) return { message: 'script must define function main(ctx)' }
-  if (String(body.triggerPoint) === 'scheduled') {
-    const cron = String(body.cron ?? '').trim()
-    if (!cron) {
-      return {
-        message: 'scheduled scripts require a cron expression',
-        code: INVALID_SCHEDULED_SCRIPT_CRON_CODE,
-        field: 'cron',
-      }
-    }
-    if (cron.length > 200) {
-      return {
-        message: 'cron expression too long',
-        code: INVALID_SCHEDULED_SCRIPT_CRON_CODE,
-        field: 'cron',
-      }
-    }
-    try {
-      computeScheduledScriptNextRunAt(cron)
-    } catch (error) {
-      if (!(error instanceof InvalidScheduledScriptCronError)) throw error
-      return {
-        message: error.message,
-        code: INVALID_SCHEDULED_SCRIPT_CRON_CODE,
-        field: 'cron',
-      }
-    }
-  }
-  if (String(body.triggerPoint) === 'endpoint') {
-    const slug = String(body.endpointSlug ?? '').trim()
-    if (!slug) return { message: 'endpoint scripts require a URL slug' }
-    if (slug.length > 80 || !SLUG_RE.test(slug)) return { message: 'slug must be lowercase letters, digits, hyphens' }
-  }
-  return null
-}
 
 function validationResponse(error: ValidationError): NextResponse {
   return NextResponse.json(
@@ -80,10 +35,11 @@ export async function POST(req: Request) {
   // A script can mint or mutate posted documents on every matching event, so
   // its creation is audited with the full row in the same transaction.
   const row = await db.transaction(async (tx) => {
+    if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const created = (await tx.execute<Record<string, unknown>>(sql`
       insert into user_scripts (org_id, name, trigger_point, document_kind, endpoint_slug, source, cron, next_run_at, timeout_ms, sort_order, is_active)
       values (${user.orgId}, ${body.name}, ${body.triggerPoint}, ${body.documentKind ?? null}, ${slug}, ${body.source},
-              ${cron}, ${nextRunAt}, ${Math.min(Number(body.timeoutMs) || 2000, 10_000)}, ${Number(body.sortOrder) || 100}, ${body.isActive !== false})
+              ${cron}, ${nextRunAt}, ${body.timeoutMs ?? 2000}, ${body.sortOrder ?? 100}, ${body.isActive !== false})
       returning *
     `))
     await tx.execute(sql`
@@ -96,6 +52,7 @@ export async function POST(req: Request) {
     `)
     return created.rows[0]!
   })
+  if (row instanceof NextResponse) return row
   return NextResponse.json({ id: String(row.id) })
 }
 
@@ -114,8 +71,9 @@ export async function PATCH(req: Request) {
   const nextRunAt = cron && body.isActive !== false ? computeScheduledScriptNextRunAt(cron) : null
   const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
   const missing = await db.transaction(async (tx) => {
+    if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const before = (await tx.execute<Record<string, unknown>>(sql`
-      select * from user_scripts where id = ${body.id} and org_id = ${user.orgId}
+      select * from user_scripts where id = ${body.id} and org_id = ${user.orgId} for update
     `))
     if (!before.rows[0]) return true
     const updated = (await tx.execute<Record<string, unknown>>(sql`
@@ -123,8 +81,8 @@ export async function PATCH(req: Request) {
         name = ${body.name}, trigger_point = ${body.triggerPoint}, document_kind = ${body.documentKind ?? null},
         endpoint_slug = ${slug},
         source = ${body.source}, cron = ${cron}, next_run_at = ${nextRunAt},
-        timeout_ms = ${Math.min(Number(body.timeoutMs) || 2000, 10_000)},
-        sort_order = ${Number(body.sortOrder) || 100}, is_active = ${body.isActive !== false}, updated_at = now()
+        timeout_ms = ${body.timeoutMs ?? 2000},
+        sort_order = ${body.sortOrder ?? 100}, is_active = ${body.isActive !== false}, updated_at = now()
       where id = ${body.id} and org_id = ${user.orgId}
       returning *
     `))
@@ -138,6 +96,7 @@ export async function PATCH(req: Request) {
     `)
     return false
   })
+  if (missing instanceof NextResponse) return missing
   if (missing) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

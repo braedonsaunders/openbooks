@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
@@ -15,10 +16,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params
 
   const missing = await db.transaction(async (tx) => {
+    if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
     // Snapshot the whole row first: a hard delete leaves no other trace of a
     // script that could fire on future documents.
     const existing = (await tx.execute<Record<string, unknown>>(sql`
-      select * from user_scripts where id = ${id} and org_id = ${user.orgId}
+      select * from user_scripts where id = ${id} and org_id = ${user.orgId} for update
     `))
     if (!existing.rows[0]) return true
     await tx.execute(sql`delete from user_scripts where id = ${id} and org_id = ${user.orgId}`)
@@ -31,6 +33,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     `)
     return false
   })
+  if (missing instanceof NextResponse) return missing
   if (missing) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

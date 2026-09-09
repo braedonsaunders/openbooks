@@ -63,20 +63,20 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
     const sNewScript = randomUUID();
     await db.execute(sql`
       insert into user_scripts (org_id, id, name, trigger_point, document_kind, source, timeout_ms, sort_order, is_active)
-      values (${prod.orgId}, ${pMatchedScript}, 'Ledger Guard', 'record_after_submit', 'journal_entry',
-              'export function run() { return true }', 2000, 100, true),
-             (${prod.orgId}, ${pChangedScript}, 'Stale Name', 'record_after_submit', null,
-              'export function run() { return false }', 2000, 200, true),
+      values (${prod.orgId}, ${pMatchedScript}, 'Ledger Guard', 'after_post', 'journal_entry',
+              'function main(ctx) { return true }', 2000, 100, true),
+             (${prod.orgId}, ${pChangedScript}, 'Stale Name', 'after_post', null,
+              'function main(ctx) { return false }', 2000, 200, true),
              (${sbxOrgId}, ${sNewScript}, 'Sandbox Only Script', 'before_submit', 'document',
-              'export function run() { return 1 }', 4000, 300, true)`);
+              'function main(ctx) { return 1 }', 4000, 300, true)`);
     const sMatchedScript = await rebase(pMatchedScript, seed);
     const sChangedScript = await rebase(pChangedScript, seed);
     await db.execute(sql`
       insert into user_scripts (org_id, id, name, trigger_point, document_kind, source, timeout_ms, sort_order, is_active)
-      values (${sbxOrgId}, ${sMatchedScript}, 'Ledger Guard', 'record_after_submit', 'journal_entry',
-              'export function run() { return true }', 2000, 100, true),
-             (${sbxOrgId}, ${sChangedScript}, 'Renamed Script', 'record_after_submit', null,
-              'export function run() { return false }', 2000, 200, true)`);
+      values (${sbxOrgId}, ${sMatchedScript}, 'Ledger Guard', 'after_post', 'journal_entry',
+              'function main(ctx) { return true }', 2000, 100, true),
+             (${sbxOrgId}, ${sChangedScript}, 'Renamed Script', 'after_post', null,
+              'function main(ctx) { return false }', 2000, 200, true)`);
 
     // saved_views — matched-identical pair and a production-only row (delete).
     const pMatchedView = randomUUID();
