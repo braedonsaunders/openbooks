@@ -53,11 +53,9 @@ export async function recordPayRunPayment(input: {
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<{ entryId: string; total: string; eft: string; cheque: string }> {
   const { orgId, actorId, documentId } = input;
-  const settings = await payrollSettings(orgId, input.allowedSubsidiaryIds);
-  const netPayable = settings.netPayAccountId;
-  if (!netPayable) {
-    throw new PayrollError("payroll setup incomplete: net pay payable account is not configured");
-  }
+  // Preserve the settings/root-subsidiary authorization boundary, but never
+  // use today's posting policy to reinterpret an already-posted liability.
+  await payrollSettings(orgId, input.allowedSubsidiaryIds);
 
   return await db.transaction(async (tx) => {
     const runRows = (await tx.execute<Record<string, string | null>>(sql`
@@ -98,7 +96,7 @@ export async function recordPayRunPayment(input: {
           from journal_lines jl
           left join parties p on p.id = jl.party_id and p.org_id = jl.org_id
          where jl.org_id = ${orgId} and jl.entry_id = ${run.posted_entry_id}
-           and jl.account_id = ${netPayable} and jl.is_open_item and jl.party_id is not null
+           and jl.is_open_item and jl.party_id is not null
            and jl.amount < 0
            and (p.id is null or ${payrollSubsidiaryOutsideScopeFilter(
              sql`jl.subsidiary_id`, input.allowedSubsidiaryIds,
@@ -107,6 +105,24 @@ export async function recordPayRunPayment(input: {
       `));
       if (hidden.rows[0]) throw new PayrollError("pay run not found");
     }
+
+    // commitPayRun tags only net-pay credits with employee parties, and the
+    // pay_run posting rule carries those tags into open items. That immutable
+    // posted evidence owns the account even after setup changes or is cleared.
+    // A native run has one net-pay account; refuse absent/ambiguous evidence
+    // rather than guessing from current configuration or settling a subset.
+    const netPayAccounts = (await tx.execute<{ account_id: string }>(sql`
+      select distinct account_id from journal_lines
+       where org_id=${orgId} and entry_id=${run.posted_entry_id}
+         and is_open_item and party_id is not null and amount<0
+    `)).rows;
+    if (netPayAccounts.length === 0) {
+      throw new PayrollError("the posted run has no open net-pay items (already settled?)");
+    }
+    if (netPayAccounts.length !== 1) {
+      throw new PayrollError("the posted run has ambiguous net-pay account evidence");
+    }
+    const netPayable = netPayAccounts[0]!.account_id;
 
     // Follow the shared posting lock order: hierarchy, accounts, then writes.
     await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
@@ -117,7 +133,7 @@ export async function recordPayRunPayment(input: {
     if (!bank.rows[0]) throw new PayrollError("choose an active bank account");
 
     // The run's per-employee net-pay open items (credits on the payable).
-    const openItems = (await tx.execute<{
+    const postedItems = (await tx.execute<{
       id: string; party_id: string; amount: string; txn_amount: string;
       fx_rate: string; subsidiary_id: string; currency: string;
     }>(sql`
@@ -129,12 +145,41 @@ export async function recordPayRunPayment(input: {
          and jl.account_id = ${netPayable} and jl.is_open_item and jl.party_id is not null
          and jl.amount < 0
          ${payrollSubsidiaryScopeFilter(sql`jl.subsidiary_id`, input.allowedSubsidiaryIds)}
-       order by jl.line_number
-       for update
+       order by jl.id
+       for update of jl
     `));
-    if (openItems.rows.length === 0) {
+    if (postedItems.rows.length === 0) {
       throw new PayrollError("the posted run has no open net-pay items (already settled?)");
     }
+
+    // Read live applications in a separate statement AFTER the endpoint locks:
+    // a payment that committed while we waited must be visible to this read.
+    // Either endpoint can be the payroll liability. Its carrying and transaction
+    // amounts are independent of the counterparty's amounts (including FX).
+    const appliedRows = (await tx.execute<{
+      id: string; applied: string; transaction_applied: string;
+    }>(sql`
+      select jl.id,
+        coalesce(sum(case when a.from_line_id=jl.id then a.source_amount else a.amount end),0)::text as applied,
+        coalesce(sum(case when a.from_line_id=jl.id then a.source_transaction_amount else a.target_transaction_amount end),0)::text as transaction_applied
+      from journal_lines jl
+      left join applications a on a.org_id=jl.org_id and a.unapplied_at is null
+        and (a.from_line_id=jl.id or a.to_line_id=jl.id)
+      where jl.org_id=${orgId} and jl.id=any(${uuidArray(postedItems.rows.map(item => item.id))}::uuid[])
+      group by jl.id
+    `)).rows;
+    const applied = new Map(appliedRows.map(row => [row.id, row]));
+    const openItems = postedItems.rows.flatMap(item => {
+      const used = applied.get(item.id)!;
+      const amount = add(item.amount, used.applied);
+      const txnAmount = add(item.txn_amount, used.transaction_applied);
+      if (cmp(amount, "0") === 0 && cmp(txnAmount, "0") === 0) return [];
+      if (cmp(amount, "0") >= 0 || cmp(txnAmount, "0") >= 0) {
+        throw new PayrollError("the posted run has inconsistent remaining net-pay amounts");
+      }
+      return [{ ...item, amount, txn_amount: txnAmount }];
+    });
+    if (openItems.length === 0) throw new PayrollError("nothing to pay: the posted run is already settled");
 
     // How each employee is actually paid, so the settlement line can carry the
     // cheque number and the caller can report the rail split. An open item with
@@ -159,6 +204,9 @@ export async function recordPayRunPayment(input: {
     const runCurrency = run.currency;
     if (!originSubId || !runCurrency) {
       throw new PayrollError("the posted pay run has no originating subsidiary or currency");
+    }
+    if (openItems.some(item => item.currency !== runCurrency)) {
+      throw new PayrollError("the remaining net-pay items must use the pay run currency");
     }
     const subsidiaries = await loadSubsidiaryContext(tx, orgId);
     const origin = subsidiaries.byId.get(originSubId);
@@ -193,10 +241,10 @@ export async function recordPayRunPayment(input: {
     // `txn_amount` is the pay-run currency (the currency the bank actually
     // leaves). `amount` is each employee subsidiary's functional amount, so it
     // cannot be summed across entities when their base currencies differ.
-    const total = sum(openItems.rows.map((item) => neg(item.txn_amount)));
+    const total = sum(openItems.map((item) => neg(item.txn_amount)));
     if (cmp(total, "0") <= 0) throw new PayrollError("nothing to pay");
     const bankAmount = neg(mulRate(total, originFxRate));
-    const settlementLines = openItems.rows.map((item) => ({
+    const settlementLines = openItems.map((item) => ({
       accountId: netPayable,
       amount: neg(item.amount),
       txnAmount: neg(item.txn_amount),
@@ -252,7 +300,7 @@ export async function recordPayRunPayment(input: {
     }[] = [];
     let eft = "0";
     let cheque = "0";
-    for (const item of openItems.rows) {
+    for (const item of openItems) {
       const debit = neg(item.amount); // positive
       const txnDebit = neg(item.txn_amount);
       const paid = rail.get(item.party_id);

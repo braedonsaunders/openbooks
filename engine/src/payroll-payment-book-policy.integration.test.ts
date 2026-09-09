@@ -32,9 +32,16 @@ for (const policy of ["inactive", "non-posting", "non-primary"] as const) {
       if (policy === "inactive") await db.execute(sql`update accounting_books set is_active=false where org_id=${fx.orgId} and id=${source.book_id}`);
       if (policy === "non-posting") await db.execute(sql`update accounting_books set posts_gl=false where org_id=${fx.orgId} and id=${source.book_id}`);
       if (policy === "non-primary") {
-        await db.execute(sql`update accounting_books set is_primary=false where org_id=${fx.orgId} and id=${source.book_id}`);
-        await db.execute(sql`insert into accounting_books(org_id,code,name,is_primary,is_active,posts_gl)
-          values(${fx.orgId},'NEW','New primary book',true,true,true)`);
+        // Model imported/legacy history. Ordinary reassignment after posting
+        // is now refused by the primary-book history guard. Only fixture
+        // construction uses the trusted migration exemption; settlement below
+        // runs after this transaction ends with every normal control enabled.
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`set local openbooks.migration='on'`);
+          await tx.execute(sql`update accounting_books set is_primary=false where org_id=${fx.orgId} and id=${source.book_id}`);
+          await tx.execute(sql`insert into accounting_books(org_id,code,name,is_primary,is_active,posts_gl)
+            values(${fx.orgId},'NEW','New primary book',true,true,true)`);
+        });
       }
       const pay = () => recordPayRunPayment({ ...input, bankAccountId });
       if (policy !== "non-primary") {
