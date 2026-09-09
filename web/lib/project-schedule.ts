@@ -7,8 +7,8 @@ import type {
   ScheduleDependency,
   ScheduleTask,
   ScheduleTaskPatchInput,
-} from '@appkit/scheduling'
-import { wouldCreateDependencyCycle } from '@appkit/scheduling'
+} from '@braedonsaunders/appkit-scheduling'
+import { wouldCreateDependencyCycle } from '@braedonsaunders/appkit-scheduling'
 import { canonicalDecimal, compareDecimal, isPositiveDecimal } from './exact-decimal'
 
 /**
@@ -16,7 +16,7 @@ import { canonicalDecimal, compareDecimal, isPositiveDecimal } from './exact-dec
  *
  * The scheduled activity is `project_tasks`; this module maps those rows (plus
  * the dependency/calendar/resource/baseline tables) into the shape
- * `@appkit/scheduling` reads, and writes patches back. Every query is org- and
+ * `@braedonsaunders/appkit-scheduling` reads, and writes patches back. Every query is org- and
  * project-scoped: the schedule surface never sees another tenant's plan, and a
  * task id from a different project is rejected rather than silently updated.
  *

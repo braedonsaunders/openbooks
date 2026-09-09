@@ -1,5 +1,5 @@
 import { ZodError } from "zod";
-import type { McpErrorShape } from "@appkit/mcp";
+import type { McpErrorShape } from "@braedonsaunders/appkit-mcp";
 import { ApplicationError } from "../application/errors";
 
 /**
