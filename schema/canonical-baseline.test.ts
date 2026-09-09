@@ -190,6 +190,8 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0097_role_reference_integrity.sql",
     "0098_promotion_capture_preconditions.sql",
     "0099_project_profile_sandbox_teardown.sql",
+    "0100_document_open_balance_currency.sql",
+    "0101_application_book_scope.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

@@ -86,7 +86,7 @@ test(
       assert.equal(control.rows.length, 1, "expense report must credit the configured employee-payable control");
       assert.equal(control.rows[0]!.is_open_item, true, "control line must be an open item despite its account type");
 
-      const open = await openItemsForParty(employeeId, "ap");
+      const open = await openItemsForParty(employeeId, "ap", org.orgId);
       assert.equal(open.length, 1);
       assert.equal(open[0]!.open, "123.4500");
 
@@ -110,7 +110,7 @@ test(
       await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`);
       await postPaymentWithApplications(payment.id, undefined, actorId);
 
-      const after = await openItemsForParty(employeeId, "ap");
+      const after = await openItemsForParty(employeeId, "ap", org.orgId);
       assert.equal(after.length, 0, "reimbursement must settle the expense report's open item exactly");
     } finally {
       // dropScratchOrg's fixed table list predates employee_roles and the

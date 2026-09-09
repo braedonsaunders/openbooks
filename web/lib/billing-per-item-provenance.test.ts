@@ -17,11 +17,14 @@ test('per-item grouping keeps every source cost line billable exactly once acros
   assert.match(grouping, /sourceCostLineIds\.push\(l\.sourceCostLineId\)/)
 
   const provenanceStart = billing.indexOf('for (const [index, l] of built.entries())')
-  const provenanceEnd = billing.indexOf('const subtotal =', provenanceStart)
+  const provenanceEnd = billing.indexOf('update documents set subtotal = ${totals.subtotal}', provenanceStart)
   assert.ok(provenanceStart >= 0 && provenanceEnd > provenanceStart, 'provenance loop is present')
   const provenance = billing.slice(provenanceStart, provenanceEnd)
   assert.match(provenance, /for \(const sourceCostLineId of sourceCostLineIds\)/)
   assert.match(provenance, /where id = \$\{sourceCostLineId\}/)
+  assert.match(provenance, /and org_id = \$\{orgId\}/)
+  assert.match(provenance, /and billed_by_line_id is null/)
+  assert.match(provenance, /if \(!stamped\.rows\[0\]\)/)
 
   // Two cost rows that become one presented line must both be consumed by the
   // first run. The second run's source query filters on billed_by_line_id IS
