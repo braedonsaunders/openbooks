@@ -441,6 +441,10 @@ export async function updateDraftPayment(
       }
     }
 
+    if (creditAllocations.length) await validateCreditAllocations(creditAllocations, allocations, {
+      orgId: doc.orgId, partyId, subsidiaryId: doc.subsidiaryId,
+      bookId: await paymentBookId(doc.orgId), side: PAYMENT_KIND_SIDE[doc.kind], controlAccountId,
+    });
     const grossApplied = sum(allocations.map((a) => a.sourceTransactionAmount));
     if (cmp(discountAmount, grossApplied) > 0) throw new PaymentError("discount cannot exceed the payment applications");
     // Collected = applications − discount + surcharge fee; the bank line carries
@@ -597,9 +601,107 @@ function paymentSubsidiaryScope(column: ReturnType<typeof sql>, allowed?: Readon
   return sql` and ${column} = any(${`{${[...allowed].join(',')}}`}::uuid[])`;
 }
 
+/** Keep selectable settlements on the same authoritative book used by posting.
+ * The setup writer takes the exclusive advisory lock; writes retain this shared
+ * lock and the selected book row through commit. */
+async function paymentBookId(orgId: string): Promise<string> {
+  await db.execute(sql`select pg_advisory_xact_lock_shared(hashtextextended(${`accounting-books:${orgId}`}, 0))`);
+  const books = (await db.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
+    select id, is_active, posts_gl from accounting_books
+     where org_id = ${orgId} and is_primary order by id for share
+  `)).rows;
+  if (books.length !== 1 || !books[0]!.is_active || !books[0]!.posts_gl) {
+    throw new PaymentError("payments require exactly one active primary posting book");
+  }
+  return books[0]!.id;
+}
+
+/** Validate credit workpapers against the payment, not merely against each
+ * other. Endpoint locks serialize cash and credit capacity checks together. */
+async function validateCreditAllocations(
+  credits: CreditAllocationInput[], allocations: AllocationInput[],
+  scope: { orgId: string; partyId: string | null; subsidiaryId: string | null; bookId: string; side: OpenItemSide; controlAccountId: string | null },
+): Promise<void> {
+  if (!credits.length) return;
+  if (!scope.partyId || !scope.subsidiaryId) throw new PaymentError("credit applications require a payment party and subsidiary");
+  validateAllocationInputs(credits.map(a => sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount)));
+  const ids = [...new Set([...allocations.map(a => a.openLineId), ...credits.flatMap(a => [a.fromLineId, a.toLineId])])];
+  await db.execute(sql`select id from journal_lines where org_id = ${scope.orgId} and id in ${ids} order by id for update`);
+  const rows = (await db.execute<{
+    id: string; account_id: string; party_id: string | null; subsidiary_id: string;
+    book_id: string; status: string; is_open_item: boolean; amount: string; source_document_id: string | null;
+    currency: string; base_currency: string; txn_amount: string;
+    source_used: string; target_used: string; source_txn_used: string; target_txn_used: string;
+  }>(sql`
+    select jl.id, jl.account_id, jl.party_id, jl.subsidiary_id, je.book_id, je.status,
+           jl.is_open_item, jl.amount, jl.currency, jl.txn_amount, s.base_currency, d.id as source_document_id,
+           coalesce(ap.source_used,0) as source_used, coalesce(ap.target_used,0) as target_used,
+           coalesce(ap.source_txn_used,0) as source_txn_used, coalesce(ap.target_txn_used,0) as target_txn_used
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+      join subsidiaries s on s.id = jl.subsidiary_id and s.org_id = jl.org_id
+      left join documents d on d.id = je.source_document_id and d.org_id = jl.org_id
+      left join lateral (
+        select sum(a.source_amount) filter(where a.from_line_id=jl.id) as source_used,
+               sum(a.amount) filter(where a.to_line_id=jl.id) as target_used,
+               sum(a.source_transaction_amount) filter(where a.from_line_id=jl.id) as source_txn_used,
+               sum(a.target_transaction_amount) filter(where a.to_line_id=jl.id) as target_txn_used
+          from applications a where a.org_id=jl.org_id and a.unapplied_at is null
+           and (a.from_line_id=jl.id or a.to_line_id=jl.id)
+      ) ap on true
+     where jl.org_id=${scope.orgId} and jl.id in ${ids}
+  `)).rows;
+  const byId = new Map(rows.map(row => [row.id, row]));
+  const targetAccounts = new Set(allocations.map(a => byId.get(a.openLineId)?.account_id));
+  const deps = scope.controlAccountId ? null : await paymentControlDeps(scope.orgId);
+  const account = scope.controlAccountId ?? (targetAccounts.size === 1 ? [...targetAccounts][0] : null)
+    ?? (scope.side === "ap" ? deps!.control.ap : deps!.control.ar);
+  const sourceAmounts = new Map<string, bigint>();
+  const targetAmounts = new Map<string, bigint>();
+  for (const allocation of allocations) targetAmounts.set(allocation.openLineId,
+    (targetAmounts.get(allocation.openLineId) ?? 0n) + toUnits(allocation.targetTransactionAmount));
+  for (const credit of credits) {
+    if (!credit.sourceDocumentId || byId.get(credit.fromLineId)?.source_document_id !== credit.sourceDocumentId) {
+      throw new PaymentError("credit source document must match the tenant-owned posted credit entry");
+    }
+    for (const [id, source] of [[credit.fromLineId, true], [credit.toLineId, false]] as const) {
+      const row = byId.get(id);
+      if (!row || row.party_id !== scope.partyId || row.subsidiary_id !== scope.subsidiaryId ||
+          row.book_id !== scope.bookId || row.account_id !== account || row.status !== "posted" || !row.is_open_item) {
+        throw new PaymentError("credit applications must use posted open items in the payment's party, control account, subsidiary, and book");
+      }
+      const positive = scope.side === "ap" ? source : !source;
+      if ((positive ? cmp(row.amount, "0") <= 0 : cmp(row.amount, "0") >= 0)) {
+        throw new PaymentError("credit application endpoints have the wrong payment side or sign");
+      }
+      if (row.currency !== row.base_currency || cmp(row.amount, row.txn_amount) !== 0) {
+        throw new PaymentError("foreign-currency credit applications require explicit transaction amounts");
+      }
+    }
+    const units = toUnits(credit.amount);
+    sourceAmounts.set(credit.fromLineId, (sourceAmounts.get(credit.fromLineId) ?? 0n) + units);
+    targetAmounts.set(credit.toLineId, (targetAmounts.get(credit.toLineId) ?? 0n) + units);
+  }
+  for (const [amounts, source] of [[sourceAmounts, true], [targetAmounts, false]] as const) {
+    for (const [id, amount] of amounts) {
+      const row = byId.get(id);
+      // Cash-only foreign targets already undergo dual-currency validation.
+      if (!row || (!source && !credits.some(a => a.toLineId === id))) continue;
+      const abs = (v: string) => { const n = toUnits(v); return n < 0n ? -n : n; };
+      if (amount > abs(row.amount) - toUnits(source ? row.source_used : row.target_used) ||
+          amount > abs(row.txn_amount) - toUnits(source ? row.source_txn_used : row.target_txn_used)) {
+        throw new PaymentError("credit and cash applications exceed an endpoint's open balance");
+      }
+    }
+  }
+}
+
 export async function openItemsForParty(partyId: string, side: OpenItemSide, orgId?: string, allowedSubsidiaryIds?: ReadonlySet<string> | null): Promise<OpenItem[]> {
+  const tenantId = orgId ?? orgContext.getStore()?.orgId;
+  if (!tenantId) throw new PaymentError("organization is required to select payment open items");
+  const bookId = await paymentBookId(tenantId);
   const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
-  const orgFilter = orgId ? sql`jl.org_id = ${orgId} and` : sql``;
+  const orgFilter = sql`jl.org_id = ${tenantId} and je.book_id = ${bookId} and`;
   const r = (await db.execute<{
       line_id: string;
       amount: string;
@@ -832,6 +934,11 @@ export async function postPaymentWithApplications(
     await db.execute(sql`select id from journal_lines where id in ${endpointIds} and org_id = ${doc.orgId} order by id for update`);
 
     const side = PAYMENT_KIND_SIDE[doc.kind];
+    const bookId = await paymentBookId(doc.orgId);
+    await validateCreditAllocations(creditAllocs, allocs, {
+      orgId: doc.orgId, partyId: doc.partyId, subsidiaryId: doc.subsidiaryId,
+      bookId, side, controlAccountId: custom.controlAccountId ?? null,
+    });
     const openItems = await openItemsForParty(doc.partyId, side, doc.orgId);
     const byLine = new Map(openItems.map((item) => [item.lineId, item]));
     for (const allocation of allocs) {
@@ -923,22 +1030,25 @@ export async function postPaymentWithApplications(
     `));
     const source = sourceResult.rows[0];
     if (!source) throw new PaymentError("posted payment entry has no AP/AR control line");
+    if (source.book_id !== bookId || source.party_id !== doc.partyId || source.subsidiary_id !== doc.subsidiaryId) {
+      throw new PaymentError("posted payment source must preserve its party, subsidiary, and accounting book");
+    }
     if (source.currency !== doc.currency || cmp(fromUnits(toUnits(source.txn_amount) < 0n ? -toUnits(source.txn_amount) : toUnits(source.txn_amount)), totalAlloc) !== 0) {
       throw new PaymentError("payment control line does not cross-foot to the transaction-currency applications");
     }
 
     const targetsResult = (await db.execute<{
       id: string; amount: string; currency: string; txn_amount: string; account_id: string;
-      party_id: string | null; subsidiary_id: string; open_base: string; open_transaction: string;
+      party_id: string | null; subsidiary_id: string; book_id: string; open_base: string; open_transaction: string;
     }>(sql`
-      select jl.id, jl.amount, jl.currency, jl.txn_amount, jl.account_id, jl.party_id, jl.subsidiary_id,
+      select jl.id, jl.amount, jl.currency, jl.txn_amount, jl.account_id, jl.party_id, jl.subsidiary_id, je.book_id,
              abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0) as open_base,
              abs(jl.txn_amount) - coalesce(sum(a.target_transaction_amount) filter (where a.unapplied_at is null), 0) as open_transaction
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
         left join applications a on a.to_line_id = jl.id and a.org_id = jl.org_id
        where jl.org_id = ${doc.orgId} and jl.id in ${allocs.map((a) => a.openLineId)}
-       group by jl.id
+       group by jl.id, je.book_id
     `));
     const targetById = new Map(targetsResult.rows.map((row) => [row.id, row]));
 
@@ -948,8 +1058,8 @@ export async function postPaymentWithApplications(
     for (const allocation of allocs) {
       const target = targetById.get(allocation.openLineId);
       if (!target) throw new PaymentError("an application target disappeared while posting");
-      if (target.account_id !== source.account_id || target.party_id !== source.party_id || target.subsidiary_id !== source.subsidiary_id) {
-        throw new PaymentError("applications must settle the same control account, party, and subsidiary as the payment");
+      if (target.account_id !== source.account_id || target.party_id !== source.party_id || target.subsidiary_id !== source.subsidiary_id || target.book_id !== source.book_id) {
+        throw new PaymentError("applications must settle the same control account, party, subsidiary, and book as the payment");
       }
       const targetBase = carryingAmountForSettlement(target.open_base, target.open_transaction, allocation.targetTransactionAmount);
       if (allocation.targetBaseAmount !== undefined && cmp(allocation.targetBaseAmount, targetBase) !== 0) {
@@ -1027,17 +1137,6 @@ export async function postPaymentWithApplications(
     })));
 
     if (creditAllocs.length > 0) {
-      // Credit allocations currently carry functional-currency amounts. Keep
-      // their evidence explicit and reject any attempt to disguise foreign
-      // transaction values as base amounts.
-      const creditRows = (await db.execute<{ id: string; currency: string; base_currency: string }>(sql`
-        select jl.id, jl.currency, s.base_currency
-          from journal_lines jl join subsidiaries s on s.id = jl.subsidiary_id and s.org_id = jl.org_id
-         where jl.org_id = ${doc.orgId} and jl.id in ${creditAllocs.flatMap((a) => [a.fromLineId, a.toLineId])}
-      `));
-      if (creditRows.rows.some((row) => row.currency !== row.base_currency)) {
-        throw new PaymentError("foreign-currency credit applications require explicit transaction amounts");
-      }
       await db.insert(schema.applications).values(creditAllocs.map((application) => ({
         orgId: doc.orgId,
         fromLineId: application.fromLineId,
@@ -1407,7 +1506,7 @@ async function createPaymentRunWithinTransaction(
     select d.id as document_id, d.document_number, d.kind as document_kind, d.document_date, d.party_id, p.display_name as vendor,
            d.project_id, d.currency, d.fx_rate, d.subsidiary_id, jl.account_id as control_account_id,
            jl.id as open_line_id, abs(jl.amount) - coalesce(ap.applied, 0) as open_base,
-           round((abs(jl.amount) - coalesce(ap.applied, 0)) / d.fx_rate, 4) as open,
+           abs(jl.txn_amount) - coalesce(ap.transaction_applied, 0) as open,
            pt.discount_days, pt.discount_percent
       from documents d
       join parties p on p.id = d.party_id and p.org_id = d.org_id
@@ -1416,7 +1515,7 @@ async function createPaymentRunWithinTransaction(
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount < 0
       left join lateral (
-        select sum(a.amount) as applied from applications a
+        select sum(a.amount) as applied, sum(a.target_transaction_amount) as transaction_applied from applications a
          where a.to_line_id = jl.id and a.org_id = ${opts.orgId} and a.unapplied_at is null
       ) ap on true
      where d.id in ${opts.billDocumentIds}
@@ -1542,7 +1641,7 @@ async function createPaymentRunWithinTransaction(
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount > 0
         join subsidiaries credit_sub on credit_sub.id = jl.subsidiary_id and credit_sub.org_id = jl.org_id
         left join lateral (
-          select sum(a.amount) as applied from applications a
+          select sum(a.source_amount) as applied from applications a
            where a.from_line_id = jl.id and a.org_id = ${opts.orgId} and a.unapplied_at is null
         ) ap on true
        where d.org_id = ${opts.orgId} and d.party_id = ${partyId}
@@ -1572,6 +1671,7 @@ async function createPaymentRunWithinTransaction(
 
     for (const bill of vendorBills) {
       let remainingBase = toUnits(bill.open_base);
+      let remainingTransaction = toUnits(bill.open);
       for (const credit of credits) {
         const left = creditRemaining.get(credit.open_line_id) ?? 0n;
         if (left <= 0n || remainingBase <= 0n) continue;
@@ -1584,9 +1684,12 @@ async function createPaymentRunWithinTransaction(
         });
         creditRemaining.set(credit.open_line_id, left - applied);
         remainingBase -= applied;
+        // This credit path only accepts functional-currency endpoints, so its
+        // explicit source/target transaction amount equals the applied amount.
+        remainingTransaction -= applied;
       }
       if (remainingBase <= 0n) continue;
-      const remainingTxn = divRate(fromUnits(remainingBase), bill.fx_rate);
+      const remainingTxn = fromUnits(remainingTransaction);
       let discountTxn = "0";
       if (captureDiscounts && bill.discount_days != null && bill.discount_percent && cmp(bill.discount_percent, "0") > 0) {
         const deadline = new Date(`${bill.document_date}T00:00:00Z`);
@@ -1623,6 +1726,7 @@ async function createPaymentRunWithinTransaction(
       bankAccountId: profile.bank_account_id,
       subsidiaryId: first.subsidiary_id,
       currency: profile.currency,
+      documentDate: paymentDate,
       fxRate: first.fx_rate,
       memo: `Payment run ${runNumber}`,
     });
