@@ -573,10 +573,22 @@ function TaskCard(props: Props & { task: Row }) {
   async function runRevaluation() {
     setBusy(true);
     try {
-      await call("/api/close/run-revaluation", {
+      const result = await call("/api/close/run-revaluation", {
         periodId: props.run.period_id,
       });
-      toast.success(t("messages.revaluationPosted"));
+      if (result.problems.length > 0) {
+        toast.error(result.problems.join("\n"), {
+          description: result.posted.length > 0
+            ? t("messages.revaluationPosted")
+            : undefined,
+        });
+      } else if (result.posted.length > 0) {
+        toast.success(t("messages.revaluationPosted"));
+      } else {
+        toast.info(t("messages.refresh"));
+      }
+      // An entity can fail after another entity's pair has posted. Refresh
+      // successful writes and readiness even when the response has problems.
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("errors.actionFailed"));
