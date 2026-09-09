@@ -37,7 +37,7 @@ export const sovLines = pgTable(
     scheduledValue: money("scheduled_value").notNull().default("0"),
     /** Per-line retainage override; null → the application's default percent. */
     retainagePercent: money("retainage_percent"),
-    /** Income account for this line; null → the project/default income account. */
+    /** Explicit posting account; required before invoicing a nonzero draw line. */
     incomeAccountId: uuid("income_account_id"),
     sortOrder: integer("sort_order").notNull().default(0),
     /** Set when this line was introduced by an approved change order. */
