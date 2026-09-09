@@ -546,7 +546,8 @@ async function removeQueueJobs(jobIds: Array<string | null>): Promise<void> {
   for (const jobId of jobIds) {
     if (!jobId) continue;
     const job = await queue.getJob(jobId);
-    if (job) await job.remove().catch(() => {});
+    if (job) await job.remove();
+    assert.equal(await queue.getJob(jobId), undefined, `queue job ${jobId} must be removed`);
   }
 }
 
@@ -556,6 +557,7 @@ test(
   async () => {
     const org = await createScratchOrg();
     const runId = randomUUID();
+    let createdJobId: string | null = null;
     try {
       const payload = {
         to: ["victim@scratch.test"],
@@ -568,6 +570,7 @@ test(
         await db.execute<{ id: string }>(sql`select id from scheduler_outbox where subject_id=${runId}`)
       ).rows[0]!.id;
       const expectedJobId = flowEmailJobId(rowId);
+      createdJobId = expectedJobId;
       const asOf = new Date(Date.now() + 5_000);
 
       // Attempt 1 performs the REAL Redis enqueue, then dies right there —
@@ -611,12 +614,12 @@ test(
       assert.equal(delivered!.attempt_count, 2);
       assert.equal(await countQueueJob(expectedJobId), 1, "no duplicate send may exist on retry");
     } finally {
-      await removeQueueJobs([
-        (await db.execute<{ id: string | null }>(sql`select id from scheduler_outbox where subject_id=${runId}`))
-          .rows[0]?.id ?? null,
-      ]);
-      await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
-      await dropScratchOrg(org.orgId);
+      try {
+        await removeQueueJobs([createdJobId]);
+      } finally {
+        await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
+        await dropScratchOrg(org.orgId);
+      }
     }
   },
 );
