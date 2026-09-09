@@ -352,18 +352,18 @@ export function BlockView({
     case 'table':
       return <TableBlockView spec={block} scope={scope} />
 
-    case 'pagination':
-      return (
-        <div className="mt-3">
-          <Pagination
-            basePath={resolveText(block.basePath, scope)}
-            currentParams={searchParams}
-            total={resolveNumber(block.total, scope)}
-            page={resolveNumber(block.page, scope)}
-            perPage={resolveNumber(block.perPage, scope)}
-          />
-        </div>
+    case 'pagination': {
+      const pager = (
+        <Pagination
+          basePath={resolveText(block.basePath, scope)}
+          currentParams={searchParams}
+          total={resolveNumber(block.total, scope)}
+          page={resolveNumber(block.page, scope)}
+          perPage={resolveNumber(block.perPage, scope)}
+        />
       )
+      return block.bare ? pager : <div className="mt-3">{pager}</div>
+    }
 
     case 'text': {
       if (block.when && !resolveValue(block.when as never, scope)) return null
