@@ -169,8 +169,8 @@ enabled on **371 tables**.
 | --- | --- | --- |
 | G7 | Schema changes are tracked migrations applied in a fixed order by the authoritative provisioner, which is the same code path in CI and in production. | `scripts/bootstrap.ts`, `schema/migrations/` |
 | G8 | The live schema is compared against a committed catalogue snapshot, so an out-of-band schema change is detected. | `scripts/schema-catalog-snapshot.ts`, `scripts/compare-schema-catalogs.mjs` |
-| G9 | Every change runs a four-job test gate: unit, database integration, coverage, and browser end-to-end. The integration job includes a **canary that fails the build if database-backed tests silently skipped** — a green build cannot mean "nothing ran". | `.github/workflows/test.yml` |
-| G10 | A release verification command runs container-security checks, type checking across all workspaces, the full test suite, and a production build. | `npm run verify:release` |
+| G9 | The test workflow runs `typecheck`, `integration`, and `e2e` jobs on pull requests and pushes to `main`. Unit tests and coverage collection run within `integration`, alongside a **canary that fails if its database-backed tests skip, fail, or run no tests**. A fourth job, `restore-drill`, runs only on the nightly schedule or manual dispatch. | `.github/workflows/test.yml` |
+| G10 | `verify:release` runs repository-artifact, dependency, container-security, and explicit-any checks; lint; end-to-end and workspace type checking; and a production web build. `verify:release:full` adds `npm test` before the build; neither command invokes the browser end-to-end suite. | `package.json`: `npm run verify:release`, `npm run verify:release:full` |
 | G11 | Row-level security is re-verified on every org-scoped table at every bootstrap, not only at first install. | `scripts/bootstrap.ts` |
 
 ### Data integrity and operations
@@ -209,10 +209,14 @@ register currently passes with no gaps and no partials.** The register's
 scope is stated in `engine/src/conformance/README.md`; standards outside it
 are not claimed in either direction.
 
-**Coverage gaps.** Browser end-to-end coverage is a smoke tier only. There is
-no automated segregation-of-duties conflict report, no automated
-authorisation-matrix test across every route and role, and no concurrency or
-fault-injection suite.
+**Coverage gaps.** Browser end-to-end coverage is a smoke tier only. Targeted
+database integration tests cover concurrent posting of one document
+(`engine/src/posting-exactly-once.integration.test.ts`) and rollback of period
+close writes after an injected failure
+(`engine/src/close-period-identity.integration.test.ts`). These cases do not
+establish comprehensive concurrency, load, or fault-injection coverage across
+the product. There is no automated segregation-of-duties conflict report or
+automated authorisation-matrix test across every route and role.
 
 **Operator responsibilities.** For a self-hosted deployment, transport
 security, backup and restore, retention, monitoring, secret management, network
