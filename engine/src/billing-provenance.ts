@@ -108,6 +108,52 @@ export async function releaseVendorBillProvenance(
   `);
 }
 
+/**
+ * Draft-delete counterpart for vendor retainage releases. A draft
+ * `vendor_bill` created by `releaseVendorRetainage` owns a
+ * `vendor_retainage_releases` reservation whose
+ * `vendor_retainage_bill_org_fk` still points at the bill: deleting the
+ * document without releasing the reservation first fails with SQLSTATE
+ * 23503. Delete the reservation with full before/after evidence in the
+ * caller's transaction so a corrected release can be issued exactly once.
+ * Idempotent; a no-op for draft vendor bills that own no reservation.
+ *
+ * The helper enforces the draft `vendor_bill` boundary itself under a row
+ * lock and refuses anything else, so a direct call can never delete posted
+ * release provenance even if reused outside the delete path (the delete
+ * caller already holds the same lock on a draft). Controlled voids never
+ * call this: the voided bill still satisfies the foreign key, the capacity
+ * query already excludes voided bills, and the row remains the release's
+ * posted-history provenance.
+ */
+export async function releaseVendorRetainageProvenance(
+  tx: SqlExecutor,
+  orgId: string,
+  documentId: string,
+  audit: { actorId: string | null; reason: string },
+): Promise<void> {
+  const guarded = (await tx.execute<{ kind: string; status: string }>(sql`
+    select kind, status from documents where org_id = ${orgId} and id = ${documentId} for update
+  `)).rows[0];
+  if (!guarded || guarded.kind !== "vendor_bill" || guarded.status !== "draft") {
+    throw new Error("a vendor retainage release reservation can only be released for a draft vendor bill");
+  }
+  await tx.execute(sql`
+    with released as (
+      delete from vendor_retainage_releases
+       where org_id = ${orgId} and vendor_bill_document_id = ${documentId}
+       returning *
+    )
+    insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+    select ${orgId}, 'vendor_retainage_releases', released.id, 'billing_released',
+      jsonb_build_object(
+        'before', to_jsonb(released),
+        'after', null,
+        'reason', ${audit.reason}::text), ${audit.actorId}::uuid
+    from released
+  `);
+}
+
 /** Release a CAM invoice or credit reservation without reopening its frozen pool. */
 export async function releaseCamBillingProvenance(
   tx: SqlExecutor,
