@@ -316,6 +316,9 @@ export function BlockView({
                     </Link>
                   )
                 })}
+                {block.leading.divider ? (
+                  <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
+                ) : null}
               </>
             ) : undefined
           }

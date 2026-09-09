@@ -12,6 +12,7 @@ import { ApPulse, AttentionList, CommitmentsSection, DirectorySection } from '..
 import { JournalEntryHeading } from '../../app/(app)/reports/journal/sections'
 import { AccountHeading, EntryCell } from '../../app/(app)/reports/general-ledger/sections'
 import { ResourceCell, RowCountsCell } from '../../app/(app)/data/import/history/sections'
+import { PartyHeading } from '../../app/(app)/reports/registers/sections'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
 
@@ -163,6 +164,16 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       created={Number(props.created ?? 0)}
       updated={Number(props.updated ?? 0)}
       failed={Number(props.failed ?? 0)}
+    />
+  ),
+  'party-heading': (props) => (
+    <PartyHeading
+      partyId={(props.partyId as string | null) ?? null}
+      partyName={str(props, 'partyName') ?? ''}
+      statementHref={str(props, 'statementHref') ?? ''}
+      closingLabel={str(props, 'closingLabel') ?? ''}
+      closing={str(props, 'closing') ?? ''}
+      closingDrill={props.closingDrill as ComponentProps<typeof PartyHeading>['closingDrill']}
     />
   ),
   'save-view': () => <SaveViewButton />,
