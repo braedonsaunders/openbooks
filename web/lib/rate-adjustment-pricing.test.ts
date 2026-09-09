@@ -54,7 +54,7 @@ type QueryClient = {
 test(
   "concurrent surcharge saves commit one rule and return the documented conflict for the loser",
   { skip: !process.env.OPENBOOKS_DB_URL },
-  async () => {
+  async (t) => {
     const hooks = registerHooks({
       resolve(specifier, context, nextResolve) {
         if (specifier === "server-only") {
@@ -89,7 +89,7 @@ test(
     );
     hooks.deregister();
 
-    const { db } = await import("@openbooks/engine/src/db.ts");
+    const { db, withOrgTransaction } = await import("@openbooks/engine/src/db.ts");
     const { sql } = await import("drizzle-orm");
     const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
       "@openbooks/engine/src/test-fixtures.ts"
@@ -121,10 +121,16 @@ test(
     const originalQueries = new WeakMap<QueryClient, QueryClient["query"]>();
     const wrappedClients = new Set<QueryClient>();
     let preflightCount = 0;
+    let auditWrites = 0;
+    let injectedFailures = 0;
+    let failureCode = "40P01";
+    let synchronizePreflights = false;
     let releasePreflights: (() => void) | undefined;
-    const bothPreflightsComplete = new Promise<void>((resolve) => {
-      releasePreflights = resolve;
-    });
+    let bothPreflightsComplete: Promise<void> = Promise.resolve();
+    let synchronizeBeforeReads = false;
+    let beforeReadCount = 0;
+    let releaseSecondBeforeRead: (() => void) | undefined;
+    let secondBeforeReadStarted: Promise<void> = Promise.resolve();
 
     poolPrototype.connect = async function synchronizedConnect(this: unknown) {
       const client = await originalConnect.call(this);
@@ -133,20 +139,39 @@ test(
         originalQueries.set(client, originalQuery);
         wrappedClients.add(client);
         client.query = async (...args: unknown[]) => {
-          const result = await originalQuery(...args);
           const query = args[0];
           const text = typeof query === "string"
             ? query
             : query && typeof query === "object" && "text" in query
               ? String((query as { text: unknown }).text)
               : "";
+          const isBeforeRead = synchronizeBeforeReads
+            && text.includes('fee_income_account_id as "feeIncomeAccountId"')
+            && text.includes("from payment_surcharge_rules");
+          const readNumber = isBeforeRead ? ++beforeReadCount : 0;
+          const pendingQuery = originalQuery(...args);
+          if (readNumber === 2) releaseSecondBeforeRead?.();
+          const result = await pendingQuery;
+          // Hold the first locked snapshot until the competing request has
+          // submitted its read. Its SELECT must wait for the first commit.
+          if (readNumber === 1) await secondBeforeReadStarted;
           if (
+            synchronizePreflights &&
             text.includes("select id from payment_surcharge_rules") &&
             text.includes("daterange(effective_from, effective_to")
           ) {
             preflightCount += 1;
             if (preflightCount === 2) releasePreflights?.();
             await bothPreflightsComplete;
+          }
+          if (text.includes("insert into audit_log") && text.includes("'payment_surcharge_rules'")) {
+            auditWrites += 1;
+            if (injectedFailures > 0) {
+              injectedFailures -= 1;
+              // Fail on the server *after* both row and audit writes. This
+              // aborts the actual transaction, exercising rollback ownership.
+              await originalQuery(`do $$ begin raise exception using errcode = '${failureCode}', message = 'injected transaction failure'; end $$`);
+            }
           }
           return result;
         };
@@ -165,35 +190,150 @@ test(
       provider: "stripe",
       paymentMethod: "card",
       effectiveFrom: "2026-01-01",
-      effectiveTo: null,
+      effectiveTo: null as string | null,
     };
-    const request = () => new Request("http://localhost/api/admin/setup/payment-providers", {
+    const request = (changes: Record<string, unknown> = {}) => new Request("http://localhost/api/admin/setup/payment-providers", {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, ...changes }),
     });
+    const storedState = async () => {
+      const stored = await db.execute<{ rules: number; audits: number }>(sql`
+        select (select count(*)::int from payment_surcharge_rules where org_id = ${org.orgId}
+                  and effective_from = ${body.effectiveFrom}::date) as rules,
+               (select count(*)::int from audit_log where org_id = ${org.orgId}
+                  and table_name = 'payment_surcharge_rules'
+                  and changes->'rule'->1->>'effectiveFrom' = ${body.effectiveFrom}) as audits
+      `);
+      return stored.rows[0]!;
+    };
+    let scenario = 0;
+    const reset = async () => {
+      // Give each scenario a disjoint day, preserving all append-only audit
+      // evidence until the scratch organization is torn down.
+      scenario += 1;
+      body.effectiveFrom = `2026-01-${String(scenario).padStart(2, "0")}`;
+      body.effectiveTo = body.effectiveFrom;
+      auditWrites = 0;
+      injectedFailures = 0;
+      failureCode = "40P01";
+      synchronizePreflights = false;
+      preflightCount = 0;
+      beforeReadCount = 0;
+    };
 
     try {
-      const responses = await Promise.all([POST(request()), POST(request())]);
-      assert.equal(preflightCount, 2, "both route transactions must pass the preflight before either writes");
+      for (let round = 1; round <= 6; round += 1) {
+        await t.test(`real exclusion race ${round}: one rule and one audit commit`, async () => {
+          await reset();
+          synchronizePreflights = true;
+          bothPreflightsComplete = new Promise<void>((resolve) => { releasePreflights = resolve; });
+          let timedOut = false;
+          const timeout = setTimeout(() => { timedOut = true; releasePreflights?.(); }, 10_000);
+          try {
+            const responses = await Promise.all([POST(request()), POST(request())]);
+            assert.equal(timedOut, false, "both preflights must reach the barrier without timeout");
+            assert.ok(preflightCount >= 2, "both initial requests must reach the preflight (a deadlock retry may read again)");
+            assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+            assert.deepEqual(await responses.find((response) => response.status === 200)!.json(), { ok: true });
+            assert.deepEqual(await responses.find((response) => response.status === 409)!.json(), {
+              error: `another active surcharge rule already takes effect on ${body.effectiveFrom}`,
+            });
+            assert.deepEqual(await storedState(), { rules: 1, audits: 1 });
+          } finally {
+            clearTimeout(timeout);
+            releasePreflights?.();
+          }
+        });
+      }
 
-      const winner = responses.find((response) => response.status === 200);
-      const loser = responses.find((response) => response.status === 409);
-      assert.ok(winner, "one concurrent request must retain the normal success path");
-      assert.ok(loser, "storage must reject the racing writer as a conflict");
-      assert.deepEqual(await winner.json(), { ok: true });
-      assert.deepEqual(await loser.json(), {
-        error: "another active surcharge rule already takes effect on 2026-01-01",
+      await t.test("deadlocks after audit roll back before retrying the whole save", async () => {
+        await reset();
+        injectedFailures = 2;
+        assert.equal((await POST(request())).status, 200);
+        assert.equal(auditWrites, 3, "both aborted attempts must have reached the audit write");
+        assert.deepEqual(await storedState(), { rules: 1, audits: 1 });
       });
 
-      const stored = await db.execute<{ count: number }>(sql`
-        select count(*)::int as count
-          from payment_surcharge_rules
-         where org_id = ${org.orgId}
-           and provider = 'stripe'
-           and payment_method = 'card'
-           and is_active
-      `);
-      assert.equal(stored.rows[0]!.count, 1);
+      await t.test("repeated deadlocks stop after three attempts without partial state", async () => {
+        await reset();
+        injectedFailures = 3;
+        const response = await POST(request());
+        assert.equal(response.status, 409);
+        assert.deepEqual(await response.json(), {
+          error: "surcharge rule save conflicted with another transaction; retry the save",
+        });
+        assert.equal(auditWrites, 3);
+        assert.deepEqual(await storedState(), { rules: 0, audits: 0 });
+      });
+
+      await t.test("an ambient transaction is never retried on its aborted connection", async () => {
+        await reset();
+        injectedFailures = 1;
+        const response = await withOrgTransaction(org.orgId, () => POST(request()));
+        assert.equal(response.status, 409);
+        assert.equal(auditWrites, 1);
+        assert.deepEqual(await storedState(), { rules: 0, audits: 0 });
+      });
+
+      await t.test("unrecognized database failures are not retried or mislabeled as overlap", async () => {
+        await reset();
+        injectedFailures = 1;
+        failureCode = "XX000";
+        await assert.rejects(POST(request()), (error: unknown) => {
+          const cause = (error as { cause?: { code?: string } }).cause;
+          return cause?.code === "XX000";
+        });
+        assert.equal(auditWrites, 1);
+        assert.deepEqual(await storedState(), { rules: 0, audits: 0 });
+      });
+
+      for (const secondAction of ["saveRule", "deleteRule"]) {
+        await t.test(`concurrent save/${secondAction} capture the immediately preceding row in their audit`, async () => {
+          await reset();
+          assert.equal((await POST(request())).status, 200);
+          const rows = await db.execute<{ id: string }>(sql`
+            select id from payment_surcharge_rules where org_id = ${org.orgId}
+              and effective_from = ${body.effectiveFrom}::date
+          `);
+          const id = rows.rows[0]!.id;
+          synchronizeBeforeReads = true;
+          secondBeforeReadStarted = new Promise<void>((resolve) => { releaseSecondBeforeRead = resolve; });
+          let timedOut = false;
+          const timeout = setTimeout(() => { timedOut = true; releaseSecondBeforeRead?.(); }, 10_000);
+          let responses: Response[];
+          try {
+            responses = await Promise.all([
+              POST(request({ id, name: "First editor" })),
+              POST(request({ id, action: secondAction, name: "Second editor" })),
+            ]);
+            assert.equal(timedOut, false, "the competing update must submit its read while the first holds its snapshot");
+            assert.equal(beforeReadCount, 2);
+          } finally {
+            synchronizeBeforeReads = false;
+            clearTimeout(timeout);
+            releaseSecondBeforeRead?.();
+          }
+          assert.deepEqual(responses.map((response) => response.status), [200, 200]);
+          const audits = await db.execute<{
+            before: { name: string; isActive: boolean };
+            after: { name: string; isActive: boolean };
+          }>(sql`
+            select changes->'rule'->0 as before, changes->'rule'->1 as after
+              from audit_log where org_id = ${org.orgId} and row_id = ${id} and action in ('update', 'delete')
+          `);
+          assert.equal(audits.rows.length, 2);
+          const first = audits.rows.find((row) => row.before.name === body.name && row.before.isActive);
+          assert.ok(first);
+          const second = audits.rows.find((row) => row !== first);
+          assert.ok(second);
+          assert.deepEqual(second.before, first.after, "second audit before must be the first editor's committed row");
+          const live = await db.execute<{ name: string; isActive: boolean }>(sql`
+            select name, is_active as "isActive" from payment_surcharge_rules where org_id = ${org.orgId} and id = ${id}
+          `);
+          assert.deepEqual(live.rows[0], { name: second.after.name, isActive: second.after.isActive });
+          assert.deepEqual(await storedState(), { rules: 1, audits: 3 });
+        });
+      }
     } finally {
       poolPrototype.connect = originalConnect;
       for (const client of wrappedClients) {
