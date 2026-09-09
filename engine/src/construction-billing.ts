@@ -278,14 +278,6 @@ export function projectRetainageHeldSql(orgId: string, projectId: string, accoun
   `;
 }
 
-async function defaultIncomeAccount(tx: SqlExecutor, orgId: string): Promise<string | null> {
-  const r = (await tx.execute<{ id: string }>(sql`
-    select id from accounts where org_id = ${orgId} and type in ('income', 'income_other') and is_active
-     order by number nulls last limit 1
-  `));
-  return r.rows[0]?.id ?? null;
-}
-
 /**
  * Create the next Application for Payment for a project, pre-filling each SOV
  * line's previous-completed (the exact gross billed to date, with each prior
@@ -573,7 +565,31 @@ export async function generatePayApplicationInvoice(
       throw new ConstructionBillingError("Nothing to bill — enter work completed on at least one line");
     }
 
-    const defIncome = await defaultIncomeAccount(tx, orgId);
+    // Resolve every billed account before numbering or writing invoice/source
+    // evidence. Chart order is not accounting configuration. Keep the selected
+    // accounts active and postable until this transaction completes.
+    const byLine = new Map(computed.lines.map((c) => [c.sovLineId, c]));
+    const preparedLines: { accountId: string; description: string; amount: string }[] = [];
+    for (const src of linesRes.rows) {
+      const c = byLine.get(src.sov_line_id)!;
+      if (cmp(c.grossThisPeriod, "0") === 0) continue;
+      if (!src.income_account_id) {
+        throw new ConstructionBillingError(
+          `Schedule-of-values line "${src.description}" has no income account. Configure its income account before creating an invoice`,
+        );
+      }
+      const account = (await tx.execute<{ id: string }>(sql`
+        select id from accounts
+         where org_id = ${orgId} and id = ${src.income_account_id} and is_active and not is_summary
+         for share
+      `)).rows[0];
+      if (!account) {
+        throw new ConstructionBillingError(
+          `Schedule-of-values line "${src.description}" requires an active, non-summary account in this organization. Correct its income account before creating an invoice`,
+        );
+      }
+      preparedLines.push({ accountId: account.id, description: src.description, amount: c.grossThisPeriod });
+    }
     const retAcct = await retainageReceivableAccount(tx, orgId);
     if (cmp(computed.retainageThisPeriod, "0") > 0 && !retAcct) {
       throw new ConstructionBillingError(
@@ -593,27 +609,12 @@ export async function generatePayApplicationInvoice(
     const invoiceId = invoice.rows[0]!.id;
 
     let lineNo = 1;
-    const byLine = new Map(computed.lines.map((c) => [c.sovLineId, c]));
-    for (const src of linesRes.rows) {
-      const c = byLine.get(src.sov_line_id)!;
-      if (cmp(c.grossThisPeriod, "0") === 0) continue;
-      let acct = defIncome;
-      if (src.income_account_id) {
-        const owned = (await tx.execute<{ id: string }>(sql`
-          select id from accounts
-           where org_id = ${orgId} and id = ${src.income_account_id} and is_active and not is_summary
-        `));
-        if (!owned.rows[0]) {
-          throw new ConstructionBillingError("No income account configured for a schedule-of-values line");
-        }
-        acct = owned.rows[0].id;
-      }
-      if (!acct) throw new ConstructionBillingError("No income account configured for a schedule-of-values line");
+    for (const line of preparedLines) {
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description, quantity,
               unit_price, amount, is_billable, project_id, created_by)
-        values (${orgId}, ${invoiceId}, ${lineNo}, ${acct}, ${src.description}, '1',
-              ${c.grossThisPeriod}, ${c.grossThisPeriod}, true, ${app.project_id}, ${userId})
+        values (${orgId}, ${invoiceId}, ${lineNo}, ${line.accountId}, ${line.description}, '1',
+              ${line.amount}, ${line.amount}, true, ${app.project_id}, ${userId})
       `);
       lineNo++;
     }
