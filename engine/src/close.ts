@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { canonicalJson } from "./canonical-json.ts";
 import { addCalendarDays, businessToday } from "./business-date.ts";
 import { db, withOrg, withBypassContext, withOrgContext, inDbTransaction, type SqlExecutor } from "./db.ts";
-import { revaluationReadiness } from "./fx-revaluation.ts";
+import { financialClosePeriodScope, revaluationReadiness } from "./fx-revaluation.ts";
 
 export class CloseError extends Error {}
 
@@ -843,34 +843,73 @@ export async function generateAccountingPeriods(
   return { created, updated, periods };
 }
 
+function closeEntityScope(subsidiaryIds: string[], entity: SQL): SQL {
+  return subsidiaryIds.length
+    ? sql`${entity} in (${sql.join(subsidiaryIds.map(id => sql`${id}::uuid`), sql`, `)})`
+    : sql`true`;
+}
+
+function closeBankStatementScope(orgId: string, subsidiaryIds: string[]): SQL {
+  const inScope = (entity: SQL) => closeEntityScope(subsidiaryIds, entity);
+  // Bank evidence is account-wide. For shared accounts its entity cannot be
+  // inferred from a statement, so it remains relevant to every applicable close.
+  return !subsidiaryIds.length ? sql`true` : sql`(
+    a.subsidiary_id is null or ${inScope(sql`a.subsidiary_id`)} or
+    (a.subsidiary_include_children and exists (
+      with recursive ancestors as (
+        select id, parent_id from subsidiaries where org_id=${orgId} and ${inScope(sql`id`)}
+        union
+        select s.id, s.parent_id from subsidiaries s join ancestors x on x.parent_id=s.id
+          where s.org_id=${orgId}
+      ) select 1 from ancestors where id=a.subsidiary_id
+    )))`;
+}
+
 async function periodFingerprint(
   orgId: string,
   periodId: string,
   bookId: string,
+  subsidiaryIds: string[] = [],
+  includeGroupEvidence = true,
 ): Promise<string> {
+  const period = (await db.execute<{
+    id: string; ends_on: string; is_adjustment: boolean; fiscal_calendar_id: string; period_number: number;
+  }>(sql`select id,ends_on,is_adjustment,fiscal_calendar_id,period_number from accounting_periods
+    where org_id=${orgId} and id=${periodId}`)).rows[0];
+  if (!period) throw new CloseError("period not found");
+  // Closing balances include prior posted activity. A controlled reopening of
+  // an earlier period must invalidate evidence even without a current-period
+  // entry. Use the FX engine's exact regular/adjustment period ordering.
+  const ledgerPeriodScope = sql`(e.period_id=${periodId} or
+    (e.status in ('posted','reversed') and ${financialClosePeriodScope(period)}))`;
+  const inScope = (entity: SQL) => closeEntityScope(subsidiaryIds, entity);
+  const entryScope = sql`(exists(select 1 from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id and ${inScope(sql`l.subsidiary_id`)})
+    or (not exists(select 1 from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id) and ${inScope(sql`e.subsidiary_id`)}))`;
+  const documentScope = sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)})`;
   const result = (await db.execute<Record<string, unknown>>(sql`
     select
-      (select count(*) from journal_entries e where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${bookId}) as entries,
-      (select coalesce(max(updated_at)::text, '') from journal_entries e where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${bookId}) as entry_changed,
+      (select count(*) from journal_entries e where e.org_id = ${orgId} and ${ledgerPeriodScope} and e.book_id = ${bookId} and ${entryScope}) as entries,
+      (select coalesce(max(updated_at)::text, '') from journal_entries e where e.org_id = ${orgId} and ${ledgerPeriodScope} and e.book_id = ${bookId} and ${entryScope}) as entry_changed,
       (select coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0)::text
          from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-        where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${bookId}) as debits,
+        where e.org_id = ${orgId} and ${ledgerPeriodScope} and e.book_id = ${bookId} and ${inScope(sql`l.subsidiary_id`)}) as debits,
       (select count(*) from documents d
        where d.org_id = ${orgId}
-         and d.posting_period_id = ${periodId}) as documents,
+         and d.posting_period_id = ${periodId} and ${documentScope}) as documents,
       (select coalesce(max(d.updated_at)::text, '') from documents d
        where d.org_id = ${orgId}
-         and d.posting_period_id = ${periodId}) as document_changed,
+         and d.posting_period_id = ${periodId} and ${documentScope}) as document_changed,
       (select count(*) from documents d
         where d.org_id = ${orgId}
           and d.status in ('draft','pending_approval','approved','posted')
-          and d.posting_period_id is null) as unassigned_documents,
+          and d.posting_period_id is null and ${documentScope}) as unassigned_documents,
       (select coalesce(max(d.updated_at)::text, '') from documents d
         where d.org_id = ${orgId}
           and d.status in ('draft','pending_approval','approved','posted')
-          and d.posting_period_id is null) as unassigned_document_changed,
-      (select count(*) from reconciliations r join accounting_periods p on p.id = ${periodId} and p.org_id = r.org_id
-        where r.org_id = ${orgId} and r.through_date <= p.ends_on and r.status = 'signed_off') as reconciliations,
+          and d.posting_period_id is null and ${documentScope}) as unassigned_document_changed,
+      (select count(*) from reconciliations r join accounts a on a.org_id=r.org_id and a.id=r.account_id join accounting_periods p on p.id = ${periodId} and p.org_id = r.org_id
+        where r.org_id = ${orgId} and r.through_date <= p.ends_on and r.status = 'signed_off'
+          and (${closeBankStatementScope(orgId, subsidiaryIds)} or exists(select 1 from journal_lines l where l.org_id=r.org_id and l.account_id=r.account_id and ${inScope(sql`l.subsidiary_id`)}))) as reconciliations,
       -- Consolidated translation rates are close evidence: re-deriving or
       -- overriding a period's rates restates every consolidated statement, so
       -- the change must invalidate completed tasks like a ledger change does.
@@ -880,10 +919,15 @@ async function periodFingerprint(
                    || cf.average_rate::text || '/' || cf.historical_rate::text || '/' || cf.source,
                  ',' order by cf.from_currency, cf.to_currency), '')
          from consolidated_fx_rates cf
-        where cf.org_id = ${orgId} and cf.period_id = ${periodId}) as consolidated_rates
+        where cf.org_id = ${orgId} and cf.period_id = ${periodId} and ${includeGroupEvidence}) as consolidated_rates,
+      (select coalesce(string_agg(e.id::text || ':' || e.updated_at::text || ':' || l.id::text || ':' || l.amount::text, ',' order by l.id), '')
+        from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
+        join accounts a on a.id=l.account_id and a.org_id=l.org_id
+        where e.org_id=${orgId} and ${ledgerPeriodScope} and e.book_id=${bookId}
+          and a.eliminate and ${includeGroupEvidence}) as group_activity
   `));
   return createHash("sha256")
-    .update(JSON.stringify(result.rows[0] ?? {}))
+    .update(JSON.stringify({ subsidiaryIds: [...subsidiaryIds].sort(), evidence: result.rows[0] ?? {} }))
     .digest("hex");
 }
 
@@ -973,16 +1017,38 @@ export async function startCloseRun(args: {
   }
   if (!configuration.rows[0]?.package_ok)
     throw new CloseError("active reporting package not found");
-  const fingerprint = await periodFingerprint(
-    args.orgId,
-    args.periodId,
-    args.bookId,
-  );
   const targetCloseDate =
     args.targetCloseDate ?? addBusinessDays(period.ends_on, 5);
 
   return db
     .transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`close-start:${args.orgId}:${args.periodId}:${args.bookId}`},0))`);
+      const existing = (await tx.execute<{
+        id: string; scope: { subsidiaryIds?: string[] }; blueprint_id: string;
+        status: string; system_blueprint: boolean;
+      }>(sql`select r.id,r.scope,r.blueprint_id,r.status,
+          b.name='close.defaultData.blueprint.name' as system_blueprint
+        from close_runs r join close_blueprints b on b.id=r.blueprint_id and b.org_id=r.org_id
+        where r.org_id=${args.orgId} and r.period_id=${args.periodId} and r.book_id=${args.bookId} for update of r`)).rows[0];
+      if (existing) {
+        if (args.subsidiaryIds !== undefined &&
+            canonicalJson([...(args.subsidiaryIds ?? [])].sort()) !== canonicalJson([...(existing.scope?.subsidiaryIds ?? [])].sort()))
+          throw new CloseError("existing close run has a different subsidiary scope");
+        if (args.blueprintId !== undefined && args.blueprintId !== existing.blueprint_id)
+          throw new CloseError("existing close run has a different blueprint");
+        if (!existing.system_blueprint && !closeFeatures.advancedClose)
+          throw new CloseError("custom close blueprints require Advanced close controls");
+        // Resume the captured scope/blueprint and its assignment/evidence rows.
+        // Defaults chosen for a new run must never rematerialize an old run.
+        if (existing.status === "cancelled") {
+          await tx.execute(sql`update close_runs set status='in_progress',updated_at=now(),updated_by=${args.actorId} where id=${existing.id} and org_id=${args.orgId}`);
+          await tx.execute(sql`insert into close_events (org_id,run_id,event_type,actor_id,payload)
+            values (${args.orgId},${existing.id},'run.resumed',${args.actorId},${JSON.stringify({scope:existing.scope,blueprintId:existing.blueprint_id})}::jsonb)`);
+        }
+        return existing.id;
+      }
+      const fingerprint = await periodFingerprint(args.orgId,args.periodId,args.bookId,args.subsidiaryIds ?? [],
+        !systemBlueprint || !args.subsidiaryIds?.length);
       const inserted = (await tx.execute<{ id: string }>(sql`
       insert into close_runs
         (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
@@ -992,12 +1058,10 @@ export async function startCloseRun(args: {
               'in_progress', 'readiness', ${targetCloseDate},
               ${JSON.stringify({ subsidiaryIds: args.subsidiaryIds ?? [] })}::jsonb,
               ${fingerprint}, now(), now(), ${args.actorId}, ${args.actorId}, ${args.actorId})
-      on conflict (org_id, period_id, book_id) do update set
-        status = case when close_runs.status = 'cancelled' then 'in_progress' else close_runs.status end,
-        updated_at = now(), updated_by = ${args.actorId}
-      where close_runs.org_id = ${args.orgId}
+      on conflict (org_id, period_id, book_id) do nothing
       returning id`));
-      const runId = inserted.rows[0]!.id;
+      const runId = inserted.rows[0]?.id;
+      if (!runId) throw new CloseError("close run was created concurrently; retry to resume its captured scope");
       const steps = (await tx.execute<any>(sql`
       select id, key, title, description, workstream, task_type, completion_mode,
              gate_type, due_offset_business_days, evidence_required, sort_order,
@@ -1010,6 +1074,8 @@ export async function startCloseRun(args: {
       let materializedSteps = 0;
       for (const step of steps.rows) {
         if (systemBlueprint && !defaultCloseStepEnabled(step.key, closeFeatures)) continue;
+        // These standard tasks certify group consolidation, never one entity.
+        if (systemBlueprint && args.subsidiaryIds?.length && ["intercompany-balanced", "consolidation"].includes(step.key)) continue;
         if (
           !blueprintStepApplies(step.applicability, {
             fiscalYear: Number(period.fiscal_year),
@@ -1098,6 +1164,8 @@ async function readinessChecks(
   const context = (await db.execute<{
       period_id: string;
       book_id: string;
+      scope: { subsidiaryIds?: string[] };
+      system_blueprint: boolean;
       starts_on: string;
       ends_on: string;
       fiscal_calendar_id: string;
@@ -1106,7 +1174,8 @@ async function readinessChecks(
       base_currency: string;
       elimination_currency: string;
     }>(sql`
-    select r.period_id, r.book_id, p.starts_on, p.ends_on,
+    select r.period_id, r.book_id, r.scope, p.starts_on, p.ends_on,
+           b.name = 'close.defaultData.blueprint.name' as system_blueprint,
            p.fiscal_calendar_id, p.period_number, p.is_adjustment,
            o.base_currency,
            coalesce(
@@ -1115,27 +1184,37 @@ async function readinessChecks(
                order by s.created_at, s.id limit 1),
              o.base_currency) as elimination_currency
       from close_runs r
+      join close_blueprints b on b.id=r.blueprint_id and b.org_id=r.org_id
       join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
       join orgs o on o.id = r.org_id
      where r.id = ${runId} and r.org_id = ${orgId}`));
   const ctx = context.rows[0];
   if (!ctx) throw new CloseError("close run not found");
+  const subsidiaryIds = ctx.scope?.subsidiaryIds ?? [];
+  const scoped = subsidiaryIds.length > 0;
+  const inScope = (entity: SQL) => closeEntityScope(subsidiaryIds, entity);
+  // Documents without an assigned entity still require accountant attention;
+  // never hide an unresolved posting assignment from an entity close.
+  const documentScope = sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)})`;
+  const statementScope = closeBankStatementScope(orgId, subsidiaryIds);
 
   const [drafts, missingPeriod, bank, depreciation, fx, fxReval, intercompany, variancePolicy] =
     (await Promise.all([
       db.execute(sql`
       select
-        (select count(*) from journal_entries where org_id = ${orgId} and period_id = ${ctx.period_id} and book_id = ${ctx.book_id} and status = 'draft')
+        (select count(*) from journal_entries e where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status = 'draft'
+          and (exists(select 1 from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id and ${inScope(sql`l.subsidiary_id`)})
+            or (not exists(select 1 from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id) and ${inScope(sql`e.subsidiary_id`)})))
         +
-        (select count(*) from documents
-          where org_id = ${orgId} and status in ('draft','pending_approval','approved')
-            and posting_period_id = ${ctx.period_id}) as count`),
+        (select count(*) from documents d
+          where d.org_id = ${orgId} and d.status in ('draft','pending_approval','approved')
+            and d.posting_period_id = ${ctx.period_id} and ${documentScope}) as count`),
       db.execute(sql`
       select count(*) as count
-        from documents
-       where org_id = ${orgId}
-         and status in ('draft','pending_approval','approved','posted')
-         and posting_period_id is null`),
+        from documents d
+       where d.org_id = ${orgId}
+         and d.status in ('draft','pending_approval','approved','posted')
+         and d.posting_period_id is null and ${documentScope}`),
       db.execute(sql`
       select count(*) as count
         from accounts a
@@ -1143,21 +1222,23 @@ async function readinessChecks(
          and (
            exists (
              select 1 from bank_statement_lines bsl
-              where bsl.org_id=${orgId} and bsl.account_id=a.id
+              where bsl.org_id=${orgId} and bsl.account_id=a.id and ${statementScope}
                 and bsl.posted_on between ${ctx.starts_on} and ${ctx.ends_on}
            )
            or exists (
              select 1 from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
               where jl.org_id=${orgId} and jl.account_id=a.id and je.period_id=${ctx.period_id}
-                and je.book_id=${ctx.book_id} and je.status in ('posted','reversed')
+                and je.book_id=${ctx.book_id} and je.status in ('posted','reversed') and ${inScope(sql`jl.subsidiary_id`)}
            )
-           or coalesce((
-             select sum(jl.amount) from journal_lines jl
+           or exists (
+             select 1 from journal_lines jl
              join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
              join accounting_periods jp on jp.id=je.period_id and jp.org_id=je.org_id
               where jl.org_id=${orgId} and jl.account_id=a.id and je.book_id=${ctx.book_id}
                 and je.status in ('posted','reversed') and jp.ends_on <= ${ctx.ends_on}
-           ), 0) <> 0
+                and ${inScope(sql`jl.subsidiary_id`)}
+              group by jl.subsidiary_id having sum(jl.amount) <> 0
+           )
          )
          and not exists (
            select 1 from reconciliations r
@@ -1168,19 +1249,25 @@ async function readinessChecks(
       select count(*) as count
         from depreciation_schedule_lines l
         join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+        join fixed_assets a on a.id=s.asset_id and a.org_id=s.org_id
        where l.org_id = ${orgId} and l.period_id = ${ctx.period_id}
-         and s.book_id = ${ctx.book_id} and l.posted_amount is null and l.planned_amount <> 0`),
+         and s.book_id = ${ctx.book_id} and l.posted_amount is null and l.planned_amount <> 0
+         and ${inScope(sql`a.subsidiary_id`)}`),
       db.execute(sql`
       select count(*) as count
         from (
-          select distinct l.currency
+          select distinct l.currency, s.base_currency
             from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+            join subsidiaries s on s.id=l.subsidiary_id and s.org_id=l.org_id
            where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id}
-             and l.currency <> ${ctx.base_currency}
+             and e.status in ('posted','reversed') and ${inScope(sql`l.subsidiary_id`)}
+             and l.currency <> s.base_currency
         ) c
        where not exists (
-         select 1 from fx_rates f where f.org_id = ${orgId} and f.from_currency = c.currency
-           and f.to_currency = ${ctx.base_currency} and f.rate_type = 'spot' and f.as_of <= ${ctx.ends_on}
+         select 1 from fx_rates f where f.org_id = ${orgId}
+           and ((f.from_currency=c.currency and f.to_currency=c.base_currency)
+             or (f.from_currency=c.base_currency and f.to_currency=c.currency))
+           and f.rate_type = 'spot' and f.rate > 0 and f.as_of <= ${ctx.ends_on}
        )`),
       // The revaluation ENGINE decides fx readiness: the same monetary
       // population, spot-rate lookup, and delta arithmetic runRevaluation
@@ -1188,7 +1275,10 @@ async function readinessChecks(
       // (the engine skips it), so it is not an exception; a position the
       // engine cannot reverse (no following period) is reported as its own
       // actionable exception below rather than as "unrevalued".
-      revaluationReadiness(orgId, ctx.book_id, ctx.period_id),
+      revaluationReadiness(orgId, ctx.book_id, ctx.period_id, scoped ? subsidiaryIds : undefined),
+      // Entity closes do not certify consolidated elimination. Only an org-wide
+      // run evaluates this complete-group assertion; filtering its ledger would
+      // manufacture a residual by omitting the counterparty.
       // Intercompany residuals are measured the way runAutoElimination
       // measures them: every subsidiary's flagged activity translated into the
       // elimination subsidiary's currency through the period's consolidated
@@ -1197,7 +1287,7 @@ async function readinessChecks(
       // cleanly reads zero per account, whatever functional currencies its
       // entities keep. A foreign entity with no consolidated rate cannot be
       // measured at all; that is counted separately, never as a residual.
-      db.execute(sql`
+      scoped && ctx.system_blueprint ? Promise.resolve({ rows: [{ count: 0, missing_rates: 0 }] }) : db.execute(sql`
       select count(*) filter (where residual <> 0 and not coalesce(missing_rate, false)) as count,
              count(*) filter (where missing_rate) as missing_rates
         from (
@@ -1233,31 +1323,34 @@ async function readinessChecks(
   };
   const variances = (await db.execute<{ count: string }>(sql`
     with current_activity as (
-      select l.account_id, sum(l.amount) as amount
+      select l.account_id, l.subsidiary_id, sum(l.amount) as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
-       group by l.account_id
+         and ${inScope(sql`l.subsidiary_id`)}
+       group by l.account_id, l.subsidiary_id
     ), prior_period as (
       select p2.id from accounting_periods p2
-       where p2.org_id = ${orgId} and p2.ends_on < ${ctx.starts_on} and not p2.is_adjustment
+       where p2.org_id = ${orgId} and p2.fiscal_calendar_id=${ctx.fiscal_calendar_id}
+         and p2.ends_on < ${ctx.starts_on} and not p2.is_adjustment
        order by p2.ends_on desc limit 1
     ), prior_activity as (
-      select l.account_id, sum(l.amount) as amount
+      select l.account_id, l.subsidiary_id, sum(l.amount) as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${orgId} and e.period_id = (select id from prior_period)
          and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
-       group by l.account_id
+         and ${inScope(sql`l.subsidiary_id`)}
+       group by l.account_id, l.subsidiary_id
+    ), entity_activity as (
+      select coalesce(c.account_id,p.account_id) as account_id,
+             coalesce(c.amount,0) as current_amount, coalesce(p.amount,0) as prior_amount
+        from current_activity c full join prior_activity p
+          on p.account_id=c.account_id and p.subsidiary_id=c.subsidiary_id
     )
     select count(*) as count
-      from accounts a
-      left join current_activity c on c.account_id = a.id
-      left join prior_activity p on p.account_id = a.id
-     where a.org_id = ${orgId} and not a.is_summary
-       and abs(coalesce(c.amount, 0) - coalesce(p.amount, 0)) >= ${threshold.amount}::numeric
-       and (
-         coalesce(p.amount, 0) = 0
-         or abs((coalesce(c.amount, 0) - p.amount) / nullif(abs(p.amount), 0) * 100) >= ${threshold.percent}::numeric
-       )`));
+      from entity_activity v join accounts a on a.id=v.account_id and a.org_id=${orgId}
+     where not a.is_summary
+       and abs(v.current_amount-v.prior_amount) >= ${threshold.amount}::numeric
+       and (v.prior_amount=0 or abs((v.current_amount-v.prior_amount)/nullif(abs(v.prior_amount),0)*100) >= ${threshold.percent}::numeric)`));
 
   return [
     {
@@ -1351,6 +1444,8 @@ async function readinessChecks(
       message: "close.diagnostics.material-variances.message",
       count: Number(variances.rows[0]?.count ?? 0),
       details: {
+        // Thresholds are evaluated in each legal entity's functional currency.
+        amountBasis: "entity-functional-currency",
         amountThreshold: threshold.amount,
         percentThreshold: Number(threshold.percent),
       },
@@ -1372,14 +1467,21 @@ export async function refreshCloseRun(
       period_id: string;
       book_id: string;
       data_fingerprint: string | null;
+      scope: { subsidiaryIds?: string[] };
+      system_blueprint: boolean;
     }>(sql`
-    select period_id, book_id, data_fingerprint from close_runs where id = ${runId} and org_id = ${orgId}`));
+    select r.period_id, r.book_id, r.data_fingerprint, r.scope,
+           b.name='close.defaultData.blueprint.name' as system_blueprint
+      from close_runs r join close_blueprints b on b.id=r.blueprint_id and b.org_id=r.org_id
+      where r.id = ${runId} and r.org_id = ${orgId}`));
   const run = runRes.rows[0];
   if (!run) throw new CloseError("close run not found");
   const fingerprint = await periodFingerprint(
     orgId,
     run.period_id,
     run.book_id,
+    run.scope?.subsidiaryIds ?? [],
+    !run.system_blueprint || !run.scope?.subsidiaryIds?.length,
   );
   const dataChanged = Boolean(
     run.data_fingerprint && run.data_fingerprint !== fingerprint,
@@ -1388,7 +1490,9 @@ export async function refreshCloseRun(
     select key from close_run_tasks where run_id=${runId} and org_id=${orgId}
   `));
   const availableTaskKeys = new Set(availableTasks.rows.map((task) => task.key));
-  const checks = (await readinessChecks(orgId, runId)).filter((check) => availableTaskKeys.has(check.taskKey));
+  const groupNotApplicable = run.system_blueprint && !!run.scope?.subsidiaryIds?.length;
+  const checks = (await readinessChecks(orgId, runId)).filter((check) =>
+    availableTaskKeys.has(check.taskKey) && !(groupNotApplicable && check.taskKey === "intercompany-balanced"));
   const hardChecks = checks.filter((check) => check.severity !== "warning");
   const readinessScore = Math.round(
     (hardChecks.filter((check) => check.count === 0).length /
@@ -1425,6 +1529,26 @@ export async function refreshCloseRun(
                 ${JSON.stringify({ invalidated })}::jsonb)`);
     }
 
+    // Old standard runs may already contain group tasks. Preserve their rows
+    // and evidence, but explicitly waive inapplicable work instead of claiming
+    // that an entity close proved consolidated balances correct.
+    if (groupNotApplicable) {
+      const previous = await tx.execute<Record<string, unknown>>(sql`
+        select * from close_run_tasks where org_id=${orgId} and run_id=${runId}
+          and key in ('intercompany-balanced','consolidation') and status <> 'waived' for update`);
+      if (previous.rows.length) {
+        const result = { reason: "group-consolidation-not-applicable-to-entity-close", subsidiaryIds: run.scope.subsidiaryIds };
+        await tx.execute(sql`update close_run_tasks set status='waived', result=${JSON.stringify(result)}::jsonb,
+          completed_at=now(), completed_by=${actorId ?? null}, updated_at=now(), updated_by=${actorId ?? null}
+          where org_id=${orgId} and run_id=${runId} and key in ('intercompany-balanced','consolidation') and status <> 'waived'`);
+        await tx.execute(sql`insert into close_events (org_id,run_id,event_type,actor_id,payload)
+          values (${orgId},${runId},'tasks.scope_not_applicable',${actorId ?? null},
+            ${JSON.stringify({before:previous.rows,after:{status:"waived",result}})}::jsonb)`);
+      }
+      await tx.execute(sql`update close_exceptions set status='resolved', resolved_at=now(), resolved_by=${actorId ?? null},
+        resolution='group-consolidation-not-applicable-to-entity-close', updated_at=now()
+        where org_id=${orgId} and run_id=${runId} and code in ('intercompany-residual','consolidated-rates-missing') and status='open'`);
+    }
     for (const check of checks) {
       const task = (await tx.execute<{ id: string }>(sql`
         select id from close_run_tasks where run_id = ${runId} and org_id = ${orgId} and key = ${check.taskKey}`));
@@ -1870,9 +1994,13 @@ export async function finalizeCloseFlowApproval(args: {
       data_fingerprint: string | null;
       period_id: string;
       book_id: string;
+      scope: { subsidiaryIds?: string[] };
+      system_blueprint: boolean;
     }>(sql`
-    select status, started_by, data_fingerprint, period_id, book_id from close_runs
-     where id = ${args.runId} and org_id = ${args.orgId} for update
+    select r.status,r.started_by,r.data_fingerprint,r.period_id,r.book_id,r.scope,
+           b.name='close.defaultData.blueprint.name' as system_blueprint
+      from close_runs r join close_blueprints b on b.id=r.blueprint_id and b.org_id=r.org_id
+     where r.id = ${args.runId} and r.org_id = ${args.orgId} for update of r
   `));
   const row = run.rows[0];
   if (!row) throw new CloseError("close run not found");
@@ -1885,6 +2013,8 @@ export async function finalizeCloseFlowApproval(args: {
     args.orgId,
     row.period_id,
     row.book_id,
+    row.scope?.subsidiaryIds ?? [],
+    !row.system_blueprint || !row.scope?.subsidiaryIds?.length,
   );
   if (!row.data_fingerprint || row.data_fingerprint !== currentFingerprint) {
     await db.execute(sql`

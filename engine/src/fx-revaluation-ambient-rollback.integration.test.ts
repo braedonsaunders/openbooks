@@ -10,6 +10,8 @@ test("FX reversal failure removes its adjustment and preserves other entities in
   skip: !process.env.OPENBOOKS_DB_URL,
 }, async () => {
   const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   const branchId = randomUUID();
   const constraint = `audit_fx_reversal_failure_${randomUUID().replaceAll("-", "")}`;

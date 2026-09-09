@@ -104,6 +104,8 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
     },
     run: async (ctx) => {
       const ledger = ctx.ledger!;
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+        coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${ledger.orgId}`);
       await setSpotRate(ledger, "USD", "CAD", "2026-07-15", "1.35");
       const sale = await capture(ctx, "foreign-currency sale", async () => {
         await postConformanceDocument(ctx, {
@@ -172,6 +174,8 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
     },
     run: async (ctx) => {
       const ledger = ctx.ledger!;
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+        coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${ledger.orgId}`);
       await setSpotRate(ledger, "USD", "CAD", "2026-07-15", "1.35");
       await postConformanceDocument(ctx, {
         kind: "customer_invoice",
@@ -246,6 +250,8 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
     },
     run: async (ctx) => {
       const ledger = ctx.ledger!;
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+        coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${ledger.orgId}`);
       // Designate the loan account a monetary item (the account-level setting
       // an administrator edits on the chart of accounts).
       await db.execute(sql`
@@ -425,6 +431,8 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
     },
     run: async (ctx) => {
       const ledger = ctx.ledger!;
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+        coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${ledger.orgId}`);
       // One direction only on the registry: the inverse of this row is where
       // ten-decimal rates come from.
       await setSpotRate(ledger, "CAD", "USD", "2026-07-22", "0.70");
@@ -491,6 +499,8 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
     },
     run: async (ctx) => {
       const ledger = ctx.ledger!;
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+        coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${ledger.orgId}`);
       // One direction only on the registry: the inverse of this row is where
       // ten-decimal rates come from.
       await setSpotRate(ledger, "CAD", "USD", "2026-07-23", "0.81");

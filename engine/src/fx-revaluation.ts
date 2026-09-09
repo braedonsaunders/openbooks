@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
-import { db, withTransactionSavepoint } from "./db.ts";
+import { db, withOrgTransaction, withTransactionSavepoint } from "./db.ts";
+import { businessTimeZone } from "./business-date.ts";
+import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import { loadControlAccounts } from "./control-accounts.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "./money.ts";
-import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
+import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
  * Period-end UNREALIZED FX revaluation.
@@ -16,25 +18,12 @@ import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRe
  * start of the next period so the exposure is re-measured from historical each
  * close rather than compounding.
  *
- * Correctness rules that keep this idempotent and double-count-free:
- *  - The historical carrying value and the foreign-currency balance are measured
- *    EXCLUDING lines whose entry origin is 'revaluation'. A revaluation only
- *    adjusts base carrying (its lines are booked in the functional currency);
- *    it never changes how much foreign currency is held. Excluding it means each
- *    close compares current spot against historical, never against a prior
- *    revaluation.
- *  - A period that already has a revaluation entry is skipped (re-running posts
- *    nothing). Correcting a period is a reopen, not a silent re-post.
- *  - A revaluation never posts without its mirror reversal: when no following
- *    accounting period exists the run reports a problem and posts nothing,
- *    because an unreversed revaluation would permanently book a delta the next
- *    close must be free to re-measure.
- *  - Concurrent runs serialize per (org, book, period, subsidiary) on a
- *    transaction-scoped advisory lock taken before the duplicate check, so the
- *    check-then-insert cannot double-post.
- *  - Every entry balances by construction (monetary deltas offset by one
- *    unrealized-gain/loss line); the kernel's deferred balance trigger is the
- *    final authority.
+ * Each run measures historical foreign positions in the assigned-period close
+ * scope, then subtracts every still-effective FX adjustment in that same scope.
+ * Corrections are additional immutable adjustment/reversal pairs; unchanged
+ * reruns do nothing. The organization write lock precedes the subsidiary's
+ * advisory lock and all basis reads, serializing ordinary posting and reruns.
+ * The mandatory next-period mirror prevents permanent unrealized differences.
  */
 
 /** Monetary account types whose foreign balances are revalued. Non-monetary
@@ -136,6 +125,11 @@ export class RevaluationError extends Error {
   readonly name = "RevaluationError";
 }
 
+export class RevaluationFeatureDisabledError extends Error {
+  readonly name = "RevaluationFeatureDisabledError";
+  constructor() { super("multiCurrency feature is disabled"); }
+}
+
 /** The transaction advisory lock that serializes one subsidiary's duplicate
  *  check-and-post for a period. */
 export function revaluationLockKey(
@@ -152,11 +146,6 @@ export function revaluationLockKey(
 export function missingReversalPeriodReason(): string {
   return "no following accounting period exists to reverse into — generate periods and re-run";
 }
-
-/** Skip reason for a period that already carries a revaluation entry — shared
- *  by the fast-path check and the authoritative one under the lock so both
- *  report identically. */
-const ALREADY_REVALUED = "already revalued for this period";
 
 /** org unrealized-FX gain/loss control account (orgs.settings.controlAccounts.fxUnrealizedGainLoss). */
 async function unrealizedAccount(orgId: string): Promise<string> {
@@ -184,47 +173,14 @@ async function primaryBookId(orgId: string): Promise<string> {
 }
 
 /**
- * Foreign-currency monetary positions for one subsidiary as of `asOfDate`,
- * measured from POSTED, non-revaluation lines only. Positions whose foreign
- * balance is exactly zero (fully settled) are dropped.
- *
- * The monetary-item population (IAS 21.8/16): bank, receivable, and payable
- * account types by default, plus any balance-sheet account explicitly flagged
- * `accounts.monetary = true` (foreign-currency loans, monetary accruals,
- * long-term debt), minus any account flagged `monetary = false` (a
- * default-typed account holding a non-monetary deferral). The true-override is
- * ignored for income/expense/equity types — only balance-sheet items are
- * monetary.
- */
-async function loadPositions(
-  orgId: string,
-  bookId: string,
-  subsidiaryId: string,
-  functionalCurrency: string,
-  asOfDate: string,
-): Promise<RevaluationPosition[]> {
-  const positions: RevaluationPosition[] = [];
-  const asAtDate = sql`e.posting_date <= ${asOfDate}`;
-  for (const exposure of await loadExposures(orgId, bookId, subsidiaryId, functionalCurrency, asOfDate, asAtDate)) {
-    if (!exposure.periodEndRate) {
-      throw new RevaluationError(
-        `no spot rate for ${exposure.currency}→${functionalCurrency} on or before ${asOfDate}`,
-      );
-    }
-    positions.push({ ...exposure, periodEndRate: exposure.periodEndRate });
-  }
-  return positions;
-}
-
-/**
- * The raw exposure population behind `loadPositions` — the same monetary
- * predicate, book, status, and rate lookup, but each position carries its
- * period-end rate as `null` when no spot rate exists instead of aborting the
- * whole entity (the readiness probe counts a missing rate as an unrevalued
- * exposure rather than hiding the ones behind it). `scope` selects which
- * journal entries (alias `e`) form the population: the poster restates every
- * balance on the books as at the period-end date; the close probe measures
- * the close run's period-identity scope.
+ * The historical population shared by posting and readiness. `scope` uses
+ * assigned accounting periods, not dates. Zero foreign balances with residual
+ * carrying value remain visible: they need a zero-value restatement, not a
+ * spot rate. Open items use remaining directional application amounts; realized
+ * settlement entries are already represented by that carrying basis and are
+ * excluded. Historical unapplication uses endpoint reversal period evidence,
+ * otherwise the stored event timestamp in the organization's business zone.
+ * Missing rates on nonzero foreign balances remain explicit.
  */
 async function loadExposures(
   orgId: string,
@@ -234,51 +190,114 @@ async function loadExposures(
   asOfDate: string,
   scope: SQL,
 ): Promise<(Omit<RevaluationPosition, "periodEndRate"> & { periodEndRate: string | null })[]> {
-  const r = (await db.execute<{ account_id: string; currency: string; carrying_base: string; foreign_balance: string }>(sql`
-    select l.account_id                         as account_id,
-           l.currency                           as currency,
-           sum(l.amount)::text                  as carrying_base,
-           sum(l.txn_amount)::text              as foreign_balance
-      from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where l.org_id = ${orgId}
-       and l.subsidiary_id = ${subsidiaryId}
-       and e.book_id = ${bookId}
-       and e.status in ('posted', 'reversed')
-       and e.origin <> 'fx_revaluation'
-       and ${scope}
-       and l.currency <> ${functionalCurrency}
-       and ${MONETARY_ACCOUNT_SQL}
-     group by l.account_id, l.currency
-     having sum(l.txn_amount) <> 0`));
+  const timeZone = await businessTimeZone(orgId);
+  const r = await db.execute<{
+    account_id: string; currency: string; carrying_base: string; foreign_balance: string; invalid_residual: boolean;
+  }>(sql`
+    with scoped_entries as materialized (
+      select e.id, e.org_id, e.reverses_entry_id, e.origin
+        from journal_entries e
+       where e.org_id=${orgId} and e.book_id=${bookId}
+         and e.status in ('posted', 'reversed') and ${scope}
+    ), effective_applications as (
+      select ap.*
+        from applications ap
+        join journal_lines source on source.id=ap.from_line_id and source.org_id=ap.org_id
+        join journal_lines target on target.id=ap.to_line_id and target.org_id=ap.org_id
+        join scoped_entries source_entry on source_entry.id=source.entry_id
+        join scoped_entries target_entry on target_entry.id=target.entry_id
+       where ap.org_id=${orgId} and ap.applied_on<=${asOfDate}
+         -- A backdated reversal is effective in its assigned period even when
+         -- the unapplication audit timestamp was written in a later month.
+         and not exists (select 1 from scoped_entries reversal
+           where reversal.reverses_entry_id in (source.entry_id, target.entry_id))
+         and (ap.unapplied_at is null
+           or exists (select 1 from journal_entries reversal
+             where reversal.org_id=${orgId} and reversal.book_id=${bookId}
+               and reversal.status in ('posted', 'reversed')
+               and reversal.reverses_entry_id in (source.entry_id, target.entry_id))
+           or (ap.unapplied_at at time zone ${timeZone})::date>${asOfDate}::date)
+    ), position_lines as (
+      select l.account_id, l.currency,
+             l.amount - sign(l.amount) * coalesce(applied.base,0) as carrying_base,
+             l.txn_amount - sign(l.txn_amount) * coalesce(applied.foreign_amount,0) as foreign_balance,
+             l.is_open_item and (
+               coalesce(applied.base,0)>abs(l.amount)
+               or coalesce(applied.foreign_amount,0)>abs(l.txn_amount)
+               or ((abs(l.amount)=coalesce(applied.base,0)) <>
+                   (abs(l.txn_amount)=coalesce(applied.foreign_amount,0)))
+             ) as invalid_residual
+        from journal_lines l
+        join scoped_entries e on e.id=l.entry_id and e.org_id=l.org_id
+        join accounts a on a.id=l.account_id and a.org_id=l.org_id
+        left join lateral (
+          select sum(case when ap.from_line_id=l.id then ap.source_amount else ap.amount end) as base,
+                 sum(case when ap.from_line_id=l.id then ap.source_transaction_amount else ap.target_transaction_amount end) as foreign_amount
+            from effective_applications ap
+           where ap.from_line_id=l.id or ap.to_line_id=l.id
+        ) applied on l.is_open_item
+       where l.org_id=${orgId} and l.subsidiary_id=${subsidiaryId}
+         and e.origin not in ('fx_revaluation', 'fx_settlement')
+         and l.currency<>${functionalCurrency} and ${MONETARY_ACCOUNT_SQL}
+    )
+    select account_id, currency, sum(carrying_base)::text as carrying_base,
+           sum(foreign_balance)::text as foreign_balance, bool_or(invalid_residual) as invalid_residual
+      from position_lines group by account_id,currency
+     having sum(foreign_balance)<>0 or sum(carrying_base)<>0 or bool_or(invalid_residual)`);
 
   const exposures: (Omit<RevaluationPosition, "periodEndRate"> & { periodEndRate: string | null })[] = [];
   for (const row of r.rows) {
+    if (row.invalid_residual) {
+      throw new RevaluationError(`inconsistent open-item residual for account ${row.account_id} in ${row.currency}`);
+    }
     exposures.push({
       accountId: row.account_id,
       currency: row.currency,
       carryingBase: row.carrying_base,
       foreignBalance: row.foreign_balance,
-      periodEndRate: await periodEndRate(orgId, row.currency, functionalCurrency, asOfDate),
+      periodEndRate: isZero(row.foreign_balance) ? "1" : await periodEndRate(orgId, row.currency, functionalCurrency, asOfDate),
     });
   }
   return exposures;
 }
 
-/** Whether a subsidiary already carries this period's revaluation entry in the book. */
-async function hasRevaluationEntry(
+/** Functional-currency FX lines cannot be allocated back to foreign currencies.
+ * Net them by monetary account, including mirrors and earlier same-end periods.
+ * A formerly monetary account remains here so disabling its policy cannot
+ * strand an adjustment. Migration 0046 freezes account types once journal
+ * lines exist; the validated FX offset is a P&L account and excluded. */
+async function loadEffectiveAdjustments(
   orgId: string,
   bookId: string,
-  periodId: string,
   subsidiaryId: string,
-): Promise<boolean> {
-  const existing = (await db.execute(sql`
-    select 1 from journal_entries
-     where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId}
-       and subsidiary_id = ${subsidiaryId} and origin = 'fx_revaluation'
-       and reverses_entry_id is null limit 1`));
-  return existing.rows.length > 0;
+  scope: SQL,
+): Promise<RevaluationLine[]> {
+  const result = await db.execute<{ account_id: string; amount: string }>(sql`
+    select l.account_id, sum(l.amount)::text as amount
+      from journal_lines l
+      join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
+      join accounts a on a.id=l.account_id and a.org_id=l.org_id
+     where l.org_id=${orgId} and l.subsidiary_id=${subsidiaryId}
+       and e.book_id=${bookId} and e.status in ('posted', 'reversed')
+       and e.origin='fx_revaluation' and ${scope}
+       and a.type not in
+         ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred', 'equity')
+     group by l.account_id having sum(l.amount) <> 0`);
+  return result.rows.map((row) => ({ accountId: row.account_id, amount: row.amount }));
+}
+
+/** One authoritative residual per account, including accounts that now have no
+ * foreign exposure but still carry an effective earlier adjustment. */
+function requiredAdjustments(positions: RevaluationPosition[], effective: RevaluationLine[]): RevaluationLine[] {
+  const amounts = new Map<string, string>();
+  for (const position of positions) {
+    amounts.set(position.accountId, add(amounts.get(position.accountId) ?? "0", positionDelta(position)));
+  }
+  for (const line of effective) {
+    amounts.set(line.accountId, add(amounts.get(line.accountId) ?? "0", neg(line.amount)));
+  }
+  return [...amounts].sort(([a], [b]) => a.localeCompare(b))
+    .filter(([, amount]) => !isZero(amount)).map(([accountId, amount]) => ({ accountId, amount }));
 }
 
 type RevaluationPeriod = {
@@ -300,9 +319,11 @@ async function loadRevaluationPeriod(orgId: string, periodId: string): Promise<R
            p.period_number as period_number,
            (select n.starts_on from accounting_periods n
              where n.org_id = ${orgId} and n.starts_on > p.ends_on and n.is_adjustment = false
+               and n.fiscal_calendar_id = p.fiscal_calendar_id
              order by n.starts_on asc limit 1) as next_starts_on,
            (select n.id from accounting_periods n
              where n.org_id = ${orgId} and n.starts_on > p.ends_on and n.is_adjustment = false
+               and n.fiscal_calendar_id = p.fiscal_calendar_id
              order by n.starts_on asc limit 1) as next_period_id
       from accounting_periods p
      where p.org_id = ${orgId} and p.id = ${periodId}`));
@@ -312,9 +333,9 @@ async function loadRevaluationPeriod(orgId: string, periodId: string): Promise<R
 }
 
 export interface RevaluationReadiness {
-  /** Foreign-currency monetary positions the engine WOULD restate (non-zero
-   *  delta at the period-end spot rate, or no spot rate at all) in entities
-   *  that carry no revaluation entry for the period yet. */
+  /** Monetary accounts with a remaining restatement difference, plus foreign
+   * positions with a missing spot rate. Prior FX entries alone never satisfy
+   * readiness when the source balance or rate has changed. */
   unrevaluedPositions: number;
   /** Of those, positions with no usable period-end spot rate. */
   positionsMissingSpotRate: number;
@@ -331,9 +352,9 @@ export interface RevaluationReadiness {
  * the period itself, and for an adjustment period also the regular period
  * sharing its end date and any lower-numbered adjustment period of the same
  * calendar. An entry assigned to an adjustment period is outside its regular
- * period's close even when dated inside it.
+ * period's close even when dated inside it. The journal-entry alias is `e`.
  */
-function closePeriodScope(period: RevaluationPeriod): SQL {
+export function financialClosePeriodScope(period: Pick<RevaluationPeriod, "id" | "ends_on" | "is_adjustment" | "fiscal_calendar_id" | "period_number">): SQL {
   return sql`exists (
     select 1 from accounting_periods ep
      where ep.id = e.period_id and ep.org_id = e.org_id
@@ -349,41 +370,37 @@ function closePeriodScope(period: RevaluationPeriod): SQL {
        ))`;
 }
 
-/**
- * Period-close readiness, decided by the SAME monetary population rule,
- * spot-rate lookup, and delta arithmetic `runRevaluation` uses. A position
- * whose delta rounds to zero is already at the period-end rate: the engine
- * posts nothing for it ("no revaluation needed"), so readiness must not
- * demand an entry that can never exist. Entities that already carry the
- * period's revaluation entry are satisfied outright, matching the engine's
- * idempotency rule.
- *
- * Population scope: the probe measures the close run's period-identity scope
- * (closePeriodScope), while the poster restates every balance on the books
- * as at the period-end date — a superset. Anything the probe flags is
- * therefore a position the engine will restate when run.
- */
+/** Posting and readiness share period identity, source population, rate
+ * lookup and effective-adjustment arithmetic. Entity-scoped closes must pass
+ * their resolved legal-entity set; an empty set means no entities. */
 export async function revaluationReadiness(
   orgId: string,
   bookId: string,
   periodId: string,
+  allowedSubsidiaryIds?: string[],
 ): Promise<RevaluationReadiness> {
   const period = await loadRevaluationPeriod(orgId, periodId);
   const ctx = await loadSubsidiaryContext(db, orgId);
-  const scope = closePeriodScope(period);
+  const scope = financialClosePeriodScope(period);
   let unrevaluedPositions = 0;
   let positionsMissingSpotRate = 0;
   for (const subsidiary of ctx.byId.values()) {
-    if (await hasRevaluationEntry(orgId, bookId, periodId, subsidiary.id)) continue;
+    if (allowedSubsidiaryIds && !allowedSubsidiaryIds.includes(subsidiary.id)) continue;
     const exposures = await loadExposures(orgId, bookId, subsidiary.id, subsidiary.baseCurrency, period.ends_on, scope);
+    const positions: RevaluationPosition[] = [];
+    const missingAccounts = new Set<string>();
     for (const exposure of exposures) {
       if (!exposure.periodEndRate) {
-        unrevaluedPositions++;
         positionsMissingSpotRate++;
-        continue;
+        unrevaluedPositions++;
+        missingAccounts.add(exposure.accountId);
+      } else {
+        positions.push({ ...exposure, periodEndRate: exposure.periodEndRate });
       }
-      if (!isZero(positionDelta({ ...exposure, periodEndRate: exposure.periodEndRate }))) unrevaluedPositions++;
     }
+    const effective = await loadEffectiveAdjustments(orgId, bookId, subsidiary.id, scope);
+    unrevaluedPositions += requiredAdjustments(positions, effective)
+      .filter((line) => !missingAccounts.has(line.accountId)).length;
   }
   return {
     unrevaluedPositions,
@@ -415,137 +432,59 @@ async function periodEndRate(
   return r.rows[0]?.rate ?? null;
 }
 
-/**
- * Run period-end unrealized FX revaluation for a period. Posts, per subsidiary
- * with a nonzero delta, a period-end adjustment entry (origin 'revaluation') and
- * a mirror reversing entry on the first day of the next period. Idempotent: a
- * subsidiary that already carries a revaluation entry for the period is skipped.
- * When no following accounting period exists the subsidiary is not revalued at
- * all and a problem is reported — every posted revaluation must carry its
- * reversal.
- */
+/** Restate each legal entity with incremental immutable adjustment/reversal
+ * pairs. The organization lock is taken before configuration and basis reads,
+ * consistent with ordinary posting. Each entity retains its own savepoint so a
+ * rejected entity cannot leave half a pair or discard successful siblings. */
 export async function runRevaluation(
   orgId: string,
   periodId: string,
   actorId: string | null,
   allowedSubsidiaryIds?: string[],
 ): Promise<RevaluationRunResult> {
-  const bookId = await primaryBookId(orgId);
-  const gainLossAccount = await unrealizedAccount(orgId);
-  const ctx = await loadSubsidiaryContext(db, orgId);
-
-  const period = await loadRevaluationPeriod(orgId, periodId);
-  const asOfDate = period.ends_on;
-
-  const result: RevaluationRunResult = { posted: [], skipped: [], problems: [] };
-
-  const subsidiaryIds = allowedSubsidiaryIds ?? [...ctx.byId.keys()];
-  for (const subsidiaryId of subsidiaryIds) {
-    const subsidiary = ctx.byId.get(subsidiaryId);
-    if (!subsidiary) {
-      result.problems.push(`subsidiary ${subsidiaryId} does not exist`);
-      continue;
+  return withOrgTransaction(orgId, async () => {
+    await db.execute(sql`select id from orgs where id=${orgId} for update`);
+    if (!(await lockAndCheckOrgFeature(db, orgId, "multiCurrency"))) {
+      throw new RevaluationFeatureDisabledError();
     }
-
-    // Idempotency fast path: never post a second revaluation into an
-    // already-revalued period. Advisory only — the authoritative check runs
-    // under the advisory lock inside postRevaluationEntry's transaction.
-    if (await hasRevaluationEntry(orgId, bookId, periodId, subsidiaryId)) {
-      result.skipped.push({ subsidiaryId, reason: ALREADY_REVALUED });
-      continue;
-    }
-
-    // Fail closed: a revaluation whose mirror reversal has no period to land in
-    // would make the unrealized gain/loss permanent (later closes re-measure
-    // against stale carrying and re-book a delta the books already carry).
-    // Refuse rather than post unreversed.
-    if (!period.next_period_id || !period.next_starts_on) {
-      result.problems.push(`${subsidiary.name}: ${missingReversalPeriodReason()}`);
-      continue;
-    }
-
-    let positions: RevaluationPosition[];
-    try {
-      positions = await loadPositions(orgId, bookId, subsidiaryId, subsidiary.baseCurrency, asOfDate);
-    } catch (err) {
-      result.problems.push(`${subsidiary.name}: ${(err as Error).message}`);
-      continue;
-    }
-
-    const { lines, netDelta } = computeRevaluation(positions, gainLossAccount);
-    if (lines.length === 0) {
-      result.skipped.push({ subsidiaryId, reason: "no revaluation needed" });
-      continue;
-    }
-
-    try {
-      const posted = await postRevaluationEntry(
-        orgId,
-        bookId,
-        subsidiaryId,
-        subsidiary.baseCurrency,
-        periodId,
-        asOfDate,
-        period.name,
-        period.next_period_id,
-        period.next_starts_on,
-        lines,
-        actorId,
-      );
-      // Null: a concurrent run won the advisory lock and posted first.
-      if (!posted) {
-        result.skipped.push({ subsidiaryId, reason: ALREADY_REVALUED });
+    const bookId = await primaryBookId(orgId);
+    await unrealizedAccount(orgId);
+    const ctx = await loadSubsidiaryContext(db, orgId);
+    const result: RevaluationRunResult = { posted: [], skipped: [], problems: [] };
+    for (const subsidiaryId of [...new Set(allowedSubsidiaryIds ?? [...ctx.byId.keys()])]) {
+      const subsidiary = ctx.byId.get(subsidiaryId);
+      if (!subsidiary) {
+        result.problems.push(`subsidiary ${subsidiaryId} does not exist`);
         continue;
       }
-      result.posted.push({ subsidiaryId, entryId: posted.entryId, reversalEntryId: posted.reversalEntryId, netDelta });
-    } catch (err) {
-      result.problems.push(`${subsidiary.name}: ${(err as Error).message}`);
+      try {
+        const posted = await postRevaluationEntry(orgId, bookId, subsidiaryId, periodId, actorId);
+        if (!posted) {
+          result.skipped.push({ subsidiaryId, reason: "no revaluation needed" });
+        } else {
+          result.posted.push({ subsidiaryId, ...posted });
+        }
+      } catch (err) {
+        result.problems.push(`${subsidiary.name}: ${(err as Error).message}`);
+      }
     }
-  }
-
-  return result;
+    return result;
+  });
 }
 
-/**
- * Insert the period-end adjustment and its mandatory next-period reversal,
- * atomically. Lines are booked in the functional currency.
- *
- * The duplicate check-then-insert is only a control because concurrent runs
- * cannot pass it simultaneously: a transaction-scoped advisory lock keyed per
- * (org, book, period, subsidiary) is taken BEFORE the check, so a retried
- * worker racing the close automation serializes here and the loser reports the
- * period as already revalued instead of double-posting. Returns null when
- * another run already posted; throws when the reversal has no period to land
- * in — an unreversed revaluation never posts.
- */
+/** Compute and insert one incremental pair under the run's organization lock
+ * and subsidiary advisory lock. Every line uses the legal entity's functional
+ * currency; its reversal is mandatory and atomic with the adjustment. */
 async function postRevaluationEntry(
   orgId: string,
   bookId: string,
   subsidiaryId: string,
-  functionalCurrency: string,
   periodId: string,
-  asOfDate: string,
-  periodName: string,
-  nextPeriodId: string | null,
-  nextStartsOn: string | null,
-  lines: RevaluationLine[],
   actorId: string | null,
-): Promise<{ entryId: string; reversalEntryId: string } | null> {
-  if (!isZero(sum(lines.map((l) => l.amount)))) {
-    throw new RevaluationError("revaluation entry does not balance");
-  }
+): Promise<{ entryId: string; reversalEntryId: string; netDelta: string } | null> {
   return db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${revaluationLockKey(orgId, bookId, periodId, subsidiaryId)}, 0))`);
-
-    // Authoritative duplicate check — held under the lock above.
-    const existing = (await tx.execute(sql`
-      select 1 from journal_entries
-       where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId}
-         and subsidiary_id = ${subsidiaryId} and origin = 'fx_revaluation'
-         and reverses_entry_id is null limit 1`));
-    if (existing.rows.length > 0) return null;
-
     const book = (await tx.execute<{ id: string }>(sql`select id from accounting_books
       where org_id=${orgId} and id=${bookId} and is_primary and is_active and posts_gl for share`)).rows[0];
     if (!book) throw new RevaluationError("revaluation requires an active primary posting book");
@@ -553,12 +492,33 @@ async function postRevaluationEntry(
     const ctx = await loadSubsidiaryContext(tx, orgId);
     const subsidiary = ctx.byId.get(subsidiaryId);
     if (!subsidiary?.isActive) throw new RevaluationError("revaluation subsidiary is missing or inactive");
-    if (subsidiary.baseCurrency !== functionalCurrency) {
-      throw new RevaluationError("subsidiary functional currency changed; recompute revaluation");
+    const functionalCurrency = subsidiary.baseCurrency;
+    // Freeze account policy before computing exposure membership and validating
+    // the configured offset. Historical accounts with obsolete monetary policy
+    // also need locking when clearing their residual adjustment.
+    await tx.execute(sql`select id from accounts where org_id=${orgId} order by id for share`);
+    const gainLossAccount = await unrealizedAccount(orgId);
+    const period = await loadRevaluationPeriod(orgId, periodId);
+    const { ends_on: asOfDate, name: periodName, next_period_id: nextPeriodId, next_starts_on: nextStartsOn } = period;
+    const scope = financialClosePeriodScope(period);
+    const exposures = await loadExposures(orgId, bookId, subsidiaryId, functionalCurrency, asOfDate, scope);
+    const positions: RevaluationPosition[] = [];
+    for (const exposure of exposures) {
+      if (!exposure.periodEndRate) {
+        throw new RevaluationError(`no spot rate for ${exposure.currency}→${functionalCurrency} on or before ${asOfDate}`);
+      }
+      positions.push({ ...exposure, periodEndRate: exposure.periodEndRate });
     }
-    const accountIds = [...new Set(lines.map((line) => line.accountId))];
-    await tx.execute(sql`select id from accounts where org_id=${orgId}
-      and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+    const effective = await loadEffectiveAdjustments(orgId, bookId, subsidiaryId, scope);
+    const monetaryLines = requiredAdjustments(positions, effective);
+    if (monetaryLines.length === 0) return null;
+    if (!nextPeriodId || !nextStartsOn) throw new RevaluationError(missingReversalPeriodReason());
+    const netDelta = sum(monetaryLines.map((line) => line.amount));
+    const lines = isZero(netDelta) ? monetaryLines
+      : [...monetaryLines, { accountId: gainLossAccount, amount: neg(netDelta) }];
+    if (!isZero(sum(lines.map((line) => line.amount)))) {
+      throw new RevaluationError("revaluation entry does not balance");
+    }
     try {
       await validateSubsidiaryRestrictions(tx, {
         orgId, ctx, docSubsidiaryId: subsidiaryId,
@@ -599,9 +559,8 @@ async function postRevaluationEntry(
       return eid;
     };
 
-    // journal_entries_org_number is org-wide while the duplicate check above
-    // is scoped to one (book, period, subsidiary): another subsidiary (or a
-    // re-posted generation) must not collide, so every physical journal —
+    // Every subsidiary and correction generation needs a distinct org-wide
+    // journal number, so every physical journal —
     // adjustment and its -R mirror alike — carries its own number.
     const entryNumber = `FXREVAL-${periodName}-${randomUUID().slice(0, 8)}`;
     const entryId = await insertEntry(
@@ -613,9 +572,6 @@ async function postRevaluationEntry(
       lines,
     );
 
-    if (!nextPeriodId || !nextStartsOn) {
-      throw new RevaluationError(missingReversalPeriodReason());
-    }
     const reversalEntryId = await insertEntry(
       `${entryNumber}-R`,
       `Unrealized FX revaluation reversal — ${periodName}`,
@@ -625,7 +581,15 @@ async function postRevaluationEntry(
       lines.map((l) => ({ accountId: l.accountId, amount: neg(l.amount) })),
     );
 
-    return { entryId, reversalEntryId };
+    await tx.execute(sql`insert into audit_log
+      (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (${orgId}, 'journal_entries', ${entryId}, 'insert', ${JSON.stringify({
+        mode: "fx_revaluation_incremental", bookId, subsidiaryId, periodId,
+        asOfDate, reversalEntryId, nextPeriodId,
+        basis: "assigned_period_open_item_residuals_and_nonopen_gl_less_effective_fx_by_account",
+        positions, effectiveAdjustments: effective, lines, netDelta,
+      })}::jsonb, ${actorId}, 'fx_revaluation')`);
+    return { entryId, reversalEntryId, netDelta };
   }));
 }
 

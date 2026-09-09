@@ -153,19 +153,20 @@ test("a refused revaluation names the missing reversal period and the remedy", (
   assert.match(reason, /generate periods and re-run/);
 });
 
-test("the advisory lock precedes the duplicate check precedes the insert", () => {
-  // The check-then-insert is only a control if two transactions cannot pass it
-  // simultaneously — pinned structurally, like payroll-filing does.
+test("the advisory lock precedes recomputing the current correction and inserting it", () => {
   const source = readFileSync(new URL("./fx-revaluation.ts", import.meta.url), "utf8");
   const fn = source.indexOf("async function postRevaluationEntry");
   const tx = source.indexOf("db.transaction", fn);
   const lock = source.indexOf("pg_advisory_xact_lock", tx);
-  const check = source.indexOf("select 1 from journal_entries", tx);
+  const check = source.indexOf("await loadExposures", tx);
+  const effective = source.indexOf("await loadEffectiveAdjustments", check);
+  const difference = source.indexOf("requiredAdjustments(positions, effective)", effective);
   const insert = source.indexOf("insert into journal_entries", tx);
   assert.ok(tx > fn, "posting happens inside one transaction");
   assert.ok(lock > tx, "the advisory lock is taken inside that transaction");
-  assert.ok(check > lock, "the duplicate check runs under the lock");
-  assert.ok(insert > check, "the entry insert follows the duplicate check");
+  assert.ok(check > lock, "the current source population is read under the lock");
+  assert.ok(effective > check && difference > effective, "the residual subtracts current effective adjustments");
+  assert.ok(insert > difference, "the insert follows the recomputed correction");
 });
 
 test("direct quotes outrank inverted ones when both quote the same date", () => {
@@ -184,10 +185,10 @@ test("direct quotes outrank inverted ones when both quote the same date", () => 
 
 test("a missing reversal period is reported before any posting is attempted", () => {
   const source = readFileSync(new URL("./fx-revaluation.ts", import.meta.url), "utf8");
-  const run = source.indexOf("export async function runRevaluation");
-  const guard = source.indexOf("missingReversalPeriodReason()", run);
-  const postCall = source.indexOf("await postRevaluationEntry(", run);
-  assert.ok(guard > run && postCall > guard, "the problem is pushed before the posting attempt");
+  const post = source.indexOf("async function postRevaluationEntry");
+  const guard = source.indexOf("throw new RevaluationError(missingReversalPeriodReason())", post);
+  const insert = source.indexOf("insert into journal_entries", post);
+  assert.ok(guard > post && insert > guard, "the mandatory period is checked before creating a journal");
   // The old silent skip is gone: the posting boundary itself refuses rather
   // than post an unreversed revaluation.
   assert.ok(!source.includes("if (nextPeriodId && nextStartsOn) {"), "the reversal is never silently skipped");
