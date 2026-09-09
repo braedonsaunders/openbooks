@@ -158,6 +158,13 @@ const PAGES = [
     minMatches: 1,
   },
   {
+    path: '/insights/dashboards',
+    // First page with sortable column headers.
+    variants: ['', '?sort=name&dir=asc'],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,

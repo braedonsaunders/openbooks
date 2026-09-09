@@ -348,9 +348,24 @@ export interface TableSpanRow {
  */
 export type TableVariant = 'report' | 'app'
 
+/**
+ * Sortable-header configuration for a table.
+ *
+ * Columns opt in individually via `Column.sort`; this supplies the shared
+ * inputs the sort links need. Present as a first-class concern because
+ * sortable headers appear on ~39 list pages — too common to leave to a widget.
+ */
+export interface TableSorting {
+  basePath: Value
+  /** The active sort column and direction, resolved by the loader. */
+  sort: FieldRef
+  dir: FieldRef
+}
+
 export interface TableBlock extends BlockCommon {
   kind: 'table'
   variant?: TableVariant
+  sorting?: TableSorting
   /** Rows rendered before the collection (opening balances). */
   leading?: TableSpanRow[]
   /** Rows rendered after it (closing balances, totals). */
