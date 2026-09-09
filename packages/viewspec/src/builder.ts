@@ -41,6 +41,7 @@ import type {
   ToggleLinkGroup,
   Tone,
   Value,
+  WidgetBlock,
   WidgetRef,
 } from './types.ts'
 import { SPEC_VERSION } from './types.ts'
@@ -138,6 +139,20 @@ export function filterBar(
   return { kind: 'filter-bar', controls, ...opts }
 }
 
+/**
+ * Place a host-registered domain component.
+ *
+ * Not every table should be decomposed into `table` blocks. A component like
+ * the statement matrix owns real presentation logic — variance percentages,
+ * scale divisors, hierarchical lines, its own drill construction — and
+ * re-expressing that as generic columns would reimplement it badly rather than
+ * compose it. ViewSpec's job is page composition, so complex domain components
+ * stay whole and are placed by name, exactly as interactive widgets are.
+ */
+export function widgetBlock(name: string, props?: Record<string, unknown>, when?: FieldRef): WidgetBlock {
+  return { kind: 'widget', widget: name, ...(props ? { props } : {}), ...(when ? { when } : {}) }
+}
+
 export function toggleLinks(links: ToggleLinkGroup['links']): ToggleLinkGroup {
   return { kind: 'toggle-links', links }
 }
@@ -162,7 +177,10 @@ export function pagination(spec: Omit<PaginationBlock, 'kind'>): PaginationBlock
   return { kind: 'pagination', ...spec }
 }
 
-export function textBlock(content: Value, opts: { tone?: Value<Tone> } = {}): TextBlock {
+export function textBlock(
+  content: Value,
+  opts: { tone?: Value<Tone>; when?: FieldRef } = {},
+): TextBlock {
   return { kind: 'text', content, ...opts }
 }
 

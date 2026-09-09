@@ -1,9 +1,10 @@
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, type ComponentProps, type ReactNode } from 'react'
 import type { WidgetRef } from '@openbooks/viewspec'
 import { resolvePath } from '@openbooks/viewspec'
 import { ExportMenu } from '../../app/(app)/reports/ExportMenu'
 import { SaveViewButton } from '../../app/(app)/reports/SaveViewButton'
 import { ScheduleReportButton } from '../../app/(app)/reports/ScheduleReportButton'
+import { StatementMatrixTable } from '../../app/(app)/reports/StatementMatrixTable'
 
 /**
  * Widget registry — the closed set of interactive components a spec may place
@@ -39,6 +40,21 @@ function stringRecord(props: Record<string, unknown>, key: string): Record<strin
 }
 
 export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
+  /**
+   * The statement matrix. Placed whole rather than decomposed into `table`
+   * blocks: it owns variance percentages, scale divisors, hierarchical line
+   * rendering and its own drill construction, and re-expressing that as
+   * generic columns would reimplement it rather than compose it. The loader
+   * hands over the `StatementView` it already built.
+   */
+  'statement-matrix': (props) => (
+    <StatementMatrixTable
+      view={props.view as ComponentProps<typeof StatementMatrixTable>['view']}
+      scale={props.scale as ComponentProps<typeof StatementMatrixTable>['scale']}
+      currency={str(props, 'currency')}
+      drill={props.drill as ComponentProps<typeof StatementMatrixTable>['drill']}
+    />
+  ),
   'save-view': () => <SaveViewButton />,
   'export-menu': (props) => (
     <ExportMenu kind={str(props, 'kind')} params={stringRecord(props, 'params')} baseHref={str(props, 'baseHref')} />
@@ -80,4 +96,17 @@ export function WidgetSlot({ widgets, scope }: { widgets: WidgetRef[] | undefine
       })}
     </>
   )
+}
+
+/** Render one widget by name — the `widget` block's renderer. */
+export function WidgetBlockView({
+  name,
+  props,
+}: {
+  name: string
+  props: Record<string, unknown>
+}) {
+  const renderer = WIDGET_REGISTRY[name]
+  if (!renderer) throw new UnknownWidgetError(`unknown widget: ${name}`)
+  return <>{renderer(props)}</>
 }

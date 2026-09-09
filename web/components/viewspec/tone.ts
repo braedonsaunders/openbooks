@@ -14,6 +14,7 @@ import type { Tone } from '@openbooks/viewspec'
 export const TONE_CLASS: Record<Tone, string> = {
   default: '',
   negative: 'text-red-600 dark:text-red-400',
+  warning: 'text-amber-600 dark:text-amber-400',
   positive: 'text-emerald-600 dark:text-emerald-400',
   muted: 'text-slate-500 dark:text-slate-400',
   strong: 'font-semibold text-slate-700 dark:text-slate-200',

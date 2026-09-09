@@ -58,6 +58,13 @@ const PAGES = [
     // capture taken during the loading screen compares blank against blank.
     expect: 'table thead th',
   },
+  {
+    path: '/reports/pnl',
+    // Exercise the statement matrix's real branches: comparison columns,
+    // dimension breakout, and a scaled presentation.
+    variants: ['', '?compare=prior_period', '?breakout=month', '?scale=thousands', '?showZero=1'],
+    expect: 'table tbody tr',
+  },
 ]
 
 function specUrl(path, variant) {

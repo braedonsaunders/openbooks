@@ -28,7 +28,7 @@ const value = z.union([z.string(), fieldRefSchema])
 const boolValue = z.union([z.boolean(), fieldRefSchema])
 
 const toneSchema = z.union([
-  z.enum(['default', 'negative', 'positive', 'muted', 'strong']),
+  z.enum(['default', 'negative', 'positive', 'warning', 'muted', 'strong']),
   fieldRefSchema,
 ])
 
@@ -148,7 +148,13 @@ const filterBarBlock = z.strictObject({
     })
     .optional(),
   actions: z.array(widgetRefSchema).max(12).optional(),
-  options: fieldRefSchema.optional(),
+  dimensions: fieldRefSchema.optional(),
+  subsidiaries: fieldRefSchema.optional(),
+  customers: fieldRefSchema.optional(),
+  dateRange: fieldRefSchema.optional(),
+  primaryFilter: fieldRefSchema.optional(),
+  periodPresets: fieldRefSchema.optional(),
+  defaultPeriod: value.optional(),
 })
 
 const summaryLineBlock = z.strictObject({
@@ -186,6 +192,16 @@ const textBlock = z.strictObject({
   kind: z.literal('text'),
   content: value,
   tone: toneSchema.optional(),
+  when: fieldRefSchema.optional(),
+})
+
+/** A host-registered domain component placed as a block. The name is checked
+ *  against the host widget registry at render time, where the registry lives. */
+const widgetBlock = z.strictObject({
+  kind: z.literal('widget'),
+  widget: z.string().min(1).max(64).regex(/^[a-z][a-z0-9-]*$/, 'widget must be a slug'),
+  props: z.record(z.string(), z.unknown()).optional(),
+  when: fieldRefSchema.optional(),
 })
 
 /**
@@ -201,6 +217,7 @@ export const blockSchema: z.ZodType<unknown> = z.lazy(() =>
     tableBlock,
     paginationBlock,
     textBlock,
+    widgetBlock,
     z.strictObject({
       kind: z.literal('paper'),
       company: value.optional(),
