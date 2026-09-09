@@ -17,6 +17,8 @@ import { Table, TableBody, TableCell, TableRow, reportSubtotalRowClass, reportTo
 import { ReportDrillLink } from '../ReportDrillLink'
 import type { StatementDimFilter } from '../../../../lib/statement-matrix'
 import { decimalCmp, decimalIsMaterial, type ExactDecimal } from '../../../../lib/statement-format'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadCashFlow, cashFlowSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +29,17 @@ export default async function CashFlow({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadCashFlow(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={cashFlowSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('reports.cashFlow')
   const tr = await getTranslations('reports')
