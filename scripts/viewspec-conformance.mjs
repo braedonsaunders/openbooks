@@ -132,6 +132,14 @@ const PAGES = [
     minMatches: 2,
   },
   {
+    // A concrete party from the sim tenant — the one with the most ledger
+    // activity, so the statement has real lines rather than only balances.
+    path: '/reports/statements/11948e5b-2ca5-4d41-8ae4-c682f6f4b14c',
+    variants: ['', '?side=ap'],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,

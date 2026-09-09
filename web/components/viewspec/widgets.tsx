@@ -14,6 +14,7 @@ import { AccountHeading, EntryCell } from '../../app/(app)/reports/general-ledge
 import { ResourceCell, RowCountsCell } from '../../app/(app)/data/import/history/sections'
 import { PartyHeading } from '../../app/(app)/reports/registers/sections'
 import { PartyLinkCell } from '../../app/(app)/reports/aging/sections'
+import { AgingStrip } from '../../app/(app)/reports/statements/[partyId]/sections'
 import { SearchInput } from '../search-input'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
@@ -225,6 +226,14 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       partyId={(props.partyId as string | null) ?? null}
       partyName={str(props, 'partyName') ?? ''}
       href={str(props, 'href') ?? ''}
+    />
+  ),
+  'aging-strip': (props) => (
+    <AgingStrip
+      cells={(props.cells as ComponentProps<typeof AgingStrip>['cells']) ?? []}
+      totalLabel={str(props, 'totalLabel') ?? ''}
+      total={str(props, 'total') ?? ''}
+      totalDrill={props.totalDrill as ComponentProps<typeof AgingStrip>['totalDrill']}
     />
   ),
   'save-view': () => <SaveViewButton />,
