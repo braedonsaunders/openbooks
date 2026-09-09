@@ -206,6 +206,12 @@ const PAGES = [
     minMatches: 2,
   },
   {
+    path: '/platform/users',
+    variants: ['', '?sort=lastLogin&dir=desc'],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,

@@ -35,7 +35,13 @@ import { LienWaiverDrawer } from '../../app/(app)/compliance/lien-waivers/LienWa
 import { NewFilingButton } from '../../app/(app)/compliance/information-returns/NewFilingButton'
 import { IdentityCell, ActingCell, AccessControlCell } from '../../app/(app)/platform/access/sections'
 import { GrantAccessForm } from '../../app/(app)/platform/_components/GrantAccessForm'
-import { KeyRound, Building2 } from 'lucide-react'
+import { KeyRound, Building2, Users } from 'lucide-react'
+import {
+  UserIdentityCell,
+  UserRolesCell,
+  UserGrantsCell,
+  UserManageCell,
+} from '../../app/(app)/platform/users/sections'
 import {
   OrgNameCell,
   OrgEnvironmentCell,
@@ -282,7 +288,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const renderer = action ? WIDGET_REGISTRY[action] : undefined
     // Icons are components, so the spec names one from a closed map rather
     // than carrying it — same rule as every other component reference.
-    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 /> }
+    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users /> }
     const iconKey = str(props, 'icon')
     return (
       <EmptyState
@@ -306,6 +312,20 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       directionLabel={str(props, 'directionLabel') ?? ''}
     />
   ),
+  'user-identity-cell': (props) => (
+    <UserIdentityCell
+      name={str(props, 'name') ?? ''}
+      href={str(props, 'href') ?? ''}
+      email={str(props, 'email') ?? ''}
+      isSuperAdmin={props.isSuperAdmin === true}
+      isActive={props.isActive === true}
+    />
+  ),
+  'user-roles-cell': (props) => <UserRolesCell roles={(props.roles as string[]) ?? []} />,
+  'user-grants-cell': (props) => (
+    <UserGrantsCell label={str(props, 'label') ?? ''} emphasised={props.emphasised === true} />
+  ),
+  'user-manage-cell': (props) => <UserManageCell href={str(props, 'href') ?? ''} />,
   'org-name-cell': (props) => (
     <OrgNameCell name={str(props, 'name') ?? ''} subtitle={str(props, 'subtitle') ?? ''} />
   ),
