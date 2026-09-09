@@ -6,6 +6,7 @@ import pg from "pg";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "./db.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
+import { dropScratchOrg } from "./test-fixtures.ts";
 import {
   readTaxRateProviderConfigView,
   quoteViaAvalara,
@@ -382,12 +383,10 @@ async function seedTaxConfigOrg(): Promise<string> {
 }
 
 async function dropTaxConfigOrg(orgId: string): Promise<void> {
-  await withBypass(async () => {
-    // audit_log is append-only by design and the seeded segment spine makes the
-    // org row itself non-trivially removable — both outlive the test inertly,
-    // and every assertion scopes itself to this run's unique org id.
-    await db.execute(sql`delete from tax_rate_provider_configs where org_id = ${orgId}`);
-  });
+  // The canonical scratch teardown removes audit evidence and seeded segment
+  // rows under its test-only boundary and verifies every org-scoped table.
+  // Removing only the provider config leaves an unowned tenant behind.
+  await dropScratchOrg(orgId);
 }
 
 /** Read the COMMITTED row through its own trusted boundary, bypassing the product. */
