@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
 import {
   can,
   guardPermission,
@@ -12,6 +13,7 @@ import {
 } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import {
+  LaborCostingFeatureDisabledError,
   laborClearingReconciliation,
   postPayrollVariance,
   type LaborCostComponent,
@@ -49,6 +51,10 @@ export const dynamic = 'force-dynamic'
  * Wage data is confidential: gated on admin.setup.manage (PMs never see it —
  * projects only ever carry the blended standard cost rate snapshot).
  */
+
+function projectsDisabledResponse() {
+  return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
+}
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -294,27 +300,28 @@ export async function PUT(req: Request) {
   // downstream labor/payroll postings reject inactive accounts, so accepting
   // one here would only move the failure into the ledger.
   const accountIds = [...new Set(Object.values(accounts).filter((v): v is string => v !== null))]
-  if (accountIds.length > 0) {
-    const found = await db.execute<{ id: string }>(sql`
-      select id from accounts
-       where org_id = ${orgId} and not is_summary and is_active
-         and id in (${sql.join(accountIds.map((id) => sql`${id}`), sql`, `)})`)
-    const valid = new Set(found.rows.map((row) => row.id))
-    for (const [key, v] of Object.entries(accounts)) {
-      if (v !== null && !valid.has(v)) {
-        return NextResponse.json(
-          { error: `${key}: account not found, inactive, or is a summary account` },
-          { status: 422 },
-        )
-      }
-    }
-  }
 
   // Settings + control accounts + audit evidence commit together or not at
   // all — no partial save can survive a failure past validation.
-  await withOrgTransaction(orgId, async () => {
+  const rejected = await withOrgTransaction(orgId, async () => {
     const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
-      select settings from orgs where id = ${orgId}`)
+      select settings from orgs where id = ${orgId} for update`)
+    if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) return projectsDisabledResponse()
+    if (accountIds.length > 0) {
+      const found = await db.execute<{ id: string }>(sql`
+        select id from accounts
+         where org_id = ${orgId} and not is_summary and is_active
+           and id in (${sql.join(accountIds.map((id) => sql`${id}`), sql`, `)}) order by id for share`)
+      const valid = new Set(found.rows.map((row) => row.id))
+      for (const [key, v] of Object.entries(accounts)) {
+        if (v !== null && !valid.has(v)) {
+          return NextResponse.json(
+            { error: `${key}: account not found, inactive, or is a summary account` },
+            { status: 422 },
+          )
+        }
+      }
+    }
     const beforeSettings = (current.rows[0]?.settings ?? {}) as Record<string, unknown>
     const beforeControl = (beforeSettings.controlAccounts ?? {}) as Record<string, unknown>
 
@@ -335,7 +342,9 @@ export async function PUT(req: Request) {
           Object.entries(accounts).map(([key, v]) => [key, [beforeControl[key] ?? null, v]]),
         ),
       })}, ${gate.user.id})`)
+    return null
   })
+  if (rejected) return rejected
   return NextResponse.json({ ok: true })
 }
 
@@ -424,6 +433,9 @@ export async function POST(req: Request) {
 
     try {
       const outcome = await withOrgTransaction(orgId, async (): Promise<RateMutation> => {
+        if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
+          return { ok: false, response: projectsDisabledResponse() }
+        }
         // Deterministic same-scope serialization BEFORE any read: a concurrent
         // start blocks here until this scope's writer commits, so two starts
         // can neither race the close nor double-book the timeline.
@@ -508,6 +520,9 @@ export async function POST(req: Request) {
     const reason = bodyReason(body.reason, to ? 'wage rate ended' : 'wage rate end date cleared')
     try {
       const outcome = await withOrgTransaction(orgId, async (): Promise<RateMutation> => {
+        if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
+          return { ok: false, response: projectsDisabledResponse() }
+        }
         // Scope columns are immutable on this path: locate first for the
         // scope decision and lock key, then re-read authoritatively under it.
         const located = await db.execute<WageScope & { id: string; employeeSubsidiaryId: string | null }>(sql`
@@ -560,6 +575,9 @@ export async function POST(req: Request) {
     const reason = bodyReason(body.reason, 'wage rate deleted')
     try {
       const outcome = await withOrgTransaction(orgId, async (): Promise<RateMutation> => {
+        if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
+          return { ok: false, response: projectsDisabledResponse() }
+        }
         const located = await db.execute<WageScope & { id: string; employeeSubsidiaryId: string | null }>(sql`
           select r.id, r.employee_party_id as "employeePartyId", r.job_title as "jobTitle",
                  r.trade_id as "tradeId", r.department_id as "departmentId", r.subsidiary_id as "subsidiaryId",
@@ -610,9 +628,14 @@ export async function POST(req: Request) {
     const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`)
     if (subsidiary.rows.length !== 1) return NextResponse.json({ error: 'subsidiary is not available' }, { status: 422 })
     if (!subsidiariesInScope(gate, [body.subsidiaryId])) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    const rec = await laborClearingReconciliation(orgId, body.periodStart, body.periodEnd, body.subsidiaryId)
-    if (!rec) return NextResponse.json({ error: 'labor clearing account is not configured' }, { status: 422 })
-    return NextResponse.json({ ok: true, ...rec })
+    try {
+      const rec = await laborClearingReconciliation(orgId, body.periodStart, body.periodEnd, body.subsidiaryId)
+      if (!rec) return NextResponse.json({ error: 'labor clearing account is not configured' }, { status: 422 })
+      return NextResponse.json({ ok: true, ...rec })
+    } catch (e) {
+      if (e instanceof LaborCostingFeatureDisabledError) return projectsDisabledResponse()
+      throw e
+    }
   }
 
   if (body.action === 'post-variance') {
@@ -632,6 +655,7 @@ export async function POST(req: Request) {
       const result = await postPayrollVariance({ orgId, actorId: userId, periodStart: body.periodStart, periodEnd: body.periodEnd, subsidiaryId: body.subsidiaryId })
       return NextResponse.json({ ok: true, ...result })
     } catch (e) {
+      if (e instanceof LaborCostingFeatureDisabledError) return projectsDisabledResponse()
       return NextResponse.json({ error: (e as Error).message }, { status: 422 })
     }
   }
