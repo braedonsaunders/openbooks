@@ -5,6 +5,10 @@ import { ExportMenu } from '../../app/(app)/reports/ExportMenu'
 import { SaveViewButton } from '../../app/(app)/reports/SaveViewButton'
 import { ScheduleReportButton } from '../../app/(app)/reports/ScheduleReportButton'
 import { StatementMatrixTable } from '../../app/(app)/reports/StatementMatrixTable'
+import { SubsidiarySwitcher } from '../subsidiary-switcher'
+import { ModuleHomeTabs, LiveDirectory } from '../module-home/ui'
+import { TrendChart } from '../../app/(app)/analytics/_ui/charts'
+import { ApPulse, AttentionList, CommitmentsSection, DirectorySection } from '../../app/(app)/purchasing/sections'
 
 /**
  * Widget registry — the closed set of interactive components a spec may place
@@ -55,6 +59,59 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       drill={props.drill as ComponentProps<typeof StatementMatrixTable>['drill']}
     />
   ),
+  /* --- purchasing cockpit ------------------------------------------------ */
+  'subsidiary-switcher': (props) => (
+    <SubsidiarySwitcher
+      picker={props.picker as ComponentProps<typeof SubsidiarySwitcher>['picker']}
+      value={str(props, 'value') ?? ''}
+      label={str(props, 'label') ?? ''}
+    />
+  ),
+  'module-home-tabs': (props) => (
+    <ModuleHomeTabs tabs={props.tabs as ComponentProps<typeof ModuleHomeTabs>['tabs']} />
+  ),
+  'commitments-section': (props) => (
+    <CommitmentsSection
+      rows={props.rows as ComponentProps<typeof CommitmentsSection>['rows']}
+      showPurchaseOrders={props.showPurchaseOrders === true}
+      empty={str(props, 'empty') ?? ''}
+    />
+  ),
+  'ap-pulse': (props) => (
+    <ApPulse
+      outstanding={str(props, 'outstanding') ?? ''}
+      overdue={str(props, 'overdue') ?? ''}
+      dueNext7={str(props, 'dueNext7') ?? ''}
+      overdueIsNegative={props.overdueIsNegative === true}
+      labels={props.labels as ComponentProps<typeof ApPulse>['labels']}
+      href={str(props, 'href') ?? ''}
+    />
+  ),
+  'trend-chart': (props) => (
+    <TrendChart
+      labels={props.labels as ComponentProps<typeof TrendChart>['labels']}
+      series={props.series as ComponentProps<typeof TrendChart>['series']}
+      height={typeof props.height === 'number' ? props.height : undefined}
+      area={props.area === true}
+    />
+  ),
+  'directory-section': (props) => (
+    <DirectorySection
+      items={props.items as ComponentProps<typeof DirectorySection>['items']}
+      title={str(props, 'title') ?? ''}
+    />
+  ),
+  'attention-list': (props) => (
+    <AttentionList
+      items={props.items as ComponentProps<typeof AttentionList>['items']}
+      allClear={str(props, 'allClear') ?? ''}
+    />
+  ),
+  'live-directory': (props) => (
+    <LiveDirectory items={props.items as ComponentProps<typeof LiveDirectory>['items']} />
+  ),
+
+  /* --- reports ----------------------------------------------------------- */
   'save-view': () => <SaveViewButton />,
   'export-menu': (props) => (
     <ExportMenu kind={str(props, 'kind')} params={stringRecord(props, 'params')} baseHref={str(props, 'baseHref')} />

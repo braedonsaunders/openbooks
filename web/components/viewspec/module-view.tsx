@@ -45,5 +45,9 @@ export function ModuleView({
   const header = <BlockList blocks={spec.header} scope={data} searchParams={searchParams} />
   const body = <BlockList blocks={spec.body} scope={data} searchParams={searchParams} />
   const Layout = spec.layout === 'detail' ? DetailPageLayout : ListPageLayout
-  return <Layout header={header}>{body}</Layout>
+  return (
+    <Layout header={header} className={spec.bodyClassName}>
+      {body}
+    </Layout>
+  )
 }

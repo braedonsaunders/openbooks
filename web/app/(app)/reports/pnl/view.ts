@@ -2,7 +2,6 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import {
-  field,
   filterBar,
   page,
   pageHeader,

@@ -122,6 +122,7 @@ const pageHeaderBlock = z.strictObject({
   description: value.optional(),
   back: z.strictObject({ href: value, label: value }).optional(),
   actions: z.array(widgetRefSchema).max(12).optional(),
+  actionsClassName: z.string().max(300).optional(),
 })
 
 const filterBarBlock = z.strictObject({
@@ -219,6 +220,30 @@ export const blockSchema: z.ZodType<unknown> = z.lazy(() =>
     textBlock,
     widgetBlock,
     z.strictObject({
+      kind: z.literal('stat-tile'),
+      iconKey: value,
+      accent: value,
+      label: value,
+      value: value,
+      sub: value.optional(),
+      tone: z.union([z.enum(['default', 'positive', 'warning', 'negative']), fieldRefSchema]).optional(),
+      when: fieldRefSchema.optional(),
+    }),
+    z.strictObject({
+      kind: z.literal('grid'),
+      className: z.string().max(300).optional(),
+      blocks: z.array(blockSchema).max(40),
+    }),
+    z.strictObject({
+      kind: z.literal('panel'),
+      title: value,
+      iconKey: value.optional(),
+      hint: value.optional(),
+      className: z.string().max(300).optional(),
+      bodyClassName: z.string().max(300).optional(),
+      blocks: z.array(blockSchema).max(40),
+    }),
+    z.strictObject({
       kind: z.literal('paper'),
       company: value.optional(),
       title: value,
@@ -235,6 +260,7 @@ export const MAX_BLOCK_DEPTH = 6
 export const pageSpecSchema = z.strictObject({
   specVersion: z.literal(SPEC_VERSION),
   layout: z.enum(['list', 'detail']),
+  bodyClassName: z.string().max(300).optional(),
   header: z.array(blockSchema).max(20),
   body: z.array(blockSchema).max(40),
 })

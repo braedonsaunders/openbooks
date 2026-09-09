@@ -3,6 +3,7 @@ import { PageHeader, cn } from '@openbooks/ui'
 import type { Block, PaperBlock, TableBlock, Tone } from '@openbooks/viewspec'
 import { ROOT_SCOPE_KEY, resolveNumber, resolveRows, resolveText, resolveValue } from '@openbooks/viewspec'
 import { Pagination } from '../pagination'
+import { HomePanel, HomeStatTile } from '../module-home/client'
 import {
   Table,
   TableBody,
@@ -155,7 +156,17 @@ export function BlockView({
               ? { href: resolveText(block.back.href, scope), label: resolveText(block.back.label, scope) }
               : undefined
           }
-          actions={block.actions ? <WidgetSlot widgets={block.actions} scope={scope} /> : undefined}
+          actions={
+            block.actions ? (
+              block.actionsClassName ? (
+                <div className={block.actionsClassName}>
+                  <WidgetSlot widgets={block.actions} scope={scope} />
+                </div>
+              ) : (
+                <WidgetSlot widgets={block.actions} scope={scope} />
+              )
+            ) : undefined
+          }
         />
       )
 
@@ -233,6 +244,40 @@ export function BlockView({
     case 'widget': {
       if (block.when && !resolveValue(block.when as never, scope)) return null
       return <WidgetBlockView name={block.widget} props={block.props ?? {}} />
+    }
+
+    case 'grid':
+      return (
+        <div className={block.className}>
+          <BlockList blocks={block.blocks} scope={scope} searchParams={searchParams} />
+        </div>
+      )
+
+    case 'panel':
+      return (
+        <HomePanel
+          title={resolveText(block.title, scope)}
+          icon={resolveText(block.iconKey, scope) || undefined}
+          hint={resolveText(block.hint, scope) || undefined}
+          className={block.className}
+          bodyClassName={block.bodyClassName}
+        >
+          <BlockList blocks={block.blocks} scope={scope} searchParams={searchParams} />
+        </HomePanel>
+      )
+
+    case 'stat-tile': {
+      if (block.when && !resolveValue(block.when as never, scope)) return null
+      return (
+        <HomeStatTile
+          icon={resolveText(block.iconKey, scope)}
+          accent={resolveText(block.accent, scope) as ComponentProps<typeof HomeStatTile>['accent']}
+          label={resolveText(block.label, scope)}
+          value={resolveText(block.value, scope)}
+          sub={resolveText(block.sub, scope) || undefined}
+          tone={resolveValue(block.tone as never, scope) as ComponentProps<typeof HomeStatTile>['tone']}
+        />
+      )
     }
   }
 }
