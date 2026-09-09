@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react'
 import { PageHeader, cn } from '@openbooks/ui'
 import type { Block, PaperBlock, TableBlock, Tone } from '@openbooks/viewspec'
 import { ROOT_SCOPE_KEY, resolveNumber, resolveRows, resolveText, resolveValue } from '@openbooks/viewspec'
@@ -13,7 +14,7 @@ import {
 import { ReportPaper } from '../../app/(app)/reports/ReportPaper'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CellView } from './cells'
-import { WidgetSlot } from './widgets'
+import { WidgetSlot, WidgetBlockView } from './widgets'
 import { toneClass } from './tone'
 import Link from 'next/link'
 import { Badge } from '@openbooks/ui'
@@ -159,12 +160,21 @@ export function BlockView({
       )
 
     case 'filter-bar': {
-      const options = block.options
-        ? (resolveValue(block.options as never, scope) as Record<string, unknown> | undefined)
-        : undefined
+      // Each loader-resolved input goes to exactly one known prop. Deliberately
+      // not a spread: a spread would let a spec set arbitrary props on this
+      // component.
+      const bind = <T,>(f: typeof block.dimensions): T | undefined =>
+        f ? (resolveValue(f as never, scope) as T | undefined) : undefined
       return (
         <ReportFilterBar
           controls={block.controls}
+          dimensions={bind<ComponentProps<typeof ReportFilterBar>['dimensions']>(block.dimensions)}
+          subsidiaries={bind<ComponentProps<typeof ReportFilterBar>['subsidiaries']>(block.subsidiaries)}
+          customers={bind<ComponentProps<typeof ReportFilterBar>['customers']>(block.customers)}
+          dateRange={bind<ComponentProps<typeof ReportFilterBar>['dateRange']>(block.dateRange)}
+          primaryFilter={bind<ComponentProps<typeof ReportFilterBar>['primaryFilter']>(block.primaryFilter)}
+          periodPresets={bind<ComponentProps<typeof ReportFilterBar>['periodPresets']>(block.periodPresets)}
+          defaultPeriod={resolveText(block.defaultPeriod, scope) || undefined}
           searchPlaceholder={resolveText(block.searchPlaceholder, scope) || undefined}
           leading={
             block.leading ? (
@@ -181,7 +191,6 @@ export function BlockView({
             ) : undefined
           }
           actions={block.actions ? <WidgetSlot widgets={block.actions} scope={scope} /> : undefined}
-          {...(options ?? {})}
         />
       )
     }
@@ -216,8 +225,14 @@ export function BlockView({
       )
 
     case 'text': {
+      if (block.when && !resolveValue(block.when as never, scope)) return null
       const tone = toneClass(resolveValue(block.tone as never, scope) as Tone | undefined)
       return <p className={cn('text-xs', tone) || undefined}>{resolveText(block.content, scope)}</p>
+    }
+
+    case 'widget': {
+      if (block.when && !resolveValue(block.when as never, scope)) return null
+      return <WidgetBlockView name={block.widget} props={block.props ?? {}} />
     }
   }
 }

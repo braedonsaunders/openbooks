@@ -56,7 +56,7 @@ export type Align = 'left' | 'right' | 'center'
 /** Tone is a NAMED presentation state the loader decides, never a comparison
  *  the spec performs. `negative` renders the red treatment used across
  *  statements; `muted`/`strong` map to the existing slate ramps. */
-export type Tone = 'default' | 'negative' | 'positive' | 'muted' | 'strong'
+export type Tone = 'default' | 'negative' | 'positive' | 'warning' | 'muted' | 'strong'
 
 export interface TextCell {
   kind: 'text'
@@ -197,8 +197,20 @@ export interface FilterBarBlock {
   /** Toggle chips rendered before the controls (the payable/receivable idiom). */
   leading?: ToggleLinkGroup
   actions?: WidgetRef[]
-  /** Loader-resolved option lists the bar needs (dimensions, subsidiaries…). */
-  options?: FieldRef
+  /**
+   * Loader-resolved inputs, named ONE BY ONE rather than a single object the
+   * renderer spreads. A spread would let a spec set any prop on the underlying
+   * component — including ones the block was never meant to expose — which is
+   * precisely the escape hatch the closed vocabulary exists to prevent. Each
+   * field below is passed to exactly one known prop.
+   */
+  dimensions?: FieldRef
+  subsidiaries?: FieldRef
+  customers?: FieldRef
+  dateRange?: FieldRef
+  primaryFilter?: FieldRef
+  periodPresets?: FieldRef
+  defaultPeriod?: Value
 }
 
 export interface ToggleLinkGroup {
@@ -264,6 +276,25 @@ export interface TextBlock {
   kind: 'text'
   content: Value
   tone?: Value<Tone>
+  /** Omit the block entirely when this loader-resolved flag is false. */
+  when?: FieldRef
+}
+
+/**
+ * A host-registered domain component placed as a block.
+ *
+ * The escape valve for components that own real presentation logic — the
+ * statement matrix, a trend chart, a live directory. Decomposing those into
+ * generic blocks would reimplement them badly; ViewSpec composes pages, it
+ * does not re-derive components. Still closed: the widget name must exist in
+ * the host registry, and `props` reach exactly one known component.
+ */
+export interface WidgetBlock {
+  kind: 'widget'
+  widget: string
+  props?: Record<string, unknown>
+  /** Omit the block entirely when this loader-resolved flag is false. */
+  when?: FieldRef
 }
 
 export type Block =
@@ -274,6 +305,7 @@ export type Block =
   | TableBlock
   | PaginationBlock
   | TextBlock
+  | WidgetBlock
 
 export const BLOCK_KINDS = [
   'page-header',
@@ -283,6 +315,7 @@ export const BLOCK_KINDS = [
   'table',
   'pagination',
   'text',
+  'widget',
 ] as const
 
 /* -------------------------------------------------------------------------- */
