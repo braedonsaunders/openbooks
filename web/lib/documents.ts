@@ -1,4 +1,5 @@
 import 'server-only'
+import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/billing-source-integrity.ts'
 import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 export { documentRevisionSql }
 import { sql, type SQL } from 'drizzle-orm'
@@ -900,6 +901,17 @@ export async function applyDocumentEdit(
           422,
           `a ${locked.status} document cannot be edited — return it to draft or create a controlled correction`,
         )
+      }
+
+      try {
+        const generated = await assertGeneratedBillingEdit(tx, orgId, id, { ...body, currency, ...(totals ?? {}) }, preparedLines)
+        // Equivalent editor lines permit header edits, but the source rows own
+        // their IDs, billable flags, lineage, and audit metadata. Never replace
+        // those rows through the generic editor's smaller column set.
+        if (generated) preparedLines = null
+      } catch (error) {
+        if (error instanceof BillingSourceIntegrityError) throw new DocumentEditError(422, error.message)
+        throw error
       }
 
       const auditBefore = await captureTransactionAuditSnapshot(tx, id, ctx.orgId)
