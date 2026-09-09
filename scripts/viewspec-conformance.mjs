@@ -125,6 +125,13 @@ const PAGES = [
     minMatches: 2,
   },
   {
+    path: '/reports/aging',
+    // Two mutually exclusive tables selected by independent presence flags.
+    variants: ['', '?view=detail', '?side=ap'],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,

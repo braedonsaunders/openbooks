@@ -13,6 +13,7 @@ import { JournalEntryHeading } from '../../app/(app)/reports/journal/sections'
 import { AccountHeading, EntryCell } from '../../app/(app)/reports/general-ledger/sections'
 import { ResourceCell, RowCountsCell } from '../../app/(app)/data/import/history/sections'
 import { PartyHeading } from '../../app/(app)/reports/registers/sections'
+import { PartyLinkCell } from '../../app/(app)/reports/aging/sections'
 import { SearchInput } from '../search-input'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
@@ -217,6 +218,13 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       script={(props.script as ComponentProps<typeof ScriptDrawer>['script']) ?? null}
       runs={(props.runs as ComponentProps<typeof ScriptDrawer>['runs']) ?? []}
       customTypes={(props.customTypes as ComponentProps<typeof ScriptDrawer>['customTypes']) ?? []}
+    />
+  ),
+  'party-link-cell': (props) => (
+    <PartyLinkCell
+      partyId={(props.partyId as string | null) ?? null}
+      partyName={str(props, 'partyName') ?? ''}
+      href={str(props, 'href') ?? ''}
     />
   ),
   'save-view': () => <SaveViewButton />,

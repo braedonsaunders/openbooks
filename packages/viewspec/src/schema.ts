@@ -42,6 +42,7 @@ const textCell = z.strictObject({
   fallback: value.optional(),
   tone: toneSchema.optional(),
   numeric: z.boolean().optional(),
+  fallbackClassName: z.string().max(200).optional(),
   prefix: z
     .strictObject({ field: fieldRefSchema, className: z.string().max(200).optional() })
     .optional(),
@@ -139,6 +140,7 @@ const widgetRefSchema = z.strictObject({
 
 const pageHeaderBlock = z.strictObject({
   kind: z.literal('page-header'),
+  when: fieldRefSchema.optional(),
   title: value,
   description: value.optional(),
   back: z.strictObject({ href: value, label: value }).optional(),
@@ -148,9 +150,12 @@ const pageHeaderBlock = z.strictObject({
 
 const filterBarBlock = z.strictObject({
   kind: z.literal('filter-bar'),
+  when: fieldRefSchema.optional(),
   controls: z.strictObject({
     search: z.boolean().optional(),
     period: z.boolean().optional(),
+    dateRange: z.boolean().optional(),
+    asOf: z.boolean().optional(),
     breakout: z.boolean().optional(),
     compare: z.boolean().optional(),
     basis: z.boolean().optional(),
@@ -182,6 +187,7 @@ const filterBarBlock = z.strictObject({
 
 const summaryLineBlock = z.strictObject({
   kind: z.literal('summary-line'),
+  when: fieldRefSchema.optional(),
   label: value,
   value: cellSchema,
 })
@@ -213,6 +219,7 @@ const spanRowSchema = z.strictObject({
 
 const tableBlock = z.strictObject({
   kind: z.literal('table'),
+  when: fieldRefSchema.optional(),
   variant: z.enum(['report', 'app']).optional(),
   leading: z.array(spanRowSchema).max(10).optional(),
   trailing: z.array(spanRowSchema).max(10).optional(),
@@ -231,6 +238,7 @@ const tableBlock = z.strictObject({
 
 const paginationBlock = z.strictObject({
   kind: z.literal('pagination'),
+  when: fieldRefSchema.optional(),
   basePath: value,
   total: fieldRefSchema,
   page: fieldRefSchema,
@@ -280,6 +288,7 @@ export const blockSchema: z.ZodType<unknown> = z.lazy(() =>
     }),
     z.strictObject({
       kind: z.literal('repeat'),
+  when: fieldRefSchema.optional(),
       items: fieldRefSchema,
       itemKey: fieldRefSchema,
       className: z.string().max(300).optional(),
@@ -289,11 +298,13 @@ export const blockSchema: z.ZodType<unknown> = z.lazy(() =>
     }),
     z.strictObject({
       kind: z.literal('grid'),
+  when: fieldRefSchema.optional(),
       className: z.string().max(300).optional(),
       blocks: z.array(blockSchema).max(40),
     }),
     z.strictObject({
       kind: z.literal('panel'),
+  when: fieldRefSchema.optional(),
       title: value,
       iconKey: value.optional(),
       hint: value.optional(),
@@ -303,6 +314,7 @@ export const blockSchema: z.ZodType<unknown> = z.lazy(() =>
     }),
     z.strictObject({
       kind: z.literal('paper'),
+  when: fieldRefSchema.optional(),
       company: value.optional(),
       title: value,
       periodPhrase: value.optional(),
