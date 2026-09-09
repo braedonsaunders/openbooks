@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
 import { isIsoCalendarDate } from "./business-date.ts";
-import { buildScheduleWithRunner, resolveAssetAccounts } from "./depreciation.ts";
+import { buildScheduleWithRunner, reconcileAssetDepreciationStatusWithRunner, resolveAssetAccounts, unimpairedAssetCarryingValue } from "./depreciation.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
 import { orgReportingFramework } from "./reporting-framework.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
@@ -153,12 +153,15 @@ async function lockAssetRow(exec: SqlExecutor, orgId: string, assetId: string, a
 async function netRemeasurementDelta(
   orgId: string,
   assetId: string,
+  bookId: string,
   exec: SqlExecutor = db,
 ): Promise<string> {
   const r = (await exec.execute<{ delta: string }>(sql`
     select coalesce(sum(event.amount), 0)::text as delta
       from asset_events event
+      join journal_entries entry on entry.id = event.journal_entry_id and entry.org_id = event.org_id
      where event.org_id = ${orgId} and event.asset_id = ${assetId}
+       and entry.book_id = ${bookId} and entry.status = 'posted'
        and event.kind in ('impaired', 'revalued')
        and not exists (
          select 1 from asset_events reversal
@@ -184,9 +187,9 @@ export interface RemeasurementPolicyDecision {
  *    held-and-used asset is prohibited outright.
  *  - IFRS (IAS 36.114/117): a reversal is permitted but capped — the carrying
  *    amount may not exceed what it would have been had no impairment been
- *    recognised. The unreversed impairment balance IS that cap here, because
- *    post-impairment schedules are rebuilt off the impaired basis; a write-up
- *    beyond it is a revaluation-surplus event, which is a different model.
+ *    recognised. This pure gate rejects increases beyond the original loss;
+ *    the service also applies the depreciated counterfactual carrying-value
+ *    ceiling from the asset's native policy at the effective posting date.
  * A write-up with NO impairment history is an ordinary revaluation and passes
  * through unchanged (both frameworks reach it via their revaluation models).
  */
@@ -381,7 +384,7 @@ export async function disposeAsset(
     // Impairments and revaluations sit on the accumulated-depreciation account
     // without schedule lines; fold them in so derecognition clears the account
     // exactly (an impaired asset must not strand its impairment credit).
-    const remeasureDelta = await netRemeasurementDelta(orgId, assetId, tx);
+    const remeasureDelta = await netRemeasurementDelta(orgId, assetId, bookId, tx);
     const effectiveAccumulated = sub(asset.accumulated, remeasureDelta);
     const { nbv, gainLoss, lines } = computeDisposal({
       cost: asset.acquisition_cost, accumulated: effectiveAccumulated, proceeds, accounts,
@@ -665,6 +668,11 @@ export async function reverseAssetLifecycleEvent(
         source.book_id,
       );
     }
+    await reconcileAssetDepreciationStatusWithRunner(tx, orgId, opts.actorId, source.asset_id);
+    if (restoredStatus !== null) {
+      restoredStatus = (await tx.execute<{ status: "in_service" | "fully_depreciated" }>(sql`
+        select status from fixed_assets where org_id = ${orgId} and id = ${source.asset_id}`)).rows[0]!.status;
+    }
     return {
       assetId: source.asset_id,
       sourceEventId: source.id,
@@ -732,7 +740,7 @@ export async function remeasureAsset(
     // Fold prior remeasurement events into the carrying amount: they credit
     // accumulated depreciation without schedule lines, so the schedule sum alone
     // overstates NBV the moment an asset has been impaired.
-    const remeasureDelta = await netRemeasurementDelta(orgId, assetId, tx);
+    const remeasureDelta = await netRemeasurementDelta(orgId, assetId, bookId, tx);
     const effectiveAccumulated = sub(asset.accumulated, remeasureDelta);
     const { delta, lines } = computeRemeasurement({
       cost: asset.acquisition_cost,
@@ -749,6 +757,14 @@ export async function remeasureAsset(
     const framework = await orgReportingFramework(orgId);
     const policy = remeasurementPolicy({ framework, delta, unreversedImpairment });
     if (!policy.allowed) throw new AssetLifecycleError(policy.reason!);
+    if (framework === "ifrs" && cmp(delta, "0") > 0 && cmp(unreversedImpairment, "0") > 0) {
+      const ceiling = await unimpairedAssetCarryingValue(tx, assetId, orgId, bookId, opts.date);
+      if (cmp(opts.newCarryingValue, ceiling) > 0) {
+        throw new AssetLifecycleError(
+          `IAS 36 caps an impairment reversal at the carrying amount without impairment, net of depreciation (${ceiling} as of ${opts.date})`,
+        );
+      }
+    }
 
     await assertLifecyclePostingPolicy(tx, orgId, asset, lines);
     const kind: "revalued" | "impaired" = cmp(delta, "0") < 0 ? "impaired" : "revalued";
@@ -803,6 +819,7 @@ export async function remeasureAsset(
       await tx.execute(sql`update depreciation_schedule_lines set planned_amount = ${fromUnits(amt < 0n ? 0n : amt)}, updated_at = now(), updated_by = ${opts.actorId} where id = ${remaining.rows[i]!.id} and org_id = ${orgId}`);
       rebuilt++;
     }
+    await reconcileAssetDepreciationStatusWithRunner(tx, orgId, opts.actorId, assetId);
     return { assetId, entryId: eid, delta, kind, rebuiltLines: rebuilt };
   });
 }
