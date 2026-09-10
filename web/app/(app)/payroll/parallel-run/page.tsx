@@ -13,6 +13,8 @@ import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { ParallelRunView } from './ParallelRunView'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadParallelRun, parallelRunSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +42,22 @@ export async function generateMetadata() {
  * with the native filter bar, saved views, PDF/Excel/CSV and scheduling. This
  * page is the workspace that runs the comparison and reads its exceptions.
  */
-export default async function PayrollParallelRunPage() {
+export default async function PayrollParallelRunPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadParallelRun(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={parallelRunSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('payroll.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')

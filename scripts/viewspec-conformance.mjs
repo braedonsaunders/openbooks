@@ -759,6 +759,88 @@ const PAGES = [
     minMatches: 1,
   },
   {
+    path: '/banking/cash',
+    // The cockpit body is one client component; the horizon param pins the
+    // accepted-vs-default-fallback branches.
+    variants: ['', { query: '?horizon=4', expect: 'main h1, main h3', minMatches: 4 }],
+    expect: 'main h1, main h3',
+    minMatches: 4,
+  },
+  {
+    path: '/admin/setup/bank-feeds',
+    // Registered only because the fixture turns `bankFeeds` on; without it
+    // both paths redirect and the harness would compare two redirects.
+    variants: [{ query: '', expect: 'main', minMatches: 1 }],
+    expect: 'main',
+    minMatches: 1,
+  },
+  {
+    path: '/docs/quick-start',
+    variants: [{ query: '', expect: 'main a[href^="/docs/"]', minMatches: 1 }],
+    expect: 'main a[href^="/docs/"]',
+    minMatches: 1,
+  },
+  {
+    path: '/apps/library',
+    // Marketplace browser: a card grid over the fixture listings, plus the
+    // resultless note. `main code` is the per-card key element, which the
+    // note branch never renders; the note title is the `main h2`.
+    variants: [
+      '',
+      { query: '?q=payroll', expect: 'main code', minMatches: 1 },
+      { query: '?q=zzzznomatch', expect: 'main h2', minMatches: 1 },
+    ],
+    expect: 'main code',
+    minMatches: 3,
+  },
+  {
+    path: '/admin/setup/tax-depreciation',
+    // Tab workspace behind one `?tab=` param. The default and `?tab=bogus`
+    // both land on the overview (the native fallback contract, copied
+    // verbatim); the entity tabs render through the shared setup-section
+    // slot and list the seeded regime / pool class.
+    variants: [
+      '',
+      { query: '?tab=bogus', expect: 'main nav a', minMatches: 4 },
+      { query: '?tab=regimes', expect: 'main table tbody tr', minMatches: 1 },
+      { query: '?tab=classes', expect: 'main table tbody tr', minMatches: 1 },
+    ],
+    expect: 'main nav a',
+    minMatches: 4,
+  },
+  {
+    path: '/tax/provisions/00000000-0000-7000-9000-000000006901',
+    // IAS 12 draft: post button + three temporary differences.
+    variants: [{ query: '', expect: 'main table tbody tr', minMatches: 8 }],
+    expect: 'main table tbody tr',
+    minMatches: 8,
+  },
+  {
+    path: '/tax/provisions/00000000-0000-7000-9000-000000006902',
+    // ASC 740 draft with no measured differences: the italic empty note.
+    variants: [{ query: '', expect: 'main table tbody tr', minMatches: 3 }],
+    expect: 'main table tbody tr',
+    minMatches: 3,
+  },
+  {
+    path: '/tax/provisions/00000000-0000-7000-9000-000000006903',
+    // Posted run: the post button is gone. Differences cannot be seeded on a
+    // finalized run — the history trigger rejects any insert against one — so
+    // this variant pins the hidden-button branch, not the difference rows.
+    variants: [{ query: '', expect: 'main table tbody tr', minMatches: 4 }],
+    expect: 'main table tbody tr',
+    minMatches: 4,
+  },
+  {
+    path: '/payroll/parallel-run',
+    // One workspace widget: the register/run pickers, the comparisons table
+    // and the registers table. The findings drawer is fetch-driven client
+    // state, not URL-addressable, so there is no drawer variant.
+    variants: [''],
+    expect: 'main table tbody tr',
+    minMatches: 2,
+  },
+  {
     path: '/banking/imports',
     // The statements list plus the live-feed panel, which stays one widget
     // because every row of it is a bundle of conditional pairs.
@@ -895,6 +977,20 @@ const PAGES = [
     ],
     expect: 'table tbody tr',
     minMatches: 1,
+  },
+  {
+    path: '/crm/activities',
+    variants: [
+      '',
+      {
+        query: '?activity=00000000-0000-7000-a000-000000000101',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
   },
   {
     path: '/crm/opportunities',
