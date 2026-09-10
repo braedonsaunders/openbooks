@@ -101,6 +101,8 @@ import { AssistantApp } from '../assistant/assistant-app'
 import { AccountDrawer as CrmAccountDrawer } from '../../app/(app)/crm/AccountDrawer'
 import { DashboardHeader } from '../../app/(app)/dashboard/_dashboard-header'
 import { DashboardGridSlot } from './dashboard-grid-slot'
+import { PlatformClient } from '../../app/(app)/sync/PlatformClient'
+import { RetroWorkspace } from '../../app/(app)/payroll/retro/RetroWorkspace'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
 import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
@@ -1159,6 +1161,22 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   },
   /** Presence is the spec's `when` on `canRun`, not a check in here. */
   'run-recognition': () => <RunRecognitionButton />,
+
+  /* --- platform sync ---------------------------------------------------------------- */
+  /** No props. The console holds every fetch and mutation — a 2.5s live poll
+   *  while a run is in flight, run/test/toggle-mirror/schedule/delete with
+   *  busy flags, `window.open` for OAuth and the QWC download. */
+  'sync-console': () => <PlatformClient />,
+
+  /* --- payroll retro ---------------------------------------------------------------- */
+  /** Money stays canonical: the workspace formats client-side in the
+   *  browser's locale, so the loader must not pre-format it. */
+  'retro-workspace': (props) => (
+    <RetroWorkspace
+      schedules={props.schedules as ComponentProps<typeof RetroWorkspace>['schedules']}
+      canRun={props.canRun === true}
+    />
+  ),
 
   /* --- home dashboard --------------------------------------------------------------- */
   /** The greeting row. The loader resolves the greeting string (locale +
