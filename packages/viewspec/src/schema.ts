@@ -199,6 +199,7 @@ const columnSchema = z.strictObject({
   sort: z.string().max(60).optional(),
   className: z.string().max(200).optional(),
   headerClassName: z.string().max(200).optional(),
+  srOnlyHeader: z.boolean().optional(),
 })
 
 const spanRowSchema = z.strictObject({
@@ -247,6 +248,7 @@ const paginationBlock = z.strictObject({
   page: fieldRefSchema,
   perPage: fieldRefSchema,
   bare: z.boolean().optional(),
+  pageParamKey: z.string().max(60).optional(),
 })
 
 const textBlock = z.strictObject({
@@ -297,6 +299,7 @@ export const blockSchema: z.ZodType<unknown> = z.lazy(() =>
       itemKey: fieldRefSchema,
       className: z.string().max(300).optional(),
       itemClassName: z.string().max(300).optional(),
+      unwrapped: z.boolean().optional(),
       blocks: z.array(blockSchema).max(40),
       empty: z.strictObject({ text: value, className: z.string().max(300).optional() }).optional(),
     }),

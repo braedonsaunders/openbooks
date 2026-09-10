@@ -320,6 +320,12 @@ export interface Column {
   className?: string
   /** Applied to the header cell — column widths live here, not on the body. */
   headerClassName?: string
+  /**
+   * Render the header label inside an `sr-only` span. An icon-only action
+   * column still owes screen readers a name, and several native lists say it
+   * exactly this way.
+   */
+  srOnlyHeader?: boolean
 }
 
 /**
@@ -396,6 +402,12 @@ export interface PaginationBlock extends BlockCommon {
    * Rendering the spacer unconditionally would be markup those pages lack.
    */
   bare?: boolean
+  /**
+   * The URL parameter this pager drives. A page with two independent lists —
+   * findings and reports on the same screen — needs the second one to page on
+   * its own key so paging one does not reset the other.
+   */
+  pageParamKey?: string
 }
 
 export interface TextBlock extends BlockCommon {
@@ -485,6 +497,13 @@ export interface RepeatBlock extends BlockCommon {
   className?: string
   /** Wrapper around each rendered item. */
   itemClassName?: string
+  /**
+   * Render each item's blocks with no wrapper element at all. Lists whose
+   * items already emit their own top-level element (a `<section>` row inside a
+   * `divide-y` container) would otherwise gain a `<div>` that the native
+   * markup does not have. Mutually exclusive with `itemClassName`.
+   */
+  unwrapped?: boolean
   blocks: Block[]
   empty?: { text: Value; className?: string }
 }

@@ -109,18 +109,45 @@ const PAGES = [
   {
     path: '/admin/api-keys',
     // Admin list: search bar, app table with an in-table empty row, drawer.
-    variants: [''],
+    variants: ['',
+      // The flyout is portaled to <body>: without naming that root the
+      // comparison never looks at the drawer at all.
+      {
+        query: '?key=01a08695-1e66-79ee-b02e-5c0de9c9e246',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
     expect: 'table thead th',
   },
   {
     path: '/admin/custom-fields',
-    variants: [''],
+    variants: ['',
+      // The flyout is portaled to <body>: without naming that root the
+      // comparison never looks at the drawer at all.
+      {
+        query: '?field=01a086a0-1a2f-758f-b727-0741a0a1d23b',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
     expect: 'table tbody tr',
     minMatches: 2,
   },
   {
     path: '/admin/scripts',
-    variants: [''],
+    variants: ['',
+      // The flyout is portaled to <body>: without naming that root the
+      // comparison never looks at the drawer at all.
+      {
+        query: '?script=01a086a2-303f-71da-9964-983ffc2a7ed8',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
     expect: 'table tbody tr',
     minMatches: 2,
   },
@@ -173,13 +200,31 @@ const PAGES = [
   {
     path: '/records/types',
     // Widest use of sorting so far: five of seven columns sort.
-    variants: ['', '?sort=records&dir=desc'],
+    variants: ['', '?sort=records&dir=desc',
+      // The flyout is portaled to <body>: without naming that root the
+      // comparison never looks at the drawer at all.
+      {
+        query: '?type=01a0878a-8277-7b16-b64e-ac70ff8445ee',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
     expect: 'table tbody tr',
     minMatches: 1,
   },
   {
     path: '/compliance/lien-waivers',
-    variants: ['', '?direction=received'],
+    variants: ['', '?direction=received',
+      // The flyout is portaled to <body>: without naming that root the
+      // comparison never looks at the drawer at all.
+      {
+        query: '?waiver=01a08793-9f04-7a5f-af67-5ae4be47ce4f',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
     expect: 'table tbody tr',
     minMatches: 2,
   },
@@ -225,6 +270,78 @@ const PAGES = [
     minMatches: 4,
   },
   {
+    path: '/accounts',
+    // Three mutually exclusive bodies: the customizable entity list, flat
+    // search results, and the class hierarchy.
+    variants: [
+      '',
+      { query: '?layout=hierarchy', expect: 'table tbody tr', minMatches: 10 },
+      { query: '?layout=hierarchy&q=account', expect: 'table tbody tr', minMatches: 2 },
+      { query: '?layout=hierarchy&class=income', expect: 'table tbody tr', minMatches: 2 },
+      // The account flyout, opened from the entity-list layout — the one place
+      // the drawer is rendered BY the list rather than beside it.
+      {
+        query: '?account=a1f8e08f-a6ae-42ac-b2fd-d8008a92b14e',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/continuous-close',
+    // Two independent lists behind a tab, each with its own pager.
+    variants: [
+      '',
+      { query: '?severity=critical', minMatches: 2 },
+      { query: '?tab=reports', expect: 'section h2', minMatches: 1 },
+      // Both flyouts: the findings drawer and the narrative drawer.
+      {
+        query: '?item=00000000-0000-7000-9000-000000000101',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+      {
+        query: '?tab=reports&report=00000000-0000-7000-9000-000000000002',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
+    path: '/parties',
+    variants: [
+      '',
+      '?role=vendor',
+      '?sort=code&dir=desc',
+      // The flyout path. The id is a sim-org party — the whole harness is
+      // pinned to that tenant already — and it is here because the drawer is
+      // the one place the party spec carries a remount key.
+      {
+        query: '?role=vendor&party=96c6a13b-5ae5-4627-b56a-1fc2c5bec9fc',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        // The flyout is portaled to <body>, so it has to be named explicitly
+        // or the comparison never looks at it.
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/reports/custom',
+    variants: ['', '?sort=kind&dir=desc'],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,
@@ -258,7 +375,14 @@ async function renderSettled(page, url, expectSelector, minMatches = 0) {
   // network idle within any sane timeout, while serving in ~60ms. Readiness is
   // asserted explicitly below — suspense drained, content selector visible,
   // overlays cleared — which is stricter than idle anyway.
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+  const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+  // Fail on the status rather than on a downstream selector timeout. A server
+  // error still renders an app shell with a <main>, so without this check a
+  // 500 costs a 30s timeout and reports as a missing selector instead of as
+  // what it is. (A missing message key produced exactly that.)
+  if (response && response.status() >= 400) {
+    throw new Error(`${url} returned HTTP ${response.status()} — the page failed to render`)
+  }
   await page.waitForSelector('main', { state: 'attached' })
   // Suspense fallbacks leave `<template id="B:n">` placeholders behind.
   await page.waitForFunction(
@@ -292,17 +416,14 @@ async function renderSettled(page, url, expectSelector, minMatches = 0) {
   // is identical on both sides and passes a pixel comparison meaninglessly.
   // Matching any full-viewport fixed overlay rather than the splash's own
   // classes keeps this correct if another overlay is introduced later.
-  await page.waitForFunction(
-    () =>
-      ![...document.querySelectorAll('body *')].some((el) => {
-        const style = getComputedStyle(el)
-        if (style.position !== 'fixed' || style.visibility === 'hidden') return false
-        if (parseFloat(style.opacity) <= 0.01) return false
-        const rect = el.getBoundingClientRect()
-        return rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9
-      }),
-    { timeout: 30_000 },
-  )
+  //
+  // Waited for by its own marker rather than by "any full-viewport fixed
+  // overlay": a flyout scrim matches that shape too and never clears, so the
+  // generic form hung every drawer variant. The splash unmounts itself, so
+  // absence of the node is the settled state.
+  await page.waitForFunction(() => !document.querySelector('[data-splash-root]'), {
+    timeout: 30_000,
+  })
   await page.evaluate(() => document.fonts?.ready)
 
   // Capture what each control ACTUALLY holds, then let the residue go.
@@ -315,11 +436,14 @@ async function renderSettled(page, url, expectSelector, minMatches = 0) {
   // attribute makes the real selection comparable for the first time, which
   // is why dropping `selected` afterwards strengthens the check rather than
   // loosening it.
+  // Document-wide, not `main`-scoped: a drawer portals to <body>, so scoping
+  // the stamp to <main> left every control inside a flyout un-stamped and
+  // still carrying the coin-flip `selected` residue.
   await page.evaluate(() => {
-    for (const el of document.querySelectorAll('main select')) {
+    for (const el of document.querySelectorAll('select')) {
       el.setAttribute('data-selected-value', el.value)
     }
-    for (const el of document.querySelectorAll('main input[type="checkbox"], main input[type="radio"]')) {
+    for (const el of document.querySelectorAll('input[type="checkbox"], input[type="radio"]')) {
       el.setAttribute('data-checked', String(el.checked))
     }
   })
@@ -334,7 +458,7 @@ async function renderSettled(page, url, expectSelector, minMatches = 0) {
   // one symptom, which would risk hiding a genuinely wrong selection.
   let previous = ''
   for (let attempt = 0; attempt < 20; attempt++) {
-    const current = await page.locator('main').innerHTML()
+    const current = await page.evaluate(() => document.body.innerHTML)
     if (current === previous) return
     previous = current
     await page.waitForTimeout(150)
@@ -358,11 +482,24 @@ async function captureSettled(page) {
     content: '*, *::before, *::after { animation: none !important; transition: none !important; }',
   })
   await page.evaluate(() => {
-    for (const el of document.querySelectorAll('main *')) {
+    for (const el of document.querySelectorAll('body *')) {
       const style = getComputedStyle(el)
       if (parseFloat(style.opacity) < 1) el.style.opacity = '1'
       if (style.transform !== 'none') el.style.transform = 'none'
     }
+  })
+  // Drop focus before photographing.
+  //
+  // A flyout autofocuses its first control, and Chrome paints the ring only
+  // when it considers focus keyboard-driven — which depends on the
+  // interaction history of the load, so the SAME page photographed twice
+  // disagrees about the ring. It cost an 860px diff on a variant whose DOM
+  // matched exactly (focus is not in the DOM, so the structural gate cannot
+  // see it either way). Blurring removes the state from both captures rather
+  // than raising the tolerance until the noise fits under it.
+  await page.evaluate(() => {
+    const active = document.activeElement
+    if (active instanceof HTMLElement) active.blur()
   })
   await page.waitForTimeout(120)
   // Screenshot <main>, not the full page: the structural diff is scoped to
@@ -378,8 +515,16 @@ function normalize(markup) {
     markup
       // React suspense / segment comment markers.
       .replace(/<!--[\s\S]*?-->/g, '')
-      // useId values depend on tree position and never reach the user.
-      .replace(/\b(id|for|aria-labelledby|aria-controls|aria-describedby)="[^"]*«[^"]*»[^"]*"/g, '')
+      // useId values depend on tree position and never reach the user. Two
+      // shapes: React 18's «…» and React 19's _R_…_ / _r_…_. Only ever
+      // stripped from the attributes that carry them, and only wholesale —
+      // a mismatched PAIR (a label pointing at nothing) would still show as a
+      // structural difference because the attribute itself would be absent on
+      // one side.
+      .replace(
+        /\b(id|for|aria-labelledby|aria-controls|aria-describedby)="[^"]*(«[^"]*»|_[Rr]_[a-z0-9]*_)[^"]*"/g,
+        '',
+      )
       // ECharts stamps each chart with a per-instance counter/timestamp. Same
       // class of framework noise as useId: generated per mount, never rendered.
       .replace(/ _echarts_instance_="[^"]*"/g, '')
@@ -622,13 +767,31 @@ async function assertNotBlank(shot, label) {
   return inkRatio
 }
 
-async function checkVariant(page, path, variant, expectSelector, minMatches) {
+/**
+ * Read every compared region as one string.
+ *
+ * `main` is the default and covers ordinary page content, but a drawer is
+ * portaled to <body> and therefore sits OUTSIDE it — comparing only `main`
+ * would have reported a flyout variant as passing while never looking at the
+ * flyout. A page that opens one names the extra root explicitly.
+ */
+async function scopedMarkup(page, scopes) {
+  const parts = []
+  for (const selector of scopes) {
+    const count = await page.locator(selector).count()
+    if (count === 0) throw new Error(`compared region "${selector}" is not present`)
+    parts.push(`<!--scope:${selector}-->` + (await page.locator(selector).first().innerHTML()))
+  }
+  return parts.join('\n')
+}
+
+async function checkVariant(page, path, variant, expectSelector, minMatches, scopes = ['main']) {
   const nativeUrl = `${BASE}${path}${variant}`
   await renderSettled(page, nativeUrl, expectSelector, minMatches)
   await assertStylesLoaded(page)
   const nativePath = await renderPath(page)
   if (nativePath !== 'native') throw new Error(`${nativeUrl} rendered via ${nativePath}, expected native`)
-  const nativeMarkup = normalizeStyles(sortClassLists(sortAttributes(normalize(await page.locator('main').innerHTML()))))
+  const nativeMarkup = normalizeStyles(sortClassLists(sortAttributes(normalize(await scopedMarkup(page, scopes)))))
   const nativeShot = await captureSettled(page)
   const ink = await assertNotBlank(nativeShot, `${path}${variant} native`)
 
@@ -639,7 +802,7 @@ async function checkVariant(page, path, variant, expectSelector, minMatches) {
       `${specUrl(path, variant)} rendered via ${chosen}, expected viewspec — the server is probably serving a build that predates the conversion`,
     )
   }
-  const specMarkup = normalizeStyles(sortClassLists(sortAttributes(normalize(await page.locator('main').innerHTML()))))
+  const specMarkup = normalizeStyles(sortClassLists(sortAttributes(normalize(await scopedMarkup(page, scopes)))))
   const specShot = await captureSettled(page)
   await assertNotBlank(specShot, `${path}${variant} spec`)
 
@@ -681,10 +844,12 @@ async function checkVariant(page, path, variant, expectSelector, minMatches) {
 }
 
 async function main() {
-  const only = process.argv[2]
-  const pages = only ? PAGES.filter((p) => p.path === only) : PAGES
-  if (pages.length === 0) {
-    console.error(`no registered page matches ${only}`)
+  // Any number of paths may be named; none means every registered page.
+  const only = process.argv.slice(2)
+  const pages = only.length ? PAGES.filter((p) => only.includes(p.path)) : PAGES
+  if (pages.length !== (only.length || PAGES.length)) {
+    const missing = only.filter((path) => !PAGES.some((p) => p.path === path))
+    console.error(`no registered page matches ${missing.join(', ')}`)
     process.exit(2)
   }
 
@@ -710,7 +875,9 @@ async function main() {
           typeof raw === 'string' ? (entry.minMatches ?? 0) : (raw.minMatches ?? entry.minMatches ?? 0)
         let result
         try {
-          result = await checkVariant(page, entry.path, variant, expect, minMatches)
+          const scopes =
+            (typeof raw === 'string' ? undefined : raw.scopes) ?? entry.scopes ?? ['main']
+          result = await checkVariant(page, entry.path, variant, expect, minMatches, scopes)
         } catch (error) {
           failures += 1
           console.error(`✗ ${entry.path}${variant}\n    ${error.message}`)
