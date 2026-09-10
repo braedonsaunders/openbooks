@@ -223,7 +223,14 @@ const tableBlock = z.strictObject({
   when: fieldRefSchema.optional(),
   variant: z.enum(['report', 'app']).optional(),
   sorting: z
-.strictObject({ basePath: value, sort: fieldRefSchema, dir: fieldRefSchema })
+    .strictObject({
+      basePath: value,
+      sort: fieldRefSchema,
+      dir: fieldRefSchema,
+      sortParamKey: z.string().max(60).optional(),
+      dirParamKey: z.string().max(60).optional(),
+      pageParamKey: z.string().max(60).optional(),
+    })
     .optional(),
   leading: z.array(spanRowSchema).max(10).optional(),
   trailing: z.array(spanRowSchema).max(10).optional(),
@@ -302,6 +309,13 @@ export const blockSchema: z.ZodType<unknown> = z.lazy(() =>
       unwrapped: z.boolean().optional(),
       blocks: z.array(blockSchema).max(40),
       empty: z.strictObject({ text: value, className: z.string().max(300).optional() }).optional(),
+    }),
+    z.strictObject({
+      kind: z.literal('frame'),
+      when: fieldRefSchema.optional(),
+      frame: z.string().min(1).max(64).regex(/^[a-z][a-z0-9-]*$/, 'frame must be a slug'),
+      props: z.record(z.string(), z.unknown()).optional(),
+      blocks: z.array(blockSchema).max(40),
     }),
     z.strictObject({
       kind: z.literal('grid'),

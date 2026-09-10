@@ -24,8 +24,6 @@ import { SortTh } from '../../../../components/sortable-th'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { NewReportButton } from './NewReportButton'
 import { CustomReportActions } from './CustomReportActions'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadCustomReports, customReportsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,17 +43,6 @@ export default async function CustomReports({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadCustomReports(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={customReportsSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
   const t = await getTranslations('reports.custom')
   const tc = await getTranslations('common')
   const tReports = await getTranslations('reports')

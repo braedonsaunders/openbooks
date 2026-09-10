@@ -23,6 +23,8 @@ import { getAuthz, can } from '../../../lib/authz'
 import { mergeHref, pickString } from '../../../lib/list-params'
 import { approvalRecordHref } from '../../../lib/approvals-links'
 import { ApprovalsTable, type ApprovalRow } from './ApprovalsTable'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadApprovals, approvalsSpec } from './view'
 import { DelegationBanner, OutOfOfficeButton } from './DelegationControls'
 import type { DelegateOption } from './GateActions'
 
@@ -74,6 +76,18 @@ export default async function Approvals({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadApprovals(sp)
+    if (!data) return null
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={approvalsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('approvals')
   const tc = await getTranslations('common')
