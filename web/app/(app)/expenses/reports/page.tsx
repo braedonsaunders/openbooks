@@ -15,6 +15,8 @@ import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { customSegmentOptions } from '../../../../lib/segments'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { taxCodeOptions, taxGroupOptions } from '../../../../lib/documents'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadExpenseReports, expenseReportsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +32,17 @@ export default async function Expenses({
   await requireFeatureEnabled(authz.user.orgId, 'expenses')
   const canSubmit = can(authz, 'expenses.create')
   const canPost = can(authz, 'ap.post')
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadExpenseReports(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={expenseReportsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const sp = await searchParams
   const expenseId = pickString(sp.expense)
   const button = canSubmit ? <NewExpenseButton /> : undefined

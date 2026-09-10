@@ -23,9 +23,11 @@ import { can, requirePermission } from "../../../lib/authz";
 import { requireFeatureEnabled } from "../../../lib/feature-gates";
 import { currentFiscalYear } from "../../../lib/fiscal";
 import { clamp, isUuid, pickString } from "../../../lib/list-params";
-import { StartCloseButton } from "./StartCloseButton";
 import { CloseWizard } from "./CloseWizard";
 import { featureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from "../../../lib/features";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadClose, closeSpec } from "./view";
+import { CloseActionCell, CloseReadinessCell, SingleBookLabel } from "./sections";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +38,23 @@ export default async function PeriodClose({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadClose(sp)
+    // The run branch stays native: CloseWizard owns its own WizardLayout
+    // shell, which no PageLayout value can express. Keep the wizard on the
+    // native path until the vocabulary for it exists.
+    if (data.onRun) {
+      return null
+    }
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={closeSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission("close.read");
   if (guardCloseScope(authz)) notFound();
   const { orgId, id: actorId } = authz.user;
@@ -223,10 +242,7 @@ export default async function PeriodClose({
                 }))}
               />
             ) : books.rows[0] ? (
-              <div className="inline-flex h-8 max-w-[16rem] items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-                <span className="text-slate-500 dark:text-slate-400">{t("filters.book")}:</span>
-                <span className="truncate font-semibold">{books.rows[0].name}</span>
-              </div>
+              <SingleBookLabel label={t("filters.book")} name={books.rows[0].name} />
             ) : null}
             <FilterChips
               basePath="/close"
@@ -292,38 +308,21 @@ export default async function PeriodClose({
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                      <div
-                        className="h-full bg-teal-500"
-                        style={{ width: `${period.readiness_score ?? 0}%` }}
-                      />
-                    </div>
-                    <span className="text-xs tabular-nums text-slate-500">
-                      {period.readiness_score ?? 0}%
-                    </span>
-                  </div>
+                  <CloseReadinessCell readiness={period.readiness_score ?? 0} />
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {Number(period.entries).toLocaleString()}
                 </TableCell>
                 <TableCell>
-                  {period.run_id ? (
-                    <Link
-                      className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
-                      href={(`/close?run=${period.run_id}`)}
-                    >
-                      {t("actions.resume")}
-                    </Link>
-                  ) : can(authz, "close.run") ? (
-                    <StartCloseButton
-                      periodId={period.id}
-                      books={books.rows}
-                      defaultBookId={selectedBookId}
-                    />
-                  ) : (
-                    "—"
-                  )}
+                  <CloseActionCell
+                    actionHref={period.run_id ? `/close?run=${period.run_id}` : null}
+                    actionLabel={t("actions.resume")}
+                    actionLinkClassName="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
+                    canStart={!period.run_id && can(authz, "close.run")}
+                    startPeriodId={period.id}
+                    startBooks={books.rows}
+                    startDefaultBookId={selectedBookId}
+                  />
                 </TableCell>
               </TableRow>
             ))}
