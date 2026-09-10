@@ -114,6 +114,14 @@ import { TemplatesList } from '../../app/(app)/admin/pdf-templates/TemplatesList
 import { WipBillingWorkspace } from '../../app/(app)/projects/wip-billing/WipBillingWorkspace'
 import { SeparationsView } from '../../app/(app)/payroll/separations/SeparationsView'
 import { SandboxManager } from '../../app/(app)/admin/sandboxes/SandboxManager'
+import { ProjectTypesWorkspace } from '../../app/(app)/admin/setup/project-types/ProjectTypesWorkspace'
+import { DepreciationSetupHeader } from '../../app/(app)/admin/setup/depreciation/sections'
+import { SecurityPageContent } from '../../app/(app)/settings/security/sections'
+import { ApiConsole } from '../../app/(app)/api-docs/ApiConsole'
+import { OpeningBalancesView } from '../../app/(app)/payroll/opening-balances/OpeningBalancesView'
+import { EntitlementOpeningsView } from '../../app/(app)/payroll/opening-balances/EntitlementOpeningsView'
+import { TaxSetupGuideSlot, TaxSetupHeader } from '../../app/(app)/admin/setup/tax-setup/sections'
+import { SetupWizard } from '../../app/(app)/admin/setup/wizard/SetupWizard'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
 import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
@@ -1267,6 +1275,78 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       starters={(props.starters as ComponentProps<typeof TemplatesList>['starters']) ?? []}
       recordTypes={(props.recordTypes as ComponentProps<typeof TemplatesList>['recordTypes']) ?? []}
     />
+  ),
+
+  /* --- API console ------------------------------------------------------------------ */
+  /** The schema IS server data — the same plain-data prop the native page
+   *  hands the component — so it travels as a literal widget prop. Nothing
+   *  here is a capability or an org id, so no slot is needed. */
+  'api-console': (props) => (
+    <ApiConsole schema={(props.schema as ComponentProps<typeof ApiConsole>['schema']) ?? []} />
+  ),
+
+  /* --- payroll opening balances ----------------------------------------------------- */
+  /** Money stays canonical text: the grid trims zeros for display over raw
+   *  store strings, client-side. */
+  'opening-balances-grid': (props) => (
+    <OpeningBalancesView
+      year={num(props, 'year') ?? new Date().getFullYear()}
+      currentYear={num(props, 'currentYear') ?? new Date().getFullYear()}
+      initial={props.initial as ComponentProps<typeof OpeningBalancesView>['initial']}
+      fields={props.fields as ComponentProps<typeof OpeningBalancesView>['fields']}
+      components={props.components as ComponentProps<typeof OpeningBalancesView>['components']}
+      canManage={props.canManage === true}
+    />
+  ),
+  /** No `year`: entitlement banks are lifetime balances by design. */
+  'entitlement-openings-grid': (props) => (
+    <EntitlementOpeningsView
+      initial={props.initial as ComponentProps<typeof EntitlementOpeningsView>['initial']}
+      canManage={props.canManage === true}
+    />
+  ),
+
+  /* --- tax setup -------------------------------------------------------------------- */
+  /** The native page owns a plain `<header>`, not the PageHeader component. */
+  'tax-setup-header': (props) => (
+    <TaxSetupHeader title={str(props, 'title') ?? ''} subtitle={str(props, 'subtitle') ?? ''} />
+  ),
+  /** ONE object prop. Country display names stay CLIENT-side (browser
+   *  locale), so the loader passes raw country codes and formats nothing. */
+  'tax-setup-guide': (props) => (
+    <TaxSetupGuideSlot guide={props.guide as ComponentProps<typeof TaxSetupGuideSlot>['guide']} />
+  ),
+
+  /* --- setup wizard ----------------------------------------------------------------- */
+  /** FIVE FLAT props. Ten animated steps, each owning state, mutations and
+   *  framer-motion transitions. */
+  'setup-wizard': (props) => (
+    <SetupWizard {...(props as unknown as ComponentProps<typeof SetupWizard>)} />
+  ),
+
+  /* --- book depreciation setup ------------------------------------------------------ */
+  /** Deliberately NOT the tax-depreciation header: two tabs fit, so the
+   *  native strip omits `overflow-x-auto` and `shrink-0`. Two components,
+   *  because the markup genuinely differs. */
+  'depreciation-setup-header': (props) => (
+    <DepreciationSetupHeader
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      tabs={(props.tabs as ComponentProps<typeof DepreciationSetupHeader>['tabs']) ?? []}
+      tabsAria={str(props, 'tabsAria') ?? ''}
+    />
+  ),
+
+  /* --- security settings ------------------------------------------------------------ */
+  /** No props. Every control is client state or a fetch to /api/auth/*. */
+  'security-panel': () => <SecurityPageContent />,
+
+  /* --- project types setup ---------------------------------------------------------- */
+  /** FOUR FLAT props. `incomeAccounts` is loaded but currently unread by the
+   *  workspace (it destructures it away) — passed anyway, so both renders
+   *  carry identical data and a future read cannot diverge them. */
+  'project-types-workspace': (props) => (
+    <ProjectTypesWorkspace {...(props as unknown as ComponentProps<typeof ProjectTypesWorkspace>)} />
   ),
 
   /* --- payroll separations ---------------------------------------------------------- */

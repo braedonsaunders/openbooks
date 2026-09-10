@@ -4,11 +4,28 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { requireProjectsFeature } from '../../../../../lib/projects-gate'
 import { isFeatureEnabled } from '../../../../../lib/features'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
 import { ProjectTypesWorkspace, type ProjectTypeRow } from './ProjectTypesWorkspace'
+import { loadProjectTypes, projectTypesSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ProjectTypesSetup() {
+export default async function ProjectTypesSetup({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadProjectTypes()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={projectTypesSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
   await requireProjectsFeature(orgId)

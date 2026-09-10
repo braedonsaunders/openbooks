@@ -1,10 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { ArrowRight, BadgeCheck, Check, ChevronDown, MapPin, Search } from 'lucide-react'
+import { Check, ChevronDown, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Badge,
@@ -41,13 +40,13 @@ export interface SupportedCountry {
 export function TaxSetupGuide({
   countries,
   installedCodes,
-  jurisdictionCount,
-  registrationCount,
+  step2,
+  step3,
 }: {
   countries: SupportedCountry[]
   installedCodes: string[]
-  jurisdictionCount: number
-  registrationCount: number
+  step2: React.ReactNode
+  step3: React.ReactNode
 }) {
   const t = useTranslations('admin.setup.taxSetup')
   const tCommon = useTranslations('common')
@@ -268,66 +267,10 @@ export function TaxSetupGuide({
         </CardContent>
       </Card>
 
-      <StepLink
-        n={2}
-        icon={<MapPin size={18} />}
-        title={t('step2.title')}
-        description={t('step2.description')}
-        stat={t('step2.stat', { count: jurisdictionCount })}
-        href="/admin/setup/tax-jurisdictions"
-        cta={t('step2.cta')}
-      />
-      <StepLink
-        n={3}
-        icon={<BadgeCheck size={18} />}
-        title={t('step3.title')}
-        description={t('step3.description')}
-        stat={t('step3.stat', { count: registrationCount })}
-        href="/admin/setup/tax-registrations"
-        cta={t('step3.cta')}
-      />
+      {step2}
+      {step3}
     </div>
   )
 }
 
-function StepLink({
-  n,
-  icon,
-  title,
-  description,
-  stat,
-  href,
-  cta,
-}: {
-  n: number
-  icon: React.ReactNode
-  title: string
-  description: string
-  stat: string
-  href: string
-  cta: string
-}) {
-  return (
-    <Card>
-      <CardContent className="flex items-center justify-between gap-4 py-4">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">{n}</span>
-          <div>
-            <div className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100">
-              <span className="text-slate-400">{icon}</span>
-              {title}
-            </div>
-            <p className="mt-0.5 max-w-xl text-sm text-slate-500 dark:text-slate-400">{description}</p>
-            <p className="mt-1 text-xs font-medium text-teal-700 dark:text-teal-300">{stat}</p>
-          </div>
-        </div>
-        <Button asChild variant="outline" className="shrink-0">
-          <Link href={href as never}>
-            {cta}
-            <ArrowRight size={14} />
-          </Link>
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
+

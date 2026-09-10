@@ -16,19 +16,22 @@
 -- error at all. Claim a fresh block rather than reusing a plausible-looking
 -- one:
 --
---   …0001-0099  continuous close (runs, work items, evidence)
+--   …0001-0099  continuous close (runs, work items, evidence);
+--                 …0014-0017 tax jurisdictions and nexus registrations
 --   …0301-0399  approvals (flows, runs, gates)
 --   …0401-0499  banking statements, reconciliations and their journal entry
 --   …0501-0599  banking transactions (checks, deposits)
 --   …0601-0699  sales orders          …0701-0799  quotes
 --   …0801-0899  subcontracts and their schedule-of-values lines
 --   …0901-0999  purchase orders
---   …1801-1899  payroll schedules and runs
+--   …1801-1899  payroll schedules and runs (…1840 remittances, …1850
+--                 year-end, …1860 separations, …1870 opening balances)
 --   …2101-2199  WIP prebilling worksheets, lines, events
 --   …2801-2899  field tickets
 --   …2901-2999  revenue contracts, obligations, recognition schedules
 --   …3101-3199  org-authored PDF templates
 --   …3801-3899  bank matching rules
+--   …4001-4099  book depreciation methods and policies
 --   …4801-4899  budget scenarios and lines
 --   …5801-5899  file cabinet folders, files, versions
 --   …6801-6899  tax return forms and filings
@@ -2574,5 +2577,169 @@ begin
             '2026-02-08T12:00:00Z')
     on conflict (id) do nothing;
   end;
+
+  -- ---- book depreciation setup (/admin/setup/depreciation) -----------------
+  --
+  -- One method + one book/category policy, so the methods tab lists one row
+  -- and the books tab lists one row. Fresh 40xx block (no existing fixture
+  -- uses it — the …0401-0499 banking ids are …000403-…000413, so …004001+
+  -- is unclaimed). GUARD before insert: the natural keys are
+  -- (org_id, code) / (org_id, book_id, category_id), not the ids — ON
+  -- CONFLICT (id) alone would raise on a re-run with changed keys, so each
+  -- guard owns its idempotence. Book/category resolve live from the sim org
+  -- (the org-guard trigger only fires on a non-null
+  -- depreciation_method_id, left NULL here); the run is skipped if none
+  -- exist.
+  insert into depreciation_methods (id, org_id, code, name, formula, end_of_life, is_active)
+  select '00000000-0000-7000-9000-000000004001', v_org, 'VS_SL',
+         'ViewSpec straight line', '(OC-RV)/AL', 'fully_depreciate', true
+   where not exists (select 1 from depreciation_methods where org_id = v_org and code = 'VS_SL');
+
+  insert into depreciation_book_policies (id, org_id, book_id, category_id, method, life_months, convention)
+  select '00000000-0000-7000-9000-000000004002', v_org, b.id, c.id,
+         'straight_line', 60, 'full_month'
+    from (select id from accounting_books where org_id = v_org and is_primary limit 1) b,
+         (select id from asset_categories where org_id = v_org and name = 'ViewSpec machinery' limit 1) c
+   where b.id is not null and c.id is not null
+     and not exists (select 1 from depreciation_book_policies p where p.org_id = v_org and p.book_id = b.id and p.category_id = c.id);
+
+  -- ---- opening balances ----------------------------------------------------
+  --
+  -- The simulator never adopts mid-year, so /payroll/opening-balances
+  -- compares two identical empty states without these: no statutory
+  -- carry-ins (0 rows), no entitlement plans (the banks section renders
+  -- its no-plans branch — no table at all), and no capped components
+  -- (no component column). Block …1870–1879. Live parties resolve by
+  -- display name; other ids are fixed. Guard-before-insert throughout:
+  -- the UNIQUEs here are all bare `ON CONFLICT (id)`-compatible
+  -- (payroll_opening_balances_employee_year,
+  -- entitlement_ledger_opening, entitlement_plans_org_code,
+  -- entitlement_plans_org_system) — EXCEPT the re-run shape of the
+  -- ledger guard: see the WARNING below.
+  declare
+    v_harbor uuid;
+    v_ade uuid;
+    v_chloe uuid;
+    v_ok boolean;
+  begin
+    select id into v_harbor from parties
+     where org_id = v_org and display_name = 'Harborview Development LLC';
+    select id into v_ade from parties
+     where org_id = v_org and display_name = 'Ade Balogun (Apprentice)';
+    select id into v_chloe from parties
+     where org_id = v_org and display_name = 'Chloe Martin (Apprentice)';
+    -- Two committed 2026 stubs already exist on run …1813 for Harborview
+    -- (…1842, remittance fixture) and Ade (…1850, year-end fixture); the
+    -- third employee (Chloe) carries the live sim stub …1860 on the same
+    -- run. All three lock their 2026 rows, which is the point.
+    -- NOT `return`: a bare return in a nested block exits the WHOLE
+    -- anonymous block, silently skipping every fixture below this one.
+    v_ok := v_harbor is not null and v_ade is not null and v_chloe is not null
+      and exists (
+        select 1 from pay_runs
+         where org_id = v_org
+           and document_id = '00000000-0000-7000-9000-000000001813'
+           and run_status = 'committed');
+    if not v_ok then
+      raise notice 'missing fixture parties or committed run; skipping opening-balances fixtures';
+    else
+
+    -- Two entitlement plans. MANUAL method needs no accrual_value (the
+    -- accrual_value CHECK only fires for non-manual methods). `VAC`
+    -- carries system_key 'vacation' — the legacy-banner join key — and
+    -- there is exactly one such plan org-wide (org_system UNIQUE).
+    insert into entitlement_plans
+      (id, org_id, code, name, system_key, unit, direction, accrual_method,
+       cap_behavior, is_active)
+    values
+      ('00000000-0000-7000-9000-000000001873', v_org, 'VAC',
+       'Vacation', 'vacation', 'hours', 'accrue', 'manual', 'warn', true),
+      ('00000000-0000-7000-9000-000000001874', v_org, 'BANK',
+       'Banked time', null, 'hours', 'accrue', 'manual', 'warn', true)
+    on conflict (id) do nothing;
+
+    -- One capped component. NULL system_key (no pack declaration can
+    -- reroute it), kind + basis satisfy their CHECKs, the annual cap is
+    -- non-negative. The sim's own BASE/BONUS/VS-TAX/VS-CPP components
+    -- are all uncapped, so this is the only component column.
+    insert into pay_components
+      (id, org_id, code, name, kind, system_key, country, basis, taxable,
+       pensionable, insurable, vacationable, non_periodic, sequence,
+       is_active, basis_cap_amount_per_year)
+    values
+      ('00000000-0000-7000-9000-000000001875', v_org, 'VS-401K',
+       'ViewSpec 401(k)', 'deduction', null, 'CA', 'fixed_amount',
+       true, false, false, false, false, 102, true, 23000.0000)
+    on conflict (id) do nothing;
+
+    -- Two 2026 statutory carry-ins + one 2025 legacy-only row. The
+    -- (org, employee, year) UNIQUE owns re-run idempotence alongside
+    -- ON CONFLICT (id). Chloe's 2025 row carries ONLY vacation_balance:
+    -- every statutory column is 0 (the trimZeros blank branch) and the
+    -- unmigrated legacy banner fires (no VAC opening exists for her).
+    insert into payroll_opening_balances
+      (id, org_id, employee_party_id, tax_year,
+       pensionable_ytd, insurable_ytd, cpp_ytd, cpp2_ytd, ei_ytd, qpip_ytd,
+       taxable_ytd, tax_ytd, non_periodic_ytd, vacation_balance)
+    values
+      ('00000000-0000-7000-9000-000000001870', v_org, v_harbor, 2026,
+       45000.0000, 42000.0000, 2380.5000, 0.0000, 1045.2500, 0.0000,
+       46000.0000, 6200.0000, 5000.0000, 0.0000),
+      ('00000000-0000-7000-9000-000000001871', v_org, v_ade, 2026,
+       30000.0000, 30000.0000, 1580.0000, 0.0000, 750.0000, 0.0000,
+       31000.0000, 4100.0000, 0.0000, 0.0000),
+      ('00000000-0000-7000-9000-000000001872', v_org, v_chloe, 2025,
+       0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
+       0.0000, 0.0000, 0.0000, 80.0000)
+    on conflict (id) do nothing;
+
+    -- Harborview's component opening: the (opening_balance_id,
+    -- component_id) UNIQUE owns re-run safety; the non-negative CHECK
+    -- passes (5000 > 0).
+    insert into payroll_opening_balance_components
+      (id, org_id, opening_balance_id, component_id, ytd_amount)
+    values
+      ('00000000-0000-7000-9000-000000001876', v_org,
+       '00000000-0000-7000-9000-000000001870',
+       '00000000-0000-7000-9000-000000001875', 5000.0000)
+    on conflict (id) do nothing;
+
+    -- Harborview's vacation bank opening. The (org, plan, employee)
+    -- partial-unique (kind = 'opening') owns re-run safety; kind 'opening'
+    -- has no sign CHECK; the append-only trigger guards UPDATE/DELETE,
+    -- not INSERT, so re-applying the identical row is a silent skip.
+    insert into entitlement_ledger
+      (id, org_id, plan_id, employee_party_id, movement_date, amount,
+       hours, kind, note)
+    values
+      ('00000000-0000-7000-9000-000000001877', v_org,
+       '00000000-0000-7000-9000-000000001873', v_harbor,
+       date '2026-01-05', 40.0000, 40.0000, 'opening',
+       'ViewSpec fixture: vacation carry-in')
+    on conflict (id) do nothing;
+
+    end if;
+  end;
+
+  -- Tax-setup guide: one state-level jurisdiction + one nexus registration
+  -- for the /admin/setup/tax-setup conversion. Exercises the JURISDICTION:
+  -- installed-code path (California's card renders installed) and the
+  -- nonzero step-2 / step-3 stats. Id …0014–…0017 are unclaimed (verified by
+  -- grep over the whole file).
+  insert into tax_jurisdictions
+    (id, org_id, code, name, country, region, level, tax_type, is_active)
+  values
+    ('00000000-0000-7000-9000-000000000014', v_org, 'US-CA', 'California',
+     'US', 'CA', 'state', 'sales_use', true)
+  on conflict (id) do nothing;
+
+  insert into tax_registrations
+    (id, org_id, jurisdiction_id, registration_number, filing_frequency,
+     return_form_code, is_active)
+  values
+    ('00000000-0000-7000-9000-000000000015', v_org,
+     '00000000-0000-7000-9000-000000000014', 'CA-SELLERS-PERMIT-VIEWSPEC',
+     'quarterly', 'US_CA_CDTFA401', true)
+  on conflict (id) do nothing;
 
 end $$;
