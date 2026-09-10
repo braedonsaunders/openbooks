@@ -1250,6 +1250,24 @@ const PAGES = [
     minMatches: 1,
     minInk: 0.002,
   },
+  {
+    path: '/dashboard/customize',
+    // The edit canvas behind a slot. The pin is the widget library's cards,
+    // which the edit-mode canvas renders and view mode does not.
+    variants: [''],
+    expect: 'main a[href="/dashboard"]',
+    minMatches: 1,
+  },
+  {
+    path: '/assistant/00000000-0000-7000-9000-000000001601',
+    // The deep-link conversation. Fixture …1601-1603 seeds it OWNED by the
+    // harness user — `ownsConversation` filters by owner in SQL, so a
+    // conversation belonging to anyone else redirects and the comparison
+    // would prove nothing while looking applied.
+    variants: [''],
+    expect: 'main button',
+    minMatches: 2,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole
