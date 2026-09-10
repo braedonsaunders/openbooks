@@ -1,15 +1,16 @@
 import { sql } from 'drizzle-orm'
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
-import { cn } from '@openbooks/ui'
 import { taxDepreciationPacks } from '@openbooks/engine/src/tax-depreciation-packs.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { pickString } from '../../../../../lib/list-params'
 import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
 import { SetupEntitySection } from '../[entity]/SetupEntitySection'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { TaxDepreciationHeader } from './sections'
 import { TaxDepreciationSetup } from './TaxDepreciationSetup'
+import { loadTaxDepreciationSetup, taxDepreciationSetupSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,17 @@ export default async function TaxDepreciationSetupPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadTaxDepreciationSetup(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={taxDepreciationSetupSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'fixedAssets')
@@ -38,21 +50,30 @@ export default async function TaxDepreciationSetupPage({
     { key: 'classes', label: t('tabs.classes') },
     { key: 'first-year', label: t('tabs.firstYear') },
   ]
-  const tabNav = (
-    <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" aria-label={t('tabsAria')}>
-      {tabs.map((item) => <Link key={item.key} href={`/admin/setup/tax-depreciation?tab=${item.key}` as never}
-        aria-current={tab === item.key ? 'page' : undefined}
-        className={cn('-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium', tab === item.key ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400')}>
-        {item.label}
-      </Link>)}
-    </nav>
+  const headerTabs = tabs.map((item) => ({
+    key: item.key,
+    href: `/admin/setup/tax-depreciation?tab=${item.key}`,
+    label: item.label,
+    active: tab === item.key,
+  }))
+  const header = (
+    <TaxDepreciationHeader
+      title={t('title')}
+      description={t('description')}
+      descriptionClassName={
+        tab === 'overview'
+          ? 'mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400'
+          : 'mt-1 text-sm text-slate-500 dark:text-slate-400'
+      }
+      tabs={headerTabs}
+      tabsAria={t('tabsAria')}
+    />
   )
 
   if (tab !== 'overview') {
     const entity = SETUP_ENTITY_BY_KEY.get(ENTITY_BY_TAB[tab])!
     return <div className="space-y-5">
-      <header><h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h1><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('description')}</p></header>
-      {tabNav}
+      {header}
       <SetupEntitySection entity={entity} orgId={orgId} searchParams={sp} basePath="/admin/setup/tax-depreciation" canManage />
     </div>
   }
@@ -71,8 +92,7 @@ export default async function TaxDepreciationSetupPage({
   ])
   return (
     <div className="space-y-5">
-      <header><h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h1><p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">{t('description')}</p></header>
-      {tabNav}
+      {header}
       <TaxDepreciationSetup
         companyCountry={org.rows[0]?.country ?? ''}
         packs={taxDepreciationPacks()}

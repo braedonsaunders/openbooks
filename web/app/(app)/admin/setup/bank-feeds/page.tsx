@@ -6,7 +6,9 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { loadDaemonConfig, hostKeyFingerprint } from "@openbooks/engine/src/sftp/manager.ts";
 import { requirePermission } from "../../../../../lib/authz";
 import { featureEnabled, resolvedFeatureState } from "../../../../../lib/features";
+import { ModuleView } from "../../../../../components/viewspec/module-view";
 import { BankFeedsClient } from "./BankFeedsClient";
+import { bankFeedsSpec, loadBankFeeds } from "./view";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +23,18 @@ export async function generateMetadata() {
  * SFTP file drops, and manual upload — all shown as one connection list, added
  * from a global bank directory. Gated by the `bankFeeds` feature.
  */
-export default async function BankFeedsPage() {
+export default async function BankFeedsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadBankFeeds()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={bankFeedsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission("admin.setup.manage");
   const features = await resolvedFeatureState(authz.user.orgId);
   if (!featureEnabled(features, "bankFeeds")) redirect("/admin/setup/features");

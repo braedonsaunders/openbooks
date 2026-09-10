@@ -7,6 +7,8 @@ import { getMoneyFormatter } from '@/lib/money-server'
 import { orgInfo } from '../../../../../lib/data'
 import { getProvisionRun } from '@openbooks/engine/src/income-tax-provision.ts'
 import { ProvisionPostButton } from './ProvisionPostButton'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { loadProvisionDetail, provisionDetailSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +18,27 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
   superseded: 'outline',
 }
 
-export default async function TaxProvisionDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function TaxProvisionDetail({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  // Optional so direct test invocations passing only `params` keep compiling;
+  // Next.js always supplies both in production.
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if (searchParams && (await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const { id } = await params
+    const data = await loadProvisionDetail(sp, id)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={provisionDetailSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('reports.read')
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('tax.provisions')

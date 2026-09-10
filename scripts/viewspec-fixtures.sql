@@ -28,12 +28,16 @@
 --   …4801-4899  budget scenarios and lines
 --   …5801-5899  file cabinet folders, files, versions
 --   …6801-6899  tax return forms and filings
+--   …6901-6999  income-tax provision runs and temporary differences
 --   …7801-7899  psp settlement batches
 --   …1101-1199  installed apps
 --   …2001-2099  AP capture documents
 --   …1001-1099  backup policy and runs
 --   …8801-8899  labor bill rate books
 --   …1901-1999  pay stubs, employee profiles, wage rates
+--   …9801-9899  app marketplace listings
+--   …9901-9999  tax depreciation regimes, pool classes, asset categories
+--   …1201-1299  bank feed connections
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
 --
 --   psql "$VIEWSPEC_DB" -f scripts/viewspec-fixtures.sql
@@ -158,7 +162,8 @@ begin
              'fixedAssets', true,
              'orders', true,
              'queryConsole', true,
-             'propertyManagement', true))
+             'propertyManagement', true,
+             'bankFeeds', true))
    where id = v_org;
 
   -- ---- approvals -----------------------------------------------------------
@@ -1277,4 +1282,373 @@ begin
   update apps set active_version_id = '00000000-0000-7000-9000-000000001112'
    where org_id = v_org and key = 'viewspec-nodesc'
      and active_version_id is null;
+
+  -- The /admin/setup/crm agent applied these directly to the tenant and never
+  -- folded them into this file, so the harness was passing on rows nothing
+  -- could recreate. A fixture that only exists in one database is not a
+  -- fixture.
+  declare
+    v_crm_owner uuid;
+  begin
+    select id into v_crm_owner from users where org_id = v_org order by created_at limit 1;
+    if v_crm_owner is null then
+      raise notice 'no user for CRM setup fixtures; skipping';
+      return;
+    end if;
+    -- ---- crm setup ----------------------------------------------------------------
+    --
+    -- Lead sources, one territory and one team for the /admin/setup/crm
+    -- conversion. The simulator seeds account statuses (9), opportunity
+    -- statuses (6) and one quota for the SIM org but no sources, territories
+    -- or teams, so three of the six tabs would compare two identical empty
+    -- states. Two sources, one territory and one team (with one active member
+    -- so member_count renders 1) close that gap; the account-statuses default
+    -- already carries 9 rows and the drawer variant opens the fixture quota
+    -- ...a000-...010 from the forecasts block above.
+    insert into crm_lead_sources (id, org_id, key, name, description, is_active)
+    values
+      ('00000000-0000-7000-a000-000000000101', v_org, 'vs-web', 'ViewSpec Web', 'Seeded for the CRM setup conformance tab', true),
+      ('00000000-0000-7000-a000-000000000102', v_org, 'vs-referral', 'ViewSpec Referral', 'Seeded for the CRM setup conformance tab', true)
+    on conflict (id) do nothing;
+
+    insert into crm_sales_teams (id, org_id, key, name, manager_user_id, is_active)
+    values ('00000000-0000-7000-a000-000000000103', v_org, 'vs-team', 'ViewSpec Sales', v_crm_owner, true)
+    on conflict (id) do nothing;
+
+    insert into crm_sales_team_members (org_id, team_id, user_id, role, is_active)
+    values (v_org, '00000000-0000-7000-a000-000000000103', v_crm_owner, 'manager', true)
+    on conflict do nothing;
+
+    insert into crm_sales_territories
+      (id, org_id, key, name, description, priority, manager_user_id, default_owner_user_id, match_mode, rules, is_active)
+    values ('00000000-0000-7000-a000-000000000104', v_org, 'vs-west', 'ViewSpec West',
+      'Seeded for the CRM setup conformance tab', 100, v_crm_owner, v_crm_owner, 'all', '[]'::jsonb, true)
+    on conflict (id) do nothing;
+  end;
+
+  -- ---- crm activities -------------------------------------------------------
+  --
+  -- The simulator never writes activities, so the list page would come up
+  -- empty. Two UNLINKED activities (no crm_activity_links rows, no contact
+  -- participants): crmActivityScope passes unlinked rows for any grant set,
+  -- and the Default `activity` list view in both sim orgs has no filters, so
+  -- both fixtures render. Dates are relative so the fixture keeps working as
+  -- the simulated clock moves.
+  declare
+    v_act_owner uuid;
+  begin
+    select id into v_act_owner from users where org_id = v_org order by created_at limit 1;
+    if v_act_owner is null then
+      raise notice 'no users; skipping activity fixtures';
+      return;
+    end if;
+
+    insert into crm_activities
+      (id, org_id, kind, status, subject, body, priority,
+       owner_user_id, assigned_user_id, starts_at, due_at)
+    values
+      ('00000000-0000-7000-a000-000000000101', v_org, 'task', 'planned',
+       'ViewSpec activity conformance A', 'Harness activity A', 'normal',
+       v_act_owner, v_act_owner, current_timestamp + interval '1 day', current_timestamp + interval '2 days'),
+      ('00000000-0000-7000-a000-000000000102', v_org, 'call', 'in_progress',
+       'ViewSpec activity conformance B', 'Harness activity B', 'high',
+       v_act_owner, v_act_owner, current_timestamp + interval '3 days', current_timestamp + interval '4 days')
+    on conflict (id) do nothing;
+  end;
+
+  -- ---- bank feeds -----------------------------------------------------------
+  --
+  -- The simulator never connects a bank feed, so /admin/setup/bank-feeds
+  -- renders its empty state on both paths. One live-cadence GoCardless
+  -- connection on the SIM org's reconcilable operating account, so the
+  -- connection list has a row. No SFTP server is seeded: the SFTP cards
+  -- and the shared endpoint card stay in their guarded-empty branch.
+  -- Claims fresh block …1201-1299 (verified unused).
+  insert into bank_feed_connections
+    (id, org_id, name, provider, account_id, status, sync_cadence,
+     last_sync_at, is_active)
+  values
+    ('00000000-0000-7000-9000-000000001201', v_org,
+     'ViewSpec operating feed', 'gocardless',
+     (select id from accounts
+       where org_id = v_org and reconcilable and not is_summary and is_active
+       order by number nulls last limit 1),
+     'connected', 'daily', now() - interval '1 day', true)
+  on conflict (id) do nothing;
+
+  -- ---- tax depreciation overview (/admin/setup/tax-depreciation) ------------
+  --
+  -- One pool regime + one class + one asset category assigned to that class,
+  -- so the overview renders the assignments table (1 regime column) and the
+  -- regimes/classes entity tabs each list one row. Fresh 99xx block (no
+  -- existing fixture uses it). GUARD before insert: the natural keys are
+  -- (org_id, code) / (org_id, regime, class_code) / (org_id, name), not the
+  -- ids — ON CONFLICT (id) alone would raise on a re-run with changed keys,
+  -- so each guard owns its idempotence. Category accounts resolve live from
+  -- the sim org (the org-guard trigger requires active postable in-tenant
+  -- accounts); the run is skipped if none exist.
+  insert into tax_regimes (id, org_id, code, name, country_code, calculation_model, class_attribute, is_active)
+  select '00000000-0000-7000-9000-000000009901', v_org, 'VS_POOL',
+         'ViewSpec pool regime', 'CA', 'pool', 'vs_pool_class', true
+   where not exists (select 1 from tax_regimes where org_id = v_org and code = 'VS_POOL');
+
+  insert into tax_pool_classes (id, org_id, regime, class_code, name, rate, method, first_year_fraction, is_active)
+  select '00000000-0000-7000-9000-000000009902', v_org, 'VS_POOL', 'VS_8',
+         'ViewSpec class 8', 0.20, 'declining', 1, true
+   where not exists (select 1 from tax_pool_classes where org_id = v_org and regime = 'VS_POOL' and class_code = 'VS_8');
+
+  insert into asset_categories (id, org_id, name, asset_account_id,
+         accumulated_depreciation_account_id, depreciation_expense_account_id,
+         tax_attributes, is_active)
+  select '00000000-0000-7000-9000-000000009903', v_org, 'ViewSpec machinery',
+         a.asset_id, a.accum_id, a.exp_id,
+         '{"vs_pool_class": "VS_8"}'::jsonb, true
+    from (select
+            (select id from accounts where org_id = v_org and is_active and not is_summary order by number limit 1) as asset_id,
+            (select id from accounts where org_id = v_org and is_active and not is_summary order by number limit 1 offset 1) as accum_id,
+            (select id from accounts where org_id = v_org and is_active and not is_summary order by number limit 1 offset 2) as exp_id) a
+   where a.asset_id is not null and a.accum_id is not null and a.exp_id is not null
+     and not exists (select 1 from asset_categories where org_id = v_org and name = 'ViewSpec machinery');
+
+  -- ---- income-tax provision detail (/tax/provisions/[id]) ------------------
+  -- Three runs: an IAS 12 draft (post button + differences), an ASC 740
+  -- draft with NO differences (italic empty-note branch), and a posted run
+  -- (button hidden). GUARDs before inserts: the one-draft-per-year partial
+  -- unique index is on (org_id, fiscal_year), not the id, and finalized
+  -- runs are trigger-immutable — ON CONFLICT (id) alone cannot own
+  -- idempotence here.
+  insert into tax_provision_runs
+    (id, org_id, fiscal_year, period_from, period_to, status, version,
+     snapshot_hash, payload)
+  select '00000000-0000-7000-9000-000000006901', v_org, 2026,
+         '2026-01-01', '2026-12-31', 'draft', 1, repeat('d', 64),
+         jsonb_build_object(
+           'fiscalYear', 2026, 'framework', 'ias12',
+           'pretaxBookIncome', '500000.00', 'enactedRatePercent', '21',
+           'taxableIncome', '480000.00', 'currentTax', '100800.00',
+           'deferredExpense', '4200.00', 'totalExpense', '105000.00',
+           'balances', jsonb_build_object(
+             'dtaGross', '35000.00', 'dtlGross', '30000.00',
+             'valuationAllowance', '9000.00'),
+           'rateReconciliation', jsonb_build_array(
+             jsonb_build_object('key', 'statutory', 'label', 'Statutory tax', 'amount', '105000.00', 'percent', '21'),
+             jsonb_build_object('key', 'credits', 'label', 'Tax credits', 'amount', '-8000.00', 'percent', '-1.6'),
+             jsonb_build_object('key', 'va', 'label', 'Recognition adjustment', 'amount', '9000.00', 'percent', '1.8'),
+             jsonb_build_object('key', 'other', 'label', 'Other', 'amount', '-1000.00', 'percent', null),
+             jsonb_build_object('key', 'total', 'label', 'Total income tax expense', 'amount', '105000.00', 'percent', '21')))
+   where not exists (select 1 from tax_provision_runs
+                      where org_id = v_org and fiscal_year = 2026 and version = 1);
+
+  insert into tax_provision_runs
+    (id, org_id, fiscal_year, period_from, period_to, status, version,
+     snapshot_hash, payload)
+  select '00000000-0000-7000-9000-000000006902', v_org, 2025,
+         '2025-01-01', '2025-12-31', 'draft', 1, repeat('e', 64),
+         jsonb_build_object(
+           'fiscalYear', 2025, 'framework', 'asc740',
+           'pretaxBookIncome', '200000.00', 'enactedRatePercent', '21',
+           'taxableIncome', '200000.00', 'currentTax', '42000.00',
+           'deferredExpense', '0.00', 'totalExpense', '42000.00',
+           'balances', jsonb_build_object(
+             'dtaGross', '0.00', 'dtlGross', '0.00',
+             'valuationAllowance', '0.00'),
+           'rateReconciliation', jsonb_build_array(
+             jsonb_build_object('key', 'statutory', 'label', 'Statutory tax', 'amount', '42000.00', 'percent', '21'),
+             jsonb_build_object('key', 'other', 'label', 'Other', 'amount', '0.00', 'percent', null),
+             jsonb_build_object('key', 'total', 'label', 'Total income tax expense', 'amount', '42000.00', 'percent', '21')))
+   where not exists (select 1 from tax_provision_runs
+                      where org_id = v_org and fiscal_year = 2025 and version = 1);
+
+  insert into tax_provision_runs
+    (id, org_id, fiscal_year, period_from, period_to, status, version,
+     snapshot_hash, payload, journal_entry_id, posted_at, posted_by)
+  select '00000000-0000-7000-9000-000000006903', v_org, 2024,
+         '2024-01-01', '2024-12-31', 'posted', 1, repeat('f', 64),
+         jsonb_build_object(
+           'fiscalYear', 2024, 'framework', 'asc740',
+           'pretaxBookIncome', '300000.00', 'enactedRatePercent', '21',
+           'taxableIncome', '290000.00', 'currentTax', '60900.00',
+           'deferredExpense', '2100.00', 'totalExpense', '63000.00',
+           'balances', jsonb_build_object(
+             'dtaGross', '12000.00', 'dtlGross', '10000.00',
+             'valuationAllowance', '100.00'),
+           'rateReconciliation', jsonb_build_array(
+             jsonb_build_object('key', 'statutory', 'label', 'Statutory tax', 'amount', '63000.00', 'percent', '21'),
+             jsonb_build_object('key', 'perm', 'label', 'Permanent differences', 'amount', '-2100.00', 'percent', '-0.7'),
+             jsonb_build_object('key', 'other', 'label', 'Other', 'amount', '2100.00', 'percent', null),
+             jsonb_build_object('key', 'total', 'label', 'Total income tax expense', 'amount', '63000.00', 'percent', '21'))),
+         '00000000-0000-7000-9000-000000006909',
+         timestamptz '2025-03-15 12:00:00+00',
+         (select id from users where org_id = v_org order by created_at limit 1)
+   where not exists (select 1 from tax_provision_runs
+                      where org_id = v_org and fiscal_year = 2024 and version = 1);
+
+  -- Differences for the IAS 12 draft only (3 rows: auto + manual + a
+  -- null-percent sibling). The ASC 740 draft gets NONE — it is the empty-note
+  -- variant. The posted run ALSO gets none: the temp-difference history
+  -- trigger (`protect_temporary_difference_history`) rejects ANY insert
+  -- against a non-draft run (verified: attempted insert raises
+  -- 'temporary differences are immutable after provision finalization'),
+  -- so a posted run with seeded differences is unseedable — the posted
+  -- variant exercises the hidden post button + recon rows instead.
+  -- `subsidiary_id` is left null (nullable, and the SIM org has a single
+  -- subsidiary the harness user sees anyway). Guard before insert: the same
+  -- trigger requires the parent run to exist with status `draft`, so the
+  -- guard owns idempotence on re-runs.
+  insert into temporary_differences
+    (id, org_id, run_id, category, description, book_basis, tax_basis,
+     difference, rate_percent, tax_effect, source)
+  select v.id::uuid, v_org, '00000000-0000-7000-9000-000000006901',
+         v.category, v.description, v.book_basis::numeric, v.tax_basis::numeric,
+         v.difference::numeric, v.rate_percent::numeric, v.tax_effect::numeric, v.source
+    from (values
+      ('00000000-0000-7000-9000-000000006911', 'fixed_assets',
+       'Accelerated depreciation', '120000.00', '80000.00', '40000.00', '21', '8400.00', 'auto'),
+      ('00000000-0000-7000-9000-000000006912', 'provisions',
+       'Warranty reserve', '15000.00', '0.00', '15000.00', '21', '3150.00', 'manual'),
+      ('00000000-0000-7000-9000-000000006913', 'loss_carryforward',
+       'NOL carryforward', '0.00', '42857.14', '-42857.14', '21', '-9000.00', 'manual')) as v(id, category, description, book_basis, tax_basis, difference, rate_percent, tax_effect, source)
+   where (select status from tax_provision_runs
+           where id = '00000000-0000-7000-9000-000000006901') = 'draft'
+     and not exists (select 1 from temporary_differences
+                      where id in ('00000000-0000-7000-9000-000000006911',
+                                   '00000000-0000-7000-9000-000000006912',
+                                   '00000000-0000-7000-9000-000000006913'));
+
+  -- (No differences insert for the posted run: the history trigger forbids
+  -- it. Its variant is recon-rows + empty-note + no post button.)
+
+  -- ---- parallel run ----------------------------------------------------------
+  --
+  -- The simulator never imports a prior register, so /payroll/parallel-run
+  -- renders two empty states without these: one register (2 stubs, 2
+  -- amounts, one unmapped column) plus one `differences` comparison with
+  -- one finding and one tolerance applied. The register pay_date matches
+  -- the first sim pay run (PAY-00001, pay_date 2026-02-11), so the native
+  -- period-suggestion path resolves. GUARD before insert: the unique key
+  -- is (org_id, name), not the id — ON CONFLICT (id) alone would raise on
+  -- a re-run, so the guard owns idempotence.
+  declare
+    v_reg uuid := '00000000-0000-7000-9000-000000001830';
+    v_cmp uuid := '00000000-0000-7000-9000-000000001831';
+    v_payrun uuid;
+    v_actor uuid;
+    v_emp uuid;
+  begin
+    select document_id into v_payrun from pay_runs
+     where org_id = v_org and document_id = '00000000-0000-7000-9000-000000001811';
+    select id into v_actor from users where org_id = v_org order by created_at limit 1;
+    select id into v_emp from parties
+     where org_id = v_org and is_active
+     order by display_name limit 1;
+    -- NOT `return`: a bare return in a nested block exits the WHOLE anonymous
+    -- block, silently skipping every fixture appended below this one.
+    if v_payrun is null or v_actor is null or v_emp is null then
+      raise notice 'missing pay run/actor/party; skipping parallel-run fixtures';
+    else
+
+    insert into payroll_prior_registers
+      (id, org_id, name, provider_name, period_start, period_end, pay_date,
+       currency_code, source_file_name, unmapped_columns, created_by, updated_by)
+    select v_reg, v_org, 'ViewSpec prior register', 'LegacyCo',
+           date '2026-01-24', date '2026-02-06', date '2026-02-11',
+           'USD', 'legacy-jan.csv', '[{"column": "parking", "valuedRows": 2}]'::jsonb,
+           v_actor, v_actor
+     where not exists (select 1 from payroll_prior_registers
+                        where org_id = v_org and name = 'ViewSpec prior register');
+
+    insert into payroll_prior_stubs
+      (id, org_id, register_id, employee_party_id, employee_label,
+       gross, net_pay, employer_cost, created_by, updated_by)
+    select '00000000-0000-7000-9000-000000001832', v_org, v_reg, v_emp,
+           'ViewSpec Employee', 5200.0000, 4000.0000, 600.0000, v_actor, v_actor
+     where exists (select 1 from payroll_prior_registers where id = v_reg)
+       and not exists (select 1 from payroll_prior_stubs
+                        where id = '00000000-0000-7000-9000-000000001832');
+
+    insert into payroll_prior_amounts
+      (id, org_id, prior_stub_id, component_id, kind, slot, source_column,
+       amount, created_by, updated_by)
+    select '00000000-0000-7000-9000-000000001833', v_org,
+           '00000000-0000-7000-9000-000000001832', null, 'earning',
+           'code:BASE', 'Base Pay', 5200.0000, v_actor, v_actor
+     where exists (select 1 from payroll_prior_stubs
+                    where id = '00000000-0000-7000-9000-000000001832')
+       and not exists (select 1 from payroll_prior_amounts
+                        where id = '00000000-0000-7000-9000-000000001833');
+
+    insert into payroll_parallel_tolerances
+      (id, org_id, kind, slot, tolerance, reason, created_by, updated_by)
+    select '00000000-0000-7000-9000-000000001834', v_org, 'total',
+           'net_pay', 1.0000, 'ViewSpec: legacy rounds net to the cent', v_actor, v_actor
+     where not exists (select 1 from payroll_parallel_tolerances
+                        where org_id = v_org and kind = 'total' and slot = 'net_pay');
+
+    insert into payroll_parallel_comparisons
+      (id, org_id, register_id, pay_run_document_id, status,
+       prior_employee_count, our_employee_count, compared_employee_count,
+       prior_only_employee_count, our_only_employee_count,
+       match_count, within_tolerance_count, difference_count, one_sided_count,
+       prior_gross, our_gross, prior_net, our_net,
+       prior_employer_cost, our_employer_cost,
+       unattributed_gross, unattributed_net, unattributed_employer_cost,
+       tolerances_applied, unmapped_columns, blocked_reason, created_by, updated_by)
+    select v_cmp, v_org, v_reg, v_payrun, 'differences',
+           1, 1, 1,
+           0, 0,
+           0, 1, 1, 0,
+           5200.0000, 5200.0000, 4000.0000, 3999.5000,
+           600.0000, 600.0000,
+           0.0000, 0.0000, 0.0000,
+           '[{"kind": "total", "slot": "net_pay", "tolerance": "1.0000", "reason": "ViewSpec: legacy rounds net to the cent"}]'::jsonb,
+           '[{"column": "parking", "valuedRows": 2}]'::jsonb,
+           null, v_actor, v_actor
+     where exists (select 1 from payroll_prior_registers where id = v_reg)
+       and not exists (select 1 from payroll_parallel_comparisons where id = v_cmp);
+
+    insert into payroll_parallel_findings
+      (id, org_id, comparison_id, employee_party_id, employee_name, kind,
+       slot, slot_label, classification, prior_amount, our_amount,
+       difference, tolerance_applied, source_column, sequence, created_by, updated_by)
+    select '00000000-0000-7000-9000-000000001835', v_org, v_cmp, v_emp,
+           'ViewSpec Employee', 'earning',
+           'code:BASE', 'Base pay', 'difference', 5200.0000, 5199.5000,
+           0.5000, 0.0000, 'Base Pay', 100, v_actor, v_actor
+     where exists (select 1 from payroll_parallel_comparisons where id = v_cmp)
+       and not exists (select 1 from payroll_parallel_findings
+                        where id = '00000000-0000-7000-9000-000000001835');
+  
+    end if;
+  end;
+
+  -- ---- app library (/apps/library): marketplace listings --------------------
+  -- Block …9801-9803. (Proposed as …1201-1203, which the bank-feed
+  -- connection above already holds — and a collision here is a SILENT
+  -- guard skip, not an error.)
+  -- listListings reads app_listings (deployment-wide, not per-org), which is
+  -- EMPTY in every environment — without rows the page compares two
+  -- identical empty notes. Three active listings: two with descriptions
+  -- (one matching "payroll", so ?q=payroll narrows 3 cards to 1) and one
+  -- with a NULL description, so the `description || t('noDescription')`
+  -- fallback renders real copy. GUARD before insert: app_listings has a
+  -- UNIQUE on key (not just the id PK) and NO trigger or CHECK to defeat,
+  -- so ON CONFLICT (id) DO NOTHING alone would raise on a re-run that
+  -- re-seeds the same keys — the guard on key owns idempotence.
+  -- Publisher is the SIM org (publisher_org_id is NOT NULL); manifest/files
+  -- are NOT NULL so the rows carry the empty-manifest defaults.
+  insert into app_listings (id, publisher_org_id, key, name, description, version, is_active)
+  select '00000000-0000-7000-9000-000000009801', v_org, 'viewspec-lib-invoicing',
+         'ViewSpec invoicing pack', 'Harness listing with a description', '2.3.0', true
+   where not exists (select 1 from app_listings where key = 'viewspec-lib-invoicing');
+
+  insert into app_listings (id, publisher_org_id, key, name, description, version, is_active)
+  select '00000000-0000-7000-9000-000000009802', v_org, 'viewspec-lib-payroll',
+         'ViewSpec payroll pack', 'Harness payroll listing', '1.0.0', true
+   where not exists (select 1 from app_listings where key = 'viewspec-lib-payroll');
+
+  insert into app_listings (id, publisher_org_id, key, name, description, version, is_active)
+  select '00000000-0000-7000-9000-000000009803', v_org, 'viewspec-lib-nodesc',
+         'ViewSpec nodesc listing', null, '0.9.0', true
+   where not exists (select 1 from app_listings where key = 'viewspec-lib-nodesc');
+
 end $$;

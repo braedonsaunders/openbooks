@@ -82,6 +82,22 @@ import { AppsToolbar, AppDrawer } from '../../app/(app)/admin/apps/AppDrawer'
 import { CrmSetupWorkspace } from '../../app/(app)/admin/setup/crm/CrmSetupWorkspace'
 import { ArCockpit } from '../../app/(app)/ar/cockpit/ArCockpit'
 import { DocsHome } from '../../app/(app)/docs/sections'
+import { DocArticleView } from '../../app/(app)/docs/[slug]/sections'
+import { CashCockpit } from '../../app/(app)/banking/cash/CashCockpit'
+import { BankFeedsClient } from '../../app/(app)/admin/setup/bank-feeds/BankFeedsClient'
+import { LibraryEmptyIcon, ListingCard } from '../../app/(app)/apps/library/sections'
+import {
+  TaxDepreciationHeader,
+  TaxDepreciationOverviewSlot,
+} from '../../app/(app)/admin/setup/tax-depreciation/sections'
+import {
+  ProvisionDifferencesSection,
+  ProvisionFrameworkBadge,
+  ProvisionPostButton,
+  ProvisionReconSection,
+  ProvisionStatusBadge,
+} from '../../app/(app)/tax/provisions/[id]/sections'
+import { ParallelRunView } from '../../app/(app)/payroll/parallel-run/ParallelRunView'
 import { PlatformNotice, PlatformTile } from '../../app/(app)/platform/sections'
 import { BackupManager } from '../../app/(app)/admin/backups/BackupManager'
 import { AppLauncherCard, AppsEmptyIcon, AppsLauncherButton } from '../../app/(app)/apps/sections'
@@ -196,6 +212,7 @@ import { NewMovementButton } from '../../app/(app)/inventory/NewMovementButton'
 import { InventoryActionDrawer } from '../../app/(app)/inventory/InventoryActionDrawer'
 import { CrmNewButton } from '../../app/(app)/crm/CrmNewButton'
 import { OpportunityDrawer } from '../../app/(app)/crm/OpportunityDrawer'
+import { ActivityDrawer } from '../../app/(app)/crm/ActivityDrawer'
 import { NewExpenseButton } from '../../app/(app)/expenses/NewExpenseButton'
 import { ExpenseDrawer } from '../../app/(app)/expenses/ExpenseDrawer'
 import { ExpenseActions } from '../../app/(app)/expenses/ExpenseActions'
@@ -1002,6 +1019,139 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       description={str(props, 'description') ?? ''}
       stat={str(props, 'stat') ?? ''}
       detail={str(props, 'detail') ?? ''}
+    />
+  ),
+
+  /* --- docs article ----------------------------------------------------------- */
+  /** Conditional pairs throughout (category span, related block, prev/next
+   *  with a bare-span placeholder) plus a client Markdown renderer. */
+  'doc-article': (props) => (
+    <DocArticleView content={props.content as ComponentProps<typeof DocArticleView>['content']} />
+  ),
+
+  /* --- cash control centre ------------------------------------------------------ */
+  /** A widget, not a slot: the LOADER already did the server work, so no user
+   *  id, org id or Authz crosses the spec. Layout persistence rides the
+   *  session cookie inside the component. */
+  'cash-cockpit': (props) => (
+    <CashCockpit
+      data={props.data as ComponentProps<typeof CashCockpit>['data']}
+      layoutPrefs={props.layoutPrefs as ComponentProps<typeof CashCockpit>['layoutPrefs']}
+      canConfigure={props.canConfigure === true}
+      canPayRun={props.canPayRun === true}
+      canCollectionRun={props.canCollectionRun === true}
+    />
+  ),
+
+  /* --- app library ---------------------------------------------------------------- */
+  /** Seven FLAT props. The install button is not a separate widget: it is
+   *  the card's footer and never renders without it. */
+  'listing-card': (props) => (
+    <ListingCard
+      listingId={str(props, 'listingId') ?? ''}
+      listingKey={str(props, 'listingKey') ?? ''}
+      name={str(props, 'name') ?? ''}
+      versionLine={str(props, 'versionLine') ?? ''}
+      description={str(props, 'description') ?? ''}
+      installed={props.installed === true}
+      current={props.current === true}
+    />
+  ),
+  /** NOT `apps-empty-icon` — that one renders Boxes; this renders Library. */
+  'library-empty-icon': () => <LibraryEmptyIcon />,
+
+  /* --- tax depreciation setup ---------------------------------------------------- */
+  /** `descriptionClassName` is loader-resolved verbatim: `max-w-3xl` appears
+   *  on the overview branch only. */
+  'tax-depreciation-header': (props) => (
+    <TaxDepreciationHeader
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      descriptionClassName={str(props, 'descriptionClassName') ?? ''}
+      tabs={(props.tabs as ComponentProps<typeof TaxDepreciationHeader>['tabs']) ?? []}
+      tabsAria={str(props, 'tabsAria') ?? ''}
+    />
+  ),
+  /** Country names and pack sorting stay CLIENT-side (browser locale), so
+   *  the loader passes raw country codes and formats nothing. */
+  'tax-depreciation-overview': (props) => (
+    <TaxDepreciationOverviewSlot
+      overview={props.overview as ComponentProps<typeof TaxDepreciationOverviewSlot>['overview']}
+    />
+  ),
+
+  /* --- tax provision detail ------------------------------------------------------ */
+  //
+  // Both sections are widgets (the admin-users precedent): the native page
+  // hand-rolls two plain <table>s with their own classes.
+  'provision-recon-section': (props) => (
+    <ProvisionReconSection
+      title={str(props, 'title') ?? ''}
+      pretaxLabel={str(props, 'pretaxLabel') ?? ''}
+      pretaxAmount={str(props, 'pretaxAmount') ?? ''}
+      enactedRateText={str(props, 'enactedRateText') ?? ''}
+      amountLabel={str(props, 'amountLabel') ?? ''}
+      percentLabel={str(props, 'percentLabel') ?? ''}
+      steps={(props.steps as ComponentProps<typeof ProvisionReconSection>['steps']) ?? []}
+      summaries={(props.summaries as ComponentProps<typeof ProvisionReconSection>['summaries']) ?? []}
+    />
+  ),
+  /** The empty note lives INSIDE the component, not as a spec-level empty
+   *  state: the native empty path keeps the section chrome and puts an
+   *  italic note inside it. */
+  'provision-differences-section': (props) => (
+    <ProvisionDifferencesSection
+      title={str(props, 'title') ?? ''}
+      emptyNote={str(props, 'emptyNote') ?? ''}
+      columns={
+        (props.columns as ComponentProps<typeof ProvisionDifferencesSection>['columns']) ?? {
+          item: '',
+          bookBasis: '',
+          taxBasis: '',
+          difference: '',
+          effect: '',
+        }
+      }
+      differences={
+        (props.differences as ComponentProps<typeof ProvisionDifferencesSection>['differences']) ?? []
+      }
+    />
+  ),
+  'provision-status-badge': (props) => (
+    <ProvisionStatusBadge
+      label={str(props, 'label') ?? ''}
+      variant={(str(props, 'variant') ?? 'secondary') as 'success' | 'secondary' | 'outline'}
+    />
+  ),
+  'provision-framework-badge': (props) => (
+    <ProvisionFrameworkBadge label={str(props, 'label') ?? ''} />
+  ),
+  'provision-post-button': (props) => <ProvisionPostButton runId={str(props, 'runId') ?? ''} />,
+
+  /* --- payroll parallel run ------------------------------------------------------ */
+  /** Whole: picker state, compare/discard/tolerance mutations, a findings
+   *  drawer and conditional cell pairs. Money stays canonical text because
+   *  the component formats client-side. */
+  'parallel-run-workspace': (props) => (
+    <ParallelRunView
+      registers={props.registers as ComponentProps<typeof ParallelRunView>['registers']}
+      runs={props.runs as ComponentProps<typeof ParallelRunView>['runs']}
+      comparisons={props.comparisons as ComponentProps<typeof ParallelRunView>['comparisons']}
+      tolerances={props.tolerances as ComponentProps<typeof ParallelRunView>['tolerances']}
+      slots={props.slots as ComponentProps<typeof ParallelRunView>['slots']}
+      canManage={props.canManage === true}
+    />
+  ),
+
+  /* --- bank feeds setup --------------------------------------------------------- */
+  /** Five FLAT props, spread exactly as the native page passes them. */
+  'bank-feeds-workspace': (props) => (
+    <BankFeedsClient
+      connections={(props.connections as ComponentProps<typeof BankFeedsClient>['connections']) ?? []}
+      sftpServers={(props.sftpServers as ComponentProps<typeof BankFeedsClient>['sftpServers']) ?? []}
+      sftpSchedules={(props.sftpSchedules as ComponentProps<typeof BankFeedsClient>['sftpSchedules']) ?? []}
+      accounts={(props.accounts as ComponentProps<typeof BankFeedsClient>['accounts']) ?? []}
+      daemon={props.daemon as ComponentProps<typeof BankFeedsClient>['daemon']}
     />
   ),
 
@@ -1831,6 +1981,11 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       failed={str(props, 'failed') ?? ''}
     />
   ),
+  'activity-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof ActivityDrawer> | null
+    if (!drawer) return null
+    return <ActivityDrawer {...drawer} />
+  },
   'opportunity-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof OpportunityDrawer> | null
     if (!drawer) return null
