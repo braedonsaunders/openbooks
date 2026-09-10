@@ -2,10 +2,11 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { PageHeader } from "@openbooks/ui";
 import { requirePermission } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
-import { CollectionsClient } from "./CollectionsClient";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { CollectionsShell } from "./sections";
+import { loadCollections, collectionsSpec } from "./view";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,22 @@ export async function generateMetadata() {
  * subscriptionBilling feature is on, a Subscriptions tab (plans + subscriptions,
  * engine/src/subscription-billing.ts) is added. All run from the scheduler.
  */
-export default async function CollectionsPage() {
+export default async function CollectionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadCollections()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={collectionsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const [tNav, tAr] = await Promise.all([
     getTranslations("nav"),
     getTranslations("ar"),
@@ -48,17 +64,13 @@ export default async function CollectionsPage() {
     : [{ rows: [] }, { rows: [] }];
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6">
-      <PageHeader
-        title={tNav("modules.collections")}
-        description={tAr("cockpit.description")}
-      />
-      <CollectionsClient
-        subscriptionsEnabled={subscriptionsEnabled}
-        advancedSubscriptionsEnabled={advancedSubscriptionsEnabled}
-        customers={customers.rows.map((c) => ({ id: c.id, name: c.name }))}
-        incomeAccounts={incomeAccounts.rows.map((a) => ({ id: a.id, label: [a.number, a.name].filter(Boolean).join(" · ") }))}
-      />
-    </div>
+    <CollectionsShell
+      title={tNav("modules.collections")}
+      description={tAr("cockpit.description")}
+      subscriptionsEnabled={subscriptionsEnabled}
+      advancedSubscriptionsEnabled={advancedSubscriptionsEnabled}
+      customers={customers.rows.map((c) => ({ id: c.id, name: c.name }))}
+      incomeAccounts={incomeAccounts.rows.map((a) => ({ id: a.id, label: [a.number, a.name].filter(Boolean).join(" · ") }))}
+    />
   );
 }

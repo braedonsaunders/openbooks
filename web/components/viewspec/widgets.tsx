@@ -35,7 +35,7 @@ import { LienWaiverDrawer } from '../../app/(app)/compliance/lien-waivers/LienWa
 import { NewFilingButton } from '../../app/(app)/compliance/information-returns/NewFilingButton'
 import { IdentityCell, ActingCell, AccessControlCell } from '../../app/(app)/platform/access/sections'
 import { GrantAccessForm } from '../../app/(app)/platform/_components/GrantAccessForm'
-import { KeyRound, Building2, Users, Mail, Activity, Settings, Send, CheckCircle2 } from 'lucide-react'
+import { Activity, Building2, CheckCircle2, KeyRound, Mail, Send, Settings, Trash2, Users } from 'lucide-react'
 import { EmailSubjectCell, EmailEvidenceCell } from '../../app/(app)/platform/email-log/sections'
 import { VendorComplianceMatrix } from '../../app/(app)/compliance/vendors/Matrix'
 import { ReportNameCell } from '../../app/(app)/reports/custom/sections'
@@ -86,6 +86,15 @@ import { DocArticleView } from '../../app/(app)/docs/[slug]/sections'
 import { CashCockpit } from '../../app/(app)/banking/cash/CashCockpit'
 import { BankFeedsClient } from '../../app/(app)/admin/setup/bank-feeds/BankFeedsClient'
 import { LibraryEmptyIcon, ListingCard } from '../../app/(app)/apps/library/sections'
+import { ExportClient } from '../../app/(app)/data/export/ExportClient'
+import { ImportWizard } from '../../app/(app)/data/import/ImportWizard'
+import { SubcontractsWorkspace } from '../../app/(app)/subcontracts/SubcontractsWorkspace'
+import { ApCockpit } from '../../app/(app)/ap/cockpit/ApCockpit'
+import { ApHeaderActions } from '../../app/(app)/ap/sections'
+import { CollectionsShell } from '../../app/(app)/collections/sections'
+import { TrashList } from '../../app/(app)/documents/trash/TrashList'
+import { TrashBackLink } from '../../app/(app)/documents/trash/sections'
+import { ExpensesDashboard } from '../../app/(app)/expenses/ExpensesDashboard'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
 import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
@@ -591,7 +600,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const renderer = action ? WIDGET_REGISTRY[action] : undefined
     // Icons are components, so the spec names one from a closed map rather
     // than carrying it — same rule as every other component reference.
-    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail />, activity: <Activity />, send: <Send />, 'check-circle': <CheckCircle2 />, gauge: <Gauge />, camera: <Camera />, 'shield-check': <ShieldCheck />, 'scroll-text': <ScrollText /> }
+    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail />, activity: <Activity />, send: <Send />, 'check-circle': <CheckCircle2 />, gauge: <Gauge />, camera: <Camera />, 'shield-check': <ShieldCheck />, 'scroll-text': <ScrollText />, trash: <Trash2 /> }
     const iconKey = str(props, 'icon')
     return (
       <EmptyState
@@ -1057,6 +1066,79 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       canPayRun={props.canPayRun === true}
       canCollectionRun={props.canCollectionRun === true}
     />
+  ),
+
+  /* --- data export ------------------------------------------------------------------ */
+  /** No props: `ExportClient` fetches its own resource descriptors after
+   *  mount and owns every string. The `query-console` precedent. */
+  'data-export': () => <ExportClient />,
+  /** Also no props: the import wizard owns its own `WizardLayout` shell and
+   *  every step's state. `bare` layout, or the chrome nests. */
+  'import-wizard': () => <ImportWizard />,
+
+  /* --- subcontracts ----------------------------------------------------------------- */
+  /** SIX FLAT props (`projects`, `vendors`, `expenseAccounts`, `parties`,
+   *  `multiCurrency`, `permissions`) — no nested bag. Six drawer tabs, the
+   *  register fetch and every mutation are client state. */
+  'subcontracts-workspace': (props) => (
+    <SubcontractsWorkspace {...(props as unknown as ComponentProps<typeof SubcontractsWorkspace>)} />
+  ),
+
+  /* --- AP cockpit ------------------------------------------------------------------- */
+  /** The capture link and the create menu as ONE widget, because the native
+   *  header nests them in their own `gap-2` row. */
+  'ap-header-actions': (props) => (
+    <ApHeaderActions
+      captureHref={str(props, 'captureHref') ?? ''}
+      captureLabel={str(props, 'captureLabel') ?? ''}
+      canCreate={props.canCreate === true}
+      newItems={(props.newItems as ComponentProps<typeof ApHeaderActions>['newItems']) ?? []}
+      newBasePath={str(props, 'newBasePath') ?? ''}
+      newTriggerLabel={str(props, 'newTriggerLabel') ?? ''}
+      newCreatingLabel={str(props, 'newCreatingLabel') ?? ''}
+      newFailedLabel={str(props, 'newFailedLabel') ?? ''}
+    />
+  ),
+  /** Whole, exactly as `ar-cockpit`: vitals, the pay-run planner, aging bars,
+   *  the cash-out schedule, the vendor table and three on-demand flyouts. */
+  'ap-cockpit': (props) => (
+    <ApCockpit
+      data={props.data as ComponentProps<typeof ApCockpit>['data']}
+      canConfigure={props.canConfigure === true}
+      canPay={props.canPay === true}
+    />
+  ),
+
+  /* --- collections ------------------------------------------------------------------ */
+  /** The shell (container + PageHeader + client island) is ONE component
+   *  because the island's four-way panel switch is tab state: presence omits
+   *  a block, it never chooses between four. */
+  'collections-shell': (props) => (
+    <CollectionsShell
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      subscriptionsEnabled={props.subscriptionsEnabled === true}
+      advancedSubscriptionsEnabled={props.advancedSubscriptionsEnabled === true}
+      customers={(props.customers as ComponentProps<typeof CollectionsShell>['customers']) ?? []}
+      incomeAccounts={(props.incomeAccounts as ComponentProps<typeof CollectionsShell>['incomeAccounts']) ?? []}
+    />
+  ),
+
+  /* --- document trash --------------------------------------------------------------- */
+  /** Not `pageHeader({ back })`: that slot renders UiBackLink (`← label`),
+   *  and this page's native back link is a chevron with its own classes. */
+  'trash-back-link': (props) => (
+    <TrashBackLink href={str(props, 'href') ?? '/documents'} label={str(props, 'label') ?? ''} />
+  ),
+  /** Passed whole: per-row busy state, the purge confirm dialog and the
+   *  restore/delete fetches are client behaviour. */
+  'trash-list': (props) => (
+    <TrashList items={(props.rows as ComponentProps<typeof TrashList>['items']) ?? []} />
+  ),
+
+  /* --- expenses cockpit ------------------------------------------------------------- */
+  'expenses-dashboard': (props) => (
+    <ExpensesDashboard data={props.data as ComponentProps<typeof ExpensesDashboard>['data']} />
   ),
 
   /* --- analytics dashboards --------------------------------------------------------- */
