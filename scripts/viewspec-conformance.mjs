@@ -291,6 +291,93 @@ const PAGES = [
     minMatches: 5,
   },
   {
+    path: '/admin/roles',
+    // The hand-rolled role table as a widget; header, search, type chips,
+    // empty state and pager are ordinary spec.
+    variants: [
+      '',
+      '?sort=members&dir=desc',
+      { query: '?type=custom', expect: 'main h3', minMatches: 1 },
+      { query: '?q=zzzznomatch', expect: 'main h3', minMatches: 1 },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 7,
+  },
+  {
+    path: '/admin/audit',
+    variants: [
+      '',
+      '?action=post',
+      // No system-actor rows in the tenant: this pins the empty branch.
+      { query: '?actor=system', expect: 'main h3', minMatches: 1 },
+      '?from=2026-09-08&to=2026-09-08',
+      {
+        query: '?event=01a083e7-3bb7-7dc6-88e6-dcf4e53e8270',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/banking',
+    // A cockpit with no table at all: the assertion counts panel headings,
+    // the /purchasing precedent.
+    variants: [{ query: '', expect: 'h2, h3', minMatches: 5 }],
+    expect: 'h2, h3',
+    minMatches: 5,
+  },
+  {
+    path: '/reports',
+    // The report launcher. One client component: its cards sit behind a
+    // search filter with its own empty state, so a spec-side repeat would
+    // render the unfiltered set and strand the input from what it filters.
+    variants: [{ query: '', expect: 'main section', minMatches: 5 }],
+    expect: 'main section',
+    minMatches: 5,
+  },
+  {
+    path: '/analytics',
+    // A static launcher: one client component owning its own search and icon
+    // maps, placed whole inside the plain page shell.
+    variants: [{ query: '', expect: 'section a[href^="/analytics/"]', minMatches: 8 }],
+    expect: 'section a',
+    minMatches: 8,
+  },
+  {
+    path: '/query',
+    // The SQL console. Its whole body is one client workbench, and the page
+    // 404s unless the tenant has queryConsole on — which the fixture now sets.
+    variants: [{ query: '', expect: 'main h1', minMatches: 1 }],
+    expect: 'main h1',
+    minMatches: 1,
+  },
+  {
+    path: '/accounting',
+    // A cockpit built from stat tiles, a health hero and shared rail panels.
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/customers',
+    // A module cockpit: vitals tiles gated per feature, a hero relationships
+    // table, and a rail of panels.
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/admin',
+    // The admin hub: nested repeats over permission-filtered groups and
+    // cards, in a `bare` layout because the hub owns its own shell.
+    variants: [{ query: '', expect: 'section a[href="/admin/users"]', minMatches: 1 }],
+    expect: 'section a',
+    minMatches: 15,
+  },
+  {
     path: '/admin/users',
     // The table is a widget here (the native page hand-rolls a plain
     // <table>); everything around it — header, search, chips, empty state,
@@ -952,6 +1039,11 @@ function normalize(markup) {
         /\b(id|for|aria-labelledby|aria-controls|aria-describedby)="[^"]*(«[^"]*»|_[Rr]_[a-z0-9]*_)[^"]*"/g,
         '',
       )
+      // The same values also appear inside SVG `url(#…)` references — a
+      // gradient's id, pointed at by `stroke`/`fill`. Rewritten to a constant
+      // rather than dropped, so a reference that goes MISSING on one side
+      // still shows as a difference.
+      .replace(/url\(#[^)]*(«[^)]*»|_[Rr]_[a-z0-9]*_)[^)]*\)/g, 'url(#generated)')
       // ECharts stamps each chart with a per-instance counter/timestamp. Same
       // class of framework noise as useId: generated per mount, never rendered.
       .replace(/ _echarts_instance_="[^"]*"/g, '')
@@ -1033,7 +1125,29 @@ function normalizeStyles(markup) {
       .filter(Boolean)
       .map((d) => {
         const index = d.indexOf(':')
-        return index === -1 ? d : `${d.slice(0, index).trim()}:${d.slice(index + 1).trim()}`
+        if (index === -1) return d
+        const property = d.slice(0, index).trim()
+        // Canonicalize the VALUE's incidental spelling, not its meaning.
+        //
+        // The same declaration serializes two ways depending on whether the
+        // browser has round-tripped it through the CSSOM yet: `transition`
+        // regains its default `all` property and loses the spaces inside
+        // `cubic-bezier(…)`. Two renders of one component disagreed on
+        // exactly that and on nothing else. Collapsing whitespace and
+        // dropping a leading `all ` from a transition compares the rule
+        // rather than the spelling; any real difference in duration, easing
+        // or property still shows.
+        let value = d.slice(index + 1).trim().replace(/\s*,\s*/g, ',').replace(/\s+/g, ' ')
+        if (property === 'transition') value = value.replace(/^all /, '')
+        // Numbers in a style value are rounded to the precision the browser
+        // itself keeps. `width:14.285714285714286%` survives verbatim in
+        // server markup, but once React writes the same value through the
+        // CSSOM Chrome hands it back as `14.2857%` — the same width, spelled
+        // shorter. Six significant digits is Chrome's own cut, so this
+        // compares the value while leaving any genuinely different one
+        // different.
+        value = value.replace(/-?\d+\.\d{7,}/g, (n) => String(Number(Number(n).toPrecision(6))))
+        return `${property}:${value}`
       })
       .sort()
     return `style="${declarations.join(';')}"`

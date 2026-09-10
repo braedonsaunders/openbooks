@@ -12,9 +12,12 @@ import { FilterChips } from '../../../../components/filter-bar'
 import { DateRangeFilter } from '../../../../components/date-range-filter'
 import { Pagination } from '../../../../components/pagination'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../../lib/list-params'
+import { AuditDocsLink } from './sections'
 import { requirePermission } from '../../../../lib/authz'
 import { AuditRows, type AuditListRow } from './AuditRows'
 import { AuditEventDrawer, type AuditEvent } from './AuditEventDrawer'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadAudit, auditSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +53,17 @@ export default async function Audit({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadAudit(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={auditSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('admin.audit.read')
   // The company log spans configuration, multi-entity transactions and
   // deleted records whose scope cannot be inferred from a current row. Like
@@ -170,11 +184,7 @@ export default async function Audit({
             title={t('title')}
             description={t('description')}
             actions={
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/docs/audit-log">
-                  <BookOpen size={15} aria-hidden /> {t('documentation')}
-                </Link>
-              </Button>
+              <AuditDocsLink href="/docs/audit-log" label={t('documentation')} />
             }
           />
           <div className="flex flex-wrap items-center gap-2">

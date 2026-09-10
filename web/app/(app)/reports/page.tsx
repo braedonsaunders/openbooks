@@ -3,14 +3,31 @@ import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { PageContainer } from '../../../components/page-layout'
+import { ModuleView } from '../../../components/viewspec/module-view'
 import { getAuthz, can } from '../../../lib/authz'
 import { ReportsHub, type HubGroup } from './ReportsHub'
 import { isFeatureEnabled } from '../../../lib/features'
 import { hiddenReportEntityKeys } from '../../../lib/report-authz'
+import { loadReportsHub, reportsHubSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
-export default async function Reports() {
+export default async function Reports({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadReportsHub()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={reportsHubSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const t = await getTranslations('reports')
   const tc = await getTranslations('analytics.trueCost')
   const authz = await getAuthz()

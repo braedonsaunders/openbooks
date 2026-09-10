@@ -1,13 +1,17 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { ArrowUpRight } from 'lucide-react'
-import { cn, PageHeader } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { HomeStatTile, HomePanel } from '../../../components/module-home/client'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadAccounting, accountingSpec } from './view'
+import { HealthHero } from './sections'
+// The shared attention rail — one implementation for the cockpits that use
+// it. The six-row cap is a DATA decision, so it happens here and in the
+// loader rather than hiding inside the component.
+import { AttentionList } from '../purchasing/sections'
 import { LiveDirectory, ModuleHomeTabs, type DirectoryItem } from '../../../components/module-home/ui'
 import { groupTabs } from '../../../components/module-home/group-tabs'
-import { Gauge } from '../analytics/_ui/Gauge'
 import { getAuthz, can, assertCan } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
 import { resolvePeriod } from '../../../lib/periods'
@@ -29,7 +33,22 @@ export async function generateMetadata() {
  * score math as analytics — the 10-tab deep dive stays there, one tab away).
  * The rail carries close progress, the live directory, and ledger hygiene.
  */
-export default async function AccountingHomePage() {
+export default async function AccountingHomePage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams)?.__viewspec === '1') {
+    const sp = (await searchParams) ?? {}
+    const data = await loadAccounting(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={accountingSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const { moneyCompact } = await getMoneyFormatter()
   const authz = await getAuthz()
   if (!authz) redirect('/login')
@@ -180,64 +199,31 @@ export default async function AccountingHomePage() {
             bodyClassName="min-h-0 overflow-y-auto p-0"
             className="min-h-[24rem] lg:col-span-2"
           >
-            <div className="flex flex-col items-center gap-2 border-b border-slate-100 px-6 py-5 sm:flex-row sm:gap-8 dark:border-slate-800">
-              <Gauge value={health.overallScore} label={t(`home.score.${health.scoreLabel}`)} size={150} thickness={13} showTicks={false} className="shrink-0" />
-              <div className="grid flex-1 grid-cols-2 gap-x-8 gap-y-1.5 sm:grid-cols-3">
-                {health.categoryScores.map((c) => (
-                  <div key={c.key}>
-                    <p className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
-                      {t(`home.categories.${c.key}`)}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <span className={cn('text-sm font-bold tabular-nums', c.score >= 60 ? 'text-emerald-600 dark:text-emerald-400' : c.score >= 40 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')}>
-                        {Math.round(c.score)}
-                      </span>
-                      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                        <span
-                          className={cn('block h-full rounded-full', c.score >= 60 ? 'bg-emerald-500' : c.score >= 40 ? 'bg-amber-500' : 'bg-red-500')}
-                          style={{ width: `${Math.min(100, Math.max(2, c.score))}%` }}
-                        />
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">{t('home.hero.ratio')}</th>
-                  <th className="px-3 py-2 text-right font-medium">{t('home.hero.value')}</th>
-                  <th className="px-3 py-2 text-right font-medium">{t('home.hero.benchmark')}</th>
-                  <th className="px-4 py-2 text-center font-medium">{t('home.hero.grade')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gradedRatios.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                    <td className="px-4 py-2">
-                      <span className="font-medium text-slate-700 dark:text-slate-200">{RATIO_DEFS[r.id]?.label ?? r.id}</span>
-                      <span className="ml-2 hidden text-xs text-slate-400 sm:inline dark:text-slate-500">{r.calc}</span>
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">{fmtRatio(r.value, r.format, moneyCompact)}</td>
-                    <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{fmtRatio(r.benchmark, r.format, moneyCompact)}</td>
-                    <td className="px-4 py-2 text-center">
-                      <span className={cn('inline-block w-8 rounded-full py-0.5 text-[11px] font-bold', r.score >= 60 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : r.score >= 40 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300')}>
-                        {r.grade ?? '—'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="border-t border-slate-100 px-4 py-2.5 dark:border-slate-800">
-              <Link
-                href={'/analytics/financial-health' as never}
-                className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400"
-              >
-                {t('home.hero.fullAnalysis')} <ArrowUpRight size={12} />
-              </Link>
-            </div>
+            <HealthHero
+              gaugeValue={health.overallScore}
+              gaugeLabel={t(`home.score.${health.scoreLabel}`)}
+              categories={health.categoryScores.map((c) => ({
+                key: c.key,
+                label: t(`home.categories.${c.key}`),
+                score: c.score,
+              }))}
+              ratios={gradedRatios.map((r) => ({
+                id: r.id,
+                label: RATIO_DEFS[r.id]?.label ?? r.id,
+                calc: r.calc,
+                value: fmtRatio(r.value, r.format, moneyCompact),
+                benchmark: fmtRatio(r.benchmark, r.format, moneyCompact),
+                grade: r.grade ?? '—',
+                score: r.score,
+              }))}
+              ratioLabels={{
+                ratio: t('home.hero.ratio'),
+                value: t('home.hero.value'),
+                benchmark: t('home.hero.benchmark'),
+                grade: t('home.hero.grade'),
+              }}
+              fullAnalysisLabel={t('home.hero.fullAnalysis')}
+            />
           </HomePanel>
 
           <div className="flex min-h-0 flex-col gap-5 overflow-y-auto">
@@ -251,30 +237,7 @@ export default async function AccountingHomePage() {
             ) : null}
 
             <HomePanel title={t('home.attention.title')} icon="triangle-alert" bodyClassName="p-0" className="shrink-0">
-              {attention.length === 0 ? (
-                <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-                  {t('home.attention.allClear')}
-                </p>
-              ) : (
-                <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-                  {attention.slice(0, 6).map((item, i) => (
-                    <li key={i}>
-                      <Link
-                        href={item.href as never}
-                        className="flex items-start gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                      >
-                        <span
-                          className={cn(
-                            'mt-1.5 h-2 w-2 shrink-0 rounded-full',
-                            item.tone === 'negative' ? 'bg-red-500' : 'bg-amber-500',
-                          )}
-                        />
-                        <span className="min-w-0 flex-1 text-slate-700 dark:text-slate-300">{item.text}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <AttentionList items={attention.slice(0, 6)} allClear={t('home.attention.allClear')} />
             </HomePanel>
           </div>
         </div>

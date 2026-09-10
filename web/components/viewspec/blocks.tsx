@@ -25,6 +25,7 @@ import {
 } from '@openbooks/ui'
 import { ReportPaper } from '../../app/(app)/reports/ReportPaper'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
+import { PageContainer } from '../page-layout'
 import { ForecastSection } from '../../app/(app)/crm/forecasts/sections'
 import { CellView } from './cells'
 import { WidgetSlot, WidgetBlockView, resolveWidgetProps } from './widgets'
@@ -61,6 +62,10 @@ type FrameComponent = (props: Record<string, unknown> & { children: ReactNode })
 
 const FRAME_REGISTRY: Record<string, FrameComponent> = {
   'tab-content': TabContent as unknown as FrameComponent,
+  /** The plain full-height page shell, for pages that sit under it natively. */
+  'page-container': ((props: Record<string, unknown> & { children: ReactNode }) => (
+    <PageContainer>{props.children}</PageContainer>
+  )) as FrameComponent,
   'forecast-section': ((props: Record<string, unknown> & { children: ReactNode }) => (
     <ForecastSection labelledBy={String(props.labelledBy ?? '')}>{props.children}</ForecastSection>
   )) as FrameComponent,

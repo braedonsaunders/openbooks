@@ -14,8 +14,10 @@ import { requirePermission, can } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
 import { reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
-import { bankingHome, type BankingAccountRow } from '../../../lib/module-home/banking'
+import { bankingHome } from '../../../lib/module-home/banking'
 import { userPageLayout } from '../../../lib/page-layout'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadBanking, bankingSpec, needsAttention, weekLabel, daysSince } from './view'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata() {
@@ -40,6 +42,17 @@ export default async function BankingHomePage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadBanking(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={bankingSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const { moneyCompact } = await getMoneyFormatter()
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
@@ -257,50 +270,9 @@ export default async function BankingHomePage({
 
 /* ------------------------------------------------------------------------- */
 
-type T = Awaited<ReturnType<typeof getTranslations<'banking'>>>
-
-function needsAttention(accounts: BankingAccountRow[], t: T) {
-  const items: { tone: 'negative' | 'warning' | 'neutral'; text: string; href: string }[] = []
-  for (const a of accounts) {
-    if (a.type === 'asset_bank' && a.balance < 0) {
-      items.push({ tone: 'negative', text: t('home.attention.negativeBalance', { account: a.name }), href: `/banking/${a.id}` })
-    }
-  }
-  for (const a of accounts) {
-    const age = daysSince(a.lastStatementDate)
-    if (a.lastStatementDate === null) {
-      items.push({ tone: 'warning', text: t('home.attention.noStatement', { account: a.name }), href: `/banking/${a.id}` })
-    } else if (age !== null && age > STALE_STATEMENT_DAYS) {
-      items.push({
-        tone: 'warning',
-        text: t('home.attention.staleStatement', { account: a.name, days: age }),
-        href: `/banking/${a.id}`,
-      })
-    }
-  }
-  for (const a of accounts) {
-    if (a.openReconciliationId) {
-      items.push({
-        tone: 'neutral',
-        text: t('home.attention.openRecon', { account: a.name }),
-        href: `/banking/${a.id}/reconcile/${a.openReconciliationId}`,
-      })
-    }
-  }
-  return items.slice(0, 6)
-}
-
-function daysSince(iso: string | null): number | null {
-  if (!iso) return null
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return null
-  return Math.max(0, Math.floor((Date.now() - then) / 86_400_000))
-}
-
-function weekLabel(weekStart: string): string {
-  return new Date(weekStart + 'T00:00:00Z').toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  })
-}
+/**
+ * needsAttention, daysSince and weekLabel now live in ./view.ts — the loader
+ * owns them and the native branch imports them back, so both render paths
+ * share one implementation (the purchasing precedent). STALE_STATEMENT_DAYS
+ * stays here: the loader defines its own copy for the badge computation.
+ */
