@@ -86,6 +86,15 @@ import { DocArticleView } from '../../app/(app)/docs/[slug]/sections'
 import { CashCockpit } from '../../app/(app)/banking/cash/CashCockpit'
 import { BankFeedsClient } from '../../app/(app)/admin/setup/bank-feeds/BankFeedsClient'
 import { LibraryEmptyIcon, ListingCard } from '../../app/(app)/apps/library/sections'
+import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
+import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
+import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
+import { CustomerView } from '../../app/(app)/analytics/customer-intelligence/CustomerView'
+import { FinancialHealthView } from '../../app/(app)/analytics/financial-health/FinancialHealthView'
+import { SentinelView } from '../../app/(app)/analytics/sentinel/SentinelView'
+import { SpendVelocityView } from '../../app/(app)/analytics/spend-velocity/SpendVelocityView'
+import { UtilizationView } from '../../app/(app)/analytics/utilization/UtilizationView'
+import { VendorView } from '../../app/(app)/analytics/vendor-performance/VendorView'
 import {
   TaxDepreciationHeader,
   TaxDepreciationOverviewSlot,
@@ -346,6 +355,13 @@ type WidgetRenderer = (props: Record<string, unknown>) => ReactNode
 function str(props: Record<string, unknown>, key: string): string | undefined {
   const value = props[key]
   return typeof value === 'string' ? value : undefined
+}
+
+/** Finite numbers only: NaN and Infinity are treated as absent, so a widget
+ *  falls back to its default rather than rendering a `NaN`. */
+function num(props: Record<string, unknown>, key: string): number | undefined {
+  const value = props[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
 function stringRecord(props: Record<string, unknown>, key: string): Record<string, string> | undefined {
@@ -1041,6 +1057,50 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       canPayRun={props.canPayRun === true}
       canCollectionRun={props.canCollectionRun === true}
     />
+  ),
+
+  /* --- analytics dashboards --------------------------------------------------------- */
+  //
+  // Seven dashboards, one shape: the `analytics-header` frame over a single
+  // bespoke client view. Each view owns charts, drill tables and client
+  // filter state; decomposing them into generic blocks would reimplement the
+  // component rather than compose it — the `paper-view` precedent.
+  //
+  // The period control is ONE entry shared by six of the seven, because the
+  // native pages render the byte-identical `<ReportFilterBar controls={{
+  // period: true }} />`. A second entry would be a duplicate, not coverage.
+  'report-period-filter': () => <ReportFilterBar controls={{ period: true }} />,
+  'cashflow-horizon-control': (props) => <HorizonControl value={num(props, 'value') ?? 4} />,
+  'cashflow-view': (props) => (
+    <CashflowView data={props.data as ComponentProps<typeof CashflowView>['data']} />
+  ),
+  /** `defs` is RATIO_DEFS: a static table of ratio definitions, plain data,
+   *  not a component or a capability. */
+  'financial-health-view': (props) => (
+    <FinancialHealthView
+      data={props.data as ComponentProps<typeof FinancialHealthView>['data']}
+      defs={props.defs as ComponentProps<typeof FinancialHealthView>['defs']}
+      budgetsEnabled={props.budgetsEnabled === true}
+    />
+  ),
+  'utilization-view': (props) => (
+    <UtilizationView data={props.data as ComponentProps<typeof UtilizationView>['data']} />
+  ),
+  'spend-velocity-view': (props) => (
+    <SpendVelocityView data={props.data as ComponentProps<typeof SpendVelocityView>['data']} />
+  ),
+  'vendor-view': (props) => (
+    <VendorView data={props.data as ComponentProps<typeof VendorView>['data']} />
+  ),
+  'customer-view': (props) => (
+    <CustomerView
+      data={props.data as ComponentProps<typeof CustomerView>['data']}
+      profitability={props.profitability as ComponentProps<typeof CustomerView>['profitability']}
+      projectsEnabled={props.projectsEnabled === true}
+    />
+  ),
+  'sentinel-view': (props) => (
+    <SentinelView data={props.data as ComponentProps<typeof SentinelView>['data']} />
   ),
 
   /* --- app library ---------------------------------------------------------------- */
