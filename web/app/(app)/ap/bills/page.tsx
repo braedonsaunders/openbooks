@@ -25,6 +25,8 @@ import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadApBills, apBillsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +47,17 @@ export default async function ApBills({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadApBills(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={apBillsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('ap.read')
   const canCreate = can(authz, 'ap.create')
   const [inventoryEnabled, equipmentEnabled] = await Promise.all([

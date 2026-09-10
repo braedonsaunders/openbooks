@@ -32,6 +32,9 @@ import {
 } from '../../../../../lib/setup/registry'
 import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
 import { loadNumberSequenceKindOptions } from '../../../../../lib/setup/number-sequence-kinds'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { loadSetupEntity, setupEntitySpec } from './view'
+import { SetupDescription } from './sections'
 import { CompanyTab } from './CompanyTab'
 import { CloseSetupPage } from './CloseSetupPage'
 import { FxProviderPage } from './FxProviderPage'
@@ -198,6 +201,18 @@ export default async function SetupEntityPage({
   params: Promise<{ entity: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const { entity: entityKey } = await params
+    const data = await loadSetupEntity(entityKey, sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={setupEntitySpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const { entity: entityKey } = await params
   const authz = await requirePermission('admin.setup.manage')
   const { orgId } = authz.user
@@ -548,20 +563,11 @@ export default async function SetupEntityPage({
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {t(`entities.${entity.key}.title`)}
           </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {t(`entities.${entity.key}.description`)}
-            {entity.docSlug ? (
-              <>
-                {' '}
-                <Link
-                  href={`/docs/${entity.docSlug}`}
-                  className="font-medium text-teal-700 hover:underline dark:text-teal-300"
-                >
-                  {t('learnMore')}
-                </Link>
-              </>
-            ) : null}
-          </p>
+          <SetupDescription
+            description={t(`entities.${entity.key}.description`)}
+            docHref={entity.docSlug ? `/docs/${entity.docSlug}` : null}
+            learnMore={t('learnMore')}
+          />
         </div>
         <div className="flex items-center gap-2">
           {entity.key === 'tax-return-forms' ? (

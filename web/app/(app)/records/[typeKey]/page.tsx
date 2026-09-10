@@ -40,6 +40,8 @@ import {
 import { NewRecordButton } from './NewRecordButton'
 import { RecordDrawer } from './RecordDrawer'
 import { getMoneyFormatter } from '../../../../lib/money-server'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadRecordModule, recordModuleSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +63,18 @@ export default async function RecordModule({
   params: Promise<{ typeKey: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const { typeKey } = await params
+    const data = await loadRecordModule(sp, typeKey)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={recordModuleSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('records.read')
   const display = await getMoneyFormatter(authz.user.orgId)
   const t = await getTranslations('records')

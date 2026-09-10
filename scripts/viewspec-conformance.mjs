@@ -162,7 +162,9 @@ const PAGES = [
     // A concrete party from the sim tenant — the one with the most ledger
     // activity, so the statement has real lines rather than only balances.
     path: '/reports/statements/11948e5b-2ca5-4d41-8ae4-c682f6f4b14c',
-    variants: ['', '?side=ap'],
+    // The AP side of this party carries two open items, not three; the
+    // threshold asserts real rows, and two rows are real.
+    variants: ['', { query: '?side=ap', expect: 'table tbody tr', minMatches: 2 }],
     expect: 'table tbody tr',
     minMatches: 3,
   },
@@ -268,6 +270,123 @@ const PAGES = [
     variants: ['', '?state=attention'],
     expect: 'table tbody tr',
     minMatches: 4,
+  },
+  {
+    path: '/admin/setup/segment-definitions',
+    // The setup workspace: `layout: 'bare'` (its own shell already draws the
+    // header chrome), a composed heading, and the widest column-kind coverage
+    // the sim org offers. The no-match search asserts the in-table empty row.
+    variants: [
+      '',
+      '?showInactive=true',
+      { query: '?q=zzzznomatch', expect: 'table thead th', minMatches: 5 },
+      {
+        query: '?row=01a083e6-dc88-7bb5-9a76-1423b1105e4b',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/journal',
+    variants: [
+      '',
+      {
+        query: '?entry=01a083e7-3954-7d4a-b2cc-c6a29f094351',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/assets',
+    // No assets in the tenant, so the list renders its empty state; the tax
+    // tab is a wholly different body chosen by a presence flag.
+    variants: [
+      { query: '', expect: 'main h3', minMatches: 1 },
+      { query: '?tab=tax-depreciation', expect: 'main select, main input', minMatches: 1 },
+    ],
+    expect: 'main h3',
+    minMatches: 1,
+  },
+  {
+    path: '/crm/forecasts',
+    // Three `frame` sections, per-currency KPI groups through repeat, and two
+    // tables with presence-flag empty pairs.
+    variants: ['', '?owner=68998480-15db-4f5d-bf0b-9e1ef472b0d7'],
+    expect: 'section table tbody tr',
+    minMatches: 1,
+  },
+  {
+    path: '/ar/invoices',
+    // The universal RECORD list (the documents twin of the entity list) plus
+    // the document flyout, with per-row actions built from a widget ref.
+    variants: [
+      '',
+      // No credits in the tenant: this pins the EmptyState branch, not a table.
+      { query: '?kind=customer_credit', expect: 'main h3', minMatches: 1 },
+      {
+        query: '?doc=01a083e7-39a0-7f05-b0b9-db3149d75113',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 25,
+  },
+  {
+    path: '/records/site_visit',
+    // A tenant-defined record module: its columns come from the type's field
+    // definitions, so the table is data-driven on both sides.
+    variants: [
+      '',
+      { query: '?status=active', expect: 'table tbody tr', minMatches: 1 },
+      { query: '?q=zzzznomatch', expect: 'main h3', minMatches: 1 },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
+    // Bank account detail: two independent prefixed lists (stmt*, recon*)
+    // plus a statement-lines drawer.
+    path: '/banking/a1f8e08f-a6ae-42ac-b2fd-d8008a92b14e',
+    variants: [
+      { query: '', expect: 'table tbody tr', minMatches: 5 },
+      { query: '?stmtQ=ofx', expect: 'table tbody tr', minMatches: 4 },
+      { query: '?source=csv&stmtSort=imported&stmtDir=asc', expect: 'table tbody tr', minMatches: 4 },
+      { query: '?reconStatus=signed_off', expect: 'table tbody tr', minMatches: 4 },
+      { query: '?reconSort=balance&reconDir=desc', expect: 'table tbody tr', minMatches: 5 },
+      { query: '?stmtQ=zzzznomatch', expect: 'table thead th', minMatches: 7 },
+      {
+        query: '?statement=00000000-0000-7000-9000-000000000403',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/admin/customization',
+    // The unfiltered list hides every record type whose feature is off, so
+    // the counts here are what the sim tenant's four enabled features leave
+    // visible — 23 forms, 40 org-scope views — not what the tables hold.
+    variants: [
+      '',
+      '?tab=views',
+      { query: '?recordType=project', expect: 'table tbody tr', minMatches: 1 },
+      { query: '?recordType=project&tab=views', expect: 'table tbody tr', minMatches: 1 },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 20,
   },
   {
     path: '/projects',

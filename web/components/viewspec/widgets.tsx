@@ -53,13 +53,64 @@ import { AccountsHierarchyTable } from '../../app/(app)/accounts/AccountsHierarc
 import { AccountDrawer } from '../../app/(app)/accounts/AccountDrawer'
 import { NewAccountButton } from '../../app/(app)/accounts/NewAccountButton'
 import { EntityListSlot } from './entity-list-slot'
+import { RecordListSlot } from './record-list-slot'
+import { NewSetupButton } from '../../app/(app)/admin/setup/[entity]/SetupDrawer'
+import { TaxReturnLibrary } from '../../app/(app)/admin/setup/[entity]/TaxReturnLibrary'
+import {
+  SetupBadgeLinkCell,
+  SetupCloseSlot,
+  SetupCodeCell,
+  SetupCompanySlot,
+  SetupDescription,
+  SetupDrawerSlot,
+  SetupFxSlot,
+} from '../../app/(app)/admin/setup/[entity]/sections'
+import { JournalDraftsPanel } from '../../app/(app)/journal/sections'
+import { JournalDrawer } from '../../app/(app)/journal/JournalDrawer'
+import { NewJournalButton } from '../../app/(app)/journal/NewJournalButton'
+import { AssetsTabs, AssetsDocLink, AssetsEquipmentLink } from '../../app/(app)/assets/sections'
+import { NewAssetButton } from '../../app/(app)/assets/NewAssetButton'
+import { NewAssetRedirect } from '../../app/(app)/assets/NewAssetRedirect'
+import { RunDepreciationButton } from '../../app/(app)/assets/RunDepreciationButton'
+import { AssetDrawer } from '../../app/(app)/assets/AssetDrawer'
+import { TaxPoolsView } from '../../app/(app)/assets/tax-pools/TaxPoolsView'
+import { Gauge, History, Camera } from 'lucide-react'
+import { DateRangeFilter } from '../date-range-filter'
+import {
+  ForecastSectionHeading,
+  ForecastKpiGroup,
+  ForecastFilters,
+  ManageQuotasButton,
+  QuotaEmptyAction,
+  ForecastSnapshotAction,
+} from '../../app/(app)/crm/forecasts/sections'
+import { NewRecordButton } from '../../app/(app)/records/[typeKey]/NewRecordButton'
+import { RecordDrawer } from '../../app/(app)/records/[typeKey]/RecordDrawer'
+import {
+  AccountStats,
+  UnmatchedCountCell,
+  ReconActionCell,
+} from '../../app/(app)/banking/[accountId]/sections'
+import { ImportStatementButton } from '../../app/(app)/banking/[accountId]/ImportStatementButton'
+import { StartReconciliationButton } from '../../app/(app)/banking/[accountId]/StartReconciliationButton'
+import { StatementDrawer } from '../../app/(app)/banking/[accountId]/StatementDrawer'
+import { DocumentDrawer } from '../document-drawer'
+import { DocumentRowActions } from '../document-row-actions'
+import { NewDocumentButton } from '../new-document-button'
+import { ScanLine } from 'lucide-react'
+import { PaymentLinksPanel } from '../payment-links-panel'
+import { DOC_KINDS } from '../../lib/document-kinds'
 import { SearchSelectFilter } from '../filter-bar'
 import { FormDesigner, NewFormButton } from '../../app/(app)/admin/customization/FormDesigner'
 import {
   ListViewDesigner,
   NewViewButton as NewListViewButton,
 } from '../../app/(app)/admin/customization/ListViewDesigner'
-import { CustomizationTabs } from '../../app/(app)/admin/customization/sections'
+import {
+  CustomizationTabs,
+  FormDefaultCell,
+  ViewScopeCell,
+} from '../../app/(app)/admin/customization/sections'
 import { BookOpen } from 'lucide-react'
 import { NewProjectButton } from '../../app/(app)/projects/NewProjectButton'
 import { NewProjectRedirect } from '../../app/(app)/projects/NewProjectRedirect'
@@ -350,7 +401,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const renderer = action ? WIDGET_REGISTRY[action] : undefined
     // Icons are components, so the spec names one from a closed map rather
     // than carrying it — same rule as every other component reference.
-    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail />, activity: <Activity />, send: <Send />, 'check-circle': <CheckCircle2 /> }
+    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail />, activity: <Activity />, send: <Send />, 'check-circle': <CheckCircle2 />, gauge: <Gauge />, camera: <Camera /> }
     const iconKey = str(props, 'icon')
     return (
       <EmptyState
@@ -428,6 +479,22 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       options={(props.options as ComponentProps<typeof SearchSelectFilter>['options']) ?? []}
       allLabel={str(props, 'allLabel')}
       resetParamKeys={(props.resetParamKeys as string[]) ?? []}
+      className={str(props, 'className')}
+    />
+  ),
+  'form-default-cell': (props) => (
+    <FormDefaultCell
+      showDefault={props.showDefault === true}
+      defaultLabel={str(props, 'defaultLabel') ?? ''}
+      rolesLabel={str(props, 'rolesLabel') ?? ''}
+    />
+  ),
+  'view-scope-cell': (props) => (
+    <ViewScopeCell
+      scopeLabel={str(props, 'scopeLabel') ?? ''}
+      scopeVariant={str(props, 'scopeVariant') === 'default' ? 'default' : 'secondary'}
+      showDefault={props.showDefault === true}
+      defaultLabel={str(props, 'defaultLabel') ?? ''}
     />
   ),
   'new-form': (props) => <NewFormButton recordType={str(props, 'recordType') ?? ''} />,
@@ -466,6 +533,336 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       filterOptions={(props.filterOptions as ComponentProps<typeof ListViewDesigner>['filterOptions']) ?? {}}
       inventoryEnabled={props.inventoryEnabled === true}
       crmEnabled={props.crmEnabled === true}
+    />
+  ),
+
+  /** The AP capture shortcut: outline button with a scan icon. */
+  'ap-capture-link': (props) => (
+    <Button asChild variant="outline">
+      <Link href={(str(props, 'href') ?? '/ap/capture') as never}>
+        <ScanLine size={14} aria-hidden />
+        {str(props, 'label') ?? ''}
+      </Link>
+    </Button>
+  ),
+
+  /* --- setup workspace ------------------------------------------------------ */
+  /** The inline "Learn more" link (with its significant leading space) appears
+   *  only when the entity declares a doc slug — a conditional pair inside one
+   *  paragraph, so a component. */
+  'setup-description': (props) => (
+    <SetupDescription
+      description={str(props, 'description') ?? ''}
+      docHref={(props.docHref as string | null) ?? null}
+      learnMore={str(props, 'learnMore') ?? ''}
+    />
+  ),
+  /** A client component that pushes `?row=new` — not a link, so `link-button`
+   *  cannot stand in for it. */
+  'new-setup-button': (props) => (
+    <NewSetupButton entityKey={str(props, 'entityKey') ?? ''} label={str(props, 'label') ?? ''} />
+  ),
+  'tax-return-library': (props) => (
+    <TaxReturnLibrary
+      packs={(props.packs as ComponentProps<typeof TaxReturnLibrary>['packs']) ?? []}
+      installedCodes={(props.installedCodes as string[]) ?? []}
+      open={props.open === true}
+      openHref={str(props, 'openHref') ?? ''}
+      closeHref={str(props, 'closeHref') ?? ''}
+    />
+  ),
+  'setup-code-cell': (props) => (
+    <SetupCodeCell
+      text={str(props, 'text') ?? ''}
+      shown={props.shown === true}
+      href={str(props, 'href')}
+    />
+  ),
+  'setup-badge-link-cell': (props) => (
+    <SetupBadgeLinkCell
+      label={str(props, 'label') ?? ''}
+      variant={(str(props, 'variant') ?? 'default') as ComponentProps<typeof SetupBadgeLinkCell>['variant']}
+      href={str(props, 'href') ?? ''}
+    />
+  ),
+  /** The drawer, its nested sub-tabs and its stacked child drawers arrive
+   *  through a slot that re-derives Authz; the spec carries only the entity
+   *  key and the current URL. */
+  'setup-drawer': (props) => (
+    <SetupDrawerSlot
+      entityKey={str(props, 'entityKey') ?? ''}
+      sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
+    />
+  ),
+  'setup-company': () => <SetupCompanySlot />,
+  'setup-close': (props) => (
+    <SetupCloseSlot
+      sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
+      canReopen={props.canReopen === true}
+    />
+  ),
+  'setup-fx': () => <SetupFxSlot />,
+
+  /* --- journal ------------------------------------------------------------- */
+  'journal-drafts': (props) => (
+    <JournalDraftsPanel
+      heading={str(props, 'heading') ?? ''}
+      drafts={(props.drafts as ComponentProps<typeof JournalDraftsPanel>['drafts']) ?? []}
+    />
+  ),
+  /** No remount key: the native page renders this drawer keyless and resets
+   *  its state from an effect on the document id. */
+  'journal-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof JournalDrawer> | null
+    if (!drawer) return null
+    return <JournalDrawer {...drawer} />
+  },
+  'new-journal': () => <NewJournalButton />,
+
+  /* --- fixed assets --------------------------------------------------------- */
+  'assets-tabs': (props) => (
+    <AssetsTabs tabs={(props.tabs as ComponentProps<typeof AssetsTabs>['tabs']) ?? []} />
+  ),
+  'assets-doc-link': (props) => <AssetsDocLink label={str(props, 'label') ?? ''} />,
+  'assets-equipment-link': (props) => <AssetsEquipmentLink label={str(props, 'label') ?? ''} />,
+  'new-asset': () => <NewAssetButton />,
+  'new-asset-redirect': () => <NewAssetRedirect />,
+  'run-depreciation': (props) => (
+    <RunDepreciationButton
+      books={(props.books as ComponentProps<typeof RunDepreciationButton>['books']) ?? []}
+    />
+  ),
+  'asset-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof AssetDrawer> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <AssetDrawer key={remountKey} {...rest} />
+  },
+  'tax-pools': (props) => (
+    <TaxPoolsView
+      canRun={props.canRun === true}
+      canConfigure={props.canConfigure === true}
+      regimes={(props.regimes as ComponentProps<typeof TaxPoolsView>['regimes']) ?? []}
+      defaultTaxYear={typeof props.defaultTaxYear === 'number' ? props.defaultTaxYear : 0}
+    />
+  ),
+
+  /* --- sales forecasts ------------------------------------------------------ */
+  'forecast-snapshot-button': (props) => (
+    <ForecastSnapshotAction
+      periodStart={str(props, 'periodStart') ?? ''}
+      periodEnd={str(props, 'periodEnd') ?? ''}
+      ownerUserId={(props.ownerUserId as string | null) ?? null}
+      salesTeamId={(props.salesTeamId as string | null) ?? null}
+    />
+  ),
+  'manage-quotas-button': (props) => {
+    const href = str(props, 'href')
+    if (!href) return null
+    return (
+      <ManageQuotasButton
+        href={href}
+        label={str(props, 'label') ?? ''}
+        ariaLabel={str(props, 'ariaLabel') ?? ''}
+      />
+    )
+  },
+  /** The empty-quota CTA is the SOLID SMALL button; `link-button` is the
+   *  default size, so reusing it would be a visible difference. */
+  'quota-empty-action': (props) => (
+    <QuotaEmptyAction
+      href={str(props, 'href') ?? ''}
+      label={str(props, 'label') ?? ''}
+      size={str(props, 'size') ?? 'sm'}
+    />
+  ),
+  'date-range-filter': (props) => (
+    <DateRangeFilter
+      fromKey={str(props, 'fromKey') ?? 'from'}
+      toKey={str(props, 'toKey') ?? 'to'}
+      fromLabel={str(props, 'fromLabel') ?? ''}
+      toLabel={str(props, 'toLabel') ?? ''}
+      defaultFrom={str(props, 'defaultFrom')}
+      defaultTo={str(props, 'defaultTo')}
+      clearable={props.clearable !== false}
+    />
+  ),
+  'forecast-filters': (props) => (
+    <ForecastFilters
+      fromKey={str(props, 'fromKey') ?? 'from'}
+      toKey={str(props, 'toKey') ?? 'to'}
+      fromLabel={str(props, 'fromLabel') ?? ''}
+      toLabel={str(props, 'toLabel') ?? ''}
+      defaultFrom={str(props, 'defaultFrom') ?? ''}
+      defaultTo={str(props, 'defaultTo') ?? ''}
+      ownerLabel={str(props, 'ownerLabel') ?? ''}
+      ownerOptions={(props.ownerOptions as ComponentProps<typeof ForecastFilters>['ownerOptions']) ?? []}
+      teamLabel={str(props, 'teamLabel') ?? ''}
+      teamOptions={(props.teamOptions as ComponentProps<typeof ForecastFilters>['teamOptions']) ?? []}
+    />
+  ),
+  'forecast-kpi-group': (props) => (
+    <ForecastKpiGroup
+      currency={str(props, 'currency') ?? ''}
+      items={(props.items as ComponentProps<typeof ForecastKpiGroup>['items']) ?? []}
+    />
+  ),
+  'section-heading': (props) => {
+    const icons: Record<string, ReactNode> = {
+      gauge: <Gauge size={17} />,
+      history: <History size={17} />,
+    }
+    const iconKey = str(props, 'iconKey')
+    return (
+      <ForecastSectionHeading
+        id={str(props, 'id') ?? ''}
+        icon={iconKey ? icons[iconKey] : undefined}
+        title={str(props, 'title') ?? ''}
+        description={str(props, 'description')}
+      />
+    )
+  },
+
+  /* --- custom record modules ----------------------------------------------- */
+  'new-record': (props) => (
+    <NewRecordButton typeKey={str(props, 'typeKey') ?? ''} typeName={str(props, 'typeName') ?? ''} />
+  ),
+  'record-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof RecordDrawer> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <RecordDrawer key={remountKey} {...rest} />
+  },
+
+  /* --- bank account workspace ---------------------------------------------- */
+  /** One widget, not four stat tiles: the native tiles are plain bordered divs
+   *  with conditional content, while `stat-tile` renders the cockpit tile. */
+  'account-stats': (props) => (
+    <AccountStats
+      glBalanceLabel={str(props, 'glBalanceLabel') ?? ''}
+      glBalanceValue={str(props, 'glBalanceValue') ?? ''}
+      reconciledThroughLabel={str(props, 'reconciledThroughLabel') ?? ''}
+      reconciledThrough={(props.reconciledThrough as string | null) ?? null}
+      neverLabel={str(props, 'neverLabel') ?? ''}
+      unmatchedLinesLabel={str(props, 'unmatchedLinesLabel') ?? ''}
+      unmatchedLinesValue={str(props, 'unmatchedLinesValue') ?? ''}
+      reconciliationLabel={str(props, 'reconciliationLabel') ?? ''}
+      reconBadgeLabel={str(props, 'reconBadgeLabel') ?? ''}
+      reconBadgeVariant={(props.reconBadgeVariant as 'warning' | 'secondary') ?? 'secondary'}
+    />
+  ),
+  'unmatched-count-cell': (props) => (
+    <UnmatchedCountCell display={str(props, 'display') ?? ''} isZero={props.isZero === true} />
+  ),
+  'recon-action-cell': (props) => (
+    <ReconActionCell href={str(props, 'href') ?? ''} label={str(props, 'label') ?? ''} />
+  ),
+  'import-statement': (props) => <ImportStatementButton accountId={str(props, 'accountId') ?? ''} />,
+  'start-reconciliation': (props) => (
+    <StartReconciliationButton
+      accountId={str(props, 'accountId') ?? ''}
+      openReconciliationId={(props.openReconciliationId as string | null) ?? null}
+      glBalance={str(props, 'glBalance') ?? ''}
+    />
+  ),
+  /** The statement drawer owns its own sl* search/sort/pagination internally,
+   *  so the whole payload passes through — the api-key-drawer precedent. */
+  'statement-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof StatementDrawer> | null
+    if (!drawer) return null
+    return <StatementDrawer {...drawer} />
+  },
+
+  /* --- documents lists ----------------------------------------------------- */
+  'new-document': (props) => (
+    <NewDocumentButton
+      items={(props.items as ComponentProps<typeof NewDocumentButton>['items']) ?? []}
+      basePath={str(props, 'basePath') ?? ''}
+      triggerLabel={str(props, 'triggerLabel') ?? ''}
+      creatingLabel={str(props, 'creatingLabel') ?? ''}
+      failedLabel={str(props, 'failedLabel') ?? ''}
+    />
+  ),
+  /**
+   * The universal record list. `drawer` and `emptyAction` name widgets, one or
+   * several, exactly as `entity-list-view` does. `rowActions` names ONE widget
+   * rendered per row: `renderRowActions` is a function, and a spec can never
+   * carry a function, so the registry builds it from the ref here.
+   */
+  'record-list-view': (props) => {
+    const one = (value: unknown, key: number) => {
+      if (!value || typeof value !== 'object') return null
+      const ref = value as { widget?: string; props?: Record<string, unknown> }
+      const renderer = ref.widget ? WIDGET_REGISTRY[ref.widget] : undefined
+      if (ref.widget && !renderer) throw new UnknownWidgetError(ref.widget)
+      return renderer ? <Fragment key={key}>{renderer(ref.props ?? {})}</Fragment> : null
+    }
+    const slot = (value: unknown) => {
+      if (Array.isArray(value)) {
+        const rendered = value.map(one).filter(Boolean)
+        return rendered.length > 0 ? <>{rendered}</> : undefined
+      }
+      return one(value, 0) ?? undefined
+    }
+    const rowActionsRef =
+      props.rowActions && typeof props.rowActions === 'object'
+        ? (props.rowActions as { widget?: string; props?: Record<string, unknown> })
+        : undefined
+    const rowActionsRenderer = rowActionsRef?.widget ? WIDGET_REGISTRY[rowActionsRef.widget] : undefined
+    if (rowActionsRef?.widget && !rowActionsRenderer) throw new UnknownWidgetError(rowActionsRef.widget)
+    return (
+      <RecordListSlot
+        recordType={str(props, 'recordType') ?? ''}
+        basePath={str(props, 'basePath') ?? ''}
+        sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
+        drawer={slot(props.drawer)}
+        emptyAction={slot(props.emptyAction)}
+        renderRowActions={
+          rowActionsRenderer
+            ? (row) =>
+                rowActionsRenderer({
+                  ...(rowActionsRef?.props ?? {}),
+                  id: row.id,
+                  status: row.status,
+                  kind: row.kind,
+                })
+            : undefined
+        }
+      />
+    )
+  },
+  /** The remount key rides along as a prop: switching documents must reset the
+   *  drawer's client state, and a widget at a fixed position would otherwise
+   *  be reused (same as `account-drawer` / `party-drawer`). */
+  'document-drawer': (props) => {
+    const drawer = props.drawer as
+      | (ComponentProps<typeof DocumentDrawer> & {
+          remountKey: string
+          paymentLinks?: { documentId: string; canManage: boolean } | null
+        })
+      | null
+    if (!drawer) return null
+    const { remountKey, paymentLinks, ...rest } = drawer
+    return (
+      <DocumentDrawer
+        key={remountKey}
+        {...rest}
+        afterContent={
+          paymentLinks ? (
+            <PaymentLinksPanel documentId={paymentLinks.documentId} canManage={paymentLinks.canManage} />
+          ) : null
+        }
+      />
+    )
+  },
+  /** `config` is re-derived from the row's kind via the static DOC_KINDS map;
+   *  the loader never ships a registry entry as data. */
+  'document-row-actions': (props) => (
+    <DocumentRowActions
+      id={String(props.id ?? '')}
+      status={String(props.status ?? '')}
+      config={DOC_KINDS[String(props.kind ?? '')]!}
+      openHref={`${str(props, 'basePath') ?? ''}?doc=${String(props.id ?? '')}`}
     />
   ),
 

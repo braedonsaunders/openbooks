@@ -1,5 +1,4 @@
 import { getMoneyFormatter } from '@/lib/money-server'
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -7,6 +6,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { EntityListView } from '../../../components/entity-list-view'
+import { ModuleView } from '../../../components/viewspec/module-view'
 import { buildListDrawerHref, pickString } from '../../../lib/list-params'
 import { can, requirePermission } from '../../../lib/authz'
 import { loadFieldDefs } from '../../../lib/custom-fields'
@@ -16,6 +16,8 @@ import { JournalDrawer } from './JournalDrawer'
 import { NewJournalButton } from './NewJournalButton'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
+import { JournalDraftsPanel } from './sections'
+import { loadJournal, journalSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +39,17 @@ export default async function Journal({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadJournal(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={journalSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('journal')
   const authz = await requirePermission('gl.read')
@@ -132,27 +145,17 @@ export default async function Journal({
       header={<PageHeader title={t('list.title')} description={t('list.description', { count: total })} actions={<NewJournalButton />} />}
     >
       {draftDocs.rows.length > 0 ? (
-        <div className="mb-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-900/40">
-          <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-            {t('list.draftsHeading')}
-          </p>
-          <div className="flex flex-col gap-0.5">
-            {(draftDocs.rows as unknown as DraftJournalRow[]).map((d) => (
-              <Link
-                key={d.id}
-                href={(buildListDrawerHref('/journal', sp, 'entry', String(d.id)))}
-                className="flex items-center gap-3 rounded px-1.5 py-1 text-sm hover:bg-white dark:hover:bg-slate-800/60"
-              >
-                <span className="font-mono text-[13px] font-semibold text-teal-700 dark:text-teal-300">
-                  {d.document_number}
-                </span>
-                <span className="whitespace-nowrap text-slate-500 dark:text-slate-400">{d.document_date}</span>
-                <span className="min-w-0 flex-1 truncate text-slate-500 dark:text-slate-400">{d.memo}</span>
-                <span className="tabular-nums">{money(d.total)}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
+        <JournalDraftsPanel
+          heading={t('list.draftsHeading')}
+          drafts={(draftDocs.rows as unknown as DraftJournalRow[]).map((d) => ({
+            id: String(d.id),
+            href: buildListDrawerHref('/journal', sp, 'entry', String(d.id)),
+            documentNumber: d.document_number,
+            documentDate: d.document_date,
+            memo: d.memo,
+            total: money(d.total),
+          }))}
+        />
       ) : null}
       <EntityListView
         recordType="journal"

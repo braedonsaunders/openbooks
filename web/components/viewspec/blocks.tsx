@@ -25,6 +25,7 @@ import {
 } from '@openbooks/ui'
 import { ReportPaper } from '../../app/(app)/reports/ReportPaper'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
+import { ForecastSection } from '../../app/(app)/crm/forecasts/sections'
 import { CellView } from './cells'
 import { WidgetSlot, WidgetBlockView, resolveWidgetProps } from './widgets'
 import { toneClass } from './tone'
@@ -60,6 +61,9 @@ type FrameComponent = (props: Record<string, unknown> & { children: ReactNode })
 
 const FRAME_REGISTRY: Record<string, FrameComponent> = {
   'tab-content': TabContent as unknown as FrameComponent,
+  'forecast-section': ((props: Record<string, unknown> & { children: ReactNode }) => (
+    <ForecastSection labelledBy={String(props.labelledBy ?? '')}>{props.children}</ForecastSection>
+  )) as FrameComponent,
 }
 
 export class UnknownFrameError extends Error {
