@@ -55,6 +55,12 @@ import { NewAccountButton } from '../../app/(app)/accounts/NewAccountButton'
 import { EntityListSlot } from './entity-list-slot'
 import { RecordListSlot } from './record-list-slot'
 import { SetupSectionSlot } from './setup-section-slot'
+import { NewBudgetButton } from '../../app/(app)/budgets/NewBudgetButton'
+import { BudgetDrawer } from '../../app/(app)/budgets/BudgetDrawer'
+import { NewRunButton } from '../../app/(app)/payroll/_ui/NewRunButton'
+import { FieldTicketDrawer } from '../../app/(app)/field-tickets/FieldTicketDrawer'
+import { NewRuleButton, RunRulesButton, RuleDrawer } from '../../app/(app)/banking/rules/RuleDrawer'
+import { ArrowUpRight } from 'lucide-react'
 import { WeeklyGrid } from '../../app/(app)/timesheets/WeeklyGrid'
 import { ItemDrawer } from '../../app/(app)/items/ItemDrawer'
 import { NewItemButton } from '../../app/(app)/items/NewItemButton'
@@ -567,6 +573,80 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
         {str(props, 'label') ?? ''}
       </Link>
     </Button>
+  ),
+
+  /* --- budgets -------------------------------------------------------------- */
+  'new-budget': (props) => (
+    <NewBudgetButton
+      currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
+    />
+  ),
+  'budget-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof BudgetDrawer> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <BudgetDrawer key={remountKey} {...rest} />
+  },
+
+  /* --- pay runs ------------------------------------------------------------- */
+  'new-pay-run': (props) => (
+    <NewRunButton
+      schedules={(props.schedules as ComponentProps<typeof NewRunButton>['schedules']) ?? []}
+      finalPayCandidates={
+        (props.finalPayCandidates as ComponentProps<typeof NewRunButton>['finalPayCandidates']) ?? []
+      }
+      today={str(props, 'today') ?? ''}
+    />
+  ),
+  /** A pay run opens a full wizard page, not a drawer, so its row action is a
+   *  plain link built from the row id. */
+  'pay-run-row-actions': (props) => (
+    <Link
+      href={`/payroll/runs/${String(props.id ?? '')}` as never}
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
+      aria-label={str(props, 'label') ?? ''}
+      title={str(props, 'label') ?? ''}
+    >
+      <ArrowUpRight size={15} />
+    </Link>
+  ),
+
+  /* --- field tickets -------------------------------------------------------- */
+  /** Keyless, like `journal-drawer`: the native page renders no key and the
+   *  drawer resets from effects on the ticket id. */
+  'field-ticket-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof FieldTicketDrawer> | null
+    if (!drawer) return null
+    return <FieldTicketDrawer {...drawer} />
+  },
+
+  /* --- bank rules ----------------------------------------------------------- */
+  'new-bank-rule': () => <NewRuleButton />,
+  'run-bank-rules': (props) => (
+    <RunRulesButton
+      accounts={(props.accounts as ComponentProps<typeof RunRulesButton>['accounts']) ?? []}
+    />
+  ),
+  'bank-rule-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof RuleDrawer> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <RuleDrawer key={remountKey} {...rest} />
+  },
+
+  /* --- entity role lists ---------------------------------------------------- */
+  'new-role-party': (props) => (
+    <NewPartyButton
+      basePath={str(props, 'basePath') ?? '/parties'}
+      role={(str(props, 'role') ?? 'customer') as 'customer' | 'vendor' | 'employee'}
+      label={str(props, 'label') ?? ''}
+    />
+  ),
+  'new-role-party-redirect': (props) => (
+    <NewPartyRedirect
+      basePath={str(props, 'basePath') ?? '/parties'}
+      role={(str(props, 'role') ?? 'customer') as 'customer' | 'vendor' | 'employee'}
+    />
   ),
 
   /* --- timesheets ----------------------------------------------------------- */

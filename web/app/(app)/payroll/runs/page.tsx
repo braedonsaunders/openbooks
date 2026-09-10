@@ -15,6 +15,8 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { requirePermission, can } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { NewRunButton } from '../_ui/NewRunButton'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadPayRuns, payRunsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +36,17 @@ export default async function PayRunsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadPayRuns(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={payRunsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('payroll.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')

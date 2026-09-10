@@ -291,6 +291,69 @@ const PAGES = [
     minMatches: 5,
   },
   {
+    path: '/payroll/runs',
+    // The universal record list over pay_run documents, with a per-row link
+    // into the run wizard (a full page, not a drawer).
+    variants: ['', { query: '?stage=calculated', expect: 'table tbody tr', minMatches: 1 }],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
+    path: '/field-tickets',
+    // The sim tenant has 500 field-ticket DOCUMENTS and no extension rows, so
+    // the list's inner join yielded nothing at all until the fixture landed.
+    variants: [
+      '',
+      {
+        query: '?ticket=00000000-0000-7000-9000-000000002801',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
+    path: '/banking/rules',
+    // Both outcome branches (categorize against a live account, exclude) and
+    // both sides of the active filter. The when/outcome columns are prose
+    // summaries the slot formats, not registry-typed cells.
+    variants: [
+      '',
+      { query: '?active=false', expect: 'table tbody tr', minMatches: 1 },
+      { query: '?q=zzzznomatch', expect: 'main h3', minMatches: 1 },
+      {
+        query: '?rule=00000000-0000-7000-9000-000000003801',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/entities/customers',
+    variants: [
+      '',
+      {
+        query: '?party=1186e699-5da5-466e-8adb-a85ed07a9ee6',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/entities/vendors',
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
     path: '/timesheets',
     // Entity list over the timesheet_week aggregate plus the WeeklyGrid
     // editor in the drawer slot.
@@ -499,7 +562,9 @@ const PAGES = [
     variants: [
       '',
       { query: '?status=active', expect: 'table tbody tr', minMatches: 1 },
-      { query: '?q=zzzznomatch', expect: 'main h3', minMatches: 1 },
+      // A search that matches nothing leaves the table standing with zero
+      // rows; the empty STATE belongs to a module with no records at all.
+      { query: '?q=zzzznomatch', expect: 'table thead th', minMatches: 3 },
     ],
     expect: 'table tbody tr',
     minMatches: 1,

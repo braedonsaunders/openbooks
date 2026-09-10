@@ -10,10 +10,23 @@ import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../..
 import { loadBudgetBooksAndYears, loadBudgetWorkspace, type BudgetDimensions } from '../../../lib/budgets'
 import { NewBudgetButton } from './NewBudgetButton'
 import { BudgetDrawer } from './BudgetDrawer'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadBudgets, budgetsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
 export default async function BudgetsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadBudgets(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={budgetsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const t = await getTranslations('budgets')
   const authz = await requirePermission('budgets.read')
   await requireFeatureEnabled(authz.user.orgId, 'budgets')
