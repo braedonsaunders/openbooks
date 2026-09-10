@@ -112,6 +112,8 @@ import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
 import { InvoicingSettingsWorkspace } from '../../app/(app)/admin/setup/invoicing/InvoicingSettingsWorkspace'
 import { TemplatesList } from '../../app/(app)/admin/pdf-templates/TemplatesList'
 import { WipBillingWorkspace } from '../../app/(app)/projects/wip-billing/WipBillingWorkspace'
+import { SeparationsView } from '../../app/(app)/payroll/separations/SeparationsView'
+import { SandboxManager } from '../../app/(app)/admin/sandboxes/SandboxManager'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
 import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
@@ -1264,6 +1266,28 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       templates={(props.templates as ComponentProps<typeof TemplatesList>['templates']) ?? []}
       starters={(props.starters as ComponentProps<typeof TemplatesList>['starters']) ?? []}
       recordTypes={(props.recordTypes as ComponentProps<typeof TemplatesList>['recordTypes']) ?? []}
+    />
+  ),
+
+  /* --- payroll separations ---------------------------------------------------------- */
+  /** Money stays canonical: the view formats client-side. */
+  'separations-workspace': (props) => (
+    <SeparationsView
+      year={num(props, 'year') ?? 0}
+      currentYear={num(props, 'currentYear') ?? 0}
+      sections={(props.sections as ComponentProps<typeof SeparationsView>['sections']) ?? []}
+    />
+  ),
+
+  /* --- sandboxes -------------------------------------------------------------------- */
+  /** Whole, and the per-row mutations are the reason: create / refresh /
+   *  reset / delete / setSchedule / promote are BOUND SERVER ACTIONS. A spec
+   *  may not carry one, so they stay inside the component on both paths
+   *  rather than being lifted into props. */
+  'sandbox-manager': (props) => (
+    <SandboxManager
+      sandboxes={props.sandboxes as ComponentProps<typeof SandboxManager>['sandboxes']}
+      periods={props.periods as ComponentProps<typeof SandboxManager>['periods']}
     />
   ),
 

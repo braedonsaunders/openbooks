@@ -1085,6 +1085,24 @@ const PAGES = [
     expect: 'table tbody tr',
     minMatches: 2,
   },
+  {
+    path: '/payroll/separations',
+    // Fixture …1860-1861 terminates one CA employee and puts a committed
+    // stub on run …1813, which is what makes the ROE population non-empty.
+    // `?year=2025` pins the filing's own empty state.
+    variants: ['', { query: '?year=2025', expect: 'main h3', minMatches: 1 }],
+    expect: 'main table tbody tr',
+    minMatches: 1,
+  },
+  {
+    path: '/admin/sandboxes',
+    // Fixture …1501-1512: one ready/masked sandbox with no error and one
+    // failed with a lastError and a schedule, so the badge, storage/error
+    // line and schedule-select branches each have a row.
+    variants: [''],
+    expect: 'main div.space-y-3 div.p-4',
+    minMatches: 2,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole
