@@ -89,6 +89,15 @@ const FRAME_REGISTRY: Record<string, FrameComponent> = {
       {props.children}
     </AnalyticsHeader>
   )) as FrameComponent,
+  /** A bare padded box. Some routes wrap their island in nothing more than
+   *  `<div className="p-4">`, and reproducing that exactly is the whole job —
+   *  `page-container` would add a max-width and a mount animation the page
+   *  never had. */
+  padded: ((props: Record<string, unknown> & { children: ReactNode }) => (
+    <div className={typeof props.className === 'string' ? props.className : 'p-4'}>
+      {props.children}
+    </div>
+  )) as FrameComponent,
   'forecast-section': ((props: Record<string, unknown> & { children: ReactNode }) => (
     <ForecastSection labelledBy={String(props.labelledBy ?? '')}>{props.children}</ForecastSection>
   )) as FrameComponent,

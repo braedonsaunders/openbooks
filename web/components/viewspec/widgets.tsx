@@ -113,6 +113,8 @@ import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm
 import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
 import { InvoicingSettingsWorkspace } from '../../app/(app)/admin/setup/invoicing/InvoicingSettingsWorkspace'
 import { TemplatesList } from '../../app/(app)/admin/pdf-templates/TemplatesList'
+import PdfTemplateEditor from '../../app/(app)/admin/pdf-templates/[id]/PdfTemplateEditor'
+import { ReportBuilder } from '../../app/(app)/reports/custom/builder/[id]/ReportBuilder'
 import { WipBillingWorkspace } from '../../app/(app)/projects/wip-billing/WipBillingWorkspace'
 import { SeparationsView } from '../../app/(app)/payroll/separations/SeparationsView'
 import { SandboxManager } from '../../app/(app)/admin/sandboxes/SandboxManager'
@@ -1477,6 +1479,27 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     <SandboxManager
       sandboxes={props.sandboxes as ComponentProps<typeof SandboxManager>['sandboxes']}
       periods={props.periods as ComponentProps<typeof SandboxManager>['periods']}
+    />
+  ),
+
+  /** `hiddenEntityKeys` is a per-caller PERMISSION result — the entities this
+   *  reader may not query — resolved in the loader and travelling as a plain
+   *  string array. The `Authz` it came from does not. */
+  'report-builder': (props) => (
+    <ReportBuilder
+      hiddenEntityKeys={props.hiddenEntityKeys as ComponentProps<typeof ReportBuilder>['hiddenEntityKeys']}
+      inventoryEnabled={props.inventoryEnabled === true}
+      company={str(props, 'company') ?? ''}
+      definition={props.definition as ComponentProps<typeof ReportBuilder>['definition']}
+    />
+  ),
+  /** The GrapesJS canvas: its own document model, drag-and-drop, the
+   *  merge-field palette and every save/preview mutation. */
+  'pdf-template-editor': (props) => (
+    <PdfTemplateEditor
+      template={props.template as ComponentProps<typeof PdfTemplateEditor>['template']}
+      mergeFields={props.mergeFields as ComponentProps<typeof PdfTemplateEditor>['mergeFields']}
+      collections={props.collections as ComponentProps<typeof PdfTemplateEditor>['collections']}
     />
   ),
 

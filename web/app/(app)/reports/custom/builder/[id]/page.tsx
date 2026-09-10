@@ -7,16 +7,33 @@ import { orgBranding } from '../../../../../../lib/report-pdf'
 import { statementPageHref } from '../../../../../../lib/report-run'
 import { hiddenReportEntityKeys } from '../../../../../../lib/report-authz'
 import { ReportBuilder } from './ReportBuilder'
+import { ModuleView } from '../../../../../../components/viewspec/module-view'
+import { loadReportBuilder, reportBuilderSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ReportBuilderPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  // Optional: this route natively takes only `params`.
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const authz = await requirePermission('reports.create')
   const { id } = await params
+  const sp = (await searchParams) ?? {}
+  if (sp.__viewspec === '1') {
+    const data = await loadReportBuilder(id)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={reportBuilderSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
+
+  const authz = await requirePermission('reports.create')
   if (!isUuid(id)) notFound()
   const [definition, branding, inventoryEnabled] = await Promise.all([
     loadReportDefinition(authz.user.orgId, id),
