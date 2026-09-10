@@ -99,6 +99,8 @@ import { ContractDrawer } from '../../app/(app)/revenue/ContractDrawer'
 import { RunRecognitionButton } from '../../app/(app)/revenue/RunRecognitionButton'
 import { AssistantApp } from '../assistant/assistant-app'
 import { AccountDrawer as CrmAccountDrawer } from '../../app/(app)/crm/AccountDrawer'
+import { DashboardHeader } from '../../app/(app)/dashboard/_dashboard-header'
+import { DashboardGridSlot } from './dashboard-grid-slot'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
 import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
@@ -1157,6 +1159,16 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   },
   /** Presence is the spec's `when` on `canRun`, not a check in here. */
   'run-recognition': () => <RunRecognitionButton />,
+
+  /* --- home dashboard --------------------------------------------------------------- */
+  /** The greeting row. The loader resolves the greeting string (locale +
+   *  first name); the Customize link lives inside the component. */
+  'dashboard-header': (props) => <DashboardHeader greeting={str(props, 'greeting') ?? ''} />,
+  /** A SLOT, not a props widget. `DashboardGrid` needs rendered tile nodes
+   *  and a bound `saveQuickActions` server action — component references and
+   *  a capability, neither of which a spec may carry. The slot re-derives
+   *  both from the session; the spec names the block and nothing else. */
+  'dashboard-grid': () => <DashboardGridSlot />,
 
   /* --- CRM accounts ----------------------------------------------------------------- */
   /** The account flyout shared by /crm/leads and /crm/prospects. Named

@@ -1,12 +1,15 @@
 import { getTranslations } from 'next-intl/server'
 import { PageContainer } from '@/components/page-layout'
 import { getAuthz } from '@/lib/authz'
+import { ModuleView } from '@/components/viewspec/module-view'
 import { loadDashboardLayout } from './_load-layout'
 import { DashboardGrid } from './_dashboard-grid'
 import { canSeeWidget } from './_widget-access'
 import { DashboardHeader } from './_dashboard-header'
 import { saveQuickActions } from './actions'
 import { loadDashboardView } from './_edit-canvas'
+import { buildGreeting } from './_greeting'
+import { loadDashboard, dashboardSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +18,23 @@ export async function generateMetadata() {
   return { title: t('title') }
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadDashboard(sp)
+    if (!data) return null
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={dashboardSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const t = await getTranslations('dashboard')
   const authz = await getAuthz()
   if (!authz) return null
@@ -58,13 +77,3 @@ export default async function DashboardPage() {
   )
 }
 
-function buildGreeting(
-  now: Date,
-  name: string | null,
-  copy: { morning: string; afternoon: string; evening: string },
-): string {
-  const hour = now.getHours()
-  const stem = hour < 12 ? copy.morning : hour < 17 ? copy.afternoon : copy.evening
-  const firstName = name?.trim().split(/\s+/)[0] ?? null
-  return firstName ? `${stem}, ${firstName}` : stem
-}
