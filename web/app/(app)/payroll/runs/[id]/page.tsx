@@ -23,6 +23,8 @@ import {
 } from '@openbooks/engine/src/payroll-payment-method.ts'
 import { orgYearEndFilings, type YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
 import { RunWizard, type RemittanceRow, type RosterRow, type RunHeader, type StubRow, type WizardStep } from './RunWizard'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { loadPayRunWizard, payRunWizardSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +47,17 @@ export default async function PayRunPage({
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')
   const { id } = await params
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadPayRunWizard(id, sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={payRunWizardSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   if (!isUuid(id)) notFound()
   const sp = await searchParams
   const t = await getTranslations('payroll')

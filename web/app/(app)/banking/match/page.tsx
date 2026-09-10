@@ -7,6 +7,8 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
 import { parsePrefixedListParams, pickString, isUuid } from '../../../../lib/list-params'
 import { MatchWorkspace, type GlRow, type ReviewRow, type StatementRow } from './MatchWorkspace'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadMatch, matchSpec } from './view'
 
 interface AccountRow extends Record<string, unknown> {
   id: string
@@ -36,6 +38,17 @@ export default async function MatchBankData({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const sp0 = await searchParams
+  if (sp0.__viewspec === '1') {
+    const data = await loadMatch(sp0)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={matchSpec(data)} data={data} searchParams={sp0} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('banking.reconcile')
   const t = await getTranslations('banking')
   const orgId = authz.user.orgId

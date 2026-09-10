@@ -1,7 +1,4 @@
-import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { BookOpen } from "lucide-react";
-import { Button } from "@openbooks/ui";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -20,6 +17,9 @@ import {
   type BillCardDetail,
   type BillCardRow,
 } from "../labor-costing/LaborBillRateCards";
+import { ModuleView } from "../../../../../components/viewspec/module-view";
+import { loadLaborPricing, laborPricingSpec } from "./view";
+import { LaborPricingHeading, type LaborPricingViewProps } from "./sections";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +28,23 @@ export default async function LaborPricingPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  if ((await searchParams).__viewspec === "1") {
+    const sp = await searchParams;
+    const data = await loadLaborPricing(sp);
+    if (!data) return null;
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView
+          spec={laborPricingSpec(data)}
+          data={data}
+          searchParams={sp}
+          trusted
+        />
+      </>
+    );
+  }
   const authz = await requirePermission("admin.setup.manage");
   await requireProjectsFeature(authz.user.orgId);
   const orgId = authz.user.orgId;
@@ -226,85 +243,74 @@ export default async function LaborPricingPage({
       .sort(),
   ];
 
+  const heading = {
+    title: t("title"),
+    description: t("description"),
+    docsHref: "/docs/labor-pricing",
+    docsLabel: t("docs"),
+  };
+  const view: LaborPricingViewProps = {
+    cards: (cardsRes as unknown as { rows: BillCardRow[] }).rows,
+    selected,
+    creating: cardParam === "new",
+    total: Number(
+      (countRes as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0,
+    ),
+    page: list.page,
+    perPage: list.perPage,
+    currentParams: sp,
+    timeFilter,
+    dimensionFilter,
+    items: (
+      itemsRes as unknown as {
+        rows: {
+          id: string;
+          name: string;
+          kind: string;
+          category: string | null;
+        }[];
+      }
+    ).rows,
+    timeTypes: (
+      timeTypesRes as unknown as {
+        rows: { id: string; name: string; bill_multiplier: string }[];
+      }
+    ).rows,
+    options: {
+      department: named(departmentsRes),
+      subsidiary: subsidiaryUiEnabled ? named(subsidiariesRes) : [],
+      location: named(locationsRes),
+      class: named(classesRes),
+      trade: named(tradesRes),
+      job_title: (
+        jobTitlesRes as unknown as { rows: { name: string }[] }
+      ).rows.map((x) => ({ id: x.name, name: x.name })),
+      project: named(projectsRes),
+      customer: named(customersRes),
+      item_kind: (
+        kindsRes as unknown as { rows: { value: string }[] }
+      ).rows.map((x) => ({ id: x.value, name: x.value })),
+      item_category: (
+        categoriesRes as unknown as { rows: { value: string }[] }
+      ).rows.map((x) => ({ id: x.value, name: x.value })),
+      transaction_type: (
+        txnTypesRes as unknown as { rows: { value: string }[] }
+      ).rows.map((x) => ({ id: x.value, name: x.value })),
+    },
+    currencies,
+    multiCurrency,
+    layout: resolvedForm?.layout,
+    forms: resolvedForm?.available ?? [],
+    currentFormId: resolvedForm?.row?.id ?? null,
+    customFieldDefs:
+      headerDefs as unknown as import("../../../../../components/custom-field-inputs").CustomFieldDefClient[],
+    canCustomize: can(authz, "admin.customization.manage"),
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            {t("title")}
-          </h2>
-          <p className="max-w-4xl text-sm text-slate-500 dark:text-slate-400">
-            {t("description")}
-          </p>
-        </div>
-        <Button asChild variant="ghost" size="sm">
-          <Link href="/docs/labor-pricing">
-            <BookOpen size={14} aria-hidden /> {t("docs")}
-          </Link>
-        </Button>
-      </div>
-      <LaborBillRateCards
-        cards={(cardsRes as unknown as { rows: BillCardRow[] }).rows}
-        selected={selected}
-        creating={cardParam === "new"}
-        total={Number(
-          (countRes as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0,
-        )}
-        page={list.page}
-        perPage={list.perPage}
-        currentParams={sp}
-        timeFilter={timeFilter}
-        dimensionFilter={dimensionFilter}
-        items={
-          (
-            itemsRes as unknown as {
-              rows: {
-                id: string;
-                name: string;
-                kind: string;
-                category: string | null;
-              }[];
-            }
-          ).rows
-        }
-        timeTypes={
-          (
-            timeTypesRes as unknown as {
-              rows: { id: string; name: string; bill_multiplier: string }[];
-            }
-          ).rows
-        }
-        options={{
-          department: named(departmentsRes),
-          subsidiary: subsidiaryUiEnabled ? named(subsidiariesRes) : [],
-          location: named(locationsRes),
-          class: named(classesRes),
-          trade: named(tradesRes),
-          job_title: (
-            jobTitlesRes as unknown as { rows: { name: string }[] }
-          ).rows.map((x) => ({ id: x.name, name: x.name })),
-          project: named(projectsRes),
-          customer: named(customersRes),
-          item_kind: (
-            kindsRes as unknown as { rows: { value: string }[] }
-          ).rows.map((x) => ({ id: x.value, name: x.value })),
-          item_category: (
-            categoriesRes as unknown as { rows: { value: string }[] }
-          ).rows.map((x) => ({ id: x.value, name: x.value })),
-          transaction_type: (
-            txnTypesRes as unknown as { rows: { value: string }[] }
-          ).rows.map((x) => ({ id: x.value, name: x.value })),
-        }}
-        currencies={currencies}
-        multiCurrency={multiCurrency}
-        layout={resolvedForm?.layout}
-        forms={resolvedForm?.available ?? []}
-        currentFormId={resolvedForm?.row?.id ?? null}
-        customFieldDefs={
-          headerDefs as unknown as import("../../../../../components/custom-field-inputs").CustomFieldDefClient[]
-        }
-        canCustomize={can(authz, "admin.customization.manage")}
-      />
+      <LaborPricingHeading {...heading} />
+      <LaborBillRateCards {...view} />
     </div>
   );
 }
