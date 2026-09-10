@@ -1,4 +1,5 @@
 import { getAuthz } from '@/lib/authz'
+import { isUuid } from '../../../lib/list-params'
 import { insightVisibilitySql } from '@/lib/insight-access'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -118,7 +119,12 @@ export async function loadDashboardEmbed(
   if (!dashboard) return null
   const publishedOnly = opts.publishedOnly !== false
 
-  const cardIds = [...new Set(dashboard.layout.map((w) => w.cardId))]
+  // Well-formed ids only. A layout is user data, and a widget pointing at
+  // something that is not a uuid — a hand-edited board, an import, a seed —
+  // used to reach `any(…::uuid[])` and 500 the whole page. This function
+  // already tolerates a card id that resolves to nothing (see the `present`
+  // filter below); tolerating one that never could is the same promise.
+  const cardIds = [...new Set(dashboard.layout.map((w) => w.cardId))].filter(isUuid)
   if (cardIds.length === 0) return { dashboard, cards: [], layout: [] }
 
   const res = (await db.execute<DashboardCard>(sql`
