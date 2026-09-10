@@ -1,5 +1,3 @@
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import { PageContainer } from '@/components/page-layout'
 import { getAuthz } from '@/lib/authz'
@@ -10,6 +8,9 @@ import { WIDGETS } from '../_widget-registry'
 import { canSeeWidget } from '../_widget-access'
 import { loadDashboardEditCanvas } from '../_edit-canvas'
 import { saveQuickActions } from '../actions'
+import { CustomizeDashboardHeader } from './sections'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadCustomizeDashboard, customizeDashboardSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +19,26 @@ export async function generateMetadata() {
   return { title: t('customize.title') }
 }
 
-export default async function CustomiseDashboardPage() {
+export default async function CustomiseDashboardPage({
+  searchParams,
+}: {
+  // Optional: this route natively takes no props. The conversion needs a query
+  // flag, and threading it through must not make the prop mandatory.
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+} = {}) {
+  const sp = (await searchParams) ?? {}
+  if (sp.__viewspec === '1') {
+    const data = await loadCustomizeDashboard()
+    if (!data) return null
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={customizeDashboardSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
+
   const t = await getTranslations('dashboard')
   const authz = await getAuthz()
   if (!authz) return null
@@ -38,23 +58,12 @@ export default async function CustomiseDashboardPage() {
   return (
     <PageContainer>
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300"
-            >
-              <ArrowLeft size={12} />
-              {t('customize.back')}
-            </Link>
-            <h1 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">
-              {t('customize.title')}
-            </h1>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              {t('customize.roleLabel', { role: ROLE_TIER_LABELS[role] })}
-            </p>
-          </div>
-        </div>
+        <CustomizeDashboardHeader
+          backHref="/dashboard"
+          backLabel={t('customize.back')}
+          title={t('customize.title')}
+          roleLabel={t('customize.roleLabel', { role: ROLE_TIER_LABELS[role] })}
+        />
 
         <DashboardGrid
           key={`${role}:${JSON.stringify(visibleLayout.widgets)}`}

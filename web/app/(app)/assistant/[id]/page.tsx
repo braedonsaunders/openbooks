@@ -8,6 +8,8 @@ import {
   ownsConversation,
   recentMessages,
 } from '../../../../lib/ai-conversations'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { assistantConversationSpec, loadAssistantConversation } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,11 +18,26 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** One deep-linkable assistant conversation. */
 export default async function AssistantConversationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  // Optional: this route natively takes only `params`.
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const authz = await requirePermission('assistant.use')
   const { id } = await params
+  const sp = (await searchParams) ?? {}
+  if (sp.__viewspec === '1') {
+    const data = await loadAssistantConversation(id)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={assistantConversationSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
+
+  const authz = await requirePermission('assistant.use')
   if (!UUID_RE.test(id) || !(await ownsConversation(authz, id, 'assistant'))) {
     redirect('/assistant')
   }

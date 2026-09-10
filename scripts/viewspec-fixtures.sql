@@ -49,6 +49,7 @@
 --   …1301-1399  CRM prospect parties and account profiles
 --   …1401-1499  equipment units and their charge item
 --   …1501-1599  sandboxes
+--   …1601-1699  assistant conversations and messages
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
 --
 --   psql "$VIEWSPEC_DB" -f scripts/viewspec-fixtures.sql
@@ -2801,5 +2802,36 @@ begin
            order by parent_id nulls first, created_at limit 1) s
    where not exists (select 1 from equipment_units
                       where org_id = v_org and unit_number = 'EQ-VIEWSPEC-2');
+
+  -- ---- assistant conversation (/assistant/[id]) ----------------------------
+  --
+  -- The simulator never opens an assistant conversation, so the deep-link
+  -- route redirects to /assistant on both paths and the comparison proves
+  -- nothing. One owned conversation with two messages. Block …1601-1603.
+  --
+  -- `user_id` resolves LIVE to the harness user: `ownsConversation` filters
+  -- by owner in SQL, so a conversation owned by anyone else redirects — the
+  -- fixture would look applied and the page would still be uncomparable.
+  insert into ai_conversations (id, org_id, user_id, scope, title, created_at, updated_at)
+  select '00000000-0000-7000-9000-000000001601', v_org, u.id, 'assistant',
+         'ViewSpec conformance conversation',
+         timestamptz '2026-08-30 09:00:00+00', timestamptz '2026-08-30 09:02:00+00'
+    from (select id from users where org_id = v_org and email = 'viewspec@sim.test') u
+   where not exists (select 1 from ai_conversations
+                      where id = '00000000-0000-7000-9000-000000001601');
+
+  insert into ai_messages (id, org_id, conversation_id, role, content, created_at, updated_at)
+  select v.id::uuid, v_org, '00000000-0000-7000-9000-000000001601',
+         v.role, v.content, v.at::timestamptz, v.at::timestamptz
+    from (values
+      ('00000000-0000-7000-9000-000000001602', 'user',
+       'What was revenue last month?', '2026-08-30 09:00:00+00'),
+      ('00000000-0000-7000-9000-000000001603', 'assistant',
+       'Revenue for the period was $128,400.', '2026-08-30 09:02:00+00')
+    ) as v(id, role, content, at)
+   where exists (select 1 from ai_conversations
+                  where id = '00000000-0000-7000-9000-000000001601')
+     and not exists (select 1 from ai_messages
+                      where id = '00000000-0000-7000-9000-000000001602');
 
 end $$;

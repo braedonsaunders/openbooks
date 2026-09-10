@@ -101,6 +101,8 @@ import { AssistantApp } from '../assistant/assistant-app'
 import { AccountDrawer as CrmAccountDrawer } from '../../app/(app)/crm/AccountDrawer'
 import { DashboardHeader } from '../../app/(app)/dashboard/_dashboard-header'
 import { DashboardGridSlot } from './dashboard-grid-slot'
+import { DashboardEditSlot } from './dashboard-edit-slot'
+import { CustomizeDashboardHeader } from '../../app/(app)/dashboard/customize/sections'
 import { PlatformClient } from '../../app/(app)/sync/PlatformClient'
 import { RetroWorkspace } from '../../app/(app)/payroll/retro/RetroWorkspace'
 import { RemittanceApNote, RemittancesView } from '../../app/(app)/payroll/remittances/sections'
@@ -1460,6 +1462,21 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
    *  a capability, neither of which a spec may carry. The slot re-derives
    *  both from the session; the spec names the block and nothing else. */
   'dashboard-grid': () => <DashboardGridSlot />,
+  /** Not `pageHeader({ back })`: that slot renders UiBackLink, and this page's
+   *  back link is a 12px lucide ArrowLeft with different classes again. */
+  'dashboard-customize-header': (props) => (
+    <CustomizeDashboardHeader
+      backHref={str(props, 'backHref') ?? '/dashboard'}
+      backLabel={str(props, 'backLabel') ?? ''}
+      title={str(props, 'title') ?? ''}
+      roleLabel={str(props, 'roleLabel') ?? ''}
+    />
+  ),
+  /** The edit canvas, also a SLOT — and more emphatically than the view one:
+   *  besides the tile nodes and the bound save action it needs
+   *  `allowedWidgetIds`, a per-caller PERMISSION decision. That must not be
+   *  reachable from a spec. */
+  'dashboard-edit': () => <DashboardEditSlot />,
 
   /* --- CRM accounts ----------------------------------------------------------------- */
   /** The account flyout shared by /crm/leads and /crm/prospects. Named
@@ -1474,14 +1491,18 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   },
 
   /* --- assistant -------------------------------------------------------------------- */
-  /** Whole: sidebar, streaming thread, composer and every fetch. `activeId`
-   *  and `initialMessages` are spec literals because the native branch passes
-   *  those same literals — this route is the new-conversation entry point. */
+  /** Whole: sidebar, streaming thread, composer and every fetch. Serves both
+   *  /assistant and /assistant/[id]: `activeId` and `initialMessages` default
+   *  to the new-conversation values the launcher route passes natively, and
+   *  the deep-link route binds real ones. Hardcoding them here would have made
+   *  this entry a single route's assumption wearing a general name. */
   'assistant-app': (props) => (
     <AssistantApp
       conversations={props.conversations as ComponentProps<typeof AssistantApp>['conversations']}
-      activeId={null}
-      initialMessages={[]}
+      activeId={str(props, 'activeId') ?? null}
+      initialMessages={
+        (props.initialMessages as ComponentProps<typeof AssistantApp>['initialMessages']) ?? []
+      }
       canWrite={props.canWrite === true}
       aiEnabled={props.aiEnabled === true}
       initialPrompt={str(props, 'initialPrompt')}
