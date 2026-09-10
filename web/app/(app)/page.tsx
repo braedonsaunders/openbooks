@@ -1,16 +1,34 @@
 import { getTranslations } from 'next-intl/server'
 import { PageContainer } from '@/components/page-layout'
 import { getAuthz } from '@/lib/authz'
+import { ModuleView } from '@/components/viewspec/module-view'
 import { loadDashboardLayout } from './dashboard/_load-layout'
 import { DashboardGrid } from './dashboard/_dashboard-grid'
 import { canSeeWidget } from './dashboard/_widget-access'
 import { DashboardHeader } from './dashboard/_dashboard-header'
 import { saveQuickActions } from './dashboard/actions'
 import { loadDashboardView } from './dashboard/_edit-canvas'
+import { loadRootDashboard, rootDashboardSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadRootDashboard(sp)
+    if (!data) return null
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={rootDashboardSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const t = await getTranslations('dashboard')
   const authz = await getAuthz()
   if (!authz) return null
