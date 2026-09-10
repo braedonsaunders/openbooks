@@ -54,6 +54,9 @@ import { AccountDrawer } from '../../app/(app)/accounts/AccountDrawer'
 import { NewAccountButton } from '../../app/(app)/accounts/NewAccountButton'
 import { EntityListSlot } from './entity-list-slot'
 import { RecordListSlot } from './record-list-slot'
+import { NewOrderButton } from '../../app/(app)/_order/NewOrderButton'
+import { NewOrderRedirect } from '../../app/(app)/_order/NewOrderRedirect'
+import { OrderDrawer } from '../../app/(app)/_order/OrderDrawer'
 import { NewSetupButton } from '../../app/(app)/admin/setup/[entity]/SetupDrawer'
 import { TaxReturnLibrary } from '../../app/(app)/admin/setup/[entity]/TaxReturnLibrary'
 import {
@@ -545,6 +548,36 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       </Link>
     </Button>
   ),
+
+  /* --- orders (quotes, sales orders, purchase orders) ----------------------- */
+  //
+  // One set of entries for all three order pages: they render the same
+  // `_order` components and differ only in the api path, base path and param
+  // the loader resolves. Three near-identical registry entries would have been
+  // three places to drift.
+  'new-order': (props) => (
+    <NewOrderButton
+      apiPath={str(props, 'apiPath') ?? ''}
+      base={str(props, 'base') ?? ''}
+      param={str(props, 'param') ?? ''}
+      label={str(props, 'label') ?? ''}
+      createFailedMessage={str(props, 'createFailedMessage') ?? ''}
+    />
+  ),
+  'new-order-redirect': (props) => (
+    <NewOrderRedirect
+      apiPath={str(props, 'apiPath') ?? ''}
+      base={str(props, 'base') ?? ''}
+      param={str(props, 'param') ?? ''}
+      createFailedMessage={str(props, 'createFailedMessage') ?? ''}
+    />
+  ),
+  'order-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof OrderDrawer> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <OrderDrawer key={remountKey} {...rest} />
+  },
 
   /* --- setup workspace ------------------------------------------------------ */
   /** The inline "Learn more" link (with its significant leading space) appears

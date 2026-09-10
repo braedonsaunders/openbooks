@@ -9,6 +9,21 @@
 --
 -- Idempotent: fixed ids, ON CONFLICT DO NOTHING. Safe to re-run.
 --
+-- Fixed ids are allocated in blocks, and the blocks matter: ON CONFLICT DO
+-- NOTHING turns a collision into a SILENT skip, so two fixtures that pick the
+-- same id leave one of them quietly unapplied. A purchase-order block landed
+-- on ids a banking fixture already held and the page stayed empty with no
+-- error at all. Claim a fresh block rather than reusing a plausible-looking
+-- one:
+--
+--   …0001-0099  continuous close (runs, work items, evidence)
+--   …0301-0399  approvals (flows, runs, gates)
+--   …0401-0499  banking statements, reconciliations and their journal entry
+--   …0501-0599  banking transactions (checks, deposits)
+--   …0601-0699  sales orders          …0701-0799  quotes
+--   …0901-0999  purchase orders
+--   …a000-…     CRM opportunities, quotas, snapshots; custom records
+--
 --   psql "$VIEWSPEC_DB" -f scripts/viewspec-fixtures.sql
 --
 -- Only ever seeds the SIM org. It is a simulated tenant; nothing here should
@@ -342,6 +357,95 @@ begin
        pipeline_amount, weighted_amount, worst_case_amount, most_likely_amount, upside_amount, closed_amount)
     values ('00000000-0000-7000-a000-000000000020', v_org, v_owner, v_qstart, v_qend, now(),
             'calculated', 'USD', 30000, 20000, 0, 10000, 20000, 0)
+    on conflict (id) do nothing;
+  end;
+
+  -- ---- orders: quotes, sales orders, purchase orders -----------------------
+  --
+  -- The simulator never writes any of the three, so all three list pages would
+  -- compare two identical empty states. One block rather than three because
+  -- the three agents that asked for these each proposed the same fixed ids;
+  -- distinct ranges here are the whole reason they can coexist.
+  --
+  -- Everything stays DRAFT except where a status is the point: a line insert
+  -- against a non-draft document is rejected by the line-immutability trigger,
+  -- so any non-draft fixture carries no lines.
+  declare
+    v_customer uuid;
+    v_customer2 uuid;
+    v_vendor uuid;
+    v_vendor2 uuid;
+    v_income uuid;
+    v_expense uuid;
+    v_item uuid;
+  begin
+    select p.id into v_customer from parties p
+      join customer_roles r on r.party_id = p.id and r.org_id = p.org_id and r.is_active
+     where p.org_id = v_org and p.is_active order by p.display_name limit 1;
+    select p.id into v_customer2 from parties p
+      join customer_roles r on r.party_id = p.id and r.org_id = p.org_id and r.is_active
+     where p.org_id = v_org and p.is_active and p.id <> v_customer
+     order by p.display_name limit 1;
+    select p.id into v_vendor from parties p
+      join vendor_roles r on r.party_id = p.id and r.org_id = p.org_id and r.is_active
+     where p.org_id = v_org and p.is_active order by p.display_name limit 1;
+    select p.id into v_vendor2 from parties p
+      join vendor_roles r on r.party_id = p.id and r.org_id = p.org_id and r.is_active
+     where p.org_id = v_org and p.is_active and p.id <> v_vendor
+     order by p.display_name limit 1;
+    select id into v_income from accounts
+     where org_id = v_org and type in ('income', 'income_other') and is_active and not is_summary
+     order by number nulls last limit 1;
+    select id into v_expense from accounts
+     where org_id = v_org and type in ('expense', 'cogs') and is_active and not is_summary
+     order by number nulls last limit 1;
+    select id into v_item from items where org_id = v_org and is_active order by name limit 1;
+
+    if v_customer is null or v_vendor is null or v_income is null or v_expense is null then
+      raise notice 'missing party or account; skipping order fixtures';
+      return;
+    end if;
+
+    insert into documents
+      (id, org_id, kind, document_number, party_id, document_date, currency,
+       status, subtotal, tax_total, total, memo)
+    values
+      -- quotes
+      ('00000000-0000-7000-9000-000000000701', v_org, 'quote', 'EST-VIEWSPEC-1',
+       v_customer, current_date - 6, 'USD', 'draft', 5000, 0, 5000, 'ViewSpec harness quote one'),
+      ('00000000-0000-7000-9000-000000000702', v_org, 'quote', 'EST-VIEWSPEC-2',
+       coalesce(v_customer2, v_customer), current_date - 3, 'USD', 'draft', 12000, 0, 12000,
+       'ViewSpec harness quote two'),
+      ('00000000-0000-7000-9000-000000000703', v_org, 'quote', 'EST-VIEWSPEC-3',
+       v_customer, current_date - 1, 'USD', 'draft', 8000, 0, 8000, 'ViewSpec harness quote three'),
+      -- sales orders
+      ('00000000-0000-7000-9000-000000000601', v_org, 'sales_order', 'SO-VIEWSPEC-1',
+       v_customer, current_date - 9, 'USD', 'draft', 1500, 0, 1500, 'ViewSpec harness sales order one'),
+      ('00000000-0000-7000-9000-000000000602', v_org, 'sales_order', 'SO-VIEWSPEC-2',
+       coalesce(v_customer2, v_customer), current_date - 4, 'USD', 'draft', 2750, 0, 2750,
+       'ViewSpec harness sales order two'),
+      -- purchase orders
+      ('00000000-0000-7000-9000-000000000901', v_org, 'purchase_order', 'PO-VIEWSPEC-1',
+       v_vendor, current_date - 5, 'USD', 'draft', 1500, 0, 1500, 'ViewSpec harness purchase order one'),
+      ('00000000-0000-7000-9000-000000000902', v_org, 'purchase_order', 'PO-VIEWSPEC-2',
+       coalesce(v_vendor2, v_vendor), current_date - 2, 'USD', 'draft', 750, 0, 750,
+       'ViewSpec harness purchase order two')
+    on conflict (id) do nothing;
+
+    insert into document_lines
+      (id, org_id, document_id, line_number, item_id, account_id, description,
+       quantity, unit_price, amount)
+    values
+      ('00000000-0000-7000-9000-000000000711', v_org, '00000000-0000-7000-9000-000000000701', 1,
+       v_item, v_income, 'Harness line one', 10, 300, 3000),
+      ('00000000-0000-7000-9000-000000000712', v_org, '00000000-0000-7000-9000-000000000701', 2,
+       v_item, v_income, 'Harness line two', 4, 500, 2000),
+      ('00000000-0000-7000-9000-000000000611', v_org, '00000000-0000-7000-9000-000000000601', 1,
+       v_item, v_income, 'Field labor', 10, 150, 1500),
+      ('00000000-0000-7000-9000-000000000911', v_org, '00000000-0000-7000-9000-000000000901', 1,
+       v_item, v_expense, 'Field labor', 10, 150, 1500),
+      ('00000000-0000-7000-9000-000000000912', v_org, '00000000-0000-7000-9000-000000000902', 1,
+       v_item, v_expense, 'Field labor', 5, 150, 750)
     on conflict (id) do nothing;
   end;
 end $$;
