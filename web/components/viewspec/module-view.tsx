@@ -44,6 +44,18 @@ export function ModuleView({
 
   const header = <BlockList blocks={spec.header} scope={data} searchParams={searchParams} />
   const body = <BlockList blocks={spec.body} scope={data} searchParams={searchParams} />
+  // `bare` exists for pages that already sit INSIDE a shell — the setup
+  // workspace renders its own sticky header and container, and wrapping its
+  // pages in a second ListPageLayout would nest the chrome. A bare spec owns
+  // its own outer element, so `header` and `body` are simply concatenated.
+  if (spec.layout === 'bare') {
+    return (
+      <>
+        {header}
+        {body}
+      </>
+    )
+  }
   const Layout = spec.layout === 'detail' ? DetailPageLayout : ListPageLayout
   return (
     <Layout header={header} className={spec.bodyClassName}>

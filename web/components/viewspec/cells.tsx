@@ -56,6 +56,7 @@ function LeafCellView({ spec, scope }: { spec: LeafCell; scope: unknown }) {
           </>
         )
       }
+      if (spec.className) return <span className={spec.className}>{String(raw ?? '')}</span>
       return <>{String(raw ?? '')}</>
     }
 

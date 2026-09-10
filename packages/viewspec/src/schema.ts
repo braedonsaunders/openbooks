@@ -39,6 +39,7 @@ const alignSchema = z.enum(['left', 'right', 'center'])
 const textCell = z.strictObject({
   kind: z.literal('text'),
   field: fieldRefSchema,
+  className: z.string().max(200).optional(),
   fallback: value.optional(),
   tone: toneSchema.optional(),
   numeric: z.boolean().optional(),
@@ -350,7 +351,7 @@ export const MAX_BLOCK_DEPTH = 6
 
 export const pageSpecSchema = z.strictObject({
   specVersion: z.literal(SPEC_VERSION),
-  layout: z.enum(['list', 'detail']),
+  layout: z.enum(['list', 'detail', 'bare']),
   bodyClassName: z.string().max(300).optional(),
   header: z.array(blockSchema).max(20),
   body: z.array(blockSchema).max(40),
