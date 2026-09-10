@@ -98,6 +98,7 @@ import { ExpensesDashboard } from '../../app/(app)/expenses/ExpensesDashboard'
 import { ContractDrawer } from '../../app/(app)/revenue/ContractDrawer'
 import { RunRecognitionButton } from '../../app/(app)/revenue/RunRecognitionButton'
 import { AssistantApp } from '../assistant/assistant-app'
+import { AccountDrawer as CrmAccountDrawer } from '../../app/(app)/crm/AccountDrawer'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
 import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
@@ -1156,6 +1157,18 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   },
   /** Presence is the spec's `when` on `canRun`, not a check in here. */
   'run-recognition': () => <RunRecognitionButton />,
+
+  /* --- CRM accounts ----------------------------------------------------------------- */
+  /** The account flyout shared by /crm/leads and /crm/prospects. Named
+   *  `crm-account-drawer` because the registry already owns an unrelated
+   *  `account-drawer` — the chart-of-accounts flyout. No `key`: the native
+   *  drawer carries none, so switching accounts reuses the mounted flyout on
+   *  both paths. */
+  'crm-account-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof CrmAccountDrawer> | null
+    if (!drawer) return null
+    return <CrmAccountDrawer {...drawer} />
+  },
 
   /* --- assistant -------------------------------------------------------------------- */
   /** Whole: sidebar, streaming thread, composer and every fetch. `activeId`

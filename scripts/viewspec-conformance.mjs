@@ -45,6 +45,24 @@ const OUT_DIR = process.env.VIEWSPEC_OUT ?? join(process.cwd(), 'tmp', 'viewspec
 const VIEWPORT = { width: 1440, height: 900 }
 
 /**
+ * Nine routes are deliberately NOT in this list and never will be, because
+ * they have no view to describe. Each is a render-less server redirect — the
+ * component resolves a destination and calls `redirect()`, returning no JSX
+ * at all:
+ *
+ *   /admin/settings      /admin/setup        /admin/super
+ *   /analytics/true-cost /assets/tax-pools   /field-tickets/[id]
+ *   /journal/[id]        /reports/lot-recall /timesheets/entry
+ *
+ * The only way to "convert" one is to replace the server redirect with a
+ * client component that calls `router.replace`, and that is a behaviour
+ * regression, not a conversion: a 307 from the server becomes an HTML
+ * document plus a JS navigation, with a different history entry and a paint
+ * of nothing in between. Its conformance entry would then compare the
+ * DESTINATION page on both paths, which proves nothing about the route under
+ * test. ViewSpec has no redirect vocabulary; that is the language being
+ * honest, not a gap to work around.
+ *
  * Pages under conversion. Each entry lists query variants that must ALL match:
  * one default render proves little on a page whose shape changes with its
  * filters, so variants pin the branches that matter — here both sides of the
@@ -889,6 +907,37 @@ const PAGES = [
     ],
     expect: 'table tbody tr',
     minMatches: 3,
+  },
+  {
+    path: '/crm/leads',
+    // Thin entity-list wrapper over lifecycle_stage='lead'. The simulator
+    // writes no account profiles, so fixture …a000-…003/004 is load-bearing.
+    variants: [
+      '',
+      {
+        query: '?account=00000000-0000-7000-a000-000000000003',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/crm/prospects',
+    // Same wrapper, stage='prospect'. Fixture …1301-1304.
+    variants: [
+      '',
+      {
+        query: '?account=00000000-0000-7000-9000-000000001301',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
   },
   // --- analytics dashboards ---------------------------------------------------
   //

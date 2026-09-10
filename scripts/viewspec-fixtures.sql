@@ -40,6 +40,7 @@
 --   …9801-9899  app marketplace listings
 --   …9901-9999  tax depreciation regimes, pool classes, asset categories
 --   …1201-1299  bank feed connections
+--   …1301-1399  CRM prospect parties and account profiles
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
 --
 --   psql "$VIEWSPEC_DB" -f scripts/viewspec-fixtures.sql
@@ -1859,6 +1860,98 @@ begin
     on conflict (id) do nothing;
   
     end if;
+  end;
+
+  -- ---- crm leads ----------------------------------------------------------
+  --
+  -- The simulator never writes account profiles, so the leads list would come
+  -- up empty. Two active lead profiles on active company parties with a lead
+  -- lifecycle status: leadWhere requires cp.lifecycle_stage = 'lead' and
+  -- cp.is_active and p.is_active, and subsidiary_id stays null so
+  -- crmSharedScope passes for any grant set. The Default `lead` list view has
+  -- no filters, so both fixtures render.
+  declare
+    v_lead_owner uuid;
+    v_lead_new uuid;
+    v_lead_working uuid;
+  begin
+    select id into v_lead_owner from users where org_id = v_org order by created_at limit 1;
+    select id into v_lead_new from crm_account_statuses
+     where org_id = v_org and lifecycle_stage = 'lead' and is_active order by sequence limit 1;
+    select id into v_lead_working from crm_account_statuses
+     where org_id = v_org and lifecycle_stage = 'lead' and is_active order by sequence desc limit 1;
+    -- NOT `return`: a bare return in a nested block exits the WHOLE anonymous
+    -- block, silently skipping every fixture appended below this one.
+    if v_lead_owner is null or v_lead_new is null then
+      raise notice 'no users or lead statuses; skipping lead fixtures';
+    else
+
+    insert into parties (id, org_id, kind, display_name, email, phone, is_active, created_by, updated_by)
+    values
+      ('00000000-0000-7000-a000-000000000003', v_org, 'company',
+       'ViewSpec Lead Conformance A', 'leads-a@viewspec.test', '555-0101', true, v_lead_owner, v_lead_owner),
+      ('00000000-0000-7000-a000-000000000004', v_org, 'company',
+       'ViewSpec Lead Conformance B', 'leads-b@viewspec.test', '555-0102', true, v_lead_owner, v_lead_owner)
+    on conflict (id) do nothing;
+
+    insert into crm_account_profiles
+      (id, org_id, party_id, lifecycle_stage, status_id, owner_user_id,
+       qualification_score, last_activity_at, is_active, created_by, updated_by)
+    values
+      ('00000000-0000-7000-a000-000000000003', v_org,
+       '00000000-0000-7000-a000-000000000003', 'lead', v_lead_new, v_lead_owner,
+       42, current_timestamp - interval '1 day', true, v_lead_owner, v_lead_owner),
+      ('00000000-0000-7000-a000-000000000004', v_org,
+       '00000000-0000-7000-a000-000000000004', 'lead', v_lead_working, v_lead_owner,
+       70, current_timestamp - interval '2 days', true, v_lead_owner, v_lead_owner)
+    on conflict (id) do nothing;
+  
+    end if;
+  end;
+
+-- ---- crm prospects -------------------------------------------------------
+-- The simulator never creates CRM account profiles, so /crm/prospects would
+-- compare two identical empty states. Two prospect accounts on the sim org's
+-- real prospect statuses (Open, Nurturing) with different owners.
+-- Block …1301–1304 claimed by the prospects conversion; verified free.
+  declare
+  v_status_open uuid;
+  v_status_nurturing uuid;
+  v_owner_a uuid;
+  v_owner_b uuid;
+  v_party_a uuid := '00000000-0000-7000-9000-000000001301';
+  v_party_b uuid := '00000000-0000-7000-9000-000000001302';
+begin
+  select id into v_status_open from crm_account_statuses
+   where org_id = v_org and lifecycle_stage = 'prospect' and name = 'Open' and is_active
+   order by sequence limit 1;
+  select id into v_status_nurturing from crm_account_statuses
+   where org_id = v_org and lifecycle_stage = 'prospect' and name = 'Nurturing' and is_active
+   order by sequence limit 1;
+  select id into v_owner_a from users where org_id = v_org and is_active order by name limit 1;
+  select id into v_owner_b from users where org_id = v_org and is_active order by name limit 1 offset 1;
+  -- NOT `return`: a bare return in a nested block exits the WHOLE anonymous
+  -- block, silently skipping every fixture appended below this one.
+  if v_status_open is null or v_owner_a is null then
+    raise notice 'missing prospect status or owner; skipping prospects fixtures';
+  else
+
+  insert into parties (id, org_id, kind, display_name, email, phone, website, is_active)
+  values (v_party_a, v_org, 'customer', 'ViewSpec Prospect Alpha', 'alpha@viewspec.test', '555-0101', 'https://alpha.viewspect.test', true),
+         (v_party_b, v_org, 'customer', 'ViewSpec Prospect Beta', 'beta@viewspec.test', '555-0102', 'https://beta.viewspect.test', true)
+  on conflict (id) do nothing;
+
+  -- subsidiary_id stays null so crmSharedScope (null = org-wide visible)
+  -- passes for any grant set, including the harness admin.
+  insert into crm_account_profiles
+    (id, org_id, party_id, lifecycle_stage, status_id, owner_user_id,
+     industry, qualification_score, last_activity_at, is_active)
+  values ('00000000-0000-7000-9000-000000001303', v_org, v_party_a, 'prospect',
+          v_status_open, v_owner_a, 'Construction', 72, now() - interval '2 days', true),
+         ('00000000-0000-7000-9000-000000001304', v_org, v_party_b, 'prospect',
+          coalesce(v_status_nurturing, v_status_open), v_owner_b, 'Real estate', 45, now() - interval '9 days', true)
+  on conflict (id) do nothing;
+  end if;
   end;
 
 end $$;
