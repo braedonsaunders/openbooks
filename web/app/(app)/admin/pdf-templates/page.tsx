@@ -6,7 +6,9 @@ import { disabledDocKinds } from '../../../../lib/documents'
 import { PDF_RECORD_TYPES } from '../../../../lib/pdf-templates/catalog'
 import { starterTemplate } from '../../../../lib/pdf-templates/starters'
 import { listPdfTemplates } from '../../../../lib/pdf-templates/store'
+import { ModuleView } from '../../../../components/viewspec/module-view'
 import { TemplatesList, type StarterRow, type TemplateRow } from './TemplatesList'
+import { loadPdfTemplates, pdfTemplatesSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +23,22 @@ export async function generateMetadata() {
  * click for a read-only sample-data preview; duplicate to start an org
  * template.
  */
-export default async function PdfTemplatesPage() {
+export default async function PdfTemplatesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadPdfTemplates()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={pdfTemplatesSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('admin.customization.manage')
   const t = await getTranslations('pdfTemplates')
   const tHub = await getTranslations('admin.hub')

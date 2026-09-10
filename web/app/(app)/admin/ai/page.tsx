@@ -6,6 +6,8 @@ import { AI_PROVIDER_SPECS } from '../../../../lib/assistant/client'
 import { getOrgAiSettings } from '../../../../lib/assistant/ai-config'
 import { CONTINUOUS_CLOSE_DETECTOR_SPECS, isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close.ts'
 import { AiSettingsForm, type ProviderSpecLite } from './AiSettingsForm'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadAdminAi, adminAiSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +23,17 @@ export async function generateMetadata() {
  * the key itself).
  */
 export default async function AiSettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadAdminAi(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={adminAiSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('admin.ai.manage')
   const t = await getTranslations('admin')
 

@@ -5,7 +5,9 @@ import { isUuid, pickString } from '../../../../lib/list-params'
 import { listPrebills, listWipProjects, loadPrebill, wipAnalytics } from '../../../../lib/wip-billing'
 import { requireWipBillingFeature } from '../../../../lib/wip-billing-gate'
 import { ListPageLayout } from '../../../../components/page-layout'
+import { ModuleView } from '../../../../components/viewspec/module-view'
 import { WipBillingWorkspace } from './WipBillingWorkspace'
+import { loadWipBilling, wipBillingSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +16,17 @@ export default async function WipBillingPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadWipBilling(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={wipBillingSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('projects.read')
   await requireFeatureEnabled(authz.user.orgId, 'wipBilling')
   await requireWipBillingFeature(authz.user.orgId)
