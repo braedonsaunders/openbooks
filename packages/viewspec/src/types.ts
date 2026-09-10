@@ -293,6 +293,13 @@ export interface FilterBarBlock extends BlockCommon {
   dateRange?: FieldRef
   primaryFilter?: FieldRef
   periodPresets?: FieldRef
+  /**
+   * Extra period choices grouped under their own optgroup — pay periods on a
+   * payroll register, for instance. The options are loader-resolved; the spec
+   * only names where they bind.
+   */
+  extraPeriods?: FieldRef
+  extraPeriodsLabel?: Value
   defaultPeriod?: Value
 }
 

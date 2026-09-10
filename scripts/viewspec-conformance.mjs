@@ -219,6 +219,41 @@ const PAGES = [
     minMatches: 1,
   },
   {
+    path: '/apps',
+    variants: [
+      '',
+      { query: '?q=demo', expect: 'main a[aria-label^="Open"]', minMatches: 1 },
+      { query: '?q=zzzznomatch', expect: 'main h2', minMatches: 1 },
+    ],
+    expect: 'main a[aria-label^="Open"]',
+    minMatches: 2,
+  },
+  {
+    path: '/reports/custom/run/01a083e6-dce6-7158-aeab-dce836642ee9',
+    // The saved-query runner: complementary filter bars behind loader flags,
+    // the result paper placed whole, and an error branch that is a paper plus
+    // a verbatim paragraph.
+    variants: [
+      '',
+      { query: '?period=last_fiscal_year', expect: 'main p', minMatches: 1 },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 40,
+  },
+  {
+    path: '/admin/setup/payment-operations',
+    // Four mutually exclusive views; profiles is empty in this tenant, so the
+    // default pins the in-table empty row with its headers intact.
+    variants: [
+      { query: '', expect: 'table thead th', minMatches: 4 },
+      { query: '?view=formats', expect: 'table tbody tr', minMatches: 4 },
+      { query: '?view=schedules', expect: 'table thead th', minMatches: 4 },
+      { query: '?view=mandates', expect: 'table thead th', minMatches: 4 },
+    ],
+    expect: 'table thead th',
+    minMatches: 4,
+  },
+  {
     path: '/admin/backups',
     variants: [{ query: '', expect: 'table tbody tr', minMatches: 2 }],
     expect: 'table tbody tr',

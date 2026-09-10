@@ -247,7 +247,9 @@ function Active({ active, t }: { active: boolean; t: Translator }) {
   return <Badge variant={active ? 'success' : 'outline'}>{t(`states.${active ? 'active' : 'archived'}`)}</Badge>
 }
 
-function SetupEditor({ view, row, creating, options, closeHref, multiCurrency = false }: { view: PaymentSetupView; row: Record<string, unknown> | null; creating: boolean; options: Options; closeHref: string; multiCurrency?: boolean }) {
+// Exported so the ViewSpec widget can place the same editor the native
+// page renders — one implementation, two callers.
+export function SetupEditor({ view, row, creating, options, closeHref, multiCurrency = false }: { view: PaymentSetupView; row: Record<string, unknown> | null; creating: boolean; options: Options; closeHref: string; multiCurrency?: boolean }) {
   const t = useTranslations('admin.setup.paymentOperations')
   const router = useRouter()
   const [busy, setBusy] = useState(false)

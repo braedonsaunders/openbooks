@@ -383,6 +383,8 @@ export function BlockView({
           dateRange={bind<ComponentProps<typeof ReportFilterBar>['dateRange']>(block.dateRange)}
           primaryFilter={bind<ComponentProps<typeof ReportFilterBar>['primaryFilter']>(block.primaryFilter)}
           periodPresets={bind<ComponentProps<typeof ReportFilterBar>['periodPresets']>(block.periodPresets)}
+          extraPeriods={bind<ComponentProps<typeof ReportFilterBar>['extraPeriods']>(block.extraPeriods)}
+          extraPeriodsLabel={resolveText(block.extraPeriodsLabel, scope) || undefined}
           defaultPeriod={resolveText(block.defaultPeriod, scope) || undefined}
           searchPlaceholder={resolveText(block.searchPlaceholder, scope) || undefined}
           leading={

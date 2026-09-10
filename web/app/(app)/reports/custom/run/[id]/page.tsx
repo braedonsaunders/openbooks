@@ -28,6 +28,8 @@ import { ExportMenu } from '../../../ExportMenu'
 import { SaveViewButton } from '../../../SaveViewButton'
 import { ReportPaper } from '../../../ReportPaper'
 import { ResultView } from '../../ResultView'
+import { ModuleView } from '../../../../../../components/viewspec/module-view'
+import { loadReportRun, reportRunSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +46,18 @@ export default async function ReportRunPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const { id } = await params
+    const data = await loadReportRun(id, sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={reportRunSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('reports.read')
   const canCreate = authz.permissions.has('reports.create') || authz.permissions.has('*')
   const { id } = await params

@@ -1,14 +1,14 @@
-import Link from 'next/link'
-import { ArrowUpRight, BookOpen, Boxes, Library } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, PageHeader } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '@/components/page-layout'
 import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
 import { can, requirePermission } from '@/lib/authz'
 import { listApps } from '@/lib/apps/store'
 import { parseListParams } from '@/lib/list-params'
-import { NavIcon } from '@/components/sidebar-nav'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadAppsLauncher, appsLauncherSpec } from './view'
+import { AppLauncherCard, AppsEmptyIcon, AppsLauncherButton } from './sections'
 
 export const runtime = 'nodejs'
 
@@ -18,6 +18,17 @@ export default async function AppsLauncherPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadAppsLauncher(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={appsLauncherSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('apps.use')
   const t = await getTranslations('apps')
   const sp = await searchParams
@@ -47,17 +58,15 @@ export default async function AppsLauncherPage({
             description={t('description')}
             actions={
               <>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/docs/apps">
-                    <BookOpen size={15} /> {t('actions.documentation')}
-                  </Link>
-                </Button>
+                <AppsLauncherButton
+                  href="/docs/apps"
+                  label={t('actions.documentation')}
+                  icon="book"
+                  variant="outline"
+                  size="sm"
+                />
                 {canManage ? (
-                  <Button asChild>
-                    <Link href="/apps/library">
-                      <Library size={15} /> {t('actions.library')}
-                    </Link>
-                  </Button>
+                  <AppsLauncherButton href="/apps/library" label={t('actions.library')} icon="library" />
                 ) : null}
               </>
             }
@@ -69,40 +78,21 @@ export default async function AppsLauncherPage({
       {apps.length > 0 ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {apps.map((app) => (
-            <Link
+            <AppLauncherCard
               key={app.key}
               href={`/apps/${encodeURIComponent(app.key)}`}
-              aria-label={t('actions.openAria', { name: app.name })}
-            >
-              <Card interactive className="h-full">
-                <CardHeader className="flex-row items-start gap-3 p-4 pb-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">
-                    <NavIcon iconKey={app.iconKey} size={20} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <CardTitle className="truncate text-base">{app.name}</CardTitle>
-                    <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-                      {t('version', { version: app.version ?? '—' })}
-                    </p>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex h-[calc(100%-4rem)] flex-col px-4 pb-4">
-                  <CardDescription className="line-clamp-2 min-h-10">
-                    {app.description || t('noDescription')}
-                  </CardDescription>
-                  <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-teal-700 dark:text-teal-300">
-                    {t('actions.open')} <ArrowUpRight size={14} aria-hidden />
-                  </span>
-                </CardContent>
-              </Card>
-            </Link>
+              ariaLabel={t('actions.openAria', { name: app.name })}
+              iconKey={app.iconKey}
+              name={app.name}
+              versionLine={t('version', { version: app.version ?? '—' })}
+              description={app.description || t('noDescription')}
+              openLabel={t('actions.open')}
+            />
           ))}
         </div>
       ) : (
         <div className="flex min-h-56 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 px-6 py-10 text-center dark:border-slate-700">
-          <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-            <Boxes size={21} aria-hidden />
-          </span>
+          <AppsEmptyIcon />
           <h2 className="font-medium text-slate-900 dark:text-slate-100">
             {hasAnyInstalled ? t('noResults.title') : t('empty.title')}
           </h2>
@@ -110,11 +100,13 @@ export default async function AppsLauncherPage({
             {hasAnyInstalled ? t('noResults.description') : t('empty.description')}
           </p>
           {!hasAnyInstalled && canManage ? (
-            <Button className="mt-4" size="sm" asChild>
-              <Link href="/apps/library">
-                <Library size={15} /> {t('empty.action')}
-              </Link>
-            </Button>
+            <AppsLauncherButton
+              href="/apps/library"
+              label={t('empty.action')}
+              icon="library"
+              size="sm"
+              className="mt-4"
+            />
           ) : null}
         </div>
       )}

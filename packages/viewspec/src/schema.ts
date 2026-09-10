@@ -184,6 +184,8 @@ const filterBarBlock = z.strictObject({
   dateRange: fieldRefSchema.optional(),
   primaryFilter: fieldRefSchema.optional(),
   periodPresets: fieldRefSchema.optional(),
+  extraPeriods: fieldRefSchema.optional(),
+  extraPeriodsLabel: value.optional(),
   defaultPeriod: value.optional(),
 })
 
