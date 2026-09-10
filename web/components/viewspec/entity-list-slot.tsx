@@ -116,13 +116,20 @@ export async function EntityListSlot({
   const authz = await getAuthz()
   if (!authz) return null
   const formatValue = recordType === 'bank_rule' ? await bankRuleFormatValue(authz.user.orgId) : undefined
+  // Change sets are PRODUCTION configuration, read from a sandbox-aware
+  // session: the native page lists them against `productionOrgId`, not the
+  // current org, and hardcodes `canManage`. Decided here rather than passed,
+  // for the same reason the org id itself is — a spec that could name either
+  // is a spec that could name the wrong one. Keyed on the record type, the
+  // way `bank_rule` above already is.
+  const productionConfig = recordType === 'change_set'
   return (
     <EntityListView
       formatValue={formatValue}
       recordType={recordType}
-      orgId={authz.user.orgId}
+      orgId={productionConfig ? authz.user.productionOrgId : authz.user.orgId}
       userId={authz.user.id}
-      canManage={can(authz, 'admin.customization.manage')}
+      canManage={productionConfig || can(authz, 'admin.customization.manage')}
       sp={sp}
       drawer={drawer}
       emptyAction={emptyAction}

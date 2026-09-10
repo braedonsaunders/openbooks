@@ -1268,6 +1268,31 @@ const PAGES = [
     expect: 'main button',
     minMatches: 2,
   },
+  {
+    path: '/admin/sandboxes/change-sets',
+    // Fixture …1701-1706: a draft set with two captured items and a reviewed
+    // one. The flyout variant opens the draft.
+    variants: [
+      '',
+      {
+        query: '?changeSet=00000000-0000-7000-9000-000000001701',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/admin/setup/payment-providers',
+    // Whole-island setup page with no props and no query params. The
+    // `onlinePayments` feature had to be switched on in the harness tenant or
+    // both paths render the same redirect to the features page.
+    variants: [''],
+    expect: 'main h2, main h3',
+    minMatches: 1,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole
