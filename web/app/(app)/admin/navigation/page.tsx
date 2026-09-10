@@ -7,10 +7,28 @@ import { currentUser } from '../../../../lib/auth'
 import { listApps } from '../../../../lib/apps/store'
 import { defaultNavConfig, type OrgNavConfig } from '../../../../lib/nav/registry'
 import { NavEditor } from './NavEditor'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadNavigationAdmin, navigationAdminSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
-export default async function NavigationAdmin() {
+export default async function NavigationAdmin({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadNavigationAdmin(sp)
+    if (!data) return null
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={navigationAdminSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const user = await currentUser()
   if (!user) return null
   const t = await getTranslations('admin.navigation')

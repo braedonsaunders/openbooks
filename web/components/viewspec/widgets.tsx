@@ -103,6 +103,11 @@ import { DashboardHeader } from '../../app/(app)/dashboard/_dashboard-header'
 import { DashboardGridSlot } from './dashboard-grid-slot'
 import { PlatformClient } from '../../app/(app)/sync/PlatformClient'
 import { RetroWorkspace } from '../../app/(app)/payroll/retro/RetroWorkspace'
+import { RemittanceApNote, RemittancesView } from '../../app/(app)/payroll/remittances/sections'
+import { YearEndView } from '../../app/(app)/payroll/year-end/YearEndView'
+import { NavEditor } from '../../app/(app)/admin/navigation/NavEditor'
+import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/FeaturesWorkspace'
+import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
 import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
@@ -1176,6 +1181,52 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       schedules={props.schedules as ComponentProps<typeof RetroWorkspace>['schedules']}
       canRun={props.canRun === true}
     />
+  ),
+
+  /* --- payroll remittances ---------------------------------------------------------- */
+  /** The groups travel verbatim: plain serializable engine output. Money and
+   *  messages resolve inside the view through useMoney/useTranslations, so
+   *  the loader must not pre-format either. */
+  'remittance-cockpit': (props) => (
+    <RemittancesView
+      groups={(props.groups as ComponentProps<typeof RemittancesView>['groups']) ?? []}
+      from={str(props, 'from') ?? ''}
+      to={str(props, 'to') ?? ''}
+      canCreate={props.canCreate === true}
+    />
+  ),
+  'remittance-ap-note': (props) => (
+    <RemittanceApNote note={str(props, 'note') ?? ''} linkLabel={str(props, 'linkLabel') ?? ''} />
+  ),
+
+  /* --- payroll year-end ------------------------------------------------------------- */
+  /** Money stays canonical numeric text: the view formats client-side in the
+   *  browser's locale. */
+  'year-end-workspace': (props) => (
+    <YearEndView
+      year={num(props, 'year') ?? new Date().getFullYear()}
+      currentYear={num(props, 'currentYear') ?? new Date().getFullYear()}
+      sections={(props.sections as ComponentProps<typeof YearEndView>['sections']) ?? []}
+    />
+  ),
+
+  /* --- admin islands ---------------------------------------------------------------- */
+  /** The org nav-layout editor: unsaved client state, prompt() dialogs, a
+   *  four-pin mobile limit with a toast, and a PUT save. */
+  'nav-editor': (props) => (
+    <NavEditor
+      initial={props.initial as ComponentProps<typeof NavEditor>['initial']}
+      apps={(props.apps as ComponentProps<typeof NavEditor>['apps']) ?? []}
+    />
+  ),
+  /** THREE FLAT props, no wrapper bag — the bank-feeds division. */
+  'features-workspace': (props) => (
+    <FeaturesWorkspace {...(props as unknown as ComponentProps<typeof FeaturesWorkspace>)} />
+  ),
+  /** ONE prop. The secret ciphertext never leaves the engine module; only
+   *  `hasSecret` crosses into the redacted view the loader reads. */
+  'email-settings-form': (props) => (
+    <EmailSettingsForm initial={props.initial as ComponentProps<typeof EmailSettingsForm>['initial']} />
   ),
 
   /* --- home dashboard --------------------------------------------------------------- */

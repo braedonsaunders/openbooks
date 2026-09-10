@@ -10,7 +10,9 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
 import { scopedRemittanceSummary } from '../../../../lib/payroll-scoped-views'
-import { RemittancesView } from './RemittancesView'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadRemittances, remittancesSpec } from './view'
+import { RemittancesView } from './sections'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +33,17 @@ export default async function PayrollRemittancesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadRemittances(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={remittancesSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('payroll.read')
   await requireFeatureEnabled(authz.user.orgId, 'payroll')
   const t = await getTranslations('payroll.remittances')
