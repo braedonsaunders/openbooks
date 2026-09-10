@@ -1,33 +1,47 @@
+import 'server-only'
+
 import { sql } from 'drizzle-orm'
 import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
-import { PageContainer } from '../../../components/page-layout'
-import { ModuleView } from '../../../components/viewspec/module-view'
+import { frame, page, ref, widgetBlock, type PageSpec } from '@openbooks/viewspec'
 import { getAuthz, can } from '../../../lib/authz'
-import { ReportsHub, type HubGroup } from './ReportsHub'
 import { isFeatureEnabled } from '../../../lib/features'
 import { hiddenReportEntityKeys } from '../../../lib/report-authz'
-import { loadReportsHub, reportsHubSpec } from './view'
 
-export const dynamic = 'force-dynamic'
+/**
+ * The reports hub, split into a loader and a spec.
+ *
+ * The page is an interactive island: `ReportsHub` owns client-side search
+ * state, the hub header (a bespoke h1, not PageHeader) and the New-report
+ * create flow, so the spec places the whole content through one widget —
+ * the same doctrine as the file cabinet, whose interactive islands stay
+ * whole while the spec owns the page structure that is actually static.
+ * There is exactly one ReportsHub; no near-duplicate exists behind another
+ * registry entry, so no second component is introduced here. The outer
+ * `PageContainer` shell (scroll wrapper + centered container + fade-in) is
+ * likewise chrome the grid vocabulary cannot name, so it arrives as a
+ * `page-container` frame the coordinator registers around the widget.
+ *
+ * Loader work copied verbatim from page.tsx: the reports.create gate, the
+ * saved/custom definition queries, the four feature probes, the
+ * entity-visibility filter (a payroll built-in must not fall into Custom
+ * when Payroll is off), the payroll-first-class split, and every
+ * feature-gated group and card filter. Query-string building for saved
+ * views (`new URLSearchParams`) runs in the loader, not the spec.
+ */
 
-export default async function Reports({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadReportsHub()
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={reportsHubSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
+type HubCard = { href: string; title: string; desc: string; icon: string }
+type HubGroup = { key: string; label: string; accent: string; cards: HubCard[] }
+
+export interface ReportsHubData {
+  title: string
+  description: string
+  groups: HubGroup[]
+  canCreate: boolean
+}
+
+export async function loadReportsHub(): Promise<ReportsHubData> {
   const t = await getTranslations('reports')
   const tc = await getTranslations('analytics.trueCost')
   const authz = await getAuthz()
@@ -56,7 +70,7 @@ export default async function Reports({
     authz ? hiddenReportEntityKeys(authz) : Promise.resolve<string[]>([]),
   ])
 
-    // Hide definitions over permission-gated or feature-off entities from
+  // Hide definitions over permission-gated or feature-off entities from
   // users who could not run them anyway. A payroll built-in must not fall
   // into the Custom group when Payroll is off.
   const hidden = new Set(hiddenEntities)
@@ -73,7 +87,7 @@ export default async function Reports({
     (row) => !payrollDefinitions.some((p) => p.id === row.id),
   )
 
-const card = (key: string, href: string, icon: string) => ({
+  const card = (key: string, href: string, icon: string) => ({
     href,
     title: t(`hub.cards.${key}Title`),
     desc: t(`hub.cards.${key}Description`),
@@ -175,9 +189,32 @@ const card = (key: string, href: string, icon: string) => ({
     },
   ]
 
-  return (
-    <PageContainer>
-      <ReportsHub title={t('hub.title')} description={t('hub.description')} groups={groups} canCreate={canCreate} />
-    </PageContainer>
-  )
+  return {
+    title: t('hub.title'),
+    description: t('hub.description'),
+    groups,
+    canCreate,
+  }
+}
+
+const f = ref<ReportsHubData>()
+
+export function reportsHubSpec(data: ReportsHubData): PageSpec {
+  return page({
+    // The hub content is one client-interactive island (search state, the
+    // h1 header, the New-report create flow); the PageContainer shell is
+    // chrome around it. Both arrive whole — the spec owns neither.
+    layout: 'bare',
+    header: [],
+    body: [
+      frame('page-container', [
+        widgetBlock('reports-hub', {
+          title: f('title'),
+          description: f('description'),
+          groups: f('groups'),
+          canCreate: f('canCreate'),
+        }),
+      ]),
+    ],
+  })
 }

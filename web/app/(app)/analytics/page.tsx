@@ -3,6 +3,8 @@ import { PageContainer } from '../../../components/page-layout'
 import { requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { AnalyticsHub, type AnalyticsGroup } from './AnalyticsHub'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadAnalytics, analyticsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +13,22 @@ export async function generateMetadata() {
   return { title: t('title') }
 }
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | undefined>>
+} = {}) {
+  const sp = (await searchParams) ?? {}
+  if (sp.__viewspec === '1') {
+    const data = await loadAnalytics()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={analyticsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const t = await getTranslations('analytics.hub')
   const authz = await requirePermission('reports.read')
   const [projectsOn, timeOn] = await Promise.all([

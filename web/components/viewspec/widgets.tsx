@@ -55,6 +55,18 @@ import { NewAccountButton } from '../../app/(app)/accounts/NewAccountButton'
 import { EntityListSlot } from './entity-list-slot'
 import { RecordListSlot } from './record-list-slot'
 import { SetupSectionSlot } from './setup-section-slot'
+import { AdminRolesTable } from '../../app/(app)/admin/roles/sections'
+import { NewRoleButton } from '../../app/(app)/admin/roles/RoleEditor'
+import { AuditRowsTable, AuditEventFlyout, AuditDocsLink } from '../../app/(app)/admin/audit/sections'
+import { AccountsRosterPanel } from '../../app/(app)/banking/AccountsRoster'
+import { BankingAttentionList } from '../../app/(app)/banking/sections'
+import { ListChecks, ShieldCheck, ScrollText } from 'lucide-react'
+import { AnalyticsHub } from '../../app/(app)/analytics/AnalyticsHub'
+import { ReportsHub } from '../../app/(app)/reports/ReportsHub'
+import { QueryConsole } from '../../app/(app)/query/sections'
+import { HealthHero } from '../../app/(app)/accounting/sections'
+import { RelationshipsSection, ArPulse as CustomerArPulse } from '../../app/(app)/customers/sections'
+import { AdminHubCard } from '../../app/(app)/admin/sections'
 import { AdminUsersTable } from '../../app/(app)/admin/users/sections'
 import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
 import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
@@ -444,7 +456,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const renderer = action ? WIDGET_REGISTRY[action] : undefined
     // Icons are components, so the spec names one from a closed map rather
     // than carrying it — same rule as every other component reference.
-    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail />, activity: <Activity />, send: <Send />, 'check-circle': <CheckCircle2 />, gauge: <Gauge />, camera: <Camera /> }
+    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail />, activity: <Activity />, send: <Send />, 'check-circle': <CheckCircle2 />, gauge: <Gauge />, camera: <Camera />, 'shield-check': <ShieldCheck />, 'scroll-text': <ScrollText /> }
     const iconKey = str(props, 'icon')
     return (
       <EmptyState
@@ -587,6 +599,156 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
         {str(props, 'label') ?? ''}
       </Link>
     </Button>
+  ),
+
+  /* --- org roles ------------------------------------------------------------- */
+  /** Same doctrine as `admin-users-table`: the native page hand-rolls a plain
+   *  `<table>` the spec's table vocabulary cannot name, so one component
+   *  serves both render paths. */
+  'admin-roles-table': (props) => (
+    <AdminRolesTable
+      roles={(props.roles as ComponentProps<typeof AdminRolesTable>['roles']) ?? []}
+      subsidiaries={
+        (props.subsidiaries as ComponentProps<typeof AdminRolesTable>['subsidiaries']) ?? null
+      }
+      basePath={str(props, 'basePath') ?? '/admin/roles'}
+      currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
+      sort={str(props, 'sort') ?? 'name'}
+      dir={str(props, 'dir') === 'desc' ? 'desc' : 'asc'}
+      labels={props.labels as ComponentProps<typeof AdminRolesTable>['labels']}
+    />
+  ),
+  'new-role': (props) => (
+    <NewRoleButton
+      subsidiaries={(props.subsidiaries as ComponentProps<typeof NewRoleButton>['subsidiaries']) ?? null}
+    />
+  ),
+
+  /* --- audit log ------------------------------------------------------------- */
+  /** Not `docs-link-button`: that one is a 14px icon with no space before the
+   *  label, this one a 15px icon with one. Same-looking buttons that are not
+   *  the same button. */
+  'audit-docs-link': (props) => (
+    <AuditDocsLink href={str(props, 'href') ?? ''} label={str(props, 'label') ?? ''} />
+  ),
+  'audit-rows-table': (props) => (
+    <AuditRowsTable
+      rows={(props.rows as ComponentProps<typeof AuditRowsTable>['rows']) ?? []}
+      selectedId={
+        (str(props, 'selectedId') ?? undefined) as ComponentProps<typeof AuditRowsTable>['selectedId']
+      }
+    />
+  ),
+  'audit-event-drawer': (props) => {
+    const drawer = props.drawer as {
+      event: ComponentProps<typeof AuditEventFlyout>['event']
+      closeHref: string
+    } | null
+    if (!drawer) return null
+    return <AuditEventFlyout event={drawer.event} closeHref={drawer.closeHref} />
+  },
+
+  /* --- banking cockpit ------------------------------------------------------- */
+  /** A widget, not a slot: the LOADER already did the roster's server work and
+   *  passes the prefs through as data, so no org id, user id or Authz crosses
+   *  the spec. Persistence rides the session cookie inside the component. */
+  'banking-roster': (props) => (
+    <AccountsRosterPanel
+      accounts={props.accounts as ComponentProps<typeof AccountsRosterPanel>['accounts']}
+      totalCash={Number(props.totalCash ?? 0)}
+      totalCards={Number(props.totalCards ?? 0)}
+      layoutPrefs={props.layoutPrefs as ComponentProps<typeof AccountsRosterPanel>['layoutPrefs']}
+    />
+  ),
+  /** A conditional PAIR — a count label when there is unmatched activity, a
+   *  plain one when clean — so the choice lives here, not in the spec. */
+  'banking-match': (props) => (
+    <Button
+      variant={(str(props, 'variant') ?? 'outline') as ComponentProps<typeof Button>['variant']}
+      asChild
+    >
+      <Link href={(str(props, 'href') ?? '/banking/match') as never}>
+        <ListChecks size={14} />
+        {props.showCount === true ? (str(props, 'countLabel') ?? '') : (str(props, 'label') ?? '')}
+      </Link>
+    </Button>
+  ),
+  'banking-attention-list': (props) => (
+    <BankingAttentionList
+      items={(props.items as ComponentProps<typeof BankingAttentionList>['items']) ?? []}
+      allClear={str(props, 'allClear') ?? ''}
+    />
+  ),
+
+  /* --- launchers and consoles ------------------------------------------------ */
+  /** Both are whole client components that own their own search, icon maps and
+   *  editor state. Decomposing either would reimplement it, not compose it. */
+  'analytics-hub': (props) => (
+    <AnalyticsHub
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      groups={(props.groups as ComponentProps<typeof AnalyticsHub>['groups']) ?? []}
+    />
+  ),
+  'reports-hub': (props) => (
+    <ReportsHub
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      groups={(props.groups as ComponentProps<typeof ReportsHub>['groups']) ?? []}
+      canCreate={props.canCreate === true}
+    />
+  ),
+  'query-console': () => <QueryConsole />,
+
+  /* --- accounting cockpit ---------------------------------------------------- */
+  'health-hero': (props) => (
+    <HealthHero
+      gaugeValue={typeof props.gaugeValue === 'number' ? props.gaugeValue : 0}
+      gaugeLabel={str(props, 'gaugeLabel') ?? ''}
+      categories={props.categories as ComponentProps<typeof HealthHero>['categories']}
+      ratios={props.ratios as ComponentProps<typeof HealthHero>['ratios']}
+      ratioLabels={props.ratioLabels as ComponentProps<typeof HealthHero>['ratioLabels']}
+      fullAnalysisLabel={str(props, 'fullAnalysisLabel') ?? ''}
+    />
+  ),
+
+  /* --- customers cockpit ----------------------------------------------------- */
+  'relationships-section': (props) => (
+    <RelationshipsSection
+      rows={(props.rows as ComponentProps<typeof RelationshipsSection>['rows']) ?? []}
+      crmEnabled={props.crmEnabled !== false}
+      empty={str(props, 'empty') ?? ''}
+    />
+  ),
+  /** The AR strip. Named `customer-ar-pulse`, not `ar-pulse`: the purchasing
+   *  cockpit already owns `ap-pulse`, and two similarly named entries pointing
+   *  at different components is exactly how a registry starts lying. */
+  'customer-ar-pulse': (props) => (
+    <CustomerArPulse
+      outstanding={str(props, 'outstanding') ?? ''}
+      overdue={str(props, 'overdue') ?? ''}
+      overdueIsNegative={props.overdueIsNegative === true}
+      dso={str(props, 'dso') ?? ''}
+      labels={props.labels as ComponentProps<typeof CustomerArPulse>['labels']}
+      href={str(props, 'href') ?? ''}
+    />
+  ),
+
+  /* --- admin hub ------------------------------------------------------------ */
+  /** One hub navigation card. The icon and the accent are lookups resolved
+   *  here, so the spec carries only data — and the accent's Tailwind classes
+   *  stay complete literals in the component, or the scanner purges them. */
+  'admin-hub-card': (props) => (
+    <AdminHubCard
+      href={str(props, 'href') ?? '#'}
+      iconKey={str(props, 'iconKey') ?? ''}
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      accent={
+        (['teal', 'violet', 'amber', 'sky'] as const).find((a) => a === str(props, 'accent')) ??
+        'teal'
+      }
+    />
   ),
 
   /* --- org users ------------------------------------------------------------ */

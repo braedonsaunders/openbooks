@@ -149,7 +149,8 @@ begin
              'timeTracking', true,
              'banking', true,
              'fixedAssets', true,
-             'orders', true))
+             'orders', true,
+             'queryConsole', true))
    where id = v_org;
 
   -- ---- approvals -----------------------------------------------------------

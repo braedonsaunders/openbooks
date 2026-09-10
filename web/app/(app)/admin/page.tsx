@@ -1,27 +1,11 @@
-import type { ReactNode } from 'react'
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import {
-  ArrowUpRight,
-  Blocks,
-  Boxes,
-  Code2,
-  Database,
-  DatabaseBackup,
-  KeyRound,
-  Link as LinkIcon,
-  Mail,
-  PanelLeft,
-  ScrollText,
-  ShieldCheck,
-  Sparkles,
-  Users,
-  Workflow,
-} from 'lucide-react'
-import { PageHeader, cn } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { getAuthz, can } from '../../../lib/authz'
 import { featureEnabled, resolvedFeatureState } from '../../../lib/features'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadAdminHub, adminHubSpec } from './view'
+import { AdminHubCard, type AdminHubAccent } from './sections'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,40 +14,14 @@ export async function generateMetadata() {
   return { title: t('hub.metaTitle') }
 }
 
-// Per-accent class sets, kept as complete literal strings so Tailwind's scanner
-// picks them up (dynamic `bg-${x}` names would be purged).
-const ACCENTS = {
-  teal: {
-    chip: 'bg-teal-50 text-teal-700 ring-teal-100 dark:bg-teal-950/50 dark:text-teal-300',
-    border: 'hover:border-teal-300 dark:hover:border-teal-700',
-    link: 'group-hover:text-teal-600 dark:group-hover:text-teal-300',
-  },
-  violet: {
-    chip: 'bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-950/50 dark:text-violet-300',
-    border: 'hover:border-violet-300 dark:hover:border-violet-700',
-    link: 'group-hover:text-violet-600 dark:group-hover:text-violet-300',
-  },
-  amber: {
-    chip: 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/50 dark:text-amber-300',
-    border: 'hover:border-amber-300 dark:hover:border-amber-700',
-    link: 'group-hover:text-amber-600 dark:group-hover:text-amber-300',
-  },
-  sky: {
-    chip: 'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/50 dark:text-sky-300',
-    border: 'hover:border-sky-300 dark:hover:border-sky-700',
-    link: 'group-hover:text-sky-600 dark:group-hover:text-sky-300',
-  },
-} as const
-
-type Accent = keyof typeof ACCENTS
 type Card = {
   href: string
+  iconKey: string
   cardKey: string
-  icon: ReactNode
   permission: string
   featureKey?: string
 }
-type Group = { key: string; labelKey: string; accent: Accent; cards: Card[] }
+type Group = { key: string; labelKey: string; accent: AdminHubAccent; cards: Card[] }
 
 // The admin hub. Every card is gated by the permission of the surface it opens;
 // the whole page is gated by holding at least one of them. Navigation is
@@ -79,15 +37,10 @@ const GROUPS: Group[] = [
     labelKey: 'hub.groups.people',
     accent: 'violet',
     cards: [
-      {
-        href: '/admin/users',
-        icon: <Users size={18} />,
-        cardKey: 'users',
-        permission: 'admin.users.manage',
-      },
+      { href: '/admin/users', iconKey: 'users', cardKey: 'users', permission: 'admin.users.manage' },
       {
         href: '/admin/roles',
-        icon: <ShieldCheck size={18} />,
+        iconKey: 'shield-check',
         cardKey: 'roles',
         permission: 'admin.roles.manage',
       },
@@ -98,27 +51,17 @@ const GROUPS: Group[] = [
     labelKey: 'hub.groups.workspace',
     accent: 'amber',
     cards: [
-      {
-        href: '/admin/ai',
-        icon: <Sparkles size={18} />,
-        cardKey: 'ai',
-        permission: 'admin.ai.manage',
-      },
+      { href: '/admin/ai', iconKey: 'sparkles', cardKey: 'ai', permission: 'admin.ai.manage' },
       {
         href: '/admin/navigation',
-        icon: <PanelLeft size={18} />,
+        iconKey: 'panel-left',
         cardKey: 'navigation',
         permission: 'admin.nav.manage',
       },
-      {
-        href: '/admin/email',
-        icon: <Mail size={18} />,
-        cardKey: 'email',
-        permission: 'admin.setup.manage',
-      },
+      { href: '/admin/email', iconKey: 'mail', cardKey: 'email', permission: 'admin.setup.manage' },
       {
         href: '/admin/pdf-templates',
-        icon: <ScrollText size={18} />,
+        iconKey: 'scroll-text',
         cardKey: 'pdfTemplates',
         permission: 'admin.customization.manage',
       },
@@ -131,42 +74,42 @@ const GROUPS: Group[] = [
     cards: [
       {
         href: '/admin/scripts',
-        icon: <Code2 size={18} />,
+        iconKey: 'code-2',
         cardKey: 'scripts',
         permission: 'scripts.manage',
         featureKey: 'scripts',
       },
       {
         href: '/admin/flows',
-        icon: <Workflow size={18} />,
+        iconKey: 'workflow',
         cardKey: 'flows',
         permission: 'flows.manage',
         featureKey: 'flows',
       },
       {
         href: '/admin/apps',
-        icon: <Blocks size={18} />,
+        iconKey: 'blocks',
         cardKey: 'apps',
         permission: 'apps.manage',
         featureKey: 'apps',
       },
       {
         href: '/admin/api-keys',
-        icon: <KeyRound size={18} />,
+        iconKey: 'key-round',
         cardKey: 'apiKeys',
         permission: 'api.keys.manage',
         featureKey: 'apiAccess',
       },
       {
         href: '/api-docs',
-        icon: <Code2 size={18} />,
+        iconKey: 'code-2',
         cardKey: 'apiDocs',
         permission: 'api.keys.manage',
         featureKey: 'apiAccess',
       },
       {
         href: '/query',
-        icon: <Database size={18} />,
+        iconKey: 'database',
         cardKey: 'queryConsole',
         permission: 'sql.execute',
         featureKey: 'queryConsole',
@@ -180,33 +123,43 @@ const GROUPS: Group[] = [
     cards: [
       {
         href: '/admin/sandboxes',
-        icon: <Boxes size={18} />,
+        iconKey: 'boxes',
         cardKey: 'sandboxes',
         permission: 'admin.sandboxes.manage',
       },
       {
         href: '/admin/backups',
-        icon: <DatabaseBackup size={18} />,
+        iconKey: 'database-backup',
         cardKey: 'backup',
         permission: 'admin.backups.manage',
       },
       {
         href: '/admin/audit',
-        icon: <ScrollText size={18} />,
+        iconKey: 'scroll-text',
         cardKey: 'audit',
         permission: 'admin.audit.read',
       },
-      {
-        href: '/sync',
-        icon: <LinkIcon size={18} />,
-        cardKey: 'sync',
-        permission: 'sync.run',
-      },
+      { href: '/sync', iconKey: 'link', cardKey: 'sync', permission: 'sync.run' },
     ],
   },
 ]
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadAdminHub()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={adminHubSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const t = await getTranslations('admin')
@@ -214,7 +167,9 @@ export default async function AdminPage() {
 
   const groups = GROUPS.map((g) => ({
     ...g,
-    cards: g.cards.filter((c) => can(authz, c.permission) && (!c.featureKey || featureEnabled(featureState, c.featureKey))),
+    cards: g.cards.filter(
+      (c) => can(authz, c.permission) && (!c.featureKey || featureEnabled(featureState, c.featureKey)),
+    ),
   })).filter((g) => g.cards.length > 0)
 
   // No admin-ish permission at all → this landing has nothing to show.
@@ -230,54 +185,25 @@ export default async function AdminPage() {
       {/* Body scrolls internally, not the whole page */}
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
         <div className="mx-auto w-full max-w-screen-2xl space-y-8 p-4 sm:p-6">
-          {groups.map((group) => {
-            const accent = ACCENTS[group.accent]
-            return (
-              <section key={group.key} className="space-y-3">
-                <h2 className="px-0.5 text-xs font-semibold tracking-wider text-slate-600 uppercase dark:text-slate-400">
-                  {t(group.labelKey)}
-                </h2>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                  {group.cards.map((card) => (
-                    <Link
-                      key={card.href}
-                      href={card.href}
-                      title={t(`hub.cards.${card.cardKey}.description`)}
-                      className={cn(
-                        'group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900',
-                        accent.border,
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'grid h-10 w-10 shrink-0 place-items-center rounded-lg ring-1',
-                          accent.chip,
-                        )}
-                      >
-                        {card.icon}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                          {t(`hub.cards.${card.cardKey}.title`)}
-                        </h3>
-                        <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-                          {t(`hub.cards.${card.cardKey}.description`)}
-                        </p>
-                      </div>
-                      <ArrowUpRight
-                        size={15}
-                        aria-hidden
-                        className={cn(
-                          'shrink-0 text-slate-300 opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:opacity-100 dark:text-slate-600',
-                          accent.link,
-                        )}
-                      />
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )
-          })}
+          {groups.map((group) => (
+            <section key={group.key} className="space-y-3">
+              <h2 className="px-0.5 text-xs font-semibold tracking-wider text-slate-600 uppercase dark:text-slate-400">
+                {t(group.labelKey)}
+              </h2>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                {group.cards.map((card) => (
+                  <AdminHubCard
+                    key={card.href}
+                    href={card.href}
+                    iconKey={card.iconKey}
+                    title={t(`hub.cards.${card.cardKey}.title`)}
+                    description={t(`hub.cards.${card.cardKey}.description`)}
+                    accent={group.accent}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
       </div>
     </div>

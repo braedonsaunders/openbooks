@@ -2,18 +2,19 @@ import Link from 'next/link'
 import { sql, type SQL } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
-import { Badge, Button, EmptyState, PageHeader } from '@openbooks/ui'
+import { Button, EmptyState, PageHeader } from '@openbooks/ui'
 import { ShieldCheck } from 'lucide-react'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
-import { SortTh } from '../../../../components/sortable-th'
 import { Pagination } from '../../../../components/pagination'
 import { requirePermission } from '../../../../lib/authz'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadAdminRoles, adminRolesSpec } from './view'
+import { AdminRolesTable } from './sections'
 import {
-  EditRoleButton,
   NewRoleButton,
   type RoleRow,
   type SubsidiaryPickerOption,
@@ -38,6 +39,17 @@ export default async function AdminRolesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadAdminRoles(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={adminRolesSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('admin.roles.manage')
   const t = await getTranslations('admin.roles')
   const tCommon = await getTranslations('common')
@@ -107,8 +119,6 @@ export default async function AdminRolesPage({
     typeCountsR.rows.map((r) => [r.is_built_in ? 'built_in' : 'custom', Number(r.c)]),
   ) as Record<string, number>
 
-  const sortProps = { basePath: BASE, currentParams: sp, sort: listParams.sort, dir: listParams.dir }
-
   return (
     <ListPageLayout
       header={
@@ -149,58 +159,26 @@ export default async function AdminRolesPage({
           description={!listParams.q && !type ? t('emptyDescription') : t('noMatchDescription')}
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
-                <SortTh column="name" {...sortProps}>
-                  {tCommon('labels.name')}
-                </SortTh>
-                <th className="px-3 py-2">{t('table.key')}</th>
-                <th className="px-3 py-2">{tCommon('labels.description')}</th>
-                <SortTh column="permissions" {...sortProps}>
-                  {t('table.permissions')}
-                </SortTh>
-                <SortTh column="members" {...sortProps}>
-                  {t('table.members')}
-                </SortTh>
-                <th className="px-3 py-2">{tCommon('labels.type')}</th>
-                <th className="px-3 py-2 text-right">{tCommon('labels.actions')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {roles.map((r) => (
-                <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
-                  <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">
-                    {r.name}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-[13px] text-slate-600 dark:text-slate-400">
-                    {r.key}
-                  </td>
-                  <td className="max-w-md px-3 py-2 text-slate-600 dark:text-slate-400">
-                    <span className="line-clamp-1">{r.description ?? '—'}</span>
-                  </td>
-                  <td className="px-3 py-2 tabular-nums text-slate-600 dark:text-slate-400">
-                    {r.permissionCount}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums text-slate-600 dark:text-slate-400">
-                    {r.memberCount}
-                  </td>
-                  <td className="px-3 py-2">
-                    {r.isBuiltIn ? (
-                      <Badge variant="secondary">{t('builtIn')}</Badge>
-                    ) : (
-                      <Badge variant="outline">{t('custom')}</Badge>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <EditRoleButton role={r} subsidiaries={subsidiaries} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <AdminRolesTable
+          roles={roles}
+          subsidiaries={subsidiaries}
+          basePath={BASE}
+          currentParams={sp}
+          sort={listParams.sort}
+          dir={listParams.dir}
+          labels={{
+            name: tCommon('labels.name'),
+            key: t('table.key'),
+            description: tCommon('labels.description'),
+            permissions: t('table.permissions'),
+            members: t('table.members'),
+            type: tCommon('labels.type'),
+            actions: tCommon('labels.actions'),
+            builtIn: t('builtIn'),
+            custom: t('custom'),
+            noDescription: '—',
+          }}
+        />
       )}
       <Pagination
         basePath={BASE}
