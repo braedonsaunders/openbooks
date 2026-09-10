@@ -84,6 +84,13 @@ import { ArCockpit } from '../../app/(app)/ar/cockpit/ArCockpit'
 import { DocsHome } from '../../app/(app)/docs/sections'
 import { PlatformNotice, PlatformTile } from '../../app/(app)/platform/sections'
 import { BackupManager } from '../../app/(app)/admin/backups/BackupManager'
+import { AppLauncherCard, AppsEmptyIcon, AppsLauncherButton } from '../../app/(app)/apps/sections'
+import {
+  NewSetupRecordButton,
+  PaymentOperationsEditor,
+  PaymentOperationsTabs,
+  PaymentScheduleNextRun,
+} from '../../app/(app)/admin/setup/payment-operations/sections'
 import {
   ReconcileStats,
   ReconcileStatusBadge,
@@ -867,6 +874,58 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       data={props.data as ComponentProps<typeof PaperView>['data']}
     />
   ),
+  /* --- app launcher ----------------------------------------------------------- */
+  /** Flat props: widget props resolve one level deep, so the loader
+   *  denormalizes each row and the spec binds per-item fields. */
+  'app-launcher-card': (props) => (
+    <AppLauncherCard
+      href={str(props, 'href') ?? ''}
+      ariaLabel={str(props, 'ariaLabel') ?? ''}
+      iconKey={str(props, 'iconKey') ?? ''}
+      name={str(props, 'name') ?? ''}
+      versionLine={str(props, 'versionLine') ?? ''}
+      description={str(props, 'description') ?? ''}
+      openLabel={str(props, 'openLabel') ?? ''}
+    />
+  ),
+  'apps-empty-icon': () => <AppsEmptyIcon />,
+  /** One parametric entry for three button shapes this page renders; none of
+   *  the existing link buttons match any of them. */
+  'apps-launcher-button': (props) => (
+    <AppsLauncherButton
+      href={str(props, 'href') ?? ''}
+      label={str(props, 'label') ?? ''}
+      icon={str(props, 'icon') === 'book' ? 'book' : 'library'}
+      variant={str(props, 'variant') === 'outline' ? 'outline' : undefined}
+      size={str(props, 'size') === 'sm' ? 'sm' : undefined}
+      className={str(props, 'className')}
+    />
+  ),
+
+  /* --- payment operations ------------------------------------------------------ */
+  'payment-operations-tabs': (props) => (
+    <PaymentOperationsTabs
+      tabs={(props.tabs as ComponentProps<typeof PaymentOperationsTabs>['tabs']) ?? []}
+    />
+  ),
+  /** `link-button`'s closed icon map has no `plus`, and this action carries
+   *  one — so it gets its own entry rather than widening that map for a
+   *  single caller. */
+  'new-setup-record': (props) => (
+    <NewSetupRecordButton href={str(props, 'href') ?? ''} label={str(props, 'label') ?? ''} />
+  ),
+  /** The native row formats this timestamp CLIENT-side, in the browser's
+   *  locale and timezone. The loader must not format it, so the raw ISO
+   *  string travels and the cell runs the identical expression. */
+  'payment-schedule-next-run': (props) => (
+    <PaymentScheduleNextRun value={(props.value as string | null) ?? null} />
+  ),
+  'payment-operations-editor': (props) => {
+    const editor = props.editor as ComponentProps<typeof PaymentOperationsEditor>['editor'] | null
+    if (!editor) return null
+    return <PaymentOperationsEditor editor={editor} />
+  },
+
   /* --- reconciliation workspace ------------------------------------------------ */
   'reconcile-status-badge': (props) => (
     <ReconcileStatusBadge

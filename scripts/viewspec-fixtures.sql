@@ -1254,4 +1254,27 @@ begin
       on conflict (id) do nothing;
     end if;
   end;
+
+  -- ---- app launcher (/apps): no-description fallback -------------------------
+  -- Same SIM-org apps the admin-apps block seeds, plus one installed app
+  -- WITH an active version but a NULL description, so the launcher's
+  -- `description || t('noDescription')` fallback renders real copy instead
+  -- of coinciding with the demo app's description. GUARD before insert:
+  -- the apps table has no trigger or CHECK to defeat, but the unique key
+  -- is (org_id, key), not the id — ON CONFLICT (id) alone would raise on a
+  -- re-run with a changed id, so the guard owns idempotence.
+  insert into apps (id, org_id, key, name, description, status, granted_permissions)
+  select '00000000-0000-7000-9000-000000001104', v_org, 'viewspec-nodesc', 'ViewSpec nodesc app',
+         null, 'installed', '[]'
+   where not exists (select 1 from apps where org_id = v_org and key = 'viewspec-nodesc');
+
+  insert into app_versions (id, org_id, app_id, version, manifest, status)
+  select '00000000-0000-7000-9000-000000001112', v_org,
+         (select id from apps where org_id = v_org and key = 'viewspec-nodesc'), '0.1.0',
+         '{"endpoints": []}', 'active'
+   where not exists (select 1 from app_versions where id = '00000000-0000-7000-9000-000000001112');
+
+  update apps set active_version_id = '00000000-0000-7000-9000-000000001112'
+   where org_id = v_org and key = 'viewspec-nodesc'
+     and active_version_id is null;
 end $$;

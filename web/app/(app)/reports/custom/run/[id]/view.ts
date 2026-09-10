@@ -1,17 +1,27 @@
-import Link from 'next/link'
+import 'server-only'
+
 import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { getTranslations } from 'next-intl/server'
-import { Button, PageHeader } from '@openbooks/ui'
+import {
+  filterBar,
+  page,
+  pageHeader,
+  pagination,
+  paper,
+  ref,
+  textBlock,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from '@openbooks/viewspec'
 import {
   applyBuiltInUrlFilters,
   BUILT_IN_REPORT_DEFINITION_MAP,
   REPORT_ENTITY_MAP,
   type ReportRunResult,
 } from '@openbooks/reports'
-import { ListPageLayout } from '../../../../../../components/page-layout'
-import { Pagination } from '../../../../../../components/pagination'
 import { requirePermission } from '../../../../../../lib/authz'
 import { canRunReportEntity } from '../../../../../../lib/report-authz'
 import { clamp, isUuid, pickString } from '../../../../../../lib/list-params'
@@ -22,45 +32,76 @@ import { statementPageHref } from '../../../../../../lib/report-run'
 import { orgBranding } from '../../../../../../lib/report-pdf'
 import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { resolvePeriod } from '../../../../../../lib/periods'
-import { ReportFilterBar, type ExtraPeriodOption } from '../../../ReportFilterBar'
-import { ScheduleReportButton } from '../../../ScheduleReportButton'
-import { ExportMenu } from '../../../ExportMenu'
-import { SaveViewButton } from '../../../SaveViewButton'
-import { ReportPaper } from '../../../ReportPaper'
-import { ResultView } from '../../ResultView'
-import { ModuleView } from '../../../../../../components/viewspec/module-view'
-import { loadReportRun, reportRunSpec } from './view'
-
-export const dynamic = 'force-dynamic'
+import type { ExtraPeriodOption } from '../../../ReportFilterBar'
+import type { ReportDrillTarget } from '../../../../../../lib/report-drill'
 
 /**
  * A saved query report IS a regular report: this screen is the exact native
  * report chrome — header back to the hub, filter-bar row with Export, and the
  * paper, already run. Definition management (builder, delivery schedules, run
  * history) lives on its own screens, never here.
+ *
+ * Split into a loader and a spec. Everything below that touches the database,
+ * the session, the translations or the URL is loader work copied verbatim from
+ * page.tsx — including the permission gates (reports.read, then the
+ * entity/Features gate that also guards /api/reports/run), the pagination
+ * normalization, the period resolution, the built-in URL-filter application,
+ * the payroll pay-period lookup, and the read-only execution. The spec only
+ * names blocks and binds already-resolved fields.
+ *
+ * Three things this page settles:
+ *
+ * 1. The filter bar's `period` control is data-driven (`Boolean(periodField)`
+ *    — a persisted-plan property, not a URL value), and the spec's controls
+ *    are static booleans by design. So the spec places TWO filter bars with
+ *    complementary loader flags (`hasPeriodField` / `noPeriodField`), the
+ *    same treatment the budget page gives its sections control. Both bars
+ *    carry the same actions; only the flag differs.
+ * 2. The extra period rows — pay periods sitting above the fiscal presets in
+ *    their own optgroup — bind through the filter bar's `extraPeriods`,
+ *    which the language gained for this page.
+ * 3. No `sections.tsx`: the page defines no local components. `ResultView`
+ *    (and its `PaperView`/`ReportPaper` interior), `ReportFilterBar`,
+ *    `ScheduleReportButton`, `ExportMenu` and `SaveViewButton` are all shared
+ *    components, so the widgets reference them directly.
  */
-export default async function ReportRunPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>
-  searchParams: Promise<Record<string, string | undefined>>
-}) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const { id } = await params
-    const data = await loadReportRun(id, sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={reportRunSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
+
+export interface ReportRunData {
+  title: string
+  description: string | null
+  backHref: string
+  backLabel: string
+  hasPeriodField: boolean
+  noPeriodField: boolean
+  /** Payroll pay periods offered atop the fiscal presets; undefined otherwise. */
+  extraPeriods: ExtraPeriodOption[] | undefined
+  canCreate: boolean
+  editHref: string
+  editLabel: string
+  definitionId: string
+  historyHref: string
+  exportBaseHref: string
+  company: string
+  periodPhrase: string | null
+  periodLabel: string | undefined
+  hasResult: boolean
+  hasError: boolean
+  result: ReportRunResult | null
+  drillTarget: ReportDrillTarget | null
+  error: string | null
+  hasPageInfo: boolean
+  pagerBasePath: string
+  totalRows: number
+  currentPage: number
+  perPage: number
+}
+
+export async function loadReportRun(
+  id: string,
+  sp: Record<string, string | undefined>,
+): Promise<ReportRunData> {
   const authz = await requirePermission('reports.read')
   const canCreate = authz.permissions.has('reports.create') || authz.permissions.has('*')
-  const { id } = await params
   if (!isUuid(id)) notFound()
 
   const definition = await loadReportDefinition(authz.user.orgId, id)
@@ -75,9 +116,8 @@ export default async function ReportRunPage({
   const entity = REPORT_ENTITY_MAP[(definition.query as { entity?: string }).entity ?? '']
   if (!(await canRunReportEntity(authz, definition.query))) notFound()
 
-  const sp = await searchParams
   const pagination = entity?.pagination
-  const page = pagination
+  const pageNum = pagination
     ? clamp(
         Number(pickString(sp.page) ?? '1'),
         1,
@@ -93,7 +133,6 @@ export default async function ReportRunPage({
     : 0
 
   const t = await getTranslations('reports')
-  const tk = await getTranslations('reports.custom')
   const tc = await getTranslations('common')
 
   // Built-in definitions localize by slug; custom slugs fall back to stored text.
@@ -175,7 +214,7 @@ export default async function ReportRunPage({
     if (queryError) throw queryError
     const executed = pagination
       ? await executeReportPage(authz.user.orgId, query, {
-          offset: (page - 1) * perPage,
+          offset: (pageNum - 1) * perPage,
           limit: perPage,
         })
       : await executeReport(authz.user.orgId, query)
@@ -187,59 +226,116 @@ export default async function ReportRunPage({
     error = err instanceof Error ? err.message : 'report failed'
   }
 
-  return (
-    <ListPageLayout
-      header={
-        <>
-          <PageHeader
-            title={displayName}
-            description={periodLabel}
-            back={{ href: '/reports', label: t('hub.title') }}
-          />
-          <ReportFilterBar
-            controls={{ period: Boolean(periodField) }}
-            extraPeriods={extraPeriods}
-            actions={
-              <>
-                {canCreate ? (
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/reports/custom/builder/${definition.id}`}>{tc('actions.edit')}</Link>
-                  </Button>
-                ) : null}
-                <ScheduleReportButton
-                  definitionId={definition.id}
-                  historyHref={`/reports/custom/run/${definition.id}/delivery`}
-                />
-                <SaveViewButton />
-                <ExportMenu baseHref={`/api/reports/definitions/${definition.id}/export${exportQs}`} />
-              </>
-            }
-          />
-        </>
-      }
-    >
-      {result ? (
-        <ResultView
-          company={branding.orgName}
-          title={displayName}
-          description={periodPhrase ?? displayDescription}
-          result={result}
-          drillTarget={{ kind: 'custom', source: 'definition', id: definition.id, label: displayName }}
-        />
-      ) : (
-        <ReportPaper company={branding.orgName} title={displayName} periodPhrase={periodPhrase ?? displayDescription ?? undefined}>
-          <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">{error}</p>
-        </ReportPaper>
-      )}
-      {result?.pageInfo ? (
-        <Pagination
-          basePath={`/reports/custom/run/${definition.id}`}
-          currentParams={sp}
-          total={result.pageInfo.totalRows}
-          page={page}
-          perPage={perPage}
-        />
-      ) : null}
-    </ListPageLayout>
+  return {
+    title: displayName,
+    description: displayDescription,
+    backHref: '/reports',
+    backLabel: t('hub.title'),
+    hasPeriodField: Boolean(periodField),
+    noPeriodField: !periodField,
+    extraPeriods,
+    canCreate,
+    editHref: `/reports/custom/builder/${definition.id}`,
+    editLabel: tc('actions.edit'),
+    definitionId: definition.id,
+    historyHref: `/reports/custom/run/${definition.id}/delivery`,
+    exportBaseHref: `/api/reports/definitions/${definition.id}/export${exportQs}`,
+    company: branding.orgName,
+    periodPhrase: periodPhrase ?? displayDescription,
+    periodLabel,
+    hasResult: Boolean(result),
+    hasError: !result,
+    result,
+    drillTarget: result
+      ? { kind: 'custom', source: 'definition', id: definition.id, label: displayName }
+      : null,
+    error,
+    hasPageInfo: Boolean(result?.pageInfo),
+    pagerBasePath: `/reports/custom/run/${definition.id}`,
+    totalRows: result?.pageInfo?.totalRows ?? 0,
+    currentPage: pageNum,
+    perPage,
+  }
+}
+
+const f = ref<ReportRunData>()
+
+export function reportRunSpec(data: ReportRunData): PageSpec {
+  const edit = widget(
+    'link-button',
+    { href: data.editHref, label: data.editLabel, variant: 'outline', size: 'sm' },
+    f('canCreate'),
   )
+  const actions = [
+    edit,
+    widget('schedule-report', { definitionId: data.definitionId, historyHref: data.historyHref }),
+    widget('save-view'),
+    widget('export-menu', { baseHref: data.exportBaseHref }),
+  ]
+  return page({
+    layout: 'list',
+    header: [
+      pageHeader({
+        title: f('title'),
+        description: f('periodLabel'),
+        back: { href: f('backHref'), label: f('backLabel') },
+      }),
+      // The generic period picker owns a date field only when the persisted
+      // plan says so — a static-controls language needs both bars, exactly
+      // like the budget page's sections pair. `extraPeriods` carries the pay
+      // periods that sit above the presets in their own optgroup.
+      {
+        ...filterBar({ period: true }, { actions, extraPeriods: f('extraPeriods') }),
+        when: f('hasPeriodField'),
+      },
+      {
+        ...filterBar({ period: false }, { actions, extraPeriods: f('extraPeriods') }),
+        when: f('noPeriodField'),
+      },
+    ],
+    body: [
+      // Success: the engine result rendered as the shared sheet of paper.
+      // `result-view` is the existing registry widget wrapping ResultView —
+      // flat props (company/title/description/result/drillTarget), exactly
+      // the shape its entry passes through.
+      {
+        ...widgetBlock('result-view', {
+          company: data.company,
+          title: data.title,
+          description: data.periodPhrase,
+          result: data.result,
+          drillTarget: data.drillTarget,
+        }),
+        when: f('hasResult'),
+      },
+      // Failure (bad URL filters, engine error): the same paper with the
+      // error paragraph the native branch renders — `py-12 text-center
+      // text-sm text-slate-500 dark:text-slate-400`, verbatim.
+      {
+        ...paper({
+          company: f('company'),
+          title: f('title'),
+          periodPhrase: f('periodPhrase'),
+          blocks: [
+            textBlock(f('error'), {
+              className: 'py-12 text-center text-sm text-slate-500 dark:text-slate-400',
+            }),
+          ],
+        }),
+        when: f('hasError'),
+      },
+      // The native pager sits directly under the paper with no mt-3 wrapper,
+      // so the block goes bare.
+      {
+        ...pagination({
+          basePath: f('pagerBasePath'),
+          total: f('totalRows'),
+          page: f('currentPage'),
+          perPage: f('perPage'),
+          bare: true,
+        }),
+        when: f('hasPageInfo'),
+      },
+    ],
+  })
 }
