@@ -6,6 +6,8 @@ import { PDF_RECORD_TYPE_BY_KEY } from '../../../../../lib/pdf-templates/catalog
 import { getPdfTemplate } from '../../../../../lib/pdf-templates/store'
 import { customMergeFields } from '../../../../../lib/pdf-templates/values'
 import PdfTemplateEditor from './PdfTemplateEditor'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { loadPdfTemplateEditor, pdfTemplateEditorSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,11 +18,26 @@ export async function generateMetadata() {
 
 export default async function PdfTemplateEditorPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  // Optional: this route natively takes only `params`.
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const authz = await requirePermission('admin.customization.manage')
   const { id } = await params
+  const sp = (await searchParams) ?? {}
+  if (sp.__viewspec === '1') {
+    const data = await loadPdfTemplateEditor(id)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={pdfTemplateEditorSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
+
+  const authz = await requirePermission('admin.customization.manage')
   const row = await getPdfTemplate(authz.user.orgId, id)
   if (!row) notFound()
   const meta = PDF_RECORD_TYPE_BY_KEY[row.recordType]

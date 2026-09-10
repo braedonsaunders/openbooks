@@ -1322,6 +1322,22 @@ const PAGES = [
     expect: 'main button',
     minMatches: 2,
   },
+  {
+    path: '/admin/pdf-templates/00000000-0000-7000-9000-000000003101',
+    // The GrapesJS template editor over the fixture's default invoice
+    // template. Its canvas mounts client-side; the pin is the editor chrome
+    // that renders on first paint.
+    variants: [''],
+    expect: 'main button',
+    minMatches: 2,
+  },
+  {
+    path: '/reports/custom/builder/01a083e6-dce6-76a6-a05b-8310c2a32030',
+    // The entity query builder over a real simulator report definition.
+    variants: [''],
+    expect: 'main button',
+    minMatches: 2,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole
@@ -2293,13 +2309,23 @@ async function renderPath(page) {
  */
 async function assertStylesLoaded(page) {
   const status = await page.evaluate(async () => {
-    const link = document.querySelector('link[rel="stylesheet"]')
-    if (!link) return 'no-stylesheet-link'
-    const res = await fetch(link.href)
-    if (!res.ok) return `stylesheet ${res.status}`
-    const text = await res.text()
-    // A real Tailwind build defines the utilities the app is written in.
-    return /\.flex\b/.test(text) && /\.text-sm\b/.test(text) ? 'ok' : 'stylesheet-missing-utilities'
+    // EVERY stylesheet link, not just the first. A page whose island injects
+    // its own CSS — the GrapesJS template editor does — can put a foreign
+    // sheet ahead of the app's in <head>, and checking only `querySelector`
+    // then fails a page that is styled perfectly well. What matters is that
+    // the app's utilities are defined SOMEWHERE that actually loaded.
+    const links = [...document.querySelectorAll('link[rel="stylesheet"]')]
+    if (links.length === 0) return 'no-stylesheet-link'
+    let anyOk = false
+    for (const link of links) {
+      const res = await fetch(link.href)
+      if (!res.ok) continue
+      anyOk = true
+      const text = await res.text()
+      // A real Tailwind build defines the utilities the app is written in.
+      if (/\.flex\b/.test(text) && /\.text-sm\b/.test(text)) return 'ok'
+    }
+    return anyOk ? 'stylesheet-missing-utilities' : 'stylesheet fetch failed'
   })
   if (status !== 'ok') throw new Error(`styles not loaded: ${status}`)
 }
