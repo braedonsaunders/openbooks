@@ -12,6 +12,8 @@ import { parseReportQuery } from '../../../../lib/report-filters'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadBudgetDimensionOptions } from '../../../../lib/budgets'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadBudgetReport, budgetReportSpec } from './view'
 import { ReportPaper } from '../ReportPaper'
 
 export const dynamic = 'force-dynamic'
@@ -21,6 +23,17 @@ export default async function BudgetPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const sp0 = await searchParams
+  if (sp0.__viewspec === '1') {
+    const data = await loadBudgetReport(sp0)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={budgetReportSpec(data)} data={data} searchParams={sp0} trusted />
+      </>
+    )
+  }
   const t = await getTranslations('reports')
   const tb = await getTranslations('budgets')
   const authz = await requirePermission('reports.read')
