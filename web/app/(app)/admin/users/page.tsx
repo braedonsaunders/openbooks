@@ -12,7 +12,9 @@ import { Pagination } from '../../../../components/pagination'
 import { requirePermission } from '../../../../lib/authz'
 import { dateTime } from '../../../../lib/format'
 import { parseListParams, pickString } from '../../../../lib/list-params'
-import { RoleAssignmentButton, ActiveToggle } from './UserActions'
+import { AdminUsersTable } from './sections'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadAdminUsers, adminUsersSpec } from './view'
 
 export async function generateMetadata() {
   const t = await getTranslations('admin.users')
@@ -33,6 +35,17 @@ export default async function AdminUsersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadAdminUsers(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={adminUsersSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('admin.users.manage')
   const t = await getTranslations('admin.users')
   const tCommon = await getTranslations('common')
@@ -149,81 +162,33 @@ export default async function AdminUsersPage({
           description={listParams.q ? t('emptySearchDescription') : t('emptyFilterDescription')}
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
-                <SortTh column="name" {...sortProps}>
-                  {tCommon('labels.name')}
-                </SortTh>
-                <SortTh column="email" {...sortProps}>
-                  {tCommon('labels.email')}
-                </SortTh>
-                <th className="px-3 py-2">{t('table.roles')}</th>
-                <th className="px-3 py-2">{tCommon('labels.status')}</th>
-                <SortTh column="last_login" {...sortProps}>
-                  {t('table.lastSignIn')}
-                </SortTh>
-                <th className="px-3 py-2 text-right">{tCommon('labels.actions')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {users.map((u) => {
-                const assigned = rolesByUser.get(u.id) ?? []
-                const isSelf = u.id === authz.user.id
-                return (
-                  <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
-                    <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">
-                      {u.name}
-                      {isSelf ? (
-                        <Badge variant="secondary" className="ml-2 text-[10px]">
-                          {t('you')}
-                        </Badge>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{u.email}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap items-center gap-1">
-                        {assigned.length === 0 ? (
-                          <Badge variant="warning" className="text-[10px]">
-                            {t('unassignedRole')}
-                          </Badge>
-                        ) : (
-                          assigned.map((r) => (
-                            <Badge key={r.id} variant="outline">
-                              {r.name}
-                            </Badge>
-                          ))
-                        )}
-                        <RoleAssignmentButton
-                          userId={u.id}
-                          userName={u.name}
-                          allRoles={allRoles.map((r) => ({
-                            id: r.id,
-                            name: r.name,
-                            isBuiltIn: r.is_built_in,
-                          }))}
-                          assignedRoleIds={assigned.map((r) => r.id)}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <Badge variant={u.is_active ? 'success' : 'destructive'}>
-                        {u.is_active ? t('statusActive') : t('statusInactive')}
-                      </Badge>
-                    </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                      {u.last_login_at ? dateTime(u.last_login_at) : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <ActiveToggle userId={u.id} userName={u.name} isActive={u.is_active} isSelf={isSelf} />
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <AdminUsersTable
+          users={users.map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            isActive: u.is_active,
+            isSelf: u.id === authz.user.id,
+            statusLabel: u.is_active ? t('statusActive') : t('statusInactive'),
+            lastSignIn: u.last_login_at ? dateTime(u.last_login_at) : '—',
+            assigned: rolesByUser.get(u.id) ?? [],
+          }))}
+          allRoles={allRoles.map((r) => ({ id: r.id, name: r.name, isBuiltIn: r.is_built_in }))}
+          basePath={BASE}
+          currentParams={sp}
+          sort={listParams.sort}
+          dir={listParams.dir}
+          labels={{
+            name: tCommon('labels.name'),
+            email: tCommon('labels.email'),
+            roles: t('table.roles'),
+            status: tCommon('labels.status'),
+            lastSignIn: t('table.lastSignIn'),
+            actions: tCommon('labels.actions'),
+            you: t('you'),
+            unassignedRole: t('unassignedRole'),
+          }}
+        />
       )}
       <Pagination
         basePath={BASE}

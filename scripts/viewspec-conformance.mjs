@@ -291,6 +291,19 @@ const PAGES = [
     minMatches: 5,
   },
   {
+    path: '/admin/users',
+    // The table is a widget here (the native page hand-rolls a plain
+    // <table>); everything around it — header, search, chips, empty state,
+    // pager — is ordinary spec.
+    variants: [
+      '',
+      '?sort=email&dir=desc',
+      { query: '?status=inactive', expect: 'main h3, table tbody tr', minMatches: 1 },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
     path: '/payments',
     // Money out: two exclusive sections behind a pill switch, and a header
     // action that is a conditional PAIR rather than one gated widget.
