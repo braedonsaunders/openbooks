@@ -65,7 +65,9 @@ const FRAME_REGISTRY: Record<string, FrameComponent> = {
   'tab-content': TabContent as unknown as FrameComponent,
   /** The plain full-height page shell, for pages that sit under it natively. */
   'page-container': ((props: Record<string, unknown> & { children: ReactNode }) => (
-    <PageContainer>{props.children}</PageContainer>
+    <PageContainer className={typeof props.className === 'string' ? props.className : undefined}>
+      {props.children}
+    </PageContainer>
   )) as FrameComponent,
   /** The plain card shell, for a body whose contents are two exclusive
    *  blocks — an empty note or a table. */

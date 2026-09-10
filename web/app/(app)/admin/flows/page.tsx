@@ -24,6 +24,9 @@ import { parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
 import { dateTime } from '../../../../lib/format'
 import { NewFlowButton, FlowRowActions } from './FlowsClient'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadFlows, flowsSpec } from './view'
+import { FlowNameCell, FlowLastRunCell, FlowRowActionsCell } from './sections'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +48,17 @@ export default async function Flows({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadFlows(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={flowsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('flows.manage')
   const orgId = authz.user.orgId
   const t = await getTranslations('admin.flows')
@@ -132,12 +146,7 @@ export default async function Flows({
               {flows.rows.map((f: any) => (
                 <TableRow key={f.id}>
                   <TableCell>
-                    <Link
-                      href={`/admin/flows/${f.id}`}
-                      className="font-medium text-teal-700 hover:underline dark:text-teal-300"
-                    >
-                      {f.name}
-                    </Link>
+                    <FlowNameCell name={f.name} href={`/admin/flows/${f.id}`} />
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">
@@ -146,16 +155,12 @@ export default async function Flows({
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{f.node_count}</TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">
-                    {f.last_run_at ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Badge variant={RUN_BADGE[String(f.last_run_status)] ?? 'outline'}>
-                          {String(f.last_run_status)}
-                        </Badge>
-                        <span className="tabular-nums">{dateTime(f.last_run_at)}</span>
-                      </span>
-                    ) : (
-                      t('neverRan')
-                    )}
+                    <FlowLastRunCell
+                      status={f.last_run_at ? String(f.last_run_status) : null}
+                      variant={RUN_BADGE[String(f.last_run_status)] ?? 'outline'}
+                      at={f.last_run_at ? dateTime(f.last_run_at) : null}
+                      fallback={t('neverRan')}
+                    />
                   </TableCell>
                   <TableCell className="text-slate-500 tabular-nums dark:text-slate-400">
                     {dateTime(f.updated_at)}
@@ -166,12 +171,11 @@ export default async function Flows({
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <FlowRowActions
+                    <FlowRowActionsCell
                       id={String(f.id)}
                       name={String(f.name)}
                       enabled={Boolean(f.enabled)}
                       updatedAt={String(f.updated_at)}
-                      key={String(f.updated_at)}
                     />
                   </TableCell>
                 </TableRow>

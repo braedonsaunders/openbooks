@@ -1,56 +1,94 @@
-import Link from 'next/link'
+import 'server-only'
+
+import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { BookOpen, Sparkles } from 'lucide-react'
-import { Button, cn } from '@openbooks/ui'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
-import { laborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
+import { laborCostingSettings, type LaborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
-import { LaborCostingWorkspace, type RateRow } from './LaborCostingWorkspace'
 import { subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { requireProjectsFeature } from '../../../../../lib/projects-gate'
-import { ModuleView } from '../../../../../components/viewspec/module-view'
-import { loadLaborCosting, laborCostingSpec } from './view'
-
-export const dynamic = 'force-dynamic'
+import { grid, heading, page, ref, textBlock, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import type { RateRow } from './LaborCostingWorkspace'
 
 /**
- * Labor Costing — ONE workspace answering "what does an hour of labor cost?".
- * Wage rates (effective-dated, employee > job title > trade > department >
- * subsidiary > org default), the estimate
- * component calculator (statutory burden %, per-diem — inputs that die when
- * payroll actuals arrive), and the posting switch + control accounts.
- * Overhead is deliberately NOT here — that's the Overhead Model's job.
+ * Labor Costing setup — ONE workspace answering "what does an hour of labor
+ * cost?". Split into a loader and a spec.
+ *
+ * The page is two static authored regions (an h2 header with three action
+ * buttons, and a four-tab underline strip) plus the `LaborCostingWorkspace`
+ * client island: wage rates (effective-dated scopes), the estimate
+ * component calculator, the posting switch and the reconciliation loader
+ * all own `useState` (settings draft, rec range/result, rate drawer), so
+ * the workspace arrives whole through one widget — decomposing its
+ * filterable rate grid into a spec repeat would render the unfiltered set
+ * and strand the search input from what it filters (the /reports lesson).
+ * There is exactly one LaborCostingWorkspace; nothing is copied.
+ *
+ * The header action cluster and the tab strip stay spec-placed, but
+ * through NEW widgets, not the existing ones — diffed and found
+ * different: `link-button` renders a bare `<Link>` child with no space
+ * after its one 14px map icon and no `size="sm"`, while this header needs
+ * `<Sparkles size={14} />` + space and `<BookOpen size={14} />` + space
+ * inside `size="sm"` outline/ghost buttons plus a teal text link with a
+ * literal `→`; `module-home-tabs` is a pill strip, while these tabs are
+ * underline links. One component behind one registry entry in both cases.
+ *
+ * Loader work copied verbatim from page.tsx: the setup.manage gate, the
+ * projects feature gate, the subsidiary probe, the view/status/scope
+ * whitelists, the rate filters (status/scope/search/subsidiary), the
+ * eleven-way fetch, and the currency/subsidiary/guide derivations. The
+ * `?view=` tab choice and the `?rate=`/`?guide=` drawer flags are
+ * loader-resolved presence strings — the spec never branches.
  */
+
+const BASE = '/admin/setup/labor-costing'
 const VIEWS = ['rates', 'components', 'posting', 'reconciliation'] as const
 export type LaborCostingView = (typeof VIEWS)[number]
 
-const RATE_STATUSES = ['all', 'active', 'current', 'scheduled', 'ended'] as const
-type RateStatus = (typeof RATE_STATUSES)[number]
-const RATE_SCOPES = ['all', 'job_title', 'trade', 'department', 'subsidiary', 'org'] as const
-type RateScope = (typeof RATE_SCOPES)[number]
+export interface LaborCostingData {
+  title: string
+  description: string
+  guideHref: string
+  guideLabel: string
+  docsLabel: string
+  overheadLabel: string
+  tabs: { href: string; label: string; active: boolean }[]
+  currentParams: Record<string, string | string[] | undefined>
+  view: LaborCostingView
+  settings: LaborCostingSettings
+  rates: RateRow[]
+  selectedRate: RateRow | null
+  creatingRate: boolean
+  guideOpen: boolean
+  totalRates: number
+  ratePage: number
+  ratePerPage: number
+  trades: { id: string; name: string }[]
+  departments: { id: string; name: string }[]
+  subsidiaries: { id: string; name: string; currency: string }[]
+  defaultSubsidiary: { id: string; name: string; currency: string } | null
+  jobTitles: string[]
+  accounts: { id: string; label: string }[]
+  currencies: string[]
+  orgCurrency: string
+  laborWip: string | null
+  laborClearing: string | null
+  payrollVariance: string | null
+  coverage: { employees: number; covered: number; hasOrgDefault: boolean }
+}
 
-export default async function LaborCostingSetup({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadLaborCosting(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={laborCostingSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
+export async function loadLaborCosting(
+  sp: Record<string, string | string[] | undefined>,
+): Promise<LaborCostingData> {
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
   const today = await businessToday(orgId)
   await requireProjectsFeature(orgId)
   const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId)
   const t = await getTranslations('admin')
-  const sp = await searchParams
   const rawView = pickString(sp.view) ?? ''
   const view: LaborCostingView = (VIEWS as readonly string[]).includes(rawView) ? (rawView as LaborCostingView) : 'rates'
   const list = parseListParams(sp, {
@@ -59,6 +97,10 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
     dir: 'asc',
     perPage: 25,
   })
+  const RATE_STATUSES = ['all', 'active', 'current', 'scheduled', 'ended'] as const
+  type RateStatus = (typeof RATE_STATUSES)[number]
+  const RATE_SCOPES = ['all', 'job_title', 'trade', 'department', 'subsidiary', 'org'] as const
+  type RateScope = (typeof RATE_SCOPES)[number]
   const rawStatus = pickString(sp.rateStatus) ?? 'active'
   const rateStatus: RateStatus = (RATE_STATUSES as readonly string[]).includes(rawStatus) ? (rawStatus as RateStatus) : 'active'
   const rawScope = pickString(sp.rateScope) ?? 'all'
@@ -168,81 +210,104 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
   }))
   const subsidiaryOptions = subsidiaryUiEnabled ? allSubsidiaryOptions : []
   const currencies = Array.from(new Set([org.base_currency, ...subsidiaryOptions.map((row) => row.currency)])).sort()
-  const basePath = '/admin/setup/labor-costing'
-  const guideHref = mergeHref(basePath, sp, {
+  const guideHref = mergeHref(BASE, sp, {
     guide: 'setup',
     rate: undefined,
   })
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t('setup.laborCosting.title')}</h2>
-          <p className="max-w-4xl text-sm text-slate-500 dark:text-slate-400">{t('setup.laborCosting.description')}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href={guideHref as never}>
-              <Sparkles size={14} aria-hidden /> {t('setup.laborCosting.checklist.launchWizard')}
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/docs/labor-costing">
-              <BookOpen size={14} aria-hidden /> {t('setup.laborCosting.docs')}
-            </Link>
-          </Button>
-          <Link href="/admin/setup/overhead" className="px-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
-            {t('setup.entities.overhead-model.title')} →
-          </Link>
-        </div>
-      </div>
+  return {
+    title: t('setup.laborCosting.title'),
+    description: t('setup.laborCosting.description'),
+    guideHref,
+    guideLabel: t('setup.laborCosting.checklist.launchWizard'),
+    docsLabel: t('setup.laborCosting.docs'),
+    overheadLabel: t('setup.entities.overhead-model.title'),
+    tabs: VIEWS.map((item) => ({
+      href: `${BASE}?view=${item}`,
+      label: t(`setup.laborCosting.tabs.${item}`),
+      active: view === item,
+    })),
+    currentParams: sp,
+    view,
+    settings,
+    rates: (ratesRes as unknown as { rows: RateRow[] }).rows,
+    selectedRate: (selectedRateRes as unknown as { rows: RateRow[] }).rows[0] ?? null,
+    creatingRate,
+    guideOpen: pickString(sp.guide) === 'setup',
+    totalRates: Number((rateCountRes as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0),
+    ratePage: list.page,
+    ratePerPage: list.perPage,
+    trades: (tradesRes as unknown as { rows: Record<string, unknown>[] }).rows.map(opt),
+    departments: (departmentsRes as unknown as { rows: Record<string, unknown>[] }).rows.map(opt),
+    subsidiaries: subsidiaryOptions,
+    defaultSubsidiary: allSubsidiaryOptions[0] ?? null,
+    jobTitles: (jobTitlesRes as unknown as { rows: { name: string }[] }).rows.map((row) => row.name),
+    accounts: (accountsRes as unknown as { rows: Record<string, unknown>[] }).rows.map((r) => ({
+      id: String(r.id),
+      label: r.number ? `${r.number} · ${r.name}` : String(r.name ?? ''),
+    })),
+    currencies,
+    orgCurrency: org.base_currency,
+    laborWip: control.laborWip ?? null,
+    laborClearing: control.laborClearing ?? null,
+    payrollVariance: control.payrollVariance ?? null,
+    coverage: {
+      employees: Number(coverageRow.employees),
+      covered: Number(coverageRow.covered),
+      hasOrgDefault: coverageRow.has_org_default === true,
+    },
+  }
+}
 
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
-        {VIEWS.map((item) => (
-          <Link
-            key={item}
-            href={`${basePath}?view=${item}`}
-            className={cn(
-              '-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium',
-              view === item ? 'border-teal-600 text-teal-700 dark:text-teal-300' : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100',
-            )}
-          >
-            {t(`setup.laborCosting.tabs.${item}`)}
-          </Link>
-        ))}
-      </div>
-      <LaborCostingWorkspace
-        view={view}
-        settings={settings}
-        rates={(ratesRes as unknown as { rows: RateRow[] }).rows}
-        selectedRate={(selectedRateRes as unknown as { rows: RateRow[] }).rows[0] ?? null}
-        creatingRate={creatingRate}
-        guideOpen={pickString(sp.guide) === 'setup'}
-        currentParams={sp}
-        totalRates={Number((rateCountRes as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0)}
-        ratePage={list.page}
-        ratePerPage={list.perPage}
-        trades={(tradesRes as unknown as { rows: Record<string, unknown>[] }).rows.map(opt)}
-        departments={(departmentsRes as unknown as { rows: Record<string, unknown>[] }).rows.map(opt)}
-        subsidiaries={subsidiaryOptions}
-        defaultSubsidiary={allSubsidiaryOptions[0] ?? null}
-        jobTitles={(jobTitlesRes as unknown as { rows: { name: string }[] }).rows.map((row) => row.name)}
-        accounts={(accountsRes as unknown as { rows: Record<string, unknown>[] }).rows.map((r) => ({
-          id: String(r.id),
-          label: r.number ? `${r.number} · ${r.name}` : String(r.name ?? ''),
-        }))}
-        currencies={currencies}
-        orgCurrency={org.base_currency}
-        laborWip={control.laborWip ?? null}
-        laborClearing={control.laborClearing ?? null}
-        payrollVariance={control.payrollVariance ?? null}
-        coverage={{
-          employees: Number(coverageRow.employees),
-          covered: Number(coverageRow.covered),
-          hasOrgDefault: coverageRow.has_org_default === true,
-        }}
-      />
-    </div>
-  )
+const f = ref<LaborCostingData>()
+
+export function laborCostingSpec(data: LaborCostingData): PageSpec {
+  return page({
+    // The setup workspace renders its own shell around every entity page;
+    // wrapping it in a second page layout would nest the chrome.
+    layout: 'bare',
+    header: [],
+    body: [
+      grid('space-y-4', [
+        grid('flex flex-wrap items-start justify-between gap-3', [
+          // Bare div: the native wrapper carries no class.
+          grid(undefined, [
+            heading(2, f('title'), 'text-base font-semibold text-slate-900 dark:text-slate-100'),
+            textBlock(f('description'), { className: 'max-w-4xl text-sm text-slate-500 dark:text-slate-400' }),
+          ]),
+          widgetBlock('labor-costing-header-actions', {
+            guideHref: data.guideHref,
+            guideLabel: data.guideLabel,
+            docsLabel: data.docsLabel,
+            overheadLabel: data.overheadLabel,
+          }),
+        ]),
+        widgetBlock('labor-costing-tabs', { tabs: data.tabs }),
+        widgetBlock('labor-costing-workspace', {
+          view: data.view,
+          settings: data.settings,
+          rates: data.rates,
+          selectedRate: data.selectedRate,
+          creatingRate: data.creatingRate,
+          guideOpen: data.guideOpen,
+          currentParams: data.currentParams,
+          totalRates: data.totalRates,
+          ratePage: data.ratePage,
+          ratePerPage: data.ratePerPage,
+          trades: data.trades,
+          departments: data.departments,
+          subsidiaries: data.subsidiaries,
+          defaultSubsidiary: data.defaultSubsidiary,
+          jobTitles: data.jobTitles,
+          accounts: data.accounts,
+          currencies: data.currencies,
+          orgCurrency: data.orgCurrency,
+          laborWip: data.laborWip,
+          laborClearing: data.laborClearing,
+          payrollVariance: data.payrollVariance,
+          coverage: data.coverage,
+        }),
+      ]),
+    ],
+  })
 }

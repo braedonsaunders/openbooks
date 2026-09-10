@@ -291,6 +291,90 @@ const PAGES = [
     minMatches: 5,
   },
   {
+    path: '/admin/flows',
+    // One flow in the tenant. The two filter variants each round-trip to that
+    // same row, which is the honest set here — a bogus-subject variant would
+    // render a zero-row table, but with one flow there is nothing else to pin.
+    variants: ['', '?subject=vendor_bill', '?q=vendor+bill+approval'],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
+    path: '/admin/setup/labor-costing',
+    variants: [
+      '',
+      { query: '?view=components', expect: 'main section h3', minMatches: 1 },
+      {
+        query: '?rate=new',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'main h2',
+    minMatches: 1,
+  },
+  {
+    path: '/admin/setup/labor-pricing',
+    // Two active books, one expired: every variant renders a different set.
+    variants: [
+      '',
+      { query: '?time=expired', expect: 'table tbody tr', minMatches: 1 },
+      { query: '?dimension=unscoped', expect: 'table tbody tr', minMatches: 1 },
+      {
+        query: '?card=00000000-0000-7000-9000-000000008811',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/admin/setup/payroll',
+    variants: [
+      { query: '', expect: 'main h2, main h3', minMatches: 2 },
+      { query: '?tab=schedules', expect: 'table tbody tr', minMatches: 2 },
+      { query: '?tab=components', expect: 'table thead th', minMatches: 1 },
+      { query: '?tab=accounts', expect: 'main h3', minMatches: 1 },
+      { query: '?tab=ca', expect: 'main h3', minMatches: 1 },
+      { query: '?tab=zzzznomatch', expect: 'main h2, main h3', minMatches: 2 },
+    ],
+    expect: 'main h2, main h3',
+    minMatches: 2,
+  },
+  {
+    path: '/payroll/runs/00000000-0000-7000-9000-000000001811',
+    // A calculated run: the loader derives step `review`, so the stub table
+    // renders on load; `?step=readiness` forces a disjoint step body.
+    variants: [
+      { query: '', expect: 'main table tbody tr', minMatches: 2 },
+      { query: '?step=readiness', expect: 'main ul li', minMatches: 1 },
+    ],
+    expect: 'main table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/banking/psp-settlements',
+    // Two draft batches. Only drafts exist by design — see the fixture note:
+    // a posted or void batch needs a real journal entry behind it.
+    variants: [{ query: '', expect: 'table tbody tr', minMatches: 2 }],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/banking/match',
+    // Two real branches: no account chosen (the picker alone) and an account
+    // with an open reconciliation (the three-list workspace).
+    variants: [
+      { query: '', expect: 'main select, main button', minMatches: 1 },
+      { query: '?account=a1f8e08f-a6ae-42ac-b2fd-d8008a92b14e', expect: 'main select, main button', minMatches: 1 },
+    ],
+    expect: 'main select, main button',
+    minMatches: 1,
+  },
+  {
     path: '/payroll',
     variants: [''],
     expect: 'h2, h3',
@@ -978,7 +1062,18 @@ async function renderSettled(page, url, expectSelector, minMatches = 0) {
   // table path. `minMatches` demands real content: import history passed at
   // 2068 bytes with zero rows before this existed.
   if (expectSelector && minMatches > 0) {
-    const found = await page.locator(expectSelector).count()
+    // WAIT for the count, do not sample it once. A table filled by a client
+    // fetch after mount reaches one row before it reaches all of them, and a
+    // single sample failed a page that was merely still arriving. The wait is
+    // bounded, so a page that genuinely has too few rows still fails — just
+    // for the right reason.
+    let found = 0
+    const deadline = Date.now() + 15_000
+    for (;;) {
+      found = await page.locator(expectSelector).count()
+      if (found >= minMatches || Date.now() > deadline) break
+      await page.waitForTimeout(250)
+    }
     if (found < minMatches) {
       throw new Error(
         `${url} matched ${found} of "${expectSelector}", need ${minMatches} — the page has no data, so this comparison would prove nothing`,

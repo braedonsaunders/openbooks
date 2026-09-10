@@ -75,6 +75,35 @@ import { HealthHero } from '../../app/(app)/accounting/sections'
 import { RelationshipsSection, ArPulse as CustomerArPulse } from '../../app/(app)/customers/sections'
 import { AdminHubCard } from '../../app/(app)/admin/sections'
 import { BuildHubCard } from '../../app/(app)/admin/build/sections'
+import { MatchWorkspace } from '../../app/(app)/banking/match/MatchWorkspace'
+import {
+  FlowNameCell,
+  FlowLastRunCell,
+  FlowRowActionsCell,
+  NewFlowButton as NewFlowListButton,
+} from '../../app/(app)/admin/flows/sections'
+import { LaborCostingWorkspace } from '../../app/(app)/admin/setup/labor-costing/LaborCostingWorkspace'
+import {
+  LaborPricingHeading,
+  LaborPricingView,
+} from '../../app/(app)/admin/setup/labor-pricing/sections'
+import { RunWizard } from '../../app/(app)/payroll/runs/[id]/RunWizard'
+import {
+  PayrollSetupHeader,
+  PayrollSetupBanner,
+  PayrollSetupTabs,
+  PacksTabSlot,
+  AccountsTabSlot,
+  PaydayTabSlot,
+  RatesTabSlot,
+  WorkSchedulesTabSlot,
+  DerivedPreviewTabSlot,
+  HolidaysTabSlot,
+  HolidayCalendarTabSlot,
+} from '../../app/(app)/admin/setup/payroll/sections'
+import { Sparkles } from 'lucide-react'
+import { cn } from '@openbooks/ui'
+import { PspSettlementsWorkspace } from '../../app/(app)/banking/psp-settlements/sections'
 import {
   PayrollChecklistBanner,
   PayrollPreviousRun,
@@ -789,6 +818,174 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
         'teal'
       }
     />
+  ),
+
+  /* --- bank matching workspace ------------------------------------------------ */
+  /** Whole: it owns selection state across three paginated lists plus the
+   *  match/unmatch calls and an add-journal form. Decomposing it would strand
+   *  the selection from the actions it drives. */
+  'match-workspace': (props) => (
+    <MatchWorkspace
+      accounts={(props.accounts as ComponentProps<typeof MatchWorkspace>['accounts']) ?? []}
+      offsetAccounts={
+        (props.offsetAccounts as ComponentProps<typeof MatchWorkspace>['offsetAccounts']) ?? []
+      }
+      account={(props.account as ComponentProps<typeof MatchWorkspace>['account']) ?? null}
+      session={(props.session as ComponentProps<typeof MatchWorkspace>['session']) ?? null}
+      data={(props.data as ComponentProps<typeof MatchWorkspace>['data']) ?? null}
+      totals={(props.totals as ComponentProps<typeof MatchWorkspace>['totals']) ?? null}
+      currentParams={(props.currentParams as ComponentProps<typeof MatchWorkspace>['currentParams']) ?? {}}
+      tab={(str(props, 'tab') ?? 'match') as ComponentProps<typeof MatchWorkspace>['tab']}
+    />
+  ),
+
+  'psp-settlements': (props) => (
+    <PspSettlementsWorkspace
+      strings={props.strings as ComponentProps<typeof PspSettlementsWorkspace>['strings']}
+      initialRows={
+        (props.initialRows as ComponentProps<typeof PspSettlementsWorkspace>['initialRows']) ?? null
+      }
+    />
+  ),
+
+  /* --- payroll setup workspace ------------------------------------------------ */
+  //
+  // The tab bodies are SLOTS, not widgets with props: each re-derives the org
+  // id, the registry entry and the manage gate from the session, so the spec
+  // carries only which tab is open and the URL it was rendering with.
+  'payroll-setup-header': (props) => (
+    <PayrollSetupHeader
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      launcher={props.launcher as ComponentProps<typeof PayrollSetupHeader>['launcher']}
+    />
+  ),
+  'payroll-setup-banner': (props) => (
+    <PayrollSetupBanner
+      launcher={props.launcher as ComponentProps<typeof PayrollSetupBanner>['launcher']}
+    />
+  ),
+  /** The active-vs-plain link pair (and aria-current set vs omitted) lives in
+   *  the component; every `active` flag is loader-resolved data. */
+  'payroll-setup-tabs': (props) => (
+    <PayrollSetupTabs
+      groups={(props.groups as ComponentProps<typeof PayrollSetupTabs>['groups']) ?? []}
+      activeGroup={str(props, 'activeGroup') ?? ''}
+      tabsAria={str(props, 'tabsAria') ?? ''}
+      subTabs={(props.subTabs as ComponentProps<typeof PayrollSetupTabs>['subTabs']) ?? []}
+    />
+  ),
+  'payroll-packs-tab': () => <PacksTabSlot />,
+  'payroll-accounts-tab': () => <AccountsTabSlot />,
+  'payroll-payday-tab': () => <PaydayTabSlot />,
+  'payroll-rates-tab': () => <RatesTabSlot />,
+  'payroll-schedules-tab': () => <WorkSchedulesTabSlot />,
+  'payroll-derived-preview-tab': (props) => (
+    <DerivedPreviewTabSlot sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}} />
+  ),
+  'payroll-holidays-tab': (props) => (
+    <HolidaysTabSlot
+      sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
+      basePath={str(props, 'basePath') ?? '/admin/setup/payroll'}
+    />
+  ),
+  'payroll-holiday-calendar-tab': (props) => (
+    <HolidayCalendarTabSlot sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}} />
+  ),
+
+  /* --- automation flows ------------------------------------------------------- */
+  'new-flow': () => <NewFlowListButton />,
+  'flow-name-cell': (props) => (
+    <FlowNameCell name={str(props, 'name') ?? ''} href={str(props, 'href') ?? ''} />
+  ),
+  'flow-last-run-cell': (props) => (
+    <FlowLastRunCell
+      status={str(props, 'status') ?? null}
+      variant={
+        (str(props, 'variant') ?? 'outline') as ComponentProps<typeof FlowLastRunCell>['variant']
+      }
+      at={str(props, 'at') ?? null}
+      fallback={str(props, 'fallback') ?? ''}
+    />
+  ),
+  'flow-row-actions': (props) => (
+    <FlowRowActionsCell
+      id={str(props, 'id') ?? ''}
+      name={str(props, 'name') ?? ''}
+      enabled={props.enabled === true}
+      updatedAt={str(props, 'updatedAt') ?? ''}
+    />
+  ),
+
+  /* --- labor costing / pricing ------------------------------------------------ */
+  /** Not `link-button`: that renders one 14px icon with no space and no
+   *  `size="sm"`. This cluster is two sized buttons with spaced icons plus a
+   *  teal text link carrying a literal arrow. Diffed, kept separate. */
+  'labor-costing-header-actions': (props) => (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button asChild variant="outline" size="sm">
+        <Link href={(str(props, 'guideHref') ?? '') as never}>
+          <Sparkles size={14} aria-hidden /> {str(props, 'guideLabel') ?? ''}
+        </Link>
+      </Button>
+      <Button asChild variant="ghost" size="sm">
+        <Link href="/docs/labor-costing">
+          <BookOpen size={14} aria-hidden /> {str(props, 'docsLabel') ?? ''}
+        </Link>
+      </Button>
+      <Link
+        href="/admin/setup/overhead"
+        className="px-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+      >
+        {str(props, 'overheadLabel') ?? ''} →
+      </Link>
+    </div>
+  ),
+  /** Not `module-home-tabs`: that is a pill strip; these are underline links
+   *  with no `aria-current`. */
+  'labor-costing-tabs': (props) => {
+    const tabs = (props.tabs as { href: string; label: string; active: boolean }[]) ?? []
+    return (
+      <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
+        {tabs.map((tab) => (
+          <Link
+            key={tab.href}
+            href={tab.href as never}
+            className={cn(
+              '-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium',
+              tab.active
+                ? 'border-teal-600 text-teal-700 dark:text-teal-300'
+                : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100',
+            )}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </div>
+    )
+  },
+  /** The spec spreads the workspace's props directly, as the loader builds
+   *  them — there is no nested `workspace` bag. */
+  'labor-costing-workspace': (props) => (
+    <LaborCostingWorkspace {...(props as unknown as ComponentProps<typeof LaborCostingWorkspace>)} />
+  ),
+  'labor-pricing-heading': (props) => (
+    <LaborPricingHeading
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      docsHref={str(props, 'docsHref') ?? '/docs/labor-pricing'}
+      docsLabel={str(props, 'docsLabel') ?? ''}
+    />
+  ),
+  'labor-pricing-view': (props) => (
+    <LaborPricingView {...(props as unknown as ComponentProps<typeof LaborPricingView>)} />
+  ),
+
+  /* --- pay run wizard --------------------------------------------------------- */
+  /** Five freely-navigable steps whose every control is a fetch flow plus
+   *  client state a spec cannot name — the /tax shape. */
+  'pay-run-wizard': (props) => (
+    <RunWizard {...(props as unknown as ComponentProps<typeof RunWizard>)} />
   ),
 
   /* --- payroll cockpit ------------------------------------------------------- */

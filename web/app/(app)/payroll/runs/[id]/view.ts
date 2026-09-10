@@ -1,65 +1,103 @@
-import { PayrollError } from "@openbooks/engine/src/payroll-error.ts";
-import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryScopeFilter } from "@openbooks/engine/src/payroll-scope.ts";
+import 'server-only'
+
+import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
+import {
+  lockAndCheckPayrollRunPopulation,
+  payrollSubsidiaryScopeFilter,
+} from '@openbooks/engine/src/payroll-scope.ts'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { ListPageLayout } from '../../../../../components/page-layout'
-import { groupTabs } from '../../../../../components/module-home/group-tabs'
-import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
-import { requirePermission, can } from '../../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
-import { isUuid } from '../../../../../lib/list-params'
+import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@openbooks/viewspec'
 import {
   payRunChanges,
   payRunFunding,
   payRunReadiness,
   payRunStaleness,
+  type PayRunFunding,
+  type PayRunReadiness,
+  type PayRunStaleness,
+  type StubChange,
 } from '@openbooks/engine/src/payroll-readiness.ts'
 import {
   payrollPaymentMethodSettings,
   resolvedPaymentMethodSql,
 } from '@openbooks/engine/src/payroll-payment-method.ts'
 import { orgYearEndFilings, type YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
-import { RunWizard, type RemittanceRow, type RosterRow, type RunHeader, type StubRow, type WizardStep } from './RunWizard'
-import { ModuleView } from '../../../../../components/viewspec/module-view'
-import { loadPayRunWizard, payRunWizardSpec } from './view'
+import { can, requirePermission } from '../../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
+import { isUuid } from '../../../../../lib/list-params'
+import { groupTabs } from '../../../../../components/module-home/group-tabs'
+import type {
+  AdjustmentRow,
+  ComponentOption,
+  RemittanceRow,
+  RosterRow,
+  RunHeader,
+  StubRow,
+  WizardStep,
+} from './RunWizard'
 
-export const dynamic = 'force-dynamic'
+/**
+ * One pay run — the processing wizard — split into a loader and a spec.
+ *
+ * The wizard is one client component with five freely-navigable steps whose
+ * every control is an interactive fetch flow (calculate/commit/post,
+ * dry-run, scope and adjustment mutations, GL preview, email stubs, bank
+ * file download, record-payment) plus client state (active step, busy,
+ * dialogs) a spec cannot name. Like the /tax page, the spec is coarse by
+ * necessity: a single `pay-run-wizard` widget binds loader data to the
+ * shared `RunWizard` the native branch also renders, and the spec draws no
+ * chrome of its own beyond the `pageHeader` shell.
+ *
+ * Everything else here is loader work copied verbatim from page.tsx: the
+ * `payroll.read` gate, the `payroll` feature gate (404 when disabled), the
+ * uuid check, the header run query with the subsidiary scope filter, the
+ * population lock check (`PayrollError` → 404), the roster/stubs/lines/
+ * previous-net/remittance/adjustments/component queries, the loader-derived
+ * `?step=` initial step, the register-report lookup, and the four engine
+ * reads (readiness, staleness, funding, changes). Authz stays server-side:
+ * `canRun` (`payroll.run`) is a loader-derived boolean, never a capability
+ * object, and the `finish`-step remittance rows only travel when the run is
+ * committed, exactly as the native `run.run_status === 'committed' ? … : []`
+ * does.
+ */
 
 const STEPS: readonly WizardStep[] = ['period', 'readiness', 'review', 'gl', 'finish']
 
-/**
- * One pay run — the processing wizard. Five freely-navigable steps (scope →
- * readiness → review stubs → GL preview & commit → post & finish); completion
- * derives from run_status + the document's posted state, never from a forced
- * linear march. Wage data — the whole page sits behind payroll.read.
- */
-export default async function PayRunPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>
-  searchParams: Promise<Record<string, string | undefined>>
-}) {
+export interface PayRunWizardData {
+  title: string
+  description: string
+  backHref: string
+  backLabel: string
+  viewTabs: { href: string; label: string; active?: boolean }[]
+  run: RunHeader
+  stubs: StubRow[]
+  roster: RosterRow[]
+  previousNet: Record<string, string>
+  adjustments: AdjustmentRow[]
+  adjustableComponents: ComponentOption[]
+  remittance: RemittanceRow[]
+  bankAccounts: { id: string; label: string }[]
+  readiness: PayRunReadiness
+  staleness: PayRunStaleness
+  funding: PayRunFunding
+  changes: StubChange[]
+  separationSections: YearEndFilingSection[]
+  registerReportId: string | null
+  canRun: boolean
+  initialStep: WizardStep
+}
+
+export async function loadPayRunWizard(
+  id: string,
+  sp: Record<string, string | string[] | undefined>,
+): Promise<PayRunWizardData> {
   const authz = await requirePermission('payroll.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')
-  const { id } = await params
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadPayRunWizard(id, sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={payRunWizardSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
   if (!isUuid(id)) notFound()
-  const sp = await searchParams
   const t = await getTranslations('payroll')
 
   return db.transaction(async () => {
@@ -196,7 +234,7 @@ export default async function PayRunPage({
     for (const row of prevRes.rows) previousNet[row.employee_party_id] = row.net_pay
 
     const [adjustmentsRes, adjustableRes] = (await Promise.all([
-      db.execute<any>(sql`
+      db.execute(sql`
         select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount::text, a.hours::text,
                a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
           from pay_run_adjustments a
@@ -204,12 +242,14 @@ export default async function PayRunPage({
           left join pay_components c on c.id = a.component_id and c.org_id = a.org_id
          where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
          order by p.display_name, a.created_at`),
-      db.execute<any>(sql`
+      db.execute(sql`
         select id, code, name, kind from pay_components
          where org_id = ${orgId} and is_active
            and (system_key is null or system_key in ('base_pay','overtime','bonus','vacation_payout'))
          order by sequence, code`),
     ]))
+    const adjustmentRows = adjustmentsRes.rows as unknown as AdjustmentRow[]
+    const componentRows = adjustableRes.rows as unknown as ComponentOption[]
 
     // A termination run's Finish step owns the pack-declared SEPARATION
     // filings (the ROE): due within days of the interruption of earnings, so
@@ -262,36 +302,72 @@ export default async function PayRunPage({
 
     const moduleTabs = await groupTabs('payroll', '/payroll/runs', { orgId })
 
-    return (
-      <ListPageLayout
-        header={
-          <PageHeader
-            title={`${t('run.title')} ${run.document_number}`}
-            description={`${run.schedule_name ?? ''} · ${run.period_start} – ${run.period_end}`.replace(/^ · /, '')}
-            back={{ href: '/payroll/runs', label: t('list.title') }}
-            actions={<ModuleHomeTabs tabs={moduleTabs} />}
-          />
-        }
-      >
-        <RunWizard
-          run={run}
-          stubs={stubs}
-          roster={rosterRes.rows}
-          previousNet={previousNet}
-          adjustments={adjustmentsRes.rows}
-          adjustableComponents={adjustableRes.rows}
-          remittance={run.run_status === 'committed' ? remitRes.rows : []}
-          bankAccounts={bankAccounts}
-          readiness={readiness}
-          staleness={staleness}
-          funding={funding}
-          changes={changes}
-          separationSections={separationSections}
-          registerReportId={registerReport?.id ?? null}
-          canRun={can(authz, 'payroll.run')}
-          initialStep={initialStep}
-        />
-      </ListPageLayout>
-    )
+    return {
+      title: `${t('run.title')} ${run.document_number}`,
+      description: `${run.schedule_name ?? ''} · ${run.period_start} – ${run.period_end}`.replace(
+        /^ · /,
+        '',
+      ),
+      backHref: '/payroll/runs',
+      backLabel: t('list.title'),
+      viewTabs: moduleTabs,
+      run,
+      stubs,
+      roster: rosterRes.rows,
+      previousNet,
+      adjustments: adjustmentRows,
+      adjustableComponents: componentRows,
+      remittance: run.run_status === 'committed' ? remitRes.rows : [],
+      bankAccounts,
+      readiness,
+      staleness,
+      funding,
+      changes,
+      separationSections,
+      registerReportId: registerReport?.id ?? null,
+      canRun: can(authz, 'payroll.run'),
+      initialStep,
+    }
+  })
+}
+
+const f = ref<PayRunWizardData>()
+
+export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
+  return page({
+    layout: 'list',
+    header: [
+      pageHeader({
+        title: f('title'),
+        description: f('description'),
+        back: { href: f('backHref'), label: f('backLabel') },
+        actions: [widget('module-home-tabs', { tabs: data.viewTabs })],
+      }),
+    ],
+    body: [
+      // The wizard is one client component: five freely-navigable steps whose
+      // every control is an interactive fetch flow a spec cannot name. The
+      // entry binds the identical loader data to the shared RunWizard the
+      // native branch renders; the loader-derived initialStep chooses the
+      // opening step on both paths.
+      widgetBlock('pay-run-wizard', {
+        run: data.run,
+        stubs: data.stubs,
+        roster: data.roster,
+        previousNet: data.previousNet,
+        adjustments: data.adjustments,
+        adjustableComponents: data.adjustableComponents,
+        remittance: data.remittance,
+        bankAccounts: data.bankAccounts,
+        readiness: data.readiness,
+        staleness: data.staleness,
+        funding: data.funding,
+        changes: data.changes,
+        separationSections: data.separationSections,
+        registerReportId: data.registerReportId,
+        canRun: data.canRun,
+        initialStep: data.initialStep,
+      }),
+    ],
   })
 }

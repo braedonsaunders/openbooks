@@ -1,84 +1,89 @@
-import { getTranslations } from "next-intl/server";
-import { sql } from "drizzle-orm";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
-import { db } from "@openbooks/engine/src/db.ts";
-import { can, requirePermission } from "../../../../../lib/authz";
-import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../../lib/features";
-import { requireProjectsFeature } from "../../../../../lib/projects-gate";
-import {
-  isUuid,
-  parseListParams,
-  pickString,
-} from "../../../../../lib/list-params";
-import { resolveFormLayout } from "../../../../../lib/customization/resolve";
-import { loadFieldDefs } from "../../../../../lib/custom-fields";
-import {
-  LaborBillRateCards,
-  type BillCardDetail,
-  type BillCardRow,
-} from "../labor-costing/LaborBillRateCards";
-import { ModuleView } from "../../../../../components/viewspec/module-view";
-import { loadLaborPricing, laborPricingSpec } from "./view";
-import { LaborPricingHeading, type LaborPricingViewProps } from "./sections";
+import 'server-only'
 
-export const dynamic = "force-dynamic";
+import { sql } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { db } from '@openbooks/engine/src/db.ts'
+import { grid, page, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { can, requirePermission } from '../../../../../lib/authz'
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
+import { requireProjectsFeature } from '../../../../../lib/projects-gate'
+import { isUuid, parseListParams, pickString } from '../../../../../lib/list-params'
+import { resolveFormLayout } from '../../../../../lib/customization/resolve'
+import { loadFieldDefs } from '../../../../../lib/custom-fields'
+import type { BillCardDetail, BillCardRow } from '../labor-costing/LaborBillRateCards'
+import type { LaborPricingViewProps } from './sections'
 
-export default async function LaborPricingPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  if ((await searchParams).__viewspec === "1") {
-    const sp = await searchParams;
-    const data = await loadLaborPricing(sp);
-    if (!data) return null;
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView
-          spec={laborPricingSpec(data)}
-          data={data}
-          searchParams={sp}
-          trusted
-        />
-      </>
-    );
-  }
-  const authz = await requirePermission("admin.setup.manage");
-  await requireProjectsFeature(authz.user.orgId);
-  const orgId = authz.user.orgId;
-  const today = await businessToday(orgId);
-  const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId);
-  const multiCurrency = await isFeatureEnabled(orgId, "multiCurrency");
-  const sp = await searchParams;
-  const t = await getTranslations("laborPricing");
+/**
+ * Labor pricing (bill rate cards), split into a loader and a spec.
+ *
+ * The page is a setup-workspace child, so — like the documents cabinet — it
+ * uses `layout: 'bare'` and draws no chrome of its own: the setup layout's
+ * fixed header, tab rail and centered container wrap both render paths
+ * identically. The body is a single `labor-pricing-view` widget (see
+ * sections.tsx for why the island cannot be decomposed), with the page's h2
+ * header above it.
+ *
+ * Everything below is the native page's query, permission and formatting
+ * logic verbatim: the projects feature gate, the effective/scope filters,
+ * the card list + count, the selected-card detail with its scopes /
+ * adjustments / terms / lines aggregates, the picker queries, the currency
+ * list, and the form-layout resolution. Authz-derived values travel as plain
+ * data (`multiCurrency`, `canCustomize`); the org id, user id and roles stay
+ * server-side inside the loader and the form-layout call.
+ */
+
+export interface LaborPricingHeadingData {
+  title: string
+  description: string
+  docsHref: string
+  docsLabel: string
+}
+
+export interface LaborPricingData {
+  canManage: boolean
+  heading: LaborPricingHeadingData
+  view: LaborPricingViewProps
+}
+
+export async function loadLaborPricing(
+  sp: Record<string, string | string[] | undefined>,
+): Promise<LaborPricingData | null> {
+  const authz = await requirePermission('admin.setup.manage')
+  // Projects-gated surface: without the feature this path redirects to the
+  // features page rather than rendering an empty shell.
+  await requireProjectsFeature(authz.user.orgId)
+  const orgId = authz.user.orgId
+  const today = await businessToday(orgId)
+  const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId)
+  const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
+  const t = await getTranslations('laborPricing')
   const list = parseListParams(sp, {
-    sort: "effective",
-    allowedSorts: ["effective"] as const,
-    dir: "desc",
+    sort: 'effective',
+    allowedSorts: ['effective'] as const,
+    dir: 'desc',
     perPage: 25,
-  });
-  const cardParam = pickString(sp.card);
+  })
+  const cardParam = pickString(sp.card)
   const selectedId =
-    cardParam && cardParam !== "new" && isUuid(cardParam) ? cardParam : null;
-  const timeParam = pickString(sp.time);
-  const timeFilter = timeParam === "scheduled" || timeParam === "expired" || timeParam === "all" ? timeParam : "active";
-  const dimensionParam = pickString(sp.dimension);
-  const dimensionTypes = ["department", ...(subsidiaryUiEnabled ? ["subsidiary"] : []), "location", "class", "trade", "job_title", "other"] as const;
-  const dimensionFilter = dimensionParam === "unscoped" || (dimensionTypes as readonly string[]).includes(dimensionParam ?? "") ? dimensionParam! : "all";
-  const effectiveFilter = timeFilter === "active"
+    cardParam && cardParam !== 'new' && isUuid(cardParam) ? cardParam : null
+  const timeParam = pickString(sp.time)
+  const timeFilter = timeParam === 'scheduled' || timeParam === 'expired' || timeParam === 'all' ? timeParam : 'active'
+  const dimensionParam = pickString(sp.dimension)
+  const dimensionTypes = ['department', ...(subsidiaryUiEnabled ? ['subsidiary'] : []), 'location', 'class', 'trade', 'job_title', 'other'] as const
+  const dimensionFilter = dimensionParam === 'unscoped' || (dimensionTypes as readonly string[]).includes(dimensionParam ?? '') ? dimensionParam! : 'all'
+  const effectiveFilter = timeFilter === 'active'
     ? sql`and v.status = 'active' and v.effective_from <= ${today} and (v.effective_to is null or v.effective_to >= ${today})`
-    : timeFilter === "scheduled"
+    : timeFilter === 'scheduled'
       ? sql`and v.status <> 'retired' and v.effective_from > ${today}`
-      : timeFilter === "expired"
+      : timeFilter === 'expired'
         ? sql`and (v.status = 'retired' or v.effective_to < ${today})`
-        : sql``;
-  const scopeFilter = dimensionFilter === "all"
+        : sql``
+  const scopeFilter = dimensionFilter === 'all'
     ? sql``
-    : dimensionFilter === "unscoped"
+    : dimensionFilter === 'unscoped'
       ? sql`and not exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id and fs.org_id = v.org_id)`
-      : sql`and exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id and fs.org_id = v.org_id and fs.scope_type = ${dimensionFilter})`;
+      : sql`and exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id and fs.org_id = v.org_id and fs.scope_type = ${dimensionFilter})`
 
   const [
     cardsRes,
@@ -202,35 +207,35 @@ export default async function LaborPricingPage({
     db.execute(
       sql`select base_currency, settings->'currencies' as currencies from orgs where id=${orgId}`,
     ),
-  ]);
+  ])
 
   const selected =
-    (selectedRes as unknown as { rows: BillCardDetail[] }).rows[0] ?? null;
-  const headerDefs = selected ? await loadFieldDefs("item_rate_versions") : [];
+    (selectedRes as unknown as { rows: BillCardDetail[] }).rows[0] ?? null
+  const headerDefs = selected ? await loadFieldDefs('item_rate_versions') : []
   const resolvedForm = selected
     ? await resolveFormLayout({
         orgId,
         userId: authz.user.id,
-        recordType: "labor_rate_card",
+        recordType: 'labor_rate_card',
         userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs,
         lineDefs: [],
         explicitLayoutId: pickString(sp.form),
       })
-    : null;
+    : null
   const named = (rows: unknown) =>
-    (rows as { rows: { id: string; name: string }[] }).rows;
+    (rows as { rows: { id: string; name: string }[] }).rows
   const org = (
     orgRes as unknown as {
-      rows: { base_currency: string; currencies: string[] | null }[];
+      rows: { base_currency: string; currencies: string[] | null }[]
     }
-  ).rows[0];
+  ).rows[0]
   const subsidiaryRows = (
     subsidiariesRes as unknown as {
-      rows: { id: string; name: string; currency: string }[];
+      rows: { id: string; name: string; currency: string }[]
     }
-  ).rows;
-  const baseCurrency = org?.base_currency ?? "CAD";
+  ).rows
+  const baseCurrency = org?.base_currency ?? 'CAD'
   const currencies = [
     baseCurrency,
     ...Array.from(
@@ -241,76 +246,112 @@ export default async function LaborPricingPage({
     )
       .filter((code) => code !== baseCurrency)
       .sort(),
-  ];
+  ]
 
-  const heading = {
-    title: t("title"),
-    description: t("description"),
-    docsHref: "/docs/labor-pricing",
-    docsLabel: t("docs"),
-  };
-  const view: LaborPricingViewProps = {
-    cards: (cardsRes as unknown as { rows: BillCardRow[] }).rows,
-    selected,
-    creating: cardParam === "new",
-    total: Number(
-      (countRes as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0,
-    ),
-    page: list.page,
-    perPage: list.perPage,
-    currentParams: sp,
-    timeFilter,
-    dimensionFilter,
-    items: (
-      itemsRes as unknown as {
-        rows: {
-          id: string;
-          name: string;
-          kind: string;
-          category: string | null;
-        }[];
-      }
-    ).rows,
-    timeTypes: (
-      timeTypesRes as unknown as {
-        rows: { id: string; name: string; bill_multiplier: string }[];
-      }
-    ).rows,
-    options: {
-      department: named(departmentsRes),
-      subsidiary: subsidiaryUiEnabled ? named(subsidiariesRes) : [],
-      location: named(locationsRes),
-      class: named(classesRes),
-      trade: named(tradesRes),
-      job_title: (
-        jobTitlesRes as unknown as { rows: { name: string }[] }
-      ).rows.map((x) => ({ id: x.name, name: x.name })),
-      project: named(projectsRes),
-      customer: named(customersRes),
-      item_kind: (
-        kindsRes as unknown as { rows: { value: string }[] }
-      ).rows.map((x) => ({ id: x.value, name: x.value })),
-      item_category: (
-        categoriesRes as unknown as { rows: { value: string }[] }
-      ).rows.map((x) => ({ id: x.value, name: x.value })),
-      transaction_type: (
-        txnTypesRes as unknown as { rows: { value: string }[] }
-      ).rows.map((x) => ({ id: x.value, name: x.value })),
+  return {
+    canManage: can(authz, 'admin.setup.manage'),
+    heading: {
+      title: t('title'),
+      description: t('description'),
+      docsHref: '/docs/labor-pricing',
+      docsLabel: t('docs'),
     },
-    currencies,
-    multiCurrency,
-    layout: resolvedForm?.layout,
-    forms: resolvedForm?.available ?? [],
-    currentFormId: resolvedForm?.row?.id ?? null,
-    customFieldDefs:
-      headerDefs as unknown as import("../../../../../components/custom-field-inputs").CustomFieldDefClient[],
-    canCustomize: can(authz, "admin.customization.manage"),
-  };
+    view: {
+      cards: (cardsRes as unknown as { rows: BillCardRow[] }).rows,
+      selected,
+      creating: cardParam === 'new',
+      total: Number(
+        (countRes as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0,
+      ),
+      page: list.page,
+      perPage: list.perPage,
+      currentParams: sp,
+      timeFilter,
+      dimensionFilter,
+      items: (
+        itemsRes as unknown as {
+          rows: {
+            id: string
+            name: string
+            kind: string
+            category: string | null
+          }[]
+        }
+      ).rows,
+      timeTypes: (
+        timeTypesRes as unknown as {
+          rows: { id: string; name: string; bill_multiplier: string }[]
+        }
+      ).rows,
+      options: {
+        department: named(departmentsRes),
+        subsidiary: subsidiaryUiEnabled ? named(subsidiariesRes) : [],
+        location: named(locationsRes),
+        class: named(classesRes),
+        trade: named(tradesRes),
+        job_title: (
+          jobTitlesRes as unknown as { rows: { name: string }[] }
+        ).rows.map((x) => ({ id: x.name, name: x.name })),
+        project: named(projectsRes),
+        customer: named(customersRes),
+        item_kind: (
+          kindsRes as unknown as { rows: { value: string }[] }
+        ).rows.map((x) => ({ id: x.value, name: x.value })),
+        item_category: (
+          categoriesRes as unknown as { rows: { value: string }[] }
+        ).rows.map((x) => ({ id: x.value, name: x.value })),
+        transaction_type: (
+          txnTypesRes as unknown as { rows: { value: string }[] }
+        ).rows.map((x) => ({ id: x.value, name: x.value })),
+      },
+      currencies,
+      multiCurrency,
+      layout: resolvedForm?.layout,
+      forms: resolvedForm?.available ?? [],
+      currentFormId: resolvedForm?.row?.id ?? null,
+      customFieldDefs:
+        headerDefs as unknown as import('../../../../../components/custom-field-inputs').CustomFieldDefClient[],
+      canCustomize: can(authz, 'admin.customization.manage'),
+    },
+  }
+}
 
-  return (
-    <div className="space-y-4">
-      <LaborPricingHeading {...heading} />
-      <LaborBillRateCards {...view} />
-    </div>
-  );
+export function laborPricingSpec(data: LaborPricingData): PageSpec {
+  return page({
+    // A setup-workspace child: the setup layout's header, tab rail and
+    // centered container wrap both render paths, so the spec draws no chrome.
+    layout: 'bare',
+    header: [],
+    body: [
+      grid('space-y-4', [
+        widgetBlock('labor-pricing-heading', {
+          title: data.heading.title,
+          description: data.heading.description,
+          docsHref: data.heading.docsHref,
+          docsLabel: data.heading.docsLabel,
+        }),
+        widgetBlock('labor-pricing-view', {
+          cards: data.view.cards,
+          selected: data.view.selected,
+          creating: data.view.creating,
+          total: data.view.total,
+          page: data.view.page,
+          perPage: data.view.perPage,
+          currentParams: data.view.currentParams,
+          timeFilter: data.view.timeFilter,
+          dimensionFilter: data.view.dimensionFilter,
+          items: data.view.items,
+          timeTypes: data.view.timeTypes,
+          options: data.view.options,
+          currencies: data.view.currencies,
+          multiCurrency: data.view.multiCurrency,
+          layout: data.view.layout,
+          forms: data.view.forms,
+          currentFormId: data.view.currentFormId,
+          customFieldDefs: data.view.customFieldDefs,
+          canCustomize: data.view.canCustomize,
+        }),
+      ]),
+    ],
+  })
 }

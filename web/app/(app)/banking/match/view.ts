@@ -1,14 +1,30 @@
+import 'server-only'
+
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/src/banking.ts'
-import { PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '../../../../components/page-layout'
+import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@openbooks/viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { parsePrefixedListParams, pickString, isUuid } from '../../../../lib/list-params'
-import { MatchWorkspace, type GlRow, type ReviewRow, type StatementRow } from './MatchWorkspace'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadMatch, matchSpec } from './view'
+import type { MatchWorkspace } from './MatchWorkspace'
+import type { GlRow, ReviewRow, StatementRow } from './MatchWorkspace'
+
+/**
+ * Match bank data, split into a loader and a spec.
+ *
+ * The workspace is one client component and stays whole: it owns selection
+ * state across three paginated lists, the match/unmatch calls, and an
+ * add-journal form. Decomposing it would strand the selection from the
+ * actions it drives.
+ *
+ * The page's real branch is upstream of any of that — with no account chosen
+ * there is no reconciliation to load, so the loader returns nulls and the
+ * workspace renders its picker. That stays a loader decision; the spec places
+ * one widget either way.
+ */
+
+type MatchWorkspaceProps = Parameters<typeof MatchWorkspace>[0]
 
 interface AccountRow extends Record<string, unknown> {
   id: string
@@ -16,7 +32,11 @@ interface AccountRow extends Record<string, unknown> {
   name: string
   unmatched: string | number
 }
-interface OffsetAccountRow extends Record<string, unknown> { id: string; number: string | null; name: string }
+interface OffsetAccountRow extends Record<string, unknown> {
+  id: string
+  number: string | null
+  name: string
+}
 interface ReconciliationRow extends Record<string, unknown> {
   id: string
   through_date: string
@@ -26,33 +46,25 @@ interface ReconciliationRow extends Record<string, unknown> {
 }
 interface CountRow extends Record<string, unknown> { n: string | number }
 
-export const dynamic = 'force-dynamic'
-
-export async function generateMetadata() {
-  const t = await getTranslations('banking')
-  return { title: t('match.title') }
+export interface MatchData {
+  title: string
+  description: string
+  accounts: MatchWorkspaceProps['accounts']
+  offsetAccounts: MatchWorkspaceProps['offsetAccounts']
+  account: MatchWorkspaceProps['account']
+  session: MatchWorkspaceProps['session']
+  data: MatchWorkspaceProps['data']
+  totals: MatchWorkspaceProps['totals']
+  currentParams: Record<string, string | string[] | undefined>
+  tab: 'match' | 'review' | 'excluded'
 }
 
-export default async function MatchBankData({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  const sp0 = await searchParams
-  if (sp0.__viewspec === '1') {
-    const data = await loadMatch(sp0)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={matchSpec(data)} data={data} searchParams={sp0} trusted />
-      </>
-    )
-  }
+export async function loadMatch(
+  sp: Record<string, string | string[] | undefined>,
+): Promise<MatchData> {
   const authz = await requirePermission('banking.reconcile')
   const t = await getTranslations('banking')
   const orgId = authz.user.orgId
-  const sp = await searchParams
   const accountId = pickString(sp.account)
   const tab = (pickString(sp.tab) ?? 'match') as 'match' | 'review' | 'excluded'
 
@@ -86,16 +98,21 @@ export default async function MatchBankData({
 
   const account = accountId && isUuid(accountId) ? accountsRes.rows.find((a) => a.id === accountId) : null
 
-  // No account selected → just the picker.
+  // No account selected → the workspace renders just its picker, so the
+  // loader stops here rather than querying for a session that cannot exist.
   if (!account) {
-    return (
-      <ListPageLayout
-        header={<PageHeader title={t('match.title')} description={t('match.description')} />}
-      >
-        <MatchWorkspace accounts={accounts} offsetAccounts={offsetAccounts} account={null} session={null}
-          data={null} totals={null} currentParams={sp} tab={tab} />
-      </ListPageLayout>
-    )
+    return {
+      title: t('match.title'),
+      description: t('match.description'),
+      accounts,
+      offsetAccounts,
+      account: null,
+      session: null,
+      data: null,
+      totals: null,
+      currentParams: sp,
+      tab,
+    }
   }
 
   // Find the account's open reconciliation (do NOT create on render).
@@ -171,20 +188,45 @@ export default async function MatchBankData({
     }
   }
 
-  return (
-    <ListPageLayout
-      header={<PageHeader title={t('match.title')} description={t('match.description')} />}
-    >
-      <MatchWorkspace
-        accounts={accounts}
-        offsetAccounts={offsetAccounts}
-        account={{ id: account.id, label: [account.number, account.name].filter(Boolean).join(' · ') }}
-        session={session ? { id: session.id, throughDate: session.through_date, statementBalance: String(session.statement_balance), currency: session.currency } : null}
-        data={data}
-        totals={totals}
-        currentParams={sp}
-        tab={tab}
-      />
-    </ListPageLayout>
-  )
+
+  return {
+    title: t('match.title'),
+    description: t('match.description'),
+    accounts,
+    offsetAccounts,
+    account: { id: account.id, label: [account.number, account.name].filter(Boolean).join(' · ') },
+    session: session
+      ? {
+          id: session.id,
+          throughDate: session.through_date,
+          statementBalance: String(session.statement_balance),
+          currency: session.currency,
+        }
+      : null,
+    data,
+    totals,
+    currentParams: sp,
+    tab,
+  }
+}
+
+const f = ref<MatchData>()
+
+export function matchSpec(data: MatchData): PageSpec {
+  return page({
+    layout: 'list',
+    header: [pageHeader({ title: f('title'), description: f('description') })],
+    body: [
+      widgetBlock('match-workspace', {
+        accounts: data.accounts,
+        offsetAccounts: data.offsetAccounts,
+        account: data.account,
+        session: data.session,
+        data: data.data,
+        totals: data.totals,
+        currentParams: data.currentParams,
+        tab: data.tab,
+      }),
+    ],
+  })
 }

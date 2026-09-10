@@ -28,6 +28,9 @@
 --   …4801-4899  budget scenarios and lines
 --   …5801-5899  file cabinet folders, files, versions
 --   …6801-6899  tax return forms and filings
+--   …7801-7899  psp settlement batches
+--   …8801-8899  labor bill rate books
+--   …1901-1999  pay stubs, employee profiles, wage rates
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
 --
 --   psql "$VIEWSPEC_DB" -f scripts/viewspec-fixtures.sql
@@ -829,4 +832,215 @@ begin
      '[{"lineCode": "5a", "label": "Taxable social security wages", "value": "120000.00", "computed": false, "editable": true}, {"lineCode": "5c", "label": "Total income tax withheld", "value": "18000.00", "computed": true, "editable": false}]'::jsonb,
      repeat('c', 64), null, null)
   on conflict (id) do nothing;
+
+  -- ---- psp settlements ------------------------------------------------------
+  --
+  -- Two DRAFT batches, and only drafts on purpose. A posted or void batch has
+  -- to carry a journal entry and, for a void, a full reversal chain — the
+  -- lifecycle CHECK enforces it. Inventing those ledger rows to decorate a
+  -- fixture is how a fixture starts lying about the product, so the harness
+  -- covers the draft row-state and says so rather than faking the other two.
+  insert into psp_settlement_batches
+    (id, org_id, provider, external_ref, settlement_date, currency,
+     gross_amount, fee_amount, refund_amount, dispute_amount, fx_amount,
+     net_amount, status, line_count)
+  values
+    ('00000000-0000-7000-9000-000000007801', v_org, 'stripe', 'po_viewspec_draft_001',
+     current_date - 2, 'USD', 12500.00, 362.50, 0, 0, 0, 12137.50, 'draft', 42),
+    ('00000000-0000-7000-9000-000000007802', v_org, 'adyen', 'adyen_viewspec_draft_001',
+     current_date - 9, 'USD', 9800.00, 284.20, 0, 0, 0, 9515.80, 'draft', 31)
+  on conflict (id) do nothing;
+
+  -- ---- labor pricing ------------------------------------------------------
+  --
+  -- Bill rate books + versions for the /admin/setup/labor-pricing
+  -- conversion: two ACTIVE books (one department-scoped, one unscoped) and
+  -- one EXPIRED book, so the time and dimension filters each change the
+  -- result set (see the INTEGRATION.md for that page). The drawer variant
+  -- opens the scoped version with one scope, one adjustment, one term and
+  -- one line.
+  insert into item_rate_books (id, org_id, code, name, currency, is_active)
+  values
+    ('00000000-0000-7000-9000-000000008801', v_org, 'STD-2025', 'Standard bill rates', 'USD', true),
+    ('00000000-0000-7000-9000-000000008802', v_org, 'OT-2025', 'Overtime bill rates', 'USD', true)
+  on conflict (id) do nothing;
+
+  -- Versions go in as DRAFT and are activated at the end of this block: the
+  -- children of an activated or retired version are immutable, so building
+  -- them in their final state first makes the scopes, policies and lines
+  -- unwritable. The product enforces the same order.
+  insert into item_rate_versions (id, org_id, rate_book_id, effective_from, effective_to, status)
+  values
+    ('00000000-0000-7000-9000-000000008811', v_org, '00000000-0000-7000-9000-000000008801', '2025-01-01', null, 'draft'),
+    ('00000000-0000-7000-9000-000000008812', v_org, '00000000-0000-7000-9000-000000008802', '2024-01-01', null, 'draft'),
+    ('00000000-0000-7000-9000-000000008813', v_org, '00000000-0000-7000-9000-000000008801', '2024-01-01', '2024-06-30', 'draft')
+  on conflict (id) do nothing;
+
+  insert into labor_rate_version_policies (id, org_id, version_id, derivation_policy)
+  values
+    ('00000000-0000-7000-9000-000000008821', v_org, '00000000-0000-7000-9000-000000008811', 'explicit'),
+    ('00000000-0000-7000-9000-000000008822', v_org, '00000000-0000-7000-9000-000000008812', 'explicit'),
+    ('00000000-0000-7000-9000-000000008823', v_org, '00000000-0000-7000-9000-000000008813', 'explicit')
+  on conflict (id) do nothing;
+
+  -- One department scope on the drawer version only (makes ?dimension=unscoped
+  -- a strict subset of the default). The department is fixture-owned so the
+  -- scope-label subselect resolves a name rather than null.
+  insert into departments (id, org_id, code, name, is_active)
+  values ('00000000-0000-7000-9000-000000008831', v_org, 'FIELD', 'Field operations', true)
+  on conflict (id) do nothing;
+
+  insert into labor_rate_version_scopes (id, org_id, version_id, scope_type, scope_value_id, scope_value_text, include_children)
+  values ('00000000-0000-7000-9000-000000008841', v_org, '00000000-0000-7000-9000-000000008811', 'department', '00000000-0000-7000-9000-000000008831', null, false)
+  on conflict (id) do nothing;
+
+  -- One billable item + one line on the drawer version (the lines aggregate
+  -- joins items, so the item must exist; kind/category feed the picker
+  -- dimensions).
+  insert into items (id, org_id, name, kind, category, is_active)
+  values ('00000000-0000-7000-9000-000000008851', v_org, 'Journeyman electrician', 'labor', 'field', true)
+  on conflict (id) do nothing;
+
+  insert into item_rate_lines (id, org_id, version_id, item_id, unit_code, unit_name, base_quantity, bill_rate, sort_order)
+  values ('00000000-0000-7000-9000-000000008861', v_org, '00000000-0000-7000-9000-000000008811', '00000000-0000-7000-9000-000000008851', 'hour', 'Hour', 1, 95.00, 1)
+  on conflict (id) do nothing;
+
+  -- One adjustment with a free-text target (satisfies the one-value check
+  -- via target_value_text) plus one term on the drawer version.
+  insert into labor_rate_adjustments
+    (id, org_id, version_id, code, name, category, calculation, value, unit,
+     presentation, sort_order, is_active, applies_regular, applies_overtime,
+     applies_double_time, applies_shift)
+  values ('00000000-0000-7000-9000-000000008871', v_org, '00000000-0000-7000-9000-000000008811',
+    'NIGHT', 'Night premium', 'surcharge', 'percent', 10.00, 'percent',
+    'separate', 1, true, true, true, false, false)
+  on conflict (id) do nothing;
+
+
+  insert into labor_rate_adjustment_targets (id, org_id, adjustment_id, target_type, target_value_id, target_value_text, include_children)
+  values ('00000000-0000-7000-9000-000000008881', v_org, '00000000-0000-7000-9000-000000008871', 'other', null, 'Night shift', false)
+  on conflict (id) do nothing;
+
+  insert into labor_rate_terms (id, org_id, version_id, code, label, content, placement, sort_order)
+  values ('00000000-0000-7000-9000-000000008891', v_org, '00000000-0000-7000-9000-000000008811',
+    'NET30', 'Payment terms', 'Net 30 days from invoice date.', 'footer', 1)
+  on conflict (id) do nothing;
+
+  -- Only NOW can the versions take their real states: adjustments, targets,
+  -- terms, scopes and lines are all children, and every one of them is
+  -- immutable once its version leaves draft. The product enforces the same
+  -- order, so a fixture that ignores it is testing a state the app cannot
+  -- reach.
+  update item_rate_versions set status = 'active'
+   where id in ('00000000-0000-7000-9000-000000008811', '00000000-0000-7000-9000-000000008812')
+     and status = 'draft';
+  update item_rate_versions set status = 'retired'
+   where id = '00000000-0000-7000-9000-000000008813' and status = 'draft';
+
+  -- ---- pay-run wizard stubs --------------------------------------------------
+  --
+  -- The simulator never calculates payroll, so the /payroll/runs/[id] wizard
+  -- renders an empty shell without these: two stubs on the existing fixture
+  -- run …1811 (PAY-00001, calculated/draft) with their profiles, wage rates
+  -- and baseline components. One stub is hourly-paid by EFT, the other is a
+  -- salaried cheque payee — both payment rails and both pay bases behind one
+  -- run. Each stub carries one BASE-linked earning and one component-free
+  -- deduction, so both stub-line join branches render.
+  declare
+    v_emp_hourly uuid;
+    v_emp_salary uuid;
+    v_comp_base uuid := '00000000-0000-7000-9000-000000001901';
+    v_comp_bonus uuid := '00000000-0000-7000-9000-000000001902';
+  begin
+    select id into v_emp_hourly from parties
+     where org_id = v_org and display_name = 'Harborview Development LLC';
+    select id into v_emp_salary from parties
+     where org_id = v_org and display_name = 'Ade Balogun (Apprentice)';
+    if v_emp_hourly is null or v_emp_salary is null then
+      raise notice 'missing fixture parties; skipping pay-run wizard fixtures';
+      return;
+    end if;
+
+    -- Baseline earning components (the engine's own BASELINE_COMPONENTS
+    -- codes: BASE/base_pay + BONUS/bonus — the adjustment picker only lists
+    -- active components whose system_key is null or one of
+    -- base_pay/overtime/bonus/vacation_payout).
+    insert into pay_components
+      (id, org_id, code, name, kind, system_key, country, basis, taxable,
+       pensionable, insurable, vacationable, non_periodic, sequence, is_active)
+    values
+      (v_comp_base, v_org, 'BASE', 'Base pay', 'earning', 'base_pay', 'CA',
+       'per_hour', true, true, true, true, false, 10, true),
+      (v_comp_bonus, v_org, 'BONUS', 'Bonus', 'earning', 'bonus', 'CA',
+       'fixed_amount', true, true, true, false, true, 30, true)
+    on conflict (id) do nothing;
+
+    -- Profiles on the biweekly fixture schedule (…1801): the Scope roster
+    -- lists exactly these two employees.
+    insert into employee_payroll_profiles
+      (id, org_id, employee_party_id, pay_schedule_id, province, pay_basis,
+       country, stub_delivery, payment_method, is_active)
+    values
+      (gen_random_uuid(), v_org, v_emp_hourly,
+       '00000000-0000-7000-9000-000000001801', 'ON', 'hourly',
+       'CA', 'email', 'eft', true),
+      (gen_random_uuid(), v_org, v_emp_salary,
+       '00000000-0000-7000-9000-000000001801', 'ON', 'salary',
+       'CA', 'email', 'cheque', true)
+    on conflict do nothing;
+
+    -- Wage rates effective before the run's pay date (2026-02-11), so the
+    -- roster's has_wage flag is true for both employees.
+    insert into labor_cost_rates
+      (id, org_id, employee_party_id, rate, basis, effective_from, is_active,
+       currency)
+    values
+      (gen_random_uuid(), v_org, v_emp_hourly, 42.50, 'hour', date '2026-01-01',
+       true, 'USD'),
+      (gen_random_uuid(), v_org, v_emp_salary, 78000.00, 'year', date '2026-01-01',
+       true, 'USD')
+    on conflict (id) do nothing;
+
+    -- Two calculated stubs on run …1811. country/filing columns satisfy the
+    -- evidence CHECKs with the unknown-source branch (no pack is installed
+    -- in the sim tenant, so no calculation evidence exists to cite).
+    insert into pay_stubs
+      (id, org_id, pay_run_document_id, employee_party_id, province,
+       periods_per_year, pay_date, tax_year, federal_claim, provincial_claim,
+       currency_code, gross, pensionable_earnings, insurable_earnings,
+       net_pay, employer_cost, vacation_accrued, factors,
+       country_source, filing_account_source)
+    values
+      ('00000000-0000-7000-9000-000000001911', v_org,
+       '00000000-0000-7000-9000-000000001811', v_emp_hourly, 'ON',
+       26, date '2026-02-11', 2026, 0, 0,
+       'USD', 3400.00, 3400.00, 3400.00,
+       2510.75, 3620.40, 136.00, '{"T": "441.20", "C": "186.85", "EI": "61.20"}',
+       'unknown', 'unknown'),
+      ('00000000-0000-7000-9000-000000001912', v_org,
+       '00000000-0000-7000-9000-000000001811', v_emp_salary, 'ON',
+       26, date '2026-02-11', 2026, 0, 0,
+       'USD', 3000.00, 3000.00, 3000.00,
+       2248.10, 3180.00, 120.00, '{"T": "380.55", "C": "164.80", "EI": "53.90"}',
+       'unknown', 'unknown')
+    on conflict (id) do nothing;
+
+    insert into pay_stub_lines
+      (id, org_id, stub_id, component_id, kind, description, hours, rate,
+       amount, sequence)
+    values
+      ('00000000-0000-7000-9000-000000001921', v_org,
+       '00000000-0000-7000-9000-000000001911', v_comp_base, 'earning',
+       'Regular hours', 80, 42.50, 3400.00, 1),
+      ('00000000-0000-7000-9000-000000001922', v_org,
+       '00000000-0000-7000-9000-000000001911', null, 'deduction',
+       'Income tax', null, null, -441.20, 2),
+      ('00000000-0000-7000-9000-000000001923', v_org,
+       '00000000-0000-7000-9000-000000001912', v_comp_base, 'earning',
+       'Salary', null, null, 3000.00, 1),
+      ('00000000-0000-7000-9000-000000001924', v_org,
+       '00000000-0000-7000-9000-000000001912', null, 'deduction',
+       'Income tax', null, null, -380.55, 2)
+    on conflict (id) do nothing;
+  end;
 end $$;

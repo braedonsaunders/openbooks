@@ -1,7 +1,5 @@
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { cn } from '@openbooks/ui'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
   payrollSettings,
@@ -9,12 +7,10 @@ import {
   type PayrollSubsidiaryScope,
 } from '@openbooks/engine/src/payroll-run.ts'
 import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll-payment-method.ts'
-import { payrollSetupState } from '@openbooks/engine/src/payroll-readiness.ts'
 import { payrollBankProfiles } from '@openbooks/engine/src/payroll-bank-file.ts'
-import { packRemittanceVendorSettingsKeys, packSlotState, PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
+import { packSlotState, PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
 import { payrollTaxYearCoverage } from '@openbooks/engine/src/payroll/tax-years.ts'
 import { pdfEncryptionAvailable } from '@openbooks/pdf'
-import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
 import { stubPasswordPolicy } from '../../../../../lib/payroll-outputs'
 import { can, requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
@@ -27,11 +23,13 @@ import { DerivedRulePreviewSection } from './DerivedRulePreviewSection'
 import { HolidayCalendarSection } from './HolidayCalendarSection'
 import { PayrollCountryPacks } from './PayrollCountryPacks'
 import { PayrollPaydaySettings } from './PayrollPaydaySettings'
-import { PayrollSetupLauncher } from './PayrollSetupLauncher'
 import { PayrollSetupWorkspace } from './PayrollSetupWorkspace'
 import { StatutoryRatesSection } from './StatutoryRatesSection'
 import { StatHolidayPaySection } from './StatHolidayPaySection'
 import { WorkSchedulesSection } from './WorkSchedulesSection'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { loadPayrollSetup, payrollSetupSpec } from './view'
+import { PayrollSetupBanner, PayrollSetupHeader, PayrollSetupTabs, launcherDataFor } from './sections'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,6 +109,17 @@ export default async function PayrollSetupPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadPayrollSetup(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={payrollSetupSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('payroll.manage')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')
@@ -156,38 +165,18 @@ export default async function PayrollSetupPage({
     active: key === tab,
   }))
 
-  const launcher = await launcherData(orgId, canManageEntities, authz.allowedSubsidiaryIds)
+  const launcher = await launcherDataFor({ orgId, canManageEntities, allowedSubsidiaryIds: authz.allowedSubsidiaryIds })
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">{t('description')}</p>
-        </div>
-        {/* Re-launchable from the settings page — adding a second country
-            pack walks the same wizard. */}
-        <PayrollSetupLauncher variant="button" {...launcher} />
-      </header>
-      {launcher.missing > 0 && <PayrollSetupLauncher variant="banner" {...launcher} />}
-      <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" aria-label={t('tabsAria')}>
-        {groups.map((item) => (
-          <Link
-            key={item.key}
-            href={`/admin/setup/payroll?tab=${item.tabs[0]}` as never}
-            aria-current={group.key === item.key ? 'page' : undefined}
-            className={cn(
-              '-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium',
-              group.key === item.key
-                ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400',
-            )}
-          >
-            {t(`groups.${item.key}`)}
-          </Link>
-        ))}
-      </nav>
-      <ModuleHomeTabs tabs={subTabs} />
+      <PayrollSetupHeader title={t('title')} description={t('description')} launcher={launcher} />
+      <PayrollSetupBanner launcher={launcher} />
+      <PayrollSetupTabs
+        groups={groups.map((g) => ({ key: g.key, label: t(`groups.${g.key}`), firstTab: g.tabs[0]! }))}
+        activeGroup={group.key}
+        tabsAria={t('tabsAria')}
+        subTabs={subTabs}
+      />
       {tab === 'packs' ? <PacksTab orgId={orgId} /> : null}
       {tab === 'accounts' ? <AccountsTab orgId={orgId} allowedSubsidiaryIds={authz.allowedSubsidiaryIds} /> : null}
       {tab === 'payday' ? <PaydayTab orgId={orgId} /> : null}
@@ -236,45 +225,6 @@ export default async function PayrollSetupPage({
       ) : null}
     </div>
   )
-}
-
-/** Everything the "Set up payroll" wizard launcher needs, computed once. */
-async function launcherData(
-  orgId: string,
-  canManageEntities: boolean,
-  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
-) {
-  const [setup, bankProfiles, schedulesRes] = await Promise.all([
-    payrollSetupState(orgId, allowedSubsidiaryIds),
-    payrollBankProfiles(orgId),
-    db.execute<{ id: string; name: string }>(sql`
-      select id, name from pay_schedules
-       where org_id = ${orgId} and is_active order by name`),
-  ])
-  // The pay-schedule form options come from the registry entity's OWN field
-  // declaration — the wizard renders the same select the setup drawer does.
-  const scheduleEntity = SETUP_ENTITY_BY_KEY.get('pay-schedules')
-  const frequencies = (scheduleEntity?.fields.find((f) => f.key === 'frequency')?.options ?? [])
-    .filter((option): option is { value: string; labelKey: string } => Boolean(option.labelKey))
-    .map((option) => ({ value: option.value, labelKey: option.labelKey }))
-  // Vendor fields per pack come from the pack declarations, so a new pack's
-  // vendors step exists the moment the pack declares its keys.
-  const vendorKeysByCountry = Object.fromEntries(
-    Object.keys(PAYROLL_COUNTRY_PACKS).map((country) => [
-      country, packRemittanceVendorSettingsKeys(country),
-    ]),
-  )
-  const missing = setup.checks.filter((check) => !check.ok && check.severity === 'blocker').length
-  return {
-    missing,
-    vendorKeysByCountry,
-    frequencies,
-    canManageEntities,
-    schedules: schedulesRes.rows,
-    bankProfiles: bankProfiles.map((p) => ({
-      id: p.id, name: p.name, format: p.format, configured: p.configured,
-    })),
-  }
 }
 
 async function PacksTab({ orgId }: { orgId: string }) {
