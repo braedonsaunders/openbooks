@@ -55,6 +55,7 @@ import { NewAccountButton } from '../../app/(app)/accounts/NewAccountButton'
 import { EntityListSlot } from './entity-list-slot'
 import { RecordListSlot } from './record-list-slot'
 import { SetupSectionSlot } from './setup-section-slot'
+import { AdminUsersTable } from '../../app/(app)/admin/users/sections'
 import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
 import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
 import { ReceiptsViewTabs } from '../../app/(app)/receipts/sections'
@@ -587,6 +588,34 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       </Link>
     </Button>
   ),
+
+  /* --- org users ------------------------------------------------------------ */
+  /** A widget, not a `table` block: this page hand-rolls a plain <table> with
+   *  its own classes, and the spec's table block offers only the two real
+   *  table variants the app has. */
+  'admin-users-table': (props) => (
+    <AdminUsersTable
+      users={(props.users as ComponentProps<typeof AdminUsersTable>['users']) ?? []}
+      allRoles={(props.allRoles as ComponentProps<typeof AdminUsersTable>['allRoles']) ?? []}
+      basePath={str(props, 'basePath') ?? '/admin/users'}
+      currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
+      sort={str(props, 'sort') ?? 'name'}
+      dir={str(props, 'dir') === 'desc' ? 'desc' : 'asc'}
+      labels={props.labels as ComponentProps<typeof AdminUsersTable>['labels']}
+    />
+  ),
+  /** A link wrapped in a Button — the plain form several admin headers use,
+   *  distinct from `link-button` only in that the Link is on the OUTSIDE. */
+  'plain-link-button': (props) => {
+    const href = str(props, 'href')
+    if (!href) return null
+    const variant = str(props, 'variant') as ComponentProps<typeof Button>['variant']
+    return (
+      <Link href={href as never}>
+        <Button variant={variant}>{str(props, 'label') ?? ''}</Button>
+      </Link>
+    )
+  },
 
   /* --- payments ------------------------------------------------------------- */
   'new-payment': (props) => (
