@@ -44,6 +44,7 @@
 --   …9901-9999  tax depreciation regimes, pool classes, asset categories
 --   …1201-1299  bank feed connections
 --   …1301-1399  CRM prospect parties and account profiles
+--   …1501-1599  sandboxes
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
 --
 --   psql "$VIEWSPEC_DB" -f scripts/viewspec-fixtures.sql
@@ -2444,5 +2445,134 @@ begin
                                      'ViewSpec Old Bill',
                                      'ViewSpec Quote'))
   on conflict (id) do nothing;
+
+  -- ---- payroll separations --------------------------------------------------
+  --
+  -- The simulator never terminates anyone and never pays a termination run,
+  -- so roeCandidates(org, 2026) is empty and /payroll/separations renders
+  -- the bare no-filings empty state without these — the comparison the
+  -- harness refuses. One terminated CA employee (Chloe Martin, Apprentice —
+  -- a sim party with an employee_roles row that no other fixture owns) with
+  -- a CA profile on the biweekly fixture schedule plus one committed stub
+  -- on the existing fixture run …1813 (PAY-00003, committed/regular) gives
+  -- the CA ROE exactly one population row. Block …1860-1869. (Claimed as …1840-1849, which the remittance
+  -- block already holds — a sixth independent collision on an unapplied
+  -- claim, which is the one case the allocation table cannot arbitrate.)
+  --
+  -- All three candidate predicates must hold at once: (1) termination in
+  -- the year OR a termination run, (2) a stub with tax_year 2026 on a
+  -- COMMITTED run (calculated stubs are invisible to the join), (3) a CA
+  -- payroll profile (roeCandidates inner-joins employee_payroll_profiles).
+  -- Blast radius (checked before claiming): the date + profile + stub move
+  -- four other readers, none of which pin the moved values. (1)
+  -- /payroll/runs `finalPayCandidates` gains Chloe (profile + terminated)
+  -- but that list renders ONLY inside the unopened New Run dialog — the
+  -- entry pins `table tbody tr` on the runs list. (2) Parties drawer / run
+  -- wizard read one employee's own dates, never Chloe's. (3) Projects
+  -- equipment operators exclude terminated staff but the /projects pin is
+  -- `table tbody tr` minMatches 3 over a 29-party register, and the
+  -- operator list lives in an unopened drawer. (4) Financial-health
+  -- headcount includes Chloe only through her final day (the pin is `main
+  -- button` tab strip, minMatches 9). (5) Utilization reads
+  -- time-tracking, never employment dates.
+  declare
+    v_chloe uuid;
+    v_actor uuid;
+  begin
+    select id into v_chloe from parties
+     where org_id = v_org and display_name = 'Chloe Martin (Apprentice)';
+    select id into v_actor from users where org_id = v_org order by created_at limit 1;
+    -- NOT `return`: a bare return in a nested block exits the WHOLE anonymous
+    -- block, silently skipping every fixture appended below this one.
+    if v_chloe is null or v_actor is null then
+      raise notice 'missing Chloe/actor; skipping separations fixtures';
+    else
+
+    -- The interruption of earnings. Chloe's employee_roles row exists with
+    -- terminated_on null — stamp it; the guard is the null itself, so a
+    -- re-run is a no-op and the UPDATE never fights another fixture.
+    update employee_roles set terminated_on = date '2026-03-31'
+     where org_id = v_org and party_id = v_chloe and terminated_on is null;
+
+    -- Chloe's CA payroll profile on the biweekly fixture schedule (…1801,
+    -- frequency `biweekly` — a frequency roeRecord accepts, though only
+    -- the population matters for the pin). Fixed id …1841; the guard is
+    -- (org_id, employee_party_id) so a re-run is a no-op even though
+    -- profiles carry no unique key on the employee.
+    insert into employee_payroll_profiles
+      (id, org_id, employee_party_id, pay_schedule_id, province, pay_basis,
+       country, stub_delivery, payment_method, is_active)
+    select '00000000-0000-7000-9000-000000001861', v_org, v_chloe,
+           '00000000-0000-7000-9000-000000001801', 'ON', 'hourly',
+           'CA', 'email', 'eft', true
+     where not exists (select 1 from employee_payroll_profiles
+                        where org_id = v_org and employee_party_id = v_chloe);
+
+    -- The committed stub that makes her a candidate. Run …1813 is the
+    -- existing committed fixture run (pay_date 2026-03-11); the stub is a
+    -- second employee on that run, so no run header changes. (org_id,
+    -- employee_party_id) is not unique but (pay_run_document_id,
+    -- employee_party_id) is — the guard names THAT, so re-runs stay
+    -- silent. country/'unknown' + filing_account/'unknown' satisfy the
+    -- evidence CHECKs with the unknown-source branch (no pack is installed
+    -- in the sim tenant, exactly like the wizard-stub block); net_pay >= 0
+    -- holds; no cheque_number so that CHECK is vacuous.
+    insert into pay_stubs
+      (id, org_id, pay_run_document_id, employee_party_id, province,
+       periods_per_year, pay_date, tax_year, federal_claim, provincial_claim,
+       currency_code, gross, pensionable_earnings, insurable_earnings,
+       net_pay, employer_cost, vacation_accrued, factors,
+       country_source, filing_account_source)
+    select '00000000-0000-7000-9000-000000001860', v_org,
+           '00000000-0000-7000-9000-000000001813', v_chloe, 'ON',
+           26, date '2026-03-11', 2026, 0, 0,
+           'USD', 2800.00, 2800.00, 2800.00,
+           2100.00, 2960.00, 112.00, '{"T": "355.00", "C": "150.00", "EI": "48.00"}',
+           'unknown', 'unknown'
+     where not exists (select 1 from pay_stubs
+                        where pay_run_document_id = '00000000-0000-7000-9000-000000001813'
+                          and employee_party_id = v_chloe);
+  
+    end if;
+  end;
+
+  -- ---- admin sandboxes (…1501-1599; verified free in fixtures + proposals) ------
+  -- The simulator never clones sandboxes, so the page would compare two
+  -- identical empty states. Two rows: one ready/masked with no error (pins
+  -- the success badge, the masked badge, the tier badge, the
+  -- never-refreshed line), one failed/unmasked with a lastError and a
+  -- daily schedule (pins the destructive badge, the error line, the
+  -- refreshed line, the auto-refresh suffix). The harness session runs in
+  -- production, so the manager branch renders on both paths.
+  --
+  -- Cross-page note: each sandbox needs its own org row (orgs.id FK). The
+  -- fixture orgs are env_kind='sandbox' children of the SIM org via
+  -- sandbox_of, so the platform-organizations page keeps comparing: its
+  -- default sort is name asc and its entry asserts minMatches 2 on the
+  -- first page, which the SIM production org + fixtures still satisfy.
+  -- The SIM org's own sandboxCount becomes 2 on both renders (same
+  -- loader), so that cell agrees too.
+  declare
+    v_sbx_org_a uuid := '00000000-0000-7000-9000-000000001501';
+    v_sbx_org_b uuid := '00000000-0000-7000-9000-000000001502';
+  begin
+    insert into orgs (id, name, base_currency, country, env_kind, sandbox_of)
+    values (v_sbx_org_a, 'ViewSpec Sandbox Alpha', 'USD', 'US', 'sandbox', v_org),
+           (v_sbx_org_b, 'ViewSpec Sandbox Beta', 'USD', 'US', 'sandbox', v_org)
+    on conflict (id) do nothing;
+
+    insert into sandboxes
+      (id, org_id, production_org_id, name, tier, masked, status,
+       last_error, last_refresh_at, refresh_schedule, storage_rows, created_at)
+    values ('00000000-0000-7000-9000-000000001511', v_sbx_org_a, v_org,
+            'ViewSpec QA', 'masked', true, 'ready',
+            null, null, null, 123456,
+            '2026-02-10T15:00:00Z'),
+           ('00000000-0000-7000-9000-000000001512', v_sbx_org_b, v_org,
+            'ViewSpec UAT', 'full', false, 'failed',
+            'Clone failed: disk full', '2026-02-09T09:30:00Z', 'daily', 789,
+            '2026-02-08T12:00:00Z')
+    on conflict (id) do nothing;
+  end;
 
 end $$;
