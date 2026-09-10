@@ -1,9 +1,10 @@
+import 'server-only'
+
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '../../../../components/page-layout'
+import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@openbooks/viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, pickString } from '../../../../lib/list-params'
@@ -11,15 +12,26 @@ import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { loadParty } from '../../../api/parties/_lib'
 import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import { NewPartyButton } from '../../parties/NewPartyButton'
-import { NewPartyRedirect } from '../../parties/NewPartyRedirect'
-import { PartyDrawer, type PartyTab } from '../../parties/PartyDrawer'
-import { RelatedTransactionDrawer } from '../../../../components/related-transaction-drawer'
-import { EntityListView } from '../../../../components/entity-list-view'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadEntityRole, entityRoleSpec } from './view'
+import type { PartyDrawer, PartyTab } from '../../parties/PartyDrawer'
 
-export const dynamic = 'force-dynamic'
+/**
+ * An entity role list (customers, vendors, employees), split into a loader
+ * and a spec.
+ *
+ * Almost all of the page is the universal entity list; what is page-specific
+ * is the drawer SLOT, which the native page fills with a fragment of up to
+ * three components — a create-redirect, the party flyout, and a related
+ * transaction flyout. A spec cannot express a fragment, so the slot takes a
+ * LIST of widget names and the host renders them in order (the same
+ * arrangement the projects page uses).
+ *
+ * The one wrinkle relative to /parties is the new-party button: it carries a
+ * per-role `basePath`, `role` and translated `label` ("New customer", not
+ * "New party"), so the header action and the empty-state action both name a
+ * prop-carrying `new-role-party` widget rather than the prop-less
+ * `new-party` one. The props are loader-resolved strings; no component
+ * reference or capability object crosses the spec boundary.
+ */
 
 // URL slug (plural) → role key (singular) + badge variant. Display copy lives
 // in the `entities` catalog under roles.<slug>.* and is translated at render.
@@ -37,26 +49,22 @@ async function loadWorkerCompGroups(orgId: string, enabled: boolean): Promise<{ 
   return { rows: result.rows }
 }
 
-export default async function EntityRole({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ role: string }>
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const { role: slug } = await params
-    const data = await loadEntityRole(slug, sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={entityRoleSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const { role: slug } = await params
+export interface EntityRoleData {
+  recordType: 'customer' | 'vendor' | 'employee'
+  title: string
+  description: string
+  canManage: boolean
+  currentParams: Record<string, string | string[] | undefined>
+  newParty: { basePath: string; role: 'customer' | 'vendor' | 'employee'; label: string }
+  showNewRedirect: boolean
+  drawer: (Record<string, unknown> & { remountKey: string }) | null
+  txnDrawer: { id: string; kind: string; partyId: string; formLayoutId?: string } | null
+}
+
+export async function loadEntityRole(
+  slug: string,
+  sp: Record<string, string | string[] | undefined>,
+): Promise<EntityRoleData> {
   const meta = ROLES[slug as keyof typeof ROLES]
   if (!meta) notFound()
   const role = meta.role
@@ -71,7 +79,6 @@ export default async function EntityRole({
   const canManage = can(authz, 'parties.manage')
   const orgId = authz.user.orgId
 
-  const sp = await searchParams
   const partyId = typeof sp.party === 'string' ? sp.party : undefined
   const partyTransactionId = pickString(sp.partyTxn)
   const partyTransactionKind = pickString(sp.partyTxnKind)
@@ -112,70 +119,83 @@ export default async function EntityRole({
       })
     : null
 
-  const partyDrawers = (
-    <>
-      {partyId === 'new' && canManage ? <NewPartyRedirect basePath={basePath} role={role} /> : null}
-      {openParty && pickers ? (
-        <PartyDrawer
-          key={String(openParty.party.id)}
-          payload={openParty as unknown as Parameters<typeof PartyDrawer>[0]['payload']}
-          canManage={canManage}
-          canReadActivities={crmEnabled && can(authz, 'crm.activities.read')}
-          canManageWages={can(authz, 'admin.setup.manage')}
-          canManagePayroll={payrollEnabled && can(authz, 'payroll.manage')}
-          payrollEnabled={payrollEnabled}
-          multiCurrency={multiCurrency}
-          role={role}
-          initialTab={partyTab}
-          initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
-          basePath={basePath}
-          paymentTerms={pickers[0].rows}
-          departments={pickers[1].rows}
-          trades={pickers[2].rows}
-          workerCompGroups={pickers[8].rows}
-          fieldDefs={pickers[3] as unknown as PartyDrawerProps['fieldDefs']}
-          subsidiaries={pickers[4]}
-          accounts={pickers[5].rows}
-          taxCodes={pickers[6].rows}
-          salesReps={pickers[7].rows}
-          layout={resolvedPartyForm?.layout}
-          forms={resolvedPartyForm?.available ?? []}
-          currentFormId={resolvedPartyForm?.row?.id ?? null}
-          recordType={role}
-          canCustomize={can(authz, 'admin.customization.manage')}
-        />
-      ) : null}
-      {openParty && partyTransactionId && isUuid(partyTransactionId) && partyTransactionKind ? (
-        <RelatedTransactionDrawer
-          id={partyTransactionId}
-          kind={partyTransactionKind}
-          partyId={String(openParty.party.id)}
-          authz={authz}
-          formLayoutId={pickString(sp.form)}
-        />
-      ) : null}
-    </>
-  )
+  return {
+    recordType: role,
+    title: t(`roles.${slug}.title`),
+    description: t(`roles.${slug}.description`),
+    canManage,
+    currentParams: sp,
+    newParty: { basePath, role, label: newLabel },
+    showNewRedirect: partyId === 'new' && canManage,
+    drawer: openParty && pickers
+      ? {
+          remountKey: String(openParty.party.id),
+          payload: openParty as unknown as PartyDrawerProps['payload'],
+          canManage,
+          canReadActivities: crmEnabled && can(authz, 'crm.activities.read'),
+          canManageWages: can(authz, 'admin.setup.manage'),
+          canManagePayroll: payrollEnabled && can(authz, 'payroll.manage'),
+          payrollEnabled,
+          multiCurrency,
+          role,
+          initialTab: partyTab,
+          initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+          basePath,
+          paymentTerms: pickers[0].rows,
+          departments: pickers[1].rows,
+          trades: pickers[2].rows,
+          workerCompGroups: pickers[8].rows,
+          fieldDefs: pickers[3] as unknown as PartyDrawerProps['fieldDefs'],
+          subsidiaries: pickers[4],
+          accounts: pickers[5].rows,
+          taxCodes: pickers[6].rows,
+          salesReps: pickers[7].rows,
+          layout: resolvedPartyForm?.layout,
+          forms: resolvedPartyForm?.available ?? [],
+          currentFormId: resolvedPartyForm?.row?.id ?? null,
+          recordType: role,
+          canCustomize: can(authz, 'admin.customization.manage'),
+        }
+      : null,
+    txnDrawer: openParty && partyTransactionId && isUuid(partyTransactionId) && partyTransactionKind
+      ? {
+          id: partyTransactionId,
+          kind: partyTransactionKind,
+          partyId: String(openParty.party.id),
+          formLayoutId: pickString(sp.form),
+        }
+      : null,
+  }
+}
 
-  return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={t(`roles.${slug}.title`)}
-          description={t(`roles.${slug}.description`)}
-          actions={canManage ? <NewPartyButton basePath={basePath} role={role} label={newLabel} /> : undefined}
-        />
-      }
-    >
-      <EntityListView
-        recordType={role}
-        orgId={orgId}
-        userId={authz.user.id}
-        canManage={can(authz, 'admin.customization.manage')}
-        sp={sp}
-        emptyAction={canManage ? <NewPartyButton basePath={basePath} role={role} label={newLabel} /> : undefined}
-        drawer={partyDrawers}
-      />
-    </ListPageLayout>
-  )
+const f = ref<EntityRoleData>()
+
+export function entityRoleSpec(data: EntityRoleData): PageSpec {
+  const newParty = { widget: 'new-role-party', props: { ...data.newParty } }
+  return page({
+    layout: 'list',
+    header: [
+      pageHeader({
+        title: f('title'),
+        description: f('description'),
+        actions: [widget(newParty.widget, newParty.props, f('canManage'))],
+      }),
+    ],
+    body: [
+      widgetBlock('entity-list-view', {
+        recordType: data.recordType,
+        sp: data.currentParams,
+        emptyAction: data.canManage ? newParty : null,
+        // Rendered in the native page's order: the create-redirect first, then
+        // the record flyout, then the transaction flyout stacked over it.
+        drawer: [
+          data.showNewRedirect ? { widget: 'new-role-party-redirect', props: { ...data.newParty } } : null,
+          data.drawer ? { widget: 'party-drawer', props: { drawer: data.drawer } } : null,
+          data.txnDrawer
+            ? { widget: 'related-txn-drawer', props: { drawer: data.txnDrawer } }
+            : null,
+        ].filter(Boolean),
+      }),
+    ],
+  })
 }

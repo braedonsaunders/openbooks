@@ -1,58 +1,61 @@
+import 'server-only'
+
 import { getTranslations } from 'next-intl/server'
-import Link from 'next/link'
-import { ArrowUpRight } from 'lucide-react'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { nextPeriodAfter } from '@openbooks/engine/src/payroll-run.ts'
 import { payrollSubsidiaryScopeFilter } from '@openbooks/engine/src/payroll-scope.ts'
 import { uuidArray } from '@openbooks/engine/src/subsidiaries.ts'
-import { PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
-import { ModuleHomeTabs } from '../../../../components/module-home/ui'
-import { RecordListView } from '../../../../components/record-list-view'
+import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@openbooks/viewspec'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { requirePermission, can } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { NewRunButton } from '../_ui/NewRunButton'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadPayRuns, payRunsSpec } from './view'
-
-export const dynamic = 'force-dynamic'
-
-export async function generateMetadata() {
-  const t = await getTranslations('payroll')
-  return { title: t('list.title') }
-}
+import { groupTabs } from '../../../../components/module-home/group-tabs'
+import type { FinalPayCandidate, RunSchedule } from '../_ui/NewRunButton'
 
 /**
- * Pay runs — the universal RecordListView over documents kind 'pay_run'
- * (search, merged-lifecycle stage chips, schedule + date-range filters, saved
- * views, sortable typed columns, pagination). Rows open the pay-run wizard —
- * a full page, not a drawer — via the list source's link override.
+ * Pay runs, split into a loader and a spec.
+ *
+ * The list itself is the universal RecordListView over documents kind
+ * 'pay_run', placed through the `record-list-view` slot: the slot re-derives
+ * org/user/permissions from the session. A spec that could name an org id is
+ * a cross-tenant read. Rows open the pay-run wizard — a full page, not a
+ * drawer — so this page needs no drawer widget; the per-row action is a plain
+ * link, expressed as the `pay-run-row-actions` widget the slot resolves per
+ * row (the same indirection the AR-invoices page uses for its document row
+ * actions).
+ *
+ * Everything else here is loader work copied verbatim from page.tsx: the
+ * `payroll.read` gate, the `payroll` feature gate (404 when disabled), the
+ * schedule picker rows with their engine-derived next periods, the final-pay
+ * candidate picker (terminated employees only), and the module tabs. The
+ * schedules, candidates, today string, tab list, and New-button presence flag
+ * are data, so they travel through the loader result and the widgets render
+ * them.
  */
-export default async function PayRunsPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadPayRuns(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={payRunsSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
+
+export interface PayRunsData {
+  title: string
+  description: string
+  currentParams: Record<string, string | string[] | undefined>
+  canRun: boolean
+  newRun: {
+    schedules: RunSchedule[]
+    finalPayCandidates: FinalPayCandidate[]
+    today: string
   }
+  viewTabs: { href: string; label: string; active?: boolean }[]
+  openLabel: string
+}
+
+export async function loadPayRuns(
+  sp: Record<string, string | string[] | undefined>,
+): Promise<PayRunsData> {
   const authz = await requirePermission('payroll.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')
   const canRun = can(authz, 'payroll.run')
   const t = await getTranslations('payroll')
-  const sp = await searchParams
 
   const scheduleRows = canRun
     ? (((await db.execute<{
@@ -113,45 +116,57 @@ export default async function PayRunsPage({
          order by prof.employee_party_id, er.terminated_on desc`))).rows)
     : []
 
-  const newButton = canRun
-    ? <NewRunButton schedules={schedules} finalPayCandidates={finalPayCandidates} today={await businessToday(orgId)} />
-    : undefined
+  return {
+    title: t('list.title'),
+    description: t('list.description'),
+    currentParams: sp,
+    canRun,
+    newRun: {
+      schedules,
+      finalPayCandidates,
+      today: canRun ? await businessToday(orgId) : '',
+    },
+    viewTabs: await groupTabs('payroll', '/payroll/runs', { orgId }),
+    openLabel: t('list.open'),
+  }
+}
 
-  const moduleTabs = await groupTabs('payroll', '/payroll/runs', { orgId })
+const f = ref<PayRunsData>()
 
-  return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={t('list.title')}
-          description={t('list.description')}
-          actions={
-            <div className="flex items-center gap-3">
-              {newButton}
-              <ModuleHomeTabs tabs={moduleTabs} />
-            </div>
-          }
-        />
-      }
-    >
-      <RecordListView
-        recordType="pay_run"
-        basePath="/payroll/runs"
-        orgId={orgId}
-        userId={authz.user.id}
-        canManage={can(authz, 'admin.customization.manage')}
-        sp={sp}
-        renderRowActions={(row) => (
-          <Link
-            href={`/payroll/runs/${row.id}` as never}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
-            aria-label={t('list.open')}
-            title={t('list.open')}
-          >
-            <ArrowUpRight size={15} />
-          </Link>
-        )}
-      />
-    </ListPageLayout>
-  )
+export function payRunsSpec(data: PayRunsData): PageSpec {
+  const newRun = {
+    widget: 'new-pay-run',
+    props: {
+      schedules: data.newRun.schedules,
+      finalPayCandidates: data.newRun.finalPayCandidates,
+      today: data.newRun.today,
+    },
+  }
+  return page({
+    layout: 'list',
+    header: [
+      pageHeader({
+        title: f('title'),
+        description: f('description'),
+        actionsClassName: 'flex items-center gap-3',
+        actions: [
+          widget(newRun.widget, newRun.props, f('canRun')),
+          widget('module-home-tabs', { tabs: data.viewTabs }),
+        ],
+      }),
+    ],
+    body: [
+      // The universal record list. Rows open the pay-run wizard (a full
+      // page), so the per-row action is a plain link — carried as a widget
+      // ref the slot resolves per row, exactly like the document row actions
+      // on the AR-invoices page.
+      widgetBlock('record-list-view', {
+        recordType: 'pay_run',
+        basePath: '/payroll/runs',
+        sp: data.currentParams,
+        emptyAction: data.canRun ? newRun : null,
+        rowActions: { widget: 'pay-run-row-actions', props: { label: data.openLabel } },
+      }),
+    ],
+  })
 }

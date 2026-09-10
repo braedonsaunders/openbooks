@@ -22,6 +22,10 @@
 --   …0501-0599  banking transactions (checks, deposits)
 --   …0601-0699  sales orders          …0701-0799  quotes
 --   …0901-0999  purchase orders
+--   …1801-1899  payroll schedules and runs
+--   …2801-2899  field tickets
+--   …3801-3899  bank matching rules
+--   …4801-4899  budget scenarios and lines
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
 --
 --   psql "$VIEWSPEC_DB" -f scripts/viewspec-fixtures.sql
@@ -125,6 +129,27 @@ begin
     ('00000000-0000-7000-9000-000000000202', v_org, v_item_critical, 'metric', null, null,
      jsonb_build_object('label', 'Oldest unmatched', 'value', '2026-01-14'))
   on conflict (id) do nothing;
+
+  -- ---- feature switches -----------------------------------------------------
+  --
+  -- The simulator leaves most modules off, and a gated page 404s identically
+  -- on both render paths — which the harness would happily call a match while
+  -- comparing two error pages. Turning on the modules the harness covers is
+  -- what makes those comparisons mean anything.
+  update orgs
+     set settings = jsonb_set(
+           coalesce(settings, '{}'::jsonb), '{features}',
+           coalesce(settings->'features', '{}'::jsonb) || jsonb_build_object(
+             'payroll', true,
+             'fieldTickets', true,
+             'budgets', true,
+             'inventory', true,
+             'crm', true,
+             'timeTracking', true,
+             'banking', true,
+             'fixedAssets', true,
+             'orders', true))
+   where id = v_org;
 
   -- ---- approvals -----------------------------------------------------------
   --
@@ -510,4 +535,232 @@ begin
             '00000000-0000-7000-9000-000000000202', '00000000-0000-7000-9000-000000000201', 2, 0)
     on conflict (id) do nothing;
   end;
+
+  -- The three blocks below were each proposed as `…0801-08xx` by three agents
+  -- working in parallel; renumbered here into distinct ranges, which is the
+  -- whole reason the allocation table at the top of this file exists.
+
+  -- ---- payroll runs ----------------------------------------------------------
+  --
+  -- The simulator never runs payroll, so the /payroll/runs list is empty
+  -- without these: two schedules (biweekly + monthly) and three runs under
+  -- the biweekly one. Header totals equal the line sums. All three stay
+  -- DRAFT: a posted document must name its accounting period, and a fixture
+  -- has no business inventing one.
+  declare
+    v_party uuid;
+    v_account uuid;
+    v_item uuid;
+    v_sched_bi uuid := '00000000-0000-7000-9000-000000001801';
+    v_sched_mo uuid := '00000000-0000-7000-9000-000000001802';
+  begin
+    select id into v_party from parties
+     where org_id = v_org and display_name = 'Harborview Development LLC';
+    select id into v_account from accounts
+     where org_id = v_org and type in ('income', 'income_other')
+       and is_active and not is_summary
+     order by number nulls last limit 1;
+    select id into v_item from items
+     where org_id = v_org and is_active
+     order by name limit 1;
+    if v_party is null or v_account is null or v_item is null then
+      raise notice 'missing party/account/item; skipping payroll fixtures';
+      return;
+    end if;
+
+    insert into pay_schedules
+      (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+       pay_date_offset_days, is_default, is_active)
+    values
+      (v_sched_bi, v_org, 'Biweekly — ViewSpec', 'biweekly', 26,
+       date '2026-01-09', 5, true, true),
+      (v_sched_mo, v_org, 'Monthly — ViewSpec', 'monthly', 12,
+       date '2026-01-31', 0, false, true)
+    on conflict (id) do nothing;
+
+    insert into documents
+      (id, org_id, kind, document_number, party_id, document_date, currency,
+       status, subtotal, tax_total, total, memo, created_at, updated_at)
+    values
+      ('00000000-0000-7000-9000-000000001811', v_org, 'pay_run', 'PAY-00001',
+       v_party, date '2026-02-06', 'USD', 'draft', 5200.0000, 0.0000, 5200.0000,
+       'ViewSpec fixture: calculated run', now(), now()),
+      ('00000000-0000-7000-9000-000000001812', v_org, 'pay_run', 'PAY-00002',
+       v_party, date '2026-02-20', 'USD', 'draft', 5340.0000, 0.0000, 5340.0000,
+       'ViewSpec fixture: calculated run', now(), now()),
+      ('00000000-0000-7000-9000-000000001813', v_org, 'pay_run', 'PAY-00003',
+       -- Draft, not posted: a posted document must name its accounting
+       -- period (documents_posted_period_required), and inventing a period
+       -- link for a fixture would fake a posting that never happened.
+       v_party, date '2026-03-06', 'USD', 'draft', 5480.0000, 0.0000, 5480.0000,
+       'ViewSpec fixture: third run', now(), now())
+    on conflict (id) do nothing;
+
+    insert into document_lines
+      (id, org_id, document_id, line_number, item_id, account_id, description,
+       quantity, unit_price, amount)
+    values
+      ('00000000-0000-7000-9000-000000001821', v_org,
+       '00000000-0000-7000-9000-000000001811', 1, v_item, v_account,
+       'ViewSpec fixture line', 1, 5200.0000, 5200.0000),
+      ('00000000-0000-7000-9000-000000001822', v_org,
+       '00000000-0000-7000-9000-000000001812', 1, v_item, v_account,
+       'ViewSpec fixture line', 1, 5340.0000, 5340.0000),
+      ('00000000-0000-7000-9000-000000001823', v_org,
+       '00000000-0000-7000-9000-000000001813', 1, v_item, v_account,
+       'ViewSpec fixture line', 1, 5480.0000, 5480.0000)
+    on conflict (id) do nothing;
+
+    insert into pay_runs
+      (document_id, org_id, pay_schedule_id, period_start, period_end,
+       pay_date, tax_year, run_status, run_type, gross_total, net_total,
+       employee_count)
+    values
+      ('00000000-0000-7000-9000-000000001811', v_org, v_sched_bi,
+       date '2026-01-24', date '2026-02-06', date '2026-02-11', 2026,
+       'calculated', 'regular', 5200.0000, 5200.0000, 1),
+      ('00000000-0000-7000-9000-000000001812', v_org, v_sched_bi,
+       date '2026-02-07', date '2026-02-20', date '2026-02-25', 2026,
+       'calculated', 'regular', 5340.0000, 5340.0000, 1),
+      ('00000000-0000-7000-9000-000000001813', v_org, v_sched_bi,
+       date '2026-02-21', date '2026-03-06', date '2026-03-11', 2026,
+       -- `committed`, not `paid`: the run-status CHECK allows only
+       -- draft/calculated/committed/voided.
+       'committed', 'regular', 5480.0000, 5480.0000, 1)
+    on conflict do nothing;
+  end;
+
+  -- ---- field tickets ---------------------------------------------------------
+  --
+  -- The simulator writes field-ticket documents but no field_tickets extension
+  -- rows, so the /field-tickets list (inner join) is empty and the drawer
+  -- (inner join) resolves null for every real id. Three tickets with their
+  -- extension rows (draft, submitted, approved) on one real sim project, so
+  -- the status chips, the project picker, and the draft pickers all render.
+  declare
+    v_project uuid;
+    v_customer uuid;
+    v_foreman uuid;
+  begin
+    select id, customer_id into v_project, v_customer from projects
+     where org_id = v_org and is_active
+     order by name limit 1;
+    select p.id into v_foreman from parties p
+     where p.org_id = v_org and p.is_active
+       and exists (
+         select 1 from employee_roles r
+          where r.party_id = p.id and r.org_id = p.org_id and r.is_active
+       )
+     order by p.display_name limit 1;
+    if v_project is null then
+      raise notice 'missing project; skipping field-ticket fixtures';
+      return;
+    end if;
+
+    insert into documents
+      (id, org_id, kind, document_number, document_date, currency, status,
+       party_id, project_id, subsidiary_id, billing_method,
+       subtotal, tax_total, total, custom)
+    values
+      ('00000000-0000-7000-9000-000000002801', v_org, 'field_ticket', 'FT-VIEWSPEC-1',
+       current_date - 2, 'USD', 'draft', v_customer, v_project, null,
+       'time_and_materials', 0, 0, 0, '{}'::jsonb),
+      ('00000000-0000-7000-9000-000000002802', v_org, 'field_ticket', 'FT-VIEWSPEC-2',
+       current_date - 9, 'USD', 'pending_approval', v_customer, v_project, null,
+       'time_and_materials', 0, 0, 0, '{}'::jsonb),
+      ('00000000-0000-7000-9000-000000002803', v_org, 'field_ticket', 'FT-VIEWSPEC-3',
+       current_date - 16, 'USD', 'approved', v_customer, v_project, null,
+       'time_and_materials', 0, 0, 0, '{}'::jsonb)
+    on conflict (id) do nothing;
+
+    insert into field_tickets
+      (document_id, org_id, period, period_start, period_end, foreman_party_id)
+    values
+      ('00000000-0000-7000-9000-000000002801', v_org, 'weekly',
+       current_date - 8, current_date - 2, v_foreman),
+      ('00000000-0000-7000-9000-000000002802', v_org, 'weekly',
+       current_date - 15, current_date - 9, v_foreman),
+      ('00000000-0000-7000-9000-000000002803', v_org, 'weekly',
+       current_date - 22, current_date - 16, v_foreman)
+    on conflict (document_id, org_id) do nothing;
+  end;
+
+  -- ---- bank matching rules --------------------------------------------------
+  --
+  -- The simulator never writes matching rules, so the list page is empty. Two
+  -- rules cover both outcome branches and both sides of the active filter: one
+  -- active rule that categorizes against a live account (so the outcome label
+  -- resolves to a real name rather than the em-dash fallback), and one
+  -- inactive rule that excludes.
+  declare
+    v_rule_account uuid;
+  begin
+    select id into v_rule_account from accounts
+     where org_id = v_org and is_active and not is_summary
+     order by number nulls last limit 1;
+    if v_rule_account is null then
+      raise notice 'no account for bank rules; skipping';
+      return;
+    end if;
+
+    insert into bank_match_rules (id, org_id, name, criteria, outcome, priority, is_active)
+    values
+      ('00000000-0000-7000-9000-000000003801', v_org, 'ViewSpec — categorize utilities',
+       jsonb_build_object('version', 2, 'match', jsonb_build_object(
+         'combinator', 'and',
+         'rules', jsonb_build_array(jsonb_build_object(
+           -- `op`, not `operator`: summarizeCondition reads cond.op, and the
+           -- wrong key renders "Description undefined" on both sides — agreeing
+           -- about nonsense is not a passing test.
+           'field', 'description', 'op', 'contains', 'value', 'utility'))))::jsonb,
+       -- The outcome shape is CHECK-validated: categorize needs version 2, a
+       -- mode, and every line needs an account plus a portion.
+       jsonb_build_object(
+         'action', 'categorize', 'version', '2', 'mode', 'auto',
+         'lines', jsonb_build_array(jsonb_build_object(
+           'accountId', v_rule_account::text,
+           'portion', jsonb_build_object('kind', 'remainder'))))::jsonb,
+       100, true),
+      ('00000000-0000-7000-9000-000000003802', v_org, 'ViewSpec — exclude transfers',
+       jsonb_build_object('version', 2, 'match', jsonb_build_object(
+         'combinator', 'and',
+         'rules', jsonb_build_array(jsonb_build_object(
+           'field', 'description', 'op', 'contains', 'value', 'transfer'))))::jsonb,
+       jsonb_build_object('action', 'exclude')::jsonb,
+       200, false)
+    on conflict (id) do nothing;
+  end;
+
+  -- ---- budgets -------------------------------------------------------------
+  -- The simulator never writes budget scenarios, so the list page would
+  -- compare two identical empty states. Three scenarios (one draft with
+  -- lines, for the drawer variant) in the SIM org, on fiscal year 2026
+  -- which has periods in the SIM org.
+  insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status, description, revision)
+  values
+    ('00000000-0000-7000-9000-000000004801', v_org,
+     (select id from accounting_books where org_id = v_org and is_active order by is_primary desc, name limit 1),
+     2026, 'ViewSpec FY26 operating budget', 'budget', 'draft', 'ViewSpec harness budget one', 1),
+    ('00000000-0000-7000-9000-000000004802', v_org,
+     (select id from accounting_books where org_id = v_org and is_active order by is_primary desc, name limit 1),
+     -- Draft, not pending_approval: a submitted or approved scenario must
+     -- carry at least one non-zero line, and only the first scenario has
+     -- lines. Faking lines to satisfy a status is how a fixture starts lying.
+     2026, 'ViewSpec FY26 stretch budget', 'budget', 'draft', 'ViewSpec harness budget two', 1),
+    ('00000000-0000-7000-9000-000000004803', v_org,
+     (select id from accounting_books where org_id = v_org and is_active order by is_primary desc, name limit 1),
+     2026, 'ViewSpec FY26 forecast', 'forecast', 'draft', 'ViewSpec harness forecast', 1)
+  on conflict (id) do nothing;
+
+  insert into budget_lines (org_id, scenario_id, account_id, period_id, amount)
+  values
+    (v_org, '00000000-0000-7000-9000-000000004801',
+     (select id from accounts where org_id = v_org and is_active and not is_summary and type = 'expense' order by number limit 1),
+     (select id from accounting_periods where org_id = v_org and fiscal_year = 2026 and not is_adjustment order by period_number limit 1),
+     12000),
+    (v_org, '00000000-0000-7000-9000-000000004801',
+     (select id from accounts where org_id = v_org and is_active and not is_summary and type = 'expense' order by number limit 1 offset 1),
+     (select id from accounting_periods where org_id = v_org and fiscal_year = 2026 and not is_adjustment order by period_number limit 1),
+     8000)
+  on conflict do nothing;
 end $$;
