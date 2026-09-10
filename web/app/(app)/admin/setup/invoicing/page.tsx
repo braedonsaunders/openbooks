@@ -3,6 +3,8 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { InvoicingSettingsWorkspace } from './InvoicingSettingsWorkspace'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { invoicingSetupSpec, loadInvoicingSetup } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +13,22 @@ export const dynamic = 'force-dynamic'
  * is summarized here but remains governed by the Projects parent gate and the
  * project's effective type profile.
  */
-export default async function InvoicingSettingsPage() {
+export default async function InvoicingSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadInvoicingSetup()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={invoicingSetupSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
   const [subscriptionBillingEnabled, projectsEnabled, projectTypes, subscriptionCounts] = await Promise.all([

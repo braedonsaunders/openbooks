@@ -108,6 +108,10 @@ import { YearEndView } from '../../app/(app)/payroll/year-end/YearEndView'
 import { NavEditor } from '../../app/(app)/admin/navigation/NavEditor'
 import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/FeaturesWorkspace'
 import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm'
+import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
+import { InvoicingSettingsWorkspace } from '../../app/(app)/admin/setup/invoicing/InvoicingSettingsWorkspace'
+import { TemplatesList } from '../../app/(app)/admin/pdf-templates/TemplatesList'
+import { WipBillingWorkspace } from '../../app/(app)/projects/wip-billing/WipBillingWorkspace'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
 import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
@@ -1227,6 +1231,48 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
    *  `hasSecret` crosses into the redacted view the loader reads. */
   'email-settings-form': (props) => (
     <EmailSettingsForm initial={props.initial as ComponentProps<typeof EmailSettingsForm>['initial']} />
+  ),
+
+  /** `selectedAgentKey` uses a typeof guard rather than `str()`, because the
+   *  native page passes `null` for an unrecognized key and `undefined` would
+   *  not reproduce it. */
+  'ai-settings-form': (props) => (
+    <AiSettingsForm
+      specs={props.specs as ComponentProps<typeof AiSettingsForm>['specs']}
+      detectorSpecs={props.detectorSpecs as ComponentProps<typeof AiSettingsForm>['detectorSpecs']}
+      initial={props.initial as ComponentProps<typeof AiSettingsForm>['initial']}
+      selectedAgentKey={
+        typeof props.selectedAgentKey === 'string'
+          ? (props.selectedAgentKey as ComponentProps<typeof AiSettingsForm>['selectedAgentKey'])
+          : null
+      }
+    />
+  ),
+  /** SEVEN FLAT props, no wrapper bag. The page is seven conditional PAIRS
+   *  (a badge plus an optional count line; a footer CTA that swaps both href
+   *  and label on one flag) — presence omits, it never chooses. */
+  'invoicing-setup-workspace': (props) => (
+    <InvoicingSettingsWorkspace
+      {...(props as unknown as ComponentProps<typeof InvoicingSettingsWorkspace>)}
+    />
+  ),
+  /** Whole, not a `table` block: search, the type dropdown and pagination are
+   *  PagedTable CLIENT state that reads no URL params, so spec table blocks
+   *  would navigate where the native page never does. */
+  'pdf-templates-list': (props) => (
+    <TemplatesList
+      templates={(props.templates as ComponentProps<typeof TemplatesList>['templates']) ?? []}
+      starters={(props.starters as ComponentProps<typeof TemplatesList>['starters']) ?? []}
+      recordTypes={(props.recordTypes as ComponentProps<typeof TemplatesList>['recordTypes']) ?? []}
+    />
+  ),
+
+  /* --- WIP and prebilling ----------------------------------------------------------- */
+  /** Whole: the create drawer, the detail drawer, per-line edit/hold/release
+   *  forms and every transition. Decomposing would strand that state from
+   *  the actions it drives — the `match-workspace` reason. */
+  'wip-billing-workspace': (props) => (
+    <WipBillingWorkspace {...(props as unknown as ComponentProps<typeof WipBillingWorkspace>)} />
   ),
 
   /* --- home dashboard --------------------------------------------------------------- */

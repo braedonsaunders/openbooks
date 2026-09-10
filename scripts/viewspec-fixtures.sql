@@ -24,8 +24,10 @@
 --   …0801-0899  subcontracts and their schedule-of-values lines
 --   …0901-0999  purchase orders
 --   …1801-1899  payroll schedules and runs
+--   …2101-2199  WIP prebilling worksheets, lines, events
 --   …2801-2899  field tickets
 --   …2901-2999  revenue contracts, obligations, recognition schedules
+--   …3101-3199  org-authored PDF templates
 --   …3801-3899  bank matching rules
 --   …4801-4899  budget scenarios and lines
 --   …5801-5899  file cabinet folders, files, versions
@@ -168,7 +170,8 @@ begin
              'queryConsole', true,
              'propertyManagement', true,
              'bankFeeds', true,
-             'subcontracts', true))
+             'subcontracts', true,
+             'wipBilling', true))
    where id = v_org;
 
   -- ---- approvals -----------------------------------------------------------
@@ -2245,5 +2248,201 @@ begin
   
     end if;
   end;
+
+  -- ---- WIP & prebilling (/projects/wip-billing) ------------------------------
+  -- The simulator never creates worksheets, so the page would compare two
+  -- identical empty states. Two worksheets on one live SIM project (resolved
+  -- by name — the simulator regenerates ids on every reseed): a draft with
+  -- two bill lines + one held line and an audit trail, and a review worksheet
+  -- with one line, so the list table has rows and the detail drawer has
+  -- metrics, lines and events. Block …2101-2199 (claimed fresh 2026-09-10;
+  -- neighbors are …2001-2022 AP capture and …2801-2803 field tickets).
+  -- Actor is the harness user viewspec@sim.test, resolved live by email.
+  insert into wip_prebills
+    (id, org_id, project_id, worksheet_number, period_start, period_end,
+     status, notes, original_bill_amount, proposed_bill_amount, cost_amount,
+     adjustment_amount, created_by, updated_by)
+  select '00000000-0000-7000-9000-000000002101', v_org, p.id,
+         'WIP-VSPEC1', date '2026-01-01', date '2026-01-31',
+         'draft', 'ViewSpec conformance worksheet', 1250.0000, 1150.0000,
+         800.0000, -100.0000, u.id, u.id
+    from (select id from projects
+           where org_id = v_org and name = 'Riverside Mall Facilities T&M'
+           order by id limit 1) p,
+         (select id from users where email = 'viewspec@sim.test'
+           order by id limit 1) u
+   where not exists (select 1 from wip_prebills
+                      where id = '00000000-0000-7000-9000-000000002101');
+
+  insert into wip_prebills
+    (id, org_id, project_id, worksheet_number, period_start, period_end,
+     status, notes, original_bill_amount, proposed_bill_amount, cost_amount,
+     adjustment_amount, submitted_at, created_by, updated_by)
+  select '00000000-0000-7000-9000-000000002102', v_org, p.id,
+         'WIP-VSPEC2', date '2026-02-01', date '2026-02-28',
+         'review', 'ViewSpec conformance worksheet (review)', 600.0000,
+         600.0000, 400.0000, 0.0000, now() - interval '2 days', u.id, u.id
+    from (select id from projects
+           where org_id = v_org and name = 'Riverside Mall Facilities T&M'
+           order by id limit 1) p,
+         (select id from users where email = 'viewspec@sim.test'
+           order by id limit 1) u
+   where not exists (select 1 from wip_prebills
+                      where id = '00000000-0000-7000-9000-000000002102');
+
+  -- Lines carry no source FKs (time_entry_id / document_line_id left null —
+  -- the FKs only constrain non-null values), so they render without touching
+  -- ledger tables either path could disagree on.
+  insert into wip_prebill_lines
+    (id, org_id, prebill_id, project_id, line_number, source_type,
+     source_date, description, quantity, unit, cost_amount,
+     original_bill_amount, proposed_bill_amount, adjustment_amount,
+     adjustment_reason, adjustment_evidence, disposition, pricing_snapshot,
+     -- `wip_prebill_lines_source_shape_chk` demands a real source: a
+     -- 'time_entry' line must name a time_entry_id and a 'document_line' one
+     -- a document_line_id, with the other null. Resolved live below.
+     time_entry_id, document_line_id)
+  select '00000000-0000-7000-9000-000000002111', v_org,
+         '00000000-0000-7000-9000-000000002101', p.id, 1, 'time_entry',
+         date '2026-01-15', 'ViewSpec conformance line 1', 8.0000, 'hours',
+         500.0000, 750.0000, 750.0000, 0.0000, null, '[]'::jsonb, 'bill',
+         '{}'::jsonb, te.id, null
+    from (select id from projects
+           where org_id = v_org and name = 'Riverside Mall Facilities T&M'
+           order by id limit 1) p,
+         (select id from time_entries where org_id = v_org
+           order by id limit 1) te
+   where exists (select 1 from wip_prebills
+                  where id = '00000000-0000-7000-9000-000000002101')
+     and not exists (select 1 from wip_prebill_lines
+                      where id = '00000000-0000-7000-9000-000000002111');
+
+  insert into wip_prebill_lines
+    (id, org_id, prebill_id, project_id, line_number, source_type,
+     source_date, description, quantity, unit, cost_amount,
+     original_bill_amount, proposed_bill_amount, adjustment_amount,
+     adjustment_reason, adjustment_evidence, disposition, pricing_snapshot,
+     -- `wip_prebill_lines_source_shape_chk` demands a real source: a
+     -- 'time_entry' line must name a time_entry_id and a 'document_line' one
+     -- a document_line_id, with the other null. Resolved live below.
+     time_entry_id, document_line_id)
+  select '00000000-0000-7000-9000-000000002112', v_org,
+         '00000000-0000-7000-9000-000000002101', p.id, 2, 'document_line',
+         date '2026-01-20', 'ViewSpec conformance line 2', 1.0000, 'each',
+         300.0000, 500.0000, 400.0000, -100.0000, 'ViewSpec write-down',
+         '["VSPEC-EV-1"]'::jsonb, 'bill', '{}'::jsonb, null, dl.id
+    from (select id from projects
+           where org_id = v_org and name = 'Riverside Mall Facilities T&M'
+           order by id limit 1) p,
+         (select id from document_lines where org_id = v_org
+           order by id limit 1) dl
+   where exists (select 1 from wip_prebills
+                  where id = '00000000-0000-7000-9000-000000002101')
+     and not exists (select 1 from wip_prebill_lines
+                      where id = '00000000-0000-7000-9000-000000002112');
+
+  insert into wip_prebill_lines
+    (id, org_id, prebill_id, project_id, line_number, source_type,
+     source_date, description, quantity, unit, cost_amount,
+     original_bill_amount, proposed_bill_amount, adjustment_amount,
+     adjustment_reason, adjustment_evidence, disposition, pricing_snapshot,
+     -- `wip_prebill_lines_source_shape_chk` demands a real source: a
+     -- 'time_entry' line must name a time_entry_id and a 'document_line' one
+     -- a document_line_id, with the other null. Resolved live below.
+     time_entry_id, document_line_id)
+  select '00000000-0000-7000-9000-000000002113', v_org,
+         '00000000-0000-7000-9000-000000002101', p.id, 3, 'document_line',
+         date '2026-01-25', 'ViewSpec conformance held line', 1.0000, 'each',
+         200.0000, 200.0000, 200.0000, 0.0000, null, '[]'::jsonb, 'hold',
+         '{}'::jsonb, null, dl.id
+    from (select id from projects
+           where org_id = v_org and name = 'Riverside Mall Facilities T&M'
+           order by id limit 1) p,
+         (select id from document_lines where org_id = v_org
+           order by id limit 1 offset 1) dl
+   where exists (select 1 from wip_prebills
+                  where id = '00000000-0000-7000-9000-000000002101')
+     and not exists (select 1 from wip_prebill_lines
+                      where id = '00000000-0000-7000-9000-000000002113');
+
+  insert into wip_prebill_lines
+    (id, org_id, prebill_id, project_id, line_number, source_type,
+     source_date, description, quantity, unit, cost_amount,
+     original_bill_amount, proposed_bill_amount, adjustment_amount,
+     adjustment_reason, adjustment_evidence, disposition, pricing_snapshot,
+     -- `wip_prebill_lines_source_shape_chk` demands a real source: a
+     -- 'time_entry' line must name a time_entry_id and a 'document_line' one
+     -- a document_line_id, with the other null. Resolved live below.
+     time_entry_id, document_line_id)
+  select '00000000-0000-7000-9000-000000002114', v_org,
+         '00000000-0000-7000-9000-000000002102', p.id, 1, 'time_entry',
+         date '2026-02-10', 'ViewSpec conformance review line', 4.0000,
+         'hours', 400.0000, 600.0000, 600.0000, 0.0000, null, '[]'::jsonb,
+         'bill', '{}'::jsonb, te.id, null
+    from (select id from projects
+           where org_id = v_org and name = 'Riverside Mall Facilities T&M'
+           order by id limit 1) p,
+         (select id from time_entries where org_id = v_org
+           order by id limit 1 offset 1) te
+   where exists (select 1 from wip_prebills
+                  where id = '00000000-0000-7000-9000-000000002102')
+     and not exists (select 1 from wip_prebill_lines
+                      where id = '00000000-0000-7000-9000-000000002114');
+
+  insert into wip_prebill_events (id, org_id, prebill_id, event_type, actor_id, details)
+  select '00000000-0000-7000-9000-000000002121', v_org,
+         '00000000-0000-7000-9000-000000002101', 'created', u.id,
+         '{"sourceCount": 3}'::jsonb
+    from (select id from users where email = 'viewspec@sim.test'
+           order by id limit 1) u
+   where exists (select 1 from wip_prebills
+                  where id = '00000000-0000-7000-9000-000000002101')
+     and not exists (select 1 from wip_prebill_events
+                      where id = '00000000-0000-7000-9000-000000002121');
+
+  insert into wip_prebill_events (id, org_id, prebill_id, event_type, actor_id, details)
+  select '00000000-0000-7000-9000-000000002122', v_org,
+         '00000000-0000-7000-9000-000000002101', 'line_updated', u.id,
+         '{"reason": "ViewSpec write-down"}'::jsonb
+    from (select id from users where email = 'viewspec@sim.test'
+           order by id limit 1) u
+   where exists (select 1 from wip_prebills
+                  where id = '00000000-0000-7000-9000-000000002101')
+     and not exists (select 1 from wip_prebill_events
+                      where id = '00000000-0000-7000-9000-000000002122');
+
+  -- ---- pdf templates (/admin/pdf-templates) --------------------------------
+  -- The simulator never authors PDF templates, so the page would compare
+  -- two identical starter-only tables. Three org templates: a default for
+  -- customer_invoice (that starter loses its effective-default badge),
+  -- an inactive one for vendor_bill (inactive-badge branch), and a plain
+  -- one for quote. Claims fresh block …3101-3199 (verified unused).
+  insert into pdf_templates
+    (id, org_id, record_type, name, description, paper_size, orientation,
+     margin_mm, header_html, footer_html, source_html, compiled_html,
+     is_default, is_active, created_at, updated_at)
+  select v.id, v_org, v.record_type, v.name, v.description, v.paper_size,
+         v.orientation, 14, null, null,
+         '<p>ViewSpec ' || v.record_type || '</p>', '<p>ViewSpec</p>',
+         v.is_default, v.is_active,
+         timestamptz '2026-08-20 12:00:00+00', timestamptz '2026-08-20 12:00:00+00'
+    from (values
+      ('00000000-0000-7000-9000-000000003101'::uuid, 'customer_invoice',
+       'ViewSpec Default Invoice', 'Seeded default invoice design',
+       'letter', 'portrait', true, true),
+      ('00000000-0000-7000-9000-000000003102'::uuid, 'vendor_bill',
+       'ViewSpec Old Bill', null,
+       'a4', 'landscape', false, false),
+      ('00000000-0000-7000-9000-000000003103'::uuid, 'quote',
+       'ViewSpec Quote', 'Seeded quote design',
+       'letter', 'portrait', false, true)
+    ) as v(id, record_type, name, description, paper_size, orientation,
+           is_default, is_active)
+   where not exists (select 1 from pdf_templates
+                      where org_id = v_org
+                        and name in ('ViewSpec Default Invoice',
+                                     'ViewSpec Old Bill',
+                                     'ViewSpec Quote'))
+  on conflict (id) do nothing;
 
 end $$;

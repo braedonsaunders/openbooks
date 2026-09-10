@@ -1030,6 +1030,61 @@ const PAGES = [
     expect: 'main button',
     minMatches: 2,
   },
+  {
+    path: '/admin/ai',
+    // Both agents (accounting + finance) always resolve — the policy loader
+    // maps over both keys with defaults — so no fixture is needed. Variants
+    // pin the ?agent= drawer and the whitelist fallback.
+    variants: [
+      { query: '', expect: 'main h4', minMatches: 2 },
+      {
+        query: '?agent=accounting',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+      { query: '?agent=bogus', expect: 'main h4', minMatches: 2 },
+    ],
+    expect: 'main h4',
+    minMatches: 2,
+  },
+  {
+    path: '/admin/setup/invoicing',
+    // Whole-island setup page reading no search params, and its buttons are
+    // useState-free Links: one page state per dataset, so one variant is full
+    // coverage. Deliberately NOT seeding `subscriptionBilling` to reach the
+    // enabled branch — that flag is org-wide and would change /collections
+    // too, and a fixture that moves another page's ground is not free.
+    variants: [''],
+    expect: 'main h2, main section h3',
+    minMatches: 4,
+  },
+  {
+    path: '/admin/pdf-templates',
+    // 15, not 21: `PagedTable` pages at 15 rows client-side, so the 21 stored
+    // and starter rows never all appear at once. Measured, not predicted.
+    // Fixture …3101-3103 seeds three org templates — one the type default,
+    // one inactive — so the default and inactive badges each have a row.
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 15,
+  },
+  {
+    path: '/projects/wip-billing',
+    // Fixture …2101-2122: a draft worksheet with three lines and an audit
+    // trail plus a review worksheet.
+    variants: [
+      '',
+      {
+        query: '?prebill=00000000-0000-7000-9000-000000002101',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole
