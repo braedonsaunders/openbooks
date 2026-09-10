@@ -57,6 +57,7 @@ import { RecordListSlot } from './record-list-slot'
 import { SetupSectionSlot } from './setup-section-slot'
 import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
 import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
+import { ReceiptsViewTabs } from '../../app/(app)/receipts/sections'
 import { NewPaymentButton } from '../../app/(app)/payments/NewPaymentButton'
 import { Plus } from 'lucide-react'
 import { FolderTree } from '../../app/(app)/documents/FolderTree'
@@ -613,6 +614,14 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     <PaymentsViewTabs
       view={(str(props, 'view') ?? 'payments') as 'payments' | 'runs'}
       labels={props.labels as ComponentProps<typeof PaymentsViewTabs>['labels']}
+    />
+  ),
+  /** Not the payments strip: this one carries no hover treatment and no
+   *  transition class, and the harness compares class strings exactly. */
+  'receipts-view-tabs': (props) => (
+    <ReceiptsViewTabs
+      view={(str(props, 'view') ?? 'receipts') as 'receipts' | 'runs'}
+      labels={props.labels as ComponentProps<typeof ReceiptsViewTabs>['labels']}
     />
   ),
   'payments-section': (props) => (

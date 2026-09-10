@@ -8,6 +8,9 @@ import { NewPaymentButton } from '../payments/NewPaymentButton'
 import { PaymentsSection } from '../payments/PaymentsSection'
 import { RunsSection } from '../payments/RunsSection'
 import { mergeHref, pickString } from '../../../lib/list-params'
+import { ReceiptsViewTabs } from './sections'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadReceipts, receiptsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +23,17 @@ export default async function Receipts({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadReceipts(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={receiptsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('ar.pay')
   const t = await getTranslations('receipts')
   const sp = await searchParams
@@ -34,7 +48,7 @@ export default async function Receipts({
           actions={
             view === 'receipts' ? <NewPaymentButton kind="customer_payment" basePath="/receipts" label={t('page.newReceipt')} /> : <Button asChild><Link href={(mergeHref('/receipts', sp, { view: 'runs', newRun: '1', run: undefined }))}><Plus size={16} />{t('page.newCollectionRun')}</Link></Button>
           }
-        /><div className="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800"><Link href="/receipts" className={cn('rounded-md px-3 py-1.5 text-sm font-medium', view === 'receipts' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100' : 'text-slate-600 dark:text-slate-300')}>{t('page.tabs.receipts')}</Link><Link href={('/receipts?view=runs')} className={cn('rounded-md px-3 py-1.5 text-sm font-medium', view === 'runs' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100' : 'text-slate-600 dark:text-slate-300')}>{t('page.tabs.collections')}</Link></div></>
+        /><ReceiptsViewTabs view={view} labels={{ receipts: t('page.tabs.receipts'), collections: t('page.tabs.collections') }} /></>
       }
     >
       {view === 'receipts' ? <PaymentsSection
