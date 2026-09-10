@@ -47,6 +47,7 @@
 --   …9901-9999  tax depreciation regimes, pool classes, asset categories
 --   …1201-1299  bank feed connections
 --   …1301-1399  CRM prospect parties and account profiles
+--   …1401-1499  equipment units and their charge item
 --   …1501-1599  sandboxes
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
 --
@@ -2741,5 +2742,47 @@ begin
      '00000000-0000-7000-9000-000000000014', 'CA-SELLERS-PERMIT-VIEWSPEC',
      'quarterly', 'US_CA_CDTFA401', true)
   on conflict (id) do nothing;
+
+  -- ---- equipment (/assets/equipment) ---------------------------------------
+  --
+  -- The simulator never registers equipment, so the roster would compare two
+  -- identical empty states. One charge item plus two units — one `active`
+  -- (so the KPI strip reads a non-zero active count and the drawer's
+  -- charge-item picker has a row to render) and one `inactive`, so the
+  -- status branch has both sides. Block …1401-1402.
+  --
+  -- `subsidiary_id` is NOT NULL and resolves LIVE: the simulator regenerates
+  -- ids on every reseed, so a hardcoded uuid would either break the FK or
+  -- point at another tenant's subsidiary. `unit_number` is unique per org,
+  -- which is what the guards name — `ON CONFLICT (id)` alone would raise on
+  -- a re-run that kept the numbers and changed the ids.
+  insert into items (id, org_id, kind, code, name, is_active)
+  select '00000000-0000-7000-9000-000000001401', v_org, 'equipment_charge',
+         'EQCH-VIEWSPEC', 'Conformance excavator charge', true
+   where not exists (select 1 from items where org_id = v_org and code = 'EQCH-VIEWSPEC');
+
+  insert into equipment_units
+    (id, org_id, subsidiary_id, unit_number, name, status, charge_item_id,
+     purchase_price, acquired_on, in_service_on)
+  select '00000000-0000-7000-9000-000000001401', v_org, s.id,
+         'EQ-VIEWSPEC-1', 'ViewSpec Excavator', 'active',
+         '00000000-0000-7000-9000-000000001401',
+         85000.0000, date '2025-06-01', date '2025-06-15'
+    from (select id from subsidiaries where org_id = v_org
+           order by parent_id nulls first, created_at limit 1) s
+   where exists (select 1 from items where id = '00000000-0000-7000-9000-000000001401')
+     and not exists (select 1 from equipment_units
+                      where org_id = v_org and unit_number = 'EQ-VIEWSPEC-1');
+
+  insert into equipment_units
+    (id, org_id, subsidiary_id, unit_number, name, status, purchase_price,
+     acquired_on, in_service_on)
+  select '00000000-0000-7000-9000-000000001402', v_org, s.id,
+         'EQ-VIEWSPEC-2', 'ViewSpec Compactor', 'inactive', 42000.0000,
+         date '2024-03-01', date '2024-03-10'
+    from (select id from subsidiaries where org_id = v_org
+           order by parent_id nulls first, created_at limit 1) s
+   where not exists (select 1 from equipment_units
+                      where org_id = v_org and unit_number = 'EQ-VIEWSPEC-2');
 
 end $$;

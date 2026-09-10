@@ -122,6 +122,10 @@ import { OpeningBalancesView } from '../../app/(app)/payroll/opening-balances/Op
 import { EntitlementOpeningsView } from '../../app/(app)/payroll/opening-balances/EntitlementOpeningsView'
 import { TaxSetupGuideSlot, TaxSetupHeader } from '../../app/(app)/admin/setup/tax-setup/sections'
 import { SetupWizard } from '../../app/(app)/admin/setup/wizard/SetupWizard'
+import { EquipmentHeaderLinks } from '../../app/(app)/assets/equipment/sections'
+import { NewEquipmentButton } from '../../app/(app)/assets/equipment/NewEquipmentButton'
+import { EquipmentDrawer } from '../../app/(app)/assets/equipment/EquipmentDrawer'
+import { KpiStrip } from '../kpi-strip'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
 import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
@@ -1276,6 +1280,33 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       recordTypes={(props.recordTypes as ComponentProps<typeof TemplatesList>['recordTypes']) ?? []}
     />
   ),
+
+  /* --- equipment -------------------------------------------------------------------- */
+  'equipment-header-links': (props) => (
+    <EquipmentHeaderLinks
+      fixedAssetsLabel={str(props, 'fixedAssetsLabel') ?? ''}
+      taxDepreciationLabel={str(props, 'taxDepreciationLabel') ?? ''}
+      documentationLabel={str(props, 'documentationLabel') ?? ''}
+      showFixedAssetsLinks={props.showFixedAssetsLinks === true}
+    />
+  ),
+  /** Loader-formatted `Kpi[]` straight through: the KPI strip's markup is not
+   *  the stat-tile block's. */
+  'equipment-kpi-strip': (props) => (
+    <KpiStrip items={(props.items as ComponentProps<typeof KpiStrip>['items']) ?? []} />
+  ),
+  'new-equipment': () => <NewEquipmentButton />,
+  /** The remount key rides along as a prop: switching units must reset the
+   *  drawer's client state, and a widget at a fixed spec position would
+   *  otherwise be reused across units. */
+  'equipment-drawer': (props) => {
+    const drawer = props.drawer as
+      | (ComponentProps<typeof EquipmentDrawer> & { remountKey: string })
+      | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <EquipmentDrawer key={remountKey} {...rest} />
+  },
 
   /* --- API console ------------------------------------------------------------------ */
   /** The schema IS server data — the same plain-data prop the native page
