@@ -270,6 +270,14 @@ const PAGES = [
     minMatches: 4,
   },
   {
+    path: '/projects',
+    // Nearly all entity list; what is page-specific is a drawer slot the
+    // native page fills with a fragment of up to three components.
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
     path: '/approvals',
     // Three tabs over the Flows engine, and the first page to use a `frame`
     // (its body is wrapped in TabContent, a component rather than a div).

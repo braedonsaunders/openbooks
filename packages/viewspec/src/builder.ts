@@ -108,6 +108,7 @@ export function text(
     prefix?: TextCell['prefix']
     suffix?: TextCell['suffix']
     fallbackClassName?: string
+    className?: string
   } = {},
 ): TextCell {
   return { kind: 'text', field: f, ...opts }

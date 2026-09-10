@@ -53,6 +53,17 @@ import { AccountsHierarchyTable } from '../../app/(app)/accounts/AccountsHierarc
 import { AccountDrawer } from '../../app/(app)/accounts/AccountDrawer'
 import { NewAccountButton } from '../../app/(app)/accounts/NewAccountButton'
 import { EntityListSlot } from './entity-list-slot'
+import { SearchSelectFilter } from '../filter-bar'
+import { FormDesigner, NewFormButton } from '../../app/(app)/admin/customization/FormDesigner'
+import {
+  ListViewDesigner,
+  NewViewButton as NewListViewButton,
+} from '../../app/(app)/admin/customization/ListViewDesigner'
+import { CustomizationTabs } from '../../app/(app)/admin/customization/sections'
+import { BookOpen } from 'lucide-react'
+import { NewProjectButton } from '../../app/(app)/projects/NewProjectButton'
+import { NewProjectRedirect } from '../../app/(app)/projects/NewProjectRedirect'
+import { ProjectDrawer } from '../../app/(app)/projects/ProjectDrawer'
 import {
   TabNav,
   Metric,
@@ -65,7 +76,7 @@ import { NarrativeDrawer } from '../../app/(app)/continuous-close/NarrativeDrawe
 import { NewPartyButton } from '../../app/(app)/parties/NewPartyButton'
 import { NewPartyRedirect } from '../../app/(app)/parties/NewPartyRedirect'
 import { PartyDrawer } from '../../app/(app)/parties/PartyDrawer'
-import { RelatedTxnSlot } from '../../app/(app)/parties/RelatedTxnSlot'
+import { RelatedTxnSlot } from './related-txn-slot'
 import { NewReportButton } from '../../app/(app)/reports/custom/NewReportButton'
 import { CustomReportActions } from '../../app/(app)/reports/custom/CustomReportActions'
 import { MatrixFilters } from '../../app/(app)/compliance/vendors/MatrixFilters'
@@ -266,6 +277,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       placeholder={str(props, 'placeholder')}
       paramKey={str(props, 'paramKey')}
       pageParamKey={str(props, 'pageParamKey')}
+      className={str(props, 'className')}
     />
   ),
   'filter-chips': (props) => (
@@ -396,6 +408,77 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     />
   ),
 
+  /* --- customization designer --------------------------------------------- */
+  'customization-tabs': (props) => (
+    <CustomizationTabs
+      formsHref={str(props, 'formsHref') ?? ''}
+      viewsHref={str(props, 'viewsHref') ?? ''}
+      formsLabel={str(props, 'formsLabel') ?? ''}
+      viewsLabel={str(props, 'viewsLabel') ?? ''}
+      formsActive={props.formsActive === true}
+      showForms={props.showForms !== false}
+    />
+  ),
+  /** Not `filter-chips`: a different component AND a different contract
+   *  (router.replace + resetParamKeys, no basePath navigation). */
+  'search-select-filter': (props) => (
+    <SearchSelectFilter
+      paramKey={str(props, 'paramKey') ?? ''}
+      label={str(props, 'label') ?? ''}
+      options={(props.options as ComponentProps<typeof SearchSelectFilter>['options']) ?? []}
+      allLabel={str(props, 'allLabel')}
+      resetParamKeys={(props.resetParamKeys as string[]) ?? []}
+    />
+  ),
+  'new-form': (props) => <NewFormButton recordType={str(props, 'recordType') ?? ''} />,
+  'new-view': (props) => <NewListViewButton recordType={str(props, 'recordType') ?? ''} />,
+  /** Not `link-button`: that is a solid Button with no icon; this is the
+   *  outline+icon treatment the designer header actually renders. */
+  'docs-link-button': (props) => {
+    const href = str(props, 'href')
+    if (!href) return null
+    return (
+      <Button asChild variant="outline" size="sm">
+        <Link href={href as never}>
+          <BookOpen size={14} aria-hidden />
+          {str(props, 'label') ?? ''}
+        </Link>
+      </Button>
+    )
+  },
+  'form-drawer': (props) => (
+    <FormDesigner
+      recordType={str(props, 'recordType') ?? ''}
+      def={(props.def as ComponentProps<typeof FormDesigner>['def']) ?? null}
+      headerDefs={(props.headerDefs as ComponentProps<typeof FormDesigner>['headerDefs']) ?? null}
+      lineDefs={(props.lineDefs as ComponentProps<typeof FormDesigner>['lineDefs']) ?? null}
+      duplicateFrom={(props.duplicateFrom as ComponentProps<typeof FormDesigner>['duplicateFrom']) ?? null}
+      subsidiaryEnabled={props.subsidiaryEnabled === true}
+    />
+  ),
+  'list-view-drawer': (props) => (
+    <ListViewDesigner
+      recordType={str(props, 'recordType') ?? ''}
+      def={(props.def as ComponentProps<typeof ListViewDesigner>['def']) ?? null}
+      canManageOrg={props.canManageOrg === true}
+      userId={str(props, 'userId') ?? ''}
+      showInListDefs={(props.showInListDefs as ComponentProps<typeof ListViewDesigner>['showInListDefs']) ?? []}
+      filterOptions={(props.filterOptions as ComponentProps<typeof ListViewDesigner>['filterOptions']) ?? {}}
+      inventoryEnabled={props.inventoryEnabled === true}
+      crmEnabled={props.crmEnabled === true}
+    />
+  ),
+
+  /* --- projects ----------------------------------------------------------- */
+  'new-project': () => <NewProjectButton />,
+  'new-project-redirect': () => <NewProjectRedirect />,
+  'project-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof ProjectDrawer> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <ProjectDrawer key={remountKey} {...rest} />
+  },
+
   /* --- chart of accounts -------------------------------------------------- */
   'new-account': (props) => (
     <NewAccountButton
@@ -438,12 +521,22 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
    * the same one the empty state already uses for its action.
    */
   'entity-list-view': (props) => {
-    const slot = (value: unknown) => {
-      if (!value || typeof value !== 'object') return undefined
+    const one = (value: unknown, key: number) => {
+      if (!value || typeof value !== 'object') return null
       const ref = value as { widget?: string; props?: Record<string, unknown> }
       const renderer = ref.widget ? WIDGET_REGISTRY[ref.widget] : undefined
       if (ref.widget && !renderer) throw new UnknownWidgetError(ref.widget)
-      return renderer ? renderer(ref.props ?? {}) : undefined
+      return renderer ? <Fragment key={key}>{renderer(ref.props ?? {})}</Fragment> : null
+    }
+    // A slot may name one widget or several — a project list's drawer slot
+    // holds a create-redirect, the record flyout and a transaction flyout, the
+    // same fragment the native page passes.
+    const slot = (value: unknown) => {
+      if (Array.isArray(value)) {
+        const rendered = value.map(one).filter(Boolean)
+        return rendered.length > 0 ? <>{rendered}</> : undefined
+      }
+      return one(value, 0) ?? undefined
     }
     return (
       <EntityListSlot
@@ -515,7 +608,8 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const { remountKey, ...rest } = drawer
     return <PartyDrawer key={remountKey} {...rest} />
   },
-  'party-txn-drawer': (props) => {
+  /** The related-transaction drawer, for any record that opens one. */
+  'related-txn-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof RelatedTxnSlot> | null
     if (!drawer) return null
     return <RelatedTxnSlot {...drawer} />

@@ -61,6 +61,15 @@ export type Tone = 'default' | 'negative' | 'positive' | 'warning' | 'muted' | '
 export interface TextCell {
   kind: 'text'
   field: FieldRef
+  /**
+   * Wrap the value in a span carrying these classes.
+   *
+   * A cell whose class sits on the VALUE rather than the cell — a monospaced
+   * code column inside an ordinary-width `<td>` — is one element, so the
+   * composite-cell rule does not apply and a bespoke widget for each would be
+   * noise. Blocks already carry class strings; this is the same, one level in.
+   */
+  className?: string
   /** Rendered when the field is null/undefined/''. Italic subtle treatment. */
   fallback?: Value
   /** Override the fallback's class (aging uses a dimmer em-dash placeholder). */
@@ -591,7 +600,12 @@ export const BLOCK_KINDS = [
 /* -------------------------------------------------------------------------- */
 
 /** Which shared page shell wraps the blocks. Mirrors the existing layouts. */
-export type PageLayout = 'list' | 'detail'
+/**
+ * `bare` is for pages that already sit inside a shell of their own (the setup
+ * workspace renders its sticky header and container around every entity page).
+ * Wrapping those in a second page layout would nest the chrome.
+ */
+export type PageLayout = 'list' | 'detail' | 'bare'
 
 export interface PageSpec {
   specVersion: typeof SPEC_VERSION
