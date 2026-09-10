@@ -1,3 +1,5 @@
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadCustomerIntelligence, customerIntelligenceSpec } from './view'
 import { getTranslations } from 'next-intl/server'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { AnalyticsHeader } from '../_ui/AnalyticsHeader'
@@ -21,6 +23,18 @@ export default async function CustomerIntelligencePage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadCustomerIntelligence(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={customerIntelligenceSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
+
   const t = await getTranslations('analytics.customer')
   const authz = await requirePermission('reports.read')
 

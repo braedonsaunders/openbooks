@@ -1,3 +1,5 @@
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadVendorPerformance, vendorPerformanceSpec } from './view'
 import { getTranslations } from 'next-intl/server'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
@@ -20,6 +22,18 @@ export default async function VendorPerformancePage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadVendorPerformance(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={vendorPerformanceSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
+
   const t = await getTranslations('analytics.vendor')
   const authz = await requirePermission('reports.read')
 

@@ -780,6 +780,69 @@ const PAGES = [
     expect: 'main a[href^="/docs/"]',
     minMatches: 1,
   },
+  // --- analytics dashboards ---------------------------------------------------
+  //
+  // Seven pages of one shape: the `analytics-header` frame over one whole
+  // client view. The `?period=` variant is the real assertion on each — it
+  // proves the loader resolved a DIFFERENT period on the spec path, not just
+  // that the widget rendered.
+  {
+    path: '/analytics/cashflow',
+    // These bodies are client tab workspaces and every TABLE lives in a tab
+    // that is not mounted by default, so the pin is `main section h3` — the
+    // Panel headings the overview tab always renders, which are absent from
+    // a body that failed to render at all.
+    //
+    // 4 / 8 / 12 are the accepted horizons; anything else falls back to 4, so
+    // `?horizon=nope` must render byte-identically to the default.
+    variants: [
+      '',
+      { query: '?horizon=12', expect: 'main section h3', minMatches: 4 },
+      { query: '?horizon=nope', expect: 'main section h3', minMatches: 4 },
+    ],
+    expect: 'main section h3',
+    minMatches: 4,
+  },
+  {
+    path: '/analytics/financial-health',
+    // Ten client tabs, only the first mounted: the pin is the tab strip
+    // itself (a button per tab), which is present on every render.
+    variants: ['', { query: '?period=last-quarter', expect: 'main button', minMatches: 9 }],
+    expect: 'main button',
+    minMatches: 9,
+  },
+  {
+    path: '/analytics/utilization',
+    variants: ['', { query: '?period=last-quarter', expect: 'main table tbody tr', minMatches: 1 }],
+    expect: 'main table tbody tr',
+    minMatches: 1,
+  },
+  {
+    path: '/analytics/spend-velocity',
+    variants: ['', { query: '?period=last-quarter', expect: 'main table tbody tr', minMatches: 1 }],
+    expect: 'main table tbody tr',
+    minMatches: 1,
+  },
+  {
+    path: '/analytics/vendor-performance',
+    variants: ['', { query: '?period=last-quarter', expect: 'main section h3', minMatches: 3 }],
+    expect: 'main section h3',
+    minMatches: 3,
+  },
+  {
+    path: '/analytics/customer-intelligence',
+    variants: ['', { query: '?period=last-quarter', expect: 'main section h3', minMatches: 2 }],
+    expect: 'main section h3',
+    minMatches: 2,
+  },
+  {
+    path: '/analytics/sentinel',
+    // Full-ledger forensics: gated on an unrestricted subsidiary fence AND
+    // admin.audit.read. The harness user holds both.
+    variants: ['', { query: '?period=last-quarter', expect: 'main table tbody tr', minMatches: 1 }],
+    expect: 'main table tbody tr',
+    minMatches: 1,
+  },
   {
     path: '/apps/library',
     // Marketplace browser: a card grid over the fixture listings, plus the
@@ -1501,6 +1564,16 @@ function normalize(markup) {
       .replace(/%3F__viewspec%3D1(%26)/gi, '%3F')
       .replace(/%26__viewspec%3D1/gi, '')
       .replace(/%3F__viewspec%3D1/gi, '')
+      // A measured wall-clock the page renders honestly. Sentinel times its
+      // own forensic sweep and prints "… in 0.1s — no caps or date-range
+      // limits", so two renders of the same page differ by construction. This
+      // is the one thing in the app a render-diff harness structurally cannot
+      // compare, and deleting the feature to make the test pass would be the
+      // tail wagging the dog. Normalized to a constant, narrowly: only a bare
+      // "in N.Ns" reading, which is the exact shape both `banner.stats` and
+      // `coverage.outro` interpolate. A duration that goes MISSING on one side
+      // still shows as a difference.
+      .replace(/\bin \d+\.\ds\b/g, 'in 0.0s')
       // Vestigial post-hydration; the live value is stamped above.
       .replace(/ selected=""/g, '')
       .replace(/>\s+</g, '><')

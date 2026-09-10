@@ -28,6 +28,7 @@ import { ReportPaper } from '../../app/(app)/reports/ReportPaper'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { PageContainer } from '../page-layout'
 import { ForecastSection } from '../../app/(app)/crm/forecasts/sections'
+import { AnalyticsHeader } from '../../app/(app)/analytics/_ui/AnalyticsHeader'
 import { CellView } from './cells'
 import { WidgetSlot, WidgetBlockView, resolveWidgetProps } from './widgets'
 import { toneClass } from './tone'
@@ -73,6 +74,20 @@ const FRAME_REGISTRY: Record<string, FrameComponent> = {
    *  blocks — an empty note or a table. */
   'card': ((props: Record<string, unknown> & { children: ReactNode }) => (
     <Card>{props.children}</Card>
+  )) as FrameComponent,
+  /** The compact analytics breadcrumb row. A FRAME, not a widget, because
+   *  the ONE control on its right differs per dashboard (six place the
+   *  shared period filter bar, cashflow places its horizon control) — and a
+   *  widget that took a control NAME would be a component reference
+   *  smuggled through a spec. */
+  'analytics-header': ((props: Record<string, unknown> & { children: ReactNode }) => (
+    <AnalyticsHeader
+      title={String(props.title ?? '')}
+      periodLabel={typeof props.periodLabel === 'string' ? props.periodLabel : undefined}
+      backLabel={typeof props.backLabel === 'string' ? props.backLabel : undefined}
+    >
+      {props.children}
+    </AnalyticsHeader>
   )) as FrameComponent,
   'forecast-section': ((props: Record<string, unknown> & { children: ReactNode }) => (
     <ForecastSection labelledBy={String(props.labelledBy ?? '')}>{props.children}</ForecastSection>
