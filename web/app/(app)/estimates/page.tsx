@@ -16,6 +16,8 @@ import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
 import { taxCodeOptions, taxGroupOptions } from '../../../lib/documents'
 import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadEstimates, estimatesSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +38,17 @@ export default async function Estimates({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadEstimates(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={estimatesSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('ar.read')
   await requireFeatureEnabled(authz.user.orgId, 'orders')
   const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')

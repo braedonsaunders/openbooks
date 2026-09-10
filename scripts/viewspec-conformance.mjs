@@ -291,6 +291,66 @@ const PAGES = [
     minMatches: 5,
   },
   {
+    path: '/ap/bills',
+    variants: [
+      '',
+      { query: '?status=posted', expect: 'table tbody tr', minMatches: 3 },
+      // A no-match search leaves the record list's table standing with zero
+      // rows; the empty STATE belongs to a list with no rows at all.
+      { query: '?q=zzzznomatch', expect: 'table thead th', minMatches: 3 },
+      {
+        query: '?doc=01a083e7-391c-7a04-886f-9bf4cb26b71b',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
+    path: '/purchase-orders',
+    variants: [
+      '',
+      {
+        query: '?order=00000000-0000-7000-9000-000000000901',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/sales-orders',
+    variants: [
+      '',
+      {
+        query: '?order=00000000-0000-7000-9000-000000000601',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/estimates',
+    variants: [
+      '',
+      {
+        query: '?estimate=00000000-0000-7000-9000-000000000701',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
     path: '/journal',
     variants: [
       '',
