@@ -984,6 +984,52 @@ const PAGES = [
     minMatches: 1,
     expectState: 'attached',
   },
+  {
+    path: '/payroll/remittances',
+    // The default render keys off businessToday (previous month), so both
+    // variants pin from/to explicitly: March renders the destination card,
+    // January renders the empty state. Fixture …1840-1845.
+    variants: [
+      { query: '?from=2026-03-01&to=2026-03-31', expect: 'main section table tbody tr', minMatches: 3 },
+      { query: '?from=2026-01-01&to=2026-01-31', expect: 'main div', minMatches: 1 },
+    ],
+    expect: 'main section table tbody tr',
+    minMatches: 3,
+  },
+  {
+    path: '/payroll/year-end',
+    // Fixture …1850-1852 puts a committed CA stub on run …1813. 2025 is
+    // untranscribed in every pack, so the `installed || rows > 0` guard
+    // filters every section out and the page renders `noFilings` — which
+    // pins the year-override and filter logic, not just the populated path.
+    variants: ['', { query: '?year=2025', expect: 'main div', minMatches: 1 }],
+    expect: 'main table tbody tr',
+    minMatches: 1,
+  },
+  {
+    path: '/admin/navigation',
+    // No org_nav_configs row for the harness org, so both paths render
+    // defaultNavConfig() — eight groups, each with a label input.
+    variants: [''],
+    expect: 'input[aria-label="Group label"]',
+    minMatches: 8,
+  },
+  {
+    path: '/admin/setup/features',
+    // All 32 registry features render regardless of org state; only the note
+    // text under a row changes with the disable probes.
+    variants: [{ query: '', expect: 'main button[role="switch"]', minMatches: 32 }],
+    expect: 'main button[role="switch"]',
+    minMatches: 32,
+  },
+  {
+    path: '/admin/email',
+    // The SIM org has settings->'email' NULL, so exactly two buttons render:
+    // Save settings and Send test.
+    variants: [''],
+    expect: 'main button',
+    minMatches: 2,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole

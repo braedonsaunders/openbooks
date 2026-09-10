@@ -2064,4 +2064,186 @@ begin
     end if;
   end;
 
+  -- ---- payroll remittances -------------------------------------------------
+  --
+  -- The simulator never accrues remittable withholdings: the only committed
+  -- sim run (…1813, PAY-00003, pay_date 2026-03-11) carries no stubs, and the
+  -- fixture stubs (…1911/1912) sit on a CALCULATED run the summary query
+  -- explicitly excludes. Without these, /payroll/remittances compares two
+  -- identical empty states. Block …1840-1845: two user-style deduction
+  -- components (null system_key, so no pack declaration can reroute them),
+  -- one stub on …1813 with two committed-source lines, and one draft
+  -- remittance-bill marker for the same vendor + March window, so the
+  -- existing-bill badge and the create-another label render.
+  -- Vendor resolves LIVE (first active vendor_roles party); the liability
+  -- account is the sim org's 2260 Payroll Taxes Payable, resolved live by
+  -- number. The stub's filing source is 'reconciled' with an evidence
+  -- object (NOT 'unknown': assertPayrollFilingAccountKnown throws on
+  -- committed unknown-source stubs) and a NULL filing id, so the group
+  -- lands in the unassigned filing bucket — the single-account path.
+  declare
+    v_vendor uuid;
+    v_acct uuid;
+    v_emp uuid;
+  begin
+    select pa.id into v_vendor from parties pa
+      join vendor_roles vr on vr.party_id = pa.id and vr.org_id = pa.org_id
+     where pa.org_id = v_org and vr.is_active
+     order by pa.display_name limit 1;
+    select id into v_acct from accounts
+     where org_id = v_org and number = '2260' limit 1;
+    select id into v_emp from parties
+     where org_id = v_org and display_name = 'Harborview Development LLC';
+    -- NOT `return`: a bare return in a nested block exits the WHOLE anonymous
+    -- block, silently skipping every fixture appended below this one.
+    if v_vendor is null or v_acct is null or v_emp is null then
+      raise notice 'missing vendor/account/party; skipping remittance fixtures';
+    else
+
+    insert into pay_components
+      (id, org_id, code, name, kind, system_key, country, basis, taxable,
+       pensionable, insurable, vacationable, non_periodic, sequence,
+       is_active, liability_account_id, remittance_party_id)
+    values
+      ('00000000-0000-7000-9000-000000001840', v_org, 'VS-TAX',
+       'ViewSpec income tax', 'deduction', null, 'CA', 'fixed_amount',
+       true, true, true, true, false, 100, true, v_acct, v_vendor),
+      ('00000000-0000-7000-9000-000000001841', v_org, 'VS-CPP',
+       'ViewSpec CPP', 'deduction', null, 'CA', 'fixed_amount',
+       true, true, true, true, false, 101, true, v_acct, v_vendor)
+    on conflict (id) do nothing;
+
+    insert into pay_stubs
+      (id, org_id, pay_run_document_id, employee_party_id, province,
+       periods_per_year, pay_date, tax_year, currency_code, gross,
+       pensionable_earnings, insurable_earnings, net_pay, employer_cost,
+       vacation_accrued, country_source, filing_account_source,
+       filing_account_evidence)
+    values
+      ('00000000-0000-7000-9000-000000001842', v_org,
+       '00000000-0000-7000-9000-000000001813', v_emp, 'ON',
+       26, date '2026-03-11', 2026, 'USD', 5000.00, 5000.00, 5000.00,
+       -- 'unknown', not 'reconciled': `pay_stub_filing_account_guard` REJECTS
+       -- any INSERT whose source is not calculation/insertion, and resolves
+       -- an 'unknown' one itself from the employee profile or the country
+       -- default — which is exactly what the application writer does.
+       4000.00, 5200.00, 200.00, 'unknown', 'unknown', null)
+    on conflict (id) do nothing;
+
+    insert into pay_stub_lines
+      (id, org_id, stub_id, component_id, kind, description, amount,
+       sequence, liability_account_id, liability_account_source)
+    values
+      ('00000000-0000-7000-9000-000000001843', v_org,
+       '00000000-0000-7000-9000-000000001842',
+       '00000000-0000-7000-9000-000000001840', 'deduction',
+       'ViewSpec income tax', -800.00, 1, v_acct, 'commit'),
+      ('00000000-0000-7000-9000-000000001844', v_org,
+       '00000000-0000-7000-9000-000000001842',
+       '00000000-0000-7000-9000-000000001841', 'deduction',
+       'ViewSpec CPP', -250.00, 2, v_acct, 'commit')
+    on conflict (id) do nothing;
+
+    -- Draft marker bill: a posted bill must name its accounting period, and
+    -- a fixture has no business inventing one. The engine's overlap query
+    -- only requires kind='vendor_bill', status<>'voided' and the custom
+    -- window — draft is enough for the existing-bill branch.
+    insert into documents
+      (id, org_id, kind, document_number, party_id, document_date,
+       currency, status, subtotal, tax_total, total, memo, custom,
+       created_at, updated_at)
+    select '00000000-0000-7000-9000-000000001845', v_org, 'vendor_bill',
+           'BILL-VSPEC-REM-1', v_vendor, date '2026-03-12', 'USD', 'draft',
+           1050.00, 0.00, 1050.00, 'ViewSpec remittance bill',
+           jsonb_build_object('payrollRemittance', jsonb_build_object(
+             'from', '2026-03-01', 'to', '2026-03-31',
+             'filingAccountId', null)),
+           now(), now()
+     where not exists (select 1 from documents
+                        where org_id = v_org and kind = 'vendor_bill'
+                          and document_number = 'BILL-VSPEC-REM-1');
+  
+    end if;
+  end;
+
+  -- ---- year-end T4 population ------------------------------------------------
+  --
+  -- The simulator never commits payroll, so /payroll/year-end renders its
+  -- empty state without these: one committed CA stub on the existing
+  -- committed run …1813 (PAY-00003, committed/regular, period
+  -- 2026-02-21–2026-03-06, pay date 2026-03-11) with the minimum rows the
+  -- T4 chain joins against. The stub reuses a live sim party (the FK to
+  -- parties holds), the ON-profile the …1901 block already seeds for that
+  -- party, and the BASE component (…1901) for the earning line. One stub
+  -- line carries the BASE link and one is component-free, so both
+  -- taxable-income join branches render. Guard before insert: the run and
+  -- party must exist, and the fixed ids must be absent — re-runs are
+  -- no-ops.
+  --
+  -- Block …1850-1852, and a DIFFERENT employee from the remittance stub
+  -- above: `pay_stubs_run_employee` is UNIQUE on (run, employee) and both
+  -- fixtures land on run …1813, so sharing a party is a hard conflict that
+  -- ON CONFLICT (id) cannot absorb. Two agents claimed …1840 independently;
+  -- this block moved.
+  declare
+    v_emp uuid;
+    v_ok boolean;
+  begin
+    select id into v_emp from parties
+     where org_id = v_org and is_active
+       and display_name <> 'Harborview Development LLC'
+     order by display_name limit 1;
+    v_ok := v_emp is not null and exists (
+      select 1 from pay_runs
+       where org_id = v_org
+         and document_id = '00000000-0000-7000-9000-000000001813'
+         and run_status = 'committed');
+    -- NOT `return`: a bare return in a nested block exits the WHOLE anonymous
+    -- block, silently skipping every fixture appended below this one.
+    if not v_ok then
+      raise notice 'missing fixture party or committed run; skipping year-end fixtures';
+    else
+
+    -- One committed CA stub on run …1813. country/filing columns cite the
+    -- legacy-region branch of the evidence CHECKs (country = 'CA',
+    -- country_source = 'legacy_region', filing_account_source =
+    -- 'insertion'): the live sim stubs use exactly this vocabulary, and it
+    -- passes both evidence assertions (no null country, no 'unknown'
+    -- filing source) so t4Slips builds instead of refusing. Province ON
+    -- (non-Quebec: no QPIP arm), filing_account_id null (the unassigned
+    -- bucket — t4Returns groups it without a filing-accounts row).
+    insert into pay_stubs
+      (id, org_id, pay_run_document_id, employee_party_id, province,
+       periods_per_year, pay_date, tax_year, federal_claim, provincial_claim,
+       currency_code, gross, pensionable_earnings, insurable_earnings,
+       net_pay, employer_cost, vacation_accrued, factors,
+       country_source, filing_account_source)
+    values
+      ('00000000-0000-7000-9000-000000001850', v_org,
+       '00000000-0000-7000-9000-000000001813', v_emp, 'ON',
+       26, date '2026-03-11', 2026, 0, 0,
+       'USD', 3400.00, 3400.00, 3400.00,
+       2510.75, 3620.40, 136.00, '{"T": "441.20", "C": "186.85", "EI": "61.20"}',
+       -- Same guard: arrive as 'unknown' and let the trigger stamp the
+       -- account. `country` is derived from the province, as the …1911 stub
+       -- above demonstrates (it sets neither and lands on 'CA').
+       'unknown', 'unknown')
+    on conflict (id) do nothing;
+
+    insert into pay_stub_lines
+      (id, org_id, stub_id, component_id, kind, description, hours, rate,
+       amount, sequence)
+    values
+      ('00000000-0000-7000-9000-000000001851', v_org,
+       '00000000-0000-7000-9000-000000001850',
+       '00000000-0000-7000-9000-000000001901', 'earning',
+       'Regular hours', 80, 42.50, 3400.00, 1),
+      ('00000000-0000-7000-9000-000000001852', v_org,
+       '00000000-0000-7000-9000-000000001850', null, 'deduction',
+       'Income tax', null, null, -441.20, 2)
+    on conflict (id) do nothing;
+  
+    end if;
+  end;
+
 end $$;
