@@ -22,6 +22,15 @@ import {
 import { requireSuperAdmin } from "../../../../../lib/super-admin";
 import { revokeAccessAction, setSuperAdminAction } from "../../actions";
 import { GrantAccessForm } from "../../_components/GrantAccessForm";
+import {
+  PlatformUserHeader,
+  GrantActingCell,
+  GrantControlCell,
+  NoGrantsBody,
+  IdentityRecordCard,
+} from "./sections";
+import { ModuleView } from "../../../../../components/viewspec/module-view";
+import { loadPlatformUser, platformUserSpec } from "./view";
 import { PlatformMutationButton } from "../../_components/PlatformMutationButton";
 
 export const dynamic = "force-dynamic";
@@ -36,10 +45,23 @@ function formatDate(value: string | Date | null): string {
 
 export default async function PlatformUserPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  const sp = (await searchParams) ?? {};
+  if (sp.__viewspec === "1") {
+    const data = await loadPlatformUser(id);
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={platformUserSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    );
+  }
   if (!isUuid(id)) notFound();
   const authz = await requireSuperAdmin();
   const [record, options] = await Promise.all([
@@ -53,42 +75,15 @@ export default async function PlatformUserPage({
   return (
     <DetailPageLayout
       header={
-        <DetailHeader
-          back={{ href: "/platform/users", label: "Users" }}
-          title={user.name}
+        <PlatformUserHeader
+          userId={user.id}
+          name={user.name}
           subtitle={`${user.email} · ${user.orgName}`}
-          badge={
-            <div className="flex items-center gap-2">
-              <Badge variant={user.isActive ? "success" : "secondary"}>
-                {user.isActive ? "active" : "inactive"}
-              </Badge>
-              {user.isSuperAdmin ? (
-                <Badge variant="warning">super admin</Badge>
-              ) : null}
-            </div>
-          }
-          actions={
-            <PlatformMutationButton
-              action={setSuperAdminAction.bind(
-                null,
-                user.id,
-                !user.isSuperAdmin,
-              )}
-              success={
-                user.isSuperAdmin
-                  ? "Super-admin access revoked"
-                  : "Super-admin access granted"
-              }
-              variant={user.isSuperAdmin ? "destructive" : "outline"}
-              disabled={isSelf && user.isSuperAdmin}
-            >
-              {user.isSuperAdmin
-                ? isSelf
-                  ? "Current operator"
-                  : "Revoke super admin"
-                : "Make super admin"}
-            </PlatformMutationButton>
-          }
+          isActive={user.isActive}
+          isSuperAdmin={user.isSuperAdmin}
+          isSelf={isSelf}
+          backHref="/platform/users"
+          backLabel="Users"
         />
       }
     >
@@ -114,9 +109,7 @@ export default async function PlatformUserPage({
             />
             <Card>
               {grants.length === 0 ? (
-                <CardContent className="p-5 text-sm text-slate-500 dark:text-slate-400">
-                  No explicit cross-organization grants.
-                </CardContent>
+                <NoGrantsBody />
               ) : (
                 <Table>
                   <TableHeader>
@@ -134,10 +127,7 @@ export default async function PlatformUserPage({
                           {grant.orgName}
                         </TableCell>
                         <TableCell>
-                          <div>{grant.actingName}</div>
-                          <div className="text-xs text-slate-500">
-                            {grant.actingEmail}
-                          </div>
+                          <GrantActingCell name={grant.actingName} email={grant.actingEmail} />
                         </TableCell>
                         <TableCell>
                           <Badge
@@ -147,20 +137,7 @@ export default async function PlatformUserPage({
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          {grant.isActive ? (
-                            <PlatformMutationButton
-                              action={revokeAccessAction.bind(null, grant.id)}
-                              success="Cross-organization access revoked"
-                              size="sm"
-                              variant="ghost"
-                            >
-                              Revoke
-                            </PlatformMutationButton>
-                          ) : (
-                            <span className="text-xs text-slate-400">
-                              Preserved
-                            </span>
-                          )}
+                          <GrantControlCell grantId={grant.id} isActive={grant.isActive} />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -171,46 +148,17 @@ export default async function PlatformUserPage({
           </section>
         </div>
 
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle>Identity record</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <Fact label="User ID" value={user.id} mono />
-            <Fact label="Home organization" value={user.orgName} />
-            <Fact label="Organization roles" value={user.roles.join(', ')} />
-            <Fact label="Last login" value={formatDate(user.lastLoginAt)} />
-            <Fact label="Created" value={formatDate(user.createdAt)} />
-          </CardContent>
-        </Card>
+        <IdentityRecordCard
+          title="Identity record"
+          facts={[
+            { label: "User ID", value: user.id, mono: true },
+            { label: "Home organization", value: user.orgName },
+            { label: "Organization roles", value: user.roles.join(", ") },
+            { label: "Last login", value: formatDate(user.lastLoginAt) },
+            { label: "Created", value: formatDate(user.createdAt) },
+          ]}
+        />
       </div>
     </DetailPageLayout>
-  );
-}
-
-function Fact({
-  label,
-  value,
-  mono = false,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div>
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
-        {label}
-      </div>
-      <div
-        className={
-          mono
-            ? "mt-1 break-all font-mono text-xs text-slate-700 dark:text-slate-200"
-            : "mt-1 text-slate-800 dark:text-slate-200"
-        }
-      >
-        {value}
-      </div>
-    </div>
   );
 }

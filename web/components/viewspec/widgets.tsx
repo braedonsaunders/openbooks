@@ -55,6 +55,13 @@ import { NewAccountButton } from '../../app/(app)/accounts/NewAccountButton'
 import { EntityListSlot } from './entity-list-slot'
 import { RecordListSlot } from './record-list-slot'
 import { SetupSectionSlot } from './setup-section-slot'
+import {
+  PlatformUserHeader,
+  GrantActingCell,
+  GrantControlCell,
+  NoGrantsBody,
+  IdentityRecordCard,
+} from '../../app/(app)/platform/users/[id]/sections'
 import { AdminRolesTable } from '../../app/(app)/admin/roles/sections'
 import { NewRoleButton } from '../../app/(app)/admin/roles/RoleEditor'
 import { AuditRowsTable, AuditEventFlyout, AuditDocsLink } from '../../app/(app)/admin/audit/sections'
@@ -67,6 +74,31 @@ import { QueryConsole } from '../../app/(app)/query/sections'
 import { HealthHero } from '../../app/(app)/accounting/sections'
 import { RelationshipsSection, ArPulse as CustomerArPulse } from '../../app/(app)/customers/sections'
 import { AdminHubCard } from '../../app/(app)/admin/sections'
+import { BuildHubCard } from '../../app/(app)/admin/build/sections'
+import {
+  PayrollChecklistBanner,
+  PayrollPreviousRun,
+  PayrollManageLinks,
+  PayrollScheduleList,
+  type PayrollPreviousRunProps,
+  type PayrollScheduleListProps,
+} from '../../app/(app)/payroll/sections'
+import {
+  BlockedBillsSection,
+  ComplianceSetupBanner,
+  ExpiringVendorsSection,
+  ReadinessPanel,
+  WaiversPanel,
+} from '../../app/(app)/compliance/sections'
+import {
+  TaxFilingDrawer,
+  TaxHistoryTable,
+  TaxPageHeader,
+  TaxPageShell,
+  TaxPreparePanel,
+  TaxTabPanels,
+  TaxTabs,
+} from '../../app/(app)/tax/sections'
 import { AdminUsersTable } from '../../app/(app)/admin/users/sections'
 import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
 import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
@@ -601,6 +633,38 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     </Button>
   ),
 
+  /* --- platform user record --------------------------------------------------- */
+  //
+  // Every entry here exists because a bound SERVER ACTION is involved. A bound
+  // action is a capability, not data, so the widget takes ids and binds the
+  // action itself — the spec says which user, the host decides what may be
+  // done to them.
+  'platform-user-header': (props) => (
+    <PlatformUserHeader
+      userId={str(props, 'userId') ?? ''}
+      name={str(props, 'name') ?? ''}
+      subtitle={str(props, 'subtitle') ?? ''}
+      isActive={props.isActive === true}
+      isSuperAdmin={props.isSuperAdmin === true}
+      isSelf={props.isSelf === true}
+      backHref={str(props, 'backHref') ?? '/platform/users'}
+      backLabel={str(props, 'backLabel') ?? ''}
+    />
+  ),
+  'grant-acting-cell': (props) => (
+    <GrantActingCell name={str(props, 'name') ?? ''} email={str(props, 'email') ?? ''} />
+  ),
+  'grant-control-cell': (props) => (
+    <GrantControlCell grantId={str(props, 'grantId') ?? ''} isActive={props.isActive === true} />
+  ),
+  'no-grants-body': () => <NoGrantsBody />,
+  'identity-record-card': (props) => (
+    <IdentityRecordCard
+      title={str(props, 'title') ?? ''}
+      facts={(props.facts as ComponentProps<typeof IdentityRecordCard>['facts']) ?? []}
+    />
+  ),
+
   /* --- org roles ------------------------------------------------------------- */
   /** Same doctrine as `admin-users-table`: the native page hand-rolls a plain
    *  `<table>` the spec's table vocabulary cannot name, so one component
@@ -711,6 +775,151 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       fullAnalysisLabel={str(props, 'fullAnalysisLabel') ?? ''}
     />
   ),
+
+  /** The build hub's card. NOT `admin-hub-card`: the shells match but the icon
+   *  maps are disjoint and the fallbacks differ, so each hub keeps its own. */
+  'build-hub-card': (props) => (
+    <BuildHubCard
+      href={str(props, 'href') ?? '#'}
+      iconKey={str(props, 'iconKey') ?? ''}
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      accent={
+        (['teal', 'violet', 'amber', 'sky'] as const).find((a) => a === str(props, 'accent')) ??
+        'teal'
+      }
+    />
+  ),
+
+  /* --- payroll cockpit ------------------------------------------------------- */
+  'payroll-settings-banner': (props) => (
+    <PayrollChecklistBanner
+      text={str(props, 'text') ?? ''}
+      settings={str(props, 'settings') ?? ''}
+      openSettingsLabel={str(props, 'openSettingsLabel') ?? ''}
+    />
+  ),
+  /** Includes its own empty state: a negated conditional pair is not a spec
+   *  construct, the same call the purchasing cockpit made. */
+  'payroll-current-period': (props) => (
+    <PayrollScheduleList
+      schedules={(props.schedules as PayrollScheduleListProps['schedules']) ?? []}
+      emptyText={str(props, 'emptyText') ?? ''}
+      showSetupLink={props.showSetupLink === true}
+      setupLabel={str(props, 'setupLabel') ?? ''}
+      labels={
+        (props.labels as PayrollScheduleListProps['labels']) ?? {
+          frequency: {},
+          period: '',
+          payDate: '',
+          employees: '',
+          net: '',
+        }
+      }
+    />
+  ),
+  'payroll-previous-run': (props) => (
+    <PayrollPreviousRun
+      run={(props.run as PayrollPreviousRunProps['run']) ?? null}
+      periodLabel={str(props, 'periodLabel') ?? ''}
+      payDateLabel={str(props, 'payDateLabel') ?? ''}
+      netLabel={str(props, 'netLabel') ?? ''}
+      employeesLabel={str(props, 'employeesLabel') ?? ''}
+      noneText={str(props, 'noneText') ?? ''}
+    />
+  ),
+  'payroll-manage-links': (props) => (
+    <PayrollManageLinks
+      paySchedulesLabel={str(props, 'paySchedulesLabel') ?? ''}
+      payComponentsLabel={str(props, 'payComponentsLabel') ?? ''}
+    />
+  ),
+
+  /* --- compliance cockpit ---------------------------------------------------- */
+  //
+  // The two right-hand panels are whole components rather than `panel` blocks
+  // because `panel` has no actions slot, and the setup prompt is an Alert
+  // rather than the dashed-card empty state.
+  'compliance-setup-banner': (props) => (
+    <ComplianceSetupBanner
+      prompt={str(props, 'prompt') ?? ''}
+      actionHref={str(props, 'actionHref') ?? ''}
+      actionLabel={str(props, 'actionLabel') ?? ''}
+    />
+  ),
+  'blocked-bills': (props) => (
+    <BlockedBillsSection
+      rows={props.rows as ComponentProps<typeof BlockedBillsSection>['rows']}
+      empty={str(props, 'empty') ?? ''}
+    />
+  ),
+  'expiring-vendors': (props) => (
+    <ExpiringVendorsSection
+      rows={props.rows as ComponentProps<typeof ExpiringVendorsSection>['rows']}
+      empty={str(props, 'empty') ?? ''}
+    />
+  ),
+  'waivers-panel': (props) => (
+    <WaiversPanel
+      title={str(props, 'title') ?? ''}
+      hint={str(props, 'hint') ?? ''}
+      actionHref={str(props, 'actionHref') ?? ''}
+      actionLabel={str(props, 'actionLabel') ?? ''}
+      rows={props.rows as ComponentProps<typeof WaiversPanel>['rows']}
+      empty={str(props, 'empty') ?? ''}
+    />
+  ),
+  'readiness-panel': (props) => (
+    <ReadinessPanel
+      title={str(props, 'title') ?? ''}
+      hint={str(props, 'hint') ?? ''}
+      actionHref={str(props, 'actionHref') ?? ''}
+      actionLabel={str(props, 'actionLabel') ?? ''}
+      rows={props.rows as ComponentProps<typeof ReadinessPanel>['rows']}
+      empty={str(props, 'empty') ?? ''}
+    />
+  ),
+
+  /* --- tax ------------------------------------------------------------------- */
+  /**
+   * The whole tax page through one widget, and coarse by necessity: the native
+   * page sits inside `PageContainer`, whose motion wrappers carry
+   * `data-page-motion` attributes and post-animation inline styles a spec grid
+   * (a plain div) cannot reproduce. Every unit below is a shared component the
+   * native branch also renders; this only binds loader data to props. The tab
+   * flags are loader-computed and applied inside `TaxTabPanels`, because a
+   * `when` cannot cross a widget boundary.
+   */
+  'tax-page': (props) => (
+    <TaxPageShell>
+      <TaxPageHeader
+        title={str(props, 'title') ?? ''}
+        description={str(props, 'description') ?? ''}
+        setupHref={str(props, 'setupHref') ?? '/admin/setup/tax-return-forms'}
+        setupLabel={str(props, 'setupLabel') ?? ''}
+        canManageSetup={props.canManageSetup === true}
+      />
+      <TaxTabs tabs={(props.tabs as ComponentProps<typeof TaxTabs>['tabs']) ?? []} />
+      <TaxTabPanels
+        tabKey={str(props, 'tabKey') ?? 'prepare'}
+        onPrepare={props.onPrepare === true}
+        onHistory={props.onHistory === true}
+        prepare={
+          <TaxPreparePanel
+            forms={(props.forms as ComponentProps<typeof TaxPreparePanel>['forms']) ?? []}
+            canSave={props.canSave === true}
+            canManageSetup={props.canManageSetup === true}
+          />
+        }
+        history={<TaxHistoryTable {...(props.history as ComponentProps<typeof TaxHistoryTable>)} />}
+      />
+    </TaxPageShell>
+  ),
+  'tax-filing-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof TaxFilingDrawer>['drawer']
+    if (!drawer) return null
+    return <TaxFilingDrawer drawer={drawer} />
+  },
 
   /* --- customers cockpit ----------------------------------------------------- */
   'relationships-section': (props) => (
@@ -1694,9 +1903,21 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'access-control-cell': (props) => (
     <AccessControlCell grantId={str(props, 'grantId') ?? ''} isActive={props.isActive === true} />
   ),
-  'grant-access-form': (props) => (
-    <GrantAccessForm {...(props.options as ComponentProps<typeof GrantAccessForm>)} />
-  ),
+  /** Two callers, two shapes: the access list hands over the whole options
+   *  bundle, the user record spreads its own fields and adds a default
+   *  member. Accepting either keeps ONE entry in front of one component
+   *  rather than a second entry that would drift from it. */
+  'grant-access-form': (props) => {
+    const options = (props.options as ComponentProps<typeof GrantAccessForm> | undefined) ?? {
+      members: (props.members as ComponentProps<typeof GrantAccessForm>['members']) ?? [],
+      organizations:
+        (props.organizations as ComponentProps<typeof GrantAccessForm>['organizations']) ?? [],
+      actingUsers: (props.actingUsers as ComponentProps<typeof GrantAccessForm>['actingUsers']) ?? [],
+    }
+    return (
+      <GrantAccessForm {...options} defaultMemberUserId={str(props, 'defaultMemberUserId') ?? ''} />
+    )
+  },
   'new-filing': (props) => (
     <NewFilingButton
       formTypes={(props.formTypes as ComponentProps<typeof NewFilingButton>['formTypes']) ?? []}

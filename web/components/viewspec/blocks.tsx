@@ -22,6 +22,7 @@ import {
   TableRow as AppTableRow,
   EmptyState,
   TabContent,
+  Card,
 } from '@openbooks/ui'
 import { ReportPaper } from '../../app/(app)/reports/ReportPaper'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
@@ -65,6 +66,11 @@ const FRAME_REGISTRY: Record<string, FrameComponent> = {
   /** The plain full-height page shell, for pages that sit under it natively. */
   'page-container': ((props: Record<string, unknown> & { children: ReactNode }) => (
     <PageContainer>{props.children}</PageContainer>
+  )) as FrameComponent,
+  /** The plain card shell, for a body whose contents are two exclusive
+   *  blocks — an empty note or a table. */
+  'card': ((props: Record<string, unknown> & { children: ReactNode }) => (
+    <Card>{props.children}</Card>
   )) as FrameComponent,
   'forecast-section': ((props: Record<string, unknown> & { children: ReactNode }) => (
     <ForecastSection labelledBy={String(props.labelledBy ?? '')}>{props.children}</ForecastSection>
