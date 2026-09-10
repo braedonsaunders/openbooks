@@ -10,6 +10,8 @@ import { isUuid } from '../../../../../lib/list-params'
 import { PERMISSION_CATALOGUE } from '../../../../../lib/permissions'
 import FlowBuilder from './FlowBuilder'
 import type { FlowRunRow } from '../_builder/RunsPanel'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { flowBuilderSpec, loadFlowBuilder } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,9 +20,28 @@ export async function generateMetadata() {
   return { title: t('title') }
 }
 
-export default async function FlowBuilderPage({ params }: { params: Promise<{ id: string }> }) {
-  const authz = await requirePermission('flows.manage')
+export default async function FlowBuilderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  // Optional: this route natively takes only `params`.
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
+  const sp = (await searchParams) ?? {}
+  if (sp.__viewspec === '1') {
+    const data = await loadFlowBuilder(id)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={flowBuilderSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
+
+  const authz = await requirePermission('flows.manage')
   if (!isUuid(id)) notFound()
 
   const [flowRes, runsRes, usersRes, rolesRes] = await Promise.all([

@@ -1338,6 +1338,30 @@ const PAGES = [
     expect: 'main button',
     minMatches: 2,
   },
+  {
+    path: '/admin/flows/00000000-0000-7000-9000-000000000301',
+    // The approval-flow graph builder over the fixture flow (…0301).
+    variants: [''],
+    expect: 'main button',
+    minMatches: 2,
+  },
+  {
+    path: '/compliance/information-returns/01a087ac-5764-7d4a-a951-91bc7eff4cb2',
+    // A real simulator 1099-NEC filing. Its worksheet shows the ledger figure
+    // and the filed figure on every row, which is the point of the page.
+    variants: [''],
+    expect: 'main table tbody tr',
+    minMatches: 1,
+  },
+  {
+    path: '/reports/custom/run/01a083e6-dce6-76a6-a05b-8310c2a32030/delivery',
+    // Schedules and run history for one saved report. Neither table has rows
+    // in this tenant, so the pin is the panel's own chrome — its empty states
+    // are what both paths must agree on here.
+    variants: [''],
+    expect: 'main h2, main h3',
+    minMatches: 1,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole
@@ -2245,6 +2269,13 @@ function normalizeStyles(markup) {
         // compares the value while leaving any genuinely different one
         // different.
         value = value.replace(/-?\d+\.\d{7,}/g, (n) => String(Number(Number(n).toPrecision(6))))
+        // Zero has no unit. React Flow's renderer writes `left:0px` in server
+        // markup and `left:0` once the CSSOM has round-tripped it, and two
+        // renders of the flow builder disagreed on exactly that and nothing
+        // else — the pixel comparison matched. A zero length is a zero length
+        // whatever it is spelled with; any non-zero value keeps its unit and
+        // still compares.
+        value = value.replace(/(^|[\s(,])0(?:px|r?em|%|vh|vw|pt)\b/g, '$10')
         return `${property}:${value}`
       })
       .sort()
