@@ -55,6 +55,18 @@ import { NewAccountButton } from '../../app/(app)/accounts/NewAccountButton'
 import { EntityListSlot } from './entity-list-slot'
 import { RecordListSlot } from './record-list-slot'
 import { SetupSectionSlot } from './setup-section-slot'
+import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
+import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
+import { NewPaymentButton } from '../../app/(app)/payments/NewPaymentButton'
+import { Plus } from 'lucide-react'
+import { FolderTree } from '../../app/(app)/documents/FolderTree'
+import { FileList } from '../../app/(app)/documents/FileList'
+import { FileDrawer } from '../../app/(app)/documents/FileDrawer'
+import { FolderDrawer } from '../../app/(app)/documents/FolderDrawer'
+import { UploadButton } from '../../app/(app)/documents/UploadButton'
+import { NewFolderButton } from '../../app/(app)/documents/NewFolderButton'
+import { DocumentsActions, DocumentsBreadcrumb } from '../../app/(app)/documents/sections'
+import { BankFeedPanel } from '../../app/(app)/banking/imports/sections'
 import { NewBudgetButton } from '../../app/(app)/budgets/NewBudgetButton'
 import { BudgetDrawer } from '../../app/(app)/budgets/BudgetDrawer'
 import { NewRunButton } from '../../app/(app)/payroll/_ui/NewRunButton'
@@ -573,6 +585,115 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
         {str(props, 'label') ?? ''}
       </Link>
     </Button>
+  ),
+
+  /* --- payments ------------------------------------------------------------- */
+  'new-payment': (props) => (
+    <NewPaymentButton
+      kind={(str(props, 'kind') ?? 'vendor_payment') as ComponentProps<typeof NewPaymentButton>['kind']}
+      basePath={str(props, 'basePath') ?? '/payments'}
+      label={str(props, 'label') ?? ''}
+    />
+  ),
+  /** The create-run action is a plain link button, not the payment button —
+   *  the two are a conditional pair the loader chooses between. */
+  'new-payment-run': (props) => {
+    const href = str(props, 'href')
+    if (!href) return null
+    return (
+      <Button asChild>
+        <Link href={href as never}>
+          <Plus size={16} />
+          {str(props, 'label') ?? ''}
+        </Link>
+      </Button>
+    )
+  },
+  'payments-view-tabs': (props) => (
+    <PaymentsViewTabs
+      view={(str(props, 'view') ?? 'payments') as 'payments' | 'runs'}
+      labels={props.labels as ComponentProps<typeof PaymentsViewTabs>['labels']}
+    />
+  ),
+  'payments-section': (props) => (
+    <PaymentsSectionSlot
+      sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
+      basePath={str(props, 'basePath') ?? '/payments'}
+      kind={str(props, 'kind') === 'customer_payment' ? 'customer_payment' : 'vendor_payment'}
+    />
+  ),
+  'payment-runs-section': (props) => (
+    <RunsSectionSlot
+      sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
+      basePath={str(props, 'basePath') === '/receipts' ? '/receipts' : '/payments'}
+      direction={str(props, 'direction') === 'inbound' ? 'inbound' : 'outbound'}
+    />
+  ),
+
+  /* --- file cabinet --------------------------------------------------------- */
+  'documents-actions': (props) => (
+    <DocumentsActions
+      trashHref={str(props, 'trashHref') ?? '/documents/trash'}
+      trashLabel={str(props, 'trashLabel') ?? ''}
+      newFolder={<NewFolderButton parentId={str(props, 'newFolderParentId') ?? undefined} />}
+      upload={<UploadButton folderId={str(props, 'newFolderParentId') ?? undefined} />}
+    />
+  ),
+  'documents-breadcrumb': (props) => (
+    <DocumentsBreadcrumb
+      homeHref={str(props, 'homeHref') ?? '/documents'}
+      homeLabel={str(props, 'homeLabel') ?? ''}
+      crumbs={(props.crumbs as ComponentProps<typeof DocumentsBreadcrumb>['crumbs']) ?? []}
+    />
+  ),
+  'folder-tree': (props) => (
+    <FolderTree
+      folders={(props.folders as ComponentProps<typeof FolderTree>['folders']) ?? []}
+      activeFolderId={str(props, 'activeFolderId') ?? undefined}
+    />
+  ),
+  /** Passed whole, like the approvals table: selection state, context-menu
+   *  targets and bulk fetches are client state a spec cannot name. */
+  'file-list': (props) => (
+    <FileList
+      folders={(props.folders as ComponentProps<typeof FileList>['folders']) ?? []}
+      files={(props.files as ComponentProps<typeof FileList>['files']) ?? []}
+      activeFolderId={str(props, 'activeFolderId') ?? undefined}
+      showLocation={props.showLocation === true}
+      canEdit={props.canEdit === true}
+      canDelete={props.canDelete === true}
+      currentParams={(props.currentParams as ComponentProps<typeof FileList>['currentParams']) ?? {}}
+      sort={str(props, 'sort') ?? 'name'}
+      dir={(str(props, 'dir') ?? 'asc') as ComponentProps<typeof FileList>['dir']}
+    />
+  ),
+  'file-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof FileDrawer> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <FileDrawer key={remountKey} {...rest} />
+  },
+  'folder-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof FolderDrawer> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <FolderDrawer key={remountKey} {...rest} />
+  },
+
+  /* --- bank feeds ----------------------------------------------------------- */
+  /** One widget, not a table: every row is a bundle of conditional pairs (a
+   *  last-attempt date or nothing, an error line or nothing, a paused marker
+   *  or nothing), and a spec must never express those. */
+  'bank-feed-panel': (props) => (
+    <BankFeedPanel
+      title={str(props, 'title') ?? ''}
+      manageLabel={str(props, 'manageLabel') ?? ''}
+      emptyMessage={str(props, 'emptyMessage') ?? ''}
+      lastSyncLabel={str(props, 'lastSyncLabel') ?? ''}
+      lastAttemptLabel={str(props, 'lastAttemptLabel') ?? ''}
+      neverLabel={str(props, 'neverLabel') ?? ''}
+      feeds={(props.feeds as ComponentProps<typeof BankFeedPanel>['feeds']) ?? []}
+    />
   ),
 
   /* --- budgets -------------------------------------------------------------- */

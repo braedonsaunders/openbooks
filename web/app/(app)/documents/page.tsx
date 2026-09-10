@@ -1,6 +1,4 @@
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { ChevronRight, Home, Trash2 } from 'lucide-react'
 import { EmptyState, PageHeader } from '@openbooks/ui'
 import { SearchInput } from '../../../components/search-input'
 import { Pagination } from '../../../components/pagination'
@@ -23,6 +21,9 @@ import { NewFolderButton } from './NewFolderButton'
 import { FileDrawer } from './FileDrawer'
 import { FolderDrawer } from './FolderDrawer'
 import { FileList } from './FileList'
+import { DocumentsActions, DocumentsBreadcrumb } from './sections'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadDocuments, documentsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,6 +58,17 @@ export default async function Documents({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadDocuments(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={documentsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('documents.read')
   const canManage = can(authz, 'documents.manage')
   const orgId = authz.user.orgId
@@ -132,17 +144,12 @@ export default async function Documents({
   const newFolderParent = activeFolderId
 
   const actions = canManage ? (
-    <div className="flex items-center gap-2">
-      <Link
-        href="/documents/trash"
-        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
-      >
-        <Trash2 className="h-4 w-4" />
-        {t('trash.link')}
-      </Link>
-      <NewFolderButton parentId={newFolderParent} />
-      <UploadButton folderId={newFolderParent} />
-    </div>
+    <DocumentsActions
+      trashHref="/documents/trash"
+      trashLabel={t('trash.link')}
+      newFolder={<NewFolderButton parentId={newFolderParent} />}
+      upload={<UploadButton folderId={newFolderParent} />}
+    />
   ) : undefined
 
   return (
@@ -160,32 +167,16 @@ export default async function Documents({
         <FolderTree folders={localizedTree} activeFolderId={activeFolderId} />
         <div className="app-scroll flex min-w-0 flex-1 flex-col overflow-auto">
           {/* Breadcrumb path */}
-          <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-slate-200 bg-white/95 px-3 py-2 text-sm backdrop-blur sm:px-6 dark:border-slate-800 dark:bg-slate-900/95">
-            <Link
-              href={folderHref(sp, null)}
-              className="flex items-center gap-1.5 rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-            >
-              <Home className="h-3.5 w-3.5" />
-              {t('list.allFiles')}
-            </Link>
-            {crumbs.map((c, i) => (
-              <span key={c.id} className="flex items-center gap-1">
-                <ChevronRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600" />
-                {i === crumbs.length - 1 ? (
-                  <span className="px-1.5 py-0.5 font-medium text-slate-800 dark:text-slate-100">
-                    {c.name}
-                  </span>
-                ) : (
-                  <Link
-                    href={folderHref(sp, c.id)}
-                    className="rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                  >
-                    {c.name}
-                  </Link>
-                )}
-              </span>
-            ))}
-          </div>
+          <DocumentsBreadcrumb
+            homeHref={folderHref(sp, null)}
+            homeLabel={t('list.allFiles')}
+            crumbs={crumbs.map((c, i) => ({
+              id: c.id,
+              name: c.name,
+              href: folderHref(sp, c.id),
+              isLast: i === crumbs.length - 1,
+            }))}
+          />
 
           <div className="min-w-0 flex-1 p-3 sm:p-4">
             {isEmpty ? (

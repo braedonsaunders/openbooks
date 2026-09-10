@@ -26,6 +26,7 @@
 --   …2801-2899  field tickets
 --   …3801-3899  bank matching rules
 --   …4801-4899  budget scenarios and lines
+--   …5801-5899  file cabinet folders, files, versions
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
 --
 --   psql "$VIEWSPEC_DB" -f scripts/viewspec-fixtures.sql
@@ -763,4 +764,30 @@ begin
      (select id from accounting_periods where org_id = v_org and fiscal_year = 2026 and not is_adjustment order by period_number limit 1),
      8000)
   on conflict do nothing;
+
+  -- ---- file cabinet ---------------------------------------------------------
+  --
+  -- The simulator writes no folders and no files, so the cabinet was two empty
+  -- states comparing against each other. One folder at the virtual root, one
+  -- child folder, and one file inside the child — files never live at the
+  -- root, so the default view needs the nesting to show anything at all.
+  declare
+    v_root uuid := '00000000-0000-7000-9000-000000005801';
+    v_child uuid := '00000000-0000-7000-9000-000000005802';
+    v_file uuid := '00000000-0000-7000-9000-000000005803';
+    v_version uuid := '00000000-0000-7000-9000-000000005804';
+  begin
+    insert into folders (id, org_id, parent_folder_id, name)
+    values (v_root, v_org, null, 'ViewSpec Cabinet'),
+           (v_child, v_org, v_root, 'ViewSpec Subfolder')
+    on conflict (id) do nothing;
+
+    insert into files (id, org_id, folder_id, name, extension, file_type, content_type, size_bytes)
+    values (v_file, v_org, v_child, 'viewspec-fixture.txt', 'txt', 'text', 'text/plain', 42)
+    on conflict (id) do nothing;
+
+    insert into file_versions (id, file_id, version_number, size_bytes, content_type)
+    values (v_version, v_file, 1, 42, 'text/plain')
+    on conflict (id) do nothing;
+  end;
 end $$;
