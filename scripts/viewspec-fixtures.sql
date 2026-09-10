@@ -110,4 +110,61 @@ begin
     ('00000000-0000-7000-9000-000000000202', v_org, v_item_critical, 'metric', null, null,
      jsonb_build_object('label', 'Oldest unmatched', 'value', '2026-01-14'))
   on conflict (id) do nothing;
+
+  -- ---- approvals -----------------------------------------------------------
+  --
+  -- Pending flow gates for the harness user, so the approval hub has rows on
+  -- the "mine" and "all" tabs; and three vendor bills reassigned to that user
+  -- as their creator, so the "submitted" tab has rows too. Reassigning
+  -- `created_by` on simulated documents is safe here — no converted page
+  -- renders it — and it is the only way that tab is reachable without
+  -- inventing documents that the ledger would then have to explain.
+  declare
+    v_user uuid;
+    v_flow uuid := '00000000-0000-7000-9000-000000000301';
+    v_docs uuid[];
+  begin
+    select id into v_user from users where org_id = v_org and email = 'viewspec@sim.test';
+    if v_user is null then
+      raise notice 'no viewspec harness user; skipping approvals fixtures';
+      return;
+    end if;
+
+    select array_agg(id order by document_number)
+      into v_docs
+      from (
+        select id, document_number from documents
+         where org_id = v_org and kind = 'vendor_bill'
+         order by document_number
+         limit 3
+      ) picked;
+    if v_docs is null then
+      raise notice 'no vendor bills to attach approvals to; skipping';
+      return;
+    end if;
+
+    update documents set created_by = v_user
+     where org_id = v_org and id = any(v_docs) and created_by is distinct from v_user;
+
+    insert into flows (id, org_id, name, description, subject_kind, enabled, graph)
+    values (v_flow, v_org, 'Vendor bill approval', 'Two-step review for vendor bills',
+            'vendor_bill', true, jsonb_build_object('nodes', jsonb_build_array(), 'edges', jsonb_build_array()))
+    on conflict (id) do nothing;
+
+    for i in 1..array_length(v_docs, 1) loop
+      insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status, started_at)
+      values (('00000000-0000-7000-9000-00000000031' || i)::uuid, v_org, v_flow, 'vendor_bill',
+              v_docs[i], 'event', 'waiting', now() - (i || ' days')::interval)
+      on conflict (id) do nothing;
+
+      insert into flow_gates
+        (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title,
+         assignee_user_id, group_key, quorum, status, signature_required, created_at)
+      values (('00000000-0000-7000-9000-00000000032' || i)::uuid, v_org, v_flow,
+              ('00000000-0000-7000-9000-00000000031' || i)::uuid, 'approve', 'vendor_bill',
+              v_docs[i], 'Approve vendor bill', v_user, 'approve', 'any', 'pending', false,
+              now() - (i || ' days')::interval)
+      on conflict (id) do nothing;
+    end loop;
+  end;
 end $$;

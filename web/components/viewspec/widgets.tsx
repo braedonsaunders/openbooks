@@ -35,11 +35,19 @@ import { LienWaiverDrawer } from '../../app/(app)/compliance/lien-waivers/LienWa
 import { NewFilingButton } from '../../app/(app)/compliance/information-returns/NewFilingButton'
 import { IdentityCell, ActingCell, AccessControlCell } from '../../app/(app)/platform/access/sections'
 import { GrantAccessForm } from '../../app/(app)/platform/_components/GrantAccessForm'
-import { KeyRound, Building2, Users, Mail, Activity, Settings } from 'lucide-react'
+import { KeyRound, Building2, Users, Mail, Activity, Settings, Send, CheckCircle2 } from 'lucide-react'
 import { EmailSubjectCell, EmailEvidenceCell } from '../../app/(app)/platform/email-log/sections'
 import { VendorComplianceMatrix } from '../../app/(app)/compliance/vendors/Matrix'
 import { ReportNameCell } from '../../app/(app)/reports/custom/sections'
 import { PartyRolesCell } from '../../app/(app)/parties/sections'
+import {
+  KindChips,
+  ApprovalTabs,
+  ApprovalEngineCell,
+  SubmittedDocumentCell,
+} from '../../app/(app)/approvals/sections'
+import { ApprovalsTable } from '../../app/(app)/approvals/ApprovalsTable'
+import { DelegationBanner, OutOfOfficeButton } from '../../app/(app)/approvals/DelegationControls'
 import { AccountNameCell, AccountRegisterCell } from '../../app/(app)/accounts/sections'
 import { AccountsHierarchyTable } from '../../app/(app)/accounts/AccountsHierarchyTable'
 import { AccountDrawer } from '../../app/(app)/accounts/AccountDrawer'
@@ -330,7 +338,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const renderer = action ? WIDGET_REGISTRY[action] : undefined
     // Icons are components, so the spec names one from a closed map rather
     // than carrying it — same rule as every other component reference.
-    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail />, activity: <Activity /> }
+    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail />, activity: <Activity />, send: <Send />, 'check-circle': <CheckCircle2 /> }
     const iconKey = str(props, 'icon')
     return (
       <EmptyState
@@ -354,6 +362,40 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       directionLabel={str(props, 'directionLabel') ?? ''}
     />
   ),
+  /* --- approvals ---------------------------------------------------------- */
+  'out-of-office': (props) => (
+    <OutOfOfficeButton users={(props.users as ComponentProps<typeof OutOfOfficeButton>['users']) ?? []} />
+  ),
+  'delegation-banner': (props) => (
+    <DelegationBanner users={(props.users as ComponentProps<typeof DelegationBanner>['users']) ?? []} />
+  ),
+  'approval-tabs': (props) => (
+    <ApprovalTabs tabs={(props.tabs as ComponentProps<typeof ApprovalTabs>['tabs']) ?? []} />
+  ),
+  'kind-chips': (props) => (
+    <KindChips
+      chips={(props.chips as ComponentProps<typeof KindChips>['chips']) ?? []}
+      clearHref={str(props, 'clearHref') ?? null}
+      clearLabel={str(props, 'clearLabel') ?? ''}
+    />
+  ),
+  'approval-engine-cell': (props) => <ApprovalEngineCell name={str(props, 'name') ?? ''} />,
+  'submitted-document-cell': (props) => (
+    <SubmittedDocumentCell
+      documentNumber={str(props, 'documentNumber') ?? ''}
+      href={str(props, 'href') ?? null}
+    />
+  ),
+  'approvals-table': (props) => (
+    <ApprovalsTable
+      rows={(props.rows as ComponentProps<typeof ApprovalsTable>['rows']) ?? []}
+      users={(props.users as ComponentProps<typeof ApprovalsTable>['users']) ?? []}
+      bulk={props.bulk === true}
+      showAssignee={props.showAssignee === true}
+      actionsEnabled={props.actionsEnabled === true}
+    />
+  ),
+
   /* --- chart of accounts -------------------------------------------------- */
   'new-account': (props) => (
     <NewAccountButton

@@ -15,9 +15,6 @@ import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
 import { NarrativeDrawer } from './NarrativeDrawer'
-import { Metric, NarrativeEntry } from './sections'
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadContinuousClose, continuousCloseSpec } from './view'
 import { WorkItemDrawer, type ContinuousCloseWorkItem } from './WorkItemDrawer'
 
 export const dynamic = 'force-dynamic'
@@ -50,17 +47,6 @@ type EvidenceRow = { id: string; kind: string; source_type: string; source_id: s
 type SelectedNarrative = ReportRow
 
 export default async function ContinuousClosePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadContinuousClose(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={continuousCloseSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
   const { money } = await getMoneyFormatter()
   const authz = await requirePermission('assistant.use')
   const readable = readableContinuousCloseAgents(authz)
@@ -296,3 +282,24 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
   }
 }
 
+function NarrativeEntry({ narrative, href, labels }: { narrative: Record<string, unknown>; href: string; labels: { agent: string; fallbackTitle: string; generated: string; open: string } }) {
+  const title = typeof narrative.title === 'string' ? narrative.title : labels.fallbackTitle
+  const executiveSummary = typeof narrative.executiveSummary === 'string' ? narrative.executiveSummary : ''
+  return (
+    <section className="py-3">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"><Sparkles size={16} /></div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500"><span className="font-medium text-violet-700 dark:text-violet-300">{labels.agent}</span><span>{labels.generated}</span></div>
+          <h2 className="truncate text-sm font-semibold text-slate-950 dark:text-slate-50">{title}</h2>
+          {executiveSummary ? <p className="mt-0.5 line-clamp-1 text-xs text-slate-600 dark:text-slate-400">{executiveSummary}</p> : null}
+        </div>
+        <Button variant="outline" size="sm" asChild><Link href={href as never}>{labels.open}<ArrowRight size={13} /></Link></Button>
+      </div>
+    </section>
+  )
+}
+
+function Metric({ label, value, locale, tone }: { label: string; value: number; locale: string; tone?: string }) {
+  return <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950"><div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{label}</div><div className={`mt-0.5 text-lg font-semibold tabular-nums ${tone ?? ''}`}>{value.toLocaleString(locale)}</div></div>
+}

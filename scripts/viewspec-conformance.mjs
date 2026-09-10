@@ -270,6 +270,19 @@ const PAGES = [
     minMatches: 4,
   },
   {
+    path: '/approvals',
+    // Three tabs over the Flows engine, and the first page to use a `frame`
+    // (its body is wrapped in TabContent, a component rather than a div).
+    variants: [
+      '',
+      { query: '?tab=submitted', expect: 'table tbody tr', minMatches: 3 },
+      { query: '?tab=all', expect: 'table tbody tr', minMatches: 3 },
+      { query: '?kind=vendor_bill', expect: 'table tbody tr', minMatches: 3 },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
     path: '/accounts',
     // Three mutually exclusive bodies: the customizable entity list, flat
     // search results, and the class hierarchy.

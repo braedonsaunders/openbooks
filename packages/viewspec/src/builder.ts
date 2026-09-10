@@ -46,6 +46,7 @@ import type {
   Value,
   WidgetBlock,
   WidgetRef,
+  FrameBlock,
   GridBlock,
   PanelBlock,
   StatTileBlock,
@@ -226,6 +227,15 @@ export function grid(
   opts: { as?: GridBlock['as'] } = {},
 ): GridBlock {
   return { kind: 'grid', ...(className ? { className } : {}), ...opts, blocks }
+}
+
+/** A host wrapper component around spec-authored children. */
+export function frame(
+  name: string,
+  blocks: Block[],
+  props?: Record<string, unknown>,
+): FrameBlock {
+  return { kind: 'frame', frame: name, ...(props ? { props } : {}), blocks }
 }
 
 export function heading(level: 2 | 3, content: Value, className?: string): HeadingBlock {

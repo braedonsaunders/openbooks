@@ -366,6 +366,17 @@ export interface TableSorting {
   /** The active sort column and direction, resolved by the loader. */
   sort: FieldRef
   dir: FieldRef
+  /**
+   * URL parameter names, when this table does not own the page's default ones.
+   *
+   * A page with two independent tables — a bank account's statement lines and
+   * its reconciliations — gives each its own prefixed params. Without these the
+   * spec would bind both tables' headers to `sort`/`dir`/`page`, so sorting one
+   * would silently reorder the other: wrong behaviour, not just wrong pixels.
+   */
+  sortParamKey?: string
+  dirParamKey?: string
+  pageParamKey?: string
 }
 
 export interface TableBlock extends BlockCommon {
@@ -439,6 +450,23 @@ export interface GridBlock extends BlockCommon {
   /** The element to render. `section` matters where the native page used one:
    *  the element name is part of the document, not decoration. */
   as?: 'div' | 'section'
+  blocks: Block[]
+}
+
+/**
+ * A host component wrapping spec-authored children.
+ *
+ * `grid` renders a div or a section, which covers most containers. Some pages
+ * wrap their whole body in a real component instead — a tab transition, a card
+ * shell — and re-implementing that inside the renderer would drift from the
+ * component the native page uses. So a frame NAMES one, from a closed registry,
+ * and its children stay ordinary blocks. The difference from `widget` is the
+ * children: a widget is a leaf, a frame is a wrapper.
+ */
+export interface FrameBlock extends BlockCommon {
+  kind: 'frame'
+  frame: string
+  props?: Record<string, unknown>
   blocks: Block[]
 }
 
@@ -539,6 +567,7 @@ export type Block =
   | PanelBlock
   | StatTileBlock
   | RepeatBlock
+  | FrameBlock
 
 export const BLOCK_KINDS = [
   'page-header',
@@ -554,6 +583,7 @@ export const BLOCK_KINDS = [
   'panel',
   'stat-tile',
   'repeat',
+  'frame',
 ] as const
 
 /* -------------------------------------------------------------------------- */

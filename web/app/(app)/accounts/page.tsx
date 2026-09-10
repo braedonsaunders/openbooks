@@ -22,8 +22,6 @@ import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/feature
 import { AccountRegisterLink } from '../../../components/account-register-link'
 import { NewAccountButton } from './NewAccountButton'
 import { AccountsHierarchyTable, type HierarchyAccountGroup } from './AccountsHierarchyTable'
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadAccounts, accountsSpec } from './view'
 import { accountParentPath, orderAccountHierarchy } from '../../../lib/account-hierarchy'
 import { ModuleHomeTabs } from '../../../components/module-home/ui'
 import { decimalAdd, decimalCmp, decimalSum } from '../../../lib/statement-format'
@@ -67,17 +65,6 @@ export default async function Accounts({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadAccounts(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={accountsSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
   const { money } = await getMoneyFormatter()
   const authz = await requirePermission('gl.read')
   const t = await getTranslations('accounts')

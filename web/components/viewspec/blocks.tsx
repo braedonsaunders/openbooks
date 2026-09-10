@@ -1,4 +1,4 @@
-import { Fragment, type ComponentProps } from 'react'
+import { Fragment, type ComponentProps, type ReactNode } from 'react'
 import { PageHeader, cn } from '@openbooks/ui'
 import type { Block, PaperBlock, TableBlock, Tone } from '@openbooks/viewspec'
 import { ROOT_SCOPE_KEY, resolveNumber, resolveRows, resolveText, resolveValue } from '@openbooks/viewspec'
@@ -21,11 +21,12 @@ import {
   TableHeader as AppTableHeader,
   TableRow as AppTableRow,
   EmptyState,
+  TabContent,
 } from '@openbooks/ui'
 import { ReportPaper } from '../../app/(app)/reports/ReportPaper'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CellView } from './cells'
-import { WidgetSlot, WidgetBlockView } from './widgets'
+import { WidgetSlot, WidgetBlockView, resolveWidgetProps } from './widgets'
 import { toneClass } from './tone'
 import Link from 'next/link'
 import { Badge } from '@openbooks/ui'
@@ -46,6 +47,24 @@ import { Badge } from '@openbooks/ui'
  * cannot render would be a runtime hole, so the exhaustive switch is the
  * enforcement.
  */
+
+/**
+ * Frames — the closed set of host components a spec may WRAP children in.
+ *
+ * Separate from the widget registry because the contract is different: a
+ * widget is a leaf and receives only props, a frame receives spec-authored
+ * children. Keeping them apart means a spec cannot smuggle children into a
+ * component that never expected them.
+ */
+type FrameComponent = (props: Record<string, unknown> & { children: ReactNode }) => ReactNode
+
+const FRAME_REGISTRY: Record<string, FrameComponent> = {
+  'tab-content': TabContent as unknown as FrameComponent,
+}
+
+export class UnknownFrameError extends Error {
+  readonly name = 'UnknownFrameError'
+}
 
 /** Column alignment → the exact classes the native tables use. */
 function alignClass(align: 'left' | 'right' | 'center' | undefined): string {
@@ -213,6 +232,9 @@ function TableBlockView({
                   dir={(resolveText(spec.sorting.dir, scope) as 'asc' | 'desc') || 'asc'}
                   align={column.align === 'right' ? 'right' : 'left'}
                   className={column.headerClassName}
+                  sortParamKey={spec.sorting.sortParamKey}
+                  dirParamKey={spec.sorting.dirParamKey}
+                  pageParamKey={spec.sorting.pageParamKey}
                 >
                   {label}
                 </SortTh>
@@ -436,6 +458,16 @@ export function BlockView({
         )
       })
       return block.className ? <div className={block.className}>{list}</div> : <>{list}</>
+    }
+
+    case 'frame': {
+      const Frame = FRAME_REGISTRY[block.frame]
+      if (!Frame) throw new UnknownFrameError(`unknown frame "${block.frame}"`)
+      return (
+        <Frame {...resolveWidgetProps(block.props ?? {}, scope)}>
+          <BlockList blocks={block.blocks} scope={scope} searchParams={searchParams} />
+        </Frame>
+      )
     }
 
     case 'grid': {
