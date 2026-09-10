@@ -291,6 +291,56 @@ const PAGES = [
     minMatches: 5,
   },
   {
+    path: '/payments',
+    // Money out: two exclusive sections behind a pill switch, and a header
+    // action that is a conditional PAIR rather than one gated widget.
+    // The runs tab has no payment runs in this tenant, so it renders its
+    // builder and empty state rather than a table.
+    variants: ['', { query: '?view=runs', expect: 'main h3, main h2', minMatches: 1 }],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
+    path: '/documents',
+    // The file cabinet: `layout: 'bare'` (it owns its own full-height shell),
+    // a folder tree, a selectable file table and two flyouts.
+    variants: [
+      '',
+      { query: '?fid=00000000-0000-7000-9000-000000005801', expect: 'table tbody tr', minMatches: 1 },
+      {
+        query: '?file=00000000-0000-7000-9000-000000005803',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
+    path: '/banking/imports',
+    // The statements list plus the live-feed panel, which stays one widget
+    // because every row of it is a bundle of conditional pairs.
+    // No search on this page's list, so no empty-search branch to pin.
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/budgets',
+    variants: [
+      '',
+      {
+        query: '?budget=00000000-0000-7000-9000-000000004801',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
     path: '/payroll/runs',
     // The universal record list over pay_run documents, with a per-row link
     // into the run wizard (a full page, not a drawer).

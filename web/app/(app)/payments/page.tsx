@@ -8,6 +8,9 @@ import { mergeHref, pickString } from '../../../lib/list-params'
 import { NewPaymentButton } from './NewPaymentButton'
 import { PaymentsSection } from './PaymentsSection'
 import { RunsSection } from './RunsSection'
+import { ViewTabs } from './sections'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadPayments, paymentsSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +24,17 @@ export default async function Payments({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadPayments(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={paymentsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('ap.pay')
   const t = await getTranslations('payments')
   const sp = await searchParams
@@ -68,31 +82,5 @@ export default async function Payments({
         <RunsSection sp={sp} authz={authz} canApprove={can(authz, 'ap.approve')} />
       )}
     </ListPageLayout>
-  )
-}
-
-function ViewTabs({
-  view,
-  labels,
-}: {
-  view: 'payments' | 'runs'
-  labels: { payments: string; runs: string }
-}) {
-  const tab = (active: boolean) =>
-    cn(
-      'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-      active
-        ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
-        : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
-    )
-  return (
-    <div className="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
-      <Link href="/payments" className={tab(view === 'payments')}>
-        {labels.payments}
-      </Link>
-      <Link href={('/payments?view=runs')} className={tab(view === 'runs')}>
-        {labels.runs}
-      </Link>
-    </div>
   )
 }

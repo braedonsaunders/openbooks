@@ -1,12 +1,14 @@
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { Badge, PageHeader } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { EntityListView } from '../../../../components/entity-list-view'
 import { ListPageLayout } from '../../../../components/page-layout'
+import { ModuleView } from '../../../../components/viewspec/module-view'
 import { can, requirePermission } from '../../../../lib/authz'
 import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
+import { BankFeedPanel, mapBankFeedRows } from './sections'
+import { bankingImportsSpec, loadBankingImports } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +34,17 @@ export default async function BankingImports({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadBankingImports(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={bankingImportsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('banking.read')
   const t = await getTranslations('banking')
   const sp = await searchParams
@@ -62,42 +75,15 @@ export default async function BankingImports({
       }
     >
       {feedsEnabled ? (
-        <section className="mb-4 rounded-lg border border-slate-200 dark:border-slate-800">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('bankFeeds.operational.title')}</h3>
-            <Link href={('/admin/setup/bank-feeds')} className="text-sm text-teal-700 hover:underline dark:text-teal-300">
-              {t('bankFeeds.operational.manage')}
-            </Link>
-          </div>
-          {feeds.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">{t('bankFeeds.operational.none')}</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {feeds.map((feed, index) => (
-                <li key={index} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
-                  <span className="font-medium text-slate-900 dark:text-slate-100">{feed.name}</span>
-                  <Badge variant="outline">{feed.provider}</Badge>
-                  <span className="text-slate-500 dark:text-slate-400">
-                    <span className="font-mono text-[13px] font-semibold">{feed.account_number}</span> {feed.account_name}
-                  </span>
-                  <Badge variant={feed.status === 'connected' ? 'default' : 'secondary'}>{feed.status}</Badge>
-                  {!feed.is_active ? <span className="text-xs text-slate-400">(paused)</span> : null}
-                  <span className="ml-auto text-slate-500 dark:text-slate-400">
-                    {t('bankFeeds.operational.lastSync')}:{' '}
-                    {feed.last_sync_at ? new Date(feed.last_sync_at).toLocaleDateString('en-CA') : t('bankFeeds.operational.never')}
-                    {feed.last_error && feed.last_attempt_at ? (
-                      <>
-                        {' '}· {t('bankFeeds.operational.lastAttempt')}:{' '}
-                        {new Date(feed.last_attempt_at).toLocaleDateString('en-CA')}
-                      </>
-                    ) : null}
-                  </span>
-                  {feed.last_error ? <span className="w-full text-xs text-red-600" title={feed.last_error}>⚠ {feed.last_error}</span> : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <BankFeedPanel
+          title={t('bankFeeds.operational.title')}
+          manageLabel={t('bankFeeds.operational.manage')}
+          emptyMessage={t('bankFeeds.operational.none')}
+          lastSyncLabel={t('bankFeeds.operational.lastSync')}
+          lastAttemptLabel={t('bankFeeds.operational.lastAttempt')}
+          neverLabel={t('bankFeeds.operational.never')}
+          feeds={mapBankFeedRows(feeds)}
+        />
       ) : null}
 
       <EntityListView
