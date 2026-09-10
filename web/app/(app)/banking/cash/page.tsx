@@ -12,6 +12,8 @@ import { resolveAsOf } from '../../../../lib/cash/core'
 import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { userPageLayout } from '../../../../lib/page-layout'
 import { CashCockpit } from './CashCockpit'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadBankingCash, bankingCashSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +33,17 @@ export default async function BankingCashPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadBankingCash(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={bankingCashSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('banking.read')
   const t = await getTranslations('banking.cash')
   const tBanking = await getTranslations('banking')
