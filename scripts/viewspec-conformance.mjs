@@ -169,6 +169,29 @@ const PAGES = [
     minMatches: 3,
   },
   {
+    path: '/reports/budget',
+    // The native filter bar sets `sections` from DATA, which the spec cannot
+    // do — so it places complementary filter bars behind loader flags.
+    variants: [''],
+    expect: 'main',
+    minMatches: 1,
+  },
+  {
+    path: '/reports/balance-sheet',
+    // The statement archetype with an accounting-equation check under the
+    // filter bar — a conditional pair the loader resolves.
+    variants: ['', '?compare=prior_period', '?scale=thousands'],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/reports/trial-balance',
+    // Body is one PaperView: a generic tabular report placed whole.
+    variants: ['', '?period=this_fiscal_year'],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
     path: '/reports/cash-flow',
     // Heterogeneous statement rows rendered from a flattened row list.
     variants: [{ query: '', expect: 'table tbody tr', minMatches: 6 }],

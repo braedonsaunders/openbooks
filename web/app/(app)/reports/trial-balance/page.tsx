@@ -13,6 +13,8 @@ import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
 import { ScheduleReportButton } from '../ScheduleReportButton'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadTrialBalance, trialBalanceSpec } from './view'
 import { PaperView, type PaperCell } from '../PaperView'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import { mergeHref } from '../../../../lib/list-params'
@@ -24,6 +26,17 @@ export default async function TrialBalance({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const sp0 = await searchParams
+  if (sp0.__viewspec === '1') {
+    const data = await loadTrialBalance(sp0)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={trialBalanceSpec(data)} data={data} searchParams={sp0} trusted />
+      </>
+    )
+  }
   const t = await getTranslations('reports')
   const sp = await searchParams
   const scheduleDefId = await reportScheduleAnchor('trial-balance')

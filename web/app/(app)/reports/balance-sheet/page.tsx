@@ -18,6 +18,9 @@ import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
 import { ScheduleReportButton } from '../ScheduleReportButton'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
+import { BalanceCheck } from './sections'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadBalanceSheet, balanceSheetSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +29,17 @@ export default async function BalanceSheet({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const sp0 = await searchParams
+  if (sp0.__viewspec === '1') {
+    const data = await loadBalanceSheet(sp0)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={balanceSheetSpec(data)} data={data} searchParams={sp0} trusted />
+      </>
+    )
+  }
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('reports')
   const tb = await getTranslations('budgets')
@@ -109,14 +123,15 @@ export default async function BalanceSheet({
               </>
             }
           />
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <span>{t('balanceSheet.equation')}</span>
-            <Badge variant={balanced ? 'success' : 'destructive'}>
-              {balanced
+          <BalanceCheck
+            equation={t('balanceSheet.equation')}
+            balanced={balanced}
+            label={
+              balanced
                 ? t('balanceSheet.balanced')
-                : t('balanceSheet.offBy', { amount: money(difference) })}
-            </Badge>
-          </div>
+                : t('balanceSheet.offBy', { amount: money(difference) })
+            }
+          />
         </>
       }
     >

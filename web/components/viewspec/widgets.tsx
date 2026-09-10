@@ -76,6 +76,8 @@ import { RelationshipsSection, ArPulse as CustomerArPulse } from '../../app/(app
 import { AdminHubCard } from '../../app/(app)/admin/sections'
 import { BuildHubCard } from '../../app/(app)/admin/build/sections'
 import { MatchWorkspace } from '../../app/(app)/banking/match/MatchWorkspace'
+import { BalanceCheck } from '../../app/(app)/reports/balance-sheet/sections'
+import { PaperView } from '../../app/(app)/reports/PaperView'
 import {
   FlowNameCell,
   FlowLastRunCell,
@@ -407,8 +409,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const icons: Record<string, ReactNode> = { settings: <Settings size={14} /> }
     const iconKey = str(props, 'iconKey')
     const variant = str(props, 'variant') as ComponentProps<typeof Button>['variant']
+    const size = str(props, 'size') as ComponentProps<typeof Button>['size']
     return (
-      <Button asChild variant={variant}>
+      <Button asChild variant={variant} size={size}>
         <Link href={href as never}>
           {iconKey ? icons[iconKey] : null}
           {str(props, 'label') ?? ''}
@@ -817,6 +820,27 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
         (['teal', 'violet', 'amber', 'sky'] as const).find((a) => a === str(props, 'accent')) ??
         'teal'
       }
+    />
+  ),
+
+  /** The accounting-equation check: a conditional pair, so the loader decides
+   *  and the component renders the decision. */
+  /** The generic tabular report paper: it owns the chrome, the column
+   *  alignment and the money formatting for any report shaped as groups of
+   *  rows. The loader assembles the data; this places the component. */
+  'paper-view': (props) => (
+    <PaperView
+      company={str(props, 'company') ?? ''}
+      currency={str(props, 'currency')}
+      emptyLabel={str(props, 'emptyLabel') ?? ''}
+      data={props.data as ComponentProps<typeof PaperView>['data']}
+    />
+  ),
+  'balance-check': (props) => (
+    <BalanceCheck
+      equation={str(props, 'equation') ?? ''}
+      balanced={props.balanced === true}
+      label={str(props, 'label') ?? ''}
     />
   ),
 
