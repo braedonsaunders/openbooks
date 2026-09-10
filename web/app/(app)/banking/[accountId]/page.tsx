@@ -5,7 +5,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { businessTimeZone } from '@openbooks/engine/src/business-date.ts'
-import { Badge, Button, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
@@ -16,6 +16,9 @@ import { isUuid, parsePrefixedListParams, pickString } from '../../../../lib/lis
 import { ImportStatementButton } from './ImportStatementButton'
 import { StartReconciliationButton } from './StartReconciliationButton'
 import { StatementDrawer } from './StatementDrawer'
+import { AccountStats, ReconActionCell, UnmatchedCountCell } from './sections'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadBankingAccount, bankingAccountSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,6 +96,18 @@ export default async function BankingAccount({
   params: Promise<{ accountId: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const { accountId } = await params
+    const data = await loadBankingAccount(accountId, sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={bankingAccountSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const { money } = await getMoneyFormatter()
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
@@ -230,9 +245,6 @@ export default async function BankingAccount({
     ? `${typeLabel} · ${account.currency_restriction}`
     : typeLabel
 
-  const stat = 'rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900'
-  const statLabel = 'text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400'
-
   return (
     <ListPageLayout
       header={
@@ -254,32 +266,18 @@ export default async function BankingAccount({
               ) : undefined
             }
           />
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className={stat}>
-              <div className={statLabel}>{t('account.stats.glBalance')}</div>
-              <div className="text-sm font-semibold tabular-nums">{money(account.balance)}</div>
-            </div>
-            <div className={stat}>
-              <div className={statLabel}>{t('account.stats.reconciledThrough')}</div>
-              <div className="text-sm font-semibold">
-                {account.reconciled_through ?? <span className="font-normal text-slate-400 dark:text-slate-500">{t('labels.never')}</span>}
-              </div>
-            </div>
-            <div className={stat}>
-              <div className={statLabel}>{t('account.stats.unmatchedLines')}</div>
-              <div className="text-sm font-semibold tabular-nums">{Number(account.unmatched_lines).toLocaleString()}</div>
-            </div>
-            <div className={stat}>
-              <div className={statLabel}>{t('account.stats.reconciliation')}</div>
-              <div className="text-sm font-semibold">
-                {account.open_reconciliation_id ? (
-                  <Badge variant="warning">{t('account.badges.inProgress')}</Badge>
-                ) : (
-                  <Badge variant="secondary">{t('account.badges.noneOpen')}</Badge>
-                )}
-              </div>
-            </div>
-          </div>
+          <AccountStats
+            glBalanceLabel={t('account.stats.glBalance')}
+            glBalanceValue={money(account.balance)}
+            reconciledThroughLabel={t('account.stats.reconciledThrough')}
+            reconciledThrough={account.reconciled_through}
+            neverLabel={t('labels.never')}
+            unmatchedLinesLabel={t('account.stats.unmatchedLines')}
+            unmatchedLinesValue={Number(account.unmatched_lines).toLocaleString()}
+            reconciliationLabel={t('account.stats.reconciliation')}
+            reconBadgeLabel={account.open_reconciliation_id ? t('account.badges.inProgress') : t('account.badges.noneOpen')}
+            reconBadgeVariant={account.open_reconciliation_id ? 'warning' : 'secondary'}
+          />
         </>
       }
     >
@@ -326,11 +324,10 @@ export default async function BankingAccount({
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{Number(s.line_count).toLocaleString()}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {Number(s.unmatched_count) > 0 ? (
-                          Number(s.unmatched_count).toLocaleString()
-                        ) : (
-                          <span className="text-green-600 dark:text-green-400">0</span>
-                        )}
+                        <UnmatchedCountCell
+                          display={Number(s.unmatched_count).toLocaleString()}
+                          isZero={Number(s.unmatched_count) === 0}
+                        />
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{money(s.opening_balance)}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(s.closing_balance)}</TableCell>
@@ -394,11 +391,10 @@ export default async function BankingAccount({
                         {r.signed_off_at ? formatTimestamp(r.signed_off_at) : '—'}
                       </TableCell>
                       <TableCell>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={(`${basePath}/reconcile/${r.id}`)}>
-                            {r.status === 'signed_off' ? tCommon('actions.view') : t('account.openWorkspace')}
-                          </Link>
-                        </Button>
+                        <ReconActionCell
+                          href={`${basePath}/reconcile/${r.id}`}
+                          label={r.status === 'signed_off' ? tCommon('actions.view') : t('account.openWorkspace')}
+                        />
                       </TableCell>
                     </TableRow>
                   ))}

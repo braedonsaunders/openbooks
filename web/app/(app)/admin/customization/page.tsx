@@ -15,6 +15,9 @@ import { RECORD_TYPES, RECORD_TYPE_BY_KEY, customFieldTargetFor, defaultFormLayo
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { FormDesigner, NewFormButton } from './FormDesigner'
 import { ListViewDesigner, NewViewButton } from './ListViewDesigner'
+import { CustomizationTabs, FormDefaultCell, ViewScopeCell } from './sections'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadCustomization, customizationSpec } from './view'
 import { disabledRecordTypes } from '../../../../lib/customization/gates'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
 import type { ComponentProps } from 'react'
@@ -44,6 +47,17 @@ export default async function CustomizationPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadCustomization(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={customizationSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const canManageOrg = can(authz, 'admin.customization.manage')
@@ -238,22 +252,14 @@ export default async function CustomizationPage({
             )}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
-              {supportsForms ? (
-                <Link
-                  href={tabHref('forms')}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${tab === 'forms' ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
-                >
-                  {t('designer.tabs.forms')}
-                </Link>
-              ) : null}
-              <Link
-                href={tabHref('views')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium ${tab === 'views' ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
-              >
-                {t('designer.tabs.views')}
-              </Link>
-            </div>
+            <CustomizationTabs
+              formsHref={tabHref('forms')}
+              viewsHref={tabHref('views')}
+              formsLabel={t('designer.tabs.forms')}
+              viewsLabel={t('designer.tabs.views')}
+              formsActive={tab === 'forms'}
+              showForms={supportsForms}
+            />
             <SearchSelectFilter
               paramKey="recordType"
               label={t('designer.recordTypeFilter')}
@@ -294,8 +300,11 @@ export default async function CustomizationPage({
                     <Badge variant={f.isActive ? 'success' : 'outline'}>{f.isActive ? tCommon('labels.active') : tCommon('labels.inactive')}</Badge>
                   </TableCell>
                   <TableCell>
-                    {f.isDefault ? <Badge variant="default">{t('designer.forms.isDefault')}</Badge> : null}{' '}
-                    {f.allowedRoles && f.allowedRoles.length ? <span className="text-xs text-slate-400">{f.allowedRoles.join(', ')}</span> : null}
+                    <FormDefaultCell
+                      showDefault={f.isDefault}
+                      defaultLabel={t('designer.forms.isDefault')}
+                      rolesLabel={f.allowedRoles && f.allowedRoles.length ? f.allowedRoles.join(', ') : ''}
+                    />
                   </TableCell>
                   <TableCell className="text-right">
                     <Link href={`/admin/customization?recordType=${f.recordType}&tab=forms&form=new&from=${f.id}`} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">
@@ -335,10 +344,12 @@ export default async function CustomizationPage({
                   </TableCell>
                   <TableCell><Badge variant="secondary">{recordTypeLabel(v.recordType)}</Badge></TableCell>
                   <TableCell>
-                    <Badge variant={v.scope === 'org' ? 'default' : 'secondary'}>
-                      {v.scope === 'org' ? t('designer.list.scopeOrg') : t('designer.list.scopeUser')}
-                    </Badge>
-                    {v.isDefault ? <Badge variant="outline">{t('designer.list.isDefault')}</Badge> : null}
+                    <ViewScopeCell
+                      scopeLabel={v.scope === 'org' ? t('designer.list.scopeOrg') : t('designer.list.scopeUser')}
+                      scopeVariant={v.scope === 'org' ? 'default' : 'secondary'}
+                      showDefault={v.isDefault}
+                      defaultLabel={t('designer.list.isDefault')}
+                    />
                   </TableCell>
                   <TableCell>
                     <Badge variant={v.isActive ? 'success' : 'outline'}>{v.isActive ? tCommon('labels.active') : tCommon('labels.inactive')}</Badge>

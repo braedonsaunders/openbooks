@@ -1,25 +1,42 @@
+import 'server-only'
+
 import { getMoneyFormatter } from '@/lib/money-server'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '../../../components/page-layout'
-import { EntityListView } from '../../../components/entity-list-view'
-import { ModuleView } from '../../../components/viewspec/module-view'
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from '@openbooks/viewspec'
 import { buildListDrawerHref, pickString } from '../../../lib/list-params'
 import { can, requirePermission } from '../../../lib/authz'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { createDraftJournal, loadJournalDoc } from '../../../lib/journals'
-import { JournalDrawer } from './JournalDrawer'
-import { NewJournalButton } from './NewJournalButton'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
-import { JournalDraftsPanel } from './sections'
-import { loadJournal, journalSpec } from './view'
+import type { JournalDrawer } from './JournalDrawer'
+import type { JournalDraftRow } from './sections'
 
-export const dynamic = 'force-dynamic'
+/**
+ * The journal list, split into a loader and a spec.
+ *
+ * The body is two blocks: an optional draft-manual-journals panel (a
+ * conditional composite, so a shared component both paths render) and the
+ * universal entity list, which arrives through the `entity-list-view` widget
+ * and its slot — the slot re-derives org id, user id and permissions from
+ * the session because a spec must never carry a capability or an org id.
+ *
+ * The drawer is the manual-journal flyout over DOCUMENT ids (?entry=); the
+ * entity list's own row links (?txn=) are a separate surface the list owns,
+ * via the shared `related-txn-drawer` widget. Posted-entry links to
+ * /journal/[id] are a third, untouched surface.
+ */
 
 interface DraftJournalRow {
   id: string
@@ -34,26 +51,25 @@ interface PartyPickerRow { id: string; display_name: string }
 interface AccountPickerRow { id: string; number: string | null; name: string }
 interface NamePickerRow { id: string; name: string }
 
-export default async function Journal({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadJournal(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={journalSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
+type JournalDrawerProps = Parameters<typeof JournalDrawer>[0]
+
+export interface JournalData {
+  title: string
+  description: string
+  currentParams: Record<string, string | string[] | undefined>
+  hasDrafts: boolean
+  draftsHeading: string
+  drafts: JournalDraftRow[]
+  drawerOpen: boolean
+  drawer: JournalDrawerProps | null
+}
+
+export async function loadJournal(
+  sp: Record<string, string | string[] | undefined>,
+): Promise<JournalData> {
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('journal')
   const authz = await requirePermission('gl.read')
-  const sp = await searchParams
   const allowedSubsidiaries = authz.allowedSubsidiaryIds
   const allowedIds = allowedSubsidiaries ? [...allowedSubsidiaries] : []
   const entryVisibility = allowedSubsidiaries
@@ -140,46 +156,72 @@ export default async function Journal({
       })
     : null
 
-  return (
-    <ListPageLayout
-      header={<PageHeader title={t('list.title')} description={t('list.description', { count: total })} actions={<NewJournalButton />} />}
-    >
-      {draftDocs.rows.length > 0 ? (
-        <JournalDraftsPanel
-          heading={t('list.draftsHeading')}
-          drafts={(draftDocs.rows as unknown as DraftJournalRow[]).map((d) => ({
-            id: String(d.id),
-            href: buildListDrawerHref('/journal', sp, 'entry', String(d.id)),
-            documentNumber: d.document_number,
-            documentDate: d.document_date,
-            memo: d.memo,
-            total: money(d.total),
-          }))}
-        />
-      ) : null}
-      <EntityListView
-        recordType="journal"
-        orgId={authz.user.orgId}
-        userId={authz.user.id}
-        canManage={can(authz, 'admin.customization.manage')}
-        sp={sp}
-        drawer={openJournal && pickers ? (
-          <JournalDrawer
-            journal={(openJournal)}
-            initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
-            parties={pickers[0].rows}
-            accounts={pickers[1].rows.map((account) => ({ ...account, number: account.number ?? undefined }))}
-            departments={pickers[2].rows}
-            projects={pickers[3].rows}
-            subsidiaries={pickers[6] ?? undefined}
-            headerDefs={pickers[4] as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[]}
-            lineDefs={pickers[5] as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[]}
-            layout={resolvedForm?.layout}
-            segments={(pickers[7])}
-          />
-        ) : null}
-        emptyAction={<NewJournalButton />}
-      />
-    </ListPageLayout>
-  )
+  const drafts = (draftDocs.rows as unknown as DraftJournalRow[]).map((d) => ({
+    id: String(d.id),
+    href: buildListDrawerHref('/journal', sp, 'entry', String(d.id)),
+    documentNumber: d.document_number,
+    documentDate: d.document_date,
+    memo: d.memo,
+    total: money(d.total),
+  }))
+
+  const drawer: JournalDrawerProps | null =
+    openJournal && pickers
+      ? {
+          journal: openJournal,
+          initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+          parties: pickers[0].rows,
+          accounts: pickers[1].rows.map((account) => ({ ...account, number: account.number ?? undefined })),
+          departments: pickers[2].rows,
+          projects: pickers[3].rows,
+          subsidiaries: pickers[6] ?? undefined,
+          headerDefs: pickers[4] as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[],
+          lineDefs: pickers[5] as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[],
+          layout: resolvedForm?.layout,
+          segments: pickers[7],
+        }
+      : null
+
+  return {
+    title: t('list.title'),
+    description: t('list.description', { count: total }),
+    currentParams: sp,
+    hasDrafts: drafts.length > 0,
+    draftsHeading: t('list.draftsHeading'),
+    drafts,
+    drawerOpen: Boolean(drawer),
+    drawer,
+  }
+}
+
+const f = ref<JournalData>()
+
+export function journalSpec(data: JournalData): PageSpec {
+  return page({
+    layout: 'list',
+    header: [
+      pageHeader({
+        title: f('title'),
+        description: f('description'),
+        // The create button checks nothing client-side; the draft endpoint
+        // enforces gl.post, exactly as on the native path.
+        actions: [widget('new-journal', {})],
+      }),
+    ],
+    body: [
+      {
+        ...widgetBlock('journal-drafts', {
+          heading: data.draftsHeading,
+          drafts: data.drafts,
+        }),
+        when: f('hasDrafts'),
+      },
+      widgetBlock('entity-list-view', {
+        recordType: 'journal',
+        sp: data.currentParams,
+        drawer: data.drawer ? { widget: 'journal-drawer', props: { drawer: data.drawer } } : null,
+        emptyAction: { widget: 'new-journal', props: {} },
+      }),
+    ],
+  })
 }

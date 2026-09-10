@@ -24,6 +24,8 @@ import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiari
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { featureEnabled, isFeatureEnabled, resolvedFeatureState } from '../../../../lib/features'
 import { PaymentLinksPanel } from '../../../../components/payment-links-panel'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadArInvoices, arInvoicesSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +45,17 @@ export default async function ArInvoices({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadArInvoices(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={arInvoicesSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('ar.read')
   const canCreate = can(authz, 'ar.create')
   const [featureState, inventoryEnabled, equipmentEnabled] = await Promise.all([

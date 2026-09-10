@@ -2,6 +2,9 @@ import Link from 'next/link'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { Camera, Gauge, History, Settings2 } from 'lucide-react'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { forecastsSpec, loadForecasts } from './view'
+import { ForecastSection, ForecastSectionHeading } from './sections'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
   Badge,
@@ -52,6 +55,17 @@ export default async function Forecasts({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadForecasts(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={forecastsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('crm.forecasts.read')
   const [t, locale, { money }] = await Promise.all([
     getTranslations('crm'),
@@ -181,8 +195,8 @@ export default async function Forecasts({
       }
     >
       <div className="space-y-6">
-        <section aria-labelledby="forecast-summary-heading" className="space-y-3">
-          <SectionHeading id="forecast-summary-heading" icon={<Gauge size={17} />} title={t('forecasts.summary')} />
+        <ForecastSection labelledBy="forecast-summary-heading">
+          <ForecastSectionHeading id="forecast-summary-heading" icon={<Gauge size={17} />} title={t('forecasts.summary')} />
           {forecast.length ? (
             <div className="space-y-4">
               {forecast.map((row) => (
@@ -239,10 +253,10 @@ export default async function Forecasts({
               description={t('forecasts.emptyForecastDescription')}
             />
           )}
-        </section>
+        </ForecastSection>
 
-        <section aria-labelledby="quota-heading" className="space-y-3">
-          <SectionHeading id="quota-heading" icon={<Gauge size={17} />} title={t('forecasts.quotas')} />
+        <ForecastSection labelledBy="quota-heading">
+          <ForecastSectionHeading id="quota-heading" icon={<Gauge size={17} />} title={t('forecasts.quotas')} />
           {quotas.length ? (
             <Table>
               <TableHeader>
@@ -286,10 +300,10 @@ export default async function Forecasts({
               }
             />
           )}
-        </section>
+        </ForecastSection>
 
-        <section aria-labelledby="history-heading" className="space-y-3">
-          <SectionHeading
+        <ForecastSection labelledBy="history-heading">
+          <ForecastSectionHeading
             id="history-heading"
             icon={<History size={17} />}
             title={t('forecasts.history')}
@@ -347,33 +361,9 @@ export default async function Forecasts({
               action={snapshotAction ?? undefined}
             />
           )}
-        </section>
+        </ForecastSection>
       </div>
     </ListPageLayout>
-  )
-}
-
-function SectionHeading({
-  id,
-  icon,
-  title,
-  description,
-}: {
-  id: string
-  icon: React.ReactNode
-  title: string
-  description?: string
-}) {
-  return (
-    <div className="flex items-start gap-2">
-      <span className="mt-0.5 text-teal-700 dark:text-teal-300">{icon}</span>
-      <div>
-        <h2 id={id} className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {title}
-        </h2>
-        {description ? <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{description}</p> : null}
-      </div>
-    </div>
   )
 }
 

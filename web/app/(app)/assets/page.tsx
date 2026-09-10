@@ -1,8 +1,7 @@
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { PageHeader, cn } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { listTaxRegimes } from '@openbooks/engine/src/tax-pool-run.ts'
 import { ListPageLayout } from '../../../components/page-layout'
@@ -19,6 +18,9 @@ import { AssetDrawer } from './AssetDrawer'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../lib/custom-fields'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadAssets, assetsSpec } from './view'
+import { AssetsDocLink, AssetsEquipmentLink, AssetsTabs } from './sections'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +29,17 @@ export default async function Assets({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadAssets(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={assetsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const t = await getTranslations('assets')
   const authz = await requirePermission('assets.read')
   await requireFeatureEnabled(authz.user.orgId, 'fixedAssets')
@@ -41,25 +54,7 @@ export default async function Assets({
     { key: 'register', label: t('tabs.register'), href: '/assets' },
     { key: 'tax-depreciation', label: t('tabs.taxDepreciation'), href: '/assets?tab=tax-depreciation' },
   ] as const
-  const tabsNav = (
-    <nav className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">
-      {tabs.map((item) => (
-        <Link
-          key={item.key}
-          href={item.href as never}
-          aria-current={tab === item.key ? 'page' : undefined}
-          className={cn(
-            '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-            tab === item.key
-              ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-              : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
-          )}
-        >
-          {item.label}
-        </Link>
-      ))}
-    </nav>
-  )
+  const tabsNav = <AssetsTabs tabs={tabs.map((item) => ({ ...item, active: tab === item.key }))} />
 
   if (tab === 'tax-depreciation') {
     const [regimes, today] = await Promise.all([
@@ -148,9 +143,7 @@ export default async function Assets({
 
   const actions = (
     <div className="flex items-center gap-2">
-      <Link href="/docs/fixed-assets-depreciation" className="text-sm text-teal-700 hover:underline dark:text-teal-300">
-        {t('equipment.documentation')}
-      </Link>
+      <AssetsDocLink label={t('equipment.documentation')} />
       {canManage ? <><RunDepreciationButton books={depreciationBooks.rows} /><NewAssetButton /></> : null}
     </div>
   )
@@ -161,9 +154,7 @@ export default async function Assets({
         <>
           <PageHeader title={t('list.title')} description={t('list.description')} actions={actions} />
           {tabsNav}
-          <Link href="/assets/equipment" className="text-sm text-teal-700 hover:underline dark:text-teal-300">
-            {t('equipment.title')}
-          </Link>
+          <AssetsEquipmentLink label={t('equipment.title')} />
         </>
       }
     >

@@ -167,4 +167,181 @@ begin
       on conflict (id) do nothing;
     end loop;
   end;
+
+  -- ---- banking account detail -------------------------------------------
+  -- Statements, lines and reconciliations for the SIM 1010 Operating
+  -- Account, so the account page renders both tables, the badge variants,
+  -- and the resume-workspace button. Verified counts: 2 statements, 12
+  -- lines (3 unmatched), 3 reconciliations (2 signed_off, 1 in_progress).
+  declare
+    v_acct  uuid := 'a1f8e08f-a6ae-42ac-b2fd-d8008a92b14e'; -- SIM 1010 Operating Account (asset_bank)
+    v_stm1  uuid := '00000000-0000-7000-9000-000000000403';
+    v_stm2  uuid := '00000000-0000-7000-9000-000000000404';
+    v_rec1  uuid := '00000000-0000-7000-9000-000000000405';
+    v_rec2  uuid := '00000000-0000-7000-9000-000000000406';
+    v_rec3  uuid := '00000000-0000-7000-9000-000000000407';
+    v_je    uuid := '00000000-0000-7000-9000-000000000408';
+    v_jl    uuid := '00000000-0000-7000-9000-000000000409';
+    v_book  uuid;
+    v_per   uuid;
+    v_sub   uuid;
+    v_user  uuid;
+  begin
+    select id into v_user from users where org_id = v_org and email = 'viewspec@sim.test';
+    select id into v_sub from subsidiaries where org_id = v_org order by name limit 1;
+    select id into v_book from accounting_books where org_id = v_org and is_primary limit 1;
+    select id into v_per from accounting_periods where org_id = v_org order by starts_on desc limit 1;
+    if v_user is null or v_sub is null or v_book is null or v_per is null then
+      raise notice 'missing banking fixture prerequisites; skipping';
+      return;
+    end if;
+  
+    -- The account page 404s on a non-reconcilable account, and the simulator
+    -- leaves every bank account with the flag off.
+    -- A reconcilable account must name its currency (CHECK constraint), so
+    -- the flag and the restriction go on together.
+    update accounts
+       set reconcilable = true,
+           currency_restriction = coalesce(currency_restriction, 'USD')
+     where id = v_acct and org_id = v_org and not reconcilable;
+
+    -- Posted entries are immutable (jl_guard), so the balance line goes in
+    -- as draft first and the entry is posted afterwards. Two legs: the
+    -- balanced-entry guard rejects a one-legged posting.
+    --
+    -- Guarded by existence rather than ON CONFLICT: once the entry is posted,
+    -- the line insert fires jl_guard and RAISEs even when every row would be
+    -- a no-op, so a second run of this file would fail. Idempotence has to be
+    -- checked before the statement, not by it.
+    if not exists (select 1 from journal_entries where id = v_je) then
+      insert into journal_entries (id, org_id, book_id, entry_number, posting_date, period_id, status, subsidiary_id)
+      values (v_je, v_org, v_book, 'BNK-1', current_date - 6, v_per, 'draft', v_sub);
+      insert into journal_lines (id, org_id, entry_id, line_number, account_id, amount, currency, txn_amount, subsidiary_id)
+      values (v_jl, v_org, v_je, 1, v_acct, 12500.0000, 'USD', 12500.0000, v_sub),
+             ('00000000-0000-7000-9000-000000000413', v_org, v_je, 2,
+              (select id from accounts where org_id = v_org and number = '3900' limit 1),
+              -12500.0000, 'USD', -12500.0000, v_sub);
+      update journal_entries set status = 'posted', posted_at = now(), posted_by = v_user
+       where id = v_je and status <> 'posted';
+    end if;
+  
+    insert into bank_statements
+      (id, org_id, account_id, source, statement_date, opening_balance, closing_balance, raw_file_ref)
+    values (v_stm1, v_org, v_acct, 'ofx', current_date - 20, 10000.0000, 12500.0000, 'fixture-ofx-1'),
+           (v_stm2, v_org, v_acct, 'csv', current_date - 6, 12500.0000, 13100.0000, 'fixture-csv-1')
+    on conflict (id) do nothing;
+  
+    -- Statement 1: three lines, one unmatched (the header unmatched stat and
+    -- the green-zero vs count pair both need a nonzero case on this page).
+    insert into bank_statement_lines
+      (id, org_id, statement_id, account_id, line_number, posted_on, amount, currency, description, match_status)
+    values ('00000000-0000-7000-9000-000000000410', v_org, v_stm1, v_acct, 1, current_date - 19, 2000.0000, 'USD', 'Client receipt', 'matched'),
+           ('00000000-0000-7000-9000-000000000411', v_org, v_stm1, v_acct, 2, current_date - 18, -1500.0000, 'USD', 'Vendor payment', 'matched'),
+           ('00000000-0000-7000-9000-000000000412', v_org, v_stm1, v_acct, 3, current_date - 17, 2000.0000, 'USD', 'Unmatched deposit', 'unmatched')
+    on conflict (id) do nothing;
+  
+    -- Statement 2: nine lines, two unmatched — exercises the drawer pager
+    -- (default page is large, but the row shapes differ per line).
+    insert into bank_statement_lines
+      (id, org_id, statement_id, account_id, line_number, posted_on, amount, currency, description, match_status)
+    select ('00000000-0000-7000-9000-00000000042' || g)::uuid, v_org, v_stm2, v_acct, g,
+           current_date - 5, (100.0000 * g), 'USD', 'Line ' || g,
+           case when g in (3, 7) then 'unmatched' else 'matched' end
+      from generate_series(1, 9) g
+    on conflict (id) do nothing;
+  
+    -- One open session per account (partial unique index): a single
+    -- in_progress row stays open; the second row is signed off as well so
+    -- closed statuses still appear. Signed-off rows must carry signoff
+    -- evidence (enforced by CHECK); the open one makes the header badge read
+    -- "in progress" and the action button "resume".
+    insert into reconciliations
+      (id, org_id, account_id, through_date, statement_balance, status, currency, signed_off_by, signed_off_at)
+    values (v_rec1, v_org, v_acct, current_date - 20, 12500.0000, 'signed_off', 'USD', v_user, now() - interval '2 days'),
+           (v_rec2, v_org, v_acct, current_date - 13, 12800.0000, 'signed_off', 'USD', v_user, now() - interval '1 day'),
+           (v_rec3, v_org, v_acct, current_date - 6, 13100.0000, 'in_progress', 'USD', null, null)
+    on conflict (id) do nothing;
+  end;
+
+
+  -- The simulator seeds the `site_visit` record type with a section shaped
+  -- `{key,type,label}`, but the forms-core schema wants `{id,type,label}` and
+  -- a section `id` — so `lintRecordFields` rejects it and the module 404s.
+  -- Repaired here rather than in the simulator: the harness needs the page to
+  -- render, and the invalid shape is the simulator's seed, not the product.
+  update custom_record_types
+     set fields = jsonb_build_array(jsonb_build_object(
+           'id', 'details',
+           'title', 'Details',
+           'fields', jsonb_build_array(
+             jsonb_build_object('id', 'visited_on', 'type', 'date', 'label', 'Visited on'),
+             jsonb_build_object('id', 'notes', 'type', 'long_text', 'label', 'Notes')
+           )
+         ))
+   where org_id = v_org and key = 'site_visit'
+     and not (fields @> '[{"id": "details"}]'::jsonb);
+
+  -- ---- custom record modules ----------------------------------------------
+  --
+  -- The simulator publishes a `site_visit` record type but never creates a
+  -- record of it, so /records/site_visit would only ever render its empty
+  -- state — the harness refuses to compare that and prove nothing about the
+  -- table path.
+  insert into custom_records
+    (id, org_id, type_id, type_key, record_number, data, search_text, status)
+  select v.id::uuid, v_org, t.id, 'site_visit', 'SV-00000' || v.n,
+         jsonb_build_object('visited_on', '2026-0' || v.n || '-15',
+                            'notes', 'Harness visit ' || v.n),
+         'sv-00000' || v.n || ' harness visit',
+         case when v.n = 1 then 'active' else 'draft' end
+    from (values
+      ('00000000-0000-7000-a000-000000000001', 1),
+      ('00000000-0000-7000-a000-000000000002', 2)) as v(id, n)
+    join custom_record_types t on t.org_id = v_org and t.key = 'site_visit'
+  on conflict (id) do nothing;
+
+  -- ---- sales forecasts -----------------------------------------------------
+  --
+  -- Two open opportunities in the current quarter, one overlapping quota and
+  -- one snapshot, so the KPI strips, the quota table and the history table all
+  -- have something to render. Dates are relative so the fixture keeps working
+  -- as the simulated clock moves.
+  declare
+    v_owner uuid;
+    v_proposal uuid;
+    v_negot uuid;
+    v_qstart date := date_trunc('month', current_date)::date;
+    v_qend date := (date_trunc('month', current_date) + interval '3 months' - interval '1 day')::date;
+  begin
+    select id into v_owner from users where org_id = v_org order by created_at limit 1;
+    select id into v_proposal from crm_opportunity_statuses
+     where org_id = v_org and not is_closed order by sequence limit 1;
+    select id into v_negot from crm_opportunity_statuses
+     where org_id = v_org and not is_closed order by sequence desc limit 1;
+    if v_owner is null or v_proposal is null then
+      raise notice 'no CRM statuses or users; skipping forecast fixtures';
+      return;
+    end if;
+
+    insert into crm_opportunities
+      (id, org_id, opportunity_number, title, owner_user_id, status_id, expected_close_date,
+       forecast_category, probability, currency, projected_amount, weighted_amount, is_active)
+    values
+      ('00000000-0000-7000-a000-000000000001', v_org, 'VS-FC-1', 'ViewSpec forecast conformance A',
+       v_owner, v_proposal, current_date + 10, 'most_likely', 50, 'USD', 10000, 5000, true),
+      ('00000000-0000-7000-a000-000000000002', v_org, 'VS-FC-2', 'ViewSpec forecast conformance B',
+       v_owner, v_negot, current_date + 20, 'upside', 75, 'USD', 20000, 15000, true)
+    on conflict (id) do nothing;
+
+    insert into crm_sales_quotas (id, org_id, owner_user_id, period_start, period_end, currency, amount)
+    values ('00000000-0000-7000-a000-000000000010', v_org, v_owner, v_qstart, v_qend, 'USD', 50000)
+    on conflict (id) do nothing;
+
+    insert into crm_forecast_snapshots
+      (id, org_id, owner_user_id, period_start, period_end, as_of, snapshot_kind, currency,
+       pipeline_amount, weighted_amount, worst_case_amount, most_likely_amount, upside_amount, closed_amount)
+    values ('00000000-0000-7000-a000-000000000020', v_org, v_owner, v_qstart, v_qend, now(),
+            'calculated', 'USD', 30000, 20000, 0, 10000, 20000, 0)
+    on conflict (id) do nothing;
+  end;
 end $$;
