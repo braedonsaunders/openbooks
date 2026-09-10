@@ -20,6 +20,8 @@ import {
   platformEmails,
   type PlatformEmail,
 } from "../../../../lib/platform-admin";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadEmailLog, emailLogSpec } from "./view";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +68,16 @@ export default async function PlatformEmailLogPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
+  if (sp.__viewspec === "1") {
+    const data = await loadEmailLog(sp);
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={emailLogSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    );
+  }
   const statusParam = pickString(sp.status);
   const status = STATUSES.includes(statusParam as PlatformEmail["status"])
     ? (statusParam as PlatformEmail["status"])
