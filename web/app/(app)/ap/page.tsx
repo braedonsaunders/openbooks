@@ -1,16 +1,16 @@
 import { getTranslations } from 'next-intl/server'
-import Link from 'next/link'
-import { ScanLine } from 'lucide-react'
-import { Button, PageHeader } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { ModuleHomeTabs } from '../../../components/module-home/ui'
 import { groupTabs } from '../../../components/module-home/group-tabs'
-import { NewDocumentButton } from '../../../components/new-document-button'
 import { requirePermission, can } from '../../../lib/authz'
 import { analyticsConfig } from '../../../lib/analytics/config'
 import { normalizeMoneyValue, withoutWeekEntries } from '../../../lib/cash/core'
 import { apPosition } from '../../../lib/cash/ap-position'
 import { ApCockpit } from './cockpit/ApCockpit'
+import { ApHeaderActions } from './sections'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadApCockpit, apCockpitSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,31 +23,44 @@ export async function generateMetadata() {
  * Accounts Payable — the payables control center (vitals + pay-run planner +
  * aging). The bills list is its own first-class route at /ap/bills.
  */
-export default async function AP() {
+// `searchParams` is OPTIONAL because cash-scope.integration.test.ts calls
+// this component directly with no arguments — the same accommodation /ar
+// needed. A required prop here turns a passing test into a type error.
+export default async function AP({
+  searchParams = Promise.resolve({}),
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+} = {}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadApCockpit()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={apCockpitSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('ap.read')
   const canCreate = can(authz, 'ap.create')
   const t = await getTranslations('ap')
   const tCommon = await getTranslations('common')
 
-  const newButton = canCreate ? (
-    <NewDocumentButton
-      items={[
+  const headerActions = (
+    <ApHeaderActions
+      captureHref="/ap/capture"
+      captureLabel={t('actions.capture')}
+      canCreate={canCreate}
+      newItems={[
         { kind: 'vendor_bill', label: t('actions.newBill') },
         { kind: 'vendor_credit', label: t('actions.newCredit') ?? t('actions.newBill') },
       ]}
-      basePath="/ap/bills"
-      triggerLabel={t('actions.newBill')}
-      creatingLabel={tCommon('actions.creating')}
-      failedLabel={t('toasts.createDraftFailed')}
+      newBasePath="/ap/bills"
+      newTriggerLabel={t('actions.newBill')}
+      newCreatingLabel={tCommon('actions.creating')}
+      newFailedLabel={t('toasts.createDraftFailed')}
     />
-  ) : undefined
-  const headerActions = (
-    <div className="flex items-center gap-2">
-      <Button variant="outline" asChild>
-        <Link href="/ap/capture"><ScanLine size={14} />{t('actions.capture')}</Link>
-      </Button>
-      {newButton}
-    </div>
   )
 
   const tabs = <ModuleHomeTabs tabs={await groupTabs('purchasing', '/ap', { orgId: authz.user.orgId })} />

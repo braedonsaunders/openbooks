@@ -780,6 +780,63 @@ const PAGES = [
     expect: 'main a[href^="/docs/"]',
     minMatches: 1,
   },
+  {
+    path: '/expenses',
+    // Cockpit: 5 vitals tiles, a trend panel, the (empty) approval queue and
+    // the categories panel. The Breakdown sub-view is client state.
+    variants: [''],
+    expect: 'section h3',
+    minMatches: 3,
+  },
+  {
+    path: '/ap',
+    variants: [{ query: '', expect: 'main h1, main h3', minMatches: 2 }],
+    expect: 'main h1, main h3',
+    minMatches: 2,
+  },
+  {
+    path: '/collections',
+    // Neither subscription feature is on in this tenant, and the recurring
+    // and dunning lists fetch client-side and come back empty — so the pinned
+    // content is the tab bar, the panel headings and the translated empty
+    // rows. No fixture can change that: those rows live behind fetch, not the
+    // loader.
+    variants: [{ query: '', expect: 'main button, main h3, main td', minMatches: 8 }],
+    expect: 'main button',
+    minMatches: 3,
+  },
+  {
+    path: '/subcontracts',
+    // The register is client-fetched but renders whatever the tenant holds,
+    // and the tenant held nothing — fixture …0801-0802 is what makes this
+    // comparison mean anything. Tabs and drawers have no URL affordance.
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
+    path: '/documents/trash',
+    // Fixture …5811-5814: one trashed folder + one trashed file.
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/data/export',
+    // Zero server data: `ExportClient` fetches its own descriptors after
+    // mount, so the pin is the static chrome that exists before any fetch.
+    variants: [''],
+    expect: 'main h1',
+    minMatches: 1,
+  },
+  {
+    path: '/data/import',
+    // Likewise zero server data. The source-step textarea renders
+    // synchronously with no fetch dependency.
+    variants: [''],
+    expect: 'main textarea',
+    minMatches: 1,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole

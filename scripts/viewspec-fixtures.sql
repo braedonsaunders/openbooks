@@ -21,6 +21,7 @@
 --   …0401-0499  banking statements, reconciliations and their journal entry
 --   …0501-0599  banking transactions (checks, deposits)
 --   …0601-0699  sales orders          …0701-0799  quotes
+--   …0801-0899  subcontracts and their schedule-of-values lines
 --   …0901-0999  purchase orders
 --   …1801-1899  payroll schedules and runs
 --   …2801-2899  field tickets
@@ -163,7 +164,8 @@ begin
              'orders', true,
              'queryConsole', true,
              'propertyManagement', true,
-             'bankFeeds', true))
+             'bankFeeds', true,
+             'subcontracts', true))
    where id = v_org;
 
   -- ---- approvals -----------------------------------------------------------
@@ -1650,5 +1652,63 @@ begin
   select '00000000-0000-7000-9000-000000009803', v_org, 'viewspec-lib-nodesc',
          'ViewSpec nodesc listing', null, '0.9.0', true
    where not exists (select 1 from app_listings where key = 'viewspec-lib-nodesc');
+
+  -- ---- document trash (/documents/trash) -----------------------------------
+  -- The simulator never deletes cabinet rows, so /documents/trash would
+  -- compare two identical empty states. One trashed folder plus one trashed
+  -- file in an ACTIVE location folder (so the `inLocation` branch renders),
+  -- both inactive but neither private nor system, so the harness admin sees
+  -- them through listTrash's visibility predicates. Block …5811-5814.
+  insert into folders (id, org_id, parent_folder_id, name, is_inactive)
+  values ('00000000-0000-7000-9000-000000005811', v_org, null, 'ViewSpec Trashed Folder', true),
+         ('00000000-0000-7000-9000-000000005813', v_org, null, 'ViewSpec Trash Location', false)
+  on conflict (id) do nothing;
+
+  insert into files
+    (id, org_id, folder_id, name, extension, file_type, content_type,
+     size_bytes, storage_kind, content_hash, is_inactive)
+  values
+    ('00000000-0000-7000-9000-000000005812', v_org,
+     '00000000-0000-7000-9000-000000005813', 'viewspec-trashed.txt', 'txt',
+     'text', 'text/plain', 42, 'db', 'viewspec-trash-file-5812', true)
+  on conflict (id) do nothing;
+
+  insert into file_versions (id, file_id, version_number, size_bytes, content_type)
+  values ('00000000-0000-7000-9000-000000005814',
+          '00000000-0000-7000-9000-000000005812', 1, 42, 'text/plain')
+  on conflict (id) do nothing;
+
+  -- ---- subcontracts (/subcontracts) ----------------------------------------
+  -- The register table is client-fetched, but it renders whatever the tenant
+  -- holds and the tenant holds nothing — so both paths would show the
+  -- "No subcontracts yet" state, which is the comparison the harness refuses.
+  -- One `active` subcontract (it sorts first in the register's ORDER BY CASE)
+  -- with one SOV line. Block …0801-0802.
+  --
+  -- Project and vendor resolve LIVE by name rather than by hardcoded id: the
+  -- simulator regenerates ids on every reseed, and a stale uuid here would
+  -- either violate the FK or, worse, point at the wrong tenant's row.
+  -- `(org_id, number)` is unique, so the guard is on `number`.
+  insert into subcontracts
+    (id, org_id, project_id, vendor_id, number, title, status, currency,
+     original_commitment, default_retainage_percent)
+  select '00000000-0000-7000-9000-000000000801', v_org, p.id, v.id,
+         'VSPEC-001', 'ViewSpec conformance subcontract', 'active', 'USD',
+         100000, 10
+    from (select id from projects
+           where org_id = v_org and is_active order by name limit 1) p,
+         (select pa.id from parties pa
+            join vendor_roles vr on vr.party_id = pa.id and vr.org_id = pa.org_id
+           where pa.org_id = v_org and vr.is_active
+           order by pa.display_name limit 1) v
+   where not exists (select 1 from subcontracts where org_id = v_org and number = 'VSPEC-001');
+
+  insert into subcontract_sov_lines
+    (id, org_id, subcontract_id, description, scheduled_value, sort_order)
+  select '00000000-0000-7000-9000-000000000802', v_org,
+         '00000000-0000-7000-9000-000000000801', 'Conformance SOV line', 100000, 0
+   where exists (select 1 from subcontracts where id = '00000000-0000-7000-9000-000000000801')
+     and not exists (select 1 from subcontract_sov_lines
+                      where id = '00000000-0000-7000-9000-000000000802');
 
 end $$;

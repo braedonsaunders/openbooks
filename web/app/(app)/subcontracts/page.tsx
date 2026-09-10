@@ -6,10 +6,27 @@ import { can, requirePermission } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 import { requireSubcontractsFeature } from "../../../lib/subcontracts-gate";
 import { SubcontractsWorkspace } from "./SubcontractsWorkspace";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadSubcontracts, subcontractsSpec } from "./view";
 
 export const dynamic = "force-dynamic";
 
-export default async function SubcontractsPage() {
+export default async function SubcontractsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadSubcontracts(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={subcontractsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission("ap.read");
   await requireSubcontractsFeature(authz.user.orgId);
   const orgId = authz.user.orgId;
