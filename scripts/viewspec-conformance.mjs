@@ -1103,6 +1103,16 @@ const PAGES = [
     expect: 'main div.space-y-3 div.p-4',
     minMatches: 2,
   },
+  {
+    path: '/',
+    // The app root renders the same dashboard as /dashboard, and reuses its
+    // registry entries unchanged — including the `dashboard-grid` SLOT, which
+    // re-derives layout, tile nodes and the bound save action from the
+    // session. Two pages, one slot, no second copy of the capability.
+    variants: [''],
+    expect: 'main a[href="/dashboard/customize"]',
+    minMatches: 1,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole
