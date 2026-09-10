@@ -6,6 +6,12 @@ import { Badge, Button, DetailHeader, EmptyState, PageHeader } from '@openbooks/
 import { ListPageLayout } from '../../../../../components/page-layout'
 import { Pagination } from '../../../../../components/pagination'
 import { isUuid, parseListParams } from '../../../../../lib/list-params'
+import { SavedViewHeader, SavedViewMeta } from './sections'
+// One definition of the page size and the client-side pager, shared by both
+// render paths.
+import { PER_PAGE, paginateResult } from './view'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { loadSavedViewRun, savedViewRunSpec } from './view'
 import { dateTime } from '../../../../../lib/format'
 import { requirePermission } from '../../../../../lib/authz'
 import { canRunReportEntity } from '../../../../../lib/report-authz'
@@ -17,32 +23,6 @@ import { ReportPaper } from '../../../reports/ReportPaper'
 
 export const dynamic = 'force-dynamic'
 
-const PER_PAGE = 50
-
-/**
- * Slice a run result to one page of rows, preserving group boundaries (a page
- * can straddle sections). The summary band keeps the FULL run's figures so
- * "Rows: 1,234" stays truthful while the table shows 50 at a time.
- */
-function paginateResult(result: ReportRunResult, page: number, perPage: number): ReportRunResult {
-  const start = (page - 1) * perPage
-  const end = start + perPage
-  let offset = 0
-  const groups = result.groups
-    .map((g) => {
-      const gStart = offset
-      offset += g.rows.length
-      const from = Math.max(start - gStart, 0)
-      const to = Math.min(end - gStart, g.rows.length)
-      if (from >= g.rows.length || to <= 0) return null
-      return { ...g, rows: g.rows.slice(from, to) }
-    })
-    .filter((g): g is NonNullable<typeof g> => g !== null)
-  // An empty page (out of range) keeps the first group shell so the header row
-  // still renders; the empty state below covers the zero-rows case.
-  return { ...result, groups: groups.length ? groups : result.groups.slice(0, 1) }
-}
-
 export default async function ViewRunPage({
   params,
   searchParams,
@@ -50,6 +30,17 @@ export default async function ViewRunPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const sp0 = await searchParams
+  if (sp0.__viewspec === '1') {
+    const data = await loadSavedViewRun(await params, sp0)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={savedViewRunSpec(data)} data={data} searchParams={sp0} trusted />
+      </>
+    )
+  }
   const t = await getTranslations('knowledge.views')
   const tReports = await getTranslations('reports')
   const tc = await getTranslations('common')
@@ -101,39 +92,29 @@ export default async function ViewRunPage({
     <ListPageLayout
       header={
         <>
-          <DetailHeader
-            title={view.name}
-            badge={
-              <Badge variant={view.scope === 'shared' ? 'secondary' : 'outline'}>
-                {t(`list.scope.${view.scope}` as never)}
-              </Badge>
-            }
+          <SavedViewHeader
+            viewId={view.id}
+            name={view.name}
+            scope={view.scope}
+            scopeLabel={t(`list.scope.${view.scope}` as never)}
             subtitle={view.description || t('run.refreshHint')}
-            back={{ href: '/knowledge/views', label: t('run.backToList') }}
-            actions={
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <a href={`/api/views/${view.id}/export?format=pdf`}><FileText size={15} /> {t('studio.exportPdf')}</a>
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <a href={`/api/views/${view.id}/export?format=xlsx`}><Download size={15} /> {t('studio.exportXlsx')}</a>
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <a href={`/api/views/${view.id}/export?format=csv`}><Download size={15} /> {t('studio.exportCsv')}</a>
-                </Button>
-                {canEdit ? (
-                  <Button size="sm" asChild>
-                    <Link href={`/knowledge/views?view=${view.id}`}><Pencil size={14} /> {t('run.editSearch')}</Link>
-                  </Button>
-                ) : null}
-              </div>
+            backHref="/knowledge/views"
+            backLabel={t('run.backToList')}
+            canEdit={canEdit}
+            labels={{
+              exportPdf: t('studio.exportPdf'),
+              exportXlsx: t('studio.exportXlsx'),
+              exportCsv: t('studio.exportCsv'),
+              edit: t('run.editSearch'),
+            }}
+          />
+          <SavedViewMeta
+            typeLabel={`${tc('labels.type')}: ${entityLabel}`}
+            lastUpdated={t('run.lastUpdated', { when: dateTime(view.updated_at) })}
+            rowsRange={
+              result.rowCount > 0 ? t('run.rowsRange', { from, to, total: result.rowCount }) : null
             }
           />
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-            <span>{tc('labels.type')}: {entityLabel}</span>
-            <span>{t('run.lastUpdated', { when: dateTime(view.updated_at) })}</span>
-            {result.rowCount > 0 ? <span>{t('run.rowsRange', { from, to, total: result.rowCount })}</span> : null}
-          </div>
         </>
       }
     >
