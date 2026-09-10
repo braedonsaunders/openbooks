@@ -77,7 +77,26 @@ import { AdminHubCard } from '../../app/(app)/admin/sections'
 import { BuildHubCard } from '../../app/(app)/admin/build/sections'
 import { MatchWorkspace } from '../../app/(app)/banking/match/MatchWorkspace'
 import { BalanceCheck } from '../../app/(app)/reports/balance-sheet/sections'
+import { Library, ArrowLeft } from 'lucide-react'
+import { AppsToolbar, AppDrawer } from '../../app/(app)/admin/apps/AppDrawer'
+import { CrmSetupWorkspace } from '../../app/(app)/admin/setup/crm/CrmSetupWorkspace'
+import { AppKeyCell } from '../../app/(app)/admin/apps/sections'
+import { CaptureList } from '../../app/(app)/ap/capture/sections'
+import { CaptureReviewDrawer } from '../../app/(app)/ap/capture/CaptureReviewDrawer'
+import { CaptureUploadButton } from '../../app/(app)/ap/capture/CaptureUploadButton'
+import { ProjectProfitabilityTable } from '../../app/(app)/reports/project-profitability/ProjectProfitabilityTable'
+import {
+  OverheadApplicationTabSlot,
+  OverheadLifecycleTabSlot,
+  OverheadModelBody,
+  OverheadModelHeader,
+  OverheadRatesTabSlot,
+} from '../../app/(app)/admin/setup/overhead/sections'
 import { SavedViewHeader, SavedViewMeta } from '../../app/(app)/knowledge/views/[id]/sections'
+import {
+  SetupReadinessCheckCard,
+  SetupReadinessHero,
+} from '../../app/(app)/admin/setup/readiness/sections'
 import { ResultView } from '../../app/(app)/reports/custom/ResultView'
 import { PaperView } from '../../app/(app)/reports/PaperView'
 import {
@@ -838,6 +857,142 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       data={props.data as ComponentProps<typeof PaperView>['data']}
     />
   ),
+  /* --- crm setup -------------------------------------------------------------- */
+  /** One client island, like the labor-costing workspace. Six per-tab column
+   *  sets with row-click routing are a six-way conditional pair, not presence,
+   *  and neither table variant can carry row navigation. */
+  'crm-setup-workspace': (props) => (
+    <CrmSetupWorkspace {...(props as ComponentProps<typeof CrmSetupWorkspace>)} />
+  ),
+
+  /* --- admin apps ------------------------------------------------------------ */
+  /** Not `link-button` (solid, no icon) and not `docs-link-button` (BookOpen):
+   *  the native action is outline-small with a 15px Library icon. Diffed. */
+  'apps-library-button': (props) => {
+    const href = str(props, 'href')
+    if (!href) return null
+    return (
+      <Button asChild variant="outline" size="sm">
+        <Link href={href as never}>
+          <Library size={15} /> {str(props, 'label') ?? ''}
+        </Link>
+      </Button>
+    )
+  },
+  'apps-toolbar': () => <AppsToolbar />,
+  'app-key-cell': (props) => <AppKeyCell appKey={str(props, 'appKey') ?? ''} />,
+  /** The whole app flyout stays one widget: its body is three tabs of per-row
+   *  client state (dirty flags, selected file, open dirs) — a workspace, not a
+   *  spec. */
+  'app-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof AppDrawer> | null
+    if (!drawer) return null
+    return <AppDrawer {...drawer} />
+  },
+
+  /* --- AP capture ------------------------------------------------------------ */
+  /** Diffed against `plain-link-button` (Link outside Button, no icon) and
+   *  `docs-link-button` (small, 14px icon, no space): neither renders this
+   *  shape, so it keeps its own entry. */
+  'back-link-button': (props) => {
+    const href = str(props, 'href')
+    if (!href) return null
+    return (
+      <Button asChild variant="outline">
+        <Link href={href as never}>
+          <ArrowLeft size={14} />
+          {str(props, 'label') ?? ''}
+        </Link>
+      </Button>
+    )
+  },
+  /** The button owns its own label; the spec only gates it. */
+  'capture-upload': (props) => <CaptureUploadButton disabled={props.disabled === true} />,
+  /** A widget, not a `table` block — the same call `AdminUsersTable` made. It
+   *  owns row selection, per-row checkboxes (materialized rows unselectable)
+   *  and three bulk actions; neither table variant can name that. */
+  'capture-list': (props) => <CaptureList {...(props as ComponentProps<typeof CaptureList>)} />,
+  /** The not-configured banner text with an optional configure link. */
+  'capture-not-configured': (props) => (
+    <>
+      {str(props, 'text') ?? ''}{' '}
+      {props.showConfigureLink === true ? (
+        <Link
+          href={(str(props, 'configureHref') ?? '/admin/ai') as never}
+          className="font-medium underline"
+        >
+          {str(props, 'configureLabel') ?? ''}
+        </Link>
+      ) : null}
+    </>
+  ),
+  'capture-review-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof CaptureReviewDrawer> | null
+    if (!drawer) return null
+    return <CaptureReviewDrawer {...drawer} />
+  },
+
+  /* --- project profitability -------------------------------------------------- */
+  /** Not `paper-view`: that would restyle the page's section wrappers and
+   *  silently drop the negative-money colouring. Diffed, kept separate. */
+  'project-profitability-table': (props) => (
+    <ProjectProfitabilityTable {...(props as ComponentProps<typeof ProjectProfitabilityTable>)} />
+  ),
+
+  /* --- overhead model --------------------------------------------------------- */
+  'overhead-model-header': (props) => (
+    <OverheadModelHeader {...(props as ComponentProps<typeof OverheadModelHeader>)} />
+  ),
+  'overhead-model-body': (props) => (
+    <OverheadModelBody {...(props as ComponentProps<typeof OverheadModelBody>)} />
+  ),
+  'overhead-rates-tab': (props) => (
+    <OverheadRatesTabSlot {...(props as ComponentProps<typeof OverheadRatesTabSlot>)} />
+  ),
+  'overhead-lifecycle-tab': () => <OverheadLifecycleTabSlot />,
+  'overhead-application-tab': () => <OverheadApplicationTabSlot />,
+
+  /* --- setup readiness -------------------------------------------------------- */
+  //
+  // NOT the existing `readiness-panel`: that one renders the compliance 1099
+  // queue and shares no markup with this page. Two names, two components.
+  'setup-readiness-hero': (props) => (
+    <SetupReadinessHero
+      kicker={str(props, 'kicker') ?? ''}
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      badgeLabel={str(props, 'badgeLabel') ?? ''}
+      badgeReady={props.badgeReady === true}
+      progressLabel={str(props, 'progressLabel') ?? ''}
+      progressCount={Number(props.progressCount ?? 0)}
+      progressTotal={Number(props.progressTotal ?? 0)}
+      progressPercent={Number(props.progressPercent ?? 0)}
+      progressMin={Number(props.progressMin ?? 0)}
+      progressMax={Number(props.progressMax ?? 0)}
+      progressNow={Number(props.progressNow ?? 0)}
+    />
+  ),
+  /** `state` is a closed complete | review | waiting vocabulary the loader
+   *  resolves; the component switches icon and tile classes on it, never the
+   *  spec. */
+  'setup-readiness-check-card': (props) => (
+    <SetupReadinessCheckCard
+      indexLabel={str(props, 'indexLabel') ?? ''}
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      href={str(props, 'href') ?? ''}
+      action={str(props, 'action') ?? ''}
+      state={
+        str(props, 'state') === 'review'
+          ? 'review'
+          : str(props, 'state') === 'waiting'
+            ? 'waiting'
+            : 'complete'
+      }
+      stateLabel={str(props, 'stateLabel') ?? ''}
+    />
+  ),
+
   /* --- saved view run --------------------------------------------------------- */
   'saved-view-header': (props) => (
     <SavedViewHeader

@@ -1,10 +1,10 @@
-import Link from 'next/link'
 import { sql } from 'drizzle-orm'
-import { CheckCircle2, CircleAlert, CircleDashed, Sparkles } from 'lucide-react'
 import { db } from '@openbooks/engine/src/db.ts'
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@openbooks/ui'
 import { requirePermission } from '../../../../../lib/authz'
 import { onboardingStatus } from '../../../../../lib/onboarding'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { loadSetupReadiness, setupReadinessSpec } from './view'
+import { SetupReadinessCheckCard, SetupReadinessHero } from './sections'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +16,22 @@ type Check = {
   state: 'complete' | 'review' | 'waiting'
 }
 
-export default async function SetupReadinessPage() {
+export default async function SetupReadinessPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadSetupReadiness()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={setupReadinessSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const { user } = await requirePermission('admin.setup.manage')
   const result = (await db.execute<Record<string, any>>(sql`
     select o.name, o.legal_name, o.base_currency, o.country, o.settings,
@@ -124,58 +139,30 @@ export default async function SetupReadinessPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden">
-        <CardHeader className="space-y-5 p-6 sm:p-7">
-          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
-            <div className="flex min-w-0 items-start gap-4">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300">
-                <Sparkles size={20} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-teal-700 dark:text-teal-300">Go-live guide</p>
-                <CardTitle className="mt-1 text-xl">Make the first posting boring—in the best way.</CardTitle>
-                <CardDescription className="mt-2 max-w-2xl leading-relaxed">
-                  OpenBooks has shaped the workspace around your company. This guide verifies the decisions that make invoices, bills, banking, and period close reliable from day one.
-                </CardDescription>
-              </div>
-            </div>
-            <Badge variant={hardReady ? 'success' : 'warning'} className="shrink-0 self-start">
-              {hardReady ? 'Accounting foundation ready' : 'Foundation needs attention'}
-            </Badge>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span className="font-medium text-slate-700 dark:text-slate-200">Setup progress</span>
-              <span className="tabular-nums text-slate-500 dark:text-slate-400">{complete} of {checks.length} areas prepared</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800" role="progressbar" aria-label="Setup progress" aria-valuemin={0} aria-valuemax={checks.length} aria-valuenow={complete}>
-              <div className="h-full rounded-full bg-teal-600 transition-[width]" style={{ width: `${Math.round((complete / checks.length) * 100)}%` }} />
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+      <SetupReadinessHero
+        kicker="Go-live guide"
+        title="Make the first posting boring—in the best way."
+        description="OpenBooks has shaped the workspace around your company. This guide verifies the decisions that make invoices, bills, banking, and period close reliable from day one."
+        badgeLabel={hardReady ? 'Accounting foundation ready' : 'Foundation needs attention'}
+        badgeReady={hardReady}
+        progressLabel="Setup progress"
+        progressCount={complete}
+        progressTotal={checks.length}
+        progressPercent={Math.round((complete / checks.length) * 100)}
+        progressMin={0}
+        progressMax={checks.length}
+        progressNow={complete}
+      />
 
       <div className="space-y-3">
-        {checks.map((item, index) => {
-          const Icon = item.state === 'complete' ? CheckCircle2 : item.state === 'review' ? CircleAlert : CircleDashed
-          return (
-            <Card key={item.title} className="overflow-hidden">
-              <CardHeader className="pb-3">
-                <div className="flex items-start gap-4">
-                  <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${item.state === 'complete' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950' : item.state === 'review' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>
-                    <Icon size={18} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-slate-400">{index + 1}</span><CardTitle className="text-base">{item.title}</CardTitle></div>
-                    <CardDescription className="mt-1">{item.description}</CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" asChild><Link href={(item.href)}>{item.action}</Link></Button>
-                </div>
-              </CardHeader>
-              <CardContent className="sr-only">{item.state}</CardContent>
-            </Card>
-          )
-        })}
+        {checks.map((item, index) => (
+          <SetupReadinessCheckCard
+            key={item.title}
+            {...item}
+            indexLabel={String(index + 1)}
+            stateLabel={item.state}
+          />
+        ))}
       </div>
     </div>
   )

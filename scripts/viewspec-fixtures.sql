@@ -29,6 +29,8 @@
 --   …5801-5899  file cabinet folders, files, versions
 --   …6801-6899  tax return forms and filings
 --   …7801-7899  psp settlement batches
+--   …1101-1199  installed apps
+--   …2001-2099  AP capture documents
 --   …8801-8899  labor bill rate books
 --   …1901-1999  pay stubs, employee profiles, wage rates
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
@@ -859,83 +861,92 @@ begin
   -- result set (see the INTEGRATION.md for that page). The drawer variant
   -- opens the scoped version with one scope, one adjustment, one term and
   -- one line.
-  insert into item_rate_books (id, org_id, code, name, currency, is_active)
-  values
-    ('00000000-0000-7000-9000-000000008801', v_org, 'STD-2025', 'Standard bill rates', 'USD', true),
-    ('00000000-0000-7000-9000-000000008802', v_org, 'OT-2025', 'Overtime bill rates', 'USD', true)
-  on conflict (id) do nothing;
+  -- Guarded by existence, not ON CONFLICT. Every child of a rate version is
+  -- immutable once the version leaves draft, and this block ACTIVATES its
+  -- versions at the end — so a second run would try to insert children under
+  -- an activated version and be refused by the engine. Idempotence has to be
+  -- checked before the statements, not by them.
+  if not exists (
+    select 1 from item_rate_versions where id = '00000000-0000-7000-9000-000000008811'
+  ) then
+    insert into item_rate_books (id, org_id, code, name, currency, is_active)
+    values
+      ('00000000-0000-7000-9000-000000008801', v_org, 'STD-2025', 'Standard bill rates', 'USD', true),
+      ('00000000-0000-7000-9000-000000008802', v_org, 'OT-2025', 'Overtime bill rates', 'USD', true)
+    on conflict (id) do nothing;
 
-  -- Versions go in as DRAFT and are activated at the end of this block: the
-  -- children of an activated or retired version are immutable, so building
-  -- them in their final state first makes the scopes, policies and lines
-  -- unwritable. The product enforces the same order.
-  insert into item_rate_versions (id, org_id, rate_book_id, effective_from, effective_to, status)
-  values
-    ('00000000-0000-7000-9000-000000008811', v_org, '00000000-0000-7000-9000-000000008801', '2025-01-01', null, 'draft'),
-    ('00000000-0000-7000-9000-000000008812', v_org, '00000000-0000-7000-9000-000000008802', '2024-01-01', null, 'draft'),
-    ('00000000-0000-7000-9000-000000008813', v_org, '00000000-0000-7000-9000-000000008801', '2024-01-01', '2024-06-30', 'draft')
-  on conflict (id) do nothing;
+    -- Versions go in as DRAFT and are activated at the end of this block: the
+    -- children of an activated or retired version are immutable, so building
+    -- them in their final state first makes the scopes, policies and lines
+    -- unwritable. The product enforces the same order.
+    insert into item_rate_versions (id, org_id, rate_book_id, effective_from, effective_to, status)
+    values
+      ('00000000-0000-7000-9000-000000008811', v_org, '00000000-0000-7000-9000-000000008801', '2025-01-01', null, 'draft'),
+      ('00000000-0000-7000-9000-000000008812', v_org, '00000000-0000-7000-9000-000000008802', '2024-01-01', null, 'draft'),
+      ('00000000-0000-7000-9000-000000008813', v_org, '00000000-0000-7000-9000-000000008801', '2024-01-01', '2024-06-30', 'draft')
+    on conflict (id) do nothing;
 
-  insert into labor_rate_version_policies (id, org_id, version_id, derivation_policy)
-  values
-    ('00000000-0000-7000-9000-000000008821', v_org, '00000000-0000-7000-9000-000000008811', 'explicit'),
-    ('00000000-0000-7000-9000-000000008822', v_org, '00000000-0000-7000-9000-000000008812', 'explicit'),
-    ('00000000-0000-7000-9000-000000008823', v_org, '00000000-0000-7000-9000-000000008813', 'explicit')
-  on conflict (id) do nothing;
+    insert into labor_rate_version_policies (id, org_id, version_id, derivation_policy)
+    values
+      ('00000000-0000-7000-9000-000000008821', v_org, '00000000-0000-7000-9000-000000008811', 'explicit'),
+      ('00000000-0000-7000-9000-000000008822', v_org, '00000000-0000-7000-9000-000000008812', 'explicit'),
+      ('00000000-0000-7000-9000-000000008823', v_org, '00000000-0000-7000-9000-000000008813', 'explicit')
+    on conflict (id) do nothing;
 
-  -- One department scope on the drawer version only (makes ?dimension=unscoped
-  -- a strict subset of the default). The department is fixture-owned so the
-  -- scope-label subselect resolves a name rather than null.
-  insert into departments (id, org_id, code, name, is_active)
-  values ('00000000-0000-7000-9000-000000008831', v_org, 'FIELD', 'Field operations', true)
-  on conflict (id) do nothing;
+    -- One department scope on the drawer version only (makes ?dimension=unscoped
+    -- a strict subset of the default). The department is fixture-owned so the
+    -- scope-label subselect resolves a name rather than null.
+    insert into departments (id, org_id, code, name, is_active)
+    values ('00000000-0000-7000-9000-000000008831', v_org, 'FIELD', 'Field operations', true)
+    on conflict (id) do nothing;
 
-  insert into labor_rate_version_scopes (id, org_id, version_id, scope_type, scope_value_id, scope_value_text, include_children)
-  values ('00000000-0000-7000-9000-000000008841', v_org, '00000000-0000-7000-9000-000000008811', 'department', '00000000-0000-7000-9000-000000008831', null, false)
-  on conflict (id) do nothing;
+    insert into labor_rate_version_scopes (id, org_id, version_id, scope_type, scope_value_id, scope_value_text, include_children)
+    values ('00000000-0000-7000-9000-000000008841', v_org, '00000000-0000-7000-9000-000000008811', 'department', '00000000-0000-7000-9000-000000008831', null, false)
+    on conflict (id) do nothing;
 
-  -- One billable item + one line on the drawer version (the lines aggregate
-  -- joins items, so the item must exist; kind/category feed the picker
-  -- dimensions).
-  insert into items (id, org_id, name, kind, category, is_active)
-  values ('00000000-0000-7000-9000-000000008851', v_org, 'Journeyman electrician', 'labor', 'field', true)
-  on conflict (id) do nothing;
+    -- One billable item + one line on the drawer version (the lines aggregate
+    -- joins items, so the item must exist; kind/category feed the picker
+    -- dimensions).
+    insert into items (id, org_id, name, kind, category, is_active)
+    values ('00000000-0000-7000-9000-000000008851', v_org, 'Journeyman electrician', 'labor', 'field', true)
+    on conflict (id) do nothing;
 
-  insert into item_rate_lines (id, org_id, version_id, item_id, unit_code, unit_name, base_quantity, bill_rate, sort_order)
-  values ('00000000-0000-7000-9000-000000008861', v_org, '00000000-0000-7000-9000-000000008811', '00000000-0000-7000-9000-000000008851', 'hour', 'Hour', 1, 95.00, 1)
-  on conflict (id) do nothing;
+    insert into item_rate_lines (id, org_id, version_id, item_id, unit_code, unit_name, base_quantity, bill_rate, sort_order)
+    values ('00000000-0000-7000-9000-000000008861', v_org, '00000000-0000-7000-9000-000000008811', '00000000-0000-7000-9000-000000008851', 'hour', 'Hour', 1, 95.00, 1)
+    on conflict (id) do nothing;
 
-  -- One adjustment with a free-text target (satisfies the one-value check
-  -- via target_value_text) plus one term on the drawer version.
-  insert into labor_rate_adjustments
-    (id, org_id, version_id, code, name, category, calculation, value, unit,
-     presentation, sort_order, is_active, applies_regular, applies_overtime,
-     applies_double_time, applies_shift)
-  values ('00000000-0000-7000-9000-000000008871', v_org, '00000000-0000-7000-9000-000000008811',
-    'NIGHT', 'Night premium', 'surcharge', 'percent', 10.00, 'percent',
-    'separate', 1, true, true, true, false, false)
-  on conflict (id) do nothing;
+    -- One adjustment with a free-text target (satisfies the one-value check
+    -- via target_value_text) plus one term on the drawer version.
+    insert into labor_rate_adjustments
+      (id, org_id, version_id, code, name, category, calculation, value, unit,
+       presentation, sort_order, is_active, applies_regular, applies_overtime,
+       applies_double_time, applies_shift)
+    values ('00000000-0000-7000-9000-000000008871', v_org, '00000000-0000-7000-9000-000000008811',
+      'NIGHT', 'Night premium', 'surcharge', 'percent', 10.00, 'percent',
+      'separate', 1, true, true, true, false, false)
+    on conflict (id) do nothing;
 
 
-  insert into labor_rate_adjustment_targets (id, org_id, adjustment_id, target_type, target_value_id, target_value_text, include_children)
-  values ('00000000-0000-7000-9000-000000008881', v_org, '00000000-0000-7000-9000-000000008871', 'other', null, 'Night shift', false)
-  on conflict (id) do nothing;
+    insert into labor_rate_adjustment_targets (id, org_id, adjustment_id, target_type, target_value_id, target_value_text, include_children)
+    values ('00000000-0000-7000-9000-000000008881', v_org, '00000000-0000-7000-9000-000000008871', 'other', null, 'Night shift', false)
+    on conflict (id) do nothing;
 
-  insert into labor_rate_terms (id, org_id, version_id, code, label, content, placement, sort_order)
-  values ('00000000-0000-7000-9000-000000008891', v_org, '00000000-0000-7000-9000-000000008811',
-    'NET30', 'Payment terms', 'Net 30 days from invoice date.', 'footer', 1)
-  on conflict (id) do nothing;
+    insert into labor_rate_terms (id, org_id, version_id, code, label, content, placement, sort_order)
+    values ('00000000-0000-7000-9000-000000008891', v_org, '00000000-0000-7000-9000-000000008811',
+      'NET30', 'Payment terms', 'Net 30 days from invoice date.', 'footer', 1)
+    on conflict (id) do nothing;
 
-  -- Only NOW can the versions take their real states: adjustments, targets,
-  -- terms, scopes and lines are all children, and every one of them is
-  -- immutable once its version leaves draft. The product enforces the same
-  -- order, so a fixture that ignores it is testing a state the app cannot
-  -- reach.
-  update item_rate_versions set status = 'active'
-   where id in ('00000000-0000-7000-9000-000000008811', '00000000-0000-7000-9000-000000008812')
-     and status = 'draft';
-  update item_rate_versions set status = 'retired'
-   where id = '00000000-0000-7000-9000-000000008813' and status = 'draft';
+    -- Only NOW can the versions take their real states: adjustments, targets,
+    -- terms, scopes and lines are all children, and every one of them is
+    -- immutable once its version leaves draft. The product enforces the same
+    -- order, so a fixture that ignores it is testing a state the app cannot
+    -- reach.
+    update item_rate_versions set status = 'active'
+     where id in ('00000000-0000-7000-9000-000000008811', '00000000-0000-7000-9000-000000008812')
+       and status = 'draft';
+    update item_rate_versions set status = 'retired'
+     where id = '00000000-0000-7000-9000-000000008813' and status = 'draft';
+  end if;
 
   -- ---- pay-run wizard stubs --------------------------------------------------
   --
@@ -991,15 +1002,19 @@ begin
 
     -- Wage rates effective before the run's pay date (2026-02-11), so the
     -- roster's has_wage flag is true for both employees.
+    -- `gen_random_uuid()` makes the id useless as a conflict target, and the
+    -- real uniqueness is (scope, effective_from) — so the guard names THAT.
     insert into labor_cost_rates
       (id, org_id, employee_party_id, rate, basis, effective_from, is_active,
        currency)
-    values
-      (gen_random_uuid(), v_org, v_emp_hourly, 42.50, 'hour', date '2026-01-01',
-       true, 'USD'),
-      (gen_random_uuid(), v_org, v_emp_salary, 78000.00, 'year', date '2026-01-01',
-       true, 'USD')
-    on conflict (id) do nothing;
+    select gen_random_uuid(), v_org, r.party, r.rate, r.basis, date '2026-01-01', true, 'USD'
+      from (values (v_emp_hourly, 42.50, 'hour'), (v_emp_salary, 78000.00, 'year'))
+             as r(party, rate, basis)
+     where not exists (
+       select 1 from labor_cost_rates x
+        where x.org_id = v_org and x.employee_party_id = r.party
+          and x.effective_from = date '2026-01-01'
+     );
 
     -- Two calculated stubs on run …1811. country/filing columns satisfy the
     -- evidence CHECKs with the unknown-source branch (no pack is installed
@@ -1043,4 +1058,164 @@ begin
        'Income tax', null, null, -380.55, 2)
     on conflict (id) do nothing;
   end;
+
+  -- ---- admin apps ------------------------------------------------------------
+  -- The simulator never installs apps, so the list page would compare two
+  -- identical empty states. Three apps in the SIM org: two installed (one
+  -- with an active version carrying two endpoints, one with NO active
+  -- version so the version cell renders the "—" fallback) and one disabled,
+  -- so the status chips carry real counts and ?status=disabled selects.
+  insert into apps (id, org_id, key, name, description, status, granted_permissions)
+  values
+    ('00000000-0000-7000-9000-000000001101', v_org, 'viewspec-demo', 'ViewSpec demo app',
+     'Harness app with an active version', 'installed', '["records.read"]'),
+    ('00000000-0000-7000-9000-000000001102', v_org, 'viewspec-noversion', 'ViewSpec versionless app',
+     'Harness app with no active version', 'installed', '[]'),
+    ('00000000-0000-7000-9000-000000001103', v_org, 'viewspec-archived', 'ViewSpec archived app',
+     'Harness disabled app', 'disabled', '[]')
+  on conflict (id) do nothing;
+
+  insert into app_versions (id, org_id, app_id, version, manifest, status)
+  values
+    ('00000000-0000-7000-9000-000000001111', v_org,
+     '00000000-0000-7000-9000-000000001101', '1.2.0',
+     '{"endpoints": [{"name": "hello", "file": "backend/hello.js", "method": "GET"}, {"name": "submit", "file": "backend/submit.js", "method": "POST"}]}',
+     'active')
+  on conflict (id) do nothing;
+
+  -- versions reference their app both ways: link the active version id back.
+  -- Deferred FKs (both directions are DEFERRABLE) allow the two inserts in
+  -- either order; this update lands after both exist.
+  update apps set active_version_id = '00000000-0000-7000-9000-000000001111'
+   where id = '00000000-0000-7000-9000-000000001101'
+     and active_version_id is null;
+
+  insert into app_files (id, org_id, app_id, version_id, path, kind, content_type, content, is_binary, size)
+  values
+    ('00000000-0000-7000-9000-000000001121', v_org,
+     '00000000-0000-7000-9000-000000001101', '00000000-0000-7000-9000-000000001111',
+     'frontend/index.html', 'frontend', 'text/html', '<h1>demo</h1>', false, 15),
+    ('00000000-0000-7000-9000-000000001122', v_org,
+     '00000000-0000-7000-9000-000000001101', '00000000-0000-7000-9000-000000001111',
+     'backend/hello.js', 'backend', 'text/javascript', 'export default async () => ({ ok: true })', false, 44)
+  on conflict (id) do nothing;
+
+  insert into app_runs (id, org_id, app_id, version_id, endpoint, status, units, logs, error_message, duration_ms, at)
+  values
+    ('00000000-0000-7000-9000-000000001131', v_org,
+     '00000000-0000-7000-9000-000000001101', '00000000-0000-7000-9000-000000001111',
+     'hello', 'ok', 1, '["started"]', null, 12, now() - interval '1 day'),
+    ('00000000-0000-7000-9000-000000001132', v_org,
+     '00000000-0000-7000-9000-000000001101', '00000000-0000-7000-9000-000000001111',
+     'submit', 'error', 2, '["started"]', 'boom', 30, now() - interval '2 hours')
+  on conflict (id) do nothing;
+
+  -- ---- AP capture (…2001-2099) ------------------------------------------------
+  --
+  -- The simulator never uploads vendor documents, so /ap/capture is empty
+  -- without these: four items across four statuses (one needs_review doubles
+  -- as the drawer target with a run + evidence). All vendor_candidate_id and
+  -- purchase_order_id NULL — the subsidiary scope passes them through, and
+  -- the search branch is exercised via normalized->>'vendorName'.
+  declare
+    v_capture_file uuid := '00000000-0000-7000-9000-000000002009';
+    v_capture_folder uuid;
+  begin
+    -- `files.folder_id` is NOT NULL, so a captured document still lives
+    -- somewhere in the cabinet. Reuse the cabinet fixture's folder rather
+    -- than inventing a second root.
+    select id into v_capture_folder from folders
+     where org_id = v_org order by created_at limit 1;
+    if v_capture_folder is null then
+      raise notice 'no folder for AP capture file; skipping capture fixtures';
+      return;
+    end if;
+
+    insert into files
+      (id, org_id, folder_id, name, extension, file_type, content_type,
+       size_bytes, storage_kind, content_hash, is_inactive)
+    values
+      (v_capture_file, v_org, v_capture_folder, 'viewspec-invoice-vs-1001.pdf', 'pdf',
+       'document', 'application/pdf', 48210, 'db',
+       'viewspec-capture-file-2009', false)
+    on conflict (id) do nothing;
+
+    insert into ap_capture_items
+      (id, org_id, file_id, status, source, original_filename, content_hash,
+       document_kind, normalized, validation_issues, overall_confidence,
+       received_at)
+    values
+      ('00000000-0000-7000-9000-000000002001', v_org, v_capture_file,
+       'needs_review', 'upload', 'viewspec-acme-invoice.pdf',
+       'viewspec-capture-2001', 'vendor_bill',
+       '{"vendorName": "ViewSpec Acme Supplies", "invoiceNumber": "VS-1001",
+         "invoiceDate": "2026-08-14", "currency": "USD", "total": "1250.00",
+         "subtotal": "1157.41", "taxTotal": "92.59", "memo": null,
+         "dueDate": null,
+         "lines": [{"description": "ViewSpec fixture line",
+                    "productCode": null, "quantity": "1.0000", "unit": null,
+                    "unitPrice": "1250.0000", "amount": "1250.0000",
+                    "taxAmount": "0.0000", "accountId": null, "itemId": null,
+                    "purchaseOrderLineId": null, "confidence": null}]}'::jsonb,
+       '[{"code": "vendor_unresolved", "severity": "blocking"}]'::jsonb,
+       0.8200, now() - interval '3 hours'),
+      ('00000000-0000-7000-9000-000000002002', v_org, v_capture_file,
+       'queued', 'upload', 'viewspec-queued-scan.pdf',
+       'viewspec-capture-2002', 'vendor_bill',
+       '{"vendorName": null, "invoiceNumber": null, "invoiceDate": null,
+         "currency": null, "total": null, "lines": []}'::jsonb,
+       '[]'::jsonb, null, now() - interval '1 hour'),
+      ('00000000-0000-7000-9000-000000002003', v_org, v_capture_file,
+       'failed', 'upload', 'viewspec-failed-scan.pdf',
+       'viewspec-capture-2003', 'vendor_credit',
+       '{"vendorName": "ViewSpec Acme Supplies", "invoiceNumber": "VS-1002",
+         "invoiceDate": null, "currency": "USD", "total": null,
+         "lines": []}'::jsonb,
+       '[{"code": "required_field", "severity": "blocking",
+          "field": "invoiceDate"}]'::jsonb,
+       0.3100, now() - interval '2 days'),
+      ('00000000-0000-7000-9000-000000002004', v_org, v_capture_file,
+       'materialized', 'upload', 'viewspec-done-invoice.pdf',
+       'viewspec-capture-2004', 'vendor_bill',
+       '{"vendorName": "ViewSpec Acme Supplies", "invoiceNumber": "VS-0998",
+         "invoiceDate": "2026-07-30", "currency": "USD", "total": "842.10",
+         "lines": [{"description": "ViewSpec fixture line",
+                    "productCode": null, "quantity": "1.0000", "unit": null,
+                    "unitPrice": "842.1000", "amount": "842.1000",
+                    "taxAmount": "0.0000", "accountId": null, "itemId": null,
+                    "purchaseOrderLineId": null, "confidence": null}]}'::jsonb,
+       '[]'::jsonb, 0.9700, now() - interval '3 days')
+    on conflict (id) do nothing;
+
+    -- A run that is not `running` must carry a finish time (CHECK), so the
+    -- succeeded attempt names one rather than leaving the column null.
+    insert into ap_capture_runs
+      (id, org_id, capture_item_id, attempt, provider, model, api_version, status,
+       finished_at)
+    values
+      ('00000000-0000-7000-9000-000000002011', v_org,
+       '00000000-0000-7000-9000-000000002001', 1,
+       'azure_document_intelligence', 'prebuilt-invoice', '2024-02-29-preview',
+       'succeeded', now() - interval '1 hour')
+    on conflict (id) do nothing;
+
+    insert into ap_capture_fields
+      (id, org_id, run_id, field_key, line_index, raw_value,
+       normalized_value, confidence, page_number)
+    values
+      ('00000000-0000-7000-9000-000000002021', v_org,
+       '00000000-0000-7000-9000-000000002011', 'invoiceNumber', null,
+       'VS-1001', '"VS-1001"'::jsonb, 0.9900, 1),
+      ('00000000-0000-7000-9000-000000002022', v_org,
+       '00000000-0000-7000-9000-000000002011', 'total', null,
+       '1250.00', '"1250.00"'::jsonb, 0.9400, 1)
+    on conflict (id) do nothing;
+  end;
+
+  -- No overhead rate fixture. The proposed row was rejected by the engine's
+  -- own guard — "children of an activated or retired rate version are
+  -- immutable" — and forcing one in would mean either deactivating a live
+  -- rate version or writing under a retired one. Both misrepresent the
+  -- product to make a test row exist, so the rates tab is covered by its
+  -- real state instead.
 end $$;

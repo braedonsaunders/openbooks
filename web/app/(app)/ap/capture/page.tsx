@@ -13,8 +13,10 @@ import { parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission, can } from '../../../../lib/authz'
 import { isDocKindEnabled } from '../../../../lib/documents'
 import { CaptureUploadButton } from './CaptureUploadButton'
-import { CaptureList, type CaptureListRow } from './CaptureList'
+import { CaptureList, type CaptureListRow } from './sections'
 import { CaptureReviewDrawer, type CaptureDetail } from './CaptureReviewDrawer'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadApCapture, apCaptureSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +24,17 @@ const STATUSES = ['queued', 'extracting', 'needs_review', 'ready', 'duplicate', 
 const SORTS = ['received', 'filename', 'status', 'total'] as const
 
 export default async function ApCapturePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadApCapture(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={apCaptureSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('ap.read')
   const canCreate = can(authz, 'ap.create')
   const t = await getTranslations('ap.capture')
