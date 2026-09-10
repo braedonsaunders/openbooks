@@ -218,6 +218,13 @@ const PAGES = [
     minMatches: 1,
   },
   {
+    path: '/compliance/vendors',
+    // A matrix: columns come from data, so the grid is a domain component.
+    variants: ['', '?state=attention'],
+    expect: 'table tbody tr',
+    minMatches: 4,
+  },
+  {
     path: '/purchasing',
     variants: [''],
     // The cockpit's hero panel — proves the grid/panel composition rendered,
@@ -297,6 +304,41 @@ async function renderSettled(page, url, expectSelector, minMatches = 0) {
     { timeout: 30_000 },
   )
   await page.evaluate(() => document.fonts?.ready)
+
+  // Capture what each control ACTUALLY holds, then let the residue go.
+  //
+  // React drives a controlled <select> through its `value` PROPERTY, which
+  // never appears in markup, while the `selected` attribute its SSR <option>
+  // carried is vestigial and gets removed at an unpredictable point during
+  // hydration. Comparing the residue is a coin flip — observed flipping
+  // direction between runs on the same page. Stamping the live value as an
+  // attribute makes the real selection comparable for the first time, which
+  // is why dropping `selected` afterwards strengthens the check rather than
+  // loosening it.
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll('main select')) {
+      el.setAttribute('data-selected-value', el.value)
+    }
+    for (const el of document.querySelectorAll('main input[type="checkbox"], main input[type="radio"]')) {
+      el.setAttribute('data-checked', String(el.checked))
+    }
+  })
+
+  // Wait for the DOM to STOP changing before reading it.
+  //
+  // React hydration rewrites parts of the server markup — most visibly, a
+  // controlled <select> loses the `selected` attribute its SSR <option> was
+  // rendered with. Reading mid-hydration produces a difference that is pure
+  // timing: the same page compared against itself would fail. Polling until two
+  // consecutive reads match fixes the whole class rather than normalizing away
+  // one symptom, which would risk hiding a genuinely wrong selection.
+  let previous = ''
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const current = await page.locator('main').innerHTML()
+    if (current === previous) return
+    previous = current
+    await page.waitForTimeout(150)
+  }
 }
 
 /**
@@ -355,6 +397,8 @@ function normalize(markup) {
       .replace(/%3F__viewspec%3D1(%26)/gi, '%3F')
       .replace(/%26__viewspec%3D1/gi, '')
       .replace(/%3F__viewspec%3D1/gi, '')
+      // Vestigial post-hydration; the live value is stamped above.
+      .replace(/ selected=""/g, '')
       .replace(/>\s+</g, '><')
       .replace(/\s+/g, ' ')
       .trim()
