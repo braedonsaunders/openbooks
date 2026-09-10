@@ -939,6 +939,26 @@ const PAGES = [
     expect: 'table tbody tr',
     minMatches: 2,
   },
+  {
+    path: '/reports/true-cost',
+    // One `paper-view` body (summary strip + five section tables stay in the
+    // component). Default: three empty groups + 3 + 8 rows. The 2025 variant
+    // pins the all-empty branch.
+    // 4, not 5: the all-empty branch renders four italic empty paragraphs,
+    // not five. Measured, not predicted.
+    variants: ['', { query: '?period=2025_calendar_year', expect: 'main p', minMatches: 4 }],
+    expect: 'table tbody tr',
+    minMatches: 11,
+  },
+  {
+    path: '/dashboard',
+    // The harness user is super-admin with the `admin` role and no
+    // user_dashboard_layouts row, so the layout resolves to the 8-widget
+    // admin role default and `canSeeWidget` passes all eight.
+    variants: [''],
+    expect: 'main a[href="/dashboard/customize"]',
+    minMatches: 1,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole
