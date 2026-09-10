@@ -123,6 +123,9 @@ import { EntitlementOpeningsView } from '../../app/(app)/payroll/opening-balance
 import { TaxSetupGuideSlot, TaxSetupHeader } from '../../app/(app)/admin/setup/tax-setup/sections'
 import { SetupWizard } from '../../app/(app)/admin/setup/wizard/SetupWizard'
 import { EquipmentHeaderLinks } from '../../app/(app)/assets/equipment/sections'
+import { ProvisionRunsTable } from '../../app/(app)/tax/provisions/sections'
+import { AppNotice, AppRuntimeChrome } from '../../app/(app)/apps/[key]/sections'
+import { ProvisionComputeButton } from '../../app/(app)/tax/provisions/ProvisionComputeButton'
 import { NewEquipmentButton } from '../../app/(app)/assets/equipment/NewEquipmentButton'
 import { EquipmentDrawer } from '../../app/(app)/assets/equipment/EquipmentDrawer'
 import { KpiStrip } from '../kpi-strip'
@@ -1280,6 +1283,44 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       recordTypes={(props.recordTypes as ComponentProps<typeof TemplatesList>['recordTypes']) ?? []}
     />
   ),
+
+  /* --- installed-app runtime -------------------------------------------------------- */
+  /** ONE entry for BOTH notice branches (not-found and disabled): the markup
+   *  is identical and only the strings differ, so a second entry would be a
+   *  duplicate that drifts. */
+  'app-notice': (props) => (
+    <AppNotice
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      backHref={str(props, 'backHref') ?? '/apps'}
+      backLabel={str(props, 'backLabel') ?? ''}
+    />
+  ),
+  /** `context` is plain data — app id/key/name plus the caller's id, name and
+   *  role KEYS — not an `Authz`. The sandbox that consumes it lives inside
+   *  `AppFrame`. */
+  'app-runtime-chrome': (props) => (
+    <AppRuntimeChrome
+      appKey={str(props, 'appKey') ?? ''}
+      appName={str(props, 'appName') ?? ''}
+      appsHref={str(props, 'appsHref') ?? '/apps'}
+      appsLabel={str(props, 'appsLabel') ?? ''}
+      context={props.context as ComponentProps<typeof AppRuntimeChrome>['context']}
+    />
+  ),
+
+  /* --- tax provision list ----------------------------------------------------------- */
+  /** The empty state lives INSIDE the component: the native empty path keeps
+   *  the card and header-row chrome and renders a `colSpan={6}` note, which a
+   *  spec-level empty block would drop. */
+  'provision-runs-table': (props) => (
+    <ProvisionRunsTable
+      columns={props.columns as ComponentProps<typeof ProvisionRunsTable>['columns']}
+      emptyText={str(props, 'emptyText') ?? ''}
+      rows={(props.rows as ComponentProps<typeof ProvisionRunsTable>['rows']) ?? []}
+    />
+  ),
+  'provision-compute-button': () => <ProvisionComputeButton />,
 
   /* --- equipment -------------------------------------------------------------------- */
   'equipment-header-links': (props) => (

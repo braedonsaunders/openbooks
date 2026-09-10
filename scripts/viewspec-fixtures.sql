@@ -1103,11 +1103,28 @@ begin
      'active')
   on conflict (id) do nothing;
 
+  -- The archived app needs an active version too, and that is not
+  -- incidental. /apps/[key] has three exclusive bodies, and the DISABLED one
+  -- is only reachable when the app HAS an active version but its status is
+  -- not `installed` — without a version it falls into the not-found branch
+  -- instead, and the two conformance entries render byte-identical markup
+  -- while appearing to cover two branches.
+  insert into app_versions (id, org_id, app_id, version, manifest, status)
+  values
+    ('00000000-0000-7000-9000-000000001113', v_org,
+     '00000000-0000-7000-9000-000000001103', '0.1.0',
+     '{"endpoints": []}', 'active')
+  on conflict (id) do nothing;
+
   -- versions reference their app both ways: link the active version id back.
   -- Deferred FKs (both directions are DEFERRABLE) allow the two inserts in
   -- either order; this update lands after both exist.
   update apps set active_version_id = '00000000-0000-7000-9000-000000001111'
    where id = '00000000-0000-7000-9000-000000001101'
+     and active_version_id is null;
+
+  update apps set active_version_id = '00000000-0000-7000-9000-000000001113'
+   where id = '00000000-0000-7000-9000-000000001103'
      and active_version_id is null;
 
   insert into app_files (id, org_id, app_id, version_id, path, kind, content_type, content, is_binary, size)
