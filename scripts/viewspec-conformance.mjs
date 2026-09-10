@@ -1187,6 +1187,23 @@ const PAGES = [
     expect: '[data-testid="setup-wizard"]',
     minMatches: 1,
   },
+  {
+    path: '/assets/equipment',
+    // KPI strip over the entity list. Fixture …1401-1402 seeds one active and
+    // one inactive unit; the flyout variant opens the active one with its
+    // live pickers.
+    variants: [
+      '',
+      {
+        query: '?equipment=00000000-0000-7000-9000-000000001401',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole
