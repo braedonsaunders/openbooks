@@ -95,6 +95,9 @@ import { CollectionsShell } from '../../app/(app)/collections/sections'
 import { TrashList } from '../../app/(app)/documents/trash/TrashList'
 import { TrashBackLink } from '../../app/(app)/documents/trash/sections'
 import { ExpensesDashboard } from '../../app/(app)/expenses/ExpensesDashboard'
+import { ContractDrawer } from '../../app/(app)/revenue/ContractDrawer'
+import { RunRecognitionButton } from '../../app/(app)/revenue/RunRecognitionButton'
+import { AssistantApp } from '../assistant/assistant-app'
 import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
 import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
 import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
@@ -1139,6 +1142,43 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   /* --- expenses cockpit ------------------------------------------------------------- */
   'expenses-dashboard': (props) => (
     <ExpensesDashboard data={props.data as ComponentProps<typeof ExpensesDashboard>['data']} />
+  ),
+
+  /* --- revenue ---------------------------------------------------------------------- */
+  /** No remount key: the native page renders `<ContractDrawer>` keyless (the
+   *  journal-drawer arrangement — its state resets via closeHref navigation),
+   *  so a key here would diverge. This differs from the account / party /
+   *  document drawers deliberately. */
+  'contract-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof ContractDrawer> | null
+    if (!drawer) return null
+    return <ContractDrawer {...drawer} />
+  },
+  /** Presence is the spec's `when` on `canRun`, not a check in here. */
+  'run-recognition': () => <RunRecognitionButton />,
+
+  /* --- assistant -------------------------------------------------------------------- */
+  /** Whole: sidebar, streaming thread, composer and every fetch. `activeId`
+   *  and `initialMessages` are spec literals because the native branch passes
+   *  those same literals — this route is the new-conversation entry point. */
+  'assistant-app': (props) => (
+    <AssistantApp
+      conversations={props.conversations as ComponentProps<typeof AssistantApp>['conversations']}
+      activeId={null}
+      initialMessages={[]}
+      canWrite={props.canWrite === true}
+      aiEnabled={props.aiEnabled === true}
+      initialPrompt={str(props, 'initialPrompt')}
+    />
+  ),
+
+  /* --- banking reconciliations ------------------------------------------------------ */
+  /** The empty-state action. The native page passes it unconditionally (no
+   *  permission gate), so the spec does too — it is data, not a branch. */
+  'choose-recon-account': (props) => (
+    <Button asChild>
+      <Link href={(str(props, 'href') ?? '/banking') as never}>{str(props, 'label') ?? ''}</Link>
+    </Button>
   ),
 
   /* --- analytics dashboards --------------------------------------------------------- */

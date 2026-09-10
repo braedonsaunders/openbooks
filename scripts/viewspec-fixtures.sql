@@ -25,6 +25,7 @@
 --   …0901-0999  purchase orders
 --   …1801-1899  payroll schedules and runs
 --   …2801-2899  field tickets
+--   …2901-2999  revenue contracts, obligations, recognition schedules
 --   …3801-3899  bank matching rules
 --   …4801-4899  budget scenarios and lines
 --   …5801-5899  file cabinet folders, files, versions
@@ -1710,5 +1711,154 @@ begin
    where exists (select 1 from subcontracts where id = '00000000-0000-7000-9000-000000000801')
      and not exists (select 1 from subcontract_sov_lines
                       where id = '00000000-0000-7000-9000-000000000802');
+
+  -- ---- revenue contracts ---------------------------------------------------
+  --
+  -- The simulator never creates revenue contracts, so /revenue is empty
+  -- without these: two contracts, one active with obligations + schedules
+  -- (the drawer path) and one cancelled (the ?status=cancelled branch).
+  -- FK targets resolve from the tenant at seed time so the block survives a
+  -- rebuild; only the seeded rows carry fixed ids (…2901-2919 claimed; grep
+  -- the file — no other block holds …29xx).
+  declare
+    v_customer uuid;
+    v_rule uuid;
+    v_deferred uuid;
+    v_recognized uuid;
+    v_book uuid;
+    v_per1 uuid;
+    v_per2 uuid;
+    v_per3 uuid;
+    v_sub uuid;
+    v_user uuid;
+    v_je uuid := '00000000-0000-7000-9000-000000002911';
+  begin
+    select id into v_customer from parties
+     where org_id = v_org and is_active order by display_name limit 1;
+    -- Rule-level default accounts: any active non-summary balance-sheet and
+    -- income accounts; obligation overrides stay null.
+    select id into v_deferred from accounts
+     where org_id = v_org and is_active and not is_summary
+       and type in ('liability_current_other', 'liability_long_term')
+     order by number nulls last limit 1;
+    select id into v_recognized from accounts
+     where org_id = v_org and is_active and not is_summary
+       and type in ('income', 'income_other')
+     order by number nulls last limit 1;
+    select id into v_book from accounting_books
+     where org_id = v_org and is_primary limit 1;
+    select id into v_per1 from accounting_periods
+     where org_id = v_org and name = '2026-01' limit 1;
+    select id into v_per2 from accounting_periods
+     where org_id = v_org and name = '2026-02' limit 1;
+    select id into v_per3 from accounting_periods
+     where org_id = v_org and name = '2026-03' limit 1;
+    select id into v_sub from subsidiaries
+     where org_id = v_org order by name limit 1;
+    select id into v_user from users
+     where org_id = v_org and email = 'viewspec@sim.test';
+    -- NOT `return`: a bare return in a nested block exits the WHOLE anonymous
+    -- block, silently skipping every fixture appended below this one.
+    if v_customer is null or v_deferred is null or v_recognized is null
+       or v_book is null or v_per1 is null or v_per2 is null or v_per3 is null
+       or v_sub is null or v_user is null then
+      raise notice 'missing revenue fixture prerequisites; skipping';
+    else
+
+    insert into recognition_rules
+      (id, org_id, code, name, method, recognition_periods,
+       deferred_account_id, recognized_account_id, is_active)
+    values ('00000000-0000-7000-9000-000000002900', v_org, 'VS-SL-3MO',
+            'ViewSpec straight-line 3mo', 'straight_line_even', 3,
+            v_deferred, v_recognized, true)
+    on conflict (id) do nothing;
+    select id into v_rule from recognition_rules
+     where org_id = v_org and code = 'VS-SL-3MO';
+
+    insert into revenue_contracts
+      (id, org_id, customer_id, contract_number, status,
+       starts_on, ends_on, total_transaction_price, currency, pricing)
+    values
+      ('00000000-0000-7000-9000-000000002901', v_org, v_customer, 'REV-VS-1', 'active',
+       '2026-01-01', '2026-03-31', 9000.0000, 'USD', '{}'::jsonb),
+      ('00000000-0000-7000-9000-000000002902', v_org, v_customer, 'REV-VS-2', 'cancelled',
+       '2026-01-01', '2026-01-31', 1000.0000, 'USD', '{}'::jsonb)
+    on conflict (id) do nothing;
+
+    insert into performance_obligations
+      (id, org_id, contract_id, description, recognition_rule_id,
+       allocated_price, recognition_starts_on, recognition_ends_on, status)
+    values
+      ('00000000-0000-7000-9000-000000002903', v_org,
+       '00000000-0000-7000-9000-000000002901',
+       'ViewSpec implementation', v_rule,
+       6000.0000, '2026-01-01', '2026-03-31', 'open'),
+      ('00000000-0000-7000-9000-000000002904', v_org,
+       '00000000-0000-7000-9000-000000002901',
+       'ViewSpec support', v_rule,
+       3000.0000, '2026-01-01', '2026-03-31', 'open')
+    on conflict (id) do nothing;
+
+    insert into recognition_schedules
+      (id, org_id, obligation_id, book_id, status, total_amount)
+    values
+      ('00000000-0000-7000-9000-000000002905', v_org,
+       '00000000-0000-7000-9000-000000002903', v_book, 'in_progress', 6000.0000),
+      ('00000000-0000-7000-9000-000000002906', v_org,
+       '00000000-0000-7000-9000-000000002904', v_book, 'planned', 3000.0000)
+    on conflict (id) do nothing;
+
+    -- The drawer's recognized-vs-planned split needs one POSTED line: a
+    -- posted entry is immutable (jl_guard), so the balance legs go in as
+    -- draft first and the entry is posted afterwards — the banking block's
+    -- pattern (guarded by existence, not ON CONFLICT: the guard fires even
+    -- when every row would be a no-op, so a second run would fail).
+    --
+    -- MARCH, not January: 2026-01 and 2026-02 are closed for GL posting in
+    -- this tenant, and the close guard rejects the draft→posted update. The
+    -- recognized month is the LAST one rather than the first, which changes
+    -- nothing the drawer asserts — one recognized line and two planned ones.
+    if not exists (select 1 from journal_entries where id = v_je) then
+      insert into journal_entries
+        (id, org_id, book_id, entry_number, posting_date, period_id, status, subsidiary_id)
+      values (v_je, v_org, v_book, 'REV-VS-1', '2026-03-31', v_per3, 'draft', v_sub);
+      insert into journal_lines
+        (id, org_id, entry_id, line_number, account_id, amount, currency, txn_amount, subsidiary_id)
+      values ('00000000-0000-7000-9000-000000002912', v_org, v_je, 1,
+              v_recognized, 2000.0000, 'USD', 2000.0000, v_sub),
+             ('00000000-0000-7000-9000-000000002913', v_org, v_je, 2,
+              v_deferred, -2000.0000, 'USD', -2000.0000, v_sub);
+      update journal_entries set status = 'posted', posted_at = now(), posted_by = v_user
+       where id = v_je and status <> 'posted';
+    end if;
+
+    insert into recognition_schedule_lines
+      (id, org_id, schedule_id, period_id, sequence,
+       planned_amount, recognized_amount, journal_entry_id)
+    values
+      -- Obligation 1: Jan + Feb still planned, Mar posted (recognized).
+      ('00000000-0000-7000-9000-000000002907', v_org,
+       '00000000-0000-7000-9000-000000002905', v_per1, 1,
+       2000.0000, null, null),
+      ('00000000-0000-7000-9000-000000002908', v_org,
+       '00000000-0000-7000-9000-000000002905', v_per2, 2,
+       2000.0000, null, null),
+      ('00000000-0000-7000-9000-000000002909', v_org,
+       '00000000-0000-7000-9000-000000002905', v_per3, 3,
+       2000.0000, 2000.0000, v_je),
+      -- Obligation 2: nothing posted — the drawer's all-planned branch.
+      ('00000000-0000-7000-9000-00000000290a', v_org,
+       '00000000-0000-7000-9000-000000002906', v_per1, 1,
+       1000.0000, null, null),
+      ('00000000-0000-7000-9000-00000000290b', v_org,
+       '00000000-0000-7000-9000-000000002906', v_per2, 2,
+       1000.0000, null, null),
+      ('00000000-0000-7000-9000-00000000290c', v_org,
+       '00000000-0000-7000-9000-000000002906', v_per3, 3,
+       1000.0000, null, null)
+    on conflict (id) do nothing;
+  
+    end if;
+  end;
 
 end $$;
