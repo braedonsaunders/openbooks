@@ -448,4 +448,66 @@ begin
        v_item, v_expense, 'Field labor', 5, 150, 750)
     on conflict (id) do nothing;
   end;
+
+  -- ---- inventory -----------------------------------------------------------
+  --
+  -- One stocked item with a receipt layer and an issue, one stock location and
+  -- one bill-of-materials row: enough for the on-hand list, the movements
+  -- list and both re-homed configuration tabs. FK targets resolve from the
+  -- tenant at seed time so the block survives a rebuild; only the seeded rows
+  -- carry fixed ids.
+  declare
+    v_sub uuid;
+    v_loc uuid;
+    v_acct_asset uuid;
+    v_acct_cogs uuid;
+  begin
+    select id into v_sub from subsidiaries where org_id = v_org order by name limit 1;
+    select id into v_loc from locations where org_id = v_org order by code limit 1;
+    select id into v_acct_asset from accounts where org_id = v_org and number = '1010' limit 1;
+    select id into v_acct_cogs from accounts where org_id = v_org and number = '1020' limit 1;
+    if v_loc is null or v_acct_asset is null or v_acct_cogs is null then
+      raise notice 'missing location or accounts; skipping inventory fixtures';
+      return;
+    end if;
+
+    insert into items (id, org_id, kind, code, name, is_active)
+    values ('00000000-0000-7000-9000-000000000201', v_org, 'inventory', 'WIDGET-001', 'Conformance widget', true),
+           ('00000000-0000-7000-9000-000000000202', v_org, 'inventory', 'GADGET-002', 'Conformance gadget', true)
+    on conflict (id) do nothing;
+
+    insert into item_inventory_profiles
+      (id, org_id, item_id, costing_method, tracking, asset_account_id, cogs_account_id, base_unit)
+    values ('00000000-0000-7000-9000-000000000203', v_org, '00000000-0000-7000-9000-000000000201',
+            'moving_average', 'none', v_acct_asset, v_acct_cogs, 'ea')
+    on conflict (id) do nothing;
+
+    insert into stock_locations (id, org_id, location_id, code, kind, is_active)
+    values ('00000000-0000-7000-9000-000000000204', v_org, v_loc, 'MAIN', 'warehouse', true)
+    on conflict (id) do nothing;
+
+    insert into inventory_movements
+      (id, org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id,
+       quantity, unit_cost, total_value, status)
+    values ('00000000-0000-7000-9000-000000000205', v_org, v_sub,
+            '00000000-0000-7000-9000-000000000201', 'receipt', now() - interval '2 days',
+            '00000000-0000-7000-9000-000000000204', 10, 25.50, 255.00, 'posted'),
+           ('00000000-0000-7000-9000-000000000206', v_org, v_sub,
+            '00000000-0000-7000-9000-000000000201', 'issue', now() - interval '1 day',
+            '00000000-0000-7000-9000-000000000204', 2, 25.50, 51.00, 'posted')
+    on conflict (id) do nothing;
+
+    insert into cost_layers
+      (id, org_id, subsidiary_id, item_id, stock_location_id, source_movement_id,
+       received_at, original_quantity, remaining_quantity, unit_cost)
+    values ('00000000-0000-7000-9000-000000000207', v_org, v_sub,
+            '00000000-0000-7000-9000-000000000201', '00000000-0000-7000-9000-000000000204',
+            '00000000-0000-7000-9000-000000000205', now() - interval '2 days', 10, 8, 25.50)
+    on conflict (id) do nothing;
+
+    insert into bom_components (id, org_id, assembly_item_id, component_item_id, quantity_per, sort_order)
+    values ('00000000-0000-7000-9000-000000000208', v_org,
+            '00000000-0000-7000-9000-000000000202', '00000000-0000-7000-9000-000000000201', 2, 0)
+    on conflict (id) do nothing;
+  end;
 end $$;

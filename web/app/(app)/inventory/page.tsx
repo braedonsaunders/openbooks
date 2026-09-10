@@ -12,6 +12,8 @@ import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
 import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
 import { NewMovementButton } from './NewMovementButton'
 import { InventoryActionDrawer } from './InventoryActionDrawer'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadInventory, inventorySpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +22,17 @@ export default async function Inventory({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadInventory(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={inventorySpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const t = await getTranslations('inventory')
 
   const authz = await requirePermission('items.read')

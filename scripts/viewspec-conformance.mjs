@@ -291,6 +291,97 @@ const PAGES = [
     minMatches: 5,
   },
   {
+    path: '/timesheets',
+    // Entity list over the timesheet_week aggregate plus the WeeklyGrid
+    // editor in the drawer slot.
+    variants: [
+      '',
+      '?status=approved',
+      {
+        query: '?timesheet=044ea4d1-8157-4cb8-93f9-7b70e7ec8f80:2025-12-28',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/items',
+    // The catalog list, the re-homed rate-books setup surface, and the flyout.
+    variants: [
+      '',
+      { query: '?view=rate-books', expect: 'table thead th', minMatches: 1 },
+      {
+        query: '?item=7f1ebdf1-28da-417c-9ed8-73fa1822c07b',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
+    path: '/inventory',
+    // Four searchParam-driven bodies: two entity lists, two registry-backed
+    // configuration tabs, and the create-movement drawer.
+    variants: [
+      '',
+      { query: '?inventoryView=movements', expect: 'table tbody tr', minMatches: 2 },
+      { query: '?inventoryView=locations', expect: 'table tbody tr', minMatches: 1 },
+      { query: '?inventoryView=bom', expect: 'table tbody tr', minMatches: 1 },
+      {
+        query: '?movement=new',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
+    path: '/crm/opportunities',
+    variants: [
+      '',
+      {
+        query: '?opportunity=00000000-0000-7000-a000-000000000001',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/expenses/reports',
+    // The universal record list plus per-row expense actions, which ride
+    // through the slot as a widget ref rather than a callback.
+    variants: [
+      '',
+      '?status=posted',
+      { query: '?q=zzzznomatch', expect: 'table thead th', minMatches: 3 },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
+    path: '/close',
+    // The period list. The run branch stays native by design: its wizard is a
+    // client shell no page layout covers, and decomposing it would
+    // reimplement rather than compose.
+    variants: [
+      '',
+      { query: '?q=2026-02', expect: 'table tbody tr', minMatches: 1 },
+      { query: '?status=not_started', expect: 'table tbody tr', minMatches: 3 },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
     path: '/ap/bills',
     variants: [
       '',

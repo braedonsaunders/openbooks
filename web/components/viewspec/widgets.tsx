@@ -54,6 +54,24 @@ import { AccountDrawer } from '../../app/(app)/accounts/AccountDrawer'
 import { NewAccountButton } from '../../app/(app)/accounts/NewAccountButton'
 import { EntityListSlot } from './entity-list-slot'
 import { RecordListSlot } from './record-list-slot'
+import { SetupSectionSlot } from './setup-section-slot'
+import { WeeklyGrid } from '../../app/(app)/timesheets/WeeklyGrid'
+import { ItemDrawer } from '../../app/(app)/items/ItemDrawer'
+import { NewItemButton } from '../../app/(app)/items/NewItemButton'
+import { NewItemRedirect } from '../../app/(app)/items/NewItemRedirect'
+import { NewMovementButton } from '../../app/(app)/inventory/NewMovementButton'
+import { InventoryActionDrawer } from '../../app/(app)/inventory/InventoryActionDrawer'
+import { CrmNewButton } from '../../app/(app)/crm/CrmNewButton'
+import { OpportunityDrawer } from '../../app/(app)/crm/OpportunityDrawer'
+import { NewExpenseButton } from '../../app/(app)/expenses/NewExpenseButton'
+import { ExpenseDrawer } from '../../app/(app)/expenses/ExpenseDrawer'
+import { ExpenseActions } from '../../app/(app)/expenses/ExpenseActions'
+import { buildListDrawerHref } from '../../lib/list-params'
+import {
+  CloseActionCell,
+  CloseReadinessCell,
+  SingleBookLabel,
+} from '../../app/(app)/close/sections'
 import { NewOrderButton } from '../../app/(app)/_order/NewOrderButton'
 import { NewOrderRedirect } from '../../app/(app)/_order/NewOrderRedirect'
 import { OrderDrawer } from '../../app/(app)/_order/OrderDrawer'
@@ -342,6 +360,8 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       label={str(props, 'label') ?? ''}
       allLabel={str(props, 'allLabel')}
       pageParamKey={str(props, 'pageParamKey')}
+      hideAll={props.hideAll === true}
+      defaultValue={str(props, 'defaultValue')}
       options={(props.options as ComponentProps<typeof FilterChips>['options']) ?? []}
     />
   ),
@@ -547,6 +567,147 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
         {str(props, 'label') ?? ''}
       </Link>
     </Button>
+  ),
+
+  /* --- timesheets ----------------------------------------------------------- */
+  'new-timesheet': (props) => (
+    <Link
+      href={(str(props, 'href') ?? '/timesheets') as never}
+      className="inline-flex h-8 items-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-medium text-white shadow-sm hover:bg-teal-800"
+    >
+      {str(props, 'label') ?? ''}
+    </Link>
+  ),
+  'timesheet-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof WeeklyGrid> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <WeeklyGrid key={remountKey} {...rest} />
+  },
+
+  /* --- items ---------------------------------------------------------------- */
+  /** One widget for the whole header slot: the native markup differs per view
+   *  (the catalog wraps tabs+button, rate books passes bare tabs), and `wrap`
+   *  selects between them as data rather than as a branch in the spec. */
+  'items-header-actions': (props) => {
+    const tabs = (props.tabs as ComponentProps<typeof ModuleHomeTabs>['tabs']) ?? []
+    const inner = (
+      <>
+        <ModuleHomeTabs tabs={tabs} />
+        {props.showNew === true ? <NewItemButton /> : null}
+      </>
+    )
+    return props.wrap === true ? <div className="flex items-center gap-3">{inner}</div> : inner
+  },
+  'new-item': () => <NewItemButton />,
+  'new-item-redirect': () => <NewItemRedirect />,
+  'item-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof ItemDrawer> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <ItemDrawer key={remountKey} {...rest} />
+  },
+
+  /* --- inventory ------------------------------------------------------------ */
+  'new-movement': () => <NewMovementButton />,
+  'inventory-action-drawer': (props) => (
+    <InventoryActionDrawer
+      items={(props.items as ComponentProps<typeof InventoryActionDrawer>['items']) ?? []}
+      stockLocations={
+        (props.stockLocations as ComponentProps<typeof InventoryActionDrawer>['stockLocations']) ?? []
+      }
+      accounts={(props.accounts as ComponentProps<typeof InventoryActionDrawer>['accounts']) ?? []}
+    />
+  ),
+  /** A registry-backed configuration surface re-homed onto another module's
+   *  tab. The registry entry is CODE, so the spec names it by key and the slot
+   *  looks it up; org id and the manage gate are re-derived from the session. */
+  'setup-section': (props) => (
+    <SetupSectionSlot
+      entityKey={str(props, 'entityKey') ?? ''}
+      sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
+      basePath={str(props, 'basePath') ?? ''}
+    />
+  ),
+
+  /* --- crm opportunities ---------------------------------------------------- */
+  'crm-new-button': (props) => (
+    <CrmNewButton
+      apiPath={str(props, 'apiPath') ?? ''}
+      basePath={str(props, 'basePath') ?? ''}
+      param={str(props, 'param') ?? ''}
+      label={str(props, 'label') ?? ''}
+      failed={str(props, 'failed') ?? ''}
+    />
+  ),
+  'opportunity-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof OpportunityDrawer> | null
+    if (!drawer) return null
+    return <OpportunityDrawer {...drawer} />
+  },
+
+  /* --- expense reports ------------------------------------------------------ */
+  /** The button owns its own labels — it is a client component reading the
+   *  message catalog directly, so the spec passes nothing. */
+  'new-expense': () => <NewExpenseButton />,
+  /**
+   * Per-row expense actions. The open href is BUILT here from the row id and
+   * the current URL, because the native page builds it the same way and a
+   * spec cannot construct a query string. `canSubmit`/`canPost` arrive as
+   * loader-resolved booleans, not as a capability object.
+   */
+  'expense-row-actions': (props) => (
+    <ExpenseActions
+      id={String(props.id ?? '')}
+      status={String(props.status ?? '')}
+      canSubmit={props.canSubmit === true}
+      canPost={props.canPost === true}
+      openHref={buildListDrawerHref(
+        '/expenses/reports',
+        (props.sp as Record<string, string | string[] | undefined>) ?? {},
+        'expense',
+        String(props.id ?? ''),
+      )}
+    />
+  ),
+  'expense-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof ExpenseDrawer> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <ExpenseDrawer key={remountKey} {...rest} />
+  },
+
+  /* --- period close --------------------------------------------------------- */
+  /** `size: 'sm'` is load-bearing here: the default renders h-10 where the
+   *  native header is h-8. */
+  'manage-books-button': (props) => {
+    const href = str(props, 'href')
+    if (!href) return null
+    return (
+      <Button asChild variant="outline" size="sm">
+        <Link href={href as never}>{str(props, 'label') ?? ''}</Link>
+      </Button>
+    )
+  },
+  'single-book-label': (props) => (
+    <SingleBookLabel label={str(props, 'label') ?? ''} name={str(props, 'name') ?? ''} />
+  ),
+  'close-readiness-cell': (props) => (
+    <CloseReadinessCell readiness={Number(props.readiness ?? 0)} />
+  ),
+  /** The action cell's conditional triple — resume link, start control, or an
+   *  em-dash. The LOADER decides which applies; the component renders the
+   *  decision it is given. */
+  'close-action-cell': (props) => (
+    <CloseActionCell
+      actionHref={(props.actionHref as string | null) ?? null}
+      actionLabel={str(props, 'actionLabel') ?? ''}
+      actionLinkClassName={str(props, 'actionLinkClassName') ?? ''}
+      canStart={props.canStart === true}
+      startPeriodId={str(props, 'startPeriodId') ?? ''}
+      startBooks={(props.startBooks as { id: string; name: string }[]) ?? []}
+      startDefaultBookId={str(props, 'startDefaultBookId') ?? ''}
+    />
   ),
 
   /* --- orders (quotes, sales orders, purchase orders) ----------------------- */

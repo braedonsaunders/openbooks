@@ -11,6 +11,8 @@ import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadOpportunity } from '../../../../lib/crm'
 import { CrmNewButton } from '../CrmNewButton'
 import { OpportunityDrawer } from '../OpportunityDrawer'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadOpportunities, opportunitiesSpec } from './view'
 type OpportunityDrawerProps = Parameters<typeof OpportunityDrawer>[0]
 type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
 
@@ -25,6 +27,17 @@ export default async function Opportunities({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadOpportunities(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={opportunitiesSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('crm.opportunities.read')
   const manage = can(authz, 'crm.opportunities.manage')
   const canCustomize = can(authz, 'admin.customization.manage')
