@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react'
+import { Fragment, type ComponentProps } from 'react'
 import { PageHeader, cn } from '@openbooks/ui'
 import type { Block, PaperBlock, TableBlock, Tone } from '@openbooks/viewspec'
 import { ROOT_SCOPE_KEY, resolveNumber, resolveRows, resolveText, resolveValue } from '@openbooks/viewspec'
@@ -220,7 +220,7 @@ function TableBlockView({
             }
             return (
               <TableHead key={index} className={headClass}>
-                {label}
+                {column.srOnlyHeader ? <span className="sr-only">{label}</span> : label}
               </TableHead>
             )
           })}
@@ -392,6 +392,7 @@ export function BlockView({
           total={resolveNumber(block.total, scope)}
           page={resolveNumber(block.page, scope)}
           perPage={resolveNumber(block.perPage, scope)}
+          pageParamKey={block.pageParamKey}
         />
       )
       return block.bare ? pager : <div className="mt-3">{pager}</div>
@@ -425,6 +426,7 @@ export function BlockView({
         const itemScope = nestedScope(item, scope)
         const key = String(resolveText(block.itemKey, itemScope) || `item-${index}`)
         const body = <BlockList blocks={block.blocks} scope={itemScope} searchParams={searchParams} />
+        if (block.unwrapped) return <Fragment key={key}>{body}</Fragment>
         return block.itemClassName !== undefined ? (
           <div key={key} className={block.itemClassName}>
             {body}

@@ -35,9 +35,31 @@ import { LienWaiverDrawer } from '../../app/(app)/compliance/lien-waivers/LienWa
 import { NewFilingButton } from '../../app/(app)/compliance/information-returns/NewFilingButton'
 import { IdentityCell, ActingCell, AccessControlCell } from '../../app/(app)/platform/access/sections'
 import { GrantAccessForm } from '../../app/(app)/platform/_components/GrantAccessForm'
-import { KeyRound, Building2, Users, Mail } from 'lucide-react'
+import { KeyRound, Building2, Users, Mail, Activity, Settings } from 'lucide-react'
 import { EmailSubjectCell, EmailEvidenceCell } from '../../app/(app)/platform/email-log/sections'
 import { VendorComplianceMatrix } from '../../app/(app)/compliance/vendors/Matrix'
+import { ReportNameCell } from '../../app/(app)/reports/custom/sections'
+import { PartyRolesCell } from '../../app/(app)/parties/sections'
+import { AccountNameCell, AccountRegisterCell } from '../../app/(app)/accounts/sections'
+import { AccountsHierarchyTable } from '../../app/(app)/accounts/AccountsHierarchyTable'
+import { AccountDrawer } from '../../app/(app)/accounts/AccountDrawer'
+import { NewAccountButton } from '../../app/(app)/accounts/NewAccountButton'
+import { EntityListSlot } from './entity-list-slot'
+import {
+  TabNav,
+  Metric,
+  ReportsCardHeading,
+  NarrativeEntry,
+  FindingCell,
+} from '../../app/(app)/continuous-close/sections'
+import { WorkItemDrawer } from '../../app/(app)/continuous-close/WorkItemDrawer'
+import { NarrativeDrawer } from '../../app/(app)/continuous-close/NarrativeDrawer'
+import { NewPartyButton } from '../../app/(app)/parties/NewPartyButton'
+import { NewPartyRedirect } from '../../app/(app)/parties/NewPartyRedirect'
+import { PartyDrawer } from '../../app/(app)/parties/PartyDrawer'
+import { RelatedTxnSlot } from '../../app/(app)/parties/RelatedTxnSlot'
+import { NewReportButton } from '../../app/(app)/reports/custom/NewReportButton'
+import { CustomReportActions } from '../../app/(app)/reports/custom/CustomReportActions'
 import { MatrixFilters } from '../../app/(app)/compliance/vendors/MatrixFilters'
 import { VendorComplianceDrawer } from '../../app/(app)/compliance/vendors/VendorComplianceDrawer'
 import {
@@ -54,6 +76,7 @@ import {
   OrgOpenCell,
 } from '../../app/(app)/platform/organizations/sections'
 import { SearchInput } from '../search-input'
+import { ShowInactivesToggle } from '../show-inactives-toggle'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
 import { FieldDrawer, NewFieldButton } from '../../app/(app)/admin/custom-fields/FieldDrawer'
@@ -195,9 +218,17 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'link-button': (props) => {
     const href = str(props, 'href')
     if (!href) return null
+    // Icons are components, so the spec names one from a closed map — the same
+    // rule the empty state follows.
+    const icons: Record<string, ReactNode> = { settings: <Settings size={14} /> }
+    const iconKey = str(props, 'iconKey')
+    const variant = str(props, 'variant') as ComponentProps<typeof Button>['variant']
     return (
-      <Button asChild>
-        <Link href={href as never}>{str(props, 'label') ?? ''}</Link>
+      <Button asChild variant={variant}>
+        <Link href={href as never}>
+          {iconKey ? icons[iconKey] : null}
+          {str(props, 'label') ?? ''}
+        </Link>
       </Button>
     )
   },
@@ -222,7 +253,13 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     />
   ),
   /* --- admin lists -------------------------------------------------------- */
-  'search-input': (props) => <SearchInput placeholder={str(props, 'placeholder')} />,
+  'search-input': (props) => (
+    <SearchInput
+      placeholder={str(props, 'placeholder')}
+      paramKey={str(props, 'paramKey')}
+      pageParamKey={str(props, 'pageParamKey')}
+    />
+  ),
   'filter-chips': (props) => (
     <FilterChips
       basePath={str(props, 'basePath')}
@@ -230,6 +267,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       paramKey={str(props, 'paramKey') ?? ''}
       label={str(props, 'label') ?? ''}
       allLabel={str(props, 'allLabel')}
+      pageParamKey={str(props, 'pageParamKey')}
       options={(props.options as ComponentProps<typeof FilterChips>['options']) ?? []}
     />
   ),
@@ -292,14 +330,14 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const renderer = action ? WIDGET_REGISTRY[action] : undefined
     // Icons are components, so the spec names one from a closed map rather
     // than carrying it — same rule as every other component reference.
-    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail /> }
+    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail />, activity: <Activity /> }
     const iconKey = str(props, 'icon')
     return (
       <EmptyState
         icon={iconKey ? icons[iconKey] : undefined}
         title={str(props, 'title') ?? ''}
         description={str(props, 'description')}
-        action={renderer ? renderer({}) : undefined}
+        action={renderer ? renderer((props.actionProps as Record<string, unknown>) ?? {}) : undefined}
       />
     )
   },
@@ -314,6 +352,151 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       waiverNumber={str(props, 'waiverNumber') ?? ''}
       href={str(props, 'href') ?? ''}
       directionLabel={str(props, 'directionLabel') ?? ''}
+    />
+  ),
+  /* --- chart of accounts -------------------------------------------------- */
+  'new-account': (props) => (
+    <NewAccountButton
+      currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
+      label={str(props, 'label') ?? ''}
+    />
+  ),
+  'account-name-cell': (props) => (
+    <AccountNameCell
+      number={str(props, 'number') ?? ''}
+      name={str(props, 'name') ?? ''}
+      href={str(props, 'href') ?? ''}
+      isSummary={props.isSummary === true}
+      inactiveLabel={str(props, 'inactiveLabel') ?? null}
+      parentPath={str(props, 'parentPath') ?? null}
+    />
+  ),
+  'account-register-cell': (props) => (
+    <AccountRegisterCell
+      accountId={str(props, 'accountId') ?? ''}
+      ariaLabel={str(props, 'ariaLabel') ?? ''}
+      title={str(props, 'title') ?? ''}
+    />
+  ),
+  'accounts-hierarchy': (props) => (
+    <AccountsHierarchyTable
+      groups={(props.groups as ComponentProps<typeof AccountsHierarchyTable>['groups']) ?? []}
+      labels={props.labels as ComponentProps<typeof AccountsHierarchyTable>['labels']}
+    />
+  ),
+  'account-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof AccountDrawer> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <AccountDrawer key={remountKey} {...rest} />
+  },
+  /**
+   * The universal entity list. `drawer` and `emptyAction` name widgets rather
+   * than carrying components — a spec cannot express JSX, so the indirection is
+   * the same one the empty state already uses for its action.
+   */
+  'entity-list-view': (props) => {
+    const slot = (value: unknown) => {
+      if (!value || typeof value !== 'object') return undefined
+      const ref = value as { widget?: string; props?: Record<string, unknown> }
+      const renderer = ref.widget ? WIDGET_REGISTRY[ref.widget] : undefined
+      if (ref.widget && !renderer) throw new UnknownWidgetError(ref.widget)
+      return renderer ? renderer(ref.props ?? {}) : undefined
+    }
+    return (
+      <EntityListSlot
+        recordType={str(props, 'recordType') ?? ''}
+        sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
+        drawer={slot(props.drawer)}
+        emptyAction={slot(props.emptyAction)}
+      />
+    )
+  },
+
+  /* --- continuous close -------------------------------------------------- */
+  'tab-nav': (props) => (
+    <TabNav
+      ariaLabel={str(props, 'ariaLabel') ?? ''}
+      tabs={(props.tabs as ComponentProps<typeof TabNav>['tabs']) ?? []}
+    />
+  ),
+  'metric-tile': (props) => (
+    <Metric
+      label={str(props, 'label') ?? ''}
+      value={Number(props.value ?? 0)}
+      locale={str(props, 'locale') ?? 'en'}
+      tone={str(props, 'tone')}
+    />
+  ),
+  'reports-card-heading': (props) => (
+    <ReportsCardHeading
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+    />
+  ),
+  'narrative-entry': (props) => (
+    <NarrativeEntry
+      narrative={(props.narrative as Record<string, unknown>) ?? {}}
+      href={str(props, 'href') ?? ''}
+      labels={props.labels as ComponentProps<typeof NarrativeEntry>['labels']}
+    />
+  ),
+  'finding-cell': (props) => (
+    <FindingCell
+      title={str(props, 'title') ?? ''}
+      href={str(props, 'href') ?? ''}
+      summary={str(props, 'summary') ?? ''}
+    />
+  ),
+  'work-item-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof WorkItemDrawer> | null
+    if (!drawer) return null
+    return <WorkItemDrawer {...drawer} />
+  },
+  'narrative-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof NarrativeDrawer> | null
+    if (!drawer) return null
+    return <NarrativeDrawer {...drawer} />
+  },
+
+  'new-party': () => <NewPartyButton />,
+  'new-party-redirect': () => <NewPartyRedirect />,
+  'party-roles-cell': (props) => (
+    <PartyRolesCell badges={(props.badges as ComponentProps<typeof PartyRolesCell>['badges']) ?? []} />
+  ),
+  /** The remount key rides along as a prop: switching parties must reset the
+   *  drawer's client state, and a widget at a fixed position would otherwise
+   *  be reused. */
+  'party-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof PartyDrawer> & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <PartyDrawer key={remountKey} {...rest} />
+  },
+  'party-txn-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof RelatedTxnSlot> | null
+    if (!drawer) return null
+    return <RelatedTxnSlot {...drawer} />
+  },
+  'show-inactives-toggle': (props) => (
+    <ShowInactivesToggle
+      basePath={str(props, 'basePath') ?? ''}
+      currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
+    />
+  ),
+  'new-report': () => <NewReportButton />,
+  'report-name-cell': (props) => (
+    <ReportNameCell
+      name={str(props, 'name') ?? ''}
+      href={str(props, 'href') ?? ''}
+      summary={str(props, 'summary') ?? ''}
+    />
+  ),
+  'custom-report-actions': (props) => (
+    <CustomReportActions
+      id={str(props, 'id') ?? ''}
+      kind={str(props, 'kind') === 'built_in' ? 'built_in' : 'custom'}
+      canCreate={props.canCreate === true}
     />
   ),
   'compliance-matrix': (props) => (
