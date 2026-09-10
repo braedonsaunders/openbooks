@@ -77,6 +77,8 @@ import { AdminHubCard } from '../../app/(app)/admin/sections'
 import { BuildHubCard } from '../../app/(app)/admin/build/sections'
 import { MatchWorkspace } from '../../app/(app)/banking/match/MatchWorkspace'
 import { BalanceCheck } from '../../app/(app)/reports/balance-sheet/sections'
+import { SavedViewHeader, SavedViewMeta } from '../../app/(app)/knowledge/views/[id]/sections'
+import { ResultView } from '../../app/(app)/reports/custom/ResultView'
 import { PaperView } from '../../app/(app)/reports/PaperView'
 import {
   FlowNameCell,
@@ -834,6 +836,36 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       currency={str(props, 'currency')}
       emptyLabel={str(props, 'emptyLabel') ?? ''}
       data={props.data as ComponentProps<typeof PaperView>['data']}
+    />
+  ),
+  /* --- saved view run --------------------------------------------------------- */
+  'saved-view-header': (props) => (
+    <SavedViewHeader
+      viewId={str(props, 'viewId') ?? ''}
+      name={str(props, 'name') ?? ''}
+      scope={str(props, 'scope') ?? ''}
+      scopeLabel={str(props, 'scopeLabel') ?? ''}
+      subtitle={str(props, 'subtitle') ?? ''}
+      backHref={str(props, 'backHref') ?? '/knowledge/views'}
+      backLabel={str(props, 'backLabel') ?? ''}
+      canEdit={props.canEdit === true}
+      labels={props.labels as ComponentProps<typeof SavedViewHeader>['labels']}
+    />
+  ),
+  'saved-view-meta': (props) => (
+    <SavedViewMeta
+      typeLabel={str(props, 'typeLabel') ?? ''}
+      lastUpdated={str(props, 'lastUpdated') ?? ''}
+      rowsRange={str(props, 'rowsRange') ?? null}
+    />
+  ),
+  'result-view': (props) => (
+    <ResultView
+      company={str(props, 'company') ?? ''}
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? null}
+      result={props.result as ComponentProps<typeof ResultView>['result']}
+      drillTarget={props.drillTarget as ComponentProps<typeof ResultView>['drillTarget']}
     />
   ),
   'balance-check': (props) => (

@@ -204,6 +204,14 @@ const PAGES = [
     expect: 'table tbody tr',
   },
   {
+    path: '/knowledge/views/01a08739-eb71-714a-bceb-19e015fd17db',
+    // A saved view's run page: a permission-gated action cluster in the
+    // header, and a body that is an empty paper or a result table.
+    variants: [{ query: '', expect: 'main', minMatches: 1 }],
+    expect: 'main',
+    minMatches: 1,
+  },
+  {
     path: '/knowledge/views',
     variants: [''],
     expect: 'table tbody tr',
