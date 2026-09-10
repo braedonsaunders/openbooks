@@ -35,7 +35,8 @@ import { LienWaiverDrawer } from '../../app/(app)/compliance/lien-waivers/LienWa
 import { NewFilingButton } from '../../app/(app)/compliance/information-returns/NewFilingButton'
 import { IdentityCell, ActingCell, AccessControlCell } from '../../app/(app)/platform/access/sections'
 import { GrantAccessForm } from '../../app/(app)/platform/_components/GrantAccessForm'
-import { KeyRound, Building2, Users } from 'lucide-react'
+import { KeyRound, Building2, Users, Mail } from 'lucide-react'
+import { EmailSubjectCell, EmailEvidenceCell } from '../../app/(app)/platform/email-log/sections'
 import {
   UserIdentityCell,
   UserRolesCell,
@@ -288,7 +289,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const renderer = action ? WIDGET_REGISTRY[action] : undefined
     // Icons are components, so the spec names one from a closed map rather
     // than carrying it — same rule as every other component reference.
-    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users /> }
+    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail /> }
     const iconKey = str(props, 'icon')
     return (
       <EmptyState
@@ -311,6 +312,12 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       href={str(props, 'href') ?? ''}
       directionLabel={str(props, 'directionLabel') ?? ''}
     />
+  ),
+  'email-subject-cell': (props) => (
+    <EmailSubjectCell subject={str(props, 'subject') ?? ''} category={str(props, 'category') ?? ''} />
+  ),
+  'email-evidence-cell': (props) => (
+    <EmailEvidenceCell summary={str(props, 'summary') ?? ''} error={str(props, 'error') ?? ''} />
   ),
   'user-identity-cell': (props) => (
     <UserIdentityCell
