@@ -8,6 +8,8 @@ import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
 import { ReportFilterBar } from '../../../reports/ReportFilterBar'
 import { AnalyticsHeader } from '../../_ui/AnalyticsHeader'
 import { TrueCostView } from '../TrueCostView'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { loadTrueCostPlanner, trueCostPlannerSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +23,18 @@ export default async function TrueCostPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadTrueCostPlanner(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={trueCostPlannerSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
+
   const t = await getTranslations('analytics.trueCost')
   const authz = await requirePermission('reports.read')
   await requireFeatureEnabled(authz.user.orgId, 'projects')

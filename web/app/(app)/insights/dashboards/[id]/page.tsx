@@ -6,10 +6,32 @@ import { can, requirePermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadDashboardEmbed } from '../../../../api/insights/_lib'
 import { DashboardBuilder } from './DashboardBuilder'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { insightsDashboardSpec, loadInsightsDashboard } from './view'
 
 export const dynamic = 'force-dynamic'
 
-export default async function DashboardDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function DashboardDetail({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  // Optional: this route natively takes only `params`.
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = (await searchParams) ?? {}
+  if (sp.__viewspec === '1') {
+    const { id } = await params
+    const data = await loadInsightsDashboard(id)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={insightsDashboardSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
+
   const authz = await requirePermission('insights.read')
   const canCreate = can(authz, 'insights.create')
   const canPublish = can(authz, 'insights.publish')

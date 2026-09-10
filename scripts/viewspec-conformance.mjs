@@ -1293,6 +1293,35 @@ const PAGES = [
     expect: 'main h2, main h3',
     minMatches: 1,
   },
+  {
+    path: '/analytics/true-cost/planner',
+    // The eighth analytics dashboard, same shape as the other seven and
+    // reusing `report-period-filter` rather than a ninth identical entry.
+    //
+    // `main button`, not `main section h3`: this view's hero is KpiCards and
+    // its panels live behind a client tab strip, so it renders no Panel
+    // heading on first paint. Measured at 4.
+    variants: ['', { query: '?period=last-quarter', expect: 'main button', minMatches: 4 }],
+    expect: 'main button',
+    minMatches: 4,
+  },
+  {
+    path: '/insights/dashboards/01a0876e-f786-76f4-b02d-1ba4bf056f67',
+    // The published simulator dashboard. Its saved layout points at card ids
+    // that are not uuids, which used to 500 the page — see the fix in
+    // `loadDashboardEmbed`. Registered deliberately: this entry is what keeps
+    // that path honest. The draft dashboard below renders the same builder
+    // with a different status; both are real, neither is seeded.
+    variants: [''],
+    expect: 'main button',
+    minMatches: 2,
+  },
+  {
+    path: '/insights/dashboards/01a0876e-f787-7e2f-846b-405ebd24b8b8',
+    variants: [''],
+    expect: 'main button',
+    minMatches: 2,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole

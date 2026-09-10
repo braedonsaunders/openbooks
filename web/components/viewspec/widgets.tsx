@@ -142,6 +142,8 @@ import { SentinelView } from '../../app/(app)/analytics/sentinel/SentinelView'
 import { SpendVelocityView } from '../../app/(app)/analytics/spend-velocity/SpendVelocityView'
 import { UtilizationView } from '../../app/(app)/analytics/utilization/UtilizationView'
 import { VendorView } from '../../app/(app)/analytics/vendor-performance/VendorView'
+import { TrueCostView } from '../../app/(app)/analytics/true-cost/TrueCostView'
+import { DashboardBuilder } from '../../app/(app)/insights/dashboards/[id]/DashboardBuilder'
 import {
   TaxDepreciationHeader,
   TaxDepreciationOverviewSlot,
@@ -1353,6 +1355,22 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     return <EquipmentDrawer key={remountKey} {...rest} />
   },
 
+  /* --- insights dashboard builder --------------------------------------------------- */
+  /** Whole: a drag-and-drop board with a card palette, placement state and
+   *  publish/pin mutations. The two decisions that matter — draft-card
+   *  visibility and the palette's `insightVisibilitySql` fence — are made in
+   *  the loader, where they belong. */
+  'insights-dashboard-builder': (props) => (
+    <DashboardBuilder
+      dashboard={props.dashboard as ComponentProps<typeof DashboardBuilder>['dashboard']}
+      cards={props.cards as ComponentProps<typeof DashboardBuilder>['cards']}
+      availableCards={props.availableCards as ComponentProps<typeof DashboardBuilder>['availableCards']}
+      pinned={props.pinned === true}
+      canCreate={props.canCreate === true}
+      canPublish={props.canPublish === true}
+    />
+  ),
+
   /* --- API console ------------------------------------------------------------------ */
   /** The schema IS server data — the same plain-data prop the native page
    *  hands the component — so it travels as a literal widget prop. Nothing
@@ -1574,6 +1592,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       profitability={props.profitability as ComponentProps<typeof CustomerView>['profitability']}
       projectsEnabled={props.projectsEnabled === true}
     />
+  ),
+  'true-cost-view': (props) => (
+    <TrueCostView data={props.data as ComponentProps<typeof TrueCostView>['data']} />
   ),
   'sentinel-view': (props) => (
     <SentinelView data={props.data as ComponentProps<typeof SentinelView>['data']} />
