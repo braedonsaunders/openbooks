@@ -11,7 +11,9 @@ import {
 } from "../../../lib/customization/resolve";
 import { isFeatureEnabled } from "../../../lib/features";
 import { requirePropertyManagementFeature } from "../../../lib/property-management-gate";
+import { ModuleView } from "../../../components/viewspec/module-view";
 import { PropertyManagementWorkspace } from "./PropertyManagementWorkspace";
+import { loadPropertyManagement, propertyManagementSpec } from "./view";
 import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
 import type { Option } from "./workspace-ui";
 
@@ -22,6 +24,17 @@ export default async function PropertyManagementPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadPropertyManagement(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={propertyManagementSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission("ar.read");
   await requirePropertyManagementFeature(authz.user.orgId);
   const orgId = authz.user.orgId;

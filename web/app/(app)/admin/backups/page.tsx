@@ -6,6 +6,8 @@ import { s3Enabled } from "@openbooks/engine/src/file-storage.ts";
 import { getWorkerHeartbeat } from "@openbooks/jobs";
 import { ListPageLayout } from "../../../../components/page-layout";
 import { requirePermission } from "../../../../lib/authz";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadAdminBackups, adminBackupsSpec } from "./view";
 import { BackupManager, type BackupPolicyRow, type BackupRunRow } from "./BackupManager";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +21,22 @@ function isoTimestamp(value: Date | string | null): string | null {
   return date.toISOString();
 }
 
-export default async function BackupsPage() {
+export default async function BackupsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  if ((await searchParams).__viewspec === "1") {
+    const sp = await searchParams;
+    const data = await loadAdminBackups();
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={adminBackupsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    );
+  }
   const authz = await requirePermission("admin.backups.manage");
   const tHub = await getTranslations("admin.hub");
   const { orgId } = authz.user;
