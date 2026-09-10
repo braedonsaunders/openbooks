@@ -837,6 +837,59 @@ const PAGES = [
     expect: 'main textarea',
     minMatches: 1,
   },
+  {
+    path: '/revenue',
+    // Entity list over revenue contracts plus the contract flyout (portaled
+    // to <body>, hence the second scope). Fixture …2901-…290c: the simulator
+    // never creates revenue contracts.
+    variants: [
+      '',
+      { query: '?status=cancelled', expect: 'table tbody tr', minMatches: 1 },
+      // At total === 0 the entity list swaps the whole table for EmptyState,
+      // so a `thead` pin here would wait forever.
+      { query: '?q=zzzznomatch', expect: 'main h3', minMatches: 1 },
+      {
+        query: '?contract=00000000-0000-7000-9000-000000002901',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/assistant',
+    // Fully client-side workbench. The pin is STATIC chrome only — never
+    // streamed tokens: the header and the New chat button.
+    //
+    // ONE variant, deliberately. The obvious second is `?q=`, but this tenant
+    // has no AI model configured, so the composer never renders and the
+    // prompt is only ever consumed by an effect guarded on `aiEnabled` —
+    // `?q=anything` renders byte-identically to the default, which is not
+    // coverage. Configuring a model to reach that branch would make the page
+    // call a language model mid-comparison, which is not a thing a
+    // deterministic render diff can contain.
+    variants: [''],
+    expect: 'main button',
+    minMatches: 2,
+  },
+  {
+    path: '/banking/reconciliations',
+    // The universal entity list over bank_reconciliation, seeded by the
+    // …0401-0499 banking block (3 rows, 2 of them signed off).
+    variants: [
+      { query: '', expect: 'table tbody tr', minMatches: 3 },
+      { query: '?status=signed_off', expect: 'table tbody tr', minMatches: 2 },
+      { query: '?q=1010', expect: 'table tbody tr', minMatches: 3 },
+      { query: '?sort=through&dir=asc', expect: 'table tbody tr', minMatches: 3 },
+      // At total === 0 the entity list swaps the WHOLE table for EmptyState —
+    // there is no headers-only branch to pin.
+    { query: '?q=zzzznomatch', expect: 'main h3', minMatches: 1 },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole
