@@ -291,6 +291,67 @@ const PAGES = [
     minMatches: 5,
   },
   {
+    path: '/payroll',
+    variants: [''],
+    expect: 'h2, h3',
+    minMatches: 4,
+  },
+  {
+    path: '/compliance',
+    // One variant only: the tenant has no 1099 data, so `?year=` changes
+    // nothing and the second render was byte-identical — which the
+    // identical-markup guard rightly refused.
+    variants: [''],
+    expect: 'main section li',
+    minMatches: 4,
+  },
+  {
+    path: '/tax',
+    // The prepare tab is a client form; the history tab is a hand-rolled
+    // table; the drawer opens a prepared filing with its mark-as-filed form.
+    variants: [
+      { query: '', expect: 'main select, main input', minMatches: 1 },
+      { query: '?tab=history', expect: 'table tbody tr', minMatches: 3 },
+      { query: '?tab=history&status=filed', expect: 'table tbody tr', minMatches: 1 },
+      {
+        query: '?tab=history&filing=00000000-0000-7000-9000-000000006811',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'main select, main input',
+    minMatches: 1,
+  },
+  {
+    path: '/banking/transactions',
+    variants: [
+      '',
+      {
+        query: '?doc=00000000-0000-7000-9000-000000000501',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/admin/build',
+    variants: [{ query: '', expect: 'section a', minMatches: 8 }],
+    expect: 'section a',
+    minMatches: 8,
+  },
+  {
+    path: '/platform/users/01a08426-0962-74c7-a086-e1609c589dcb',
+    // A detail page whose every control is a bound SERVER ACTION, so each one
+    // is a widget that takes ids and binds the action itself.
+    variants: [{ query: '', expect: 'main h2', minMatches: 1 }],
+    expect: 'main h2',
+    minMatches: 1,
+  },
+  {
     path: '/admin/roles',
     // The hand-rolled role table as a widget; header, search, type chips,
     // empty state and pager are ordinary spec.

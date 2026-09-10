@@ -1,6 +1,5 @@
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { Alert, AlertDescription, Badge, Button, EmptyState, PageHeader } from '@openbooks/ui'
+import { EmptyState, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { HomePanel, HomeStatTile } from '../../../components/module-home/client'
 import { ModuleHomeTabs } from '../../../components/module-home/ui'
@@ -11,6 +10,15 @@ import { loadComplianceOverview, requireComplianceFeature, stateTone } from '../
 import { getMoneyFormatter } from '@/lib/money-server'
 import { decimalCmp } from '../../../lib/statement-format'
 import { complianceTabs } from './tabs'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadCompliance, complianceSpec } from './view'
+import {
+  BlockedBillsSection,
+  ComplianceSetupBanner,
+  ExpiringVendorsSection,
+  ReadinessPanel,
+  WaiversPanel,
+} from './sections'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +44,17 @@ export default async function ComplianceHomePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadCompliance(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={complianceSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('compliance.read')
   const orgId = authz.user.orgId
   await requireComplianceFeature(orgId)
@@ -64,14 +83,11 @@ export default async function ComplianceHomePage({
       }
     >
       {!overview.configured ? (
-        <Alert className="mb-4">
-          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-            <span>{t('setup.prompt')}</span>
-            <Button asChild size="sm">
-              <Link href="/admin/setup/compliance-classes">{t('setup.action')}</Link>
-            </Button>
-          </AlertDescription>
-        </Alert>
+        <ComplianceSetupBanner
+          prompt={t('setup.prompt')}
+          actionHref="/admin/setup/compliance-classes"
+          actionLabel={t('setup.action')}
+        />
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -115,36 +131,19 @@ export default async function ComplianceHomePage({
           hint={t('panels.blockedHint')}
           bodyClassName="p-0"
         >
-          {overview.blockedBills.length === 0 ? (
-            <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{t('panels.blockedEmpty')}</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {overview.blockedBills.map((bill) => (
-                <li key={bill.documentId} className="flex items-start justify-between gap-3 px-4 py-2.5">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Badge variant={bill.decision === 'blocked' ? 'destructive' : 'warning'}>
-                        {t(`decision.${bill.decision}`)}
-                      </Badge>
-                      <Link
-                        href={`/ap/bills?doc=${bill.documentId}`}
-                        className="truncate text-sm font-medium text-slate-800 hover:underline dark:text-slate-100"
-                      >
-                        {bill.documentNumber}
-                      </Link>
-                      <span className="truncate text-sm text-slate-500 dark:text-slate-400">{bill.vendorName}</span>
-                    </div>
-                    <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-                      {bill.reasons.join(' · ')}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
-                    {money(bill.openBalance)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <BlockedBillsSection
+            rows={overview.blockedBills.map((bill) => ({
+              documentId: bill.documentId,
+              documentNumber: bill.documentNumber,
+              billHref: `/ap/bills?doc=${bill.documentId}`,
+              vendorName: bill.vendorName,
+              decisionLabel: t(`decision.${bill.decision}`),
+              decisionVariant: bill.decision === 'blocked' ? 'destructive' : 'warning',
+              reasons: bill.reasons.join(' · '),
+              openBalance: money(bill.openBalance),
+            }))}
+            empty={t('panels.blockedEmpty')}
+          />
         </HomePanel>
 
         <HomePanel
@@ -153,110 +152,55 @@ export default async function ComplianceHomePage({
           hint={t('panels.expiringHint')}
           bodyClassName="p-0"
         >
-          {overview.expiringSoon.length === 0 ? (
-            <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{t('panels.expiringEmpty')}</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {overview.expiringSoon.map((row) => (
-                <li key={row.partyId} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                  <Link
-                    href={`/compliance/vendors?vendor=${row.partyId}`}
-                    className="truncate text-sm font-medium text-slate-800 hover:underline dark:text-slate-100"
-                  >
-                    {row.vendorName}
-                  </Link>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge variant={stateTone(row.overall)}>{t(`states.${row.overall}`)}</Badge>
-                    <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{row.nextExpiry}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ExpiringVendorsSection
+            rows={overview.expiringSoon.map((row) => ({
+              partyId: row.partyId,
+              vendorHref: `/compliance/vendors?vendor=${row.partyId}`,
+              vendorName: row.vendorName,
+              stateLabel: t(`states.${row.overall}`),
+              stateVariant: stateTone(row.overall),
+              nextExpiry: row.nextExpiry,
+            }))}
+            empty={t('panels.expiringEmpty')}
+          />
         </HomePanel>
 
         {projectsEnabled ? (
-          <HomePanel
-            icon="clipboard"
+          <WaiversPanel
             title={t('panels.waivers')}
             hint={t('panels.waiversHint')}
-            bodyClassName="p-0"
-            actions={
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/compliance/lien-waivers">{t('panels.waiversAction')}</Link>
-              </Button>
-            }
-          >
-            {overview.outstandingWaivers.length === 0 ? (
-              <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{t('panels.waiversEmpty')}</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {overview.outstandingWaivers.map((waiver) => (
-                  <li key={waiver.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                    <div className="min-w-0">
-                      <Link
-                        href={`/compliance/lien-waivers?waiver=${waiver.id}`}
-                        className="truncate text-sm font-medium text-slate-800 hover:underline dark:text-slate-100"
-                      >
-                        {waiver.waiverNumber}
-                      </Link>
-                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-                        {waiver.partyName} · {waiver.projectName}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <Badge variant="warning">{t(`waiverStatus.${waiver.status}`)}</Badge>
-                      <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-                        {waiver.throughDate}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </HomePanel>
+            actionHref="/compliance/lien-waivers"
+            actionLabel={t('panels.waiversAction')}
+            rows={overview.outstandingWaivers.map((waiver) => ({
+              id: waiver.id,
+              waiverHref: `/compliance/lien-waivers?waiver=${waiver.id}`,
+              waiverNumber: waiver.waiverNumber,
+              context: `${waiver.partyName} · ${waiver.projectName}`,
+              statusLabel: t(`waiverStatus.${waiver.status}`),
+              throughDate: waiver.throughDate,
+            }))}
+            empty={t('panels.waiversEmpty')}
+          />
         ) : null}
 
-        <HomePanel
-          icon="receipt"
+        <ReadinessPanel
           title={t('panels.readiness', { year: taxYear })}
           hint={t('panels.readinessHint')}
-          bodyClassName="p-0"
-          actions={
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/compliance/information-returns">{t('panels.readinessAction')}</Link>
-            </Button>
-          }
-        >
-          {overview.readiness.length === 0 ? (
-            <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{t('panels.readinessEmpty')}</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {overview.readiness.map((row) => (
-                <li key={row.partyId} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                  <div className="min-w-0">
-                    <Link
-                      href={`/compliance/vendors?vendor=${row.partyId}`}
-                      className="truncate text-sm font-medium text-slate-800 hover:underline dark:text-slate-100"
-                    >
-                      {row.vendorName}
-                    </Link>
-                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-                      {!row.reportable
-                        ? t('readiness.unflagged')
-                        : !row.hasTin
-                          ? t('readiness.missingTin')
-                          : t('readiness.noForm')}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
-                    {money(row.paidThisYear)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </HomePanel>
+          actionHref="/compliance/information-returns"
+          actionLabel={t('panels.readinessAction')}
+          rows={overview.readiness.map((row) => ({
+            partyId: row.partyId,
+            vendorHref: `/compliance/vendors?vendor=${row.partyId}`,
+            vendorName: row.vendorName,
+            issue: !row.reportable
+              ? t('readiness.unflagged')
+              : !row.hasTin
+                ? t('readiness.missingTin')
+                : t('readiness.noForm'),
+            paidThisYear: money(row.paidThisYear),
+          }))}
+          empty={t('panels.readinessEmpty')}
+        />
       </div>
 
       {overview.filings.length === 0 && overview.trackedVendors === 0 && overview.configured ? (

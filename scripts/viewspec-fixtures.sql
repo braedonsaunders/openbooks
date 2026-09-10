@@ -27,6 +27,7 @@
 --   …3801-3899  bank matching rules
 --   …4801-4899  budget scenarios and lines
 --   …5801-5899  file cabinet folders, files, versions
+--   …6801-6899  tax return forms and filings
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
 --
 --   psql "$VIEWSPEC_DB" -f scripts/viewspec-fixtures.sql
@@ -791,4 +792,41 @@ begin
     values (v_version, v_file, 1, 42, 'text/plain')
     on conflict (id) do nothing;
   end;
+
+  -- Tax return forms + filing history for the /tax conversion. The prepare
+  -- tab needs at least one active form (its Select, submission panel and
+  -- compute flow); the history tab needs rows across both statuses.
+  insert into tax_return_forms
+    (id, org_id, code, name, country, submission_channel, government_format,
+     submission_url, is_active, official_pdf_file_id)
+  values
+    ('00000000-0000-7000-9000-000000006801', v_org, 'CA_GST34',
+     'GST/HST return', 'CA', 'portal_manual', 'portal_entry',
+     'https://www.canada.ca/en/revenue-agency.html', true, null),
+    ('00000000-0000-7000-9000-000000006802', v_org, 'US_941',
+     'Employer quarterly federal tax return', 'US', 'efile_api', 'api',
+     null, true, null)
+  on conflict (id) do nothing;
+
+  insert into tax_filings
+    (id, org_id, form_code, form_name, country, period_from, period_to,
+     version, status, submission_channel, boxes, snapshot_hash,
+     filing_reference, filed_at)
+  values
+    ('00000000-0000-7000-9000-000000006811', v_org, 'CA_GST34',
+     'GST/HST return', 'CA', '2026-01-01', '2026-03-31',
+     1, 'prepared', 'portal_manual',
+     '[{"lineCode": "101", "label": "Sales and other revenue", "value": "48250.00", "computed": false, "editable": true}, {"lineCode": "105", "label": "Total GST/HST collected", "value": "2412.50", "computed": true, "editable": false}]'::jsonb,
+     repeat('a', 64), null, null),
+    ('00000000-0000-7000-9000-000000006812', v_org, 'CA_GST34',
+     'GST/HST return', 'CA', '2025-10-01', '2025-12-31',
+     1, 'filed', 'portal_manual',
+     '[{"lineCode": "101", "label": "Sales and other revenue", "value": "41100.00", "computed": false, "editable": true}, {"lineCode": "105", "label": "Total GST/HST collected", "value": "2055.00", "computed": true, "editable": false}]'::jsonb,
+     repeat('b', 64), 'CRA-CONF-2025-Q4', now() - interval '40 days'),
+    ('00000000-0000-7000-9000-000000006813', v_org, 'US_941',
+     'Employer quarterly federal tax return', 'US', '2026-01-01', '2026-03-31',
+     1, 'prepared', 'efile_api',
+     '[{"lineCode": "5a", "label": "Taxable social security wages", "value": "120000.00", "computed": false, "editable": true}, {"lineCode": "5c", "label": "Total income tax withheld", "value": "18000.00", "computed": true, "editable": false}]'::jsonb,
+     repeat('c', 64), null, null)
+  on conflict (id) do nothing;
 end $$;
