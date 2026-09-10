@@ -959,6 +959,31 @@ const PAGES = [
     expect: 'main a[href="/dashboard/customize"]',
     minMatches: 1,
   },
+  {
+    path: '/sync',
+    // The Migrations & Mirror console. Fixture …9821-9826: the simulator
+    // never connects an external system, and both fixture runs finished in
+    // the past so the client's 2.5s live poll stays off and the DOM settles.
+    variants: [{ query: '', expect: 'table tbody tr', minMatches: 2 }],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/payroll/retro',
+    // A table pin would match zero rows: the default render is the IDLE
+    // branch, and proposals only exist as post-POST client state. The pin is
+    // the schedule picker's options, which the loader populates.
+    //
+    // `main select option`, not `#retro-schedule option`: the shared `Select`
+    // puts that id on a custom listbox BUTTON and keeps a hidden native
+    // <select aria-hidden> beside it for form semantics — the options live in
+    // the hidden one. And `attached` rather than `visible`, because an
+    // <option> is real rendered data that Playwright will never call visible.
+    variants: [''],
+    expect: 'main select option',
+    minMatches: 1,
+    expectState: 'attached',
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole
@@ -1554,7 +1579,7 @@ async function login(page) {
  * fade matters because `PageContainer` animates opacity on mount; screenshotting
  * mid-animation produces a diff that is pure timing noise.
  */
-async function renderSettled(page, url, expectSelector, minMatches = 0) {
+async function renderSettled(page, url, expectSelector, minMatches = 0, expectState = 'visible') {
   // `domcontentloaded`, not `networkidle`: a large page with many client
   // components (a register with thousands of transaction links) never reaches
   // network idle within any sane timeout, while serving in ~60ms. Readiness is
@@ -1581,7 +1606,13 @@ async function renderSettled(page, url, expectSelector, minMatches = 0) {
   // loading screen satisfies it — so each page names an element that only
   // exists once its real content has rendered.
   if (expectSelector) {
-    await page.waitForSelector(expectSelector, { state: 'visible', timeout: 30_000 })
+    // `visible` by default, because a node with no box usually means the page
+    // has not really rendered. But some genuinely-rendered content HAS no box:
+    // an `<option>` inside a closed `<select>` is in the DOM and is real data,
+    // and Playwright will never call it visible. Those variants say
+    // `expectState: 'attached'` rather than being forced onto a weaker
+    // selector that proves less.
+    await page.waitForSelector(expectSelector, { state: expectState, timeout: 30_000 })
   }
   // A page that legitimately renders its EMPTY state is not blank, so the ink
   // and byte-count guards pass it happily while proving nothing about the
@@ -2035,9 +2066,9 @@ async function scopedMarkup(page, scopes) {
   return parts.join('\n')
 }
 
-async function checkVariant(page, path, variant, expectSelector, minMatches, scopes = ['main']) {
+async function checkVariant(page, path, variant, expectSelector, minMatches, scopes = ['main'], expectState = 'visible') {
   const nativeUrl = `${BASE}${path}${variant}`
-  await renderSettled(page, nativeUrl, expectSelector, minMatches)
+  await renderSettled(page, nativeUrl, expectSelector, minMatches, expectState)
   await assertStylesLoaded(page)
   const nativePath = await renderPath(page)
   if (nativePath !== 'native') throw new Error(`${nativeUrl} rendered via ${nativePath}, expected native`)
@@ -2045,7 +2076,7 @@ async function checkVariant(page, path, variant, expectSelector, minMatches, sco
   const nativeShot = await captureSettled(page)
   const ink = await assertNotBlank(nativeShot, `${path}${variant} native`)
 
-  await renderSettled(page, specUrl(path, variant), expectSelector, minMatches)
+  await renderSettled(page, specUrl(path, variant), expectSelector, minMatches, expectState)
   const chosen = await renderPath(page)
   if (chosen !== 'viewspec') {
     throw new Error(
@@ -2127,7 +2158,9 @@ async function main() {
         try {
           const scopes =
             (typeof raw === 'string' ? undefined : raw.scopes) ?? entry.scopes ?? ['main']
-          result = await checkVariant(page, entry.path, variant, expect, minMatches, scopes)
+          const expectState =
+            (typeof raw === 'string' ? undefined : raw.expectState) ?? entry.expectState ?? 'visible'
+          result = await checkVariant(page, entry.path, variant, expect, minMatches, scopes, expectState)
         } catch (error) {
           failures += 1
           console.error(`✗ ${entry.path}${variant}\n    ${error.message}`)

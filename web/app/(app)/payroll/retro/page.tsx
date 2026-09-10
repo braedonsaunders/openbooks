@@ -7,6 +7,8 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { scopedRetroSchedules } from '../../../../lib/payroll-scoped-views'
 import { RetroWorkspace, type RetroSchedule } from './RetroWorkspace'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadPayrollRetro, payrollRetroSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +35,22 @@ export async function generateMetadata() {
  * produces is paid, taxed, costed and posted by the standard pay-run pipeline —
  * this page adds no second path to a cheque.
  */
-export default async function PayrollRetroPage() {
+export default async function PayrollRetroPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadPayrollRetro(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={payrollRetroSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('payroll.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')

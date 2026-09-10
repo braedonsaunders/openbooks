@@ -37,7 +37,8 @@
 --   …1001-1099  backup policy and runs
 --   …8801-8899  labor bill rate books
 --   …1901-1999  pay stubs, employee profiles, wage rates
---   …9801-9899  app marketplace listings
+--   …9801-9810  app marketplace listings
+--   …9821-9899  platform sync connections, runs, QBD sessions/captures
 --   …9901-9999  tax depreciation regimes, pool classes, asset categories
 --   …1201-1299  bank feed connections
 --   …1301-1399  CRM prospect parties and account profiles
@@ -1952,6 +1953,115 @@ begin
           coalesce(v_status_nurturing, v_status_open), v_owner_b, 'Real estate', 45, now() - interval '9 days', true)
   on conflict (id) do nothing;
   end if;
+  end;
+
+  -- ---- platform sync connections + runs (/sync) ---------------------------
+  -- Block …9821-9826. (Proposed as …1201-1215, which the bank-feed connection
+  -- already holds — the FOURTH independent claim on that block. The
+  -- allocation table at the top of this file is the record; check it AND
+  -- grep before claiming.)
+  --
+  -- The simulator never connects an external accounting system, so the SIM
+  -- org holds zero `connections` and zero `sync_runs` rows: /sync renders
+  -- its "No connections yet" note and no runs table at all. One populated
+  -- connection card (netsuite, token auth, mirror on) + one qbd connection
+  -- (token auth, exercises the qbd heartbeat/capture/docs branch) + two
+  -- finished runs (an `incremental` mirror run carrying
+  -- mirror/openItems/periods stats for the result-summary path, and an
+  -- `attachments` run for the attachments-summary path) give the harness
+  -- the card branches AND ≥2 `table tbody tr` rows to compare. Both runs
+  -- are `status = 'ok'` in the past: nothing is `running`, so the client's
+  -- 2.5s live-poll loop stays off and the capture settles.
+  --
+  -- Cross-page impact: nil. `sync_runs` is read only by the platform API
+  -- and the (currently unreferenced) `dashboardData` in web/lib/data.ts;
+  -- `connections` only by the platform API + sync engine. No other
+  -- converted page counts or lists either table.
+  --
+  -- Guarded all-or-nothing like the backup block: the UNIQUE key is
+  -- (org_id, display_name), not the id — ON CONFLICT (id) alone would
+  -- raise on a re-run that collides on name, so the guard owns
+  -- idempotence. `posted_change_policy` stays 'review_required' (the
+  -- CHECK requires authorized_by/at to be NULL in that case — the
+  -- fixtures set neither). Secrets are a sealed-blob-shaped placeholder:
+  -- never unsealed by the list path (`toClient` returns only
+  -- `hasSecrets`), and the fixture sets no real credential.
+  declare
+    v_conn_ns uuid := '00000000-0000-7000-9000-000000009821';
+  begin
+    if not exists (select 1 from connections where org_id = v_org and display_name = 'ViewSpec NetSuite') then
+      insert into connections
+        (id, org_id, source, display_name, auth_kind, status, config,
+         secrets, mirror_enabled, mirror_schedule, cursor, last_run_at,
+         last_error, posted_change_policy)
+      values
+        -- Token-auth connection with mirror on: exercises the source +
+        -- status + mirror badges, the lastRun/cursor line, the mirror-health
+        -- line, and the netsuite-only project-financials/attachments
+        -- actions + attachment-health line.
+        (v_conn_ns, v_org, 'netsuite', 'ViewSpec NetSuite', 'token',
+         'active', '{"account": "1234567", "baseCurrency": "USD"}',
+         'sealed:viewspec-fixture', true, 'daily',
+         timestamptz '2026-08-28 06:00:00+00',
+         timestamptz '2026-08-28 06:04:11+00',
+         null, 'review_required'),
+        -- Second connection on the qbd branch: heartbeat + capture status
+        -- + docs link (qbdStatus comes from qbd_sessions/qbd_captures,
+        -- seeded below). No secrets: shows the unconfigured-status path.
+        ('00000000-0000-7000-9000-000000009822', v_org, 'qbd',
+         'ViewSpec QuickBooks Desktop', 'token', 'unconfigured',
+         '{"historyStartDate": "2020-01-01", "region": "US", "baseCurrency": "USD"}',
+         null, false, 'daily', null, null, null, 'review_required')
+      on conflict (id) do nothing;
+
+      insert into sync_runs
+        (id, org_id, connection_id, source, kind, status, started_at,
+         finished_at, synced_through, stats, progress, error_message,
+         triggered_by)
+      values
+        ('00000000-0000-7000-9000-000000009823', v_org, v_conn_ns,
+         'netsuite', 'incremental', 'ok',
+         timestamptz '2026-08-28 06:00:00+00',
+         timestamptz '2026-08-28 06:04:11+00',
+         timestamptz '2026-08-28 06:00:00+00',
+         '{"docsNew": 12, "docsAmended": 3, "docsUnchanged": 140,
+           "tb": {"matches": 42, "accounts": 42},
+           "openItems": {"checked": 18, "matches": 18},
+           "periods": {"checked": 4, "matches": 4}}',
+         '{}', null, 'schedule'),
+        ('00000000-0000-7000-9000-000000009824', v_org, v_conn_ns,
+         'netsuite', 'attachments', 'ok',
+         timestamptz '2026-08-28 07:00:00+00',
+         timestamptz '2026-08-28 07:02:33+00',
+         timestamptz '2026-08-28 06:00:00+00',
+         '{"sourceFiles": 9, "sourceLinks": 9, "createdFiles": 9}',
+         '{}', null, 'manual')
+      on conflict (id) do nothing;
+
+      -- qbd heartbeat + latest capture for the second connection (the API
+      -- takes max(last_seen_at) and the latest capture row).
+      insert into qbd_sessions
+        (id, org_id, connection_id, status, last_seen_at, expires_at)
+      values
+        ('00000000-0000-7000-9000-000000009825', v_org,
+         '00000000-0000-7000-9000-000000009822', 'active',
+         timestamptz '2026-08-29 12:00:00+00',
+         timestamptz '2026-09-05 12:00:00+00')
+      on conflict (id) do nothing;
+
+      insert into qbd_captures
+        (id, org_id, connection_id, status, captured_through, progress,
+         expires_at, finished_at, created_at)
+      values
+        ('00000000-0000-7000-9000-000000009826', v_org,
+         '00000000-0000-7000-9000-000000009822', 'complete',
+         timestamptz '2026-08-29 11:00:00+00',
+         '{"completed": 41, "total": 41}',
+         timestamptz '2026-09-05 11:00:00+00',
+         timestamptz '2026-08-29 11:04:02+00',
+         timestamptz '2026-08-29 11:00:00+00')
+      on conflict (id) do nothing;
+    end if;
   end;
 
 end $$;
