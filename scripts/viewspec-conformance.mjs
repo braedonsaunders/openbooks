@@ -301,6 +301,14 @@ const PAGES = [
     minMatches: 1,
   },
   {
+    path: '/receipts',
+    // The mirror of /payments through the same two slots, with kind and
+    // direction flipped.
+    variants: ['', { query: '?view=runs', expect: 'main h3, main h2', minMatches: 1 }],
+    expect: 'table tbody tr',
+    minMatches: 1,
+  },
+  {
     path: '/documents',
     // The file cabinet: `layout: 'bare'` (it owns its own full-height shell),
     // a folder tree, a selectable file table and two flyouts.
