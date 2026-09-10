@@ -37,6 +37,9 @@ import { IdentityCell, ActingCell, AccessControlCell } from '../../app/(app)/pla
 import { GrantAccessForm } from '../../app/(app)/platform/_components/GrantAccessForm'
 import { KeyRound, Building2, Users, Mail } from 'lucide-react'
 import { EmailSubjectCell, EmailEvidenceCell } from '../../app/(app)/platform/email-log/sections'
+import { VendorComplianceMatrix } from '../../app/(app)/compliance/vendors/Matrix'
+import { MatrixFilters } from '../../app/(app)/compliance/vendors/MatrixFilters'
+import { VendorComplianceDrawer } from '../../app/(app)/compliance/vendors/VendorComplianceDrawer'
 import {
   UserIdentityCell,
   UserRolesCell,
@@ -313,6 +316,27 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       directionLabel={str(props, 'directionLabel') ?? ''}
     />
   ),
+  'compliance-matrix': (props) => (
+    <VendorComplianceMatrix
+      rows={props.rows as ComponentProps<typeof VendorComplianceMatrix>['rows']}
+      columns={props.columns as ComponentProps<typeof VendorComplianceMatrix>['columns']}
+      classId={(props.classId as string | null) ?? null}
+      stateFilter={(props.stateFilter as string | null) ?? null}
+      labels={props.labels as ComponentProps<typeof VendorComplianceMatrix>['labels']}
+    />
+  ),
+  'matrix-filters': (props) => (
+    <MatrixFilters
+      classes={props.classes as ComponentProps<typeof MatrixFilters>['classes']}
+      classId={(props.classId as string | null) ?? null}
+      state={(props.state as string | null) ?? null}
+    />
+  ),
+  'vendor-compliance-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof VendorComplianceDrawer> | null
+    if (!drawer) return null
+    return <VendorComplianceDrawer {...drawer} />
+  },
   'email-subject-cell': (props) => (
     <EmailSubjectCell subject={str(props, 'subject') ?? ''} category={str(props, 'category') ?? ''} />
   ),
