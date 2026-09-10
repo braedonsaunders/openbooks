@@ -7,6 +7,8 @@ import { can, requirePermission } from '../../../../../lib/authz'
 import { loadFiling, requireComplianceFeature } from '../../../../../lib/compliance'
 import { isUuid } from '../../../../../lib/list-params'
 import { FilingWorksheet } from './FilingWorksheet'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { filingDetailSpec, loadFilingDetail } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +27,27 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
  * transmitted, so the ledger figure and the filed figure are both visible on
  * every row — never one silently replacing the other.
  */
-export default async function FilingDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function FilingDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  // Optional: this route natively takes only `params`.
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = (await searchParams) ?? {}
+  if (sp.__viewspec === '1') {
+    const { id } = await params
+    const data = await loadFilingDetail(id)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={filingDetailSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
+
   const authz = await requirePermission('compliance.read')
   const orgId = authz.user.orgId
   await requireComplianceFeature(orgId)

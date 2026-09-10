@@ -115,6 +115,9 @@ import { InvoicingSettingsWorkspace } from '../../app/(app)/admin/setup/invoicin
 import { TemplatesList } from '../../app/(app)/admin/pdf-templates/TemplatesList'
 import PdfTemplateEditor from '../../app/(app)/admin/pdf-templates/[id]/PdfTemplateEditor'
 import { ReportBuilder } from '../../app/(app)/reports/custom/builder/[id]/ReportBuilder'
+import FlowBuilder from '../../app/(app)/admin/flows/[id]/FlowBuilder'
+import { FilingWorksheet } from '../../app/(app)/compliance/information-returns/[id]/FilingWorksheet'
+import { DeliveryPanel } from '../../app/(app)/reports/custom/run/[id]/delivery/DeliveryPanel'
 import { WipBillingWorkspace } from '../../app/(app)/projects/wip-billing/WipBillingWorkspace'
 import { SeparationsView } from '../../app/(app)/payroll/separations/SeparationsView'
 import { SandboxManager } from '../../app/(app)/admin/sandboxes/SandboxManager'
@@ -1482,6 +1485,40 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     />
   ),
 
+  /** Schedule forms, cadence pickers, recipient editing and the run list's
+   *  retry actions — all client state. */
+  'delivery-panel': (props) => (
+    <DeliveryPanel
+      definitionId={str(props, 'definitionId') ?? ''}
+      schedules={props.schedules as ComponentProps<typeof DeliveryPanel>['schedules']}
+      recentRuns={props.recentRuns as ComponentProps<typeof DeliveryPanel>['recentRuns']}
+      canSchedule={props.canSchedule === true}
+    />
+  ),
+  /** Whole: per-row adjustment forms, the reason capture and the file/void
+   *  actions are client state. The ledger figure and the filed figure are both
+   *  on every row by design — never one silently replacing the other. */
+  'filing-worksheet': (props) => (
+    <FilingWorksheet
+      filing={props.filing as ComponentProps<typeof FilingWorksheet>['filing']}
+      boxes={props.boxes as ComponentProps<typeof FilingWorksheet>['boxes']}
+      canManage={props.canManage === true}
+      canFile={props.canFile === true}
+    />
+  ),
+  /** `permissions` is PERMISSION_CATALOGUE — the static list of permission
+   *  KEYS the app defines, for the gate inspector's picker. A catalogue, not a
+   *  grant: nothing about it is caller-specific and it confers nothing. */
+  'flow-builder': (props) => (
+    <FlowBuilder
+      flow={props.flow as ComponentProps<typeof FlowBuilder>['flow']}
+      runs={props.runs as ComponentProps<typeof FlowBuilder>['runs']}
+      profile={props.profile as ComponentProps<typeof FlowBuilder>['profile']}
+      users={props.users as ComponentProps<typeof FlowBuilder>['users']}
+      roles={props.roles as ComponentProps<typeof FlowBuilder>['roles']}
+      permissions={props.permissions as ComponentProps<typeof FlowBuilder>['permissions']}
+    />
+  ),
   /** `hiddenEntityKeys` is a per-caller PERMISSION result — the entities this
    *  reader may not query — resolved in the loader and travelling as a plain
    *  string array. The `Authz` it came from does not. */

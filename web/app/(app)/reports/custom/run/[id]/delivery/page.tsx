@@ -9,6 +9,8 @@ import { canRunReportEntity } from '../../../../../../../lib/report-authz'
 import { isUuid } from '../../../../../../../lib/list-params'
 import { loadReportDefinition } from '../../../../../../../lib/custom-reports'
 import { DeliveryPanel } from './DeliveryPanel'
+import { ModuleView } from '../../../../../../../components/viewspec/module-view'
+import { loadReportDelivery, reportDeliverySpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +19,27 @@ export const dynamic = 'force-dynamic'
  * run history with artifacts. Kept off the report screen itself — that page is
  * pure native report chrome.
  */
-export default async function ReportDeliveryPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ReportDeliveryPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  // Optional: this route natively takes only `params`.
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = (await searchParams) ?? {}
+  if (sp.__viewspec === '1') {
+    const { id } = await params
+    const data = await loadReportDelivery(id)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={reportDeliverySpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
+
   const authz = await requirePermission('reports.read')
   const canSchedule = authz.permissions.has('reports.schedule') || authz.permissions.has('*')
   const { id } = await params

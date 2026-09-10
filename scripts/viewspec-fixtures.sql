@@ -27,6 +27,7 @@
 --   …1801-1899  payroll schedules and runs (…1840 remittances, …1850
 --                 year-end, …1860 separations, …1870 opening balances)
 --   …2101-2199  WIP prebilling worksheets, lines, events
+--   …2201-2299  information-return recipients
 --   …2801-2899  field tickets
 --   …2901-2999  revenue contracts, obligations, recognition schedules
 --   …3101-3199  org-authored PDF templates
@@ -2901,5 +2902,49 @@ begin
                   where id = '00000000-0000-7000-9000-000000001701')
      and not exists (select 1 from change_set_items
                       where id = '00000000-0000-7000-9000-000000001703');
+
+  -- ---- information-return recipients (/compliance/information-returns/[id])
+  --
+  -- The simulator creates filings but never computes their recipient rows, so
+  -- the worksheet renders its empty state and the comparison proves nothing.
+  -- Two recipients on the 1099-NEC filing: one clean and one carrying an
+  -- adjustment with its reason, so BOTH figures the worksheet exists to show —
+  -- the ledger amount and the filed amount — differ on one row. A worksheet
+  -- where they always agree would not test the thing an accountant reviews.
+  -- Block …1901-1902 is taken by pay stubs; this claims …2201-2202.
+  --
+  -- `filing_id` and `party_id` resolve live: the simulator regenerates both on
+  -- every reseed.
+  -- `information_return_recipients_adjustment` demands that a non-empty
+  -- `adjustments` object carry an `adjustment_reason`. That is the control
+  -- this table exists to enforce — an accountant may move a filed figure away
+  -- from the ledger figure, but not silently — so the fixture supplies a real
+  -- reason rather than leaving the adjustment empty to keep the check quiet.
+  insert into information_return_recipients
+    (id, org_id, filing_id, party_id, recipient_snapshot, computed_amounts,
+     adjustments, adjustment_reason, tax_withheld, state_withholding, status)
+  select v.id::uuid, v_org, fl.id, pa.id,
+         jsonb_build_object('name', v.name, 'tin', v.tin, 'address',
+           jsonb_build_object('line1', '1 ViewSpec Way', 'city', 'Calgary',
+                              'region', 'AB', 'postalCode', 'T2P 1A1', 'country', 'CA')),
+         jsonb_build_object('1', v.computed),
+         v.adjustments::jsonb, v.reason, 0, '{}'::jsonb, 'included'
+    from (values
+      ('00000000-0000-7000-9000-000000002201', 'ViewSpec Contractor A',
+       '11-1111111', '4200.00', '{}', null),
+      ('00000000-0000-7000-9000-000000002202', 'ViewSpec Contractor B',
+       '22-2222222', '9800.00', '{"1": "-300.00"}',
+       'Reimbursed expenses excluded from box 1')
+    ) as v(id, name, tin, computed, adjustments, reason),
+         (select id from information_return_filings
+           where org_id = v_org and form_type = '1099-NEC'
+           order by tax_year desc limit 1) fl,
+         -- UNIQUE (filing_id, party_id): one recipient per party per filing,
+         -- so the two rows need two different parties. Paired by ordinal.
+         (select id, row_number() over (order by display_name) as rn
+            from parties where org_id = v_org and is_active) pa
+   where pa.rn = case when v.id like '%2201' then 1 else 2 end
+     and not exists (select 1 from information_return_recipients
+                      where id = '00000000-0000-7000-9000-000000002201');
 
 end $$;
