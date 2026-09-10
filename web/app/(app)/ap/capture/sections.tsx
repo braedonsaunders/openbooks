@@ -31,6 +31,22 @@ const VARIANT: Record<string, 'success' | 'warning' | 'destructive' | 'outline' 
   ready: 'success', materialized: 'success', needs_review: 'warning', duplicate: 'warning', failed: 'destructive', extracting: 'secondary', queued: 'secondary', rejected: 'outline',
 }
 
+/**
+ * The capture queue table.
+ *
+ * This one is a WIDGET rather than a `table` block, and the reason is worth
+ * stating: it is not the shared app table. The native page owns row-selection
+ * state, per-row checkboxes (materialized rows are unselectable), and three
+ * bulk actions driven by that state — none of which the spec's table
+ * vocabulary can name. The ViewSpec table block deliberately offers only the
+ * two real table variants the app has; expressing this one would mean either
+ * teaching the spec to carry client state or quietly restyling the page — so
+ * it stays a component, and the spec places it (same treatment as
+ * `AdminUsersTable`).
+ *
+ * Everything around it — the header, the search and filter row, the pager,
+ * the review drawer — is ordinary spec.
+ */
 export function CaptureList({ rows, currentParams, canCreate, sort, dir }: { rows: CaptureListRow[]; currentParams: Record<string, string | string[] | undefined>; canCreate: boolean; sort: string; dir: 'asc' | 'desc' }) {
   const t = useTranslations('ap.capture')
   const locale = useLocale()

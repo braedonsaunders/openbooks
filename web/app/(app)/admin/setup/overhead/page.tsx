@@ -1,20 +1,18 @@
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { BookOpen } from 'lucide-react'
-import { cn } from '@openbooks/ui'
 import { sql } from 'drizzle-orm'
 import { businessToday, parseIsoDate } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
-import { TrueCostView } from '../../../../(app)/analytics/true-cost/TrueCostView'
-import { OverheadActions } from './OverheadActions'
 import { OverheadApplication } from './OverheadApplication'
 import { countUnappliedOverheadTime, listOverheadApplications, overheadApplicationSettings } from '@openbooks/engine/src/overhead-apply.ts'
 import { OverheadLifecycle } from './OverheadLifecycle'
 import { RatesTab } from './RatesTab'
 import { currentPublishedRates } from '../../../../../lib/overhead-publish'
 import { requireProjectsFeature } from '../../../../../lib/projects-gate'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { loadOverhead, overheadSpec } from './view'
+import { OverheadModelBody, OverheadModelHeader } from './sections'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +35,17 @@ export default async function OverheadModelSetup({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadOverhead(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={overheadSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('admin.setup.manage')
   await requireProjectsFeature(authz.user.orgId)
   const t = await getTranslations('admin')
@@ -99,121 +108,67 @@ export default async function OverheadModelSetup({
     }
   }
 
+  const stepDefs = [
+    {
+      n: 1,
+      title: t('setup.entities.overhead-model.step1t'),
+      desc: t('setup.entities.overhead-model.step1d', { count: data.categories.length, unassigned: data.unassigned.length }),
+      done: data.categories.length > 0 && data.unassigned.length === 0,
+    },
+    {
+      n: 2,
+      title: t('setup.entities.overhead-model.step2t'),
+      desc: t('setup.entities.overhead-model.step2d', { rate: data.kpis.compositeRate.toFixed(2) }),
+      done: data.kpis.compositeRate > 0,
+    },
+    {
+      n: 3,
+      title: t('setup.entities.overhead-model.step3t'),
+      desc:
+        card.n > 0 && card.from_date
+          ? t('setup.entities.overhead-model.ratesActive', { count: card.n, date: card.from_date })
+          : t('setup.entities.overhead-model.noRates'),
+      done: card.n > 0 && typesRes.rows.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
+    },
+  ]
+  const steps = stepDefs.map((s) => ({
+    n: s.n,
+    badge: s.done ? '✓' : String(s.n),
+    badgeDone: s.done,
+    title: s.title,
+    desc: s.desc,
+  }))
+  const policies = typesRes.rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    methodLabel: methodLabel(r.overhead),
+  }))
+  const headerProps = {
+    title: t('setup.entities.overhead-model.title'),
+    description: t('setup.entities.overhead-model.description'),
+    docsHref: '/docs/overhead-costing',
+    docsLabel: t('setup.entities.overhead-model.docs'),
+    analyticsHref: '/analytics/true-cost',
+    analyticsLabel: t('setup.entities.overhead-model.viewAnalytics'),
+    laborHref: '/admin/setup/labor-costing',
+    laborLabel: t('setup.entities.overhead-model.laborCostingLink'),
+    actions: {
+      departments: data.departments.map((d) => ({ id: d.id, name: d.name, composite: d.composite })),
+      projectTypes: typesRes.rows.map((r) => ({ id: r.id, name: r.name })),
+      autoOpen: card.n === 0 && !typesRes.rows.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
+    },
+    tabs: VIEWS.map((item) => ({
+      href: `/admin/setup/overhead?view=${item}`,
+      label: t(`setup.entities.overhead-model.tabs.${item}`),
+      active: view === item,
+    })),
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            {t('setup.entities.overhead-model.title')}
-          </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {t('setup.entities.overhead-model.description')}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/docs/overhead-costing"
-            className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
-          >
-            <BookOpen size={13} aria-hidden /> {t('setup.entities.overhead-model.docs')}
-          </Link>
-          <Link
-            href="/analytics/true-cost"
-            className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
-          >
-            {t('setup.entities.overhead-model.viewAnalytics')} →
-          </Link>
-          <Link
-            href="/admin/setup/labor-costing"
-            className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
-          >
-            {t('setup.entities.overhead-model.laborCostingLink')} →
-          </Link>
-          <OverheadActions
-            departments={data.departments.map((d) => ({ id: d.id, name: d.name, composite: d.composite }))}
-            projectTypes={typesRes.rows.map((r) => ({ id: r.id, name: r.name }))}
-            autoOpen={card.n === 0 && !typesRes.rows.some((r) => r.overhead?.method && r.overhead.method !== 'none')}
-          />
-        </div>
-      </div>
+      <OverheadModelHeader {...headerProps} />
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
-        {VIEWS.map((item) => (
-          <Link
-            key={item}
-            href={`/admin/setup/overhead?view=${item}`}
-            className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm font-medium',
-              view === item
-                ? 'border-teal-600 text-teal-700 dark:text-teal-300'
-                : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100',
-            )}
-          >
-            {t(`setup.entities.overhead-model.tabs.${item}`)}
-          </Link>
-        ))}
-      </div>
-
-      {view === 'model' && (<>
-      {/* Guided flow — the three steps of overhead setup, each showing its
-          live state so it is always clear where you are and what is next. */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        {[
-          {
-            n: 1,
-            title: t('setup.entities.overhead-model.step1t'),
-            desc: t('setup.entities.overhead-model.step1d', { count: data.categories.length, unassigned: data.unassigned.length }),
-            done: data.categories.length > 0 && data.unassigned.length === 0,
-          },
-          {
-            n: 2,
-            title: t('setup.entities.overhead-model.step2t'),
-            desc: t('setup.entities.overhead-model.step2d', { rate: data.kpis.compositeRate.toFixed(2) }),
-            done: data.kpis.compositeRate > 0,
-          },
-          {
-            n: 3,
-            title: t('setup.entities.overhead-model.step3t'),
-            desc:
-              card.n > 0 && card.from_date
-                ? t('setup.entities.overhead-model.ratesActive', { count: card.n, date: card.from_date })
-                : t('setup.entities.overhead-model.noRates'),
-            done: card.n > 0 && typesRes.rows.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
-          },
-        ].map((s) => (
-          <div key={s.n} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-            <div className="mb-1 flex items-center gap-2">
-              <span
-                className={
-                  'grid h-5 w-5 place-items-center rounded-full text-[11px] font-semibold ' +
-                  (s.done
-                    ? 'bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-950'
-                    : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200')
-                }
-              >
-                {s.done ? '✓' : s.n}
-              </span>
-              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{s.title}</span>
-            </div>
-            <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">{s.desc}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Active policy per project type. */}
-      <div className="flex flex-wrap gap-1.5">
-        {typesRes.rows.map((r) => (
-          <span
-            key={r.id}
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-950"
-          >
-            <span className="font-medium text-slate-800 dark:text-slate-200">{r.name}</span>
-            <span className="text-slate-400">·</span>
-            <span className="text-slate-600 dark:text-slate-300">{methodLabel(r.overhead)}</span>
-          </span>
-        ))}
-      </div>
-      </>)}
+      {view === 'model' && <OverheadModelBody steps={steps} policies={policies} trueCost={data} />}
       {view === 'rates' && <RatesTab orgId={authz.user.orgId} rowParam={rowParam} />}
       {view === 'lifecycle' && (
         <OverheadLifecycle mode={lifecycle.mode} cadence={lifecycle.cadence} drift={drift} />
@@ -230,7 +185,6 @@ export default async function OverheadModelSetup({
         unapplied={unapplied}
       />
       )}
-      {view === 'model' && <TrueCostView data={data} mode="setup" />}
     </div>
   )
 }

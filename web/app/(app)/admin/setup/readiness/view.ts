@@ -1,37 +1,53 @@
+import 'server-only'
+
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { field, grid, page, ref, repeat, widgetBlock, type PageSpec } from '@openbooks/viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { onboardingStatus } from '../../../../../lib/onboarding'
-import { ModuleView } from '../../../../../components/viewspec/module-view'
-import { loadSetupReadiness, setupReadinessSpec } from './view'
-import { SetupReadinessCheckCard, SetupReadinessHero } from './sections'
+import type { SetupReadinessCheck } from './sections'
 
-export const dynamic = 'force-dynamic'
+/**
+ * The setup readiness guide, split into a loader and a spec.
+ *
+ * The page has no search params, no table, and no drawer: everything the
+ * spec needs is loader-resolved data. The seven checks are a `repeat` over
+ * `widgetBlock('setup-readiness-check-card', …)` with per-item field refs —
+ * the same per-item prop threading the admin hub cards use.
+ *
+ * The conditional PAIRS (which icon per state, which description per branch)
+ * are components in `sections.tsx`, not spec constructs: the loader computes
+ * the state string, description text and action label verbatim from the
+ * native page, and the component renders the decision it is given. The
+ * `Badge` variant and the `sr-only` state label likewise travel as data.
+ *
+ * `layout: 'bare'` because the setup workspace shell (SetupLayout) already
+ * draws the header chrome and content container — wrapping this in a second
+ * ListPageLayout would nest the chrome. The outer `space-y-6` div is a
+ * `grid` with no wrapper of its own, matching the native markup exactly.
+ */
 
-type Check = {
+export interface SetupReadinessHero {
+  kicker: string
   title: string
   description: string
-  href: string
-  action: string
-  state: 'complete' | 'review' | 'waiting'
+  badgeLabel: string
+  badgeReady: boolean
+  progressLabel: string
+  progressCount: number
+  progressTotal: number
+  progressPercent: number
+  progressMin: number
+  progressMax: number
+  progressNow: number
 }
 
-export default async function SetupReadinessPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadSetupReadiness()
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={setupReadinessSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
+export interface SetupReadinessData {
+  hero: SetupReadinessHero
+  checks: SetupReadinessCheck[]
+}
+
+export async function loadSetupReadiness(): Promise<SetupReadinessData> {
   const { user } = await requirePermission('admin.setup.manage')
   const result = (await db.execute<Record<string, any>>(sql`
     select o.name, o.legal_name, o.base_currency, o.country, o.settings,
@@ -68,7 +84,7 @@ export default async function SetupReadinessPage({
     && org?.books > 0 && org?.periods > 0 && Boolean(control.ar && control.ap && control.bank)
   const profileReady = onboardingStatus(settings) === 'complete' && Boolean(settings.workspaceProfile)
 
-  const checks: Check[] = [
+  const checks: Omit<SetupReadinessCheck, 'indexLabel' | 'stateLabel'>[] = [
     {
       title: 'Company and workspace profile',
       description: profileReady
@@ -137,33 +153,73 @@ export default async function SetupReadinessPage({
   const complete = checks.filter((item) => item.state === 'complete').length
   const hardReady = profileReady && foundationReady
 
-  return (
-    <div className="space-y-6">
-      <SetupReadinessHero
-        kicker="Go-live guide"
-        title="Make the first posting boring—in the best way."
-        description="OpenBooks has shaped the workspace around your company. This guide verifies the decisions that make invoices, bills, banking, and period close reliable from day one."
-        badgeLabel={hardReady ? 'Accounting foundation ready' : 'Foundation needs attention'}
-        badgeReady={hardReady}
-        progressLabel="Setup progress"
-        progressCount={complete}
-        progressTotal={checks.length}
-        progressPercent={Math.round((complete / checks.length) * 100)}
-        progressMin={0}
-        progressMax={checks.length}
-        progressNow={complete}
-      />
+  return {
+    hero: {
+      kicker: 'Go-live guide',
+      title: 'Make the first posting boring—in the best way.',
+      description:
+        'OpenBooks has shaped the workspace around your company. This guide verifies the decisions that make invoices, bills, banking, and period close reliable from day one.',
+      badgeLabel: hardReady ? 'Accounting foundation ready' : 'Foundation needs attention',
+      badgeReady: hardReady,
+      progressLabel: 'Setup progress',
+      progressCount: complete,
+      progressTotal: checks.length,
+      progressPercent: Math.round((complete / checks.length) * 100),
+      progressMin: 0,
+      progressMax: checks.length,
+      progressNow: complete,
+    },
+    checks: checks.map((item, index) => ({
+      ...item,
+      indexLabel: String(index + 1),
+      stateLabel: item.state,
+    })),
+  }
+}
 
-      <div className="space-y-3">
-        {checks.map((item, index) => (
-          <SetupReadinessCheckCard
-            key={item.title}
-            {...item}
-            indexLabel={String(index + 1)}
-            stateLabel={item.state}
-          />
-        ))}
-      </div>
-    </div>
-  )
+const f = ref<SetupReadinessData>()
+const item = field
+
+export function setupReadinessSpec(data: SetupReadinessData): PageSpec {
+  return page({
+    layout: 'bare',
+    body: [
+      grid('space-y-6', [
+        widgetBlock('setup-readiness-hero', {
+          kicker: f('hero.kicker'),
+          title: f('hero.title'),
+          description: f('hero.description'),
+          badgeLabel: f('hero.badgeLabel'),
+          badgeReady: f('hero.badgeReady'),
+          progressLabel: f('hero.progressLabel'),
+          progressCount: f('hero.progressCount'),
+          progressTotal: f('hero.progressTotal'),
+          progressPercent: f('hero.progressPercent'),
+          progressMin: f('hero.progressMin'),
+          progressMax: f('hero.progressMax'),
+          progressNow: f('hero.progressNow'),
+        }),
+        // The seven checks: per-item field refs thread each check's fields
+        // straight into the widget — the same threading the admin hub cards
+        // use. The item IS the check; there is no nested object.
+        repeat({
+          items: f('checks'),
+          itemKey: item('title'),
+          className: 'space-y-3',
+          unwrapped: true,
+          blocks: [
+            widgetBlock('setup-readiness-check-card', {
+              indexLabel: item('indexLabel'),
+              title: item('title'),
+              description: item('description'),
+              href: item('href'),
+              action: item('action'),
+              state: item('state'),
+              stateLabel: item('stateLabel'),
+            }),
+          ],
+        }),
+      ]),
+    ],
+  })
 }

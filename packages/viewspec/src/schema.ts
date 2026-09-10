@@ -157,6 +157,7 @@ const filterBarBlock = z.strictObject({
     period: z.boolean().optional(),
     dateRange: z.boolean().optional(),
     asOf: z.boolean().optional(),
+    customer: z.boolean().optional(),
     breakout: z.boolean().optional(),
     compare: z.boolean().optional(),
     basis: z.boolean().optional(),

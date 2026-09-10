@@ -261,6 +261,8 @@ export interface FilterBarControls {
   dateRange?: boolean
   /** Balance-style: custom period collapses to a single "as of" date. */
   asOf?: boolean
+  /** The customer dropdown. Its options bind through `customers` below. */
+  customer?: boolean
   breakout?: boolean
   compare?: boolean
   basis?: boolean

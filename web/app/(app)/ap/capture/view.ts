@@ -1,45 +1,90 @@
-import Link from 'next/link'
+import 'server-only'
+
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { ArrowLeft } from 'lucide-react'
-import { Button, PageHeader } from '@openbooks/ui'
 import { db } from '@openbooks/engine/src/db.ts'
 import { getDocumentCaptureSettings } from '@openbooks/engine/src/ap-capture-config.ts'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { SearchInput } from '../../../../components/search-input'
-import { FilterChips } from '../../../../components/filter-bar'
-import { Pagination } from '../../../../components/pagination'
+import {
+  grid,
+  page,
+  pageHeader,
+  pagination,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from '@openbooks/viewspec'
 import { parseListParams, pickString } from '../../../../lib/list-params'
-import { requirePermission, can } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { isDocKindEnabled } from '../../../../lib/documents'
-import { CaptureUploadButton } from './CaptureUploadButton'
-import { CaptureList, type CaptureListRow } from './sections'
-import { CaptureReviewDrawer, type CaptureDetail } from './CaptureReviewDrawer'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadApCapture, apCaptureSpec } from './view'
+import type { CaptureListRow } from './sections'
+import type { CaptureDetail } from './CaptureReviewDrawer'
 
-export const dynamic = 'force-dynamic'
+/**
+ * Bill capture, split into a loader and a spec.
+ *
+ * The list is a WIDGET, not a `table` block — see the note on `CaptureList`:
+ * the native page hand-rolls selection state, per-row checkboxes, and three
+ * bulk actions the spec's table vocabulary cannot name (same treatment as
+ * `AdminUsersTable`). Everything around it — the header, the search/filter
+ * row, the pager — is ordinary spec, and the review drawer rides through a
+ * widget ref with a remount key, the same pattern as `account-drawer`.
+ *
+ * The loader reproduces page.tsx VERBATIM: the permission gate, the
+ * search/sort/page parsing, the subsidiary scoping on both the list queries
+ * and the counts, the capture-settings + global-AI resolution behind the
+ * upload button, and the ?capture= flyout resolution (org guard, subsidiary
+ * guard, vendor/PO/account option lists, latest-attempt evidence) plus the
+ * purchase-order kind check.
+ */
 
 const STATUSES = ['queued', 'extracting', 'needs_review', 'ready', 'duplicate', 'failed', 'materialized', 'rejected'] as const
 const SORTS = ['received', 'filename', 'status', 'total'] as const
 
-export default async function ApCapturePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadApCapture(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={apCaptureSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
+export interface ApCaptureDrawer {
+  /** Remount key: switching documents must reset the drawer's client state. */
+  remountKey: string
+  initial: CaptureDetail
+  vendors: { id: string; label: string }[]
+  accounts: { id: string; label: string }[]
+  purchaseOrders: { id: string; label: string }[]
+  canLookupPurchaseOrders: boolean
+  canCreate: boolean
+}
+
+export interface ApCaptureData {
+  title: string
+  description: string
+  backHref: string
+  backLabel: string
+  currentParams: Record<string, string | string[] | undefined>
+  canCreate: boolean
+  showBanner: boolean
+  notConfiguredText: string
+  showConfigureLink: boolean
+  configureHref: string
+  configureLabel: string
+  searchPlaceholder: string
+  statusLabel: string
+  statusOptions: { value: string; label: string; count: number }[]
+  uploadDisabled: boolean
+  sort: string
+  dir: 'asc' | 'desc'
+  rows: CaptureListRow[]
+  total: number
+  currentPage: number
+  perPage: number
+  drawerOpen: boolean
+  drawer: ApCaptureDrawer | null
+}
+
+export async function loadApCapture(
+  sp: Record<string, string | string[] | undefined>,
+): Promise<ApCaptureData> {
   const authz = await requirePermission('ap.read')
   const canCreate = can(authz, 'ap.create')
   const t = await getTranslations('ap.capture')
   const tc = await getTranslations('common')
-  const sp = await searchParams
   const list = parseListParams(sp, { sort: 'received', dir: 'desc', perPage: 25, allowedSorts: SORTS })
   const requestedStatus = pickString(sp.status)
   const status = STATUSES.includes(requestedStatus as (typeof STATUSES)[number]) ? requestedStatus : undefined
@@ -99,11 +144,11 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
     db.execute(sql`select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled from orgs where id = ${authz.user.orgId}`),
   ])
   const rows = (rowsResult as unknown as { rows: CaptureListRow[] }).rows
-  const total = Number(((totalResult)).rows[0]?.n ?? 0)
-  const counts = new Map<string, number>(((countsResult)).rows.map((row: any) => [row.status, Number(row.n)]))
+  const total = Number(((totalResult) as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0)
+  const counts = new Map<string, number>(((countsResult) as unknown as { rows: { status: string; n: number }[] }).rows.map((row) => [row.status, Number(row.n)]))
   const selectedId = pickString(sp.capture)
   let detail: CaptureDetail | null = null
-  let options: { vendors: any[]; accounts: any[]; purchaseOrders: any[] } | null = null
+  let options: { vendors: { id: string; label: string }[]; accounts: { id: string; label: string }[]; purchaseOrders: { id: string; label: string }[] } | null = null
   let canLookupPurchaseOrders = false
   if (selectedId) {
     const selected = (await db.execute<CaptureDetail>(sql`
@@ -153,38 +198,117 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
              and ar.attempt = (select max(attempt) from ap_capture_runs where capture_item_id = ${selectedId} and org_id = ${authz.user.orgId})
         `),
       ])
-      detail.evidence = (evidence as any).rows
-      options = { vendors: ((vendors)).rows, accounts: ((accounts)).rows, purchaseOrders: ((purchaseOrders)).rows }
+      detail.evidence = (evidence as unknown as { rows: CaptureDetail['evidence'] }).rows
+      options = {
+        vendors: ((vendors) as unknown as { rows: { id: string; label: string }[] }).rows,
+        accounts: ((accounts) as unknown as { rows: { id: string; label: string }[] }).rows,
+        purchaseOrders: ((purchaseOrders) as unknown as { rows: { id: string; label: string }[] }).rows,
+      }
     }
   }
-  const captureOperational = Boolean(((globalResult)).rows[0]?.enabled)
+  const captureOperational = Boolean(((globalResult) as unknown as { rows: { enabled: boolean }[] }).rows[0]?.enabled)
     && captureSettings.enabled && captureSettings.hasKey && Boolean(captureSettings.endpoint)
-  const actions = (
-    <div className="flex items-center gap-2">
-      <Button variant="outline" asChild><Link href="/ap"><ArrowLeft size={14} />{t('backToBills')}</Link></Button>
-      {canCreate ? <CaptureUploadButton disabled={!captureOperational} /> : null}
-    </div>
-  )
-  return (
-    <ListPageLayout
-      header={
-        <>
-          <PageHeader title={t('title')} description={t('description')} actions={actions} />
-          {!captureOperational ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-              {t('notConfigured')} {can(authz, 'admin.ai.manage') ? <Link href="/admin/ai" className="font-medium underline">{t('configure')}</Link> : null}
-            </div>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            <SearchInput placeholder={t('search')} />
-            <FilterChips basePath="/ap/capture" currentParams={sp} paramKey="status" label={tc('labels.status')} options={STATUSES.map((value) => ({ value, label: t(`status.${value}`), count: counts.get(value) ?? 0 }))} />
-          </div>
-        </>
+  const drawer: ApCaptureDrawer | null = detail && options
+    ? {
+        remountKey: String(detail.id),
+        initial: detail,
+        vendors: options.vendors,
+        accounts: options.accounts,
+        purchaseOrders: options.purchaseOrders,
+        canLookupPurchaseOrders,
+        canCreate,
       }
-    >
-      <CaptureList rows={rows} currentParams={sp} canCreate={canCreate} sort={list.sort} dir={list.dir} />
-      <Pagination basePath="/ap/capture" currentParams={sp} total={total} page={list.page} perPage={list.perPage} />
-      {detail && options ? <CaptureReviewDrawer initial={detail} vendors={options.vendors} accounts={options.accounts} purchaseOrders={options.purchaseOrders} canLookupPurchaseOrders={canLookupPurchaseOrders} canCreate={canCreate} /> : null}
-    </ListPageLayout>
-  )
+    : null
+  return {
+    title: t('title'),
+    description: t('description'),
+    backHref: '/ap',
+    backLabel: t('backToBills'),
+    currentParams: sp,
+    canCreate,
+    showBanner: !captureOperational,
+    notConfiguredText: t('notConfigured'),
+    showConfigureLink: can(authz, 'admin.ai.manage'),
+    configureHref: '/admin/ai',
+    configureLabel: t('configure'),
+    searchPlaceholder: t('search'),
+    statusLabel: tc('labels.status'),
+    statusOptions: STATUSES.map((value) => ({ value, label: t(`status.${value}`), count: counts.get(value) ?? 0 })),
+    uploadDisabled: !captureOperational,
+    sort: list.sort,
+    dir: list.dir,
+    rows,
+    total,
+    currentPage: list.page,
+    perPage: list.perPage,
+    drawerOpen: Boolean(drawer),
+    drawer,
+  }
+}
+
+const f = ref<ApCaptureData>()
+
+export function apCaptureSpec(data: ApCaptureData): PageSpec {
+  const upload = {
+    widget: 'capture-upload',
+    props: { disabled: data.uploadDisabled },
+  }
+  return page({
+    layout: 'list',
+    header: [
+      pageHeader({
+        title: f('title'),
+        description: f('description'),
+        actionsClassName: 'flex items-center gap-2',
+        actions: [
+          widget('back-link-button', { href: data.backHref, label: data.backLabel }),
+          widget(upload.widget, upload.props, f('canCreate')),
+        ],
+      }),
+      {
+        ...grid('rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300', [
+          widgetBlock('capture-not-configured', {
+            text: data.notConfiguredText,
+            configureHref: data.configureHref,
+            configureLabel: data.configureLabel,
+            showConfigureLink: data.showConfigureLink,
+          }),
+        ]),
+        when: f('showBanner'),
+      },
+      grid('flex flex-wrap gap-2', [
+        widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
+        widgetBlock('filter-chips', {
+          basePath: '/ap/capture',
+          currentParams: data.currentParams,
+          paramKey: 'status',
+          label: data.statusLabel,
+          options: data.statusOptions,
+        }),
+      ]),
+    ],
+    body: [
+      widgetBlock('capture-list', {
+        rows: data.rows,
+        currentParams: data.currentParams,
+        canCreate: data.canCreate,
+        sort: data.sort,
+        dir: data.dir,
+      }),
+      pagination({
+        basePath: '/ap/capture',
+        total: f('total'),
+        page: f('currentPage'),
+        perPage: f('perPage'),
+        // The native pager is unwrapped here — no `mt-3` spacer.
+        bare: true,
+      }),
+      {
+        ...widgetBlock('capture-review-drawer', {
+          drawer: data.drawer,
+        }),
+        when: f('drawerOpen'),
+      },
+    ],
+  })
 }

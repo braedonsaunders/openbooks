@@ -15,6 +15,9 @@ import { dateTime } from '../../../../lib/format'
 import { isAppPublished, listAppFiles } from '../../../../lib/apps/store'
 import type { AppManifest } from '../../../../lib/apps/manifest'
 import { AppsToolbar, AppDrawer } from './AppDrawer'
+import { AppKeyCell } from './sections'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadAdminApps, adminAppsSpec } from './view'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -24,6 +27,17 @@ export default async function AppsAdminPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadAdminApps(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={adminAppsSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('apps.manage')
   // /admin/apps is a separate route segment from /apps, so the apps layout
   // gate does not cover it. A disabled module must not keep an admin door open.
@@ -163,7 +177,7 @@ export default async function AppsAdminPage({
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <code className="text-xs text-slate-500">{a.key}</code>
+                  <AppKeyCell appKey={a.key} />
                 </TableCell>
                 <TableCell>{a.version ? `v${a.version}` : '—'}</TableCell>
                 <TableCell className="tabular-nums">{endpointCount(a.manifest)}</TableCell>

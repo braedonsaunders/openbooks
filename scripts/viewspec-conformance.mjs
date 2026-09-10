@@ -204,6 +204,78 @@ const PAGES = [
     expect: 'table tbody tr',
   },
   {
+    path: '/admin/setup/crm',
+    variants: [
+      '',
+      { query: '?tab=opportunityStatuses', expect: 'table tbody tr', minMatches: 3 },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 5,
+  },
+  {
+    path: '/admin/apps',
+    variants: [
+      '',
+      { query: '?status=disabled', expect: 'table tbody tr', minMatches: 1 },
+      {
+        query: '?app=viewspec-demo',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/ap/capture',
+    // The list is a widget, not a table block: it owns row selection,
+    // per-row checkboxes and three bulk actions.
+    variants: [
+      '',
+      { query: '?status=failed', expect: 'table tbody tr', minMatches: 1 },
+      {
+        query: '?capture=00000000-0000-7000-9000-000000002001',
+        expect: '[data-drawer-layer]',
+        minMatches: 1,
+        scopes: ['main', '[data-drawer-layer]'],
+      },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  {
+    path: '/reports/project-profitability',
+    // Whole-table widget, and complementary filter bars behind loader flags
+    // because the native `sections` control is data-driven.
+    variants: [
+      '',
+      { query: '?q=zzzznomatch', expect: 'main p', minMatches: 1 },
+    ],
+    expect: 'table tbody tr',
+    minMatches: 6,
+  },
+  {
+    path: '/admin/setup/overhead',
+    // Four mutually exclusive bodies behind ?view=, one step wider than the
+    // accounts page's three.
+    variants: [
+      '',
+      { query: '?view=lifecycle', expect: 'main section h3', minMatches: 1 },
+      { query: '?view=application', expect: 'main section h3', minMatches: 1 },
+    ],
+    expect: 'main h2',
+    minMatches: 1,
+  },
+  {
+    path: '/admin/setup/readiness',
+    // Seven check cards in a `bare` layout — the setup workspace already
+    // draws the shell chrome.
+    variants: [{ query: '', expect: 'main a[href^="/admin/setup"]', minMatches: 5 }],
+    expect: 'main a[href^="/admin/setup"]',
+    minMatches: 5,
+  },
+  {
     path: '/knowledge/views/01a08739-eb71-714a-bceb-19e015fd17db',
     // A saved view's run page: a permission-gated action cluster in the
     // header, and a body that is an empty paper or a result table.
