@@ -116,6 +116,8 @@ import { TemplatesList } from '../../app/(app)/admin/pdf-templates/TemplatesList
 import { WipBillingWorkspace } from '../../app/(app)/projects/wip-billing/WipBillingWorkspace'
 import { SeparationsView } from '../../app/(app)/payroll/separations/SeparationsView'
 import { SandboxManager } from '../../app/(app)/admin/sandboxes/SandboxManager'
+import { ChangeSetDrawer } from '../../app/(app)/admin/sandboxes/change-sets/ChangeSetDrawer'
+import { PaymentProvidersClient } from '../../app/(app)/admin/setup/payment-providers/PaymentProvidersClient'
 import { ProjectTypesWorkspace } from '../../app/(app)/admin/setup/project-types/ProjectTypesWorkspace'
 import { DepreciationSetupHeader } from '../../app/(app)/admin/setup/depreciation/sections'
 import { SecurityPageContent } from '../../app/(app)/settings/security/sections'
@@ -1398,6 +1400,11 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     <SetupWizard {...(props as unknown as ComponentProps<typeof SetupWizard>)} />
   ),
 
+  /* --- payment providers setup ------------------------------------------------------ */
+  /** No props: the island fetches its own providers, bank accounts and
+   *  surcharge rules and owns every form. */
+  'payment-providers-workspace': () => <PaymentProvidersClient />,
+
   /* --- book depreciation setup ------------------------------------------------------ */
   /** Deliberately NOT the tax-depreciation header: two tabs fit, so the
    *  native strip omits `overflow-x-auto` and `shrink-0`. Two components,
@@ -1438,6 +1445,16 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
    *  reset / delete / setSchedule / promote are BOUND SERVER ACTIONS. A spec
    *  may not carry one, so they stay inside the component on both paths
    *  rather than being lifted into props. */
+  /** The remount key rides along as a prop: reviewing a different change set
+   *  must reset the drawer's approval state. */
+  'change-set-drawer': (props) => {
+    const drawer = props.drawer as
+      | (ComponentProps<typeof ChangeSetDrawer> & { remountKey: string })
+      | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <ChangeSetDrawer key={remountKey} {...rest} />
+  },
   'sandbox-manager': (props) => (
     <SandboxManager
       sandboxes={props.sandboxes as ComponentProps<typeof SandboxManager>['sandboxes']}

@@ -50,6 +50,7 @@
 --   …1401-1499  equipment units and their charge item
 --   …1501-1599  sandboxes
 --   …1601-1699  assistant conversations and messages
+--   …1701-1799  sandbox change sets and their items
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
 --
 --   psql "$VIEWSPEC_DB" -f scripts/viewspec-fixtures.sql
@@ -177,7 +178,10 @@ begin
              'propertyManagement', true,
              'bankFeeds', true,
              'subcontracts', true,
-             'wipBilling', true))
+             'wipBilling', true,
+             -- /admin/setup/payment-providers redirects to the features page
+             -- without this, so both paths render the same redirect.
+             'onlinePayments', true))
    where id = v_org;
 
   -- ---- approvals -----------------------------------------------------------
@@ -2833,5 +2837,69 @@ begin
                   where id = '00000000-0000-7000-9000-000000001601')
      and not exists (select 1 from ai_messages
                       where id = '00000000-0000-7000-9000-000000001602');
+
+  -- ---- sandbox change sets (/admin/sandboxes/change-sets) ------------------
+  --
+  -- Captured configuration changes are only produced by a real sandbox
+  -- capture, which the simulator never runs, so the review list would compare
+  -- two identical empty states. Two change sets on the ViewSpec QA sandbox
+  -- (…1511, seeded above): one `draft` with two items and one `reviewed`, so
+  -- the status branch has more than one value and the flyout has a set with
+  -- real items to show. Block …1701-1706.
+  --
+  -- `org_id` is the PRODUCTION org: the page lists against `productionOrgId`,
+  -- not the sandbox's own, which is the whole point of the record.
+  -- The second set is `reviewed`, not `approved`: an approved set must carry
+  -- approval evidence, and `change_sets_actor_separation` forbids the creator
+  -- and the approver being the same person. That separation is the control
+  -- this table exists to enforce, so the fixture honours it — the reviewer is
+  -- a DIFFERENT harness user, resolved live — rather than reaching around it.
+  insert into change_sets
+    (id, org_id, sandbox_org_id, name, status, capture_complete, item_count,
+     created_by, reviewed_by, reviewed_at)
+  select v.id::uuid, v_org, sb.org_id,
+         v.name, v.status, true, v.item_count::int,
+         creator.id,
+         case when v.status = 'reviewed' then reviewer.id end,
+         case when v.status = 'reviewed' then timestamptz '2026-09-01 10:00:00+00' end
+    from (values
+      ('00000000-0000-7000-9000-000000001701', 'ViewSpec captured settings', 'draft', 2),
+      ('00000000-0000-7000-9000-000000001702', 'ViewSpec reviewed settings', 'reviewed', 0)
+    ) as v(id, name, status, item_count),
+         (select id from users where org_id = v_org and email = 'viewspec@sim.test') creator,
+         (select id from users where org_id = v_org and email <> 'viewspec@sim.test'
+           order by email limit 1) reviewer,
+         -- NOT the sandbox id: `sandbox_org_id` references orgs(id) and names
+         -- the sandbox's CLONED org, which the sandbox fixture creates.
+         (select org_id from sandboxes
+           where id = '00000000-0000-7000-9000-000000001511') sb
+   where sb.org_id is not null
+     and not exists (select 1 from change_sets
+                      where id = '00000000-0000-7000-9000-000000001701');
+
+  -- `change_set_items_captured_base_valid`: a captured UPDATE must carry the
+  -- `expected_before` snapshot, and that snapshot's `id` and `org_id` must
+  -- match the row it claims to describe. That is the optimistic-concurrency
+  -- check the apply path verifies against production before it writes, so the
+  -- fixture builds a real one rather than setting `base_captured` false to
+  -- make the constraint go quiet.
+  insert into change_set_items
+    (id, org_id, change_set_id, table_name, target_id, op, base_captured,
+     expected_before)
+  select v.id::uuid, v_org, '00000000-0000-7000-9000-000000001701',
+         v.table_name, v.target_id::uuid, v.op, true,
+         case when v.op = 'update' then jsonb_build_object(
+           'id', v.target_id, 'org_id', v_org::text, 'name', 'ViewSpec captured base')
+         end
+    from (values
+      ('00000000-0000-7000-9000-000000001703', 'accounts',
+       '00000000-0000-7000-9000-000000001704', 'update'),
+      ('00000000-0000-7000-9000-000000001705', 'tax_rates',
+       '00000000-0000-7000-9000-000000001706', 'insert')
+    ) as v(id, table_name, target_id, op)
+   where exists (select 1 from change_sets
+                  where id = '00000000-0000-7000-9000-000000001701')
+     and not exists (select 1 from change_set_items
+                      where id = '00000000-0000-7000-9000-000000001703');
 
 end $$;
