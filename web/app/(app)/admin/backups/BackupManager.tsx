@@ -52,17 +52,19 @@ function formatWhen(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : "—";
 }
 
+export interface BackupManagerProps {
+  policy: BackupPolicyRow | null;
+  runs: BackupRunRow[];
+  s3Enabled: boolean;
+  workerOnline: boolean;
+}
+
 export function BackupManager({
   policy,
   runs,
   s3Enabled,
   workerOnline,
-}: {
-  policy: BackupPolicyRow | null;
-  runs: BackupRunRow[];
-  s3Enabled: boolean;
-  workerOnline: boolean;
-}) {
+}: BackupManagerProps) {
   const router = useRouter();
   const t = useTranslations("admin.backupsManager");
   const [pending, start] = useTransition();

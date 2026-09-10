@@ -4,12 +4,14 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/src/banking.ts'
-import { Badge, PageHeader } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../../../components/page-layout'
 import { requirePermission, can } from '../../../../../../lib/authz'
 import { isUuid, parsePrefixedListParams } from '../../../../../../lib/list-params'
 import { ReconcileWorkspace } from './ReconcileWorkspace'
-import { DifferenceBadge } from './DifferenceBadge'
+import { ReconcileStats, ReconcileStatusBadge } from './sections'
+import { ModuleView } from '../../../../../../components/viewspec/module-view'
+import { loadReconciliation, reconcileSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,6 +62,18 @@ export default async function ReconcilePage({
   params: Promise<{ accountId: string; reconciliationId: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const { accountId, reconciliationId } = await params
+    const data = await loadReconciliation(accountId, reconciliationId, sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={reconcileSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
   const t = await getTranslations('banking')
@@ -178,9 +192,6 @@ export default async function ReconcilePage({
        where ${mWhere}`),
   ]))
 
-  const stat = 'rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900'
-  const statLabel = 'text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400'
-
   return (
     <ListPageLayout
       header={
@@ -201,36 +212,30 @@ export default async function ReconcilePage({
                 : t('reconcile.description')
             }
             actions={
-              <Badge variant={signedOff ? 'success' : recon.status === 'balanced' ? 'warning' : 'secondary'}>
-                {RECON_STATUS_KEYS.includes(recon.status)
-                  ? t(`reconStatus.${recon.status}`)
-                  : String(recon.status).replace(/_/g, ' ')}
-              </Badge>
+              <ReconcileStatusBadge
+                label={
+                  RECON_STATUS_KEYS.includes(recon.status)
+                    ? t(`reconStatus.${recon.status}`)
+                    : String(recon.status).replace(/_/g, ' ')
+                }
+                variant={signedOff ? 'success' : recon.status === 'balanced' ? 'warning' : 'secondary'}
+              />
             }
           />
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className={stat}>
-              <div className={statLabel}>{t('labels.statementBalance')}</div>
-              <div className="text-sm font-semibold tabular-nums">{money(totals.statementBalance, { maximumFractionDigits: 4 })}</div>
-            </div>
-            <div className={stat}>
-              <div className={statLabel}>{t('reconcile.stats.clearedGlBalance')}</div>
-              <div className="text-sm font-semibold tabular-nums">{money(totals.clearedBalance, { maximumFractionDigits: 4 })}</div>
-            </div>
-            <div className={stat}>
-              <div className={statLabel}>{t('reconcile.stats.difference')}</div>
-              <DifferenceBadge difference={totals.difference} currency={recon.currency} />
-            </div>
-            <div className={stat}>
-              <div className={statLabel}>{t('reconcile.stats.matched')}</div>
-              <div className="text-sm font-semibold tabular-nums">
-                {t('reconcile.matchedCounts', {
-                  bank: totals.matchedStatementLines,
-                  gl: totals.matchedJournalLines,
-                })}
-              </div>
-            </div>
-          </div>
+          <ReconcileStats
+            statementBalanceLabel={t('labels.statementBalance')}
+            statementBalanceValue={money(totals.statementBalance, { maximumFractionDigits: 4 })}
+            clearedBalanceLabel={t('reconcile.stats.clearedGlBalance')}
+            clearedBalanceValue={money(totals.clearedBalance, { maximumFractionDigits: 4 })}
+            differenceLabel={t('reconcile.stats.difference')}
+            difference={totals.difference}
+            differenceCurrency={recon.currency}
+            matchedLabel={t('reconcile.stats.matched')}
+            matchedValue={t('reconcile.matchedCounts', {
+              bank: totals.matchedStatementLines,
+              gl: totals.matchedJournalLines,
+            })}
+          />
         </>
       }
     >

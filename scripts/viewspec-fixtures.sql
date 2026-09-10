@@ -31,6 +31,7 @@
 --   …7801-7899  psp settlement batches
 --   …1101-1199  installed apps
 --   …2001-2099  AP capture documents
+--   …1001-1099  backup policy and runs
 --   …8801-8899  labor bill rate books
 --   …1901-1999  pay stubs, employee profiles, wage rates
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
@@ -156,7 +157,8 @@ begin
              'banking', true,
              'fixedAssets', true,
              'orders', true,
-             'queryConsole', true))
+             'queryConsole', true,
+             'propertyManagement', true))
    where id = v_org;
 
   -- ---- approvals -----------------------------------------------------------
@@ -1218,4 +1220,38 @@ begin
   -- rate version or writing under a retired one. Both misrepresent the
   -- product to make a test row exist, so the rates tab is covered by its
   -- real state instead.
+
+  -- ---- admin backups ----------------------------------------------------------
+  -- The simulator never runs backups, so the page would compare two
+  -- identical empty states. One policy (enabled, weekly) plus two runs:
+  -- one completed (downloadable: archive/manifest/delete actions) and one
+  -- running (exercises the in-progress cell + the live-polling branch).
+  -- Guarded all-or-nothing: backup_policies is one-row-per-org (PK on
+  -- org_id), so skip the block if the SIM org already has a policy.
+  begin
+    if not exists (select 1 from backup_policies where org_id = v_org) then
+      insert into backup_policies
+        (org_id, enabled, frequency, hour_utc, day_of_week, day_of_month,
+         max_keep, last_run_at, next_run_at)
+      values
+        (v_org, true, 'weekly', 2, 1, 1,
+         7, timestamptz '2026-08-24 02:00:00+00', timestamptz '2026-08-31 02:00:00+00');
+
+      insert into backup_runs
+        (id, org_id, kind, status, file_name, byte_size, table_count,
+         row_count, sha256, error, purged_at, purge_reason, created_at,
+         completed_at)
+      values
+        ('00000000-0000-7000-9000-000000001001', v_org, 'scheduled', 'completed',
+         'openbooks-2026-08-24.tar.zst', 1048576, 42,
+         123456, '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+         null, null, null, timestamptz '2026-08-24 02:00:00+00',
+         timestamptz '2026-08-24 02:04:11+00'),
+        ('00000000-0000-7000-9000-000000001002', v_org, 'manual', 'running',
+         null, null, null,
+         null, null, null, null, null, timestamptz '2026-08-30 01:00:00+00',
+         null)
+      on conflict (id) do nothing;
+    end if;
+  end;
 end $$;

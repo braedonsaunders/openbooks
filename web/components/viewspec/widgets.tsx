@@ -80,6 +80,16 @@ import { BalanceCheck } from '../../app/(app)/reports/balance-sheet/sections'
 import { Library, ArrowLeft } from 'lucide-react'
 import { AppsToolbar, AppDrawer } from '../../app/(app)/admin/apps/AppDrawer'
 import { CrmSetupWorkspace } from '../../app/(app)/admin/setup/crm/CrmSetupWorkspace'
+import { ArCockpit } from '../../app/(app)/ar/cockpit/ArCockpit'
+import { DocsHome } from '../../app/(app)/docs/sections'
+import { PlatformNotice, PlatformTile } from '../../app/(app)/platform/sections'
+import { BackupManager } from '../../app/(app)/admin/backups/BackupManager'
+import {
+  ReconcileStats,
+  ReconcileStatusBadge,
+} from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/sections'
+import { ReconcileWorkspace } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/ReconcileWorkspace'
+import { PropertyManagementWorkspace } from '../../app/(app)/property-management/PropertyManagementWorkspace'
 import { AppKeyCell } from '../../app/(app)/admin/apps/sections'
 import { CaptureList } from '../../app/(app)/ap/capture/sections'
 import { CaptureReviewDrawer } from '../../app/(app)/ap/capture/CaptureReviewDrawer'
@@ -857,6 +867,110 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       data={props.data as ComponentProps<typeof PaperView>['data']}
     />
   ),
+  /* --- reconciliation workspace ------------------------------------------------ */
+  'reconcile-status-badge': (props) => (
+    <ReconcileStatusBadge
+      label={str(props, 'label') ?? ''}
+      variant={(str(props, 'variant') ?? 'secondary') as 'success' | 'warning' | 'secondary'}
+    />
+  ),
+  /** One widget, not four stat tiles: the native tiles are plain bordered
+   *  divs, and the difference tile holds a conditional pair (green zero vs
+   *  amber nonzero) that a spec must not express. */
+  'reconcile-stats': (props) => (
+    <ReconcileStats
+      statementBalanceLabel={str(props, 'statementBalanceLabel') ?? ''}
+      statementBalanceValue={str(props, 'statementBalanceValue') ?? ''}
+      clearedBalanceLabel={str(props, 'clearedBalanceLabel') ?? ''}
+      clearedBalanceValue={str(props, 'clearedBalanceValue') ?? ''}
+      differenceLabel={str(props, 'differenceLabel') ?? ''}
+      difference={str(props, 'difference') ?? '0'}
+      differenceCurrency={str(props, 'differenceCurrency') ?? ''}
+      matchedLabel={str(props, 'matchedLabel') ?? ''}
+      matchedValue={str(props, 'matchedValue') ?? ''}
+    />
+  ),
+  /** Whole, like `match-workspace`: selection state across three prefixed
+   *  panes plus every mutation. `canReconcile` is a loader-resolved boolean,
+   *  never an Authz. */
+  'reconcile-workspace': (props) => (
+    <ReconcileWorkspace
+      basePath={str(props, 'basePath') ?? ''}
+      accountPath={str(props, 'accountPath') ?? ''}
+      currentParams={
+        (props.currentParams as ComponentProps<typeof ReconcileWorkspace>['currentParams']) ?? {}
+      }
+      reconciliation={props.reconciliation as ComponentProps<typeof ReconcileWorkspace>['reconciliation']}
+      difference={str(props, 'difference') ?? '0'}
+      canReconcile={props.canReconcile === true}
+      stmtRows={(props.stmtRows as ComponentProps<typeof ReconcileWorkspace>['stmtRows']) ?? []}
+      stmtTotal={Number(props.stmtTotal ?? 0)}
+      stmtParams={props.stmtParams as ComponentProps<typeof ReconcileWorkspace>['stmtParams']}
+      glRows={(props.glRows as ComponentProps<typeof ReconcileWorkspace>['glRows']) ?? []}
+      glTotal={Number(props.glTotal ?? 0)}
+      glParams={props.glParams as ComponentProps<typeof ReconcileWorkspace>['glParams']}
+      matchedRows={(props.matchedRows as ComponentProps<typeof ReconcileWorkspace>['matchedRows']) ?? []}
+      matchedTotal={Number(props.matchedTotal ?? 0)}
+      mParams={props.mParams as ComponentProps<typeof ReconcileWorkspace>['mParams']}
+    />
+  ),
+
+  /* --- admin backups ---------------------------------------------------------- */
+  /** Whole: a per-field schedule form, polling effects and fetch mutations
+   *  are client state and capabilities, not spec vocabulary. */
+  'backup-manager': (props) => (
+    <BackupManager
+      policy={(props.policy as ComponentProps<typeof BackupManager>['policy']) ?? null}
+      runs={(props.runs as ComponentProps<typeof BackupManager>['runs']) ?? []}
+      s3Enabled={props.s3Enabled === true}
+      workerOnline={props.workerOnline === true}
+    />
+  ),
+
+  /* --- platform hub ----------------------------------------------------------- */
+  'platform-notice': () => <PlatformNotice />,
+  /** Flat props, every value a string — not a single `tile` object. The icon
+   *  is an `iconKey` lookup resolved here so the spec carries only data. */
+  'platform-tile': (props) => (
+    <PlatformTile
+      href={str(props, 'href') ?? '#'}
+      iconKey={
+        (['building-2', 'users', 'key-round', 'mail'] as const).find(
+          (k) => k === str(props, 'iconKey'),
+        ) ?? 'building-2'
+      }
+      title={str(props, 'title') ?? ''}
+      description={str(props, 'description') ?? ''}
+      stat={str(props, 'stat') ?? ''}
+      detail={str(props, 'detail') ?? ''}
+    />
+  ),
+
+  /* --- docs home -------------------------------------------------------------- */
+  /** A gradient hero, composite link cards and hover-reveal arrows: generic
+   *  blocks would need new vocabulary to say any of it, so it stays one
+   *  component with a single `content` object. */
+  'docs-home': (props) => (
+    <DocsHome content={props.content as ComponentProps<typeof DocsHome>['content']} />
+  ),
+
+  /* --- property management ---------------------------------------------------- */
+  'property-management-workspace': (props) => (
+    <PropertyManagementWorkspace
+      {...(props as unknown as ComponentProps<typeof PropertyManagementWorkspace>)}
+    />
+  ),
+
+  /* --- AR cockpit ------------------------------------------------------------- */
+  /** Whole: schedule bars, a collections worklist and a week drill that
+   *  fetches on demand are client behaviour a spec cannot name. */
+  'ar-cockpit': (props) => (
+    <ArCockpit
+      data={props.data as ComponentProps<typeof ArCockpit>['data']}
+      canCollect={props.canCollect === true}
+    />
+  ),
+
   /* --- crm setup -------------------------------------------------------------- */
   /** One client island, like the labor-costing workspace. Six per-tab column
    *  sets with row-click routing are a six-way conditional pair, not presence,

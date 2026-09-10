@@ -319,6 +319,18 @@ export const blockSchema: z.ZodType<unknown> = z.lazy(() =>
       props: z.record(z.string(), z.unknown()).optional(),
       blocks: z.array(blockSchema).max(40),
     }),
+    // `heading` was renderable, typed, listed in BLOCK_KINDS and used by a
+    // dozen specs — and missing here, so `validateSpec` rejected every spec
+    // that carried one. Native pages render `trusted`, which skips validation,
+    // so nothing caught it until an agent ran the validator directly. That is
+    // precisely the hole an untrusted-spec runtime would have fallen into.
+    z.strictObject({
+      kind: z.literal('heading'),
+      when: fieldRefSchema.optional(),
+      level: z.union([z.literal(2), z.literal(3)]),
+      content: value,
+      className: z.string().max(300).optional(),
+    }),
     z.strictObject({
       kind: z.literal('grid'),
   when: fieldRefSchema.optional(),
@@ -375,8 +387,50 @@ function assertDepth(blocks: unknown[], depth: number, errors: string[]): void {
   }
 }
 
+/**
+ * Cheap structural depth check, run BEFORE the zod parse.
+ *
+ * The block union is recursive, and zod explores it by trying every member at
+ * every level — so parse cost grows exponentially with nesting. A 12-deep
+ * grid took 8.2 SECONDS to reject, which for a spec arriving as untrusted
+ * JSON is not a slow test, it is a denial-of-service vector: the attacker
+ * pays for one request and the server pays for all of them.
+ *
+ * So depth is measured on the raw value first, by walking `blocks` arrays
+ * without validating anything. An over-deep spec is refused before the
+ * expensive parser ever sees it.
+ */
+function rawDepth(value: unknown, depth = 1): number {
+  if (!Array.isArray(value)) return depth
+  let deepest = depth
+  for (const entry of value) {
+    if (entry === null || typeof entry !== 'object') continue
+    const nested = (entry as { blocks?: unknown }).blocks
+    if (Array.isArray(nested)) {
+      const found = rawDepth(nested, depth + 1)
+      if (found > deepest) deepest = found
+      // Stop as soon as the cap is exceeded; there is nothing to learn from
+      // measuring how much worse it gets.
+      if (deepest > MAX_BLOCK_DEPTH) return deepest
+    }
+  }
+  return deepest
+}
+
 /** Parse + validate an untrusted spec. Never throws. */
 export function validateSpec(raw: unknown): SpecValidation {
+  if (raw !== null && typeof raw === 'object') {
+    const candidate = raw as { header?: unknown; body?: unknown }
+    if (
+      rawDepth(candidate.header) > MAX_BLOCK_DEPTH ||
+      rawDepth(candidate.body) > MAX_BLOCK_DEPTH
+    ) {
+      return {
+        ok: false,
+        errors: [`block nesting exceeds the maximum depth of ${MAX_BLOCK_DEPTH}`],
+      }
+    }
+  }
   const parsed = pageSpecSchema.safeParse(raw)
   if (!parsed.success) {
     return {

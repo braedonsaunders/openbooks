@@ -204,6 +204,56 @@ const PAGES = [
     expect: 'table tbody tr',
   },
   {
+    // An OPEN reconciliation: three prefixed panes and every mutation live in
+    // one workspace component, placed whole.
+    path: '/banking/a1f8e08f-a6ae-42ac-b2fd-d8008a92b14e/reconcile/00000000-0000-7000-9000-000000000407',
+    variants: [{ query: '', expect: 'main button', minMatches: 4 }],
+    expect: 'main button',
+    minMatches: 4,
+  },
+  {
+    // The signed-off branch, which short-circuits before the panes load.
+    path: '/banking/a1f8e08f-a6ae-42ac-b2fd-d8008a92b14e/reconcile/00000000-0000-7000-9000-000000000405',
+    variants: [{ query: '', expect: 'main', minMatches: 1 }],
+    expect: 'main',
+    minMatches: 1,
+  },
+  {
+    path: '/admin/backups',
+    variants: [{ query: '', expect: 'table tbody tr', minMatches: 2 }],
+    expect: 'table tbody tr',
+    minMatches: 2,
+  },
+  {
+    path: '/platform',
+    variants: [{ query: '', expect: 'main a[href^="/platform/"]', minMatches: 4 }],
+    expect: 'main a[href="/platform/organizations"]',
+    minMatches: 1,
+  },
+  {
+    path: '/docs',
+    // No params, no gates, no database — a second variant would be vacuous.
+    variants: [{ query: '', expect: 'a[href^="/docs/"]', minMatches: 20 }],
+    expect: 'a[href^="/docs/"]',
+    minMatches: 20,
+  },
+  {
+    path: '/property-management',
+    // The feature is default-OFF; the fixture turns it on for this tenant, or
+    // the harness would compare two error pages.
+    variants: [{ query: '', expect: 'table tbody tr, main h1', minMatches: 1 }],
+    expect: 'table tbody tr, main h1',
+    minMatches: 1,
+  },
+  {
+    path: '/ar',
+    // The cockpit body is one client component; the header is a create menu
+    // beside the module tabs in one flex wrapper.
+    variants: [{ query: '', expect: 'main h1, main h2', minMatches: 1 }],
+    expect: 'main h1, main h2',
+    minMatches: 1,
+  },
+  {
     path: '/admin/setup/crm',
     variants: [
       '',
@@ -1397,6 +1447,23 @@ function normalizeStyles(markup) {
         // rather than the spelling; any real difference in duration, easing
         // or property still shows.
         let value = d.slice(index + 1).trim().replace(/\s*,\s*/g, ',').replace(/\s+/g, ' ')
+        // A hex colour and its rgb() form are the same colour: the CSSOM
+        // re-serializes `#10b981` as `rgb(16, 185, 129)` once it has
+        // round-tripped the declaration, and two renders of one component
+        // disagreed on exactly that. Canonicalize to rgb() so the COLOUR is
+        // compared rather than its spelling — a different colour still
+        // produces a different triple.
+        value = value.replace(/#([0-9a-f]{3}|[0-9a-f]{6})\b/gi, (hex, digits) => {
+          const full =
+            digits.length === 3
+              ? digits
+                  .split('')
+                  .map((c) => c + c)
+                  .join('')
+              : digits
+          const n = Number.parseInt(full, 16)
+          return `rgb(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255})`
+        })
         if (property === 'transition') value = value.replace(/^all /, '')
         // Numbers in a style value are rounded to the precision the browser
         // itself keeps. `width:14.285714285714286%` survives verbatim in

@@ -8,6 +8,8 @@ import { requirePermission, can } from '../../../lib/authz'
 import { analyticsConfig } from '../../../lib/analytics/config'
 import { normalizeMoneyValue, withoutWeekEntries } from '../../../lib/cash/core'
 import { arPosition } from '../../../lib/cash/ar-position'
+import { ModuleView } from '../../../components/viewspec/module-view'
+import { loadArCockpit, arCockpitSpec } from './view'
 import { ArCockpit } from './cockpit/ArCockpit'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +24,25 @@ export async function generateMetadata() {
  * worklist + aging), the AP page's mirror. The invoice list is its own
  * first-class route at /ar/invoices.
  */
-export default async function AR() {
+// The whole props object is optional: an integration test renders this page
+// component directly with no arguments, and a bare destructure would make
+// that a type error.
+export default async function AR({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+} = {}) {
+  const sp0 = (await searchParams) ?? {}
+  if (sp0.__viewspec === '1') {
+    const data = await loadArCockpit()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={arCockpitSpec(data)} data={data} searchParams={sp0} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('ar.read')
   const canCreate = can(authz, 'ar.create')
   const t = await getTranslations('ar')
