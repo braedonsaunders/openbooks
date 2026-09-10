@@ -1204,6 +1204,52 @@ const PAGES = [
     expect: 'table tbody tr',
     minMatches: 2,
   },
+  {
+    path: '/tax/provisions',
+    // The run list over the three fixture runs (…6901-6903). One variant: the
+    // page reads no search params, and the compute button is permission-shaped
+    // — the harness user is unrestricted, so it always renders.
+    variants: [''],
+    expect: 'table tbody tr',
+    minMatches: 3,
+  },
+  // Three mutually exclusive bodies, one per route — a spec cannot choose
+  // between three, so the loader sets three complementary flags. All three are
+  // reachable in this tenant with rows the apps fixture already seeds.
+  //
+  // All three carry their own `minInk`: each is one heading plus a link (or a
+  // breadcrumb over a frame that has not loaded a bundle in this tenant), and
+  // that is genuinely sparse on a 1440×900 viewport. The selector is what
+  // proves the render here; the ink floor is the backstop and it is the
+  // backstop that has to bend, not the assertion.
+  {
+    path: '/apps/viewspec-demo',
+    // The live runtime: breadcrumb strip over the sandboxed frame. Pinned on
+    // the breadcrumb, not the <iframe>: the frame fetches its bundle after
+    // mount and this tenant's demo app has none, so it renders its own
+    // loading/error branch — identically on both paths, but never an iframe.
+    variants: [''],
+    expect: 'main a[href="/apps"]',
+    minMatches: 1,
+    minInk: 0.002,
+  },
+  {
+    path: '/apps/viewspec-noversion',
+    // Installed but with no active version: the not-found notice.
+    variants: [''],
+    expect: 'main a[href="/apps"]',
+    minMatches: 1,
+    minInk: 0.002,
+  },
+  {
+    path: '/apps/viewspec-archived',
+    // Present but not `installed`: the disabled notice. Same widget as above,
+    // different loader strings — which is the whole point of one entry.
+    variants: [''],
+    expect: 'main a[href="/apps"]',
+    minMatches: 1,
+    minInk: 0.002,
+  },
   // --- analytics dashboards ---------------------------------------------------
   //
   // Seven pages of one shape: the `analytics-header` frame over one whole
@@ -2253,7 +2299,17 @@ function pixelTolerance(total) {
   return Math.max(PIXEL_TOLERANCE_MIN, Math.round((total ?? 0) * PIXEL_TOLERANCE_RATIO))
 }
 
-async function assertNotBlank(shot, label) {
+/**
+ * The default floor. A content page that renders is comfortably over it; a
+ * loading screen is comfortably under. But a few real pages are legitimately
+ * sparse — a not-found notice is one heading and one link on a 1440×900
+ * viewport — and for those an entry declares its own `minInk` rather than
+ * being pushed onto a selector that proves less. Lowering the floor for
+ * EVERYONE to accommodate them is what would actually weaken the guard.
+ */
+const DEFAULT_MIN_INK = 0.01
+
+async function assertNotBlank(shot, label, minInk = DEFAULT_MIN_INK) {
   const { data, info } = await sharp(shot).raw().toBuffer({ resolveWithObject: true })
   const counts = new Map()
   const total = info.width * info.height
@@ -2264,7 +2320,7 @@ async function assertNotBlank(shot, label) {
   let dominant = 0
   for (const n of counts.values()) if (n > dominant) dominant = n
   const inkRatio = 1 - dominant / total
-  if (inkRatio < 0.01) {
+  if (inkRatio < minInk) {
     throw new Error(
       `${label} capture is blank (${(inkRatio * 100).toFixed(2)}% non-background) — the page had not rendered`,
     )
@@ -2290,7 +2346,7 @@ async function scopedMarkup(page, scopes) {
   return parts.join('\n')
 }
 
-async function checkVariant(page, path, variant, expectSelector, minMatches, scopes = ['main'], expectState = 'visible') {
+async function checkVariant(page, path, variant, expectSelector, minMatches, scopes = ['main'], expectState = 'visible', minInk = DEFAULT_MIN_INK) {
   const nativeUrl = `${BASE}${path}${variant}`
   await renderSettled(page, nativeUrl, expectSelector, minMatches, expectState)
   await assertStylesLoaded(page)
@@ -2298,7 +2354,7 @@ async function checkVariant(page, path, variant, expectSelector, minMatches, sco
   if (nativePath !== 'native') throw new Error(`${nativeUrl} rendered via ${nativePath}, expected native`)
   const nativeMarkup = normalizeStyles(sortClassLists(sortAttributes(normalize(await scopedMarkup(page, scopes)))))
   const nativeShot = await captureSettled(page)
-  const ink = await assertNotBlank(nativeShot, `${path}${variant} native`)
+  const ink = await assertNotBlank(nativeShot, `${path}${variant} native`, minInk)
 
   await renderSettled(page, specUrl(path, variant), expectSelector, minMatches, expectState)
   const chosen = await renderPath(page)
@@ -2309,7 +2365,7 @@ async function checkVariant(page, path, variant, expectSelector, minMatches, sco
   }
   const specMarkup = normalizeStyles(sortClassLists(sortAttributes(normalize(await scopedMarkup(page, scopes)))))
   const specShot = await captureSettled(page)
-  await assertNotBlank(specShot, `${path}${variant} spec`)
+  await assertNotBlank(specShot, `${path}${variant} spec`, minInk)
 
   const slug = `${path}${variant}`.replace(/[^a-z0-9]+/gi, '_')
   const pixels = nativeShot.equals(specShot) ? { differing: 0, total: 0 } : await pixelDiff(nativeShot, specShot)
@@ -2384,7 +2440,11 @@ async function main() {
             (typeof raw === 'string' ? undefined : raw.scopes) ?? entry.scopes ?? ['main']
           const expectState =
             (typeof raw === 'string' ? undefined : raw.expectState) ?? entry.expectState ?? 'visible'
-          result = await checkVariant(page, entry.path, variant, expect, minMatches, scopes, expectState)
+          const minInk =
+            (typeof raw === 'string' ? undefined : raw.minInk) ?? entry.minInk ?? DEFAULT_MIN_INK
+          result = await checkVariant(
+            page, entry.path, variant, expect, minMatches, scopes, expectState, minInk,
+          )
         } catch (error) {
           failures += 1
           console.error(`✗ ${entry.path}${variant}\n    ${error.message}`)
