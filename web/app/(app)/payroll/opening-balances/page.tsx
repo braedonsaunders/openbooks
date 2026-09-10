@@ -11,6 +11,8 @@ import { pickString } from '../../../../lib/list-params'
 import { scopedEntitlementOpenings, scopedOpeningBalances } from '../../../../lib/payroll-scoped-views'
 import { EntitlementOpeningsView } from './EntitlementOpeningsView'
 import { OpeningBalancesView } from './OpeningBalancesView'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadPayrollOpeningBalances, payrollOpeningBalancesSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +33,17 @@ export default async function PayrollOpeningBalancesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadPayrollOpeningBalances(sp)
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={payrollOpeningBalancesSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await requirePermission('payroll.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')

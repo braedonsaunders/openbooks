@@ -6,6 +6,8 @@ import { INDUSTRIES, canSwitchIndustry } from '../../../../../lib/industries'
 import { FEATURES, featureEnabled, resolvedFeatureState } from '../../../../../lib/features'
 import { SetupWizard } from './SetupWizard'
 import { isBookStart, isCloseCadence, isComplexityLevel, isMonthlyActivityLevel, isTaxPosition, isTeamSize } from '../../../../../lib/workspace-profile'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
+import { loadWizard, wizardSpec } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +16,18 @@ export const dynamic = 'force-dynamic'
  * Features page ("Run setup wizard" button). On first login the wizard is
  * rendered inline by the app layout (see web/app/(app)/layout.tsx).
  */
-export default async function WizardPage() {
+export default async function WizardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  if ((await searchParams).__viewspec === '1') {
+    const sp = await searchParams
+    const data = await loadWizard()
+    return (
+      <>
+        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
+        <meta name="x-viewspec-render" content="1" />
+        <ModuleView spec={wizardSpec(data)} data={data} searchParams={sp} trusted />
+      </>
+    )
+  }
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   if (!can(authz, 'admin.setup.manage')) redirect('/')

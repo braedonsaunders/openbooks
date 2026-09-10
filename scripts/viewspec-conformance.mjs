@@ -676,9 +676,15 @@ const PAGES = [
     path: '/banking',
     // A cockpit with no table at all: the assertion counts panel headings,
     // the /purchasing precedent.
-    variants: [{ query: '', expect: 'h2, h3', minMatches: 5 }],
+    //
+    // FOUR, not five. The spec emits exactly four headed panels — the roster,
+    // the trend, the work-queue directory and the attention list — and the
+    // native page emits the same four. The 5 was a predicted count that no
+    // render ever produced; it went unnoticed because this entry had not been
+    // re-run since it was written. Measured now.
+    variants: [{ query: '', expect: 'h2, h3', minMatches: 4 }],
     expect: 'h2, h3',
-    minMatches: 5,
+    minMatches: 4,
   },
   {
     path: '/reports',
@@ -1111,6 +1117,74 @@ const PAGES = [
     // session. Two pages, one slot, no second copy of the capability.
     variants: [''],
     expect: 'main a[href="/dashboard/customize"]',
+    minMatches: 1,
+  },
+  {
+    path: '/admin/setup/project-types',
+    // Whole-island setup page: five simulator types, each with one effective
+    // profile version. Reads no search params, so one variant is coverage.
+    variants: [{ query: '', expect: 'main button', minMatches: 10 }],
+    expect: 'main button',
+    minMatches: 10,
+  },
+  {
+    path: '/admin/setup/depreciation',
+    // Two registry-entity tabs, no overview — the tax-depreciation shape at
+    // its smallest. `?tab=bogus` falls back to methods, verbatim.
+    variants: [
+      '',
+      { query: '?tab=bogus', expect: 'main nav a', minMatches: 2 },
+      { query: '?tab=books', expect: 'main table tbody tr', minMatches: 1 },
+      { query: '?tab=methods', expect: 'main table tbody tr', minMatches: 1 },
+    ],
+    expect: 'main nav a',
+    minMatches: 2,
+  },
+  {
+    path: '/settings/security',
+    // Fully client-side panel with no props. The pin is STATIC chrome only:
+    // the h1 and the two card h2s. MFA state and session rows arrive over
+    // /api/auth/* after mount.
+    variants: [''],
+    expect: 'main h1, main h2',
+    minMatches: 3,
+  },
+  {
+    path: '/api-docs',
+    // The REST console. Its left rail renders one <li> per record type
+    // server-side — the query filter starts empty, so `filtered` is the full
+    // schema: nine built-in types plus one published custom type.
+    variants: [{ query: '', expect: 'main aside ul li', minMatches: 10 }],
+    expect: 'main aside ul li',
+    minMatches: 10,
+  },
+  {
+    path: '/payroll/opening-balances',
+    // Two whole-workspace grids. Fixture …1870-1877 seeds the statutory
+    // carry-ins, the legacy 2025 vacation row, two entitlement plans and one
+    // bank opening.
+    variants: [
+      '',
+      { query: '?year=2026', expect: 'main table tbody tr', minMatches: 6 },
+      { query: '?year=2025', expect: 'main table tbody tr', minMatches: 6 },
+    ],
+    expect: 'main table tbody tr',
+    minMatches: 6,
+  },
+  {
+    path: '/admin/setup/tax-setup',
+    // Header plus 16 country cards and two step-link cards. The search filter
+    // is client-side useState, not a `?q=` param, so one variant is coverage.
+    variants: [''],
+    expect: 'main li',
+    minMatches: 16,
+  },
+  {
+    path: '/admin/setup/wizard',
+    // Both paths mount the same island at step 0, so the welcome step renders
+    // identically regardless of org state.
+    variants: [{ query: '', expect: '[data-testid="setup-wizard"]', minMatches: 1 }],
+    expect: '[data-testid="setup-wizard"]',
     minMatches: 1,
   },
   // --- analytics dashboards ---------------------------------------------------
@@ -1863,7 +1937,11 @@ async function captureSettled(page) {
   // construction. Including it only contributes font-antialiasing noise from a
   // region that is not under test — 352 stray pixels on the api-keys page,
   // well past a tolerance tuned for content.
-  return await page.locator('main').screenshot({ caret: 'hide' })
+  // `.first()`: a page that nests a second <main> inside the shell's would
+  // otherwise fail here with a strict-mode violation rather than a diff. One
+  // page did exactly that (settings/security, since fixed); the outer landmark
+  // contains the inner one either way, so first() is the region we mean.
+  return await page.locator('main').first().screenshot({ caret: 'hide' })
 }
 
 function normalize(markup) {
