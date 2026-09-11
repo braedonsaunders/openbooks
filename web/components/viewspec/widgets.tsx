@@ -385,6 +385,7 @@ import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
 import { FieldDrawer, NewFieldButton } from '../../app/(app)/admin/custom-fields/FieldDrawer'
 import { LayoutDrawer } from '../../app/(app)/admin/page-layouts/LayoutDrawer'
+import { CloseWizard } from '../../app/(app)/close/CloseWizard'
 import { NewScriptButton, ScriptDrawer } from '../../app/(app)/admin/scripts/ScriptDrawer'
 import { Badge, Button } from '@openbooks/ui'
 import Link from 'next/link'
@@ -606,6 +607,19 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       hiddenTables={(props.hiddenTables as string[]) ?? []}
     />
   ),
+  /**
+   * The period-close run wizard, placed whole.
+   *
+   * A leaf, not a frame: it owns six stage bodies, its own navigation and its
+   * own full-height shell, and decomposing eleven hundred lines of it into
+   * blocks would reimplement it rather than compose it. Its page uses
+   * `layout: 'bare'` so the wizard's shell is the only one.
+   */
+  'close-wizard': (props) => {
+    const wizard = props.wizard as ComponentProps<typeof CloseWizard> | null
+    if (!wizard) return null
+    return <CloseWizard {...wizard} />
+  },
   'page-layout-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof LayoutDrawer>['drawer'] | null
     if (!drawer) return null
