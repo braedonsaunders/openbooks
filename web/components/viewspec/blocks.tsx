@@ -577,7 +577,3 @@ export function BlockList({
     </>
   )
 }
-
-/** The frame names this host can render. Derived, for the same reason
- *  `WIDGET_NAMES` is. */
-export const FRAME_NAMES: ReadonlySet<string> = new Set(Object.keys(FRAME_REGISTRY))

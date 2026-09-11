@@ -3434,13 +3434,3 @@ export function WidgetBlockView({
   if (!renderer) throw new UnknownWidgetError(`unknown widget: ${name}`)
   return <>{renderer(resolveWidgetProps(props, scope))}</>
 }
-
-/**
- * The widget names this host can render.
- *
- * Derived from the registry rather than written beside it, because a
- * hand-kept list is a list that drifts — and the thing it guards is whether a
- * tenant-authored spec is accepted, so drift means either rejecting a widget
- * that works or storing one that does not.
- */
-export const WIDGET_NAMES: ReadonlySet<string> = new Set(Object.keys(WIDGET_REGISTRY))

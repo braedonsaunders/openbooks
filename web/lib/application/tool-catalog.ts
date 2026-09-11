@@ -30,6 +30,13 @@ import {
   listRecordTypes,
   updateApplicationRecord,
 } from "./records";
+import {
+  clearLayout,
+  describeLayoutVocabulary,
+  listLayouts,
+  setLayout,
+  validateLayout,
+} from "./page-layouts";
 import { orgVitals } from "./vitals";
 
 export type ApplicationToolConfirmation = "never" | "always";
@@ -58,6 +65,10 @@ const RATE = z.string().regex(/^\d+(?:\.\d{1,10})?$/)
   .describe("Positive exact decimal rate with at most ten decimal places.");
 const IDEMPOTENCY_KEY = z.string().regex(/^[A-Za-z0-9._:-]{8,200}$/)
   .describe("Unique retry key for this exact mutation.");
+const ROUTE = z.string().regex(/^\/[A-Za-z0-9\-_/[\]().]*$/).max(120)
+  .describe("Next.js route PATTERN the layout replaces, e.g. /banking or /apps/[key]. Never a concrete url.");
+const LAYOUT_SPEC = z.unknown()
+  .describe("A ViewSpec PageSpec document. Call validate_page_layout first; errors name the offending widget or path.");
 const CUSTOM = z.record(z.string(), z.unknown());
 const DOCUMENT_REVISION = z.string()
   .regex(new RegExp(DOCUMENT_REVISION_PATTERN), "must be the exact persisted document updated_at token")
@@ -252,6 +263,44 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     inputSchema: z.object({ typeKey: TYPE_KEY, id: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: true, openWorld: false, assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await deleteApplicationRecord(context, input) }),
+  }),
+  definition({
+    name: "describe_page_layout_vocabulary", title: "Describe Page Layout Vocabulary",
+    description: "The block kinds, cell kinds, widget names and frame names a page layout may use, read from the live renderer registries, plus the rules a layout must obey. Start here before writing one: a widget this does not list is refused at save.",
+    inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context) => ({ ok: true, ...await describeLayoutVocabulary(context) }),
+  }),
+  definition({
+    name: "list_page_layouts", title: "List Page Layouts",
+    description: "List the routes this org has customized, with the stored layout for each. A route absent from this list renders its built-in layout.",
+    inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context) => ({ ok: true, ...await listLayouts(context) }),
+  }),
+  definition({
+    name: "validate_page_layout", title: "Validate Page Layout",
+    description: "Check a draft layout without storing it. Returns the specific errors — an unknown widget is named, an illegal property is pointed at. Iterate here rather than against set_page_layout.",
+    inputSchema: z.object({ spec: LAYOUT_SPEC }),
+    readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await validateLayout(context, input) }),
+  }),
+  definition({
+    name: "set_page_layout", title: "Set Page Layout",
+    description: "Replace what a route renders for everyone in this org. The layout binds fields the page's loader already resolved; it cannot reach data the reader could not already see. A rejected layout is returned with its errors rather than stored.",
+    inputSchema: z.object({ route: ROUTE, spec: LAYOUT_SPEC, note: z.string().max(500).optional() }),
+    readOnly: false, destructive: false, openWorld: false,
+    assistantConfirmation: "always", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await setLayout(context, input) }),
+  }),
+  definition({
+    name: "clear_page_layout", title: "Clear Page Layout",
+    description: "Drop this org's layout for a route so the page returns to its built-in one. The stored layout is deactivated, not destroyed.",
+    inputSchema: z.object({ route: ROUTE }),
+    readOnly: false, destructive: true, openWorld: false,
+    assistantConfirmation: "always", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await clearLayout(context, input) }),
   }),
   definition({
     name: "list_approvals", title: "List Approvals",

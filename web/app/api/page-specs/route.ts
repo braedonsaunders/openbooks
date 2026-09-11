@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { guardPermission } from '../../../lib/authz'
 import { clearPageSpec, listPageSpecs, savePageSpec } from '../../../lib/page-specs'
-import { FRAME_NAMES } from '../../../components/viewspec/blocks'
-import { WIDGET_NAMES } from '../../../components/viewspec/widgets'
+import { FRAME_NAMES, WIDGET_NAMES } from '../../../components/viewspec/registry-names'
 
 export const runtime = 'nodejs'
 
@@ -54,10 +53,10 @@ export async function POST(req: Request) {
   // The errors are returned, not logged and swallowed. An author who wrote an
   // unknown widget needs to be told WHICH one; "invalid spec" is not a message
   // anyone can act on.
-  if ('ok' in result && result.ok === false) {
+  if (!result.ok) {
     return NextResponse.json({ error: 'spec rejected', errors: result.errors }, { status: 400 })
   }
-  return NextResponse.json(result)
+  return NextResponse.json({ id: result.id })
 }
 
 /** DELETE ?route=… — drop the override; the page returns to its built-in spec. */

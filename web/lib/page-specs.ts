@@ -99,10 +99,12 @@ export async function listPageSpecs(orgId: string): Promise<StoredPageSpec[]> {
 /**
  * Store an override, replacing whatever was active for the route.
  *
- * The previous row is DEACTIVATED rather than deleted. A tenant turning a
- * customization off should not lose the work, and an audit entry that points
- * at a row someone can still read is worth more than one that points at a
- * gap.
+ * The previous row is DEACTIVATED rather than deleted, and its deactivation is
+ * audited alongside the new row. A tenant turning a customization off should
+ * not lose the work; an audit entry that points at a row someone can still
+ * read is worth more than one that points at a gap; and a trail that showed
+ * two inserts without recording which superseded which would not answer the
+ * question anyone opens it to ask.
  */
 export async function savePageSpec(opts: {
   orgId: string
@@ -111,7 +113,7 @@ export async function savePageSpec(opts: {
   spec: PageSpec
   note?: string | null
   registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> }
-}): Promise<{ id: string } | SpecRejection> {
+}): Promise<{ ok: true; id: string } | SpecRejection> {
   const checked = validateAgainstRegistries(opts.spec, opts.registries)
   if (!checked.ok) return checked
   if (checked.spec.route && checked.spec.route !== opts.route) {
@@ -119,9 +121,20 @@ export async function savePageSpec(opts: {
   }
 
   return await db.transaction(async (tx) => {
-    await tx.execute(sql`
+    // The supersession is audited too, not just the new row. Without it the
+    // trail shows two inserts for one route and no record of which replaced
+    // which — which is the question anyone reading the trail is asking.
+    const superseded = await tx.execute<{ id: string }>(sql`
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
-       where org_id = ${opts.orgId} and route = ${opts.route} and is_active`)
+       where org_id = ${opts.orgId} and route = ${opts.route} and is_active
+      returning id`)
+    for (const row of superseded.rows) {
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${opts.orgId}, 'page_specs', ${row.id}, 'update',
+                ${JSON.stringify({ route: opts.route, is_active: false, reason: 'superseded' })},
+                ${opts.actorId})`)
+    }
     const inserted = await tx.execute<{ id: string }>(sql`
       insert into page_specs (org_id, route, spec, note, created_by, updated_by)
       values (${opts.orgId}, ${opts.route}, ${JSON.stringify(checked.spec)}::jsonb,
@@ -132,7 +145,7 @@ export async function savePageSpec(opts: {
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${opts.orgId}, 'page_specs', ${id}, 'insert',
               ${JSON.stringify({ route: opts.route, note: opts.note ?? null })}, ${opts.actorId})`)
-    return { id }
+    return { ok: true as const, id }
   })
 }
 
