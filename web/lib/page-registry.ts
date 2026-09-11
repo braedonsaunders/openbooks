@@ -244,6 +244,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/page-layouts': {
+    route: '/admin/page-layouts',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/admin/page-layouts/view')
+      return {
+        load: (input) => m.loadPageLayouts(input.searchParams ?? {}),
+        spec: (data) => m.pageLayoutsSpec(data as never),
+      }
+    },
+  },
   '/admin/pdf-templates': {
     route: '/admin/pdf-templates',
     segments: [],

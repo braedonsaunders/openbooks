@@ -384,6 +384,7 @@ import { ShowInactivesToggle } from '../show-inactives-toggle'
 import { FilterChips } from '../filter-bar'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
 import { FieldDrawer, NewFieldButton } from '../../app/(app)/admin/custom-fields/FieldDrawer'
+import { LayoutDrawer } from '../../app/(app)/admin/page-layouts/LayoutDrawer'
 import { NewScriptButton, ScriptDrawer } from '../../app/(app)/admin/scripts/ScriptDrawer'
 import { Badge, Button } from '@openbooks/ui'
 import Link from 'next/link'
@@ -604,6 +605,15 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       hiddenKinds={(props.hiddenKinds as string[]) ?? []}
       hiddenTables={(props.hiddenTables as string[]) ?? []}
     />
+  ),
+  'page-layout-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof LayoutDrawer>['drawer'] | null
+    if (!drawer) return null
+    return <LayoutDrawer drawer={drawer} />
+  },
+  /** The "N of M routes customized" line under the list. */
+  'page-layout-summary': (props) => (
+    <p className="px-1 pt-2 text-xs text-slate-500 dark:text-slate-400">{str(props, 'text') ?? ''}</p>
   ),
   'new-script': () => <NewScriptButton />,
   'script-drawer': (props) => (

@@ -50,3 +50,30 @@ export async function authedContext(
     await api.dispose();
   }
 }
+
+/**
+ * Dismiss the first-run setup wizard if this org still shows it.
+ *
+ * A freshly bootstrapped org opens every page behind a fixed, full-screen
+ * overlay, which silently swallows every click a spec makes — the failure
+ * reads as "element is not stable", never as "something is covering it". Four
+ * specs had each grown their own copy of this before it was worth naming.
+ *
+ * Deliberately waits for the POST rather than just the overlay disappearing:
+ * the wizard hides optimistically, so a spec that raced on for the next click
+ * could beat the deferral to the server and meet the overlay again on the
+ * following navigation.
+ */
+export async function dismissSetupWizard(page: Page) {
+  const wizard = page.getByTestId("setup-wizard");
+  if (!(await wizard.isVisible().catch(() => false))) return;
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/setup/wizard") &&
+        response.request().method() === "POST",
+    ),
+    wizard.getByRole("button", { name: "Skip for now", exact: true }).click(),
+  ]);
+  await wizard.waitFor({ state: "hidden" });
+}
