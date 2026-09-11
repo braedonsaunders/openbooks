@@ -34,7 +34,9 @@ import {
   clearLayout,
   describeLayoutVocabulary,
   describePageLayout,
+  listLayoutHistory,
   listLayouts,
+  restoreLayout,
   setLayout,
   validateLayout,
 } from "./page-layouts";
@@ -308,6 +310,22 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await setLayout(context, input) }),
+  }),
+  definition({
+    name: "list_page_layout_history", title: "List Page Layout History",
+    description: "Every layout ever saved for a route, newest first, with who saved it and why. A save deactivates its predecessor rather than deleting it, so this is how an edit gets undone after the fact.",
+    inputSchema: z.object({ route: ROUTE }),
+    readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await listLayoutHistory(context, input as never) }),
+  }),
+  definition({
+    name: "restore_page_layout", title: "Restore Page Layout",
+    description: "Publish a previous version of a route's layout again, by the id list_page_layout_history reports. Appends a new active version rather than reactivating the old row, so the history stays a true record of what was live when.",
+    inputSchema: z.object({ route: ROUTE, versionId: UUID }),
+    readOnly: false, destructive: false, openWorld: false,
+    assistantConfirmation: "always", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await restoreLayout(context, input as never) }),
   }),
   definition({
     name: "clear_page_layout", title: "Clear Page Layout",

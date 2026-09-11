@@ -149,6 +149,114 @@ export async function savePageSpec(opts: {
   })
 }
 
+export interface PageSpecVersion {
+  id: string
+  /** The layout this org renders for the route right now. */
+  active: boolean
+  note: string | null
+  savedAt: string
+  /** The user who saved it, if the row recorded one. */
+  savedBy: string | null
+  authorName: string | null
+}
+
+/**
+ * Every layout this org has stored for a route, newest first.
+ *
+ * The rows were always kept — a save deactivates its predecessor rather than
+ * deleting it, so the audit trail points at something a person can still
+ * read. Nothing could read them, which made "deactivated, not deleted" a
+ * promise with no way to collect on it. This is the way.
+ */
+export async function listPageSpecHistory(orgId: string, route: string): Promise<PageSpecVersion[]> {
+  const rows = await db.execute<{
+    id: string
+    is_active: boolean
+    note: string | null
+    created_at: string
+    created_by: string | null
+    author: string | null
+  }>(sql`
+    select s.id, s.is_active, s.note, s.created_at, s.created_by, u.name as author
+      from page_specs s
+      left join users u on u.id = s.created_by and u.org_id = s.org_id
+     where s.org_id = ${orgId} and s.route = ${route}
+     order by s.created_at desc`)
+  return rows.rows.map((row) => ({
+    id: row.id,
+    active: row.is_active,
+    note: row.note,
+    // `created_at`, not `updated_at`. A superseded row's `updated_at` is when
+    // it was switched OFF, so reporting it as "saved" would tell someone
+    // reading the history after an incident that two different layouts went
+    // live at the same instant.
+    savedAt: String(row.created_at),
+    savedBy: row.created_by,
+    authorName: row.author,
+  }))
+}
+
+/**
+ * Publish a previous version again.
+ *
+ * Appends a NEW active row carrying the old spec rather than flipping the old
+ * row back on. Reactivating in place would make that row's timestamp claim it
+ * had been live all along, and the history someone opens after an incident is
+ * exactly where that lie would cost the most.
+ *
+ * Validated under the RENDER rules, not the authoring ones. This is an undo,
+ * not an edit: the version being restored was published under the rules of
+ * its day and — if it is the one this org was running last week — still
+ * renders correctly. Holding it to today's stricter checks would make the
+ * layout someone wants back the one they cannot have.
+ */
+export async function restorePageSpec(opts: {
+  orgId: string
+  actorId: string
+  route: string
+  versionId: string
+  registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> }
+}): Promise<{ ok: true; id: string } | SpecRejection> {
+  const rows = await db.execute<{ spec: unknown; note: string | null; is_active: boolean }>(sql`
+    select spec, note, is_active from page_specs
+     where org_id = ${opts.orgId} and route = ${opts.route} and id = ${opts.versionId}
+     limit 1`)
+  const row = rows.rows[0]
+  // Scoped to the org AND the route: a version id is not a capability, and a
+  // row from another route would publish a layout under a page it was never
+  // written for.
+  if (!row) return { ok: false, errors: ['no such version for this route'] }
+  if (row.is_active) return { ok: false, errors: ['that version is already the active layout'] }
+
+  const checked = validateAgainstRegistries(row.spec, opts.registries)
+  if (!checked.ok) return checked
+
+  return await db.transaction(async (tx) => {
+    const superseded = await tx.execute<{ id: string }>(sql`
+      update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
+       where org_id = ${opts.orgId} and route = ${opts.route} and is_active
+      returning id`)
+    for (const previous of superseded.rows) {
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${opts.orgId}, 'page_specs', ${previous.id}, 'update',
+                ${JSON.stringify({ route: opts.route, is_active: false, reason: 'superseded' })},
+                ${opts.actorId})`)
+    }
+    const inserted = await tx.execute<{ id: string }>(sql`
+      insert into page_specs (org_id, route, spec, note, created_by, updated_by)
+      values (${opts.orgId}, ${opts.route}, ${JSON.stringify(checked.spec)}::jsonb,
+              ${row.note}, ${opts.actorId}, ${opts.actorId})
+      returning id`)
+    const id = inserted.rows[0]!.id
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${opts.orgId}, 'page_specs', ${id}, 'insert',
+              ${JSON.stringify({ route: opts.route, restoredFrom: opts.versionId })}, ${opts.actorId})`)
+    return { ok: true as const, id }
+  })
+}
+
 /**
  * How long a preview draft keeps applying.
  *

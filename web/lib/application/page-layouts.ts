@@ -9,7 +9,14 @@ import { forbidden } from './errors'
 import { boundPaths, describeFields } from '../page-fields'
 import { MissingSegmentError, PAGE_REGISTRY, PAGE_ROUTES } from '../page-registry'
 import { validateAgainstRegistries } from '../page-spec-validate'
-import { clearPageSpec, listPageSpecs, loadPageSpec, savePageSpec } from '../page-specs'
+import {
+  clearPageSpec,
+  listPageSpecHistory,
+  listPageSpecs,
+  loadPageSpec,
+  restorePageSpec,
+  savePageSpec,
+} from '../page-specs'
 
 /**
  * Page layouts as an application capability.
@@ -270,6 +277,44 @@ export async function setLayout(
     return { stored: false, errors: result.errors }
   }
   return { stored: true, id: result.id, errors: [] as string[] }
+}
+
+/**
+ * Every layout this org has stored for a route, newest first.
+ *
+ * A save deactivates its predecessor rather than deleting it, so the work was
+ * always there; until now nothing could read it, which made "deactivated, not
+ * deleted" a promise with no way to collect on it.
+ */
+export async function listLayoutHistory(context: ApplicationContext, input: { route: string }) {
+  requireCustomization(context)
+  return { versions: await listPageSpecHistory(context.authz.user.orgId, input.route) }
+}
+
+/**
+ * Publish a previous version again.
+ *
+ * The undo that outlives the session. An editor's in-page undo is gone the
+ * moment the tab closes, so a layout someone regrets tomorrow had no way back
+ * except rewriting it.
+ */
+export async function restoreLayout(
+  context: ApplicationContext,
+  input: { route: string; versionId: string },
+) {
+  requireCustomization(context)
+  const result = await restorePageSpec({
+    orgId: context.authz.user.orgId,
+    actorId: context.authz.user.id,
+    route: input.route,
+    versionId: input.versionId,
+    // An undo is not an edit: a version published under older rules still
+    // renders, and today's stricter checks must not make the layout someone
+    // wants back the one they cannot have.
+    registries: RENDER_REGISTRIES,
+  })
+  if (!result.ok) return { restored: false, errors: result.errors }
+  return { restored: true, id: result.id, errors: [] as string[] }
 }
 
 /** Drop a layout; the page returns to its built-in spec. */

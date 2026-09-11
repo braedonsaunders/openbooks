@@ -15,6 +15,7 @@ import {
   type OutlineNode,
 } from '@/lib/page-layout-outline'
 import type { FieldDescriptor } from '@/lib/page-fields'
+import type { PageSpecVersion } from '@/lib/page-specs'
 import type { PageLayoutDrawerData } from './view'
 
 /**
@@ -156,7 +157,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
   const initial = drawer.override ?? drawer.builtIn
   const [working, setWorking] = useState<PageSpec | null>(initial)
   const [undo, setUndo] = useState<PageSpec[]>([])
-  const [mode, setMode] = useState<'structure' | 'json' | 'preview' | 'fields'>('structure')
+  const [mode, setMode] = useState<'structure' | 'json' | 'preview' | 'fields' | 'history'>('structure')
   const [json, setJson] = useState(() => (initial ? JSON.stringify(initial, null, 2) : ''))
   // Blank each time: a note explains THIS change, so carrying the previous
   // one forward would quietly attribute an old reason to a new edit.
@@ -165,6 +166,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
   const [busy, setBusy] = useState(false)
   /** The url of the live preview, and a token that forces the frame to reload. */
   const [preview, setPreview] = useState<{ href: string; nonce: number } | null>(null)
+  const [versions, setVersions] = useState<PageSpecVersion[] | null>(null)
 
   const outline = useMemo(() => (working ? outlineSpec(working) : null), [working])
   const dirty = working !== initial
@@ -277,6 +279,35 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
     }
   }
 
+  const loadHistory = async () => {
+    const response = await fetch(
+      `/api/page-specs?route=${encodeURIComponent(drawer.route)}&history=1`,
+    )
+    const body = (await response.json().catch(() => ({}))) as { versions?: PageSpecVersion[] }
+    setVersions(body.versions ?? [])
+  }
+
+  const restore = async (versionId: string) => {
+    setBusy(true)
+    try {
+      const response = await fetch(`/api/page-specs?restore=${encodeURIComponent(versionId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ route: drawer.route }),
+      })
+      const body = (await response.json().catch(() => ({}))) as { errors?: string[]; error?: string }
+      if (!response.ok) {
+        setErrors(body.errors ?? [body.error ?? tCommon('errors.unknown')])
+        return
+      }
+      setErrors([])
+      toast.success(t('actions.restored'))
+      router.refresh()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const remove = async () => {
     setBusy(true)
     try {
@@ -292,7 +323,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
     }
   }
 
-  const TABS = ['structure', 'json', 'preview', 'fields'] as const
+  const TABS = ['structure', 'json', 'preview', 'fields', 'history'] as const
 
   // The drawer chrome owns the tab strip, so the tabs sit above the scrolling
   // body instead of scrolling away with it.
@@ -304,7 +335,10 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
           type="button"
           role="tab"
           aria-selected={mode === tab}
-          onClick={() => setMode(tab)}
+          onClick={() => {
+            setMode(tab)
+            if (tab === 'history') void loadHistory()
+          }}
           className={
             mode === tab
               ? 'shrink-0 border-b-2 border-teal-600 px-3 py-3 text-sm font-medium text-teal-700 transition-colors dark:border-teal-400 dark:text-teal-300'
@@ -435,10 +469,55 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
               </div>
             ) : null}
 
+            {mode === 'history' ? (
+              <div className="space-y-2">
+                <p className={`text-xs ${TONE.chrome}`}>{t('history.help')}</p>
+                {versions === null ? (
+                  <p className={`text-xs ${TONE.chrome}`}>{t('history.loading')}</p>
+                ) : versions.length === 0 ? (
+                  <p className={`text-sm ${TONE.chrome}`}>{t('history.empty')}</p>
+                ) : (
+                  <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {versions.map((version) => (
+                      <li key={version.id} className="flex items-center gap-3 py-2">
+                        <span className="text-sm text-slate-700 dark:text-slate-200">
+                          {new Date(version.savedAt).toLocaleString()}
+                        </span>
+                        {version.active ? (
+                          <Badge variant="success" className="text-[10px]">{t('history.active')}</Badge>
+                        ) : null}
+                        {version.authorName ? (
+                          <span className={`text-xs ${TONE.chrome}`}>{version.authorName}</span>
+                        ) : null}
+                        {version.note ? (
+                          <span className="truncate text-xs text-slate-500">{version.note}</span>
+                        ) : null}
+                        {!version.active ? (
+                          <Button
+                            className="ml-auto"
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => restore(version.id)}
+                          >
+                            {t('actions.restore')}
+                          </Button>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+
             {mode === 'fields' ? (
               <Fields fields={drawer.fields} truncated={drawer.fieldsTruncated} t={t} />
             ) : null}
 
+            {/* Only where something is being edited. On History or Available
+                fields there is no save to explain, and an input that does
+                nothing invites someone to fill it in. */}
+            {mode === 'structure' || mode === 'json' ? (
             <div className="space-y-1">
               <label className={`text-xs ${TONE.chrome}`} htmlFor="page-layout-note">
                 {t('drawer.note')}
@@ -451,6 +530,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
                 maxLength={500}
               />
             </div>
+            ) : null}
           </>
         ) : null}
       </div>
