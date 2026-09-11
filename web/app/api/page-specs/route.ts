@@ -4,9 +4,16 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { guardPermission } from '../../../lib/authz'
 import { applicationContextFromSession } from '../../../lib/application/context'
 import { describePageLayout } from '../../../lib/application/page-layouts'
-import { clearPageSpec, listPageSpecs, savePageSpec, savePageSpecDraft } from '../../../lib/page-specs'
+import {
+  clearPageSpec,
+  listPageSpecHistory,
+  listPageSpecs,
+  restorePageSpec,
+  savePageSpec,
+  savePageSpecDraft,
+} from '../../../lib/page-specs'
 import { validateAgainstRegistries } from '../../../lib/page-spec-validate'
-import { AUTHORING_REGISTRIES } from '../../../components/viewspec/registries'
+import { AUTHORING_REGISTRIES, RENDER_REGISTRIES } from '../../../components/viewspec/registries'
 
 export const runtime = 'nodejs'
 
@@ -82,6 +89,10 @@ export async function GET(req: Request) {
     if (key.startsWith('param.')) params[key.slice('param.'.length)] = value
   }
 
+  if (url.searchParams.get('history') === '1') {
+    return NextResponse.json({ versions: await listPageSpecHistory(gate.user.orgId, route) })
+  }
+
   const context = applicationContextFromSession(gate, 'assistant', randomUUID())
   const described = await describePageLayout(context, { route, params, searchParams })
   return NextResponse.json(described, { status: described.known ? 200 : 404 })
@@ -104,7 +115,28 @@ export async function POST(req: Request) {
 
   const route = typeof body.route === 'string' ? body.route : null
   if (!route) return NextResponse.json({ error: 'route is required' }, { status: 400 })
-  if (body.spec === undefined) return NextResponse.json({ error: 'spec is required' }, { status: 400 })
+  // A restore names a version instead of carrying a document, so the spec
+  // requirement is checked after that branch has had its chance.
+  const restoring = new URL(req.url).searchParams.get('restore')
+  if (!restoring && body.spec === undefined) {
+    return NextResponse.json({ error: 'spec is required' }, { status: 400 })
+  }
+
+  const restoreId = new URL(req.url).searchParams.get('restore')
+  if (restoreId) {
+    const restored = await restorePageSpec({
+      orgId: gate.user.orgId,
+      actorId: gate.user.id,
+      route,
+      versionId: restoreId,
+      // RENDER rules: an undo is not an edit. A version published under older
+      // rules still renders, and holding it to today's stricter checks would
+      // make the layout someone wants back the one they cannot have.
+      registries: RENDER_REGISTRIES,
+    })
+    if (!restored.ok) return NextResponse.json({ error: 'restore refused', errors: restored.errors }, { status: 400 })
+    return NextResponse.json({ id: restored.id })
+  }
 
   if (new URL(req.url).searchParams.get('preview') === '1') {
     const params = (body as { params?: unknown }).params

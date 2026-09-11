@@ -175,6 +175,79 @@ test.describe("page layouts", () => {
     }
   });
 
+  test("a previous version can be restored after the fact", async ({ browser, baseURL }) => {
+    test.slow();
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      await page.goto(LIST);
+      await dismissSetupWizard(page);
+      await resetLayout(page);
+
+      // History is append-only on purpose — `resetLayout` deactivates the
+      // live layout and keeps every row — so this counts the GROWTH rather
+      // than a total that earlier runs have already moved.
+      const countVersions = async () =>
+        ((await (
+          await page.request.get(`/api/page-specs?route=${encodeURIComponent(ROUTE)}&history=1`)
+        ).json()) as { versions: unknown[] }).versions.length;
+      const before = await countVersions();
+
+      // Two saves, so there is something to go back TO. The in-editor undo
+      // dies with the tab; this is the undo that does not.
+      const save = async (title: string) => {
+        const response = await page.request.post("/api/page-specs", {
+          headers: { Origin: new URL(page.url()).origin },
+          data: {
+            route: ROUTE,
+            note: title,
+            // The title stays constant and only the heading varies, so an
+            // assertion on the heading matches exactly one element.
+            spec: {
+              specVersion: 1,
+              route: ROUTE,
+              layout: "list",
+              header: [{ kind: "page-header", title: "Layout under test" }],
+              body: [{ kind: "heading", level: 2, content: title }],
+            },
+          },
+        });
+        expect(response.status(), await response.text()).toBe(200);
+      };
+      await save("First layout");
+      await save("Second layout");
+
+      await page.goto(ROUTE);
+      await expect(page.locator("main").getByText("Second layout")).toBeVisible();
+
+      await page.goto(`${LIST}?route=${encodeURIComponent(ROUTE)}`);
+      const dialog = page.getByRole("dialog");
+      await dialog.getByRole("tab", { name: /^history$/i }).click();
+
+      // The live version is marked and offers no Restore: restoring what is
+      // already live is a no-op dressed up as an action.
+      await expect(dialog.getByText("Live now")).toBeVisible();
+      const older = dialog.locator("li").filter({ hasText: "First layout" }).first();
+      await older.getByRole("button", { name: /restore/i }).click();
+
+      await page.goto(ROUTE);
+      await expect(page.locator("main").getByText("First layout")).toBeVisible();
+      await expect(page.locator("main").getByText("Second layout")).toHaveCount(0);
+
+      // Restoring APPENDS. Two saves plus one restore is three new versions,
+      // and the layout that was live a moment ago is still there — so this
+      // is reversible too.
+      expect(await countVersions()).toBe(before + 3);
+      const versions = (await (
+        await page.request.get(`/api/page-specs?route=${encodeURIComponent(ROUTE)}&history=1`)
+      ).json()) as { versions: Array<{ active: boolean; note: string | null }> };
+      expect(versions.versions.filter((v) => v.active).length).toBe(1);
+      expect(versions.versions.some((v) => v.note === "Second layout")).toBe(true);
+    } finally {
+      await resetLayout(page).catch(() => {});
+      await context.close();
+    }
+  });
+
   test("a layout the renderer would refuse is reported, not stored", async ({ browser, baseURL }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {

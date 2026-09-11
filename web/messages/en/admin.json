@@ -3777,7 +3777,8 @@
       "structure": "Structure",
       "json": "Advanced",
       "fields": "Available fields",
-      "preview": "Preview"
+      "preview": "Preview",
+      "history": "History"
     },
     "outline": {
       "header": "Header",
@@ -3833,12 +3834,20 @@
       "saved": "Layout saved.",
       "validated": "This layout is valid.",
       "removed": "Customization removed; the page renders the built-in layout.",
-      "openPreview": "Open preview"
+      "openPreview": "Open preview",
+      "restore": "Restore",
+      "restored": "That version is live again."
     },
     "preview": {
       "help": "Opens the real page rendered with your unsaved layout. Only you see it, and it stops applying after 30 minutes.",
       "newTab": "It opens in a new tab: the app refuses to be shown inside a frame, which is the protection that stops another site embedding your pages.",
       "opened": "Opened"
+    },
+    "history": {
+      "help": "Every layout saved for this route. Saves never delete the one before them, so an edit can be undone after the fact.",
+      "empty": "This page has never been customized.",
+      "active": "Live now",
+      "loading": "Loading…"
     }
   }
 }

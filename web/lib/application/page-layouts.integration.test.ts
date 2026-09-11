@@ -88,6 +88,8 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
       () => layouts.setLayout(reader, { route: '/banking', spec: validSpec('/banking') }),
       () => layouts.clearLayout(reader, { route: '/banking' }),
       () => layouts.describePageLayout(reader, { route: '/banking' }),
+      () => layouts.listLayoutHistory(reader, { route: '/banking' }),
+      () => layouts.restoreLayout(reader, { route: '/banking', versionId: randomUUID() }),
     ]) {
       await assert.rejects(call, /forbidden/i, 'a reader must not reach page layouts')
     }
@@ -143,6 +145,44 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
     await layouts.setLayout(allowed, { route: '/banking', spec: validSpec('/banking') })
     assert.equal((await layouts.listLayouts(allowed)).layouts.length, 1)
 
+    // History is the undo that outlives the session. Two saves, so there is a
+    // previous version to go back to.
+    await layouts.setLayout(allowed, { route: '/banking', spec: validSpec('/banking'), note: 'second' })
+    const history = await layouts.listLayoutHistory(allowed, { route: '/banking' })
+    assert.equal(history.versions.length, 3, 'every save is kept, not just the live one')
+    assert.equal(history.versions.filter((version) => version.active).length, 1)
+    // Newest first, and `savedAt` is when the version was WRITTEN. A
+    // superseded row's `updated_at` is when it was switched off, and
+    // reporting that would claim two layouts went live at the same instant.
+    assert.ok(history.versions[0]!.active)
+    assert.ok(history.versions[0]!.savedAt >= history.versions[1]!.savedAt)
+
+    const previous = history.versions.find((version) => !version.active)!
+    const restored = await layouts.restoreLayout(allowed, {
+      route: '/banking',
+      versionId: previous.id,
+    })
+    assert.equal(restored.restored, true)
+    const afterRestore = await layouts.listLayoutHistory(allowed, { route: '/banking' })
+    assert.equal(afterRestore.versions.length, 4, 'a restore APPENDS rather than reactivating')
+    assert.notEqual(
+      afterRestore.versions.find((version) => version.active)!.id,
+      previous.id,
+      'the old row stays off; reactivating it would make its timestamp lie',
+    )
+
+    // A version that is already live, and a version id belonging to another
+    // route, are both refused — an id is not a capability.
+    const active = afterRestore.versions.find((version) => version.active)!
+    assert.equal(
+      (await layouts.restoreLayout(allowed, { route: '/banking', versionId: active.id })).restored,
+      false,
+    )
+    assert.equal(
+      (await layouts.restoreLayout(allowed, { route: '/accounts', versionId: previous.id })).restored,
+      false,
+    )
+
     const cleared = await layouts.clearLayout(allowed, { route: '/banking' })
     assert.equal(cleared.cleared, 1)
     assert.deepEqual((await layouts.listLayouts(allowed)).layouts, [])
@@ -152,15 +192,15 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
     const rows = await db.execute<{ n: string }>(
       sql`select count(*) as n from page_specs where org_id = ${orgA}`,
     )
-    assert.equal(Number(rows.rows[0]!.n), 2, 'both stored layouts survive as inactive rows')
+    assert.equal(Number(rows.rows[0]!.n), 4, 'every stored layout survives as an inactive row')
 
     const audit = await db.execute<{ action: string }>(
       sql`select action from audit_log where org_id = ${orgA} and table_name = 'page_specs' order by at`,
     )
     assert.deepEqual(
       audit.rows.map((r) => r.action),
-      ['insert', 'update', 'insert', 'update'],
-      'every save and every clear is recorded',
+      ['insert', 'update', 'insert', 'update', 'insert', 'update', 'insert', 'update'],
+      'every save, every restore and every clear is recorded, with its supersession',
     )
   })
 })
