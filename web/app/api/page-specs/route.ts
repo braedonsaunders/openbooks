@@ -4,9 +4,9 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { guardPermission } from '../../../lib/authz'
 import { applicationContextFromSession } from '../../../lib/application/context'
 import { describePageLayout } from '../../../lib/application/page-layouts'
-import { clearPageSpec, listPageSpecs, savePageSpec } from '../../../lib/page-specs'
+import { clearPageSpec, listPageSpecs, savePageSpec, savePageSpecDraft } from '../../../lib/page-specs'
 import { validateAgainstRegistries } from '../../../lib/page-spec-validate'
-import { FRAME_NAMES, WIDGET_NAMES } from '../../../components/viewspec/registry-names'
+import { AUTHORING_REGISTRIES } from '../../../components/viewspec/registries'
 
 export const runtime = 'nodejs'
 
@@ -25,7 +25,33 @@ export const runtime = 'nodejs'
  * validation and be refused.
  */
 
-const registries = { widgets: WIDGET_NAMES, frames: FRAME_NAMES }
+const registries = AUTHORING_REGISTRIES
+
+/**
+ * A route PATTERN plus segment values as a url a browser can open.
+ *
+ * `/apps/[key]` is what a layout is stored under; `/apps/inventory` is what
+ * you can look at. Refusing on a missing segment rather than substituting a
+ * blank matters: `/apps/` would render some other page entirely, and the
+ * author would be told their layout looks wrong when what they were shown was
+ * never their page.
+ */
+function previewUrl(
+  route: string,
+  params: Record<string, string>,
+): { ok: true; href: string } | { ok: false; error: string } {
+  let missing: string | null = null
+  const path = route.replace(/\[([^\]]+)\]/g, (_, name: string) => {
+    const value = params[name]
+    if (typeof value !== 'string' || value === '') {
+      missing ??= name
+      return ''
+    }
+    return encodeURIComponent(value)
+  })
+  if (missing) return { ok: false, error: `preview needs a value for [${missing}]` }
+  return { ok: true, href: `${path}?layoutPreview=1` }
+}
 
 /**
  * GET — every route this org has customized.
@@ -79,6 +105,22 @@ export async function POST(req: Request) {
   const route = typeof body.route === 'string' ? body.route : null
   if (!route) return NextResponse.json({ error: 'route is required' }, { status: 400 })
   if (body.spec === undefined) return NextResponse.json({ error: 'spec is required' }, { status: 400 })
+
+  if (new URL(req.url).searchParams.get('preview') === '1') {
+    const params = (body as { params?: unknown }).params
+    const url = previewUrl(route, params && typeof params === 'object' ? (params as Record<string, string>) : {})
+    if (!url.ok) return NextResponse.json({ error: url.error, errors: [url.error] }, { status: 400 })
+
+    const saved = await savePageSpecDraft({
+      orgId: gate.user.orgId,
+      userId: gate.user.id,
+      route,
+      spec: body.spec as never,
+      registries,
+    })
+    if (!saved.ok) return NextResponse.json({ error: 'spec rejected', errors: saved.errors }, { status: 400 })
+    return NextResponse.json({ previewUrl: url.href })
+  }
 
   if (new URL(req.url).searchParams.get('validate') === '1') {
     const checked = validateAgainstRegistries(body.spec, registries)

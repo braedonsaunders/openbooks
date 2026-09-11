@@ -509,9 +509,6 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
               placeholder: data.statementsSearchPlaceholder,
               paramKey: 'stmtQ',
               pageParamKey: 'stmtPage',
-              // The native pagers sit flush inside their section; the `mt-3`
-              // spacer belongs to list pages that wrap them.
-              bare: true,
             }),
             widgetBlock('filter-chips', {
               basePath: data.basePath,
@@ -520,9 +517,6 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
               label: data.sourceLabel,
               options: data.sourceOptions,
               pageParamKey: 'stmtPage',
-              // The native pagers sit flush inside their section; the `mt-3`
-              // spacer belongs to list pages that wrap them.
-              bare: true,
             }),
           ]),
           {
@@ -596,7 +590,6 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
               placeholder: data.reconciliationsSearchPlaceholder,
               paramKey: 'reconQ',
               pageParamKey: 'reconPage',
-              bare: true,
             }),
             widgetBlock('filter-chips', {
               basePath: data.basePath,
@@ -605,7 +598,6 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
               label: data.reconStatusLabel,
               options: data.reconStatusOptions,
               pageParamKey: 'reconPage',
-              bare: true,
             }),
           ]),
           {
@@ -665,6 +657,8 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
               page: f('reconPage'),
               perPage: f('reconPerPage'),
               pageParamKey: 'reconPage',
+              // The native pagers sit flush inside their section; the `mt-3`
+              // spacer belongs to list pages that wrap them.
               bare: true,
             }),
             when: f('reconShowTable'),

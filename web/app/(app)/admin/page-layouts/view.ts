@@ -22,7 +22,7 @@ import { NAV_GROUPS, NAV_MODULES } from '../../../../lib/nav/registry'
 import { describeFields, type FieldDescriptor } from '../../../../lib/page-fields'
 import { MissingSegmentError, PAGE_REGISTRY, PAGE_ROUTES } from '../../../../lib/page-registry'
 import { listPageSpecs, loadPageSpec } from '../../../../lib/page-specs'
-import { FRAME_NAMES, WIDGET_NAMES } from '../../../../components/viewspec/registry-names'
+import { RENDER_REGISTRIES } from '../../../../components/viewspec/registries'
 import type { PageSpec as Spec } from '@braedonsaunders/appkit-viewspec'
 
 /**
@@ -45,7 +45,7 @@ import type { PageSpec as Spec } from '@braedonsaunders/appkit-viewspec'
  * code path that could drift from what the page really does.
  */
 
-const registries = { widgets: WIDGET_NAMES, frames: FRAME_NAMES }
+const registries = RENDER_REGISTRIES
 
 /** Nav label and group for a route, longest matching href first. */
 const NAV_BY_HREF = [...NAV_MODULES]

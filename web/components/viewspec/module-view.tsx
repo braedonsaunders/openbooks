@@ -1,10 +1,10 @@
 import type { PageSpec, ViewData } from '@braedonsaunders/appkit-viewspec'
 import { validateSpec } from '@braedonsaunders/appkit-viewspec'
-import { getAuthz } from '../../lib/authz'
-import { loadPageSpec } from '../../lib/page-specs'
+import { can, getAuthz } from '../../lib/authz'
+import { loadPageSpec, loadPageSpecDraft } from '../../lib/page-specs'
 import { ListPageLayout, DetailPageLayout } from '../page-layout'
 import { BlockList } from './blocks'
-import { FRAME_NAMES, WIDGET_NAMES } from './registry-names'
+import { RENDER_REGISTRIES } from './registries'
 import { SpecBoundary } from './spec-boundary'
 
 /**
@@ -66,7 +66,7 @@ export async function ModuleView({
     }
   }
 
-  const effective = await resolveSpec(spec)
+  const effective = await resolveSpec(spec, searchParams)
   if (effective === spec) return render(spec, data, searchParams)
   // A tenant layout is rendered inside a boundary whose fallback is the page
   // the app shipped. Both subtrees are built here: the fallback has to exist
@@ -106,19 +106,38 @@ function render(
 }
 
 /**
- * The tenant's spec for this route, or the built-in one.
+ * The spec this request should render: the author's own preview draft, the
+ * tenant's stored layout, or the built-in one, in that order.
  *
- * The org comes from the SESSION, never from the spec or the request. A spec
- * that could name an org id is a cross-tenant read, which is the same rule
- * that puts the entity lists behind slots.
+ * The org and the user come from the SESSION, never from the spec or the
+ * request. A spec that could name an org id is a cross-tenant read, which is
+ * the same rule that puts the entity lists behind slots.
+ *
+ * `?layoutPreview=1` is what makes previewing the REAL page affordable. The
+ * draft lookup is an extra query on a hot path shared by every page in the
+ * app, so it happens only when the request explicitly asks — and the param
+ * grants nothing on its own, because a draft is keyed to the author and the
+ * permission is checked again here. Someone else's `?layoutPreview=1` finds
+ * no draft and renders exactly what they would have seen anyway.
+ *
+ * Doing it this way means the preview IS the page — its chrome, its data, its
+ * interactions — instead of a second rendering path that could drift from the
+ * one readers actually get.
  */
-async function resolveSpec(builtIn: PageSpec): Promise<PageSpec> {
+async function resolveSpec(
+  builtIn: PageSpec,
+  searchParams: Record<string, string | string[] | undefined>,
+): Promise<PageSpec> {
   if (!builtIn.route) return builtIn
   const authz = await getAuthz()
   if (!authz) return builtIn
-  const stored = await loadPageSpec(authz.user.orgId, builtIn.route, {
-    widgets: WIDGET_NAMES,
-    frames: FRAME_NAMES,
-  })
+  const registries = RENDER_REGISTRIES
+
+  if (searchParams.layoutPreview === '1' && can(authz, 'admin.customization.manage')) {
+    const draft = await loadPageSpecDraft(authz.user.orgId, authz.user.id, builtIn.route, registries)
+    if (draft) return draft
+  }
+
+  const stored = await loadPageSpec(authz.user.orgId, builtIn.route, registries)
   return stored?.spec ?? builtIn
 }

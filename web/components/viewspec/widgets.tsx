@@ -2849,6 +2849,12 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       toKey={str(props, 'toKey') ?? 'to'}
       fromLabel={str(props, 'fromLabel') ?? ''}
       toLabel={str(props, 'toLabel') ?? ''}
+      // Forwarded, not dropped: the component's default is the hardcoded
+      // English "Clear dates", so a page that translated the label was having
+      // it thrown away. `pageParamKey` likewise decides which pager this
+      // filter resets, and defaulting it silently resets the wrong one.
+      clearLabel={str(props, 'clearLabel')}
+      pageParamKey={str(props, 'pageParamKey')}
       defaultFrom={str(props, 'defaultFrom')}
       defaultTo={str(props, 'defaultTo')}
       clearable={props.clearable !== false}
