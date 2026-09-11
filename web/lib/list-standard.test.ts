@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { readingPagePairs } from './page-source'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
-const source = (path: string) => readFileSync(join(webRoot, path), 'utf8')
+const source = readingPagePairs((path: string) => readFileSync(join(webRoot, path), 'utf8'))
 
 const entityLists = [
   'app/(app)/accounts/page.tsx',
@@ -39,9 +40,18 @@ const transactionLists = [
   'app/(app)/sales-orders/page.tsx',
 ]
 
+/**
+ * A page reaches a shared list either by rendering the component or by placing
+ * it as a widget block — `widgetBlock('entity-list-view')` mounts the very
+ * same EntityListView. The invariant is that these lists are not hand-rolled;
+ * which of the two spellings a page uses is not part of it.
+ */
+const ENTITY_LIST = /EntityListView|widgetBlock\('entity-list-view'/
+const RECORD_LIST = /RecordListView|widgetBlock\('record-list-view'/
+
 test('primary business record lists use the shared list implementations', () => {
-  for (const path of entityLists) assert.match(source(path), /EntityListView/, path)
-  for (const path of transactionLists) assert.match(source(path), /RecordListView/, path)
+  for (const path of entityLists) assert.match(source(path), ENTITY_LIST, path)
+  for (const path of transactionLists) assert.match(source(path), RECORD_LIST, path)
 })
 
 test('both shared list implementations mount the saved-view menu', () => {
@@ -53,5 +63,7 @@ test('personal saved-view actions are available without org customization permis
   const menu = source('components/views-menu.tsx')
   assert.match(menu, /scope=\$\{manageScope\}/)
   assert.doesNotMatch(menu, /\{canManage \? \(\s*<>\s*<Link/)
-  assert.match(source('app/(app)/admin/customization/page.tsx'), /canManageOrg=\{canManageOrg\}/)
+  // Passed as a JSX attribute or bound as a spec prop — `canManageOrg:
+  // data.viewDrawerCanManage` is the same forwarding, one indirection away.
+  assert.match(source('app/(app)/admin/customization/page.tsx'), /canManageOrg[=:]/)
 })

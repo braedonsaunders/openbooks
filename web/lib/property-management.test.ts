@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readingPagePairs } from './page-source'
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-const source = (path: string) => readFileSync(join(webRoot, path), "utf8");
+const source = readingPagePairs((path: string) => readFileSync(join(webRoot, path), "utf8"));
 const propertyMessages = (
   JSON.parse(source("messages/en/entities.json")) as {
     propertyManagement: Record<string, unknown>;
@@ -45,12 +46,15 @@ const pmModules = [
 test("property-management page is feature gated and subsidiary scoped", () => {
   const page = source("app/(app)/property-management/page.tsx");
 
-  assert.match(page, /requirePermission\("ar\.read"\)/);
+  // Quote-agnostic: the loader moved into the sibling `view.ts`, which is
+  // written in the single-quote style the rest of the app uses. The gate is
+  // the invariant; which quote character spells it is not.
+  assert.match(page, /requirePermission\(['"]ar\.read['"]\)/);
   assert.match(page, /requirePropertyManagementFeature/);
   assert.match(page, /authz\.allowedSubsidiaryIds/);
-  assert.match(page, /manage: can\(authz, "ar\.create"\)/);
-  assert.match(page, /bill: can\(authz, "ar\.create"\)/);
-  assert.match(page, /account: can\(authz, "gl\.post"\)/);
+  assert.match(page, /manage: can\(authz, ['"]ar\.create['"]\)/);
+  assert.match(page, /bill: can\(authz, ['"]ar\.create['"]\)/);
+  assert.match(page, /account: can\(authz, ['"]gl\.post['"]\)/);
 });
 
 test("property-management API gates reads, accounting effects, and subsidiary records", () => {
@@ -189,10 +193,10 @@ test("property customization provisions form, view, and custom-field persistence
   const route = source("app/api/property-management/route.ts");
   const schema = source("../schema/src/property-management.ts");
 
-  assert.match(page, /recordType: "property"/);
+  assert.match(page, /recordType: ['"]property['"]/);
   assert.match(page, /resolveFormLayout/);
   assert.match(page, /resolveListView/);
-  assert.match(page, /loadFieldDefs\("managed_properties"\)/);
+  assert.match(page, /loadFieldDefs\(['"]managed_properties['"]\)/);
   assert.match(route, /case "updateProperty"/);
   assert.match(route, /case "updateUnit"/);
   assert.match(route, /case "updateLease"/);

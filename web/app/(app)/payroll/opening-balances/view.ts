@@ -17,7 +17,6 @@ import {
 } from '../../../../lib/payroll-scoped-views'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 import type { OpeningBalancesView } from './OpeningBalancesView'
-import type { EntitlementOpeningsView } from './EntitlementOpeningsView'
 
 /**
  * Mid-year adoption: the statutory year-to-date each employee brings in from
@@ -47,7 +46,6 @@ import type { EntitlementOpeningsView } from './EntitlementOpeningsView'
  */
 
 type BalancesProps = Parameters<typeof OpeningBalancesView>[0]
-type BanksProps = Parameters<typeof EntitlementOpeningsView>[0]
 
 export interface PayrollOpeningBalancesData {
   title: string

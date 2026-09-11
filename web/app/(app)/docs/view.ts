@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { categoriesWithArticles, getArticle } from '../../../lib/docs'
 import type { DocsHomeContent } from './sections'
 
@@ -55,8 +55,6 @@ export async function loadDocsHome(): Promise<DocsData> {
     },
   }
 }
-
-const f = ref<DocsData>()
 
 export function docsHomeSpec(data: DocsData): PageSpec {
   return page({

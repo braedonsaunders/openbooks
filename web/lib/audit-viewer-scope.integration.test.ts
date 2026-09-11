@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
+import { resolveAppModule } from './test-module-hooks'
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import * as React from "react";
@@ -15,7 +16,8 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "next-intl/server") return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__auditViewerSession.user}" };
-  if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
+  const app = resolveAppModule(specifier, context, next, root);
+  if (app) return app;
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");

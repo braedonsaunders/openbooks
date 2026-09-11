@@ -1,24 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plus } from 'lucide-react'
-import {
-  Badge,
-  Button,
-  Drawer,
-  Input,
-  Label,
-  Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@openbooks/ui'
+import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 
 export interface ScheduleOption {
   id: string

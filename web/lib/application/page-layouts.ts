@@ -5,8 +5,10 @@ import { FRAME_NAMES, WIDGET_NAMES } from '../../components/viewspec/registry-na
 import { can } from '../authz'
 import type { ApplicationContext } from './context'
 import { forbidden } from './errors'
+import { boundPaths, describeFields } from '../page-fields'
+import { MissingSegmentError, PAGE_REGISTRY, PAGE_ROUTES } from '../page-registry'
 import { validateAgainstRegistries } from '../page-spec-validate'
-import { clearPageSpec, listPageSpecs, savePageSpec } from '../page-specs'
+import { clearPageSpec, listPageSpecs, loadPageSpec, savePageSpec } from '../page-specs'
 
 /**
  * Page layouts as an application capability.
@@ -64,7 +66,165 @@ export async function describeLayoutVocabulary(context: ApplicationContext) {
 /** Every route this org has customized. */
 export async function listLayouts(context: ApplicationContext) {
   requireCustomization(context)
-  return { layouts: await listPageSpecs(context.authz.user.orgId) }
+  return {
+    layouts: await listPageSpecs(context.authz.user.orgId),
+    customizableRoutes: PAGE_ROUTES,
+  }
+}
+
+/** The five closest routes by name, for a caller who mistyped one. */
+function nearestRoutes(route: string): string[] {
+  const needle = route.toLowerCase().replace(/\/+$/, '')
+  const scored = PAGE_ROUTES.map((candidate) => {
+    const other = candidate.toLowerCase()
+    let shared = 0
+    while (shared < needle.length && shared < other.length && needle[shared] === other[shared]) shared++
+    return { candidate, shared }
+  })
+  return scored
+    .filter((entry) => entry.shared > 1)
+    .sort((a, b) => b.shared - a.shared || a.candidate.length - b.candidate.length)
+    .slice(0, 5)
+    .map((entry) => entry.candidate)
+}
+
+/**
+ * Next.js signals redirect and not-found by THROWING, and both are ordinary
+ * answers here rather than failures. A loader that calls `requirePermission`
+ * for a permission the caller lacks redirects to `/`; letting that escape
+ * would turn a description request into an actual HTTP redirect on whatever
+ * transport asked.
+ *
+ * Matched on the digest string because Next's own predicates are not public
+ * API. The two prefixes are stable contract — they appear in serialized RSC
+ * payloads — and a prefix that stopped matching would make this report a
+ * loader failure instead of a redirect, which is wrong but not unsafe.
+ */
+function controlFlow(error: unknown): { kind: 'redirect' | 'not-found'; detail: string } | null {
+  const digest = (error as { digest?: unknown } | null)?.digest
+  if (typeof digest !== 'string') return null
+  if (digest.startsWith('NEXT_REDIRECT')) {
+    return { kind: 'redirect', detail: digest.split(';')[2] ?? '' }
+  }
+  if (digest.startsWith('NEXT_HTTP_ERROR_FALLBACK') || digest === 'NEXT_NOT_FOUND') {
+    return { kind: 'not-found', detail: '' }
+  }
+  return null
+}
+
+/**
+ * What a route renders right now, and what its data offers a layout to bind.
+ *
+ * This is the affordance the write tools were missing. `describeLayoutVocabulary`
+ * lists the widgets that EXIST; it cannot say what a particular page is made
+ * of, so an author had to compose from scratch and guess at field paths — and
+ * a guessed path fails silently, because a missing field resolves to
+ * `undefined` by design rather than erroring.
+ *
+ * It works by running the page's own loader, with the caller's own session and
+ * the caller's own permissions, and then building the built-in spec over the
+ * result. That is precisely what visiting the page does, minus the rendering.
+ * Nothing is escalated and nothing is bypassed: a loader that would redirect
+ * this caller away still redirects, and is reported as such rather than
+ * answered around.
+ *
+ * The result deliberately includes the built-in spec verbatim. An author's
+ * best starting point is the layout the app ships — copy it, move a panel,
+ * save — and handing it over is what makes the difference between editing and
+ * reinventing.
+ */
+export async function describePageLayout(
+  context: ApplicationContext,
+  input: {
+    route: string
+    params?: Record<string, string | undefined>
+    searchParams?: Record<string, string | undefined>
+  },
+) {
+  requireCustomization(context)
+  const entry = PAGE_REGISTRY[input.route]
+  if (!entry) {
+    return {
+      known: false as const,
+      route: input.route,
+      reason: 'no page declares this route pattern',
+      didYouMean: nearestRoutes(input.route),
+    }
+  }
+
+  const stored = await loadPageSpec(context.authz.user.orgId, entry.route, registries)
+  const common = {
+    known: true as const,
+    route: entry.route,
+    requiredSegments: entry.segments,
+    readsSearchParams: entry.searchParams,
+    /** The org's own layout for this route, or null if it renders the built-in one. */
+    override: stored ? { id: stored.id, spec: stored.spec } : null,
+  }
+
+  const page = await entry.module()
+  let data: object | null
+  try {
+    data = await page.load({ params: input.params, searchParams: input.searchParams })
+  } catch (error) {
+    if (error instanceof MissingSegmentError) {
+      return { ...common, described: false as const, reason: 'missing-segment', segment: error.segment }
+    }
+    const flow = controlFlow(error)
+    if (flow?.kind === 'redirect') {
+      // The destination is the informative part and is reported as fact; the
+      // cause is NOT. Two very different things redirect — `requirePermission`
+      // sends an unauthorized reader to `/`, and a disabled feature sends
+      // anyone to the features page — and naming the wrong one sends the
+      // caller looking in the wrong place.
+      return {
+        ...common,
+        described: false as const,
+        reason: 'redirect',
+        redirectTo: flow.detail || null,
+        detail:
+          `this page redirects you to ${flow.detail || 'another route'}. That is usually a ` +
+          'permission you do not hold or a feature that is off for this org.',
+      }
+    }
+    if (flow?.kind === 'not-found') {
+      return {
+        ...common,
+        described: false as const,
+        reason: 'not-found',
+        detail:
+          'this page answers "not found" for these inputs — the record may not exist, or the ' +
+          'page may be gated off for this org.',
+      }
+    }
+    throw error
+  }
+
+  if (data === null) {
+    // The loader chose to render nothing — it has already redirected, or this
+    // reader has no content on this page. There is no spec to describe,
+    // because the page itself would not build one.
+    return {
+      ...common,
+      described: false as const,
+      reason: 'renders-nothing',
+      detail: 'the page renders nothing for you with these inputs',
+    }
+  }
+
+  const builtIn = page.spec(data)
+  const catalog = describeFields(data)
+  return {
+    ...common,
+    described: true as const,
+    /** The layout the app ships for this route — the thing to edit. */
+    builtIn,
+    /** Dot paths the built-in layout binds; a subset of `fields`. */
+    boundFields: boundPaths(builtIn),
+    fields: catalog.fields,
+    fieldsTruncated: catalog.truncated,
+    note: 'Field paths are resolved against the loader output. Paths under an array\'s `item` resolve against a ROW — that is what a table\'s columns and a repeat\'s blocks see.',
+  }
 }
 
 /**

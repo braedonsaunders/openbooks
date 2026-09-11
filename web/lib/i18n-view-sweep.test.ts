@@ -28,7 +28,11 @@ const WORD = /[A-Za-z]{2}/
 
 const FINANCIAL_VIEWS = [
   join(import.meta.dirname, '..', 'app', '(app)', 'analytics', 'true-cost', 'TrueCostView.tsx'),
-  join(import.meta.dirname, '..', 'app', '(app)', 'banking', 'psp-settlements', 'page.tsx'),
+  // The `view.ts`, not the `page.tsx`: the ViewSpec conversion moved every
+  // user-visible string into the loader, and scanning the four-line wiring
+  // file would be a sweep that guards nothing — the exact rot the coverage
+  // test below exists to catch.
+  join(import.meta.dirname, '..', 'app', '(app)', 'banking', 'psp-settlements', 'view.ts'),
 ] as const
 
 const DISPLAY_ATTRS = new Set([
@@ -304,7 +308,9 @@ test('the sweep causally covers every audited financial view', () => {
   // views exist and that each contributes real scanned surface.
   for (const f of FINANCIAL_VIEWS) {
     const src = readFileSync(f, 'utf8')
-    assert.ok(src.includes('useTranslations'), `${f} must bind next-intl`)
+    // Either binding counts: a client view calls `useTranslations`, a server
+    // loader `getTranslations`, and the detector already understands both.
+    assert.ok(/\b(?:use|get)Translations\b/.test(src), `${f} must bind next-intl`)
     assert.ok(src.length > 5000, `${f} looks truncated — the sweep would guard nothing`)
   }
 })

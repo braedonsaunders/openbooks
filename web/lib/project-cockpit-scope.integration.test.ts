@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { readingPagePairs } from './page-source'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 registerHooks({resolve(specifier,context,next){
@@ -12,7 +13,7 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { loadProject } = await import('../app/api/projects/_lib')
 
-const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
+const source = readingPagePairs((path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'))
 
 /**
  * The project loader behind the cockpit flyout applies the caller's subsidiary

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { pageSource } from '../../../../lib/page-source'
 import test from 'node:test'
 
-const page = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8')
+const page = pageSource(fileURLToPath(new URL('./page.tsx', import.meta.url)))
 
 function statusCounts<T extends { status: string }>(rows: T[]): Map<string, number> {
   return rows.reduce((counts, row) => counts.set(row.status, (counts.get(row.status) ?? 0) + 1), new Map())

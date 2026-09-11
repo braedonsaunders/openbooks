@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { pageSource } from '../../../../lib/page-source'
 import test from 'node:test'
 import { nextPeriod, runPayload, type RunSchedule } from './NewRunButton'
 
@@ -43,7 +44,7 @@ test('editing a date keeps the explicit off-cycle window', () => {
 })
 
 test('the runs page derives the preview from the anchor and actual run history', () => {
-  const source = readFileSync(new URL('../runs/page.tsx', import.meta.url), 'utf8')
+  const source = pageSource(fileURLToPath(new URL('../runs/page.tsx', import.meta.url)))
   assert.match(source, /s\.anchor_period_end::text as anchor_period_end/)
   assert.match(source, /max\(r\.period_end\)::text as last_end/)
   assert.match(source, /nextPeriodAfter\(schedule, schedule\.last_end\)/)

@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
+import { resolveAppModule } from './test-module-hooks'
+import { pathToFileURL } from 'node:url'
 import test from "node:test";
+import * as React from "react";
 import type { ListViewConfig } from "@openbooks/customization";
 import type { Authz } from "./authz";
 
+const root = pathToFileURL(process.cwd() + '/').href;
+// The tsx runner compiles these RSC sources with the CLASSIC JSX transform,
+// which emits bare `React.createElement`. Next supplies the automatic runtime
+// in production; the global is the equivalent here. Needed because importing a
+// page now reaches the shared widget registry, and those components are JSX.
+Object.assign(globalThis, { React });
 const state: { gate: Authz | null } = { gate: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-run-population-scope")] = state;
 registerHooks({ resolve(specifier, context, next) {
@@ -14,12 +23,16 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === "next-intl/server") return virtual("export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}");
   if (specifier.endsWith("/lib/feature-gates") && parent.endsWith("/api/payroll/runs/route.ts")) return virtual(
     "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.payroll-run-population-scope')].gate}");
-  if (parent.endsWith("/payroll/runs/[id]/page.tsx")) {
+  // A page is its `page.tsx` AND its `view.ts`: the loader these stubs were
+  // written against now lives in the sibling module.
+  if (parent.endsWith("/payroll/runs/[id]/page.tsx") || parent.endsWith("/payroll/runs/[id]/view.ts")) {
     if (specifier.endsWith("/lib/authz")) return virtual(
       "export async function requirePermission(){return globalThis[Symbol.for('openbooks.payroll-run-population-scope')].gate};export function can(){return true}");
     if (specifier.endsWith("/module-home/group-tabs")) return virtual("export async function groupTabs(){return []}");
     if (specifier === "./RunWizard") return virtual("export function RunWizard(){return null}");
   }
+  const app = resolveAppModule(specifier, context, next, root)
+  if (app) return app
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");

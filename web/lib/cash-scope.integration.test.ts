@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
+import { resolveAppModule } from './test-module-hooks'
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import * as React from 'react';
@@ -13,16 +13,16 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__cashScope.user}' };
-  if (context.parentURL?.endsWith('/page.tsx')) {
+  // A page is its `page.tsx` AND its `view.ts`. These stubs are scoped to the
+  // page's own modules so they cannot leak into the service-boundary cases
+  // below, and the loader they were written for now lives in the sibling.
+  if (context.parentURL?.endsWith('/page.tsx') || context.parentURL?.endsWith('/view.ts')) {
     if (specifier.endsWith('/lib/consolidation')) return { shortCircuit: true, url: 'data:text/javascript,export async function reportSubsidiaryView(){return {subsidiary:{ids:globalThis.__cashScope.subIds},picker:[],options:[],consolidated:false}}' };
     if (specifier.endsWith('/lib/page-layout')) return { shortCircuit: true, url: 'data:text/javascript,export async function userPageLayout(){return null}' };
     if (specifier.endsWith('/module-home/group-tabs')) return { shortCircuit: true, url: 'data:text/javascript,export async function groupTabs(){return []}' };
   }
-  if (specifier.startsWith('@/')) {
-    const path = root+'web/'+specifier.slice(2);
-    for (const suffix of ['.ts','.tsx','/index.ts','/index.tsx']) if (existsSync(new URL(path+suffix))) return next(path+suffix,context);
-    return next(path,context);
-  }
+  const app = resolveAppModule(specifier, context, next, root);
+  if (app) return app;
   return next(specifier,context);
 } });
 const { sql } = await import('drizzle-orm');
@@ -36,10 +36,15 @@ const { apPosition } = await import('./cash/ap-position');
 const { arPosition } = await import('./cash/ar-position');
 const { orgVitals } = await import('./application/vitals');
 const { executeAssistantTool } = await import('./assistant/registry');
-const { default: CashflowPage } = await import('../app/(app)/analytics/cashflow/page');
-const { default: CashPage } = await import('../app/(app)/banking/cash/page');
-const { default: ApPage } = await import('../app/(app)/ap/page');
-const { default: ArPage } = await import('../app/(app)/ar/page');
+// The page LOADERS. The `page` boundary asks whether each cockpit applies the
+// reader's subsidiary scope, and that decision lives in the loader — the spec
+// only names where the resolved data is drawn. Pulling props off a rendered
+// element stopped working when `ModuleView` became the single render path, and
+// was always a detour around the value actually under test.
+const { loadCashflow } = await import('../app/(app)/analytics/cashflow/view');
+const { loadBankingCash } = await import('../app/(app)/banking/cash/view');
+const { loadApCockpit } = await import('../app/(app)/ap/view');
+const { loadArCockpit } = await import('../app/(app)/ar/view');
 const settings = { weeklyCap: '0.0000', restrictToSafe: false };
 const surfaces = ['cashflow','cash','ap','ar'] as const;
 for (const boundary of ['service','assistant','page','vitals','selected view'] as const) {
@@ -87,9 +92,8 @@ for (const boundary of ['service','assistant','page','vitals','selected view'] a
               const result = await executeAssistantTool(authz,name,{asOfDate:org.date});
               assert.equal(result.ok,true); assert.ok(result.ok); data=result.data;
             } else if (boundary === 'page') {
-              const page = surface === 'cashflow' ? await CashflowPage({searchParams:Promise.resolve({})}) : surface === 'cash' ? await CashPage({searchParams:Promise.resolve({})}) : surface === 'ap' ? await ApPage() : await ArPage();
-              const child = React.Children.toArray((page.props as {children:React.ReactNode}).children).find(React.isValidElement);
-              assert.ok(child && React.isValidElement(child)); data=(child.props as {data:unknown}).data;
+              const loaded = surface === 'cashflow' ? await loadCashflow({}) : surface === 'cash' ? await loadBankingCash({}) : surface === 'ap' ? await loadApCockpit() : await loadArCockpit();
+              data=(loaded as {data:unknown}).data;
             } else data=await orgVitals({authz,source:'assistant',requestId:randomUUID(),apiKeyId:null});
             assert.ok(data && typeof data === 'object');
             const result = data as Record<string,unknown>;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
+import { resolveAppModule } from './test-module-hooks'
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import * as React from "react";
@@ -15,13 +15,10 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "next-intl/server") return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__healthScope.user}" };
-  if (specifier.endsWith("/lib/periods") && context.parentURL?.endsWith("/analytics/financial-health/page.tsx")) return { shortCircuit: true, url: "data:text/javascript,export async function resolvePeriod(){return globalThis.__healthScope.period}" };
+  if (specifier.endsWith("/lib/periods") && /\/analytics\/financial-health\/(?:page\.tsx|view\.ts)$/.test(context.parentURL ?? "")) return { shortCircuit: true, url: "data:text/javascript,export async function resolvePeriod(){return globalThis.__healthScope.period}" };
   if (specifier === "../money-server" && context.parentURL?.includes("/analytics/")) return { shortCircuit: true, url: "data:text/javascript,export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}" };
-  if (specifier.startsWith("@/")) {
-    const path = root + "web/" + specifier.slice(2);
-    for (const suffix of [".ts", ".tsx", "/index.ts", "/index.tsx"]) if (existsSync(new URL(path + suffix))) return next(path + suffix, context);
-    return next(path, context);
-  }
+  const app = resolveAppModule(specifier, context, next, root)
+  if (app) return app
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
@@ -29,7 +26,11 @@ const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { getAuthz } = await import("./authz");
 const { healthData } = await import("./analytics/health-data");
-const { default: HealthPage } = await import("../app/(app)/analytics/financial-health/page");
+// The page LOADER. This asks whether the page applies the reader's
+// subsidiary scope, which the loader decides; the spec only names where the
+// resolved data is drawn. Reading props off a rendered element stopped
+// working when `ModuleView` became the single render path.
+const { loadFinancialHealth } = await import("../app/(app)/analytics/financial-health/view");
 const { executeAssistantTool } = await import("./assistant/registry");
 const { accountingHome } = await import("./module-home/accounting");
 
@@ -83,10 +84,7 @@ for (const boundary of ["service", "completed month", "page", "assistant", "acco
           let data: Pick<HealthData, 'figures' | 'budget'>;
           if (boundary === "service" || boundary === "completed month") data = await healthData(state.period!, org.orgId, authz.allowedSubsidiaryIds);
           else if (boundary === "page") {
-            const output = await HealthPage({ searchParams: Promise.resolve({}) });
-            const children = React.Children.toArray((output.props as { children: React.ReactNode }).children);
-            const view = children.find(React.isValidElement); assert.ok(view && React.isValidElement(view));
-            data = (view.props as { data: HealthData }).data;
+            data = ((await loadFinancialHealth({})) as { data: HealthData }).data;
           } else {
             const result = await executeAssistantTool(authz, 'analytics_financial_health', { fromDate: state.period!.from, toDate: state.period!.to });
             assert.equal(result.ok, true); assert.ok(result.ok);

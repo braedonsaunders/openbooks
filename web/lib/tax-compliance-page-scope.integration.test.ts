@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { existsSync } from 'node:fs'
 import { registerHooks } from 'node:module'
+import { resolveAppModule } from './test-module-hooks'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import * as React from 'react'
@@ -38,11 +38,8 @@ registerHooks({
     if (specifier === '@/lib/money-server') {
       return { shortCircuit: true, url: 'data:text/javascript,export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}' }
     }
-    if (specifier.startsWith('@/')) {
-      const path = root + 'web/' + specifier.slice(2)
-      for (const suffix of ['.ts', '.tsx', '/index.ts', '/index.tsx']) if (existsSync(new URL(path + suffix))) return next(path + suffix, context)
-      return next(path, context)
-    }
+    const app = resolveAppModule(specifier, context, next, root)
+    if (app) return app
     return next(specifier, context)
   },
 })
@@ -52,7 +49,12 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { computeProvisionRun, getProvisionRun } = await import('@openbooks/engine/src/income-tax-provision.ts')
 const { ensureFiling } = await import('@openbooks/engine/src/information-returns.ts')
 const { default: TaxPage } = await import('../app/(app)/tax/page')
-const { default: ProvisionPage } = await import('../app/(app)/tax/provisions/[id]/page')
+// The page LOADER. Every fact this test checks — which entities' totals the
+// run projects to, and whether Post is offered — is decided in the loader;
+// the spec only binds `canPost` and the formatted amounts. Searching the
+// rendered tree stopped working when `ModuleView` became the single render
+// path, and `canPost` is a stronger assertion than the button's presence.
+const { loadProvisionDetail } = await import('../app/(app)/tax/provisions/[id]/view')
 const { default: InformationReturnsPage } = await import('../app/(app)/compliance/information-returns/page')
 const { default: ComplianceHomePage } = await import('../app/(app)/compliance/page')
 
@@ -97,7 +99,6 @@ function collect(
   return out
 }
 const renderedText = (node: unknown) => collect(node).text.join('\n')
-const elementTypeNames = (node: unknown) => collect(node).types
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg())
@@ -183,20 +184,20 @@ test('/tax/provisions/[id] projects the run to the caller\'s entities and gates 
       assert.notEqual(whole.totalExpense, own.totalExpense, 'the fixture must make the projection observable')
 
       await restrict(null)
-      const all = await ProvisionPage({ params: Promise.resolve({ id: runId }) })
-      assert.ok(renderedText(all).includes(whole.totalExpense))
-      assert.ok(elementTypeNames(all).has('ProvisionPostButton'), 'an unrestricted gl.post holder may post')
+      const all = await loadProvisionDetail({}, runId)
+      assert.ok(JSON.stringify(all).includes(whole.totalExpense))
+      assert.equal(all.canPost, true, 'an unrestricted gl.post holder may post')
 
       await restrict([org.subsidiaryId])
-      const scoped = await ProvisionPage({ params: Promise.resolve({ id: runId }) })
-      const text = renderedText(scoped)
+      const scoped = await loadProvisionDetail({}, runId)
+      const text = JSON.stringify(scoped)
       assert.ok(text.includes(own.totalExpense), 'the page shows the projected total')
       assert.ok(!text.includes(whole.totalExpense), 'the consolidated org-wide total must not leak')
-      assert.ok(!elementTypeNames(scoped).has('ProvisionPostButton'), 'posting is refused to restricted callers by the route; the page must not offer it')
+      assert.equal(scoped.canPost, false, 'posting is refused to restricted callers by the route; the page must not offer it')
 
       // No visible entity: indistinguishable from a missing run.
       await restrict([empty])
-      await assert.rejects(ProvisionPage({ params: Promise.resolve({ id: runId }) }), isNotFound)
+      await assert.rejects(loadProvisionDetail({}, runId), isNotFound)
     })
   } finally {
     await teardown(org.orgId)

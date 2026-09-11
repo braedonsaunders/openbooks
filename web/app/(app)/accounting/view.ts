@@ -82,7 +82,7 @@ export interface AccountingData {
 }
 
 export async function loadAccounting(
-  sp: Record<string, string | string[] | undefined>,
+  _sp: Record<string, string | string[] | undefined>,
 ): Promise<AccountingData> {
   const { moneyCompact } = await getMoneyFormatter()
   const authz = await getAuthz()

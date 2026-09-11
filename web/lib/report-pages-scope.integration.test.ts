@@ -1,6 +1,6 @@
 import { registerHooks } from 'node:module'
+import { resolveAppModule } from './test-module-hooks'
 import { pathToFileURL } from 'node:url'
-import { existsSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
@@ -51,11 +51,8 @@ registerHooks({
         ),
       }
     }
-    if (s.startsWith('@/')) {
-      const path = root + 'web/' + s.slice(2)
-      for (const suffix of ['.ts', '.tsx', '/index.ts', '/index.tsx']) if (existsSync(new URL(path + suffix))) return next(path + suffix, c)
-      return next(path, c)
-    }
+    const app = resolveAppModule(s, c, next, root)
+    if (app) return app
     return next(s, c)
   },
 })

@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
+import { pageSource } from "./page-source";
 
-const source = readFileSync(
-  "web/app/(app)/admin/backups/page.tsx",
-  "utf8",
-);
+// The page is its wiring file and its `view.ts`; the timestamp normalization
+// these assertions cover moved into the latter with the rest of the loader.
+const source = pageSource("web/app/(app)/admin/backups/page.tsx");
 
 test("backup page normalizes raw SQL timestamps before serialization", () => {
   assert.match(source, /function isoTimestamp\(/);

@@ -33,6 +33,7 @@ import {
 import {
   clearLayout,
   describeLayoutVocabulary,
+  describePageLayout,
   listLayouts,
   setLayout,
   validateLayout,
@@ -270,6 +271,20 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context) => ({ ok: true, ...await describeLayoutVocabulary(context) }),
+  }),
+  definition({
+    name: "describe_page_layout", title: "Describe Page Layout",
+    description: "What a route renders TODAY: its built-in layout verbatim, this org's override if one is active, and every field path the page's loader exposes with a sample value. Read this before writing a layout — editing the built-in one beats composing from scratch, and a field path that does not exist here renders as blank rather than as an error. Runs the page's own loader under your own permissions; a page you cannot view reports that instead of its layout.",
+    inputSchema: z.object({
+      route: ROUTE,
+      params: z.record(z.string(), z.string()).optional()
+        .describe("Values for the route's dynamic segments, keyed as the route names them, e.g. { accountId: \"…\" } for /banking/[accountId]."),
+      searchParams: z.record(z.string(), z.string()).optional()
+        .describe("The query string to load the page with, e.g. { period: \"last-month\" }."),
+    }),
+    readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await describePageLayout(context, input as never) }),
   }),
   definition({
     name: "list_page_layouts", title: "List Page Layouts",

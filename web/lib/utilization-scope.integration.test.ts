@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
+import { resolveAppModule } from './test-module-hooks'
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import * as React from 'react';
@@ -15,13 +15,10 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__utilizationScope.user}' };
-  if (specifier.endsWith('/lib/periods') && /analytics\/utilization\/page.tsx$/.test(context.parentURL ?? '')) return { shortCircuit: true, url: 'data:text/javascript,export async function resolvePeriod(){return '+JSON.stringify(period)+'}' };
+  if (specifier.endsWith('/lib/periods') && /analytics\/utilization\/(?:page\.tsx|view\.ts)$/.test(context.parentURL ?? '')) return { shortCircuit: true, url: 'data:text/javascript,export async function resolvePeriod(){return '+JSON.stringify(period)+'}' };
   if (specifier === '../money-server' && context.parentURL?.includes('/analytics/')) return { shortCircuit: true, url: 'data:text/javascript,export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}' };
-  if (specifier.startsWith('@/')) {
-    const path = root + 'web/' + specifier.slice(2);
-    for (const suffix of ['.ts', '.tsx', '/index.ts', '/index.tsx']) if (existsSync(new URL(path + suffix))) return next(path + suffix, context);
-    return next(path, context);
-  }
+  const app = resolveAppModule(specifier, context, next, root)
+  if (app) return app
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
@@ -29,7 +26,11 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { getAuthz } = await import('./authz');
 const { utilizationData } = await import('./analytics/utilization-data');
-const { default: UtilizationPage } = await import('../app/(app)/analytics/utilization/page');
+// The page LOADER. This asks whether the page applies the reader's
+// subsidiary scope, which the loader decides; the spec only names where the
+// resolved data is drawn. Reading props off a rendered element stopped
+// working when `ModuleView` became the single render path.
+const { loadUtilization } = await import('../app/(app)/analytics/utilization/view');
 const { executeAssistantTool } = await import('./assistant/registry');
 import type { UtilizationData } from './analytics/utilization-data';
 
@@ -63,10 +64,7 @@ for (const boundary of ['service','page','assistant'] as const) {
           let data: Pick<UtilizationData,'company'|'history'>;
           if(boundary === 'service')data=await utilizationData(org.orgId,period,authz.allowedSubsidiaryIds);
           else if(boundary === 'page'){
-            const output=await UtilizationPage({searchParams:Promise.resolve({})});
-            const children=React.Children.toArray((output.props as {children:React.ReactNode}).children);
-            const view=children.find(React.isValidElement);assert.ok(view && React.isValidElement(view));
-            data=(view.props as {data:UtilizationData}).data;
+            data=((await loadUtilization({})) as {data:UtilizationData}).data;
           }else{
             const result=await executeAssistantTool(authz,'analytics_utilization',{fromDate:period.from,toDate:period.to});
             assert.equal(result.ok,true);assert.ok(result.ok);data=result.data as UtilizationData;
