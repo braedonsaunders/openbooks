@@ -17,13 +17,6 @@ export default async function DashboardPage({
   const sp = await searchParams
   const data = await loadDashboard(sp)
   if (!data) return null
-  return (
-    <>
-      {/* Hoisted to <head>. The conformance harness reads it to tell a current
-          build from a pre-cutover one still serving the old native page. */}
-      <meta name="x-viewspec-render" content="1" />
-      <ModuleView spec={dashboardSpec(data)} data={data} searchParams={sp} trusted />
-    </>
-  )
+  return <ModuleView spec={dashboardSpec(data)} data={data} searchParams={sp} trusted />
 }
 

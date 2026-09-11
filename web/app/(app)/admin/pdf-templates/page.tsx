@@ -22,12 +22,5 @@ export default async function PdfTemplatesPage({
 }) {
   const sp = await searchParams
   const data = await loadPdfTemplates()
-  return (
-    <>
-      {/* Hoisted to <head>. The conformance harness reads it to tell a current
-          build from a pre-cutover one still serving the old native page. */}
-      <meta name="x-viewspec-render" content="1" />
-      <ModuleView spec={pdfTemplatesSpec(data)} data={data} searchParams={sp} trusted />
-    </>
-  )
+  return <ModuleView spec={pdfTemplatesSpec(data)} data={data} searchParams={sp} trusted />
 }

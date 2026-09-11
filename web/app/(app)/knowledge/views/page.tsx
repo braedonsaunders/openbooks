@@ -12,12 +12,5 @@ export default async function ViewsPage({
 }) {
   const sp = await searchParams
   const data = await loadViewsPage(sp)
-  return (
-    <>
-      {/* Hoisted to <head>. The conformance harness reads it to tell a current
-          build from a pre-cutover one still serving the old native page. */}
-      <meta name="x-viewspec-render" content="1" />
-      <ModuleView spec={viewsSpec(data)} data={data} searchParams={sp} trusted />
-    </>
-  )
+  return <ModuleView spec={viewsSpec(data)} data={data} searchParams={sp} trusted />
 }

@@ -12,12 +12,5 @@ export default async function Aging({
 }) {
   const sp = await searchParams
   const data = await loadAging(sp)
-  return (
-    <>
-      {/* Hoisted to <head>. The conformance harness reads it to tell a current
-          build from a pre-cutover one still serving the old native page. */}
-      <meta name="x-viewspec-render" content="1" />
-      <ModuleView spec={agingSpec(data)} data={data} searchParams={sp} trusted />
-    </>
-  )
+  return <ModuleView spec={agingSpec(data)} data={data} searchParams={sp} trusted />
 }

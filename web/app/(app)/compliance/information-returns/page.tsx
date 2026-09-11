@@ -1,8 +1,4 @@
 import { getTranslations } from 'next-intl/server'
-import {
-} from '@openbooks/ui'
-import {
-} from '../../../../lib/compliance'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadInformationReturns, informationReturnsSpec } from './view'
 
@@ -26,12 +22,5 @@ export default async function InformationReturnsPage({
 } = {}) {
   const sp = (await searchParams) ?? {}
   const data = await loadInformationReturns()
-  return (
-    <>
-      {/* Hoisted to <head>. The conformance harness reads it to tell a current
-          build from a pre-cutover one still serving the old native page. */}
-      <meta name="x-viewspec-render" content="1" />
-      <ModuleView spec={informationReturnsSpec(data)} data={data} searchParams={sp} trusted />
-    </>
-  )
+  return <ModuleView spec={informationReturnsSpec(data)} data={data} searchParams={sp} trusted />
 }

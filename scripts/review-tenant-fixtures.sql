@@ -1,20 +1,26 @@
--- Fixtures for the ViewSpec conformance tenant.
+-- Fixtures for the local review tenant.
 --
--- The harness refuses to compare a page that has no rows: two identical empty
--- states prove nothing about the table path, and that false pass has already
--- happened once. Most pages find real data in the simulated tenant, but a few
--- modules the simulator never exercises (the continuous-close agents, for one)
--- come up empty, so their rows are seeded here rather than typed into psql and
--- forgotten — an undocumented tenant makes the harness unreproducible.
+-- The simulator generates a rich construction company, but a few modules it
+-- never exercises come up completely empty — subcontracts, revenue contracts,
+-- WIP worksheets, equipment, sandboxes, provisions, change sets. Those pages
+-- then render their empty state and there is nothing to look at or click
+-- through. This seeds one or two honest rows for each, so the review tenant
+-- shows every page doing its job.
 --
--- Idempotent: fixed ids, ON CONFLICT DO NOTHING. Safe to re-run.
+-- Written for the ViewSpec conformance harness, which refused to compare a
+-- page with no rows (two identical empty states prove nothing about the table
+-- path, and that false pass happened once). The harness is gone — its job
+-- ended with the conversion — but the seeded tenant outlived it.
+--
+-- Idempotent: fixed ids, ON CONFLICT DO NOTHING, safe to re-run. A few blocks
+-- deliberately RE-STAMP relative timestamps on every apply, because the pages
+-- that render "3 days pending" mean nothing if the row is dated whenever you
+-- first ran this.
 --
 -- Fixed ids are allocated in blocks, and the blocks matter: ON CONFLICT DO
 -- NOTHING turns a collision into a SILENT skip, so two fixtures that pick the
--- same id leave one of them quietly unapplied. A purchase-order block landed
--- on ids a banking fixture already held and the page stayed empty with no
--- error at all. Claim a fresh block rather than reusing a plausible-looking
--- one:
+-- same id leave one of them quietly unapplied. Claim a fresh block rather than
+-- reusing a plausible-looking one:
 --
 --   …0001-0099  continuous close (runs, work items, evidence);
 --                 …0014-0017 tax jurisdictions and nexus registrations
@@ -54,7 +60,7 @@
 --   …1701-1799  sandbox change sets and their items
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
 --
---   psql "$VIEWSPEC_DB" -f scripts/viewspec-fixtures.sql
+--   PGOPTIONS='-c app.bypass_rls=on' psql "$REVIEW_DB" -f scripts/review-tenant-fixtures.sql
 --
 -- Only ever seeds the SIM org. It is a simulated tenant; nothing here should
 -- be able to touch a real one.
@@ -239,6 +245,20 @@ begin
               v_docs[i], 'Approve vendor bill', v_user, 'approve', 'any', 'pending', false,
               now() - (i || ' days')::interval)
       on conflict (id) do nothing;
+
+      -- ALWAYS refresh the age, do not just insert it.
+      --
+      -- `/approvals` renders how long a gate has been pending — "3d" — and
+      -- that is computed from `created_at` against today. `now() - i days` is
+      -- relative when the row is INSERTED and absolute forever after, so with
+      -- `on conflict do nothing` the age crept up by one every midnight and
+      -- the recorded baseline broke overnight. Re-stamping on every apply is
+      -- what actually makes the fixture mean "a gate that has been pending i
+      -- days" rather than "a gate dated the day I first ran this".
+      update flow_runs set started_at = now() - (i || ' days')::interval
+       where id = ('00000000-0000-7000-9000-00000000031' || i)::uuid;
+      update flow_gates set created_at = now() - (i || ' days')::interval
+       where id = ('00000000-0000-7000-9000-00000000032' || i)::uuid;
     end loop;
   end;
 
