@@ -33,7 +33,8 @@
  *   VIEWSPEC_HEADED=1 node scripts/viewspec-conformance.mjs   # watch it run
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { gunzipSync, gzipSync } from 'node:zlib'
 import { join } from 'node:path'
 import { chromium } from 'playwright'
 import sharp from 'sharp'
@@ -42,6 +43,38 @@ const BASE = process.env.VIEWSPEC_BASE_URL ?? 'http://localhost:4780'
 const EMAIL = process.env.VIEWSPEC_EMAIL ?? 'viewspec@sim.test'
 const PASSWORD = process.env.VIEWSPEC_PASSWORD ?? 'viewspec-dev'
 const OUT_DIR = process.env.VIEWSPEC_OUT ?? join(process.cwd(), 'tmp', 'viewspec')
+
+/**
+ * Two modes, and the reason there are two is the whole point of this file.
+ *
+ * `dual` renders each page twice — once through the native JSX, once through
+ * `ModuleView` — and proves they are indistinguishable. That works only while
+ * BOTH implementations exist, which is true exactly once: during the
+ * conversion.
+ *
+ * Deleting the native branch removes the control. A dual run afterwards would
+ * compare the spec against itself and pass trivially, which is the precise
+ * failure this harness was built to make impossible. So before the native
+ * branch is deleted its output is captured — normalized, gzipped, committed —
+ * and `golden` compares every later render against that recorded baseline.
+ * The comparison stops being "do two implementations agree" and becomes "does
+ * this page still render what the native implementation rendered", which is
+ * the question that survives the deletion.
+ *
+ * What golden mode LOSES, stated plainly: the pixel backstop. Storing a
+ * screenshot per variant is ~100MB of binary in git, and a binary blob nobody
+ * can read a diff of is not evidence. The DOM diff was always the gate; the
+ * ink ratio is still recorded and asserted, and `assertStylesLoaded` still
+ * catches the unstyled-render case that pixels were mainly guarding.
+ */
+const MODE = process.env.VIEWSPEC_MODE ?? 'dual'
+const GOLDEN_DIR = process.env.VIEWSPEC_GOLDEN_DIR ?? join(process.cwd(), 'tests', 'viewspec-golden')
+
+/** A stable filename for one path+variant pair. */
+function goldenSlug(path, variant) {
+  const raw = `${path}${variant}` || '/'
+  return (raw.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'root').slice(0, 120)
+}
 const VIEWPORT = { width: 1440, height: 900 }
 
 /**
@@ -2475,6 +2508,81 @@ async function scopedMarkup(page, scopes) {
   return parts.join('\n')
 }
 
+/**
+ * Capture one variant's CURRENT render as the golden baseline.
+ *
+ * Run once, against the build that still has the native branches, so the
+ * recorded bytes are the native implementation's own output. After the
+ * branches are gone this is the only surviving description of what each page
+ * used to render.
+ */
+async function captureGolden(page, path, variant, expectSelector, minMatches, scopes, expectState, minInk) {
+  const url = `${BASE}${path}${variant}`
+  await renderSettled(page, url, expectSelector, minMatches, expectState)
+  await assertStylesLoaded(page)
+  const via = await renderPath(page)
+  if (via !== 'native') {
+    throw new Error(`${url} rendered via ${via}, expected native — capture must run BEFORE the native branch is deleted`)
+  }
+  const markup = normalizeStyles(sortClassLists(sortAttributes(normalize(await scopedMarkup(page, scopes)))))
+  const ink = await assertNotBlank(await captureSettled(page), `${path}${variant} native`, minInk)
+
+  mkdirSync(GOLDEN_DIR, { recursive: true })
+  const slug = goldenSlug(path, variant)
+  writeFileSync(join(GOLDEN_DIR, `${slug}.html.gz`), gzipSync(Buffer.from(markup, 'utf8'), { level: 9 }))
+  return { ok: true, path, variant, bytes: markup.length, ink, captured: true }
+}
+
+/**
+ * Compare one variant against its recorded golden.
+ *
+ * The marker assertion is load-bearing here in a way it was not before. With
+ * one implementation left, a server running a stale build serves the OLD
+ * native page on the same url — and that page would diff cleanly against a
+ * golden captured from the native branch. The marker is what separates "the
+ * spec renders this correctly" from "you are looking at the thing the spec was
+ * supposed to replace".
+ */
+async function checkGolden(page, path, variant, expectSelector, minMatches, scopes, expectState, minInk) {
+  const url = `${BASE}${path}${variant}`
+  const slug = goldenSlug(path, variant)
+  const file = join(GOLDEN_DIR, `${slug}.html.gz`)
+  if (!existsSync(file)) {
+    throw new Error(`no golden for ${path}${variant} (${slug}.html.gz) — capture it before comparing`)
+  }
+  const golden = gunzipSync(readFileSync(file)).toString('utf8')
+
+  await renderSettled(page, url, expectSelector, minMatches, expectState)
+  await assertStylesLoaded(page)
+  const via = await renderPath(page)
+  if (via !== 'viewspec') {
+    throw new Error(`${url} rendered via ${via}, expected viewspec — the server is probably serving a build that predates the cutover`)
+  }
+  const markup = normalizeStyles(sortClassLists(sortAttributes(normalize(await scopedMarkup(page, scopes)))))
+  const ink = await assertNotBlank(await captureSettled(page), `${path}${variant}`, minInk)
+
+  if (markup === golden) {
+    // `markup` rides along so `assertVariantsDiffer` keeps working after the
+    // cutover: a page whose variants all render the same bytes is still a page
+    // whose variants prove nothing, golden baseline or not.
+    return { ok: true, path, variant, bytes: markup.length, markup, ink, pixels: 0, tolerance: 0 }
+  }
+  mkdirSync(OUT_DIR, { recursive: true })
+  writeFileSync(join(OUT_DIR, `${slug}.golden.html`), golden)
+  writeFileSync(join(OUT_DIR, `${slug}.current.html`), markup)
+  return {
+    ok: false,
+    path,
+    variant,
+    slug,
+    structural: false,
+    visual: true,
+    pixels: 0,
+    tolerance: 0,
+    diff: firstDifference(golden, markup),
+  }
+}
+
 async function checkVariant(page, path, variant, expectSelector, minMatches, scopes = ['main'], expectState = 'visible', minInk = DEFAULT_MIN_INK) {
   const nativeUrl = `${BASE}${path}${variant}`
   await renderSettled(page, nativeUrl, expectSelector, minMatches, expectState)
@@ -2571,7 +2679,9 @@ async function main() {
             (typeof raw === 'string' ? undefined : raw.expectState) ?? entry.expectState ?? 'visible'
           const minInk =
             (typeof raw === 'string' ? undefined : raw.minInk) ?? entry.minInk ?? DEFAULT_MIN_INK
-          result = await checkVariant(
+          const run =
+            MODE === 'capture' ? captureGolden : MODE === 'golden' ? checkGolden : checkVariant
+          result = await run(
             page, entry.path, variant, expect, minMatches, scopes, expectState, minInk,
           )
         } catch (error) {
@@ -2581,9 +2691,16 @@ async function main() {
         }
         results.push(result)
         if (result.ok) {
+          const detail = result.captured
+            ? 'captured'
+            : MODE === 'golden'
+              ? 'matches golden'
+              : result.pixels === 0
+                ? 'pixels identical'
+                : `${result.pixels} px AA`
           console.log(
-          `✓ ${entry.path}${variant || ' (default)'}  [${result.bytes} bytes, ${result.pixels === 0 ? 'pixels identical' : `${result.pixels} px AA`}, ${(result.ink * 100).toFixed(1)}% ink]`,
-        )
+            `✓ ${entry.path}${variant || ' (default)'}  [${result.bytes} bytes, ${detail}, ${(result.ink * 100).toFixed(1)}% ink]`,
+          )
           continue
         }
         failures += 1
@@ -2591,12 +2708,15 @@ async function main() {
         console.error(`    structural: ${result.structural ? 'match' : 'DIFFER'}   visual: ${result.visual ? 'match' : `DIFFER (${result.pixels} px, tolerance ${result.tolerance})`}`)
         if (result.diff) {
           console.error(`    first difference at node ${result.diff.index}, after: …${result.diff.context.slice(-140)}`)
-          console.error(`    native: ${String(result.diff.native).slice(0, 220)}`)
-          console.error(`    spec  : ${String(result.diff.spec).slice(0, 220)}`)
+          const [lhs, rhs] = MODE === 'golden' ? ['golden ', 'current'] : ['native ', 'spec   ']
+          console.error(`    ${lhs}: ${String(result.diff.native).slice(0, 220)}`)
+          console.error(`    ${rhs}: ${String(result.diff.spec).slice(0, 220)}`)
         }
         console.error(`    artifacts: ${join(OUT_DIR, `${result.slug}.*`)}`)
       }
-      const suspicious = assertVariantsDiffer(results)
+      // Capture mode records no markup on the result, so there is nothing to
+      // cross-check; the dual run that preceded it already made this assertion.
+      const suspicious = MODE === 'capture' ? null : assertVariantsDiffer(results)
       if (suspicious) {
         failures += 1
         console.error(`✗ ${entry.path}: ${suspicious}`)
