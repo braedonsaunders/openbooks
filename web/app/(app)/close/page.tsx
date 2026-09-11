@@ -11,11 +11,5 @@ export default async function PeriodClose({
 }) {
   const sp = await searchParams
   const data = await loadClose(sp)
-  // The run branch stays native: CloseWizard owns its own WizardLayout
-  // shell, which no PageLayout value can express. Keep the wizard on the
-  // native path until the vocabulary for it exists.
-  if (data.onRun) {
-    return null
-  }
   return <ModuleView spec={closeSpec(data)} data={data} searchParams={sp} trusted />
 }

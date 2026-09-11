@@ -83,6 +83,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'choose-recon-account': { props: ['href', 'label'] },
   'close-action-cell': { props: ['actionHref', 'actionLabel', 'actionLinkClassName', 'canStart', 'startBooks', 'startDefaultBookId', 'startPeriodId'] },
   'close-readiness-cell': { props: ['readiness'] },
+  'close-wizard': { props: ['wizard'] },
   'code-cell': { props: ['text'] },
   'collections-shell': { props: ['advancedSubscriptionsEnabled', 'customers', 'description', 'incomeAccounts', 'subscriptionsEnabled', 'title'] },
   'commitments-section': { props: ['empty', 'rows', 'showPurchaseOrders'] },

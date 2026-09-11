@@ -21,6 +21,12 @@ import { authedContext } from './auth'
  * The route list is DISCOVERED from the filesystem, not typed out. A list
  * someone has to remember to extend is a list that silently stops covering new
  * pages, which is the failure mode this exists to prevent.
+ *
+ * What it does NOT cover, and cannot: a branch selected by a QUERY STRING.
+ * Every route is visited bare, so a page that renders something else entirely
+ * for `?run=<id>` is invisible here — which is exactly how `/close` served a
+ * blank wizard for weeks. Those branches need a test that can seed the row
+ * they depend on; `web/lib/close-run-branch.integration.test.ts` is the model.
  */
 
 const APP_DIR = join(process.cwd(), 'web', 'app', '(app)')

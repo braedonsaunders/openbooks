@@ -26,30 +26,50 @@ import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { currentFiscalYear } from '../../../lib/fiscal'
 import { clamp, isUuid, pickString } from '../../../lib/list-params'
+import { featureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../../../lib/features'
+import type { CloseWizard } from './CloseWizard'
 
 /**
  * Period close, split into a loader and a spec.
  *
- * The page has two server branches: `?run=<uuid>` renders the CloseWizard, and
- * everything else renders the period list. The wizard is a client component
- * (~1100 lines: six stage bodies, run actions, evidence uploads) whose shell is
- * `WizardLayout`, not `ListPageLayout` — decomposing it into table blocks
- * would reimplement it badly rather than compose it. The brief anticipates
- * this exactly: when the page needs vocabulary that does not exist, stop and
- * report rather than invent it. So this conversion covers the LIST branch
- * only; the run branch stays native and the spec is gated on the same
- * condition the native page uses (`run` absent, non-UUID, or unknown id).
+ * The page has two server branches: `?run=<uuid>` renders the CloseWizard,
+ * and everything else renders the period list. They are two DOCUMENTS, not
+ * one document with a `when` on it — `when` omits a block, it cannot change
+ * the page's shell, and these two need different ones. The wizard is a client
+ * component (~1100 lines: six stage bodies, run actions, evidence uploads)
+ * that owns a full-height `WizardLayout`, so its spec is `layout: 'bare'` and
+ * places the wizard whole. Decomposing it into blocks would reimplement it
+ * rather than compose it.
  *
- * That gate needs care: the native page falls through to the list when the
- * run id names no row, so the loader re-runs the lookup and exposes
- * `onList`/`onRun` presence flags — never the run itself, which is a
- * capability-bearing client-component prop set, not data.
+ * An earlier conversion left this branch on the native path and a later one
+ * deleted that path, so the page answered `null` for every run and "Resume"
+ * led to a blank screen. The lesson is in the shape of the fix: the loader
+ * now LOADS the wizard rather than probing whether a run exists, so the page
+ * cannot know it is on the run branch and have nothing to render it with.
+ *
+ * The wizard's props are plain data — rows and resolved booleans, no bound
+ * action and no `Authz` — which is what lets them travel through a spec at
+ * all. Its own writes go through API routes that authorize themselves.
+ *
+ * An id that names no run falls through to the LIST, as the native page did:
+ * a stale bookmark should show the periods rather than an error.
  *
  * Query, permission and formatting logic below are verbatim from page.tsx.
  */
 
 const PER_PAGE = 20
 const BASE = '/close'
+
+/**
+ * The wizard's props, resolved by the loader.
+ *
+ * Every field is DATA — rows and booleans — which is why it can travel
+ * through a spec at all. There is no server action here, no `Authz`, no
+ * callback: the wizard's own writes go through API routes that authorize
+ * themselves, and the four `can*` flags are the same resolved-permission
+ * booleans every other page binds.
+ */
+export type CloseWizardData = Omit<Parameters<typeof CloseWizard>[0], never>
 
 const STATUS_VALUES = [
   'not_started',
@@ -105,10 +125,118 @@ export interface CloseData {
   startBooks: { id: string; name: string }[]
   onList: boolean
   onRun: boolean
+  /** Everything the run wizard renders. Null on the list branch. */
+  wizard: CloseWizardData | null
   rows: ClosePeriodRow[]
   total: number
   currentPage: number
   perPage: number
+}
+
+/**
+ * Everything the run wizard needs, or null when the id names no run.
+ *
+ * Queries lifted verbatim from the page this replaced. Returning null for an
+ * unknown id is what makes the list the fallback: a stale bookmark shows the
+ * period list rather than an error, which is the behaviour the native page
+ * had and the one a reader can act on.
+ */
+async function loadCloseWizard(
+  runId: string,
+  stage: string | undefined,
+  authz: Awaited<ReturnType<typeof requirePermission>>,
+): Promise<CloseWizardData | null> {
+  const { orgId } = authz.user
+  const [runRes, tasksRes, exceptionsRes, evidenceRes, signoffsRes, eventsRes, locksRes, historyRes] =
+    await Promise.all([
+      db.execute(sql`
+        select r.*, p.name as period_name, p.starts_on, p.ends_on, p.fiscal_year,
+               b.name as book_name, b.code as book_code,
+               bp.name as blueprint_name, bp.version as blueprint_version,
+               pkg.name as package_name, pkg.reports as package_reports,
+               starter.name as starter_name, approver.name as approver_name,
+               closer.name as closer_name, publisher.name as publisher_name
+          from close_runs r
+          join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
+          join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
+          join close_blueprints bp on bp.id = r.blueprint_id and bp.org_id = r.org_id
+          left join close_reporting_packages pkg on pkg.id = r.reporting_package_id and pkg.org_id = r.org_id
+          left join users starter on starter.id = r.started_by
+          left join users approver on approver.id = r.approved_by
+          left join users closer on closer.id = r.closed_by
+          left join users publisher on publisher.id = r.published_by
+         where r.id = ${runId} and r.org_id = ${orgId}`),
+      db.execute(sql`
+        select t.*, owner.name as owner_name, reviewer.name as reviewer_name,
+               coalesce(jsonb_agg(distinct dep.key) filter (where dep.id is not null), '[]'::jsonb) as dependencies,
+               count(distinct ev.id) as evidence_count
+          from close_run_tasks t
+          left join users owner on owner.id = t.owner_id
+          left join users reviewer on reviewer.id = t.reviewer_id
+          left join close_blueprint_dependencies d on d.step_id = t.blueprint_step_id and d.org_id = t.org_id
+          left join close_run_tasks dep on dep.run_id = t.run_id and dep.blueprint_step_id = d.depends_on_step_id and dep.org_id = t.org_id
+          left join close_task_evidence ev on ev.task_id = t.id and ev.org_id = t.org_id
+         where t.run_id = ${runId} and t.org_id = ${orgId}
+         group by t.id, owner.name, reviewer.name order by t.sort_order`),
+      db.execute(
+        sql`select * from close_exceptions where run_id = ${runId} and org_id = ${orgId} order by status, case severity when 'critical' then 1 when 'error' then 2 when 'warning' then 3 else 4 end, created_at`,
+      ),
+      db.execute(
+        sql`select * from close_task_evidence where run_id = ${runId} and org_id = ${orgId} order by created_at desc`,
+      ),
+      db.execute(
+        sql`select s.*, u.name as signed_by_name from close_signoffs s join users u on u.id = s.signed_by where s.run_id = ${runId} and s.org_id = ${orgId} order by s.signed_at desc`,
+      ),
+      db.execute(
+        sql`select e.*, u.name as actor_name from close_events e left join users u on u.id = e.actor_id where e.run_id = ${runId} and e.org_id = ${orgId} order by e.at desc limit 100`,
+      ),
+      db.execute(
+        sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId} and org_id = ${orgId}) and book_id = (select book_id from close_runs where id = ${runId} and org_id = ${orgId}) order by subsidiary_id nulls first, module`,
+      ),
+      db.execute(sql`
+        select t.key,
+               avg(extract(epoch from (t.completed_at - r.started_at)) / 86400.0)::numeric(10,1) as average_days
+          from close_run_tasks t join close_runs r on r.id = t.run_id and r.org_id = t.org_id
+         where t.org_id = ${orgId} and t.completed_at is not null and r.id <> ${runId}
+         group by t.key`),
+    ])
+
+  const run = runRes.rows[0]
+  if (!run) return null
+
+  const history = new Map(
+    (historyRes.rows as { key: string; average_days: string }[]).map((row) => [
+      row.key,
+      Number(row.average_days),
+    ]),
+  )
+  const [subsidiaryEnabled, featureState] = await Promise.all([
+    subsidiaryFeatureEnabled(orgId),
+    resolvedFeatureState(orgId),
+  ])
+  return {
+    // The requested stage, so `?stage=publish` deep links land where they
+    // say. The wizard falls back to the run's current stage when it is
+    // absent, which is why dropping it looked harmless and was not.
+    stage,
+    run: run as CloseWizardData['run'],
+    tasks: (tasksRes.rows as { key: string }[]).map((task) => ({
+      ...task,
+      predicted_days: history.get(task.key) ?? null,
+    })) as CloseWizardData['tasks'],
+    exceptions: exceptionsRes.rows as CloseWizardData['exceptions'],
+    evidence: evidenceRes.rows as CloseWizardData['evidence'],
+    signoffs: signoffsRes.rows as CloseWizardData['signoffs'],
+    events: eventsRes.rows as CloseWizardData['events'],
+    locks: locksRes.rows as CloseWizardData['locks'],
+    canRun: can(authz, 'close.run'),
+    canApprove: can(authz, 'close.approve'),
+    canReopen: can(authz, 'close.reopen'),
+    canManageFlows: can(authz, 'flows.manage'),
+    subsidiaryEnabled,
+    multiCurrency: featureEnabled(featureState, 'multiCurrency'),
+    advancedClose: featureEnabled(featureState, 'advancedClose'),
+  }
 }
 
 export async function loadClose(
@@ -125,11 +253,13 @@ export async function loadClose(
   const runId = pickString(sp.run)
   // The native page renders the wizard only for a UUID run id that names a
   // row; anything else falls through to the list.
-  const onRun =
-    Boolean(runId && isUuid(runId)) &&
-    (await db.execute(sql`
-      select 1 from close_runs where id = ${runId} and org_id = ${orgId} limit 1
-    `)).rows.length > 0
+  // The wizard's data is loaded HERE rather than probed for existence and
+  // then loaded elsewhere: `onRun` used to be a bare "does this row exist"
+  // check, which meant the page knew it was on the run branch and still had
+  // nothing to render it with.
+  const wizard =
+    runId && isUuid(runId) ? await loadCloseWizard(runId, pickString(sp.stage), authz) : null
+  const onRun = wizard !== null
   const onList = !onRun
   const currentFy = await currentFiscalYear()
   const fy = Number(pickString(sp.fy) ?? currentFy)
@@ -216,6 +346,7 @@ export async function loadClose(
     startBooks: books.rows.map((row: any) => ({ id: row.id, name: row.name })),
     onList,
     onRun,
+    wizard,
     rows: (periods.rows as any[]).map((period) => ({
       id: period.id,
       name: period.name,
@@ -246,6 +377,26 @@ const item = field
 const rootF = rootRef<CloseData>()
 
 export function closeSpec(data: CloseData): PageSpec {
+  // The run branch is its own document, not a `when` inside the list's.
+  //
+  // `when` omits a block; it cannot change the page's SHELL, and these two
+  // branches need different ones: the list is a `list` layout, and the wizard
+  // owns its own full-height `WizardLayout`, so wrapping it in a second page
+  // shell would nest the chrome. `bare` is precisely the value for a page
+  // that brings its own outer element — it exists for the setup workspace,
+  // which has the same property.
+  //
+  // Choosing between two documents here is ordinary TypeScript over loader
+  // data, not a conditional inside a spec. The spec this returns still only
+  // names blocks and binds resolved fields.
+  if (data.wizard) {
+    return page({
+      route: '/close',
+      layout: 'bare',
+      header: [],
+      body: [widgetBlock('close-wizard', { wizard: data.wizard })],
+    })
+  }
   return page({
     route: '/close',
     layout: 'list',
@@ -352,17 +503,6 @@ export function closeSpec(data: CloseData): PageSpec {
           ],
         ),
         when: f('onList'),
-      },
-      // The run branch stays native (see page.tsx): CloseWizard owns its own
-      // WizardLayout shell, which no PageLayout value can express. This block
-      // is a placeholder for the coordinator — `close-wizard-slot` is NOT in
-      // the registry on purpose (an unknown widget fails closed at render),
-      // so the run branch must be handled in page.tsx until the vocabulary
-      // for it exists. The loader exposes the flag so that handling never
-      // branches on the query itself.
-      {
-        ...widgetBlock('close-wizard-slot', {}),
-        when: f('onRun'),
       },
     ],
   })
