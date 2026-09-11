@@ -4,7 +4,7 @@ import Link from "next/link";
 import { LaborBillRateCards } from "../labor-costing/LaborBillRateCards";
 
 /**
- * Pieces of the labor-pricing page that both render paths share.
+ * Pieces of the labor-pricing page that the page and the widget registry share.
  *
  * The whole page is one client island: the toolbar (search, two selects,
  * create button), the hand-rolled rate-book table, the pager and the drawer
@@ -40,7 +40,7 @@ export function LaborPricingView(props: LaborPricingViewProps) {
  * geometry are a different element) and not `docs-link-button` (outline, no
  * space after the icon). The ghost treatment with the spaced icon is the
  * labor pages' own header — labor-costing renders the same shape — so it
- * stays a page-owned component shared by both render paths.
+ * stays a page-owned component shared by the page and the widget registry.
  */
 export function LaborPricingHeading({
   title,

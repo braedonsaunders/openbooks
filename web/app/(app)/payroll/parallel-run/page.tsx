@@ -1,18 +1,6 @@
 import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
 import {
-  comparablePayRuns,
-  comparableSlots,
-  parallelComparisons,
-  parallelTolerances,
-  priorRegisters,
 } from '@openbooks/engine/src/payroll-parallel-run-store.ts'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
-import { ModuleHomeTabs } from '../../../../components/module-home/ui'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { ParallelRunView } from './ParallelRunView'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadParallelRun, parallelRunSpec } from './view'
 
@@ -47,57 +35,14 @@ export default async function PayrollParallelRunPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadParallelRun(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={parallelRunSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const authz = await requirePermission('payroll.read')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'payroll')
-
-  const t = await getTranslations('payroll')
-  const text = (key: string, fallback: string) =>
-    t.has(key as never) ? t(key as never) : fallback
-
-  const [registers, runs, comparisons, tolerances, slots] = await Promise.all([
-    priorRegisters(orgId),
-    comparablePayRuns(orgId),
-    parallelComparisons(orgId, {}),
-    parallelTolerances(orgId),
-    comparableSlots(orgId),
-  ])
-  const tabs = await groupTabs('payroll', '/payroll/parallel-run', { orgId })
-
+  const sp = await searchParams
+  const data = await loadParallelRun(sp)
   return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={text('parallelRun.title', 'Parallel run')}
-          description={text(
-            'parallelRun.description',
-            'Check a pay period against the payroll system you are leaving, penny by penny. Import the old provider’s register, pick the run that covers the same period, and compare.',
-          )}
-          actions={<ModuleHomeTabs tabs={tabs} />}
-        />
-      }
-    >
-      <ParallelRunView
-        registers={registers}
-        runs={runs}
-        comparisons={comparisons}
-        tolerances={tolerances}
-        slots={slots.map((slot) => ({
-          fieldKey: slot.fieldKey, kind: slot.kind, slot: slot.slot, label: slot.label,
-        }))}
-        canManage={can(authz, 'payroll.manage')}
-      />
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={parallelRunSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

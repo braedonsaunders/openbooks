@@ -5,7 +5,7 @@ import Link from 'next/link'
  * placeholder when the row has none.
  *
  * Two conditional forms in one cell, which is the established boundary for a
- * component rather than a block. Shared by both render paths and by both the
+ * component rather than a block. Shared by the page and the widget registry and by both the
  * summary and detail tables.
  */
 export function PartyLinkCell({

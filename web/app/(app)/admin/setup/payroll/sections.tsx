@@ -104,7 +104,7 @@ export function PayrollSetupTabs({
  * The page header: h1 + description + launcher button. The native page owns
  * a `<header>` element here — no PageHeader block vocabulary for it — so the
  * whole row is one shared component over loader-resolved strings plus the
- * launcher payload. The native branch imports it back; both paths share the
+ * launcher payload. The widget registry renders it, so there is one copy of the
  * h1, the description, and the button chrome by construction.
  */
 export function PayrollSetupHeader({

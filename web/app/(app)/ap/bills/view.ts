@@ -36,7 +36,7 @@ import type { DocumentDrawer } from '../../../../components/document-drawer'
  * views, sortable typed table, drill-through, pagination), which needs an org
  * id, a user id, a permission decision and a per-row actions renderer. None of
  * those may travel through a spec, so the list arrives through a NOT-YET-
- * EXISTING slot: see INTEGRATION.md for the exact `record-list-slot`
+ * EXISTING slot: see the registry entry for the exact `record-list-slot`
  * proposal, mirroring `entity-list-slot.tsx`. The page owns only the header
  * (title/description/capture link/new button) and the ?doc= document flyout
  * with its form-layout resolution, copied verbatim from page.tsx.

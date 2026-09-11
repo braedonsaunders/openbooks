@@ -9,7 +9,7 @@ import { NewFlowButton, FlowRowActions } from './FlowsClient'
  * as leaf cells: the name link (class-carrying anchor), the last-run pair
  * (badge + timestamp, or the never-ran fallback), and the row actions (the
  * client enable/delete controls WITH their revision key). Each is a verbatim
- * move of the native markup; page.tsx imports them back so both render paths
+ * move of the native markup; page.tsx imports them back so the page and the widget registry
  * share one implementation. Never write a second copy.
  */
 

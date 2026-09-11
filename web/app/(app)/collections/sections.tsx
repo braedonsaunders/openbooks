@@ -2,8 +2,8 @@ import { PageHeader } from '@openbooks/ui'
 import { CollectionsClient } from './CollectionsClient'
 
 /**
- * The /collections page shell, shared by the native branch and the ViewSpec
- * widget. Moved here (verbatim) from page.tsx so both render paths mount one
+ * The /collections page shell, placed by the ViewSpec
+ * widget. Moved here (verbatim) from page.tsx so the page and the widget registry mount one
  * implementation — the `mx-auto max-w-6xl` container is narrower than any
  * viewspec shell, so it travels with the island rather than being
  * re-expressed as spec chrome.

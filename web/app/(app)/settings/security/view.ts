@@ -20,8 +20,8 @@ import { currentUser } from '../../../../lib/auth'
  *
  * The native markup is NOT copied. The `<main>` wrapper, the header copy and
  * the panel live in `sections.tsx` (`SecurityPageContent`, moved there from
- * `page.tsx` so both render paths share one implementation), and the
- * registry entry in INTEGRATION.md renders it directly with no props.
+ * `page.tsx` so there is one implementation), and the
+ * registry entry in the registry entry renders it directly with no props.
  * `layout: 'bare'` is load-bearing: the native page renders straight into
  * the app shell's `<main>`, so `list`/`detail` would nest a second
  * ListPageLayout around it and break parity.

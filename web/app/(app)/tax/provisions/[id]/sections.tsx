@@ -2,7 +2,7 @@
 
 import { Badge } from "@openbooks/ui"
 
-// Single implementation shared by both render paths: the native page imports
+// Single implementation shared by the page and the widget registry: the native page imports
 // it from ./ProvisionPostButton and the spec registry reaches it through here.
 export { ProvisionPostButton } from "./ProvisionPostButton"
 

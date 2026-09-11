@@ -30,7 +30,7 @@ import type { DirectoryItem } from '../../../components/module-home/ui'
  * two render paths cannot drift. The rail's attention list and directory are
  * byte-identical to the existing `attention-list` and `directory-section`
  * registry widgets, so the spec reuses those and only the hero table and the
- * AR pulse need new registry entries (proposed in INTEGRATION.md).
+ * AR pulse need new registry entries.
  *
  * Loader logic is copied verbatim from page.tsx: the workspace spans CRM + AR
  * + records (any of the group's read permissions opens the home), panels stay

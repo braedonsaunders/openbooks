@@ -16,7 +16,7 @@ import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitl
  *   wrapper classes) is the loader's `state` field, resolved to a closed
  *   vocabulary the component switches on — never spec branching.
  *
- * The native page imports them from here so both render paths share one
+ * The native page imports them from here so the page and the widget registry share one
  * implementation and cannot drift.
  */
 

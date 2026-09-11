@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { KpiStrip, type Kpi } from '../../../../components/kpi-strip'
 
 /**
- * Pieces of the equipment register that both render paths share.
+ * Pieces of the equipment register that the page and the widget registry share.
  *
  * They live here rather than inside `page.tsx` for the reason SortTh taught:
  * two implementations of the same visual element drift, and a conformance

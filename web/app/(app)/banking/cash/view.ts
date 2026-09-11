@@ -120,7 +120,7 @@ export function bankingCashSpec(data: BankingCashData): PageSpec {
       // layout-prefs fetch — capabilities the LOADER may hold) and passes
       // the results through as data; layout persistence rides the session
       // cookie inside the shared component, so no user id, org id or Authz
-      // crosses the spec. The proposed `cash-cockpit` WIDGET (INTEGRATION.md)
+      // crosses the spec. The `cash-cockpit` widget
       // renders the shared CashCockpit over that data — a widget, not a
       // slot, because there is no capability left to re-derive.
       widgetBlock('cash-cockpit', {

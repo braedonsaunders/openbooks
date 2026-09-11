@@ -1,20 +1,5 @@
-import { crmSharedScope } from '../../../../lib/crm-scope'
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { PageHeader } from '@openbooks/ui'
-import { EntityListView } from '../../../../components/entity-list-view'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { can, requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { isUuid, pickString } from '../../../../lib/list-params'
-import { loadOpportunity } from '../../../../lib/crm'
-import { CrmNewButton } from '../CrmNewButton'
-import { OpportunityDrawer } from '../OpportunityDrawer'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadOpportunities, opportunitiesSpec } from './view'
-type OpportunityDrawerProps = Parameters<typeof OpportunityDrawer>[0]
-type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
 
 export const dynamic = 'force-dynamic'
 
@@ -27,108 +12,14 @@ export default async function Opportunities({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadOpportunities(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={opportunitiesSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const authz = await requirePermission('crm.opportunities.read')
-  const manage = can(authz, 'crm.opportunities.manage')
-  const canCustomize = can(authz, 'admin.customization.manage')
-  const t = await getTranslations('crm')
   const sp = await searchParams
-  const openId = pickString(sp.opportunity)
-
-  const button = manage ? (
-    <CrmNewButton
-      apiPath="/api/crm/opportunities/draft"
-      basePath="/crm/opportunities"
-      param="opportunity"
-      label={t('opportunities.new')}
-      failed={t('feedback.createFailed')}
-    />
-  ) : undefined
-
-  let drawer: React.ReactNode = null
-  if (openId && isUuid(openId)) {
-    const [multiCurrency, inventoryEnabled, equipmentEnabled] = await Promise.all([
-      isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
-      isFeatureEnabled(authz.user.orgId, 'inventory'),
-      isFeatureEnabled(authz.user.orgId, 'equipment'),
-    ])
-    const [open, statuses, owners, accounts, contacts, teams, sources, items, currencies] = await Promise.all([
-      loadOpportunity(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
-      (db.execute(sql`select * from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence`)),
-      (db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`)),
-      (db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name limit 2000`)),
-      (db.execute(sql`select c.id,c.party_id,c.name from contacts c left join parties p on p.id=c.party_id and p.org_id=c.org_id where c.org_id=${authz.user.orgId} and c.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by c.name limit 4000`)),
-      (db.execute(sql`select id,name from crm_sales_teams where org_id=${authz.user.orgId} and is_active order by name`)),
-      (db.execute(sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`)),
-      (db.execute(sql`
-        select id, concat_ws(' · ', code, name) name from items
-         where org_id = ${authz.user.orgId} and is_active
-           and (
-             ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
-             ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
-             or id in (
-               select item_id from crm_opportunity_lines
-                where org_id = ${authz.user.orgId} and opportunity_id = ${openId} and item_id is not null
-             )
-           )
-         order by name limit 2000`)),
-      multiCurrency
-        ? db.execute<ElementOf<OpportunityDrawerProps['currencies']>>(sql`select code,name from currencies order by code`)
-        : Promise.resolve({ rows: [] }),
-    ])
-    const requestedReturn = pickString(sp.drawerReturn)
-    const closeHref = requestedReturn?.startsWith('/crm/opportunities')
-      ? requestedReturn
-      : '/crm/opportunities'
-    if (open) {
-      drawer = (
-        <OpportunityDrawer
-          data={open as unknown as OpportunityDrawerProps['data']}
-          statuses={statuses.rows as unknown as OpportunityDrawerProps['statuses']}
-          owners={owners.rows as unknown as OpportunityDrawerProps['owners']}
-          accounts={accounts.rows as unknown as OpportunityDrawerProps['accounts']}
-          contacts={contacts.rows as unknown as OpportunityDrawerProps['contacts']}
-          teams={teams.rows as unknown as OpportunityDrawerProps['teams']}
-          sources={sources.rows as unknown as OpportunityDrawerProps['sources']}
-          items={items.rows as unknown as OpportunityDrawerProps['items']}
-          currencies={currencies.rows as unknown as OpportunityDrawerProps['currencies']}
-          closeHref={closeHref}
-          canManage={manage}
-          multiCurrency={multiCurrency}
-        />
-      )
-    }
-  }
-
+  const data = await loadOpportunities(sp)
   return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={t('opportunities.title')}
-          description={t('opportunities.description')}
-          actions={button}
-        />
-      }
-    >
-      <EntityListView
-        recordType="opportunity"
-        orgId={authz.user.orgId}
-        userId={authz.user.id}
-        canManage={canCustomize}
-        sp={sp}
-        drawer={drawer}
-        emptyAction={button}
-      />
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={opportunitiesSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

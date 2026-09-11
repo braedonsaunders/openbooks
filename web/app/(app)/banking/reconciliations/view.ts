@@ -14,7 +14,7 @@ import { requirePermission } from '../../../../lib/authz'
  * The reconciliations list, split into a loader and a spec.
  *
  * The whole page is the universal entity list (`bank_reconciliation` record
- * type); the native page passes no drawer and no formatValue, so the spec
+ * type); the page passed no drawer and no formatValue, so the spec
  * passes neither — rows link out to the per-account reconcile workspace via
  * the source's own rowHref, and every cell is registry-typed (reference /
  * amount / status / date). The list arrives through the shared
@@ -23,7 +23,7 @@ import { requirePermission } from '../../../../lib/authz'
  * type and the current params, never a capability or an org id.
  *
  * The empty action (a Button-as-child Link back to /banking) is a widget
- * ref (`choose-recon-account`, INTEGRATION.md): a spec cannot express JSX.
+ * ref (`choose-recon-account`, the registry entry): a spec cannot express JSX.
  * The native page passes it unconditionally, so the spec does too — there
  * is no permission gate on it to reproduce.
  */

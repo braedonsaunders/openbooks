@@ -48,7 +48,7 @@ import type {
  * file download, record-payment) plus client state (active step, busy,
  * dialogs) a spec cannot name. Like the /tax page, the spec is coarse by
  * necessity: a single `pay-run-wizard` widget binds loader data to the
- * shared `RunWizard` the native branch also renders, and the spec draws no
+ * shared `RunWizard` this page has always rendered, and the spec draws no
  * chrome of its own beyond the `pageHeader` shell.
  *
  * Everything else here is loader work copied verbatim from page.tsx: the
@@ -348,8 +348,8 @@ export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
       // The wizard is one client component: five freely-navigable steps whose
       // every control is an interactive fetch flow a spec cannot name. The
       // entry binds the identical loader data to the shared RunWizard the
-      // native branch renders; the loader-derived initialStep chooses the
-      // opening step on both paths.
+      // wizard renders; the loader-derived initialStep chooses the
+      // opening step wherever it renders.
       widgetBlock('pay-run-wizard', {
         run: data.run,
         stubs: data.stubs,

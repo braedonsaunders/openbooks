@@ -23,8 +23,8 @@ import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
  * the ?estimate=new create redirect.
  *
  * The list itself is the universal RecordListView — a whole host component
- * placed by name through the proposed `record-list-view` widget (see
- * INTEGRATION.md), the same arrangement the AP bills page uses. The header
+ * placed by name through the `record-list-view` widget (see
+ * the registry entry), the same arrangement the AP bills page uses. The header
  * carries only the New button (`new-estimate-order` widget, named after the
  * shared _order components two sibling pages will reuse).
  *

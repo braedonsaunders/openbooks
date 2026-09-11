@@ -8,7 +8,7 @@ import { SearchSelectFilter } from '../../../../components/filter-bar'
 import { ForecastSnapshotButton } from '../ForecastSnapshotButton'
 
 /**
- * Pieces of the forecasts page shared by both render paths.
+ * Pieces of the forecasts page shared by the page and the widget registry.
  *
  * Every one of these is a conditional composite or a component the spec
  * language cannot name: the section wrapper carries aria-labelledby plus an

@@ -21,7 +21,7 @@ import type {
  *
  * This is a cockpit, not a list: the purchasing page set the precedent, and
  * this page follows it. ViewSpec composes the grid and the panels; the panel
- * BODIES stay components in ./sections, shared by both render paths so they
+ * BODIES stay components in ./sections, shared by the page and the widget registry so they
  * cannot drift. The rows those components take are presentation-ready data —
  * labels resolved, hrefs built, money formatted — computed in the loader from
  * the native page's logic verbatim.

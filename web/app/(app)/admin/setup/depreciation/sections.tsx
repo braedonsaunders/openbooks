@@ -11,8 +11,8 @@ import { cn } from '@openbooks/ui'
  * nav — is one shared component over loader-resolved strings. The
  * active-vs-plain link PAIR (and aria-current set-vs-omitted) is a
  * component, not a spec construct: every tab's `href`, `label` and `active`
- * boolean travel as data. The native branch imports the header back so both
- * render paths share one implementation — the tax-depreciation precedent.
+ * boolean travel as data. The widget registry renders the header, so there is
+ * one implementation of it — the tax-depreciation precedent.
  *
  * Class strings transcribed from the native page verbatim. Note the nav
  * here has NO `overflow-x-auto` and NO `shrink-0` on the links (the

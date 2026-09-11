@@ -31,7 +31,7 @@ import type { ParallelRunView } from './ParallelRunView'
  *
  * So the spec places the workspace whole through one widget, the same call
  * the pay-run wizard page made: `ParallelRunView` moves nowhere and is
- * shared by both render paths. The loader below copies page.tsx verbatim —
+ * shared by the page and the widget registry. The loader below copies page.tsx verbatim —
  * the `payroll.read` gate, the `payroll` feature gate (404 when disabled),
  * the five store reads, the module tabs, and the `payroll.manage` flag —
  * and hands the store rows to the widget untouched.

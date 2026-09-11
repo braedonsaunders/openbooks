@@ -1,13 +1,5 @@
 import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { requirePermission } from '../../../../lib/authz'
-import { disabledDocKinds } from '../../../../lib/documents'
-import { PDF_RECORD_TYPES } from '../../../../lib/pdf-templates/catalog'
-import { starterTemplate } from '../../../../lib/pdf-templates/starters'
-import { listPdfTemplates } from '../../../../lib/pdf-templates/store'
 import { ModuleView } from '../../../../components/viewspec/module-view'
-import { TemplatesList, type StarterRow, type TemplateRow } from './TemplatesList'
 import { loadPdfTemplates, pdfTemplatesSpec } from './view'
 
 export const dynamic = 'force-dynamic'
@@ -28,62 +20,14 @@ export default async function PdfTemplatesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadPdfTemplates()
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={pdfTemplatesSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const authz = await requirePermission('admin.customization.manage')
-  const t = await getTranslations('pdfTemplates')
-  const tHub = await getTranslations('admin.hub')
-
-  const hiddenKinds = new Set(await disabledDocKinds(authz.user.orgId))
-  const catalog = PDF_RECORD_TYPES.filter((meta) => !hiddenKinds.has(meta.key))
-  const all = (await listPdfTemplates(authz.user.orgId)).filter((tp) => !hiddenKinds.has(tp.recordType))
-  const templates: TemplateRow[] = all.map((tp) => ({
-    id: tp.id,
-    name: tp.name,
-    description: tp.description,
-    recordType: tp.recordType,
-    paperSize: tp.paperSize,
-    orientation: tp.orientation,
-    isActive: tp.isActive,
-    isDefault: tp.isDefault,
-  }))
-  const defaultedTypes = new Set(all.filter((tp) => tp.isDefault).map((tp) => tp.recordType))
-  const starters: StarterRow[] = catalog.map((meta) => {
-    const starter = starterTemplate(meta)
-    return {
-      recordType: meta.key,
-      label: meta.label,
-      sourceHtml: starter.sourceHtml,
-      headerHtml: starter.headerHtml,
-      footerHtml: starter.footerHtml,
-      isEffectiveDefault: !defaultedTypes.has(meta.key),
-    }
-  })
-
+  const sp = await searchParams
+  const data = await loadPdfTemplates()
   return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          back={{ href: '/admin', label: tHub('title') }}
-          title={t('title')}
-          description={t('description')}
-        />
-      }
-    >
-      <TemplatesList
-        templates={templates}
-        starters={starters}
-        recordTypes={catalog.map((meta) => ({ key: meta.key, label: meta.label }))}
-      />
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={pdfTemplatesSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

@@ -290,7 +290,7 @@ export function auditSpec(data: AuditData): PageSpec {
     body: [
       {
         // The native empty state carries the ScrollText glyph; the registry's
-        // closed icon map has no `scroll-text` key yet (see INTEGRATION.md).
+        // closed icon map has no `scroll-text` key yet.
         ...widgetBlock('empty-state', {
           icon: 'scroll-text',
           title: data.emptyTitle,

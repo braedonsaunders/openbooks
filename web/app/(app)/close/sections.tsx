@@ -7,7 +7,7 @@ import { StartCloseButton } from './StartCloseButton'
  * Each of these is more than one element — a single-book pill with two spans,
  * a readiness bar beside its percentage, and the resume-link / start-button /
  * em-dash triple — so each is a component rather than block vocabulary. The
- * native page imports them from here so both render paths share one
+ * native page imports them from here so the page and the widget registry share one
  * implementation and cannot drift.
  */
 

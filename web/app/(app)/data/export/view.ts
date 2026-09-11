@@ -22,7 +22,7 @@ import { requirePermission } from '../../../../lib/authz'
  *
  * The native component is NOT copied. It stays in `./ExportClient` (a
  * sibling module, not inline in page.tsx, so there is nothing to move
- * into a `sections.tsx` — the backups precedent), and both render paths
+ * into a `sections.tsx` — the backups precedent), and the page and the widget registry
  * share that one implementation. Never write a second copy.
  */
 

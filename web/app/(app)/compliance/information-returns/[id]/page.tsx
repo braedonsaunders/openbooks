@@ -1,12 +1,5 @@
-import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
-import { formDefinition } from '@openbooks/engine/src/information-returns.ts'
-import { ListPageLayout } from '../../../../../components/page-layout'
-import { can, requirePermission } from '../../../../../lib/authz'
-import { loadFiling, requireComplianceFeature } from '../../../../../lib/compliance'
 import { isUuid } from '../../../../../lib/list-params'
-import { FilingWorksheet } from './FilingWorksheet'
 import { ModuleView } from '../../../../../components/viewspec/module-view'
 import { filingDetailSpec, loadFilingDetail } from './view'
 
@@ -36,47 +29,14 @@ export default async function FilingDetailPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = (await searchParams) ?? {}
-  if (sp.__viewspec === '1') {
-    const { id } = await params
-    const data = await loadFilingDetail(id)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={filingDetailSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-
-  const authz = await requirePermission('compliance.read')
-  const orgId = authz.user.orgId
-  await requireComplianceFeature(orgId)
   const { id } = await params
-  if (!isUuid(id)) notFound()
-  const filing = await loadFiling(orgId, id)
-  if (!filing) notFound()
-  const t = await getTranslations('compliance')
-  const form = formDefinition(filing.formType)
-
+  const data = await loadFilingDetail(id)
   return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={`${filing.formType} · ${filing.taxYear}`}
-          description={t('informationReturns.detailDescription', {
-            entity: filing.subsidiaryName ?? t('informationReturns.orgRoot'),
-            threshold: `${filing.currency} ${filing.threshold}`,
-          })}
-          back={{ href: '/compliance/information-returns', label: t('informationReturns.title') }}
-        />
-      }
-    >
-      <FilingWorksheet
-        filing={filing}
-        boxes={form.boxes}
-        canManage={can(authz, 'compliance.manage')}
-        canFile={can(authz, 'compliance.file')}
-      />
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={filingDetailSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

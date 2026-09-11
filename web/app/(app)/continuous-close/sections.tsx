@@ -3,7 +3,7 @@ import { ArrowRight, FileText, Sparkles } from 'lucide-react'
 import { Button } from '@openbooks/ui'
 
 /**
- * Pieces of the continuous-close screen that both render paths share.
+ * Pieces of the continuous-close screen that the page and the widget registry share.
  *
  * They live here rather than inside `page.tsx` for the reason SortTh taught:
  * two implementations of the same visual element drift, and a conformance

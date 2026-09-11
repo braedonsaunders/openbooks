@@ -1,15 +1,3 @@
-import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { notFound } from 'next/navigation'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
-import { ModuleHomeTabs } from '../../../../components/module-home/ui'
-import { requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { pickString } from '../../../../lib/list-params'
-import { scopedYearEndFilings } from '../../../../lib/payroll-scoped-views'
-import { SeparationsView } from './SeparationsView'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadSeparations, separationsSpec } from './view'
 
@@ -33,44 +21,14 @@ export default async function PayrollSeparationsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadSeparations(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={separationsSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const authz = await requirePermission('payroll.read')
-  await requireFeatureEnabled(authz.user.orgId, 'payroll')
-  const t = await getTranslations('payroll.separations')
   const sp = await searchParams
-  const currentYear = Number((await businessToday(authz.user.orgId)).slice(0, 4))
-  const requested = Number(pickString(sp.year))
-  const year = Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : currentYear
-
-  const filings = await scopedYearEndFilings(authz, year)
-  if (!filings) notFound()
-  const sections = filings.filter(
-    (filing) => filing.cadence === 'separation' && (filing.installed || filing.data.rows.length > 0),
-  )
-
-  const moduleTabs = await groupTabs('payroll', '/payroll/separations', { orgId: authz.user.orgId })
-
+  const data = await loadSeparations(sp)
   return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={t('title')}
-          description={t('description')}
-          actions={<ModuleHomeTabs tabs={moduleTabs} />}
-        />
-      }
-    >
-      <SeparationsView year={year} currentYear={currentYear} sections={sections} />
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={separationsSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

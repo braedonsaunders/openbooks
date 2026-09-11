@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { cn } from '@openbooks/ui'
 
 /**
- * Pieces of the approvals hub shared by both render paths.
+ * Pieces of the approvals hub shared by the page and the widget registry.
  *
  * Both are conditional composites — a chip that changes treatment when it is
  * the active filter, a tab that grows a count bubble — so they are components.

@@ -10,7 +10,7 @@ import { revokeAccessAction, setSuperAdminAction } from '../../actions'
 import { PlatformMutationButton } from '../../_components/PlatformMutationButton'
 
 /**
- * Pieces of the platform user record that both render paths share.
+ * Pieces of the platform user record that the page and the widget registry share.
  *
  * Every one of them exists because a SERVER ACTION is involved. A bound action
  * is a capability, not data — it can never travel through a spec — so the

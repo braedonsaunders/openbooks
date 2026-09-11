@@ -11,7 +11,7 @@ import { NewDocumentButton } from '../../../components/new-document-button'
  * menu, sitting inside the `gap-3` actions wrapper alongside the module tabs.
  * Placing all three flat in the spec renders one wrapper instead of two and
  * spaces the pair differently — the harness caught exactly that. Moved out of
- * `page.tsx` and imported back, so both render paths share one implementation.
+ * `page.tsx` and imported back, so there is one implementation.
  *
  * `canCreate` omits the create menu, matching the native `undefined`.
  */

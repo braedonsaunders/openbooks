@@ -97,7 +97,7 @@ export function analyticsSpec(data: AnalyticsData): PageSpec {
     // The hub owns its own shell (PageContainer) the way the setup workspace
     // owns its — ListPageLayout's sticky-header chrome would nest a second
     // shell around it, so header and body concatenate and the frame renders
-    // the exact native shell (see INTEGRATION.md).
+    // the exact native shell.
     layout: 'bare',
     header: [],
     body: [

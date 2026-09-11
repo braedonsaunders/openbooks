@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 /**
- * Open a logged-in Chrome window with the native and spec renders side by side.
+ * Open a logged-in Chrome window on the conformance tenant.
+ *
+ * Built during the conversion to put a page's native and spec renders side by
+ * side; there is one render now, so it is simply a fast way to look at any set
+ * of pages as the harness sees them.
  *
  * Uses its own user-data directory so it never touches the developer's real
  * Chrome profile or session. The window stays open until closed manually; this
@@ -18,7 +22,7 @@ const PROFILE = process.env.VIEWSPEC_PROFILE ?? join(tmpdir(), 'viewspec-chrome-
 
 const TABS = process.argv.slice(2)
 if (TABS.length === 0) {
-  TABS.push('/reports/partners?kind=payable', '/reports/partners?kind=payable&__viewspec=1')
+  TABS.push('/reports/partners?kind=payable', '/reports/partners?kind=receivable')
 }
 
 const context = await chromium.launchPersistentContext(PROFILE, {

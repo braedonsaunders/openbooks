@@ -48,7 +48,7 @@ import type { DocumentCrumb } from './sections'
  * tiers behind separate presence flags.
  *
  * The empty-state action reuses the header actions widget by name, exactly as
- * the native page passes the same `actions` node to both PageHeader and
+ * the page passed the same `actions` node to both PageHeader and
  * EmptyState.
  */
 
@@ -349,7 +349,7 @@ export function documentsSpec(data: DocumentsData): PageSpec {
           ]),
         ]),
       ]),
-      // URL-backed drawers, portaled to <body> on both paths.
+      // URL-backed drawers, portaled to <body> wherever it renders.
       {
         ...widgetBlock('file-drawer', { drawer: data.fileDrawer }),
         when: f('fileDrawerOpen'),

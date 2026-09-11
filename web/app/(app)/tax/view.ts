@@ -26,7 +26,7 @@ import type { TaxFormOption, TaxHistoryRow } from './sections'
  * The spec is coarse by necessity rather than by taste: the native page sits
  * in `PageContainer`, whose motion wrappers a spec `grid` cannot reproduce,
  * so the spec places a single `tax-page` widget rendering the identical
- * shell components the native branch uses. The loader-computed tab flags
+ * shell components the widget registry uses. The loader-computed tab flags
  * travel as data and are applied inside `TaxTabPanels`, exactly as the
  * native `{tab === ... ? ... : ...}` does — a `when` cannot cross a widget
  * boundary. Authz stays server-side: the page 404s entity-restricted
@@ -232,7 +232,7 @@ export function taxSpec(data: TaxData): PageSpec {
     // The native page owns its PageContainer shell, which no spec layout
     // reproduces — so the spec draws no chrome of its own and places the
     // whole page through one widget that renders the identical shared
-    // components the native branch uses.
+    // components the widget registry uses.
     layout: 'bare',
     header: [],
     body: [

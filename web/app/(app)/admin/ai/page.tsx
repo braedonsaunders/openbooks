@@ -1,11 +1,4 @@
 import { getTranslations } from 'next-intl/server'
-import { Card, CardContent, PageHeader } from '@openbooks/ui'
-import { PageContainer } from '../../../../components/page-layout'
-import { requirePermission } from '../../../../lib/authz'
-import { AI_PROVIDER_SPECS } from '../../../../lib/assistant/client'
-import { getOrgAiSettings } from '../../../../lib/assistant/ai-config'
-import { CONTINUOUS_CLOSE_DETECTOR_SPECS, isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close.ts'
-import { AiSettingsForm, type ProviderSpecLite } from './AiSettingsForm'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadAdminAi, adminAiSpec } from './view'
 
@@ -23,60 +16,14 @@ export async function generateMetadata() {
  * the key itself).
  */
 export default async function AiSettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadAdminAi(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={adminAiSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const authz = await requirePermission('admin.ai.manage')
-  const t = await getTranslations('admin')
-
-  // Serializable slice of the provider specs (no SDK code in the client bundle).
-  const specs: ProviderSpecLite[] = AI_PROVIDER_SPECS.map((p) => ({
-    value: p.value,
-    label: p.label,
-    baseUrl: p.baseUrl,
-    requiresBaseUrl: p.requiresBaseUrl,
-    fast: p.fast,
-    smart: p.smart,
-    keyHint: p.keyHint,
-    modelHint: p.modelHint,
-  }))
-
-  const initial = await getOrgAiSettings(authz.user.orgId)
-  const requestedAgent = (await searchParams).agent
-  const selectedAgentKey = isContinuousCloseAgentKey(requestedAgent) ? requestedAgent : null
-
+  const sp = await searchParams
+  const data = await loadAdminAi(sp)
   return (
-    <PageContainer>
-      <div className="max-w-5xl space-y-4">
-        <PageHeader
-          title={t('ai.title')}
-          description={t('ai.description')}
-          back={{ href: '/admin', label: t('hub.title') }}
-        />
-        <Card>
-          <CardContent className="pt-6">
-            <AiSettingsForm
-              specs={specs}
-              detectorSpecs={CONTINUOUS_CLOSE_DETECTOR_SPECS.map((spec) => ({
-                ...spec,
-                parameters: spec.parameters.map((parameter) => ({
-                  ...parameter,
-                })),
-              }))}
-              initial={initial}
-              selectedAgentKey={selectedAgentKey}
-            />
-          </CardContent>
-        </Card>
-      </div>
-    </PageContainer>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={adminAiSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

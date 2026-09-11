@@ -35,7 +35,7 @@ export interface TaxHistoryRow {
 }
 
 /**
- * Pieces of the tax page that both render paths share.
+ * Pieces of the tax page that the page and the widget registry share.
  *
  * The prepare/history tab strip is a WIDGET rather than the shared `tab-nav`:
  * it carries a count badge inside one tab and `aria-current` instead of
@@ -52,7 +52,7 @@ export interface TaxHistoryRow {
  * `data-page-motion` attributes and post-animation inline styles that a spec
  * `grid` (a plain div) cannot reproduce — so the spec draws no chrome of its
  * own and places a single `tax-page` widget rendering the identical shell
- * components the native branch uses. The pager likewise lives in the shared
+ * components the widget registry uses. The pager likewise lives in the shared
  * history-table component (not in the spec) because this table is not a spec
  * table; the spec's `pagination` block would render a second one. The tab
  * presence flags still come from the loader; they are applied one level down,

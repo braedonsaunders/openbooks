@@ -42,7 +42,7 @@ import type { YearEndView } from './YearEndView'
  *
  * So the spec places the workspace whole through one widget, the same call
  * the parallel-run page made: `YearEndView` moves nowhere and is shared by
- * both render paths. The loader below copies page.tsx verbatim — the
+ * the page and the widget registry. The loader below copies page.tsx verbatim — the
  * `payroll.read` gate, the `payroll` feature gate (404 when disabled), the
  * business-day year with its clamped `?year=` override, the scoped filings
  * read (a restricted caller whose scope excludes any row of the year's
@@ -53,7 +53,7 @@ import type { YearEndView } from './YearEndView'
  * formats client-side (browser locale).
  *
  * No sections.tsx: nothing is moved or duplicated — `YearEndView` stays
- * where it is and both render paths import the same component, exactly like
+ * where it is and the page and the widget registry import the same component, exactly like
  * `ParallelRunView`.
  */
 

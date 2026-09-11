@@ -1,12 +1,3 @@
-import { notFound, redirect } from 'next/navigation'
-import { requirePermission } from '../../../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../../../lib/features'
-import { isUuid } from '../../../../../../lib/list-params'
-import { loadReportDefinition } from '../../../../../../lib/custom-reports'
-import { orgBranding } from '../../../../../../lib/report-pdf'
-import { statementPageHref } from '../../../../../../lib/report-run'
-import { hiddenReportEntityKeys } from '../../../../../../lib/report-authz'
-import { ReportBuilder } from './ReportBuilder'
 import { ModuleView } from '../../../../../../components/viewspec/module-view'
 import { loadReportBuilder, reportBuilderSpec } from './view'
 
@@ -22,43 +13,13 @@ export default async function ReportBuilderPage({
 }) {
   const { id } = await params
   const sp = (await searchParams) ?? {}
-  if (sp.__viewspec === '1') {
-    const data = await loadReportBuilder(id)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={reportBuilderSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-
-  const authz = await requirePermission('reports.create')
-  if (!isUuid(id)) notFound()
-  const [definition, branding, inventoryEnabled] = await Promise.all([
-    loadReportDefinition(authz.user.orgId, id),
-    orgBranding(),
-    isFeatureEnabled(authz.user.orgId, 'inventory'),
-  ])
-  if (!definition) notFound()
-  // Standard statement reports keep their rich drill-through pages — the entity
-  // query-builder edits `query` definitions only.
-  if (definition.report_type === 'statement') redirect(statementPageHref(definition.statement))
-  if (!definition.query) notFound()
-
+  const data = await loadReportBuilder(id)
   return (
-    <ReportBuilder
-      hiddenEntityKeys={await hiddenReportEntityKeys(authz)}
-      inventoryEnabled={inventoryEnabled}
-      company={branding.orgName}
-      definition={{
-        id: definition.id,
-        kind: definition.kind,
-        name: definition.name,
-        description: definition.description,
-        query: definition.query,
-        layout: definition.layout,
-      }}
-    />
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={reportBuilderSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

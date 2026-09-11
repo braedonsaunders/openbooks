@@ -1,24 +1,3 @@
-import { getMoneyFormatter } from '@/lib/money-server'
-import { getTranslations } from 'next-intl/server'
-import { Badge, PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { dimensionOptions } from '../../../../lib/reports'
-import { orgInfo } from '../../../../lib/data'
-import { resolveOrgId } from '../../../../lib/org-scope'
-import { reportBookSelection } from '../../../../lib/report-books'
-import { reportSubsidiaryView } from '../../../../lib/consolidation'
-import { balanceSheetView } from '../../../../lib/statement-matrix'
-import { decimalAdd, decimalCmp, decimalNeg } from '../../../../lib/statement-format'
-import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
-import { StatementMatrixTable } from '../StatementMatrixTable'
-import { ReportPaper } from '../ReportPaper'
-import { ExportMenu } from '../ExportMenu'
-import { ReportFilterBar } from '../ReportFilterBar'
-import { SaveViewButton } from '../SaveViewButton'
-import { ScheduleReportButton } from '../ScheduleReportButton'
-import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
-import { BalanceCheck } from './sections'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadBalanceSheet, balanceSheetSpec } from './view'
 
@@ -30,130 +9,13 @@ export default async function BalanceSheet({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp0 = await searchParams
-  if (sp0.__viewspec === '1') {
-    const data = await loadBalanceSheet(sp0)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={balanceSheetSpec(data)} data={data} searchParams={sp0} trusted />
-      </>
-    )
-  }
-  const { money } = await getMoneyFormatter()
-  const t = await getTranslations('reports')
-  const tb = await getTranslations('budgets')
-  const sp = await searchParams
-  const scheduleDefId = await reportScheduleAnchor('balance-sheet')
-  const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
-
-  const secTotal = (section: string) => t('statement.sectionTotal', { section })
-  const labels = {
-    assets: t('balanceSheet.assets'),
-    liabilities: t('balanceSheet.liabilities'),
-    equity: t('balanceSheet.equity'),
-    totalAssets: secTotal(t('balanceSheet.assets')),
-    totalLiabilities: secTotal(t('balanceSheet.liabilities')),
-    totalEquity: secTotal(t('balanceSheet.equity')),
-    accumulatedEarnings: t('statement.accumulatedEarnings'),
-    translationAdjustment: t('statement.translationAdjustment'),
-    liabilitiesAndEquity: t('balanceSheet.liabilitiesAndEquity'),
-    totalOf: secTotal,
-  }
-
-  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
-  const [view, opts, org] = await Promise.all([
-    balanceSheetView({ from: period.from, to: period.to }, period.label, labels, {
-      breakout: q.breakout,
-      compare: q.compare,
-      basis: q.basis,
-      dims: q.dims,
-      subsidiary: subView.subsidiary,
-      showZero: q.showZero,
-      bookId: selectedBook.id,
-    }),
-    dimensionOptions(),
-    orgInfo(),
-  ])
-
-  const valueOf = (label: string) => view.lines.find((l) => l.label === label)?.values?.[0] ?? '0.0000'
-  const totalAssets = valueOf(labels.totalAssets)
-  const totalLiabilities = valueOf(labels.totalLiabilities)
-  const totalEquity = valueOf(labels.totalEquity)
-  const difference = decimalAdd(totalAssets, decimalNeg(decimalAdd(totalLiabilities, totalEquity)))
-  const balanced = decimalCmp(difference, '-0.0100') > 0 && decimalCmp(difference, '0.0100') < 0
-
+  const data = await loadBalanceSheet(sp0)
   return (
-    <ListPageLayout
-      header={
-        <>
-          <PageHeader
-            title={t('balanceSheet.title')}
-            description={`${selectedBook.name} · ${subView.label ? `${subView.label} · ` : ''}${t('balanceSheet.asOf', { date: period.to })}`}
-            back={{ href: '/reports', label: t('hub.title') }}
-          />
-          <ReportFilterBar
-            controls={{
-              period: true,
-              asOf: true,
-              breakout: true,
-              breakoutOptions: ['department', 'project', 'location', 'class', 'month', 'quarter'],
-              compare: true,
-              basis: true,
-              dimensions: true,
-              subsidiary: true,
-              showZero: true,
-              scale: true,
-              sections: true,
-            }}
-            primaryFilter={books.length > 1 ? {
-              paramKey: 'book',
-              label: tb('list.bookFilter'),
-              value: selectedBook.id,
-              options: books.map(book => ({ value: book.id, label: book.name })),
-            } : undefined}
-            dimensions={opts}
-            subsidiaries={subView.picker}
-            actions={
-              <>
-                {scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton />
-                <ExportMenu kind="balance-sheet" params={sp} />
-              </>
-            }
-          />
-          <BalanceCheck
-            equation={t('balanceSheet.equation')}
-            balanced={balanced}
-            label={
-              balanced
-                ? t('balanceSheet.balanced')
-                : t('balanceSheet.offBy', { amount: money(difference) })
-            }
-          />
-        </>
-      }
-    >
-      <ReportPaper
-        company={org?.name ?? ''}
-        title={t('balanceSheet.title')}
-        periodPhrase={`${selectedBook.name} · ${t('balanceSheet.asOf', { date: period.to })}`}
-        note={scaleFactor(q.scale).note || undefined}
-        wide={view.columns.length > 4}
-      >
-        <StatementMatrixTable
-          view={view}
-          scale={q.scale}
-          currency={subView.currency ?? org?.base_currency}
-          drill={{
-            dims: q.dims,
-            basis: q.basis,
-            subsidiaryId: q.subsidiaryId,
-            bookId: selectedBook.id,
-          }}
-        />
-      </ReportPaper>
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={balanceSheetSpec(data)} data={data} searchParams={sp0} trusted />
+    </>
   )
 }

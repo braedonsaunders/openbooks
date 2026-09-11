@@ -211,7 +211,7 @@ export function flowsSpec(data: FlowsData): PageSpec {
     body: [
       {
         // `workflow` is NOT in the empty-state widget's closed icon map yet
-        // (see INTEGRATION.md) — until the coordinator adds it, the spec
+        // — until the coordinator adds it, the spec
         // path renders the empty state without the glyph. Icon and action
         // named, not carried, per the component-reference rule.
         ...widgetBlock('empty-state', {

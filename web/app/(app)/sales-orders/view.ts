@@ -22,7 +22,7 @@ import type { OrderDrawer } from '../_order/OrderDrawer'
  * `record-list-view` slot instead of a table: the slot re-derives
  * org/user/permissions from the session. A spec that could name an org id is
  * a cross-tenant read — the same rule that puts EntityListView behind
- * `entity-list-view`. The AR-invoices conversion proposed the record-list
+ * `entity-list-view`. The AR-invoices conversion introduced the record-list
  * equivalent (`record-list-view` widget + `RecordListSlot`); this page places
  * the same widget with its own drawer and empty-action refs.
  *

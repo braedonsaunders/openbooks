@@ -8,9 +8,9 @@ import { RemittancesView } from './RemittancesView'
  * cards (each with its conditional filing-account badge, existing-bill
  * links, and create-bill vs assign-vendor action), and the empty state. It
  * stays whole: every card carries conditional pairs a spec cannot express,
- * so the spec places the cockpit through a widget and both render paths
+ * so the spec places the cockpit through a widget and the page and the widget registry
  * share this one implementation. Display strings resolve inside the client
- * component via useTranslations/useMoney, identically on both paths.
+ * component via useTranslations/useMoney, identically wherever it renders.
  */
 
 export { RemittancesView }

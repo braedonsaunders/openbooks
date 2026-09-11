@@ -1,7 +1,7 @@
 import { SecurityPanel } from "./security-panel";
 
 /**
- * The native page body, moved out of `page.tsx` so both render paths share one
+ * The native page body, moved out of `page.tsx` so the page and the widget registry share one
  * implementation. The `security-panel` widget renders it with no props — the
  * header copy is static English owned here, not loader data, the same call the
  * `query-console` spec makes.

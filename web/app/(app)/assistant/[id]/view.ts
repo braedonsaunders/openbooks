@@ -26,7 +26,7 @@ import {
  *
  * The native component is NOT copied. `AssistantApp` stays where it is
  * (`web/components/assistant/assistant-app.tsx`, also rendered by the
- * `/assistant` sibling route) and the registry diff in INTEGRATION.md §1
+ * `/assistant` sibling route) and the registry entry
  * renders it directly with loader-resolved props.
  *
  * Visibility note: `listConversations` and `recentMessages` both filter by
@@ -55,7 +55,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export async function loadAssistantConversation(id: string): Promise<AssistantConversationData> {
   // Native page.tsx, verbatim: permission first, then the UUID shape check +
-  // owner check (redirect, not a body — see INTEGRATION.md §4), then the
+  // owner check (redirect, not a body — see the registry entry §4), then the
   // sidebar + thread window + model config in parallel. No search params:
   // like loadDocArticle(slug), the loader takes only the segment param.
   const authz = await requirePermission('assistant.use')

@@ -116,7 +116,7 @@ export async function loadBankingRules(
   // native page's `whenSummary` / `outcomeSummary` closures inside
   // EntityListView's `formatValue`. A spec can never carry a function, so the
   // loader does NOT precompute them — the coordinator's slot addition (see
-  // INTEGRATION.md §4) carries the verbatim logic. Nothing else on this page
+  // the registry entry) carries the verbatim logic. Nothing else on this page
   // formats values in the loader.
 
   return {

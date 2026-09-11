@@ -12,7 +12,7 @@ import { isFeatureEnabled } from '../../../lib/features'
  * client-side workbench (`'use client'` — editor, rail, results grid, every
  * fetch) with zero server-rendered content. The LOADER reproduces the
  * `layout.tsx` gates verbatim (`sql.execute` permission, `queryConsole`
- * feature flag — both verified against the page's GATES in INTEGRATION.md
+ * feature flag — both verified against the page's GATES in the registry entry
  * §2, because the harness tenant 404s here today) and returns no
  * presentation data, because there is none: every string the page shows is
  * read by the component itself through `useTranslations`, every row arrives
@@ -22,8 +22,8 @@ import { isFeatureEnabled } from '../../../lib/features'
  * components.
  *
  * The native component is NOT copied. It lives in `sections.tsx` (moved
- * there from `page.tsx` so both render paths share one implementation), and
- * the registry entry in INTEGRATION.md renders it directly with no props.
+ * there from `page.tsx` so there is one implementation), and
+ * the registry entry renders it directly with no props.
  */
 
 /** No server-rendered content: the loader runs the gates and binds nothing. */

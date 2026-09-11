@@ -25,7 +25,7 @@ import type { RetroSchedule } from './RetroWorkspace'
  *
  * So the spec places the workspace whole through one widget, the same call
  * the parallel-run page made: `RetroWorkspace` moves nowhere and is shared
- * by both render paths. The loader below copies page.tsx verbatim — the
+ * by the page and the widget registry. The loader below copies page.tsx verbatim — the
  * `payroll.read` gate, the `payroll` feature gate (404 when disabled), the
  * scoped schedule read, the module tabs, and the `payroll.run` flag — and
  * hands the schedule rows to the widget untouched.

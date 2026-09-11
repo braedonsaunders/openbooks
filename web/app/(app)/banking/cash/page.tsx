@@ -1,17 +1,4 @@
 import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { ModuleHomeTabs } from '../../../../components/module-home/ui'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
-import { SubsidiarySwitcher } from '../../../../components/subsidiary-switcher'
-import { requirePermission, can } from '../../../../lib/authz'
-import { analyticsConfig } from '../../../../lib/analytics/config'
-import { normalizeMoneyValue, withoutWeekEntries } from '@/lib/cash/core'
-import { cashPosition } from '../../../../lib/cash/cash-position'
-import { resolveAsOf } from '../../../../lib/cash/core'
-import { reportSubsidiaryView } from '../../../../lib/consolidation'
-import { userPageLayout } from '../../../../lib/page-layout'
-import { CashCockpit } from './CashCockpit'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadBankingCash, bankingCashSpec } from './view'
 
@@ -33,71 +20,14 @@ export default async function BankingCashPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadBankingCash(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={bankingCashSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const authz = await requirePermission('banking.read')
-  const t = await getTranslations('banking.cash')
-  const tBanking = await getTranslations('banking')
-
   const sp = await searchParams
-  const parsed = Number(sp.horizon)
-  const horizon = parsed === 4 || parsed === 12 ? parsed : 8
-
-  // Subsidiary context (multi-subsidiary orgs): the whole cockpit — cash,
-  // open items, SQL-backed forecast categories — scopes to the selected view.
-  const asOfIso = await resolveAsOf(authz.user.orgId)
-  const subView = await reportSubsidiaryView(sp.sub, asOfIso)
-
-  const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
-  const apSettings = { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
-  const [position, layoutPrefs] = await Promise.all([
-    cashPosition(authz.user.orgId, horizon, apSettings, undefined, subView.subsidiary?.ids, authz.allowedSubsidiaryIds),
-    userPageLayout(authz.user.id, 'banking-cash'),
-  ])
-  // Every week's totals and counts travel with the page; the transactions
-  // behind them do not. On a real ledger those arrays are the entire open-item
-  // book repeated across the horizon — tens of megabytes to render a timeline
-  // whose rows show amounts. The week flyout fetches the week actually opened
-  // from /api/cash/week-entries, at full detail.
-  const data = { ...position, weeks: withoutWeekEntries(position.weeks) }
-
+  const data = await loadBankingCash(sp)
   return (
-    <ListPageLayout
-      className="flex h-full min-h-0 flex-col"
-      header={
-        <PageHeader
-          title={t('title')}
-          description={t('description')}
-          actions={
-            <div className="flex items-center gap-3">
-              <SubsidiarySwitcher
-                picker={subView.picker}
-                value={subView.picker.find((p) => p.id === sp.sub)?.id ?? subView.picker[0]?.id ?? ''}
-                label={tBanking('home.subsidiary')}
-              />
-              {/* The group's unified route-tab strip (shared with /banking). */}
-              <ModuleHomeTabs tabs={await groupTabs('banking', '/banking/cash', { subQs: sp.sub ? `?sub=${sp.sub}` : '', orgId: authz.user.orgId })} />
-            </div>
-          }
-        />
-      }
-    >
-      <CashCockpit
-        data={data}
-        layoutPrefs={layoutPrefs}
-        canConfigure={can(authz, 'admin.setup.manage')}
-        canPayRun={can(authz, 'ap.pay')}
-        canCollectionRun={can(authz, 'ar.pay')}
-      />
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={bankingCashSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

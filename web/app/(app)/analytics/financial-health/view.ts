@@ -24,7 +24,7 @@ import type { FinancialHealthView } from './FinancialHealthView'
  *
  * Loader work copied VERBATIM from page.tsx. `RATIO_DEFS` is a static table of ratio
  * definitions, not a component or a capability, so it travels as plain data
- * through the widget exactly as the native page passes it as a prop.
+ * through the widget exactly as the page passed it as a prop.
  */
 
 type ViewProps = Parameters<typeof FinancialHealthView>[0]

@@ -163,7 +163,14 @@ export async function loadCustomReports(
       select id, kind, slug, name, description, query, updated_at
         from report_definitions
        where ${where}
-       order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
+       -- id is the tiebreaker, and it is not cosmetic. Sorting by kind
+       -- alone leaves every row sharing a kind in an order Postgres may pick
+       -- freshly per query — including BETWEEN the pages of this very
+       -- limit/offset pagination, so a report could show up on page two after
+       -- you already saw it on page one, or never show up at all. The
+       -- conformance harness caught it as two runs disagreeing about which
+       -- report came first.
+       order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, id asc
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`),
     db.execute<{ kind: string; n: string }>(sql`
       select kind, count(*) as n from report_definitions

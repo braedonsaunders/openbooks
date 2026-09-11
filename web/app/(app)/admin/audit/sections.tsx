@@ -25,7 +25,7 @@ export function AuditRowsTable({ rows, selectedId }: ComponentProps<typeof Audit
 }
 
 // The drawer takes a discriminated union (closeHref XOR onClose); the URL
-// variant is the one both render paths use here.
+// variant is the one the page and the widget registry use here.
 export function AuditEventFlyout({ event, closeHref }: { event: AuditEvent; closeHref: string }) {
   return <AuditEventDrawer event={event} closeHref={closeHref} />
 }

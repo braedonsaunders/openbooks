@@ -5,7 +5,7 @@ import Link from 'next/link'
  *
  * A link with a trailing annotation: `text` can carry a suffix and `link`
  * cannot, and rather than widen either renderer for one page this stays a
- * component. Shared by both render paths.
+ * component. Shared by the page and the widget registry.
  */
 export function WaiverNumberCell({
   waiverNumber,

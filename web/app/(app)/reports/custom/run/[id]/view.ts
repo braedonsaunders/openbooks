@@ -309,7 +309,7 @@ export function reportRunSpec(data: ReportRunData): PageSpec {
         when: f('hasResult'),
       },
       // Failure (bad URL filters, engine error): the same paper with the
-      // error paragraph the native branch renders — `py-12 text-center
+      // error paragraph this page renders — `py-12 text-center
       // text-sm text-slate-500 dark:text-slate-400`, verbatim.
       {
         ...paper({

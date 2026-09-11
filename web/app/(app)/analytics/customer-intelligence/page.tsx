@@ -1,15 +1,6 @@
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadCustomerIntelligence, customerIntelligenceSpec } from './view'
 import { getTranslations } from 'next-intl/server'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { AnalyticsHeader } from '../_ui/AnalyticsHeader'
-import { requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery } from '../../../../lib/report-filters'
-import { customerData, customerProfitability } from '../../../../lib/analytics/customer-data'
-import { ReportFilterBar } from '../../reports/ReportFilterBar'
-import { CustomerView } from './CustomerView'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,40 +14,14 @@ export default async function CustomerIntelligencePage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadCustomerIntelligence(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={customerIntelligenceSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-
-  const t = await getTranslations('analytics.customer')
-  const authz = await requirePermission('reports.read')
-
   const sp = await searchParams
-  const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-
-  const [data, profitability, projectsEnabled] = await Promise.all([
-    customerData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds),
-    customerProfitability({ from: period.from, to: period.to }, authz.user.orgId, authz.allowedSubsidiaryIds),
-    isFeatureEnabled(authz.user.orgId, 'projects'),
-  ])
-
+  const data = await loadCustomerIntelligence(sp)
   return (
-    <ListPageLayout
-      header={
-        <AnalyticsHeader title={t('title')} periodLabel={period.label} backLabel={t('backToHub')}>
-          <ReportFilterBar controls={{ period: true }} />
-        </AnalyticsHeader>
-      }
-    >
-      <CustomerView data={data} profitability={profitability} projectsEnabled={projectsEnabled} />
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={customerIntelligenceSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }
