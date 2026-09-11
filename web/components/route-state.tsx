@@ -7,15 +7,28 @@ export function RouteStateView({
   title,
   description,
   action,
+  state,
 }: {
   icon?: React.ReactNode
   title: string
   description?: string
   action?: React.ReactNode
+  /**
+   * Machine-readable name for WHY this boundary is showing.
+   *
+   * The e2e route sweep needs to tell a page that rendered from a page that
+   * crashed into this boundary, and both answer HTTP 200 with text in
+   * `<main>`. Matching the visible copy would work today and break the first
+   * time someone runs the suite in another locale, so the signal is an
+   * attribute rather than a sentence.
+   */
+  state?: 'error' | 'not-found'
 }) {
   return (
     <ListPageLayout header={<PageHeader title={title} description={description} />}>
-      <EmptyState icon={icon} title={title} description={description} action={action} />
+      <div data-route-state={state}>
+        <EmptyState icon={icon} title={title} description={description} action={action} />
+      </div>
     </ListPageLayout>
   )
 }
