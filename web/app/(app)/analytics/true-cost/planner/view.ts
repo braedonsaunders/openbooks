@@ -57,6 +57,7 @@ export async function loadTrueCostPlanner(
 
 export function trueCostPlannerSpec(data: TrueCostPlannerData): PageSpec {
   return page({
+    route: '/analytics/true-cost/planner',
     layout: 'list',
     header: [
       frame('analytics-header', [widgetBlock('report-period-filter')], {

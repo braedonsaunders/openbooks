@@ -159,6 +159,7 @@ export function purchaseOrdersSpec(data: PurchaseOrdersData): PageSpec {
     },
   }
   return page({
+    route: '/purchase-orders',
     layout: 'list',
     header: [
       pageHeader({

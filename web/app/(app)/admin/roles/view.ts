@@ -190,6 +190,7 @@ const f = ref<AdminRolesData>()
 
 export function adminRolesSpec(data: AdminRolesData): PageSpec {
   return page({
+    route: '/admin/roles',
     layout: 'list',
     header: [
       pageHeader({

@@ -106,6 +106,7 @@ export function prospectsSpec(data: ProspectsData): PageSpec {
     },
   }
   return page({
+    route: '/crm/prospects',
     layout: 'list',
     header: [
       pageHeader({

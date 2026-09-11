@@ -238,6 +238,7 @@ const f = ref<CustomersData>()
 
 export function customersSpec(data: CustomersData): PageSpec {
   return page({
+    route: '/customers',
     layout: 'list',
     bodyClassName: 'flex h-full min-h-0 flex-col',
     header: [

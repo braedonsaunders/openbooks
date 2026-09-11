@@ -100,6 +100,7 @@ const f = ref<BankingImportsData>()
 
 export function bankingImportsSpec(data: BankingImportsData): PageSpec {
   return page({
+    route: '/banking/imports',
     layout: 'list',
     header: [
       pageHeader({

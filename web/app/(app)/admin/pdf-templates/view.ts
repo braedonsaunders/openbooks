@@ -90,6 +90,7 @@ const f = ref<PdfTemplatesData>()
 
 export function pdfTemplatesSpec(data: PdfTemplatesData): PageSpec {
   return page({
+    route: '/admin/pdf-templates',
     layout: 'list',
     header: [
       pageHeader({

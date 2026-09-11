@@ -90,6 +90,7 @@ const f = ref<ArCockpitData>()
 
 export function arCockpitSpec(data: ArCockpitData): PageSpec {
   return page({
+    route: '/ar',
     layout: 'list',
     bodyClassName: 'flex h-full min-h-0 flex-col',
     header: [

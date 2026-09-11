@@ -233,6 +233,7 @@ export function bankingTransactionsSpec(data: BankingTransactionsData): PageSpec
     },
   }
   return page({
+    route: '/banking/transactions',
     layout: 'list',
     header: [
       pageHeader({

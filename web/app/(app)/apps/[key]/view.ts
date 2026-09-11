@@ -112,6 +112,7 @@ export async function loadAppRuntime(key: string): Promise<AppRuntimeData> {
 
 export function appRuntimeSpec(data: AppRuntimeData): PageSpec {
   return page({
+    route: '/apps/[key]',
     // The runtime owns its own full-height flex column, and the two notice
     // branches own their own centred container. A `list` layout would nest
     // either inside a shell the native page never renders.

@@ -153,6 +153,7 @@ const f = ref<PnlData>()
 
 export function pnlSpec(data: PnlData): PageSpec {
   return page({
+    route: '/reports/pnl',
     layout: 'list',
     header: [
       pageHeader({

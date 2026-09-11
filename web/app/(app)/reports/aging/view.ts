@@ -315,6 +315,7 @@ const totalsRow: TableSpanRow = {
 
 export function agingSpec(data: AgingData): PageSpec {
   return page({
+    route: '/reports/aging',
     layout: 'list',
     header: [
       pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),

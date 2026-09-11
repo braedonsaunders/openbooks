@@ -60,6 +60,7 @@ const f = ref<DocsData>()
 
 export function docsHomeSpec(data: DocsData): PageSpec {
   return page({
+    route: '/docs',
     // The docs home owns its own centered container; a list layout would
     // nest it in a second shell.
     layout: 'bare',

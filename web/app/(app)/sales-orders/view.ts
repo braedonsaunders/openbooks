@@ -199,6 +199,7 @@ export function salesOrdersSpec(data: SalesOrdersData): PageSpec {
     },
   }
   return page({
+    route: '/sales-orders',
     layout: 'list',
     header: [
       pageHeader({

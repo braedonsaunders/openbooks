@@ -89,6 +89,7 @@ const f = ref<SubcontractsData>()
 
 export function subcontractsSpec(data: SubcontractsData): PageSpec {
   return page({
+    route: '/subcontracts',
     layout: 'list',
     header: [
       pageHeader({

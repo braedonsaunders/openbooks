@@ -236,6 +236,7 @@ const f = ref<AccountingData>()
 
 export function accountingSpec(data: AccountingData): PageSpec {
   return page({
+    route: '/accounting',
     layout: 'list',
     bodyClassName: 'flex h-full min-h-0 flex-col',
     header: [

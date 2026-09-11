@@ -149,6 +149,7 @@ function emptyNoteBody(when: FieldRef, data: AppsLauncherData, withCta: boolean)
 
 export function appsLauncherSpec(data: AppsLauncherData): PageSpec {
   return page({
+    route: '/apps',
     layout: 'list',
     header: [
       pageHeader({

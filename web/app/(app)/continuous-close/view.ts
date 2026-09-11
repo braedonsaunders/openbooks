@@ -494,6 +494,7 @@ const rootF = rootRef<ContinuousCloseData>()
 
 export function continuousCloseSpec(data: ContinuousCloseData): PageSpec {
   return page({
+    route: '/continuous-close',
     layout: 'list',
     header: [
       pageHeader({

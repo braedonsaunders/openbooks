@@ -200,6 +200,7 @@ const LINK = 'font-medium text-teal-700 hover:underline dark:text-teal-300'
 
 export function customFieldsSpec(data: CustomFieldsData): PageSpec {
   return page({
+    route: '/admin/custom-fields',
     layout: 'list',
     header: [
       pageHeader({

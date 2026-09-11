@@ -349,6 +349,7 @@ const rootF = rootRef<ApprovalsData>()
 
 export function approvalsSpec(data: ApprovalsData): PageSpec {
   return page({
+    route: '/approvals',
     layout: 'list',
     header: [
       grid('space-y-3', [

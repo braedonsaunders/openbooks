@@ -32,6 +32,7 @@ export async function loadSync(): Promise<SyncData> {
 
 export function syncSpec(_data: SyncData): PageSpec {
   return page({
+    route: '/sync',
     // Bare + `page-container`: the native page renders <PageContainer>, not
     // the sticky ListPageLayout chrome, so a `list` layout would nest a shell
     // the page never had.

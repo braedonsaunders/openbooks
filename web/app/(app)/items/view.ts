@@ -160,6 +160,7 @@ const f = ref<ItemsData>()
 export function itemsSpec(data: ItemsData): PageSpec {
   const newItem = { widget: 'new-item', props: {} }
   return page({
+    route: '/items',
     layout: 'list',
     header: [
       pageHeader({

@@ -58,6 +58,7 @@ export async function loadAssistant(
 
 export function assistantSpec(data: AssistantData): PageSpec {
   return page({
+    route: '/assistant',
     // Bare: the app owns its own full-height flex column (the native root
     // is `flex h-full min-h-0 flex-1` under the app shell's <main>), so no
     // ListPageLayout chrome may wrap it.

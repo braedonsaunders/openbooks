@@ -114,6 +114,7 @@ const item = field
 
 export function platformUsersSpec(data: PlatformUsersData): PageSpec {
   return page({
+    route: '/platform/users',
     layout: 'list',
     header: [
       pageHeader({

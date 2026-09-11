@@ -254,6 +254,7 @@ export function apCaptureSpec(data: ApCaptureData): PageSpec {
     props: { disabled: data.uploadDisabled },
   }
   return page({
+    route: '/ap/capture',
     layout: 'list',
     header: [
       pageHeader({

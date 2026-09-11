@@ -137,6 +137,7 @@ const f = ref<AdminBackupsData>()
 
 export function adminBackupsSpec(data: AdminBackupsData): PageSpec {
   return page({
+    route: '/admin/backups',
     layout: 'list',
     header: [
       pageHeader({

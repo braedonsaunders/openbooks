@@ -159,6 +159,7 @@ export function budgetReportSpec(data: BudgetReportData): PageSpec {
   // `primaryFilter` binds a field, not a literal — the loader assembles the
   // picker and the spec names where it lives.
   return page({
+    route: '/reports/budget',
     layout: 'list',
     header: [
       pageHeader({

@@ -88,6 +88,7 @@ const f = ref<CollectionsData>()
 export function collectionsSpec(data: CollectionsData): PageSpec {
   void data
   return page({
+    route: '/collections',
     // The native page renders its own `mx-auto max-w-6xl` container, which
     // no list/detail shell reproduces. The spec places the container whole
     // (it lives in sections.tsx, placed by the widget registry) rather

@@ -194,6 +194,7 @@ const PANEL = 'overflow-x-auto rounded-xl border border-slate-200 bg-white dark:
 
 export function informationReturnsSpec(data: InformationReturnsData): PageSpec {
   return page({
+    route: '/compliance/information-returns',
     layout: 'list',
     header: [
       pageHeader({

@@ -65,6 +65,7 @@ const f = ref<FilingDetailData>()
 
 export function filingDetailSpec(data: FilingDetailData): PageSpec {
   return page({
+    route: '/compliance/information-returns/[id]',
     layout: 'list',
     header: [
       pageHeader({

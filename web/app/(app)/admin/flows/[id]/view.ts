@@ -94,6 +94,7 @@ export async function loadFlowBuilder(id: string): Promise<FlowBuilderData> {
 
 export function flowBuilderSpec(data: FlowBuilderData): PageSpec {
   return page({
+    route: '/admin/flows/[id]',
     // Exact native wrapper: <div className="p-4">.
     layout: 'bare',
     header: [],

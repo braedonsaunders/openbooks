@@ -201,6 +201,7 @@ export function estimatesSpec(data: EstimatesData): PageSpec {
     },
   }
   return page({
+    route: '/estimates',
     layout: 'list',
     header: [
       pageHeader({

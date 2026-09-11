@@ -81,6 +81,7 @@ export async function loadInsightsDashboard(id: string): Promise<InsightsDashboa
 
 export function insightsDashboardSpec(data: InsightsDashboardData): PageSpec {
   return page({
+    route: '/insights/dashboards/[id]',
     // The builder owns its own full-height shell; a page layout would nest a
     // second one around it.
     layout: 'bare',

@@ -46,6 +46,7 @@ export async function loadCustomizeDashboard(): Promise<CustomizeDashboardData |
 
 export function customizeDashboardSpec(data: CustomizeDashboardData): PageSpec {
   return page({
+    route: '/dashboard/customize',
     // The native page renders inside PageContainer, not the sticky
     // ListPageLayout chrome — the platform-hub arrangement.
     layout: 'bare',

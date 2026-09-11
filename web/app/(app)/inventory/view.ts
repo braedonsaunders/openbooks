@@ -152,6 +152,7 @@ export function inventorySpec(data: InventoryData): PageSpec {
     props: {},
   }
   return page({
+    route: '/inventory',
     layout: 'list',
     header: [
       pageHeader({

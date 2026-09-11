@@ -191,6 +191,7 @@ const f = ref<AdminUsersData>()
 
 export function adminUsersSpec(data: AdminUsersData): PageSpec {
   return page({
+    route: '/admin/users',
     layout: 'list',
     header: [
       pageHeader({

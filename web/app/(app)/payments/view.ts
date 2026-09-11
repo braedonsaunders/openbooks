@@ -57,6 +57,7 @@ const f = ref<PaymentsData>()
 
 export function paymentsSpec(data: PaymentsData): PageSpec {
   return page({
+    route: '/payments',
     layout: 'list',
     header: [
       pageHeader({

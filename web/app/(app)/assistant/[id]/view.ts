@@ -83,6 +83,7 @@ export async function loadAssistantConversation(id: string): Promise<AssistantCo
 
 export function assistantConversationSpec(data: AssistantConversationData): PageSpec {
   return page({
+    route: '/assistant/[id]',
     // Bare: the app owns its own full-height flex column (the native root
     // is `flex h-full min-h-0 flex-1` under the app shell's <main>), so no
     // ListPageLayout chrome may wrap it. Same call as the /assistant spec.

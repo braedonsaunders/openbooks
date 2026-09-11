@@ -125,6 +125,7 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
 
 export function bankFeedsSpec(data: BankFeedsData): PageSpec {
   return page({
+    route: '/admin/setup/bank-feeds',
     // The setup workspace renders its own shell around every setup page, so a
     // second page layout would nest the chrome. And the `mx-auto w-full
     // max-w-4xl space-y-6 p-1` wrapper belongs to BankFeedsClient itself —

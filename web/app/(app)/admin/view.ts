@@ -180,6 +180,7 @@ const f = ref<AdminHubData>()
 export function adminHubSpec(data: AdminHubData): PageSpec {
   void data
   return page({
+    route: '/admin',
     // The hub owns its own full-height shell — ListPageLayout's centered
     // container would nest the chrome, so header and body concatenate.
     layout: 'bare',

@@ -35,6 +35,7 @@ export async function loadDataImport(): Promise<DataImportData> {
 
 export function dataImportSpec(): PageSpec {
   return page({
+    route: '/data/import',
     // `bare`: the wizard owns its own WizardLayout shell (sticky header,
     // scroll region, footer bar). Wrapping it in a second ListPageLayout
     // would nest the chrome and the DOM would no longer match byte for byte.

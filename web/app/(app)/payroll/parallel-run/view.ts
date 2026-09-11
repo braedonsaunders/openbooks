@@ -105,6 +105,7 @@ const f = ref<ParallelRunData>()
 
 export function parallelRunSpec(_data: ParallelRunData): PageSpec {
   return page({
+    route: '/payroll/parallel-run',
     layout: 'list',
     header: [
       pageHeader({

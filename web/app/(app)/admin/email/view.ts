@@ -55,6 +55,7 @@ const f = ref<EmailSettingsData>()
 
 export function emailSettingsSpec(data: EmailSettingsData): PageSpec {
   return page({
+    route: '/admin/email',
     // The page owns its own shell (PageContainer) the way the platform hub
     // does — ListPageLayout's sticky-header chrome would nest a second shell
     // around it, so header and body concatenate and the frame renders the

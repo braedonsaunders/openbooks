@@ -156,6 +156,7 @@ const f = ref<ProjectsData>()
 export function projectsSpec(data: ProjectsData): PageSpec {
   const newProject = { widget: 'new-project', props: {} }
   return page({
+    route: '/projects',
     layout: 'list',
     header: [
       pageHeader({

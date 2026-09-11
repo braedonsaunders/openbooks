@@ -116,6 +116,7 @@ export async function loadWizard(): Promise<WizardData> {
 
 export function wizardSpec(data: WizardData): PageSpec {
   return page({
+    route: '/admin/setup/wizard',
     // The setup workspace renders its own shell around every setup page, so
     // a second page layout would nest the chrome. And the fixed full-screen
     // scrim + centered card wrapper belongs to WizardShell itself — the

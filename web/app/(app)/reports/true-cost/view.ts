@@ -101,6 +101,7 @@ export function trueCostSpec(data: TrueCostData): PageSpec {
     widget('export-menu', { kind: 'true-cost', params: data.exportParams }),
   ]
   return page({
+    route: '/reports/true-cost',
     layout: 'list',
     header: [
       pageHeader({

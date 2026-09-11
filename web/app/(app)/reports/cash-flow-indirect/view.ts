@@ -305,6 +305,7 @@ const f = ref<CashFlowIndirectData>()
 
 export function cashFlowIndirectSpec(data: CashFlowIndirectData): PageSpec {
   return page({
+    route: '/reports/cash-flow-indirect',
     layout: 'list',
     header: [
       pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),

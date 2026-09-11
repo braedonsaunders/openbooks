@@ -60,6 +60,7 @@ export async function loadCustomerIntelligence(sp: Record<string, string | undef
 
 export function customerIntelligenceSpec(data: CustomerIntelligenceData): PageSpec {
   return page({
+    route: '/analytics/customer-intelligence',
     layout: 'list',
     header: [
       frame('analytics-header', [widgetBlock('report-period-filter')], {

@@ -378,6 +378,7 @@ const rootF = rootRef<PartiesData>()
 
 export function partiesSpec(data: PartiesData): PageSpec {
   return page({
+    route: '/parties',
     layout: 'list',
     header: [
       pageHeader({

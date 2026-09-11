@@ -67,6 +67,7 @@ const f = ref<NavigationAdminData>()
 
 export function navigationAdminSpec(data: NavigationAdminData): PageSpec {
   return page({
+    route: '/admin/navigation',
     // The native page sits inside PageContainer (whole-body scroll, max-w-3xl
     // inner) — ListPageLayout's sticky-header chrome would nest a second shell
     // around it, so this is the analytics-hub precedent: `bare` + the exact

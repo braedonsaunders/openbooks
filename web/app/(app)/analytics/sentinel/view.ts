@@ -60,6 +60,7 @@ export async function loadSentinel(sp: Record<string, string | undefined>): Prom
 
 export function sentinelSpec(data: SentinelData): PageSpec {
   return page({
+    route: '/analytics/sentinel',
     layout: 'list',
     header: [
       frame('analytics-header', [widgetBlock('report-period-filter')], {

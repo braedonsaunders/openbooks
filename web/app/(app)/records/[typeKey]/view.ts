@@ -328,6 +328,7 @@ const rootF = rootRef<RecordModuleData>()
 
 export function recordModuleSpec(data: RecordModuleData): PageSpec {
   return page({
+    route: '/records/[typeKey]',
     layout: 'list',
     header: [
       pageHeader({

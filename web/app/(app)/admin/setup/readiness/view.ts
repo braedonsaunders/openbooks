@@ -182,6 +182,7 @@ const item = field
 
 export function setupReadinessSpec(data: SetupReadinessData): PageSpec {
   return page({
+    route: '/admin/setup/readiness',
     layout: 'bare',
     body: [
       grid('space-y-6', [

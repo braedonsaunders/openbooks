@@ -118,6 +118,7 @@ const f = ref<PayrollOpeningBalancesData>()
 
 export function payrollOpeningBalancesSpec(_data: PayrollOpeningBalancesData): PageSpec {
   return page({
+    route: '/payroll/opening-balances',
     layout: 'list',
     header: [
       pageHeader({

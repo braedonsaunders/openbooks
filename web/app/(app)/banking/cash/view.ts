@@ -95,6 +95,7 @@ const f = ref<BankingCashData>()
 
 export function bankingCashSpec(data: BankingCashData): PageSpec {
   return page({
+    route: '/banking/cash',
     layout: 'list',
     bodyClassName: 'flex h-full min-h-0 flex-col',
     header: [

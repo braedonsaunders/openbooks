@@ -186,6 +186,7 @@ const f = ref<ComplianceData>()
 
 export function complianceSpec(data: ComplianceData): PageSpec {
   return page({
+    route: '/compliance',
     layout: 'list',
     header: [
       pageHeader({ title: f('title'), description: f('description') }),

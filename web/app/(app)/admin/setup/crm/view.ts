@@ -233,6 +233,7 @@ export async function loadCrmSetup(
 
 export function crmSetupSpec(data: CrmSetupData): PageSpec {
   return page({
+    route: '/admin/setup/crm',
     // The setup workspace renders its own shell around every entity page;
     // wrapping it in a second page layout would nest the chrome.
     layout: 'bare',

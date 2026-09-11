@@ -92,6 +92,7 @@ const f = ref<AdminAiData>()
 export function adminAiSpec(data: AdminAiData): PageSpec {
   void data
   return page({
+    route: '/admin/ai',
     // The native page owns its own shell (PageContainer) the way the platform
     // hub does — ListPageLayout's sticky-header chrome would nest a second
     // shell around it, so header and body concatenate and the frame renders

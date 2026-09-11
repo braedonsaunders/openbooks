@@ -54,6 +54,7 @@ export async function loadVendorPerformance(sp: Record<string, string | undefine
 
 export function vendorPerformanceSpec(data: VendorPerformanceData): PageSpec {
   return page({
+    route: '/analytics/vendor-performance',
     layout: 'list',
     header: [
       frame('analytics-header', [widgetBlock('report-period-filter')], {

@@ -135,6 +135,7 @@ const f = ref<TimesheetsData>()
 export function timesheetsSpec(data: TimesheetsData): PageSpec {
   const newTimesheet = { widget: 'new-timesheet', props: data.newButton }
   return page({
+    route: '/timesheets',
     layout: 'list',
     header: [
       pageHeader({

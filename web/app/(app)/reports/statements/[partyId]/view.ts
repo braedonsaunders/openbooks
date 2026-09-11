@@ -253,6 +253,7 @@ const closingRow: TableSpanRow = {
 
 export function statementSpec(data: StatementData): PageSpec {
   return page({
+    route: '/reports/statements/[partyId]',
     layout: 'list',
     header: [
       pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),

@@ -201,6 +201,7 @@ const f = ref<ReportsHubData>()
 
 export function reportsHubSpec(data: ReportsHubData): PageSpec {
   return page({
+    route: '/reports',
     // The hub content is one client-interactive island (search state, the
     // h1 header, the New-report create flow); the PageContainer shell is
     // chrome around it. Both arrive whole — the spec owns neither.

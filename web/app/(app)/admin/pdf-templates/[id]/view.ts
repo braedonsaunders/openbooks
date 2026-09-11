@@ -75,6 +75,7 @@ export async function loadPdfTemplateEditor(id: string): Promise<PdfTemplateEdit
 
 export function pdfTemplateEditorSpec(data: PdfTemplateEditorData): PageSpec {
   return page({
+    route: '/admin/pdf-templates/[id]',
     // Exact native wrapper: <div className="p-4">, and nothing else. A page
     // layout would add chrome this route does not have.
     layout: 'bare',

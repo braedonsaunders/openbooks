@@ -207,6 +207,7 @@ export function assetsSpec(data: AssetsData): PageSpec {
     props: { books: data.books },
   }
   return page({
+    route: '/assets',
     layout: 'list',
     header: [
       // Two headers, not one with conditional actions: the native tax tab

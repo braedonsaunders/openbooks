@@ -159,6 +159,7 @@ const f = ref<ProvisionDetailData>()
 
 export function provisionDetailSpec(data: ProvisionDetailData): PageSpec {
   return page({
+    route: '/tax/provisions/[id]',
     layout: 'list',
     header: [
       pageHeader({

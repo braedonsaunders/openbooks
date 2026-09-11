@@ -110,6 +110,7 @@ const item = field
 
 export function platformOrganizationsSpec(data: PlatformOrganizationsData): PageSpec {
   return page({
+    route: '/platform/organizations',
     layout: 'list',
     header: [
       pageHeader({

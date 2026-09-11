@@ -186,6 +186,7 @@ const rootF = rootRef<PartnersData>()
 
 export function partnersSpec(data: PartnersData): PageSpec {
   return page({
+    route: '/reports/partners',
     layout: 'list',
     header: [
       pageHeader({
