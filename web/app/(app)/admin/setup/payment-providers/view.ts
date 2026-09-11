@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { redirect } from 'next/navigation'
-import { page, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { featureEnabled, resolvedFeatureState } from '../../../../../lib/features'
 

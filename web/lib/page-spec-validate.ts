@@ -1,4 +1,4 @@
-import { validateSpec, type PageSpec } from '@openbooks/viewspec'
+import { validateSpec, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
 /**
  * Whether a document is a spec this host can render.

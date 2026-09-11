@@ -11,7 +11,7 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { dateTime } from '../../../lib/format'

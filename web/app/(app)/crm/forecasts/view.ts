@@ -20,7 +20,7 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { can, requirePermission } from '../../../../lib/authz'
 import { calculateForecast, type ForecastRow } from '../../../../lib/crm'

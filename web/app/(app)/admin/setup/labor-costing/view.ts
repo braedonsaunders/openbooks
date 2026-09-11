@@ -10,7 +10,7 @@ import { requirePermission } from '../../../../../lib/authz'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
 import { subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { requireProjectsFeature } from '../../../../../lib/projects-gate'
-import { grid, heading, page, ref, textBlock, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { grid, heading, page, ref, textBlock, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import type { RateRow } from './LaborCostingWorkspace'
 
 /**

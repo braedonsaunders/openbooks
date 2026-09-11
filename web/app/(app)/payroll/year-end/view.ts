@@ -11,7 +11,7 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'

@@ -19,7 +19,7 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { FORM_TYPES } from '@openbooks/engine/src/information-returns.ts'
 import { can, requirePermission } from '../../../../lib/authz'

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { grid, heading, page, pageHeader, pagination, ref, repeat, field, textBlock, widget, widgetBlock, type FieldRef, type PageSpec } from '@openbooks/viewspec'
+import { grid, heading, page, pageHeader, pagination, ref, repeat, field, textBlock, widget, widgetBlock, type FieldRef, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { parseListParams } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
 import { listApps, listListings } from '../../../../lib/apps/store'

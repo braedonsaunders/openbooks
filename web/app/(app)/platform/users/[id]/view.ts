@@ -17,7 +17,7 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { isUuid } from '../../../../../lib/list-params'
 import { platformGrantOptions, platformUser } from '../../../../../lib/platform-admin'
 import { requireSuperAdmin } from '../../../../../lib/super-admin'

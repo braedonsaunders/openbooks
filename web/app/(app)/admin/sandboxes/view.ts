@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { listSandboxes } from '@openbooks/engine/src/sandbox/index.ts'
-import { page, pageHeader, ref, textBlock, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, pageHeader, ref, textBlock, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import type { PeriodOption, SandboxRow } from './SandboxManager'
 

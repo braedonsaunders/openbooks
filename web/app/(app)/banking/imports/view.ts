@@ -9,7 +9,7 @@ import {
   ref,
   widgetBlock,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
 import { mapBankFeedRows } from './sections'

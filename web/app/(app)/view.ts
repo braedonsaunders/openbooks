@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { frame, grid, page, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { frame, grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz } from '@/lib/authz'
 
 import { buildGreeting } from './dashboard/_greeting'

@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { getAuthz, can } from '../../../../lib/authz'
 import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
-import { grid, heading, page, pageHeader, ref, repeat, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { grid, heading, page, pageHeader, ref, repeat, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
 /**
  * The Build hub — every authoring tool, mirroring the Platform hub's shell.

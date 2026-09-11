@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { page, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { getOrgAiConfig } from '../../../lib/assistant/ai-config'
 import { getModel } from '../../../lib/assistant/client'

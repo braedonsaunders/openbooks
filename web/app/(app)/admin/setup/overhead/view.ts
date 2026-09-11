@@ -7,7 +7,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { trueCostData, type TrueCostData } from '../../../../../lib/analytics/true-cost-data'
 import { requireProjectsFeature } from '../../../../../lib/projects-gate'
-import { grid, page, ref, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { grid, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
 /**
  * Overhead Model — the rate-engine BUILDER, lifted out of the True Cost

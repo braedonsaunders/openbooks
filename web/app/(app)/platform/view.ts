@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { frame, grid, page, pageHeader, ref, repeat, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { frame, grid, page, pageHeader, ref, repeat, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { platformSummary } from '../../../lib/platform-admin'
 import type { PlatformTileIconKey } from './sections'
 

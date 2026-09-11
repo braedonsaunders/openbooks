@@ -21,7 +21,7 @@ import {
   widgetCell,
   type PageSpec,
   type TableSpanRow,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { requirePermission } from '../../../../../lib/authz'
 import { partnerStatement, type AgingSide } from '../../../../../lib/reports'

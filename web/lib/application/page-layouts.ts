@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { BLOCK_KINDS, CELL_KINDS, SPEC_VERSION, type PageSpec } from '@openbooks/viewspec'
+import { BLOCK_KINDS, CELL_KINDS, SPEC_VERSION, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { FRAME_NAMES, WIDGET_NAMES } from '../../components/viewspec/registry-names'
 import { can } from '../authz'
 import type { ApplicationContext } from './context'

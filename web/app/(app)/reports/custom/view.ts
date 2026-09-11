@@ -19,7 +19,7 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { REPORT_ENTITY_MAP, type ReportCustomQuery } from '@openbooks/reports'
 import { requirePermission } from '../../../../lib/authz'
 import { hiddenReportEntityKeys, hiddenReportStatementKinds } from '../../../../lib/report-authz'

@@ -11,7 +11,7 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { budgetScenarioOptions, budgetVsActualView } from '../../../../lib/budget-report'
 import { orgInfo } from '../../../../lib/data'
 import { parseReportQuery } from '../../../../lib/report-filters'

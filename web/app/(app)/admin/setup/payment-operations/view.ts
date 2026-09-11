@@ -20,7 +20,7 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../../../lib/list-params'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'

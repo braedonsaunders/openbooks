@@ -6,7 +6,7 @@ import { requirePermission, can } from '../../../lib/authz'
 import { analyticsConfig } from '../../../lib/analytics/config'
 import { normalizeMoneyValue, withoutWeekEntries } from '../../../lib/cash/core'
 import { arPosition } from '../../../lib/cash/ar-position'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
 /**
  * The AR cockpit, split into a loader and a spec.

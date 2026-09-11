@@ -5,7 +5,7 @@ import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { s3Enabled } from '@openbooks/engine/src/file-storage.ts'
 import { getWorkerHeartbeat } from '@openbooks/jobs'
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import type { BackupManagerProps } from './BackupManager'
 

@@ -17,7 +17,7 @@ import {
   ref,
   widgetBlock,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 
 export const PER_PAGE = 50
 

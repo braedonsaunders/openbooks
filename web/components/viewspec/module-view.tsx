@@ -1,5 +1,5 @@
-import type { PageSpec, ViewData } from '@openbooks/viewspec'
-import { validateSpec } from '@openbooks/viewspec'
+import type { PageSpec, ViewData } from '@braedonsaunders/appkit-viewspec'
+import { validateSpec } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz } from '../../lib/authz'
 import { loadPageSpec } from '../../lib/page-specs'
 import { ListPageLayout, DetailPageLayout } from '../page-layout'

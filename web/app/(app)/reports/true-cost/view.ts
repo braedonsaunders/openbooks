@@ -9,7 +9,7 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { requireProjectsFeature } from '../../../../lib/projects-gate'
 import { parseReportQuery } from '../../../../lib/report-filters'

@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
-import { page, ref, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 

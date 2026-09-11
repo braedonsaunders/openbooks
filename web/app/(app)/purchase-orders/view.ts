@@ -10,7 +10,7 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { pickString } from '../../../lib/list-params'
 import { requirePermission, can } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'

@@ -21,7 +21,7 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { buildListDrawerHref, parseListParams, pickString, isUuid } from '../../../../lib/list-params'
 import { disabledCustomFieldTargets } from '../../../../lib/customization/gates'

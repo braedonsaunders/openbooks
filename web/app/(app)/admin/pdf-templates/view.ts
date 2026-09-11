@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { disabledDocKinds } from '../../../../lib/documents'
 import { PDF_RECORD_TYPES } from '../../../../lib/pdf-templates/catalog'

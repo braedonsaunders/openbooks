@@ -2,7 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { requireSubcontractsFeature } from '../../../lib/subcontracts-gate'
