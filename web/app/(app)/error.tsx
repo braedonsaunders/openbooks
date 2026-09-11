@@ -23,6 +23,7 @@ export default function AppError({
 
   return (
     <RouteStateView
+      state="error"
       icon={<AlertTriangle />}
       title={t('errorTitle')}
       description={t('errorDescription')}

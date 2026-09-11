@@ -9,6 +9,7 @@ export default async function AppNotFound() {
 
   return (
     <RouteStateView
+      state="not-found"
       icon={<FileQuestion />}
       title={t('notFoundTitle')}
       description={t('notFoundDescription')}
