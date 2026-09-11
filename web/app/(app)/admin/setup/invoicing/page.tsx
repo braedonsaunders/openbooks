@@ -1,8 +1,3 @@
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { requirePermission } from '../../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../../lib/features'
-import { InvoicingSettingsWorkspace } from './InvoicingSettingsWorkspace'
 import { ModuleView } from '../../../../../components/viewspec/module-view'
 import { invoicingSetupSpec, loadInvoicingSetup } from './view'
 
@@ -18,52 +13,14 @@ export default async function InvoicingSettingsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadInvoicingSetup()
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={invoicingSetupSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const authz = await requirePermission('admin.setup.manage')
-  const orgId = authz.user.orgId
-  const [subscriptionBillingEnabled, projectsEnabled, projectTypes, subscriptionCounts] = await Promise.all([
-    isFeatureEnabled(orgId, 'subscriptionBilling'),
-    isFeatureEnabled(orgId, 'projects'),
-    db.execute<{ active: number; standard: number; applications: number }>(sql`
-      select count(*) filter (where is_active)::int as active,
-             count(*) filter (
-               where is_active
-                 and invoicing_profile->>'billingProcedure' = 'standard'
-             )::int as standard,
-             count(*) filter (
-               where is_active
-                 and invoicing_profile->>'billingProcedure' = 'application_for_payment'
-             )::int as applications
-        from project_types
-       where org_id = ${orgId}`),
-    db.execute<{ active: number; paused: number }>(sql`
-      select count(*) filter (where status = 'active')::int as active,
-             count(*) filter (where status = 'paused')::int as paused
-        from subscriptions
-       where org_id = ${orgId}`),
-  ])
-  const typeCounts = projectTypes.rows[0]
-  const subscriptions = subscriptionCounts.rows[0]
-
+  const sp = await searchParams
+  const data = await loadInvoicingSetup()
   return (
-    <InvoicingSettingsWorkspace
-      subscriptionBillingEnabled={subscriptionBillingEnabled}
-      activeSubscriptions={Number(subscriptions?.active ?? 0)}
-      pausedSubscriptions={Number(subscriptions?.paused ?? 0)}
-      projectsEnabled={projectsEnabled}
-      activeProjectTypes={Number(typeCounts?.active ?? 0)}
-      standardProjectTypes={Number(typeCounts?.standard ?? 0)}
-      applicationProjectTypes={Number(typeCounts?.applications ?? 0)}
-    />
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={invoicingSetupSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

@@ -11,7 +11,7 @@ import { TaxSetupGuide } from './TaxSetupGuide'
  *
  * The page owns a plain `<header>` (h1 + subtitle) rather than the
  * `PageHeader` component, so the whole header is one shared component over
- * loader-resolved strings. The native branch imports it back so both render
+ * loader-resolved strings. The widget registry renders it, so one implementation
  * paths share one implementation.
  *
  * The guide body is a client component (search filtering, checkbox/select

@@ -1,30 +1,6 @@
 import { getTranslations } from 'next-intl/server'
-import Link from 'next/link'
-import { ScanLine } from 'lucide-react'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { Button, PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { RecordListView } from '../../../../components/record-list-view'
-import { DocumentDrawer } from '../../../../components/document-drawer'
-import { DocumentRowActions } from '../../../../components/document-row-actions'
-import { NewDocumentButton } from '../../../../components/new-document-button'
-import { pickString } from '../../../../lib/list-params'
-import { requirePermission, can } from '../../../../lib/authz'
 import {
-  AP_KINDS,
-  DOC_KINDS,
-  accountOptions,
-  dimensionOptions,
-  loadDocument,
-  partyOptions,
-  taxCodeOptions,
-  taxGroupOptions,
 } from '../../../../lib/documents'
-import { loadFieldDefs } from '../../../../lib/custom-fields'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
-import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadApBills, apBillsSpec } from './view'
 
@@ -47,158 +23,14 @@ export default async function ApBills({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadApBills(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={apBillsSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const authz = await requirePermission('ap.read')
-  const canCreate = can(authz, 'ap.create')
-  const [inventoryEnabled, equipmentEnabled] = await Promise.all([
-    isFeatureEnabled(authz.user.orgId, 'inventory'),
-    isFeatureEnabled(authz.user.orgId, 'equipment'),
-  ])
-  const t = await getTranslations('ap')
-  const tCommon = await getTranslations('common')
   const sp = await searchParams
-  const docId = typeof sp.doc === 'string' ? sp.doc : undefined
-
-  const newItems = [
-    { kind: 'vendor_bill', label: t('actions.newBill') },
-    { kind: 'vendor_credit', label: t('actions.newCredit') ?? t('actions.newBill') },
-  ]
-  const newButton = canCreate ? (
-    <NewDocumentButton
-      items={newItems}
-      basePath="/ap/bills"
-      triggerLabel={t('actions.newBill')}
-      creatingLabel={tCommon('actions.creating')}
-      failedLabel={t('toasts.createDraftFailed')}
-    />
-  ) : undefined
-  const headerActions = (
-    <div className="flex items-center gap-2">
-      <Button variant="outline" asChild>
-        <Link href="/ap/capture"><ScanLine size={14} />{t('actions.capture')}</Link>
-      </Button>
-      {newButton}
-    </div>
-  )
-
-
-  // Drawer + form layout resolve only when a flyout is open.
-  // Org guard: never render another tenant's document in the drawer.
-  const loadedDoc = docId ? await loadDocument(docId, authz.user.orgId) : null
-  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId
-    && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
-    ? loadedDoc : null
-  const openKind = openDoc?.doc.kind as string | undefined
-  const drawerOpen = !!(openDoc && openKind && (AP_KINDS as readonly string[]).includes(openKind))
-  const [headerDefs, lineDefs] = drawerOpen
-    ? await Promise.all([loadFieldDefs('documents', openKind!), loadFieldDefs('document_lines', openKind!)])
-    : [[], []]
-  const [pickers, resolvedForm] = await Promise.all([
-    drawerOpen
-      ? Promise.all([
-          partyOptions('vendor'),
-          accountOptions(DOC_KINDS[openKind as 'vendor_bill']!),
-          taxCodeOptions(),
-          taxGroupOptions(),
-          dimensionOptions(),
-          db.execute(sql`
-            select id, code, name from items
-             where org_id = ${authz.user.orgId} and is_active
-               and (
-                 ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
-                 ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
-                 or id in (
-                   select item_id from document_lines
-                    where org_id = ${authz.user.orgId} and document_id = ${docId} and item_id is not null
-                 )
-               )
-             order by coalesce(code, name), name limit 2000`).then((r) => r.rows),
-          // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
-          isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
-            if (!multi) return null
-            const options = await subsidiaryOptions()
-            return authz.allowedSubsidiaryIds
-              ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
-              : options
-          }),
-        ])
-      : null,
-    drawerOpen
-      ? resolveFormLayout({
-          orgId: authz.user.orgId,
-          userId: authz.user.id,
-          recordType: openKind!,
-          userRoles: authz.user.roles.map(({ key }) => key),
-          headerDefs,
-          lineDefs,
-          explicitLayoutId: pickString(sp.form),
-        })
-      : null,
-  ])
-
-  const drawer =
-    openDoc && pickers && resolvedForm && openKind ? (
-      <DocumentDrawer
-        payload={(openDoc)}
-        key={(openDoc as any).doc.id}
-        config={DOC_KINDS[openKind]!}
-        basePath="/ap/bills"
-        initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
-        parties={(pickers[0])}
-        accounts={(pickers[1])}
-        taxCodes={(pickers[2])}
-        taxGroups={(pickers[3])}
-        departments={((pickers[4])).departments}
-        projects={((pickers[4])).projects}
-        locations={((pickers[4])).locations}
-        classes={((pickers[4])).classes}
-        segments={((pickers[4])).segments}
-        builtinSegments={((pickers[4])).builtinSegments}
-        items={pickers[5] as any}
-        subsidiaries={((pickers[6])) ?? undefined}
-        headerDefs={headerDefs as any}
-        lineDefs={lineDefs as any}
-        canCreate={canCreate}
-        canPost={can(authz, 'ap.post')}
-        layout={resolvedForm.layout}
-        availableLayouts={resolvedForm.available}
-        currentLayoutId={resolvedForm.row?.id ?? null}
-        recordType={openKind}
-        canCustomize={can(authz, 'admin.customization.manage')}
-      />
-    ) : null
-
+  const data = await loadApBills(sp)
   return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={t('list.title')}
-          description={t('list.description')}
-          actions={headerActions}
-        />
-      }
-    >
-      <RecordListView
-        recordType="vendor_bill"
-        basePath="/ap/bills"
-        orgId={authz.user.orgId}
-        userId={authz.user.id}
-        canManage={can(authz, 'admin.customization.manage')}
-        sp={sp}
-        drawer={drawer}
-        emptyAction={newButton}
-        renderRowActions={(row) => <DocumentRowActions id={row.id} status={row.status} config={DOC_KINDS[row.kind]!} openHref={`/ap/bills?doc=${row.id}`} />}
-      />
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={apBillsSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

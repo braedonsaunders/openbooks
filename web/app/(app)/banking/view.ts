@@ -28,7 +28,7 @@ import type { BankingAttentionItem } from './sections'
  *
  * This follows the purchasing-cockpit archetype, not a list page: ViewSpec
  * composes the grid and the panels; the panel BODIES stay components, shared
- * by both render paths via ./sections so they cannot drift (see
+ * by the page and the widget registry via ./sections so they cannot drift (see
  * ../../purchasing/view.ts for the division and its rationale).
  *
  * Three components the purchasing page rendered directly become widgets/slots
@@ -50,12 +50,12 @@ import type { BankingAttentionItem } from './sections'
  *   (the prefs fetch — a user capability the LOADER may hold) and passes the
  *   prefs through as data; persistence rides the session cookie inside the
  *   shared component, so no user id, org id or Authz crosses the spec. The
- *   proposed `banking-roster` WIDGET (INTEGRATION.md) renders the shared
+ *   `banking-roster` widget renders the shared
  *   AccountsRosterPanel over that data — a widget, not a slot, because there
  *   is no capability left to re-derive.
  * - The header's Match button is a conditional PAIR (count label when
  *   unmatched, plain label when clean) with a variant flip — a component,
- *   not a spec construct. It renders through the proposed `banking-match`
+ *   not a spec construct. It renders through the `banking-match`
  *   widget over loader-resolved strings.
  */
 
@@ -308,7 +308,7 @@ export function bankingSpec(data: BankingData): PageSpec {
           widget('module-home-tabs', { tabs: data.tabs }),
           // Conditional PAIR (count label when unmatched, plain label when
           // clean) with a variant flip — a component, not a spec construct.
-          // The proposed `banking-match` widget (INTEGRATION.md) renders the
+          // The `banking-match` widget renders the
           // shared Button+Link chrome over these loader-resolved strings.
           widget(
             'banking-match',
@@ -375,7 +375,7 @@ export function bankingSpec(data: BankingData): PageSpec {
         grid('grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3', [
           // Roster hero. The loader performs the roster's server work (the
           // user_page_layouts prefs fetch) and passes the prefs through as
-          // data; the proposed `banking-roster` WIDGET (INTEGRATION.md)
+          // data; the `banking-roster` widget
           // renders the shared AccountsRosterPanel over them. A widget, not
           // a slot: persistence rides the session cookie, so no capability
           // crosses the spec.

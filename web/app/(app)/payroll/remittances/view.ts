@@ -30,11 +30,11 @@ import type { RemittanceGroup } from '@openbooks/engine/src/payroll-remittance.t
  * plus optional name join), the existing-bill link list, the create-bill
  * button vs the assign-vendor link, the withheld/employer kind label, the
  * accountLabel-or-fallback pair — so the spec places the cockpit through
- * one widget and both render paths share the implementation in
+ * one widget and the page and the widget registry share the implementation in
  * ./sections (re-exported from RemittancesView). The widget receives the
  * engine groups verbatim plus from/to/canCreate; money and messages
  * resolve inside the client component via useMoney/useTranslations,
- * identically on both paths.
+ * identically wherever it renders.
  *
  * Loader work is copied verbatim from page.tsx: the `payroll.read` gate,
  * the `payroll` feature gate (404 when disabled), the PD7A previous-month

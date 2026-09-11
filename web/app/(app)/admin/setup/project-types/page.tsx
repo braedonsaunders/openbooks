@@ -1,11 +1,4 @@
-import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { db } from '@openbooks/engine/src/db.ts'
-import { requirePermission } from '../../../../../lib/authz'
-import { requireProjectsFeature } from '../../../../../lib/projects-gate'
-import { isFeatureEnabled } from '../../../../../lib/features'
 import { ModuleView } from '../../../../../components/viewspec/module-view'
-import { ProjectTypesWorkspace, type ProjectTypeRow } from './ProjectTypesWorkspace'
 import { loadProjectTypes, projectTypesSpec } from './view'
 
 export const dynamic = 'force-dynamic'
@@ -15,55 +8,14 @@ export default async function ProjectTypesSetup({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadProjectTypes()
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={projectTypesSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const authz = await requirePermission('admin.setup.manage')
-  const orgId = authz.user.orgId
-  await requireProjectsFeature(orgId)
-  const today = await businessToday(orgId)
-  const [typesRes, dimsRes, acctRes, fieldTicketsEnabled] = await Promise.all([
-    db.execute(sql`
-      select id, key, name, description, is_built_in as "isBuiltIn", is_active as "isActive",
-             sort_order as "sortOrder", billing_method as "billingMethod",
-             version.financial_profile as "financialProfile",
-             version.effective_from::text as "financialProfileEffectiveFrom",
-             invoicing_profile as "invoicingProfile", backup_profile as "backupProfile"
-        from project_types
-        left join lateral (
-          select v.financial_profile, v.effective_from
-            from project_financial_profile_versions v
-           where v.org_id = project_types.org_id
-             and v.project_type_id = project_types.id
-             and v.effective_from <= ${today}
-             and (v.effective_to is null or v.effective_to >= ${today})
-           order by v.effective_from desc
-           limit 1
-        ) version on true
-       where project_types.org_id = ${orgId}
-       order by sort_order, name`),
-    db.execute(sql`select distinct dimension from account_groups where org_id = ${orgId} order by dimension`),
-    db.execute(sql`
-      select id, number, name from accounts
-       where org_id = ${orgId} and is_active and coalesce(is_summary,false) = false
-         and type in ('income','income_other') order by number limit 500`),
-    isFeatureEnabled(orgId, 'fieldTickets'),
-  ])
-
+  const sp = await searchParams
+  const data = await loadProjectTypes()
   return (
-    <ProjectTypesWorkspace
-      types={(typesRes as unknown as { rows: ProjectTypeRow[] }).rows}
-      dimensions={(dimsRes as unknown as { rows: { dimension: string }[] }).rows.map((r) => r.dimension)}
-      incomeAccounts={(acctRes as unknown as { rows: { id: string; number: string; name: string }[] }).rows}
-      fieldTicketsEnabled={fieldTicketsEnabled}
-    />
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={projectTypesSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

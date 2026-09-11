@@ -1,12 +1,4 @@
-import { PageHeader } from '@openbooks/ui'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { isUuid, pickString } from '../../../../lib/list-params'
-import { listPrebills, listWipProjects, loadPrebill, wipAnalytics } from '../../../../lib/wip-billing'
-import { requireWipBillingFeature } from '../../../../lib/wip-billing-gate'
-import { ListPageLayout } from '../../../../components/page-layout'
 import { ModuleView } from '../../../../components/viewspec/module-view'
-import { WipBillingWorkspace } from './WipBillingWorkspace'
 import { loadWipBilling, wipBillingSpec } from './view'
 
 export const dynamic = 'force-dynamic'
@@ -16,46 +8,14 @@ export default async function WipBillingPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadWipBilling(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={wipBillingSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const authz = await requirePermission('projects.read')
-  await requireFeatureEnabled(authz.user.orgId, 'wipBilling')
-  await requireWipBillingFeature(authz.user.orgId)
   const sp = await searchParams
-  const selectedId = pickString(sp.prebill)
-  const [prebills, projects, analytics, selected] = await Promise.all([
-    listPrebills(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
-    listWipProjects(authz.user.orgId, authz.allowedSubsidiaryIds),
-    wipAnalytics(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
-    selectedId && isUuid(selectedId) ? loadPrebill(authz.user.orgId, selectedId, authz.allowedSubsidiaryIds) : null,
-  ])
+  const data = await loadWipBilling(sp)
   return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title="WIP & Prebilling"
-          description="Review unbilled project work, govern billing adjustments, and convert approved worksheets into draft invoices."
-        />
-      }
-    >
-      <WipBillingWorkspace
-        prebills={prebills}
-        projects={projects}
-        analytics={analytics}
-        selected={selected}
-        canManage={can(authz, 'projects.manage')}
-        canApprove={can(authz, 'ar.approve')}
-        canCreateInvoice={can(authz, 'ar.create')}
-      />
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={wipBillingSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

@@ -1,20 +1,5 @@
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { RecordListView } from '../../../../components/record-list-view'
-import { buildListDrawerHref, isUuid, pickString } from '../../../../lib/list-params'
-import { can, requirePermission } from '../../../../lib/authz'
+import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { ExpenseActions } from '../ExpenseActions'
-import { ExpenseDrawer } from '../ExpenseDrawer'
-import { NewExpenseButton } from '../NewExpenseButton'
-import { loadExpenseReport } from '../../../../lib/expenses'
-import { loadFieldDefs } from '../../../../lib/custom-fields'
-import { customSegmentOptions } from '../../../../lib/segments'
-import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import { taxCodeOptions, taxGroupOptions } from '../../../../lib/documents'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadExpenseReports, expenseReportsSpec } from './view'
 
@@ -27,101 +12,16 @@ export default async function Expenses({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const t = await getTranslations('expenses')
   const authz = await requirePermission('expenses.read')
   await requireFeatureEnabled(authz.user.orgId, 'expenses')
-  const canSubmit = can(authz, 'expenses.create')
-  const canPost = can(authz, 'ap.post')
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadExpenseReports(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={expenseReportsSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
   const sp = await searchParams
-  const expenseId = pickString(sp.expense)
-  const button = canSubmit ? <NewExpenseButton /> : undefined
-
-  let drawer: React.ReactNode = null
-  if (expenseId && isUuid(expenseId)) {
-    const [openReport, pickers] = await Promise.all([
-      loadExpenseReport(expenseId, authz.user.orgId),
-      Promise.all([
-        db.execute(sql`
-          select p.id, p.display_name from parties p
-           where p.is_active and p.org_id = ${authz.user.orgId}
-             and exists (select 1 from employee_roles er where er.org_id = p.org_id and er.party_id = p.id and er.is_active)
-           order by p.display_name limit 2000`) as any,
-        db.execute(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs') and is_active and not is_summary and org_id = ${authz.user.orgId} order by number nulls last`) as any,
-        taxCodeOptions(authz.user.orgId),
-        taxGroupOptions(authz.user.orgId),
-        db.execute(sql`select id, name from departments where is_active and org_id = ${authz.user.orgId} order by name`) as any,
-        db.execute(sql`select id, name from projects where is_active and org_id = ${authz.user.orgId} order by name limit 2000`) as any,
-        loadFieldDefs('documents', 'expense_report'),
-        loadFieldDefs('document_lines', 'expense_report'),
-        customSegmentOptions(authz.user.orgId),
-      ]),
-    ])
-    if (openReport) {
-      const resolvedForm = await resolveFormLayout({
-        orgId: authz.user.orgId,
-        userId: authz.user.id,
-        recordType: 'expense_report',
-        userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: (pickers[6]),
-        lineDefs: (pickers[7]),
-        explicitLayoutId: pickString(sp.form),
-      })
-      drawer = (
-        <ExpenseDrawer
-          report={(openReport)}
-          initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
-          employees={pickers[0].rows}
-          accounts={pickers[1].rows}
-          taxCodes={(pickers[2])}
-          taxGroups={(pickers[3])}
-          departments={pickers[4].rows}
-          projects={pickers[5].rows}
-          headerDefs={pickers[6] as any}
-          lineDefs={pickers[7] as any}
-          segments={(pickers[8])}
-          canSubmit={canSubmit}
-          canPost={canPost}
-          layout={resolvedForm.layout}
-          closeHref="/expenses/reports"
-        />
-      )
-    }
-  }
-
+  const data = await loadExpenseReports(sp)
   return (
-    <ListPageLayout
-      header={<PageHeader title={t('list.title')} description={t('list.description')} actions={button} />}
-    >
-      <RecordListView
-        recordType="expense_report"
-        basePath="/expenses/reports"
-        orgId={authz.user.orgId}
-        userId={authz.user.id}
-        canManage={can(authz, 'admin.customization.manage')}
-        sp={sp}
-        drawer={drawer}
-        emptyAction={button}
-        renderRowActions={(row) => (
-          <ExpenseActions
-            id={row.id}
-            status={row.status}
-            canSubmit={canSubmit}
-            canPost={canPost}
-            openHref={buildListDrawerHref('/expenses/reports', sp, 'expense', String(row.id))}
-          />
-        )}
-      />
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={expenseReportsSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

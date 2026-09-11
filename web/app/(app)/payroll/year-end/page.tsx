@@ -1,15 +1,3 @@
-import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { notFound } from 'next/navigation'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
-import { ModuleHomeTabs } from '../../../../components/module-home/ui'
-import { requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { pickString } from '../../../../lib/list-params'
-import { scopedYearEndFilings } from '../../../../lib/payroll-scoped-views'
-import { YearEndView } from './YearEndView'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadYearEnd, yearEndSpec } from './view'
 
@@ -34,50 +22,14 @@ export default async function PayrollYearEndPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadYearEnd(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={yearEndSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const authz = await requirePermission('payroll.read')
-  await requireFeatureEnabled(authz.user.orgId, 'payroll')
-  const t = await getTranslations('payroll.yearEnd')
   const sp = await searchParams
-  const currentYear = Number((await businessToday(authz.user.orgId)).slice(0, 4))
-  const requested = Number(pickString(sp.year))
-  const year = Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : currentYear
-
-  // Year-end shows ANNUAL and QUARTERLY returns only. Separation documents
-  // (the ROE, a P45) are due per interruption of earnings — within days of
-  // the employee event — and live on /payroll/separations, never here.
-  // The same population guard the JSON route applies: a restricted caller
-  // whose scope excludes any row of the year's population gets the route's
-  // not-found answer here too, never a rendered slip.
-  const filings = await scopedYearEndFilings(authz, year)
-  if (!filings) notFound()
-  const sections = filings.filter(
-    (filing) => filing.cadence !== 'separation' && (filing.installed || filing.data.rows.length > 0),
-  )
-
-  const moduleTabs = await groupTabs('payroll', '/payroll/year-end', { orgId: authz.user.orgId })
-
+  const data = await loadYearEnd(sp)
   return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={`${t('title')} ${year}`}
-          description={t('description')}
-          actions={<ModuleHomeTabs tabs={moduleTabs} />}
-        />
-      }
-    >
-      <YearEndView year={year} currentYear={currentYear} sections={sections} />
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={yearEndSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

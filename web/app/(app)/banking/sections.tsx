@@ -14,8 +14,8 @@ import { cn } from '@openbooks/ui'
  *
  * The roster hero stays OUT of this file on purpose: it is a live, stateful
  * workspace (user hide/reorder prefs persisted through /api/me/page-layout)
- * rendered by the shared AccountsRosterPanel through the proposed
- * `banking-roster` widget (see INTEGRATION.md). The loader fetches the prefs
+ * rendered by the shared AccountsRosterPanel through the `banking-roster`
+ *  widget. The loader fetches the prefs
  * and passes them as data; persistence rides the session cookie, so the
  * widget carries no user id, org id or Authz.
  */

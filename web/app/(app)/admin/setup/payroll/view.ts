@@ -40,7 +40,7 @@ import { launcherDataFor, type PayrollLauncherData } from './sections'
  * Every tab body needs an org id, and the entity-backed bodies additionally
  * need a live registry entry plus the manage gate. None of those travel
  * through a spec, so the spec places one widget per tab and the registry
- * entries (INTEGRATION.md) render the `./sections` slots, which re-derive
+ * entries render the `./sections` slots, which re-derive
  * everything from the session. The loader resolves only the tab key, the
  * labels, and the presence flags.
  *
@@ -50,7 +50,7 @@ import { launcherDataFor, type PayrollLauncherData } from './sections'
  * `active` boolean, every group strip's `activeGroup` flag, and every label
  * string travel as data. What the blocks cannot express — the active-vs-
  * plain link PAIR, aria-current set-vs-omitted — lives in the shared
- * `PayrollSetupTabs` chrome (./sections), used by both render paths.
+ * `PayrollSetupTabs` chrome (./sections), used by the page and the widget registry.
  */
 
 const ENTITY_BY_TAB = {

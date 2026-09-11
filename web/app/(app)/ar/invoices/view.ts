@@ -31,7 +31,7 @@ import type { DocumentDrawer } from '../../../../components/document-drawer'
  * session. A spec that could name an org id is a cross-tenant read — the same
  * rule that put EntityListView behind `entity-list-view` when the accounts
  * page was converted. No such RecordListView slot exists yet, so the spec
- * below names the proposed `record-list-view` widget and INTEGRATION.md
+ * below names the `record-list-view` widget and the registry entry
  * carries the exact registry entry and slot the coordinator needs to add.
  *
  * Everything else here is loader work copied verbatim from page.tsx: the
@@ -243,7 +243,7 @@ export function arInvoicesSpec(data: ArInvoicesData): PageSpec {
       // a user id and a permission decision, none of which may travel through
       // a spec. The spec supplies only the record type and the URL it was
       // already rendering with; `rowActions` names the per-row actions widget
-      // (defined in INTEGRATION.md) and the slot resolves it per row.
+      // (defined in the registry entry) and the slot resolves it per row.
       widgetBlock('record-list-view', {
         recordType: 'customer_invoice',
         basePath: '/ar/invoices',

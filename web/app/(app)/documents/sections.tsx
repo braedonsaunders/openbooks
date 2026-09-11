@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { ChevronRight, Home, Trash2 } from 'lucide-react'
 
 /**
- * Pieces of the documents page that both render paths share.
+ * Pieces of the documents page that the page and the widget registry share.
  *
  * They live here rather than inside `page.tsx` for the reason SortTh taught:
  * two implementations of the same visual element drift, and a conformance

@@ -27,7 +27,7 @@ import type { AttentionItem, HealthCategoryRow, HealthRatioRow } from './section
  * The accounting cockpit, split into a loader and a spec.
  *
  * Same archetype as /purchasing: ViewSpec composes the GRID and the PANELS;
- * the panel bodies stay components in ./sections, shared by both render paths
+ * the panel bodies stay components in ./sections, shared by the page and the widget registry
  * so they cannot drift. The Financial Health hero body (gauge + category bars
  * + ratio table + deep link) is one bespoke `health-hero` widget rather than
  * blocks: its ratio table is a plain `<table>` with native classes the spec's

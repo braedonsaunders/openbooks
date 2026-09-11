@@ -7,7 +7,7 @@ import { Gauge } from '../analytics/_ui/Gauge'
  * The accounting cockpit's bespoke panel bodies, extracted from page.tsx.
  *
  * ViewSpec composes the grid and the panels; the bodies below stay components
- * shared by both render paths so they cannot drift. Each is a verbatim move
+ * shared by the page and the widget registry so they cannot drift. Each is a verbatim move
  * of the native markup (class strings transcribed, never retyped) with the
  * loader-resolved values passed in as props — the spec binds, the loader
  * computes.

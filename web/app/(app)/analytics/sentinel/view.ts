@@ -24,7 +24,7 @@ import type { SentinelView } from './SentinelView'
  * Loader work copied VERBATIM from page.tsx. The gate here is the strictest in the app —
  * full-ledger forensics demands an unrestricted subsidiary fence AND
  * `admin.audit.read`, and anything less redirects to `/`. It runs in the
- * loader, so both render paths are gated identically.
+ * loader, so the gate runs in the loader.
  *
  * `sentinelData` takes the whole `Authz` because it fences its own SQL. That
  * object never reaches the spec: the loader hands the widget the finished

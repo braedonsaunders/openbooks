@@ -20,7 +20,7 @@ import { page, widgetBlock, frame, type PageSpec } from '@openbooks/viewspec'
  *
  * The console carries no props. It fetches its own payload over
  * /api/platform/connections and reads its own `sync.*` keys through
- * `useTranslations`, exactly as the native branch does; a loader-resolved
+ * `useTranslations`, as it always has; a loader-resolved
  * string here would be a second copy that drifts from the catalog.
  */
 

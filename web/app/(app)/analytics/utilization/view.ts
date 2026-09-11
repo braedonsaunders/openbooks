@@ -22,7 +22,7 @@ import type { UtilizationView } from './UtilizationView'
  * rather than compose it.
  *
  * Loader work copied VERBATIM from page.tsx. The `timeTracking` feature gate runs
- * in the loader on both paths, so a spec render redirects exactly as the
+ * in the loader wherever it renders, so a spec render redirects exactly as the
  * native one does — a gate that only guarded the native path would be a hole.
  */
 

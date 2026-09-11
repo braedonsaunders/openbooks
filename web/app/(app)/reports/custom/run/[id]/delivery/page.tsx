@@ -1,14 +1,3 @@
-import { notFound, redirect } from 'next/navigation'
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
-import { db } from '@openbooks/engine/src/db.ts'
-import { DetailPageLayout } from '../../../../../../../components/page-layout'
-import { requirePermission } from '../../../../../../../lib/authz'
-import { canRunReportEntity } from '../../../../../../../lib/report-authz'
-import { isUuid } from '../../../../../../../lib/list-params'
-import { loadReportDefinition } from '../../../../../../../lib/custom-reports'
-import { DeliveryPanel } from './DeliveryPanel'
 import { ModuleView } from '../../../../../../../components/viewspec/module-view'
 import { loadReportDelivery, reportDeliverySpec } from './view'
 
@@ -28,72 +17,14 @@ export default async function ReportDeliveryPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = (await searchParams) ?? {}
-  if (sp.__viewspec === '1') {
-    const { id } = await params
-    const data = await loadReportDelivery(id)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={reportDeliverySpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-
-  const authz = await requirePermission('reports.read')
-  const canSchedule = authz.permissions.has('reports.schedule') || authz.permissions.has('*')
   const { id } = await params
-  if (!isUuid(id)) notFound()
-
-  const definition = await loadReportDefinition(authz.user.orgId, id)
-  if (!definition) notFound()
-  if (definition.report_type === 'statement' || !definition.query) redirect('/reports/custom')
-  if (!(await canRunReportEntity(authz, definition.query))) notFound()
-
-  const t = await getTranslations('reports')
-  const tk = await getTranslations('reports.custom')
-  const displayName = definition.kind === 'built_in' && t.has(`builtIns.${definition.slug}.name`)
-    ? t(`builtIns.${definition.slug}.name`)
-    : definition.name
-
-  const [schedules, recentRuns] = (await Promise.all([
-    db.execute<any>(sql`
-      select id, definition_id, cadence, day_of_week, day_of_month, hour, minute,
-             timezone, recipient_emails, next_run_at, active
-        from report_schedules
-       where org_id = ${authz.user.orgId} and definition_id = ${id}
-       order by next_run_at
-    `),
-    db.execute<any>(sql`
-      select r.id, r.trigger, r.status, r.error, r.row_count, r.started_at, r.finished_at,
-             exists(select 1 from report_run_artifacts a where a.run_id=r.id and a.org_id=r.org_id) as artifact_available,
-             count(d.id)::int as delivery_total,
-             count(d.id) filter (where d.status='sent')::int as delivery_sent,
-             count(d.id) filter (where d.status='failed')::int as delivery_failed,
-             count(d.id) filter (where d.status='suppressed')::int as delivery_suppressed
-        from report_runs r
-        left join report_delivery_outbox d on d.run_id=r.id and d.org_id=r.org_id
-       where r.org_id = ${authz.user.orgId} and r.definition_id = ${id}
-       group by r.id
-       order by r.created_at desc limit 10
-    `),
-  ]))
-
+  const data = await loadReportDelivery(id)
   return (
-    <DetailPageLayout
-      header={
-        <PageHeader
-          title={`${displayName} — ${tk('runner.scheduledDelivery')}`}
-          back={{ href: `/reports/custom/run/${definition.id}`, label: displayName }}
-        />
-      }
-    >
-      <DeliveryPanel
-        definitionId={definition.id}
-        schedules={schedules.rows}
-        recentRuns={recentRuns.rows}
-        canSchedule={canSchedule}
-      />
-    </DetailPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={reportDeliverySpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

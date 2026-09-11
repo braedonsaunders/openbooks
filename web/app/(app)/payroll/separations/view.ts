@@ -30,7 +30,7 @@ import { scopedYearEndFilings } from '../../../../lib/payroll-scoped-views'
  * So the spec places the workspace whole through one widget — the same call
  * the parallel-run page made (`parallel-run-workspace` places
  * `ParallelRunView` whole, and the pay-run wizard places `RunWizard`
- * whole). `SeparationsView` moves nowhere and both render paths import the
+ * whole). `SeparationsView` moves nowhere and the page and the widget registry import the
  * same component; the widget entry renders it with the exact props the
  * native page passes. No `sections.tsx`: nothing is moved or duplicated.
  *

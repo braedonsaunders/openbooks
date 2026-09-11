@@ -6,7 +6,7 @@ const copy = { morning: 'Good morning', afternoon: 'Good afternoon', evening: 'G
 
 /**
  * The greeting is the one string both dashboard render paths share: the
- * native branch in page.tsx and the ViewSpec loader in view.ts import the
+ * loader in view.ts is the only caller, and it imports the
  * same `buildGreeting`, so a drift between two copies cannot desync the
  * conformance comparison. These pin the time boundaries and the name
  * handling that the shared helper owns.

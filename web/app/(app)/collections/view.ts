@@ -90,7 +90,7 @@ export function collectionsSpec(data: CollectionsData): PageSpec {
   return page({
     // The native page renders its own `mx-auto max-w-6xl` container, which
     // no list/detail shell reproduces. The spec places the container whole
-    // (it lives in sections.tsx, shared with the native branch) rather
+    // (it lives in sections.tsx, placed by the widget registry) rather
     // than composing a wrong-width page around the widget.
     layout: 'bare',
     header: [],

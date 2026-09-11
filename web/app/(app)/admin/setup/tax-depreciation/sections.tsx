@@ -14,8 +14,8 @@ import { TaxDepreciationSetup } from './TaxDepreciationSetup'
  * header — h1, description and nav — is one shared component over
  * loader-resolved strings. The active-vs-plain link PAIR (and aria-current
  * set-vs-omitted) is a component, not a spec construct: every tab's `href`,
- * `label` and `active` boolean travel as data. The native branch imports the
- * header back so both render paths share one implementation.
+ * `label` and `active` boolean travel as data. The widget registry renders the
+ * header, so there is one implementation of it.
  *
  * The overview body is a client component (pack install and the assignment
  * Selects are fetch flows plus useState a spec cannot name), so it renders

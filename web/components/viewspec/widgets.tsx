@@ -825,7 +825,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   /* --- org roles ------------------------------------------------------------- */
   /** Same doctrine as `admin-users-table`: the native page hand-rolls a plain
    *  `<table>` the spec's table vocabulary cannot name, so one component
-   *  serves both render paths. */
+   *  serves the page and the widget registry. */
   'admin-roles-table': (props) => (
     <AdminRolesTable
       roles={(props.roles as ComponentProps<typeof AdminRolesTable>['roles']) ?? []}
@@ -1466,7 +1466,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   /* --- sandboxes -------------------------------------------------------------------- */
   /** Whole, and the per-row mutations are the reason: create / refresh /
    *  reset / delete / setSchedule / promote are BOUND SERVER ACTIONS. A spec
-   *  may not carry one, so they stay inside the component on both paths
+   *  may not carry one, so they stay inside the component wherever it renders
    *  rather than being lifted into props. */
   /** The remount key rides along as a prop: reviewing a different change set
    *  must reset the drawer's approval state. */
@@ -1761,7 +1761,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ),
 
   /* --- bank feeds setup --------------------------------------------------------- */
-  /** Five FLAT props, spread exactly as the native page passes them. */
+  /** Five FLAT props, spread exactly as the page passed them. */
   'bank-feeds-workspace': (props) => (
     <BankFeedsClient
       connections={(props.connections as ComponentProps<typeof BankFeedsClient>['connections']) ?? []}
@@ -2234,7 +2234,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
    * page sits inside `PageContainer`, whose motion wrappers carry
    * `data-page-motion` attributes and post-animation inline styles a spec grid
    * (a plain div) cannot reproduce. Every unit below is a shared component the
-   * native branch also renders; this only binds loader data to props. The tab
+   * page has always rendered; this only binds loader data to props. The tab
    * flags are loader-computed and applied inside `TaxTabPanels`, because a
    * `when` cannot cross a widget boundary.
    */
@@ -3084,7 +3084,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     }
     // A slot may name one widget or several — a project list's drawer slot
     // holds a create-redirect, the record flyout and a transaction flyout, the
-    // same fragment the native page passes.
+    // same fragment the page passed.
     const slot = (value: unknown) => {
       if (Array.isArray(value)) {
         const rendered = value.map(one).filter(Boolean)

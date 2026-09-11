@@ -12,7 +12,7 @@ import { RunStatusBadge } from './_ui/run-status'
  * smart action (Start / Resume / Review), the previous-period body carries a
  * conditional badge + link, and the checklist banner carries a translated
  * settings list — each a conditional pair (or triple) that a spec cannot
- * express, so they live here and both render paths share one implementation.
+ * express, so they live here and there is one implementation.
  *
  * Display strings arrive pre-resolved from the loader (./view.ts); these
  * components only compose markup.

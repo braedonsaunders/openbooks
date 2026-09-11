@@ -1,5 +1,3 @@
-import { PageContainer } from '../../../components/page-layout'
-import { PlatformClient } from './PlatformClient'
 import { ModuleView } from '../../../components/viewspec/module-view'
 import { loadSync, syncSpec } from './view'
 
@@ -17,20 +15,14 @@ export default async function PlatformPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadSync()
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={syncSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
+  const sp = await searchParams
+  const data = await loadSync()
   return (
-    <PageContainer>
-      <PlatformClient />
-    </PageContainer>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={syncSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

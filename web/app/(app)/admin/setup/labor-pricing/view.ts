@@ -19,7 +19,7 @@ import type { LaborPricingViewProps } from './sections'
  *
  * The page is a setup-workspace child, so — like the documents cabinet — it
  * uses `layout: 'bare'` and draws no chrome of its own: the setup layout's
- * fixed header, tab rail and centered container wrap both render paths
+ * fixed header, tab rail and centered container wrap the page and the widget registry
  * identically. The body is a single `labor-pricing-view` widget (see
  * sections.tsx for why the island cannot be decomposed), with the page's h2
  * header above it.
@@ -319,7 +319,7 @@ export async function loadLaborPricing(
 export function laborPricingSpec(data: LaborPricingData): PageSpec {
   return page({
     // A setup-workspace child: the setup layout's header, tab rail and
-    // centered container wrap both render paths, so the spec draws no chrome.
+    // centered container wrap the page and the widget registry, so the spec draws no chrome.
     layout: 'bare',
     header: [],
     body: [

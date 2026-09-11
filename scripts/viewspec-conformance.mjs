@@ -2,10 +2,10 @@
 /**
  * ViewSpec conformance harness.
  *
- * For every converted page, render it twice against the SAME request — once
- * through the native JSX and once through `ModuleView` — and prove the two are
- * indistinguishable. A page counts as converted only when this is clean; until
- * then the native branch stays and ships.
+ * Every page in the app renders through `ModuleView` from a loader and a spec.
+ * This renders each one and proves it still produces the bytes the ORIGINAL
+ * hand-written JSX produced, recorded in `tests/viewspec-golden` from the last
+ * build that had it.
  *
  * This runs in a real browser, and that is not incidental. The first version
  * of this harness fetched the HTML with `fetch` and compared the `<main>`
@@ -15,13 +15,12 @@
  * cannot fail is worse than no harness, so the comparison happens after the
  * document has actually finished streaming and rendering.
  *
- * Two comparisons, because they catch different failures:
- *
- *   1. Structural — the settled DOM of the page's `<main>`, normalized and
- *      diffed node by node. Exact, and it is the gate. A DOM diff can say
- *      WHAT changed; a pixel diff cannot.
- *   2. Visual — a full-page screenshot compared pixel for pixel. Identical
- *      markup can still lay out differently, so this is the backstop.
+ * The comparison is structural: the settled DOM of the page's `<main>`,
+ * normalized and diffed node by node. Exact, and it is the gate — a DOM diff
+ * can say WHAT changed, which is the whole reason to prefer it. A pixel
+ * backstop ran alongside it during the conversion, when both implementations
+ * were present to screenshot; see the note on MODE below for why it did not
+ * survive into the recorded baseline.
  *
  * Normalization is deliberately narrow: React comment markers and per-render
  * `useId` values carry no user-visible meaning. Nothing else is stripped —
@@ -31,8 +30,10 @@
  *   node scripts/viewspec-conformance.mjs                  # every registered page
  *   node scripts/viewspec-conformance.mjs /reports/partners
  *   VIEWSPEC_HEADED=1 node scripts/viewspec-conformance.mjs   # watch it run
+ *   VIEWSPEC_MODE=capture node scripts/viewspec-conformance.mjs   # re-baseline
  */
 
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import { join } from 'node:path'
@@ -45,29 +46,35 @@ const PASSWORD = process.env.VIEWSPEC_PASSWORD ?? 'viewspec-dev'
 const OUT_DIR = process.env.VIEWSPEC_OUT ?? join(process.cwd(), 'tmp', 'viewspec')
 
 /**
- * Two modes, and the reason there are two is the whole point of this file.
+ * Two modes: `golden` (the default) diffs each page against a recorded
+ * baseline in `tests/viewspec-golden`; `capture` re-records that baseline.
  *
- * `dual` renders each page twice — once through the native JSX, once through
- * `ModuleView` — and proves they are indistinguishable. That works only while
- * BOTH implementations exist, which is true exactly once: during the
- * conversion.
+ * There used to be a third. `dual` rendered every page twice — once through
+ * the original JSX, once through `ModuleView` — and proved the two
+ * indistinguishable. That is how all 165 pages were converted, and it was only
+ * ever possible while both implementations existed. The native branches are
+ * gone, so a dual run would now compare the spec against itself and pass
+ * trivially: the exact failure this harness was built to make impossible. It
+ * was deleted rather than left behind looking usable.
  *
- * Deleting the native branch removes the control. A dual run afterwards would
- * compare the spec against itself and pass trivially, which is the precise
- * failure this harness was built to make impossible. So before the native
- * branch is deleted its output is captured — normalized, gzipped, committed —
- * and `golden` compares every later render against that recorded baseline.
- * The comparison stops being "do two implementations agree" and becomes "does
- * this page still render what the native implementation rendered", which is
- * the question that survives the deletion.
+ * Its output was recorded first, and that is what `tests/viewspec-golden`
+ * holds — 344 variants captured from the last build that still had a native
+ * branch. The question changed from "do two implementations agree" to "does
+ * this page still render what the native implementation rendered", and that
+ * one survives having a single implementation.
  *
- * What golden mode LOSES, stated plainly: the pixel backstop. Storing a
- * screenshot per variant is ~100MB of binary in git, and a binary blob nobody
- * can read a diff of is not evidence. The DOM diff was always the gate; the
- * ink ratio is still recorded and asserted, and `assertStylesLoaded` still
- * catches the unstyled-render case that pixels were mainly guarding.
+ * What golden mode LOSES, stated plainly: the pixel backstop. A screenshot per
+ * variant is ~100MB of binary in git, and a blob nobody can read a diff of is
+ * not evidence. The DOM diff was always the gate; the ink ratio is still
+ * recorded and asserted, and `assertStylesLoaded` still catches the unstyled
+ * render that pixels were mainly there to catch.
+ *
+ * RE-BASELINING IS A DELIBERATE ACT. `capture` overwrites the recorded bytes,
+ * so running it turns any regression into the new expected output. Run it when
+ * a page was MEANT to change, and review the resulting git diff as carefully
+ * as the change itself.
  */
-const MODE = process.env.VIEWSPEC_MODE ?? 'dual'
+const MODE = process.env.VIEWSPEC_MODE ?? 'golden'
 const GOLDEN_DIR = process.env.VIEWSPEC_GOLDEN_DIR ?? join(process.cwd(), 'tests', 'viewspec-golden')
 
 /** A stable filename for one path+variant pair. */
@@ -96,7 +103,7 @@ const VIEWPORT = { width: 1440, height: 900 }
  * test. ViewSpec has no redirect vocabulary; that is the language being
  * honest, not a gap to work around.
  *
- * Pages under conversion. Each entry lists query variants that must ALL match:
+ * The registered pages. Each entry lists query variants that must ALL match:
  * one default render proves little on a page whose shape changes with its
  * filters, so variants pin the branches that matter — here both sides of the
  * payable/receivable toggle and a search that returns nothing.
@@ -1971,9 +1978,41 @@ const PAGES = [
   },
 ]
 
-function specUrl(path, variant) {
-  const separator = variant.includes('?') ? '&' : '?'
-  return `${BASE}${path}${variant}${separator}__viewspec=1`
+/**
+ * The one thing this harness writes, and it writes it because it broke
+ * something by not writing it.
+ *
+ * Logging in sets `users.last_login_at = now()`. Three pages RENDER that
+ * value — /admin/users, /platform/users and the user detail — so the harness
+ * was mutating the very data it then compared, and every run diffed against a
+ * baseline captured at whatever minute the previous run happened to log in.
+ * Observation changing the observation is not a flake to be tolerated; it is a
+ * measurement that has to be made stable.
+ *
+ * So the harness pins its own row back to a fixed instant after authenticating.
+ * Narrow on purpose: one column, one user, in the disposable conformance
+ * tenant. Every other timestamp on every other page still compares for real,
+ * which is the point — a date bug anywhere else still fails.
+ */
+const PINNED_LOGIN = '2026-09-10 20:14:00+00'
+
+function pinHarnessLastLogin() {
+  const url = process.env.OPENBOOKS_DB_URL
+  if (!url) return
+  // `app.bypass_rls` is not optional. `users` is row-level-secured, and
+  // without it the UPDATE matches zero rows and psql reports success — the
+  // silent no-op that had this pin doing nothing while every run looked fine
+  // until the clock crossed a minute.
+  const env = { ...process.env, PGOPTIONS: '-c app.bypass_rls=on' }
+  // RETURNING, not the command tag: `-q` suppresses tags, and a pin that
+  // cannot prove it changed a row is the no-op it is meant to prevent.
+  const out = execFileSync('psql', [url, '-qAt', '-c',
+    `update users set last_login_at = timestamptz '${PINNED_LOGIN}'` +
+    ` where email = '${EMAIL}' returning 'pinned'`,
+  ], { env, encoding: 'utf8' })
+  if (out.trim() !== 'pinned') {
+    throw new Error(`could not pin the harness last_login_at (psql returned: ${out.trim() || 'nothing'})`)
+  }
 }
 
 async function login(page) {
@@ -1982,6 +2021,7 @@ async function login(page) {
     data: { email: EMAIL, password: PASSWORD },
   })
   if (!response.ok()) throw new Error(`login failed: ${response.status()} ${await response.text()}`)
+  pinHarnessLastLogin()
 }
 
 /**
@@ -2175,20 +2215,16 @@ function normalize(markup) {
       // ECharts stamps each chart with a per-instance counter/timestamp. Same
       // class of framework noise as useId: generated per mount, never rendered.
       .replace(/ _echarts_instance_="[^"]*"/g, '')
-      // The conversion flag leaks into client-built self-referential hrefs
-      // (ReportDrillLink rebuilds the query from useSearchParams). It is
-      // harness scaffolding that disappears when the native branch is deleted,
-      // so removing it is honest — but it has to be removed as a query
-      // PARAMETER, preserving the `?`/`&` separator structure, and `&` arrives
-      // entity-encoded inside an attribute value.
-      .replace(/\?__viewspec=1(&amp;|&)/g, '?')
-      .replace(/(&amp;|&)__viewspec=1/g, '')
-      .replace(/\?__viewspec=1/g, '')
-      // …and again URL-ENCODED, because links that carry a return path embed
-      // the current query inside a parameter value (drawerReturn=%2F…%3F…).
-      .replace(/%3F__viewspec%3D1(%26)/gi, '%3F')
-      .replace(/%26__viewspec%3D1/gi, '')
-      .replace(/%3F__viewspec%3D1/gi, '')
+      // (The conversion flag used to leak into client-built self-referential
+      // hrefs and had to be stripped here. Nothing emits it now — the flag went
+      // with the native branches — so there is nothing left to strip.)
+      // The harness's OWN session, rendered back at it. /settings/security
+      // lists active sessions with a "Last used" time, and `validateSessionToken`
+      // rewrites `last_seen_at` on the very request that renders the page — so
+      // unlike `last_login_at`, which the harness pins, this one cannot be held
+      // still from outside: the act of observing it is what moves it. Normalized
+      // to a constant. A "Last used" line that goes MISSING still differs.
+      .replace(/Last used [^<]*/g, 'Last used <pinned>')
       // A measured wall-clock the page renders honestly. Sentinel times its
       // own forensic sweep and prints "… in 0.1s — no caps or date-range
       // limits", so two renders of the same page differ by construction. This
@@ -2395,70 +2431,23 @@ async function assertStylesLoaded(page) {
 }
 
 
-/**
- * Reject a capture that is essentially empty.
- *
- * This harness has produced three false passes, and every one shared a shape:
- * both sides rendered the SAME nothing (a streaming fallback, a stale build,
- * an animation rewound to opacity 0) and the comparison happily reported a
- * match. A pixel comparison cannot tell "identical" from "identically blank",
- * so the content has to be asserted independently of the diff.
- *
- * A real page is mostly background with text, rules and chrome over it. Well
- * under 1% non-background means the capture is a loading screen.
- */
-/**
- * Count differing pixels between two captures.
- *
- * Byte equality is too strict: subpixel text antialiasing varies by a handful
- * of pixels between two renders of identical markup. A tolerance is dangerous
- * in principle — it is exactly the mechanism that hides real differences — so
- * it is bounded three ways: the DOM must already match exactly (structure is
- * the real gate, pixels are the backstop), the budget is a few tens of pixels
- * out of ~1.3M, and the actual count is ALWAYS printed on success so a slow
- * creep upward is visible rather than silent.
- */
-async function pixelDiff(a, b) {
-  const [ra, rb] = await Promise.all([
-    sharp(a).raw().toBuffer({ resolveWithObject: true }),
-    sharp(b).raw().toBuffer({ resolveWithObject: true }),
-  ])
-  if (ra.info.width !== rb.info.width || ra.info.height !== rb.info.height) {
-    return { differing: Infinity, reason: `size ${ra.info.width}x${ra.info.height} vs ${rb.info.width}x${rb.info.height}` }
-  }
-  const { width, height, channels } = ra.info
-  let differing = 0
-  for (let i = 0; i < width * height * channels; i += channels) {
-    if (ra.data[i] !== rb.data[i] || ra.data[i + 1] !== rb.data[i + 1] || ra.data[i + 2] !== rb.data[i + 2]) {
-      differing++
-    }
-  }
-  return { differing, total: width * height }
-}
 
 /**
- * Visual tolerance, as a fraction of the compared area.
+ * Read every compared region as one string.
  *
- * Calibrated against evidence rather than taste. Six real defects have been
- * caught by this harness — a stray wrapper element, money cells losing
- * `tabular-nums`, a closing balance losing its negative tone, a missing header
- * wrapper, a missing layout class, an empty header cell — and the STRUCTURAL
- * diff caught every one of them. The visual diff caught none: on several it
- * reported "match" while the DOM differed. Its only independent findings have
- * been rasterization noise.
- *
- * So structure is the gate and pixels are a coarse backstop for layout shifts
- * the DOM cannot show. Chrome rasterizes identical text slightly differently
- * between loads — sub-pixel glyph positioning, deltas up to ~64 on a few
- * hundred pixels — and a threshold tight enough to reject that rejects
- * correct pages. A genuine layout shift moves thousands of pixels and still
- * fails comfortably.
+ * `main` is the default and covers ordinary page content, but a drawer is
+ * portaled to <body> and therefore sits OUTSIDE it — comparing only `main`
+ * would have reported a flyout variant as passing while never looking at the
+ * flyout. A page that opens one names the extra root explicitly.
  */
-const PIXEL_TOLERANCE_RATIO = 0.0005
-const PIXEL_TOLERANCE_MIN = 64
-
-function pixelTolerance(total) {
-  return Math.max(PIXEL_TOLERANCE_MIN, Math.round((total ?? 0) * PIXEL_TOLERANCE_RATIO))
+async function scopedMarkup(page, scopes) {
+  const parts = []
+  for (const selector of scopes) {
+    const count = await page.locator(selector).count()
+    if (count === 0) throw new Error(`compared region "${selector}" is not present`)
+    parts.push(`<!--scope:${selector}-->` + (await page.locator(selector).first().innerHTML()))
+  }
+  return parts.join('\n')
 }
 
 /**
@@ -2491,38 +2480,19 @@ async function assertNotBlank(shot, label, minInk = DEFAULT_MIN_INK) {
 }
 
 /**
- * Read every compared region as one string.
+ * Record one variant's current render as the golden baseline.
  *
- * `main` is the default and covers ordinary page content, but a drawer is
- * portaled to <body> and therefore sits OUTSIDE it — comparing only `main`
- * would have reported a flyout variant as passing while never looking at the
- * flyout. A page that opens one names the extra root explicitly.
- */
-async function scopedMarkup(page, scopes) {
-  const parts = []
-  for (const selector of scopes) {
-    const count = await page.locator(selector).count()
-    if (count === 0) throw new Error(`compared region "${selector}" is not present`)
-    parts.push(`<!--scope:${selector}-->` + (await page.locator(selector).first().innerHTML()))
-  }
-  return parts.join('\n')
-}
-
-/**
- * Capture one variant's CURRENT render as the golden baseline.
- *
- * Run once, against the build that still has the native branches, so the
- * recorded bytes are the native implementation's own output. After the
- * branches are gone this is the only surviving description of what each page
- * used to render.
+ * The first capture ran against the last build that still had the native
+ * branches, so the committed bytes are the native implementation's own output.
+ * Every capture since re-records whatever the page renders now.
  */
 async function captureGolden(page, path, variant, expectSelector, minMatches, scopes, expectState, minInk) {
   const url = `${BASE}${path}${variant}`
   await renderSettled(page, url, expectSelector, minMatches, expectState)
   await assertStylesLoaded(page)
   const via = await renderPath(page)
-  if (via !== 'native') {
-    throw new Error(`${url} rendered via ${via}, expected native — capture must run BEFORE the native branch is deleted`)
+  if (via !== 'viewspec') {
+    throw new Error(`${url} rendered via ${via}, expected viewspec — refusing to bake a pre-cutover render into the baseline`)
   }
   const markup = normalizeStyles(sortClassLists(sortAttributes(normalize(await scopedMarkup(page, scopes)))))
   const ink = await assertNotBlank(await captureSettled(page), `${path}${variant} native`, minInk)
@@ -2583,64 +2553,6 @@ async function checkGolden(page, path, variant, expectSelector, minMatches, scop
   }
 }
 
-async function checkVariant(page, path, variant, expectSelector, minMatches, scopes = ['main'], expectState = 'visible', minInk = DEFAULT_MIN_INK) {
-  const nativeUrl = `${BASE}${path}${variant}`
-  await renderSettled(page, nativeUrl, expectSelector, minMatches, expectState)
-  await assertStylesLoaded(page)
-  const nativePath = await renderPath(page)
-  if (nativePath !== 'native') throw new Error(`${nativeUrl} rendered via ${nativePath}, expected native`)
-  const nativeMarkup = normalizeStyles(sortClassLists(sortAttributes(normalize(await scopedMarkup(page, scopes)))))
-  const nativeShot = await captureSettled(page)
-  const ink = await assertNotBlank(nativeShot, `${path}${variant} native`, minInk)
-
-  await renderSettled(page, specUrl(path, variant), expectSelector, minMatches, expectState)
-  const chosen = await renderPath(page)
-  if (chosen !== 'viewspec') {
-    throw new Error(
-      `${specUrl(path, variant)} rendered via ${chosen}, expected viewspec — the server is probably serving a build that predates the conversion`,
-    )
-  }
-  const specMarkup = normalizeStyles(sortClassLists(sortAttributes(normalize(await scopedMarkup(page, scopes)))))
-  const specShot = await captureSettled(page)
-  await assertNotBlank(specShot, `${path}${variant} spec`, minInk)
-
-  const slug = `${path}${variant}`.replace(/[^a-z0-9]+/gi, '_')
-  const pixels = nativeShot.equals(specShot) ? { differing: 0, total: 0 } : await pixelDiff(nativeShot, specShot)
-  const tolerance = pixelTolerance(pixels.total)
-  const pixelsEqual = pixels.differing <= tolerance
-
-  if (nativeMarkup === specMarkup && pixelsEqual) {
-    return {
-      ok: true,
-      path,
-      variant,
-      bytes: nativeMarkup.length,
-      markup: nativeMarkup,
-      ink,
-      pixels: pixels.differing,
-      tolerance,
-    }
-  }
-
-  mkdirSync(OUT_DIR, { recursive: true })
-  writeFileSync(join(OUT_DIR, `${slug}.native.html`), nativeMarkup)
-  writeFileSync(join(OUT_DIR, `${slug}.spec.html`), specMarkup)
-  writeFileSync(join(OUT_DIR, `${slug}.native.png`), nativeShot)
-  writeFileSync(join(OUT_DIR, `${slug}.spec.png`), specShot)
-
-  return {
-    ok: false,
-    path,
-    variant,
-    slug,
-    structural: nativeMarkup === specMarkup,
-    visual: pixelsEqual,
-    pixels: pixels.differing,
-    tolerance,
-    diff: nativeMarkup === specMarkup ? null : firstDifference(nativeMarkup, specMarkup),
-  }
-}
-
 async function main() {
   // Any number of paths may be named; none means every registered page.
   const only = process.argv.slice(2)
@@ -2679,8 +2591,7 @@ async function main() {
             (typeof raw === 'string' ? undefined : raw.expectState) ?? entry.expectState ?? 'visible'
           const minInk =
             (typeof raw === 'string' ? undefined : raw.minInk) ?? entry.minInk ?? DEFAULT_MIN_INK
-          const run =
-            MODE === 'capture' ? captureGolden : MODE === 'golden' ? checkGolden : checkVariant
+          const run = MODE === 'capture' ? captureGolden : checkGolden
           result = await run(
             page, entry.path, variant, expect, minMatches, scopes, expectState, minInk,
           )
@@ -2708,14 +2619,14 @@ async function main() {
         console.error(`    structural: ${result.structural ? 'match' : 'DIFFER'}   visual: ${result.visual ? 'match' : `DIFFER (${result.pixels} px, tolerance ${result.tolerance})`}`)
         if (result.diff) {
           console.error(`    first difference at node ${result.diff.index}, after: …${result.diff.context.slice(-140)}`)
-          const [lhs, rhs] = MODE === 'golden' ? ['golden ', 'current'] : ['native ', 'spec   ']
+          const [lhs, rhs] = ['golden ', 'current']
           console.error(`    ${lhs}: ${String(result.diff.native).slice(0, 220)}`)
           console.error(`    ${rhs}: ${String(result.diff.spec).slice(0, 220)}`)
         }
         console.error(`    artifacts: ${join(OUT_DIR, `${result.slug}.*`)}`)
       }
-      // Capture mode records no markup on the result, so there is nothing to
-      // cross-check; the dual run that preceded it already made this assertion.
+      // Capture records no markup on the result, so there is nothing to
+      // cross-check; the comparing run that follows it makes the assertion.
       const suspicious = MODE === 'capture' ? null : assertVariantsDiffer(results)
       if (suspicious) {
         failures += 1

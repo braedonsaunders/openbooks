@@ -30,7 +30,7 @@ import type { OverheadPolicy, OverheadStep } from './view'
  * spec cannot express: the strip's active-vs-plain link PAIR is a
  * conditional pair, and OverheadActions owns `useState` plus the money and
  * business-day hooks. `OverheadModelHeader` renders both verbatim, and
- * page.tsx imports it back so both render paths share one implementation —
+ * page.tsx imports it back so there is one implementation —
  * the payroll-sections precedent.
  *
  * The four tab bodies each render through a SLOT below that re-derives the

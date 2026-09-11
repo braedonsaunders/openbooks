@@ -15,7 +15,7 @@ import type { PlatformTileIconKey } from './sections'
  * icons stay behind `iconKey` lookups in `sections.tsx`, so the loader rows
  * are serializable.
  *
- * The page takes no searchParams other than `__viewspec`, so the loader takes
+ * The page takes no searchParams at all, so the loader takes
  * no args and `currentParams` is absent: the tiles link to fixed paths.
  */
 
@@ -84,7 +84,7 @@ export function platformHubSpec(data: PlatformHubData): PageSpec {
     // The hub owns its own shell (PageContainer) the way the analytics hub
     // does — ListPageLayout's sticky-header chrome would nest a second shell
     // around it, so header and body concatenate and the frame renders the
-    // exact native shell (see INTEGRATION.md).
+    // exact native shell.
     layout: 'bare',
     header: [],
     body: [

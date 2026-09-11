@@ -35,7 +35,7 @@ import type { EntitlementOpeningsView } from './EntitlementOpeningsView'
  *
  * So the spec places both grids whole through two widgets, the same call the
  * retro and parallel-run pages made: the views move nowhere and are shared
- * by both render paths. The loader below copies page.tsx verbatim — the
+ * by the page and the widget registry. The loader below copies page.tsx verbatim — the
  * `payroll.read` gate, the `payroll` feature gate (404 when disabled), the
  * business-day tax year with its clamped `?year=` override, the scoped
  * statutory read, the deliberately year-agnostic bank read, the module tabs,
@@ -43,7 +43,7 @@ import type { EntitlementOpeningsView } from './EntitlementOpeningsView'
  * the components format client-side (trimZeros display, raw-string drafts).
  *
  * No sections.tsx: nothing is moved or duplicated — both views stay where
- * they are and both render paths import the same components.
+ * they are and one set of components is imported.
  */
 
 type BalancesProps = Parameters<typeof OpeningBalancesView>[0]

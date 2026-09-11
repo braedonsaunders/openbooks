@@ -25,7 +25,7 @@ import { grid, page, ref, widgetBlock, type PageSpec } from '@openbooks/viewspec
  * through one widget — it owns `useState` (tab, flyouts, drills) the way
  * LaborCostingWorkspace does. The header row (docs/analytics/labor links
  * plus the client-only OverheadActions island) and the tab strip are shared
- * chrome in `./sections`, used by both render paths: the strip's
+ * chrome in `./sections`, used by the page and the widget registry: the strip's
  * active-vs-plain link PAIR and the actions' modal state are conditional
  * pairs and client state a spec cannot name. The rates, lifecycle and
  * application bodies need an org id (a capability), so each renders through

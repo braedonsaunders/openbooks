@@ -21,7 +21,7 @@ import type {
  * precedent. The overview body is a client component (pack install and
  * assignment Selects are fetch flows plus useState a spec cannot name), so
  * it renders through a WHOLE-COMPONENT slot: the loader resolves every prop
- * the native page passes `TaxDepreciationSetup` (company country, packs,
+ * the page passed `TaxDepreciationSetup` (company country, packs,
  * installed codes, regime groups, category assignments) to presentation-ready
  * data, and the slot re-derives nothing — the props are data, not
  * capabilities. The three registry-backed tabs (`regimes`, `classes`,

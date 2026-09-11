@@ -31,7 +31,7 @@ import type { AttentionItem } from './sections'
  * cockpit does not. Its rail sections are each a handful of one-off markup,
  * and inventing a block per section would grow the vocabulary one page at a
  * time forever. So the division here is: ViewSpec composes the GRID and the
- * PANELS; the panel bodies stay components, shared by both render paths via
+ * PANELS; the panel bodies stay components, shared by the page and the widget registry via
  * ./sections so they cannot drift.
  *
  * That is a weaker claim than "the page is expressible" — but it is the honest

@@ -18,7 +18,7 @@ import { requirePermission } from '../../../../lib/authz'
  * The loader reproduces the native server logic VERBATIM — the gate — and
  * returns no rows, because the page renders none server-side: the resource
  * list and the sample-company profiles both load client-side inside the
- * wizard, identically on both paths.
+ * wizard, identically wherever it renders.
  */
 
 export interface DataImportData {

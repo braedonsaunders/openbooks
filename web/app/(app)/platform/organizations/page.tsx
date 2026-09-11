@@ -1,31 +1,10 @@
-import { Building2, ExternalLink } from "lucide-react";
 import {
-  Badge,
-  Button,
-  EmptyState,
-  PageHeader,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from "@openbooks/ui";
-import { FilterChips } from "../../../../components/filter-bar";
-import { Pagination } from "../../../../components/pagination";
-import { ListPageLayout } from "../../../../components/page-layout";
-import { SearchInput } from "../../../../components/search-input";
-import { SortTh } from "../../../../components/sortable-th";
-import { parseListParams, pickString } from "../../../../lib/list-params";
-import { platformOrganizations } from "../../../../lib/platform-admin";
-import { enterOrganizationAction } from "../actions";
-import { ModuleView } from "../../../../components/viewspec/module-view";
-import { loadPlatformOrganizations, platformOrganizationsSpec } from "./view";
+import { ModuleView } from "../../../../components/viewspec/module-view"
+import { loadPlatformOrganizations, platformOrganizationsSpec } from "./view"
 
 export const dynamic = "force-dynamic";
 
-const BASE = "/platform/organizations";
-const SORTS = ["name", "environment", "users", "sandboxes", "created"] as const;
 
 export default async function PlatformOrganizationsPage({
   searchParams,
@@ -33,185 +12,13 @@ export default async function PlatformOrganizationsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
-  if (sp.__viewspec === "1") {
-    const data = await loadPlatformOrganizations(sp);
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={platformOrganizationsSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    );
-  }
-  const environmentParam = pickString(sp.environment);
-  const environment =
-    environmentParam === "production" ||
-    environmentParam === "sandbox" ||
-    environmentParam === "preview"
-      ? environmentParam
-      : undefined;
-  const params = parseListParams(sp, {
-    sort: "name",
-    dir: "asc",
-    perPage: 25,
-    allowedSorts: SORTS,
-  });
-  const result = await platformOrganizations({ ...params, environment });
-
+  const data = await loadPlatformOrganizations(sp);
   return (
-    <ListPageLayout
-      header={
-        <>
-          <PageHeader
-            back={{ href: "/platform", label: "Super Admin" }}
-            title="Organizations"
-            description="Production companies and their isolated non-production environments."
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search name, legal name, country, or currency…" />
-            <FilterChips
-              basePath={BASE}
-              currentParams={sp}
-              paramKey="environment"
-              label="Environment"
-              options={[
-                {
-                  value: "production",
-                  label: "Production",
-                  count: result.environmentCounts.production ?? 0,
-                },
-                {
-                  value: "sandbox",
-                  label: "Sandbox",
-                  count: result.environmentCounts.sandbox ?? 0,
-                },
-                {
-                  value: "preview",
-                  label: "Preview",
-                  count: result.environmentCounts.preview ?? 0,
-                },
-              ]}
-            />
-          </div>
-        </>
-      }
-    >
-      {result.rows.length === 0 ? (
-        <EmptyState
-          icon={<Building2 />}
-          title="No organizations found"
-          description="Try broadening the search or environment filter."
-        />
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  column="name"
-                  sort={params.sort}
-                  dir={params.dir}
-                >
-                  Organization
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  column="environment"
-                  sort={params.sort}
-                  dir={params.dir}
-                >
-                  Environment
-                </SortTh>
-                <TableHead>Country / currency</TableHead>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  column="users"
-                  sort={params.sort}
-                  dir={params.dir}
-                >
-                  Users
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  column="sandboxes"
-                  sort={params.sort}
-                  dir={params.dir}
-                >
-                  Sandboxes
-                </SortTh>
-                <TableHead className="text-right">Workspace</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {result.rows.map((org) => (
-                <TableRow key={org.id}>
-                  <TableCell>
-                    <div className="font-medium text-slate-900 dark:text-slate-100">
-                      {org.name}
-                    </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                      {org.legalName || org.id}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        org.envKind === "production"
-                          ? "success"
-                          : org.envKind === "sandbox"
-                            ? "warning"
-                            : "secondary"
-                      }
-                    >
-                      {org.envKind}
-                    </Badge>
-                    {org.parentName ? (
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        of {org.parentName}
-                      </div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    <div>{org.country}</div>
-                    <div className="text-xs text-slate-500">
-                      {org.baseCurrency}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-medium tabular-nums">
-                      {org.activeUserCount}
-                    </span>
-                    <span className="text-slate-400"> / {org.userCount}</span>
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    {org.sandboxCount}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <form action={enterOrganizationAction}>
-                      <input type="hidden" name="orgId" value={org.id} />
-                      <Button type="submit" size="sm" variant="outline">
-                        Open <ExternalLink size={14} />
-                      </Button>
-                    </form>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath={BASE}
-            currentParams={sp}
-            total={result.total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </div>
-      )}
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={platformOrganizationsSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   );
 }

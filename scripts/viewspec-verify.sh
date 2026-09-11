@@ -32,4 +32,5 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
 fi
 
 cd "$REPO"
-node scripts/viewspec-conformance.mjs "$@"
+# The harness pins its own last_login_at; it needs the tenant url to do it.
+OPENBOOKS_DB_URL="$DB" node scripts/viewspec-conformance.mjs "$@"

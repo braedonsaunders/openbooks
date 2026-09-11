@@ -20,7 +20,7 @@ import { listConversations } from '../../../lib/ai-conversations'
  *
  * The native component is NOT copied. `AssistantApp` stays where it is
  * (`web/components/assistant/assistant-app.tsx`, also owned by the `[id]`
- * sibling route) and the registry entry in INTEGRATION.md renders it
+ * sibling route) and the registry entry renders it
  * directly with loader-resolved props.
  *
  * Visibility note: `listConversations` filters by owner in SQL

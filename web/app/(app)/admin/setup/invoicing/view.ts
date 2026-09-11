@@ -36,7 +36,7 @@ import type { InvoicingSettingsWorkspace } from './InvoicingSettingsWorkspace'
  * Serializability note: every loader field is a boolean or a number — the
  * page has no dates, money, rows, or params — so there is nothing to format
  * and no `currentParams` to thread (the page reads no search params; the
- * `__viewspec` flag is consumed by `page.tsx`, never by the loader).
+ * loader is handed the request's params and reads none of them).
  */
 
 type InvoicingWorkspaceProps = Parameters<typeof InvoicingSettingsWorkspace>[0]

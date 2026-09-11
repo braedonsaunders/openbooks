@@ -19,7 +19,7 @@ import type { ChangeSetDrawer } from './ChangeSetDrawer'
  * either org is a spec that could name the wrong one.
  *
  * And it is production-only. `envKind !== 'production'` redirects, which runs
- * in the loader so both render paths are gated identically.
+ * in the loader so the gate runs in the loader.
  *
  * The copy is hardcoded English on the native page (this route has no catalog
  * entry yet), so the loader carries the same literals rather than inventing

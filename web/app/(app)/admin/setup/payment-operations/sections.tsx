@@ -12,7 +12,7 @@ import type { PaymentOperationsData } from './view'
  * The native page is a client component, so these composites CANNOT live in a
  * `server-only` sections file the way the [entity] slots do — the four
  * exports below are client components imported by the coordinator's registry
- * entries (INTEGRATION.md), and the drawer chrome they wrap is itself client
+ * entries, and the drawer chrome they wrap is itself client
  * state. What the spec cannot express lives here:
  *
  * - `PaymentOperationsTabs`: the four-view tab strip. The active-vs-plain
@@ -30,7 +30,7 @@ import type { PaymentOperationsData } from './view'
  *   so the drawer stays whole and the spec places it by name over
  *   loader-resolved props.
  *
- * The native branch imports nothing back: `page.tsx` renders
+ * Nothing imports this back into a page: `page.tsx` renders
  * `PaymentOperationsSetup` directly, while the spec path reaches the same
  * implementation through these shared wrappers. One implementation either
  * way — the wrappers below add no markup of their own.

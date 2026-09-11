@@ -1,29 +1,6 @@
 import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { RecordListView } from '../../../../components/record-list-view'
-import { requirePermission, can } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { buildListDrawerHref, pickString } from '../../../../lib/list-params'
 import {
-  BANK_KINDS,
-  DOC_KINDS,
-  accountOptions,
-  bankAccountOptions,
-  cardOptions,
-  dimensionOptions,
-  loadDocument,
-  taxCodeOptions,
-  taxGroupOptions,
 } from '../../../../lib/documents'
-import { loadFieldDefs } from '../../../../lib/custom-fields'
-import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
-import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import { DocumentDrawer, type DocumentDrawerProps } from '../../../../components/document-drawer'
-import { DocumentRowActions } from '../../../../components/document-row-actions'
-import { NewDocumentButton } from '../../../../components/new-document-button'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadBankingTransactions, bankingTransactionsSpec } from './view'
 
@@ -34,10 +11,6 @@ export async function generateMetadata() {
   return { title: t('transactionsPage.title') }
 }
 
-// The banking transaction kinds that can be created from this page — the
-// source platform "Write Checks / Make Deposits / Transfer Funds / Issue Credit Card"
-// shortcuts, surfaced as one New menu.
-const NEW_KINDS = ['check', 'deposit', 'card_charge', 'card_refund', 'transfer'] as const
 
 // Kinds that keep a bespoke drawer form (no customizable form layout): transfers
 // (to/from legs) and deposits (destination bank + source lines).
@@ -47,153 +20,14 @@ export default async function BankingTransactions({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadBankingTransactions(sp)
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={bankingTransactionsSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const authz = await requirePermission('banking.read')
-  const canCreate = can(authz, 'ap.create') || can(authz, 'gl.post')
-  const [inventoryEnabled, equipmentEnabled] = await Promise.all([
-    isFeatureEnabled(authz.user.orgId, 'inventory'),
-    isFeatureEnabled(authz.user.orgId, 'equipment'),
-  ])
-  const t = await getTranslations('banking')
-  const tCommon = await getTranslations('common')
   const sp = await searchParams
-  const basePath = '/banking/transactions'
-
-  // -- open document drawer (?doc=<id>) -------------------------------------
-  const docId = typeof sp.doc === 'string' ? sp.doc : undefined
-  // Org guard: never render another tenant's document in the drawer.
-  const loadedDoc = docId ? await loadDocument(docId, authz.user.orgId) : null
-  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId
-    && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
-    ? loadedDoc : null
-  const openKind = openDoc?.doc.kind as string | undefined
-  const drawerOpen = !!(openDoc && openKind && (BANK_KINDS as readonly string[]).includes(openKind))
-  const pickers = drawerOpen
-    ? await Promise.all([
-        accountOptions(DOC_KINDS[openKind! as 'card_charge']!),
-        taxCodeOptions(),
-        taxGroupOptions(),
-        dimensionOptions(),
-        db.execute(sql`
-          select id, code, name from items
-           where org_id = ${authz.user.orgId} and is_active
-             and (
-               ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
-               ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
-               or id in (
-                 select item_id from document_lines
-                  where org_id = ${authz.user.orgId} and document_id = ${docId} and item_id is not null
-               )
-             )
-           order by coalesce(code, name), name limit 2000`).then((r) => r.rows),
-        cardOptions(),
-        bankAccountOptions(),
-        loadFieldDefs('documents', openKind!),
-        loadFieldDefs('document_lines', openKind!),
-        // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
-        isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
-          if (!multi) return null
-          const options = await subsidiaryOptions()
-          return authz.allowedSubsidiaryIds
-            ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
-            : options
-        }),
-      ])
-    : null
-  const resolvedForm = drawerOpen && pickers
-    ? await resolveFormLayout({
-        orgId: authz.user.orgId,
-        userId: authz.user.id,
-        recordType: openKind!,
-        userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: (pickers[7]),
-        lineDefs: (pickers[8]),
-        explicitLayoutId: pickString(sp.form),
-      })
-    : null
-
-  const newItems = NEW_KINDS.map((kind) => ({ kind, label: t(`txKinds.${kind}`) }))
-
-  const cfg = openKind ? DOC_KINDS[openKind] : undefined
-
+  const data = await loadBankingTransactions(sp)
   return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          back={{ href: '/banking', label: t('home.title') }}
-          title={t('transactionsPage.title')}
-          description={t('transactionsPage.description')}
-          actions={
-            canCreate ? (
-              <NewDocumentButton
-                items={newItems}
-                basePath={basePath}
-                triggerLabel={t('actions.new')}
-                creatingLabel={tCommon('actions.creating')}
-                failedLabel={t('toasts.createDraftFailed')}
-              />
-            ) : undefined
-          }
-        />
-      }
-    >
-      <RecordListView
-        recordType="bank_transaction"
-        basePath={basePath}
-        orgId={authz.user.orgId}
-        userId={authz.user.id}
-        canManage={can(authz, 'admin.customization.manage')}
-        sp={sp}
-        renderRowActions={(row) => (
-          <DocumentRowActions
-            id={String(row.id)}
-            status={String(row.status)}
-            config={DOC_KINDS[row.kind]!}
-            openHref={buildListDrawerHref(basePath, sp, 'doc', String(row.id))}
-          />
-        )}
-        drawer={openDoc && pickers && cfg ? (
-          <DocumentDrawer
-            payload={(openDoc)}
-            key={String(openDoc.doc.id)}
-            config={cfg}
-            basePath={basePath}
-            initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
-            accounts={(pickers[0])}
-            taxCodes={(pickers[1])}
-            taxGroups={(pickers[2])}
-            departments={((pickers[3])).departments}
-            projects={((pickers[3])).projects}
-            locations={((pickers[3])).locations}
-            classes={((pickers[3])).classes}
-            segments={((pickers[3])).segments}
-            builtinSegments={((pickers[3])).builtinSegments}
-            items={pickers[4] as unknown as DocumentDrawerProps['items']}
-            cards={(pickers[5])}
-            bankAccounts={(pickers[6])}
-            subsidiaries={((pickers[9])) ?? undefined}
-            headerDefs={pickers[7] as unknown as DocumentDrawerProps['headerDefs']}
-            lineDefs={pickers[8] as unknown as DocumentDrawerProps['lineDefs']}
-            canCreate={canCreate}
-            canPost={can(authz, 'ap.post') || can(authz, 'gl.post')}
-            layout={resolvedForm?.layout}
-            availableLayouts={resolvedForm?.available}
-            currentLayoutId={resolvedForm?.row?.id ?? null}
-            recordType={openKind}
-            canCustomize={can(authz, 'admin.customization.manage')}
-          />
-        ) : null}
-      />
-    </ListPageLayout>
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={bankingTransactionsSpec(data)} data={data} searchParams={sp} trusted />
+    </>
   )
 }

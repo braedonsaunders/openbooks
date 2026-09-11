@@ -38,7 +38,7 @@ import type { PaymentSetupView } from './PaymentOperationsSetup'
  * The editor drawer and the per-view "New" button stay widgets: the drawer
  * owns fetch flows plus client form state a spec cannot name (the /tax and
  * payroll precedents), and both need the full options payload plus the
- * multiCurrency flag the loader already resolves. The proposed
+ * multiCurrency flag the loader already resolves. The
  * `payment-operations-editor` slot re-derives nothing — it renders the shared
  * `./sections` component over loader-resolved props — while the tab strip is
  * a shared `PaymentOperationsTabs` chrome (the payroll `PayrollSetupTabs`

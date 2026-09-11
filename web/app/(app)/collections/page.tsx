@@ -1,12 +1,6 @@
-import { redirect } from "next/navigation";
-import { getTranslations } from "next-intl/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { requirePermission } from "../../../lib/authz";
-import { isFeatureEnabled } from "../../../lib/features";
-import { ModuleView } from "../../../components/viewspec/module-view";
-import { CollectionsShell } from "./sections";
-import { loadCollections, collectionsSpec } from "./view";
+import { getTranslations } from "next-intl/server"
+import { ModuleView } from "../../../components/viewspec/module-view"
+import { loadCollections, collectionsSpec } from "./view"
 
 export const dynamic = "force-dynamic";
 
@@ -27,50 +21,14 @@ export default async function CollectionsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if ((await searchParams).__viewspec === '1') {
-    const sp = await searchParams
-    const data = await loadCollections()
-    return (
-      <>
-        {/* Proof-of-path marker for the conformance harness; hoisted to <head>. */}
-        <meta name="x-viewspec-render" content="1" />
-        <ModuleView spec={collectionsSpec(data)} data={data} searchParams={sp} trusted />
-      </>
-    )
-  }
-  const [tNav, tAr] = await Promise.all([
-    getTranslations("nav"),
-    getTranslations("ar"),
-  ]);
-  const authz = await requirePermission("documents.manage").catch(() => null);
-  if (!authz) redirect("/dashboard");
-
-  const subscriptionsEnabled = await isFeatureEnabled(authz.user.orgId, "subscriptionBilling");
-  const advancedSubscriptionsEnabled = subscriptionsEnabled && await isFeatureEnabled(authz.user.orgId, "advancedSubscriptions");
-  const [customers, incomeAccounts] = subscriptionsEnabled
-    ? await Promise.all([
-        db.execute<any>(sql`
-          select p.id, p.display_name as "name" from parties p
-           where p.org_id = ${authz.user.orgId} and p.is_active
-             and exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.org_id = p.org_id)
-           order by p.display_name
-        `),
-        db.execute<any>(sql`
-          select id, number, name from accounts
-           where org_id = ${authz.user.orgId} and type in ('income', 'income_other') and is_active
-           order by number nulls last
-        `),
-      ])
-    : [{ rows: [] }, { rows: [] }];
-
+  const sp = await searchParams
+  const data = await loadCollections()
   return (
-    <CollectionsShell
-      title={tNav("modules.collections")}
-      description={tAr("cockpit.description")}
-      subscriptionsEnabled={subscriptionsEnabled}
-      advancedSubscriptionsEnabled={advancedSubscriptionsEnabled}
-      customers={customers.rows.map((c) => ({ id: c.id, name: c.name }))}
-      incomeAccounts={incomeAccounts.rows.map((a) => ({ id: a.id, label: [a.number, a.name].filter(Boolean).join(" · ") }))}
-    />
-  );
+    <>
+      {/* Hoisted to <head>. The conformance harness reads it to tell a current
+          build from a pre-cutover one still serving the old native page. */}
+      <meta name="x-viewspec-render" content="1" />
+      <ModuleView spec={collectionsSpec(data)} data={data} searchParams={sp} trusted />
+    </>
+  )
 }

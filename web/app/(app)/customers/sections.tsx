@@ -8,7 +8,7 @@ import { RelationshipsTable } from './RelationshipsTable'
  *
  * Same division as the purchasing cockpit (see ../purchasing/sections.tsx):
  * ViewSpec composes the grid and the panels; the panel bodies stay components,
- * shared by both render paths via this file so they cannot drift. Each of
+ * shared by the page and the widget registry via this file so they cannot drift. Each of
  * these is a handful of one-off markup, and inventing a ViewSpec block for
  * each would grow the vocabulary one page at a time without ever converging.
  *

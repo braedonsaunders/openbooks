@@ -22,7 +22,7 @@ import { loadApiSchema, type ApiRecordTypeSchema } from '../../../lib/api/schema
  * placed: the spec composes pages, it does not reimplement domain components.
  *
  * The native component is NOT copied. It already lives in its own module
- * (`./ApiConsole`, not defined in `page.tsx`), so both render paths share one
+ * (`./ApiConsole`, not defined in `page.tsx`), so the page and the widget registry share one
  * implementation with no `sections.tsx` to move it into. Never write a second
  * copy.
  */

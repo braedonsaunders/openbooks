@@ -1,7 +1,7 @@
 import { Badge } from '@openbooks/ui'
 
 /**
- * The provision-run list table, moved out of `page.tsx` so both render paths
+ * The provision-run list table, moved out of `page.tsx` so the page and the widget registry
  * share one implementation.
  *
  * A widget rather than a `table` block, the same call the detail page made for

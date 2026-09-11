@@ -99,7 +99,7 @@ export function wipBillingSpec(data: WipBillingData): PageSpec {
     layout: 'list',
     header: [pageHeader({ title: f('title'), description: f('description') })],
     body: [
-      // The whole workspace, placed through one widget (see INTEGRATION.md):
+      // The whole workspace, placed through one widget:
       // it owns the create/detail drawers, the editable line inputs and every
       // fetch mutation, so splitting it would strand client state from the
       // actions it drives. The loader hands over exactly the props the native
