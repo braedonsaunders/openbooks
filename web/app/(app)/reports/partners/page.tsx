@@ -20,15 +20,5 @@ export default async function Partners({
 }) {
   const sp = await searchParams
   const data = await loadPartners(sp)
-  return (
-    <>
-      {/* Proof-of-path marker for the conformance harness. React hoists it
-          into <head>, so it is outside the compared <main> subtree and
-          cannot influence the diff. Without it a stale server — one still
-          serving a build that predates the conversion — would silently
-          compare the native page against itself and report a pass. */}
-      <meta name="x-viewspec-render" content="1" />
-      <ModuleView spec={partnersSpec(data)} data={data} searchParams={sp} trusted />
-    </>
-  )
+  return <ModuleView spec={partnersSpec(data)} data={data} searchParams={sp} trusted />
 }

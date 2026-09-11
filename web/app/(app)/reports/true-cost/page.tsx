@@ -8,12 +8,5 @@ export default async function TrueCostReport({ searchParams }: {
 }) {
   const sp = await searchParams
   const data = await loadTrueCost(sp)
-  return (
-    <>
-      {/* Hoisted to <head>. The conformance harness reads it to tell a current
-          build from a pre-cutover one still serving the old native page. */}
-      <meta name="x-viewspec-render" content="1" />
-      <ModuleView spec={trueCostSpec(data)} data={data} searchParams={sp} trusted />
-    </>
-  )
+  return <ModuleView spec={trueCostSpec(data)} data={data} searchParams={sp} trusted />
 }

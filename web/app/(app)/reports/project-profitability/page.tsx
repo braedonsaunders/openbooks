@@ -9,12 +9,5 @@ export default async function ProjectProfitabilityPage({
 }) {
   const sp = await searchParams
   const data = await loadProjectProfitability(sp)
-  return (
-    <>
-      {/* Proof-of-path marker for the conformance harness; React hoists it to
-          <head>, outside the compared <main>. */}
-      <meta name="x-viewspec-render" content="1" />
-      <ModuleView spec={projectProfitabilitySpec(data)} data={data} searchParams={sp} trusted />
-    </>
-  )
+  return <ModuleView spec={projectProfitabilitySpec(data)} data={data} searchParams={sp} trusted />
 }

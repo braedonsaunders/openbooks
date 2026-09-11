@@ -1,8 +1,6 @@
 import { getTranslations } from 'next-intl/server'
 import { ModuleView } from '../../../components/viewspec/module-view'
 import { loadCompliance, complianceSpec } from './view'
-import {
-} from './sections'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,12 +28,5 @@ export default async function ComplianceHomePage({
 }) {
   const sp = await searchParams
   const data = await loadCompliance(sp)
-  return (
-    <>
-      {/* Hoisted to <head>. The conformance harness reads it to tell a current
-          build from a pre-cutover one still serving the old native page. */}
-      <meta name="x-viewspec-render" content="1" />
-      <ModuleView spec={complianceSpec(data)} data={data} searchParams={sp} trusted />
-    </>
-  )
+  return <ModuleView spec={complianceSpec(data)} data={data} searchParams={sp} trusted />
 }

@@ -17,12 +17,5 @@ export default async function CustomizationPage({
 }) {
   const sp = await searchParams
   const data = await loadCustomization(sp)
-  return (
-    <>
-      {/* Hoisted to <head>. The conformance harness reads it to tell a current
-          build from a pre-cutover one still serving the old native page. */}
-      <meta name="x-viewspec-render" content="1" />
-      <ModuleView spec={customizationSpec(data)} data={data} searchParams={sp} trusted />
-    </>
-  )
+  return <ModuleView spec={customizationSpec(data)} data={data} searchParams={sp} trusted />
 }
