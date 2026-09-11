@@ -2,6 +2,7 @@ import 'server-only'
 
 import { BLOCK_KINDS, CELL_KINDS, SPEC_VERSION, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { FRAME_NAMES, WIDGET_NAMES } from '../../components/viewspec/registry-names'
+import { AUTHORING_REGISTRIES, RENDER_REGISTRIES } from '../../components/viewspec/registries'
 import { can } from '../authz'
 import type { ApplicationContext } from './context'
 import { forbidden } from './errors'
@@ -25,7 +26,7 @@ import { clearPageSpec, listPageSpecs, loadPageSpec, savePageSpec } from '../pag
  * a page looks like for everyone in the org.
  */
 
-const registries = { widgets: WIDGET_NAMES, frames: FRAME_NAMES }
+const registries = AUTHORING_REGISTRIES
 
 function requireCustomization(context: ApplicationContext): void {
   if (!can(context.authz, 'admin.customization.manage')) {
@@ -55,6 +56,7 @@ export async function describeLayoutVocabulary(context: ApplicationContext) {
       'A field reference is { "$": "dot.path" } into the loader data, and nothing else.',
       '`when` OMITS a block; it cannot choose between two. A conditional pair is a component, not a spec construct.',
       'Widgets and frames must be named from the lists above; anything else is refused at save.',
+      'A widget prop the widget does not read is refused at save: it would reach nothing and fail silently.',
       'The org is taken from the session. A spec that names an org id is refused.',
     ],
     limits: {
@@ -152,7 +154,11 @@ export async function describePageLayout(
     }
   }
 
-  const stored = await loadPageSpec(context.authz.user.orgId, entry.route, registries)
+  // READ under the render rules, not the authoring ones. A layout stored
+  // before the prop contracts existed is still what this route renders, so
+  // describing it away as "no override" would show the author a page they
+  // are not looking at.
+  const stored = await loadPageSpec(context.authz.user.orgId, entry.route, RENDER_REGISTRIES)
   const common = {
     known: true as const,
     route: entry.route,

@@ -99,3 +99,93 @@ test('validateSpec hands back the parsed spec, so callers stop holding unknown',
   assert.equal(result.ok, true)
   assert.ok(result.ok && result.spec.route === '/banking')
 })
+
+/**
+ * Prop contracts — the gate that turns a silent typo into a refusal.
+ *
+ * A widget's props are `Record<string, unknown>` by design, so before this
+ * the only feedback for `placeholer` was a control that never appeared.
+ */
+const withContracts = {
+  ...registries,
+  contracts: {
+    'banking-roster': { props: ['accounts', 'totalCash'] },
+    'save-view': { props: [] },
+    'stat-tile-row': { props: ['anything'], open: true as const },
+  },
+}
+
+test('a prop the widget does not read is refused, with the near miss named', () => {
+  const spec = page({
+    route: '/banking',
+    body: [widgetBlock('banking-roster', { accounts: [], totalCsh: 0 })],
+  })
+  const result = validateAgainstRegistries(spec, withContracts)
+  assert.equal(result.ok, false)
+  assert.ok(!result.ok)
+  assert.equal(result.errors.length, 1)
+  // Both names in one message: the one that is wrong and the one that is
+  // probably meant. A bare "unknown prop" leaves an author scanning a list.
+  assert.match(result.errors[0]!, /banking-roster/)
+  assert.match(result.errors[0]!, /"totalCsh"/)
+  assert.match(result.errors[0]!, /did you mean "totalCash"/)
+})
+
+test('a prop nothing resembles is refused without a guess', () => {
+  // A wrong suggestion costs more than none — it sends the author to rename a
+  // prop that was never the problem.
+  const spec = page({ route: '/banking', body: [widgetBlock('banking-roster', { zzzzzzzz: 1 })] })
+  const result = validateAgainstRegistries(spec, withContracts)
+  assert.ok(!result.ok)
+  assert.doesNotMatch(result.errors[0]!, /did you mean/)
+})
+
+test('a missing prop is NOT an error, because a widget may have a default', () => {
+  const spec = page({ route: '/banking', body: [widgetBlock('banking-roster', {})] })
+  assert.equal(validateAgainstRegistries(spec, withContracts).ok, true)
+})
+
+test('an open widget is checked for nothing', () => {
+  // Seventeen entries forward their props wholesale, so any name may be
+  // meaningful. Guessing at those would trade a silent typo for a confident
+  // false refusal, which is the worse failure.
+  const spec = page({ route: '/banking', body: [widgetBlock('stat-tile-row', { whatever: 1 })] })
+  assert.equal(validateAgainstRegistries(spec, withContracts).ok, true)
+})
+
+test('with no contracts supplied, props are not checked at all', () => {
+  // This is what the RENDER path passes. A layout stored under older rules
+  // must keep rendering: tightening a rule must never take a working page
+  // away from a reader who had nothing to do with it.
+  const spec = page({ route: '/banking', body: [widgetBlock('banking-roster', { totalCsh: 0 })] })
+  assert.equal(validateAgainstRegistries(spec, registries).ok, true)
+})
+
+test('the same bad prop is reported once, however often it appears', () => {
+  const spec = page({
+    route: '/banking',
+    body: [widgetBlock('banking-roster', { nope: 1 }), widgetBlock('banking-roster', { nope: 2 })],
+  })
+  const result = validateAgainstRegistries(spec, withContracts)
+  assert.ok(!result.ok)
+  assert.equal(result.errors.length, 1)
+})
+
+test('props are checked on widget CELLS and refs too, not only blocks', () => {
+  // A widget reached through a table cell renders the same component, so a
+  // prop that reaches nothing there is the same defect.
+  const spec = page({
+    route: '/banking',
+    header: [
+      {
+        kind: 'page-header',
+        title: 'x',
+        actions: [{ widget: 'banking-roster', props: { totalCsh: 1 } }],
+      },
+    ],
+    body: [],
+  })
+  const result = validateAgainstRegistries(spec, withContracts)
+  assert.ok(!result.ok)
+  assert.match(result.errors[0]!, /totalCsh/)
+})

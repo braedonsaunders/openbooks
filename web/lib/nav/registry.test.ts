@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import test from 'node:test'
 import {
   DEFAULT_NAV_ORDER,
@@ -122,4 +124,23 @@ test('native record targets are deterministic data contracts', () => {
       assert.equal(module.key, 'projects')
     }
   }
+})
+
+test('every module and group carries a translated label', () => {
+  // A module added without its `nav.modules` entry renders a raw key in the
+  // sidebar and throws MISSING_MESSAGE on the server for every page that
+  // resolves the nav — which is every page. The registry and the catalog are
+  // edited in different files, so nothing but this connects them.
+  const nav = JSON.parse(
+    readFileSync(join(import.meta.dirname, '..', '..', 'messages', 'en', 'nav.json'), 'utf8'),
+  ) as { modules: Record<string, string>; groups?: Record<string, string> }
+
+  const missing = NAV_MODULES.filter((module) => !nav.modules[module.key]).map((module) => module.key)
+  assert.deepEqual(missing, [], 'these modules have no nav.modules label')
+
+  // The reverse too: a label for a module that no longer exists is dead copy
+  // translators keep paying for.
+  const keys = new Set(NAV_MODULES.map((module) => module.key))
+  const orphaned = Object.keys(nav.modules).filter((key) => !keys.has(key))
+  assert.deepEqual(orphaned, [], 'these nav.modules labels name no module')
 })

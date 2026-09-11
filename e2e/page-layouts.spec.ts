@@ -131,6 +131,50 @@ test.describe("page layouts", () => {
     }
   });
 
+  test("preview shows the unsaved layout on the real page, and only to its author", async ({
+    browser,
+    baseURL,
+  }) => {
+    test.slow();
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      await page.goto(`${LIST}?route=${encodeURIComponent(ROUTE)}`);
+      await dismissSetupWizard(page);
+      const dialog = page.getByRole("dialog");
+      await dialog
+        .locator("[data-block-path]")
+        .filter({ hasText: "trendTitle" })
+        .getByRole("button", { name: /hide/i })
+        .click();
+
+      await dialog.getByRole("tab", { name: /^preview$/i }).click();
+      const [previewTab] = await Promise.all([
+        context.waitForEvent("page"),
+        dialog.getByRole("button", { name: /open preview/i }).click(),
+      ]);
+      await previewTab.waitForLoadState("domcontentloaded");
+
+      // The preview IS the page — same chrome, same data — with the unsaved
+      // layout applied. A second rendering path could drift from this one;
+      // that is the whole reason it goes through the real route.
+      const previewed = previewTab.locator("main");
+      await expect(previewed).toBeVisible();
+      await expect(previewed.getByText("Cash trend")).toHaveCount(0);
+      await expect(previewed.getByText("Needs attention").first()).toBeVisible();
+      await previewTab.close();
+
+      // Nothing was published: the same route without the preview flag still
+      // renders what everyone else sees.
+      await page.goto(ROUTE);
+      await expect(page.locator("main").getByText("Cash trend")).toBeVisible();
+      const stored = await page.request.get("/api/page-specs");
+      expect(await stored.json()).toEqual({ rows: [] });
+    } finally {
+      await resetLayout(page).catch(() => {});
+      await context.close();
+    }
+  });
+
   test("a layout the renderer would refuse is reported, not stored", async ({ browser, baseURL }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
@@ -154,6 +198,21 @@ test.describe("page layouts", () => {
       // The offending widget is NAMED. "Invalid" is not a message anyone can
       // act on, and an author who cannot see which widget is wrong will guess.
       await expect(dialog.getByText(/no-such-widget/)).toBeVisible();
+
+      // A prop the widget does not read is refused too, and the message names
+      // the near miss. Before the contracts this saved cleanly and then did
+      // nothing, which is the failure mode with no feedback at all.
+      await editor.fill(
+        JSON.stringify({
+          specVersion: 1,
+          route: ROUTE,
+          layout: "list",
+          header: [],
+          body: [{ kind: "widget", widget: "search-input", props: { placeholer: "x" } }],
+        }),
+      );
+      await dialog.getByRole("button", { name: /^check$/i }).click();
+      await expect(dialog.getByText(/did you mean "placeholder"/)).toBeVisible();
 
       // And it really was a dry run. Checking a draft must not store it, or
       // "Check" would be a save with extra steps and an author would have no

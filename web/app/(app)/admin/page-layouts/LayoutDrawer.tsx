@@ -156,13 +156,15 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
   const initial = drawer.override ?? drawer.builtIn
   const [working, setWorking] = useState<PageSpec | null>(initial)
   const [undo, setUndo] = useState<PageSpec[]>([])
-  const [mode, setMode] = useState<'structure' | 'json' | 'fields'>('structure')
+  const [mode, setMode] = useState<'structure' | 'json' | 'preview' | 'fields'>('structure')
   const [json, setJson] = useState(() => (initial ? JSON.stringify(initial, null, 2) : ''))
   // Blank each time: a note explains THIS change, so carrying the previous
   // one forward would quietly attribute an old reason to a new edit.
   const [note, setNote] = useState('')
   const [errors, setErrors] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  /** The url of the live preview, and a token that forces the frame to reload. */
+  const [preview, setPreview] = useState<{ href: string; nonce: number } | null>(null)
 
   const outline = useMemo(() => (working ? outlineSpec(working) : null), [working])
   const dirty = working !== initial
@@ -213,6 +215,43 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
     return true
   }
 
+  /**
+   * Store the working layout as this author's draft and point the frame at
+   * the REAL route with `?layoutPreview=1`.
+   *
+   * Not a rendering of its own: the frame loads the page every reader loads,
+   * which is the only way a preview can be trusted to match what shipping the
+   * layout would actually do.
+   */
+  const showPreview = async () => {
+    const spec = candidate()
+    if (!spec) return
+    setBusy(true)
+    try {
+      const response = await fetch('/api/page-specs?preview=1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ route: drawer.route, spec, params: drawer.segments }),
+      })
+      const body = (await response.json().catch(() => ({}))) as {
+        previewUrl?: string
+        errors?: string[]
+        error?: string
+      }
+      if (!response.ok || !body.previewUrl) {
+        setErrors(body.errors ?? [body.error ?? tCommon('errors.unknown')])
+        return
+      }
+      setErrors([])
+      setPreview({ href: body.previewUrl, nonce: Date.now() })
+      // Opened only after the draft is stored, so the new tab never races the
+      // write and shows the layout the author had a moment ago.
+      window.open(body.previewUrl, '_blank', 'noopener,noreferrer')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const validate = async () => {
     const spec = candidate()
     if (!spec) return
@@ -253,7 +292,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
     }
   }
 
-  const TABS = ['structure', 'json', 'fields'] as const
+  const TABS = ['structure', 'json', 'preview', 'fields'] as const
 
   // The drawer chrome owns the tab strip, so the tabs sit above the scrolling
   // body instead of scrolling away with it.
@@ -371,6 +410,29 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
                 className="h-[28rem] font-mono text-xs"
                 aria-label={t('tabs.json')}
               />
+            ) : null}
+
+            {mode === 'preview' ? (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600 dark:text-slate-300">{t('preview.help')}</p>
+                {/* A new tab rather than an inline frame, and not for want of
+                    trying: the app sends `X-Frame-Options: DENY` and
+                    `frame-ancestors 'none'`, which is the clickjacking
+                    protection every page depends on. Relaxing it for requests
+                    carrying `?layoutPreview=1` would make that protection
+                    opt-out via a query parameter an attacker can add. The
+                    convenience is not worth the hole — do not "fix" this by
+                    widening the header. */}
+                <p className={`text-xs ${TONE.chrome}`}>{t('preview.newTab')}</p>
+                <Button disabled={busy} onClick={showPreview}>
+                  {busy ? tCommon('actions.saving') : t('actions.openPreview')}
+                </Button>
+                {preview ? (
+                  <p className={`text-xs ${TONE.chrome}`}>
+                    {t('preview.opened')} <code className={TONE.mono}>{preview.href}</code>
+                  </p>
+                ) : null}
+              </div>
             ) : null}
 
             {mode === 'fields' ? (

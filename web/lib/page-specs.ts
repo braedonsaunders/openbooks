@@ -149,6 +149,93 @@ export async function savePageSpec(opts: {
   })
 }
 
+/**
+ * How long a preview draft keeps applying.
+ *
+ * Long enough to edit, look, and come back; short enough that an author who
+ * wandered off is not still wearing a layout they have forgotten about. The
+ * window is enforced on READ as well as on write, so an expired draft stops
+ * applying even if nothing has swept it yet — a draft that outlived its
+ * sweep must not quietly keep rendering.
+ */
+export const DRAFT_TTL_MINUTES = 30
+
+/**
+ * Store an author's unpublished layout so they can see it before anyone else.
+ *
+ * Scoped to one USER, not to the org. A draft is unreviewed work: it must not
+ * change what a colleague sees, and it must not become a way to show someone
+ * a layout they did not ask for. Publishing stays a separate, audited act.
+ *
+ * Not audited, deliberately. The audit trail answers "who changed what the
+ * org sees", and a draft changes nothing anyone else can observe; filling the
+ * trail with keystrokes would bury the entries that do matter.
+ */
+export async function savePageSpecDraft(opts: {
+  orgId: string
+  userId: string
+  route: string
+  spec: PageSpec
+  registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> }
+}): Promise<{ ok: true } | SpecRejection> {
+  const checked = validateAgainstRegistries(opts.spec, opts.registries)
+  if (!checked.ok) return checked
+  if (checked.spec.route && checked.spec.route !== opts.route) {
+    return { ok: false, errors: [`spec declares route ${checked.spec.route}, previewed as ${opts.route}`] }
+  }
+
+  // Sweep this author's expired drafts on the way past. A background job for
+  // a handful of rows per editing session would be machinery without a
+  // purpose, and doing it here means the table cannot grow without someone
+  // actively using the feature.
+  await db.execute(sql`
+    delete from page_spec_drafts
+     where org_id = ${opts.orgId} and user_id = ${opts.userId}
+       and created_at < now() - ${`${DRAFT_TTL_MINUTES} minutes`}::interval`)
+  await db.execute(sql`
+    insert into page_spec_drafts (org_id, user_id, route, spec)
+    values (${opts.orgId}, ${opts.userId}, ${opts.route}, ${JSON.stringify(checked.spec)}::jsonb)
+    on conflict (org_id, user_id, route)
+    do update set spec = excluded.spec, created_at = now()`)
+  return { ok: true as const }
+}
+
+/**
+ * The caller's own unexpired draft for a route, or null.
+ *
+ * Validated on the way out for the same reason a stored override is: the row
+ * could have been written by an older build, and "it was valid when we stored
+ * it" is not a property the renderer can assume.
+ */
+export async function loadPageSpecDraft(
+  orgId: string,
+  userId: string,
+  route: string,
+  registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> },
+): Promise<PageSpec | null> {
+  const rows = await db.execute<{ spec: unknown }>(sql`
+    select spec from page_spec_drafts
+     where org_id = ${orgId} and user_id = ${userId} and route = ${route}
+       and created_at >= now() - ${`${DRAFT_TTL_MINUTES} minutes`}::interval
+     limit 1`)
+  const row = rows.rows[0]
+  if (!row) return null
+  const checked = validateAgainstRegistries(row.spec, registries)
+  if (!checked.ok) {
+    console.warn(`[page-specs] ignoring draft for ${route}: ${checked.errors.slice(0, 3).join('; ')}`)
+    return null
+  }
+  if (checked.spec.route && checked.spec.route !== route) return null
+  return checked.spec
+}
+
+/** Drop a draft once its author has published or walked away. */
+export async function clearPageSpecDraft(orgId: string, userId: string, route: string): Promise<void> {
+  await db.execute(sql`
+    delete from page_spec_drafts
+     where org_id = ${orgId} and user_id = ${userId} and route = ${route}`)
+}
+
 /** Turn an override off; the page falls back to its built-in spec. */
 export async function clearPageSpec(opts: {
   orgId: string

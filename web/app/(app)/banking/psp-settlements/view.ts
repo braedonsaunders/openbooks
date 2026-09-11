@@ -69,7 +69,6 @@ export interface PspSettlementsStrings {
 export interface PspSettlementsData {
   title: string
   description: string
-  acceptanceHref: string
   strings: PspSettlementsStrings
   rows: PspSettlementRow[]
 }
@@ -119,7 +118,6 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
   return {
     title: t('title'),
     description: t('description'),
-    acceptanceHref: '/admin/setup/payment-providers',
     strings: {
       acceptanceNote: t('acceptanceNote'),
       acceptanceLink: t('acceptanceLink'),
@@ -184,7 +182,10 @@ export function pspSettlementsSpec(data: PspSettlementsData): PageSpec {
           // No wrapper: the frame already carries `space-y-6`, and a second
           // div here is markup the native page does not have.
           widgetBlock('psp-settlements', {
-            acceptanceHref: data.acceptanceHref,
+            // No `acceptanceHref`: the workspace hardcodes that route itself,
+            // so passing it here reached nothing. Wiring the route through
+            // properly is a separate cleanup — this only stops pretending it
+            // is already wired.
             strings: data.strings,
             initialRows: data.rows,
           }),

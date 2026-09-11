@@ -3776,7 +3776,8 @@
       "aria": "Layout editor sections",
       "structure": "Structure",
       "json": "Advanced",
-      "fields": "Available fields"
+      "fields": "Available fields",
+      "preview": "Preview"
     },
     "outline": {
       "header": "Header",
@@ -3831,7 +3832,13 @@
       "remove": "Remove customization",
       "saved": "Layout saved.",
       "validated": "This layout is valid.",
-      "removed": "Customization removed; the page renders the built-in layout."
+      "removed": "Customization removed; the page renders the built-in layout.",
+      "openPreview": "Open preview"
+    },
+    "preview": {
+      "help": "Opens the real page rendered with your unsaved layout. Only you see it, and it stops applying after 30 minutes.",
+      "newTab": "It opens in a new tab: the app refuses to be shown inside a frame, which is the protection that stops another site embedding your pages.",
+      "opened": "Opened"
     }
   }
 }
