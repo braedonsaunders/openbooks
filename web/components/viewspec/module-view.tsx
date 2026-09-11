@@ -3,8 +3,9 @@ import { validateSpec } from '@openbooks/viewspec'
 import { getAuthz } from '../../lib/authz'
 import { loadPageSpec } from '../../lib/page-specs'
 import { ListPageLayout, DetailPageLayout } from '../page-layout'
-import { BlockList, FRAME_NAMES } from './blocks'
-import { WIDGET_NAMES } from './widgets'
+import { BlockList } from './blocks'
+import { FRAME_NAMES, WIDGET_NAMES } from './registry-names'
+import { SpecBoundary } from './spec-boundary'
 
 /**
  * ModuleView — the single entry point that turns a spec plus its loader data
@@ -30,6 +31,12 @@ import { WIDGET_NAMES } from './widgets'
  * punish a reader for an author's mistake. The reason is logged. An invalid
  * spec passed directly — by a test, or an agent calling this component —
  * still surfaces its errors, because there is no built-in to fall back to.
+ *
+ * The same bargain covers a layout that validates and then THROWS. Widget
+ * props are `Record<string, unknown>` by design, so a tenant can bind the
+ * wrong shape to a widget that expects a particular one; validation cannot
+ * see that, and the component fails at render. `SpecBoundary` catches it and
+ * renders the built-in page instead of the app error screen.
  */
 export async function ModuleView({
   spec,
@@ -60,13 +67,29 @@ export async function ModuleView({
   }
 
   const effective = await resolveSpec(spec)
-  const header = <BlockList blocks={effective.header} scope={data} searchParams={searchParams} />
-  const body = <BlockList blocks={effective.body} scope={data} searchParams={searchParams} />
+  if (effective === spec) return render(spec, data, searchParams)
+  // A tenant layout is rendered inside a boundary whose fallback is the page
+  // the app shipped. Both subtrees are built here: the fallback has to exist
+  // before the boundary can use it.
+  return (
+    <SpecBoundary fallback={render(spec, data, searchParams)}>
+      {render(effective, data, searchParams)}
+    </SpecBoundary>
+  )
+}
+
+function render(
+  spec: PageSpec,
+  data: ViewData,
+  searchParams: Record<string, string | string[] | undefined>,
+) {
+  const header = <BlockList blocks={spec.header} scope={data} searchParams={searchParams} />
+  const body = <BlockList blocks={spec.body} scope={data} searchParams={searchParams} />
   // `bare` exists for pages that already sit INSIDE a shell — the setup
   // workspace renders its own sticky header and container, and wrapping its
   // pages in a second ListPageLayout would nest the chrome. A bare spec owns
   // its own outer element, so `header` and `body` are simply concatenated.
-  if (effective.layout === 'bare') {
+  if (spec.layout === 'bare') {
     return (
       <>
         {header}
@@ -74,9 +97,9 @@ export async function ModuleView({
       </>
     )
   }
-  const Layout = effective.layout === 'detail' ? DetailPageLayout : ListPageLayout
+  const Layout = spec.layout === 'detail' ? DetailPageLayout : ListPageLayout
   return (
-    <Layout header={header} className={effective.bodyClassName}>
+    <Layout header={header} className={spec.bodyClassName}>
       {body}
     </Layout>
   )
