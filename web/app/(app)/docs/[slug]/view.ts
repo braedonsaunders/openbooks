@@ -64,6 +64,7 @@ export async function loadDocArticle(slug: string): Promise<DocArticleData> {
 
 export function docArticleSpec(data: DocArticleData): PageSpec {
   return page({
+    route: '/docs/[slug]',
     // The article owns its own centered container; a list layout would nest
     // it in a second shell (same reason as the docs home).
     layout: 'bare',

@@ -59,6 +59,7 @@ const f = ref<ExpensesData>()
 
 export function expensesSpec(data: ExpensesData): PageSpec {
   return page({
+    route: '/expenses',
     layout: 'list',
     bodyClassName: 'flex h-full min-h-0 flex-col',
     header: [

@@ -263,6 +263,7 @@ const f = ref<LaborCostingData>()
 
 export function laborCostingSpec(data: LaborCostingData): PageSpec {
   return page({
+    route: '/admin/setup/labor-costing',
     // The setup workspace renders its own shell around every entity page;
     // wrapping it in a second page layout would nest the chrome.
     layout: 'bare',

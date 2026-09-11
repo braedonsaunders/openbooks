@@ -273,6 +273,7 @@ export function reportRunSpec(data: ReportRunData): PageSpec {
     widget('export-menu', { baseHref: data.exportBaseHref }),
   ]
   return page({
+    route: '/reports/custom/run/[id]',
     layout: 'list',
     header: [
       pageHeader({

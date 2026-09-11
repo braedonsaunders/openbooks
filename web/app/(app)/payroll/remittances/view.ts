@@ -105,6 +105,7 @@ const f = ref<RemittancesData>()
 
 export function remittancesSpec(data: RemittancesData): PageSpec {
   return page({
+    route: '/payroll/remittances',
     layout: 'list',
     header: [
       pageHeader({

@@ -55,6 +55,7 @@ export async function loadRootDashboard(
 
 export function rootDashboardSpec(data: RootDashboardData): PageSpec {
   return page({
+    route: '/',
     // The native page renders inside PageContainer (not the sticky
     // ListPageLayout chrome), so the spec is bare and places the container
     // itself through the `page-container` frame — the platform-hub precedent.

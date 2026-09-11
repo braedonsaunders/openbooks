@@ -75,6 +75,7 @@ const f = ref<RevenueData>()
 export function revenueSpec(data: RevenueData): PageSpec {
   const runRecognition = { widget: 'run-recognition', props: {} }
   return page({
+    route: '/revenue',
     layout: 'list',
     header: [
       pageHeader({

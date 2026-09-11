@@ -79,6 +79,7 @@ const f = ref<PayrollRetroData>()
 
 export function payrollRetroSpec(_data: PayrollRetroData): PageSpec {
   return page({
+    route: '/payroll/retro',
     layout: 'list',
     header: [
       pageHeader({

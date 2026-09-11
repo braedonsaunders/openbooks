@@ -77,6 +77,7 @@ const f = ref<SandboxesData>()
 
 export function sandboxesSpec(data: SandboxesData): PageSpec {
   return page({
+    route: '/admin/sandboxes',
     layout: 'list',
     header: [
       pageHeader({

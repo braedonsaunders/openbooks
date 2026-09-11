@@ -87,6 +87,7 @@ export async function loadTaxSetup(
  */
 export function taxSetupSpec(data: TaxSetupData): PageSpec {
   return page({
+    route: '/admin/setup/tax-setup',
     // The setup workspace renders its own shell around every entity page;
     // wrapping it in a second page layout would nest the chrome. The native
     // page owns its outer `<div className="mx-auto max-w-5xl space-y-6 p-1">`,

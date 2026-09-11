@@ -177,6 +177,7 @@ const f = ref<ComplianceVendorsData>()
 
 export function complianceVendorsSpec(data: ComplianceVendorsData): PageSpec {
   return page({
+    route: '/compliance/vendors',
     layout: 'list',
     header: [
       pageHeader({ title: f('title'), description: f('description') }),

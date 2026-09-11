@@ -170,6 +170,7 @@ const MUTED = 'text-slate-500 dark:text-slate-400'
 
 export function apiKeysSpec(data: ApiKeysData): PageSpec {
   return page({
+    route: '/admin/api-keys',
     layout: 'list',
     header: [
       pageHeader({

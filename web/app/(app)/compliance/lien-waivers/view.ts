@@ -202,6 +202,7 @@ const MUTED = 'text-slate-500 dark:text-slate-400'
 
 export function lienWaiversSpec(data: LienWaiversData): PageSpec {
   return page({
+    route: '/compliance/lien-waivers',
     layout: 'list',
     header: [
       pageHeader({ title: f('title'), description: f('description') }),

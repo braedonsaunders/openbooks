@@ -74,6 +74,7 @@ const f = ref<TrashData>()
 
 export function trashSpec(data: TrashData): PageSpec {
   return page({
+    route: '/documents/trash',
     // The trash owns its own full-height shell — ListPageLayout's centered
     // container would nest the chrome, so header and body concatenate.
     layout: 'bare',

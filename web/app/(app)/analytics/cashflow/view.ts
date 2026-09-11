@@ -61,6 +61,7 @@ export async function loadCashflow(sp: Record<string, string | undefined>): Prom
 
 export function cashflowSpec(data: CashflowData): PageSpec {
   return page({
+    route: '/analytics/cashflow',
     layout: 'list',
     header: [
       frame(

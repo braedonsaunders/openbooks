@@ -141,6 +141,7 @@ function emptyNoteBody(when: FieldRef) {
 
 export function appsLibrarySpec(data: AppsLibraryData): PageSpec {
   return page({
+    route: '/apps/library',
     layout: 'list',
     header: [
       pageHeader({

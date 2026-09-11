@@ -230,6 +230,7 @@ export function arInvoicesSpec(data: ArInvoicesData): PageSpec {
     },
   }
   return page({
+    route: '/ar/invoices',
     layout: 'list',
     header: [
       pageHeader({

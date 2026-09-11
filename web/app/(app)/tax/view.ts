@@ -229,6 +229,7 @@ const f = ref<TaxData>()
 
 export function taxSpec(data: TaxData): PageSpec {
   return page({
+    route: '/tax',
     // The native page owns its PageContainer shell, which no spec layout
     // reproduces — so the spec draws no chrome of its own and places the
     // whole page through one widget that renders the identical shared

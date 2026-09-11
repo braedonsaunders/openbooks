@@ -19,7 +19,7 @@
  */
 
 import { z } from 'zod'
-import { SPEC_VERSION } from './types.ts'
+import { SPEC_VERSION, type PageSpec } from './types.ts'
 
 const fieldRefSchema = z.strictObject({ $: z.string().min(1).max(200) })
 
@@ -365,6 +365,15 @@ export const blockSchema: z.ZodType<unknown> = z.lazy(() =>
 export const MAX_BLOCK_DEPTH = 6
 
 export const pageSpecSchema = z.strictObject({
+  // The route PATTERN, not a url: `/apps/[key]`, never `/apps/payroll`. A
+  // stored override is keyed by it, so the shape is constrained here rather
+  // than trusted from whatever wrote the row.
+  route: z
+    .string()
+    .min(1)
+    .max(120)
+    .regex(/^\/[A-Za-z0-9\-_/[\]().]*$/, 'route must be an absolute route pattern')
+    .optional(),
   specVersion: z.literal(SPEC_VERSION),
   layout: z.enum(['list', 'detail', 'bare']),
   bodyClassName: z.string().max(300).optional(),
@@ -372,10 +381,17 @@ export const pageSpecSchema = z.strictObject({
   body: z.array(blockSchema).max(40),
 })
 
-export interface SpecValidation {
-  ok: boolean
-  errors: string[]
-}
+/**
+ * A discriminated union, not a bare `{ ok, errors }`.
+ *
+ * The point of validating is to STOP holding `unknown`. Returning the parsed
+ * document means a caller that checked `ok` is handed a `PageSpec`, instead of
+ * checking and then casting the same raw value it started with — which is how
+ * a validated-then-ignored spec sneaks through.
+ */
+export type SpecValidation =
+  | { ok: true; spec: PageSpec; errors: [] }
+  | { ok: false; errors: string[] }
 
 /** Walk nested `paper` blocks and reject anything deeper than the cap. */
 function assertDepth(blocks: unknown[], depth: number, errors: string[]): void {
@@ -443,5 +459,6 @@ export function validateSpec(raw: unknown): SpecValidation {
   const errors: string[] = []
   assertDepth(parsed.data.header, 1, errors)
   assertDepth(parsed.data.body, 1, errors)
-  return { ok: errors.length === 0, errors }
+  if (errors.length > 0) return { ok: false, errors }
+  return { ok: true, spec: parsed.data as PageSpec, errors: [] }
 }

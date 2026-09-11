@@ -173,6 +173,7 @@ const f = ref<EntityRoleData>()
 export function entityRoleSpec(data: EntityRoleData): PageSpec {
   const newParty = { widget: 'new-role-party', props: { ...data.newParty } }
   return page({
+    route: '/entities/[role]',
     layout: 'list',
     header: [
       pageHeader({

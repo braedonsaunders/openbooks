@@ -203,6 +203,7 @@ const MUTED = 'text-slate-500 dark:text-slate-400'
 
 export function insightsSpec(data: InsightsData): PageSpec {
   return page({
+    route: '/insights',
     layout: 'list',
     header: [
       pageHeader({

@@ -248,6 +248,7 @@ const closingRow: TableSpanRow = {
 
 export function generalLedgerSpec(data: GeneralLedgerData): PageSpec {
   return page({
+    route: '/reports/general-ledger',
     layout: 'list',
     header: [
       pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),

@@ -258,6 +258,10 @@ export function repeat(spec: Omit<RepeatBlock, 'kind'>): RepeatBlock {
 /* ---------------------------------- page ---------------------------------- */
 
 export function page(spec: {
+  /** The Next.js route PATTERN this spec describes. A page that declares it
+   *  can be overridden by a tenant-authored spec stored under that key; a
+   *  page that omits it cannot, which is the safe default. */
+  route?: string
   layout?: PageSpec['layout']
   bodyClassName?: string
   header?: Block[]
@@ -265,6 +269,7 @@ export function page(spec: {
 }): PageSpec {
   return {
     specVersion: SPEC_VERSION,
+    ...(spec.route ? { route: spec.route } : {}),
     layout: spec.layout ?? 'list',
     ...(spec.bodyClassName ? { bodyClassName: spec.bodyClassName } : {}),
     header: spec.header ?? [],

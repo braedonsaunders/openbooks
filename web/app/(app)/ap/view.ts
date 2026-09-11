@@ -81,6 +81,7 @@ const f = ref<ApCockpitData>()
 
 export function apCockpitSpec(data: ApCockpitData): PageSpec {
   return page({
+    route: '/ap',
     layout: 'list',
     bodyClassName: 'flex h-full min-h-0 flex-col',
     header: [

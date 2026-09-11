@@ -229,6 +229,7 @@ const rootF = rootRef<CustomReportsData>()
 
 export function customReportsSpec(data: CustomReportsData): PageSpec {
   return page({
+    route: '/reports/custom',
     layout: 'list',
     header: [
       pageHeader({

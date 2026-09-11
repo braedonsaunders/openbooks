@@ -143,6 +143,7 @@ export function payRunsSpec(data: PayRunsData): PageSpec {
     },
   }
   return page({
+    route: '/payroll/runs',
     layout: 'list',
     header: [
       pageHeader({

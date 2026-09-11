@@ -103,6 +103,7 @@ export function invoicingSetupSpec(data: InvoicingSetupData): PageSpec {
     applicationProjectTypes: data.applicationProjectTypes,
   }
   return page({
+    route: '/admin/setup/invoicing',
     // The setup workspace layout renders its own shell (sticky PageHeader +
     // SetupNav rail) around every setup page; wrapping it in a second page
     // layout would nest the chrome — the crm/bank-feeds precedent.

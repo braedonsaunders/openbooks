@@ -240,6 +240,7 @@ const openingRow: TableSpanRow = {
 
 export function registersSpec(data: RegistersData): PageSpec {
   return page({
+    route: '/reports/registers',
     layout: 'list',
     header: [
       pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),

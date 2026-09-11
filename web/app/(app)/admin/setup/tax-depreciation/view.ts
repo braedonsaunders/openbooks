@@ -152,6 +152,7 @@ const f = ref<TaxDepreciationSetupData>()
 export function taxDepreciationSetupSpec(data: TaxDepreciationSetupData): PageSpec {
   const basePath = '/admin/setup/tax-depreciation'
   return page({
+    route: '/admin/setup/tax-depreciation',
     // The setup workspace renders its own shell around every entity page;
     // wrapping it in a second page layout would nest the chrome. The native
     // page owns its outer `<div className="space-y-5">`, so the spec places

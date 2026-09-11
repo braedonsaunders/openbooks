@@ -45,6 +45,7 @@ export async function loadApiDocs(
 
 export function apiDocsSpec(data: ApiDocsData): PageSpec {
   return page({
+    route: '/api-docs',
     // Bare: the console owns its own full-height flex column (the native root
     // is `flex h-full min-h-0 flex-col` under the app shell's <main>), so no
     // ListPageLayout chrome may wrap it.

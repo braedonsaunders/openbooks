@@ -97,6 +97,7 @@ const f = ref<ReportDeliveryData>()
 
 export function reportDeliverySpec(data: ReportDeliveryData): PageSpec {
   return page({
+    route: '/reports/custom/run/[id]/delivery',
     // `detail`, not `list`: the native page uses DetailPageLayout.
     layout: 'detail',
     header: [

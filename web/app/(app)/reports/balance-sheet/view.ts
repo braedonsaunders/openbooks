@@ -151,6 +151,7 @@ const f = ref<BalanceSheetData>()
 
 export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
   return page({
+    route: '/reports/balance-sheet',
     layout: 'list',
     header: [
       pageHeader({

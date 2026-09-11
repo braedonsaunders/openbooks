@@ -40,6 +40,7 @@ export async function loadQuery(
 
 export function querySpec(_data: QueryData): PageSpec {
   return page({
+    route: '/query',
     // Bare: the console owns its own full-height flex column (the native root
     // is `flex h-full min-h-0 flex-col` under the app shell's <main>), so no
     // ListPageLayout chrome may wrap it.

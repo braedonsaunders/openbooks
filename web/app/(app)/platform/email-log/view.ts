@@ -127,6 +127,7 @@ const item = field
 
 export function emailLogSpec(data: EmailLogData): PageSpec {
   return page({
+    route: '/platform/email-log',
     layout: 'list',
     header: [
       pageHeader({

@@ -62,6 +62,7 @@ export async function loadFinancialHealth(sp: Record<string, string | undefined>
 
 export function financialHealthSpec(data: FinancialHealthData): PageSpec {
   return page({
+    route: '/analytics/financial-health',
     layout: 'list',
     header: [
       frame('analytics-header', [widgetBlock('report-period-filter')], {

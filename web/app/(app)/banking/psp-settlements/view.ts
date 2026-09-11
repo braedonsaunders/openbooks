@@ -167,6 +167,7 @@ const f = ref<PspSettlementsData>()
 
 export function pspSettlementsSpec(data: PspSettlementsData): PageSpec {
   return page({
+    route: '/banking/psp-settlements',
     // List chrome outside (sticky PageHeader), PageContainer scroll shell
     // inside — the native page nests exactly this pair.
     layout: 'list',

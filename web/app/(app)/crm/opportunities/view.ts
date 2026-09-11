@@ -129,6 +129,7 @@ export function opportunitiesSpec(data: OpportunitiesData): PageSpec {
     },
   }
   return page({
+    route: '/crm/opportunities',
     layout: 'list',
     header: [
       pageHeader({

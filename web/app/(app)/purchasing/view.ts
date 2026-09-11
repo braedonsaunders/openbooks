@@ -245,6 +245,7 @@ const f = ref<PurchasingData>()
 
 export function purchasingSpec(data: PurchasingData): PageSpec {
   return page({
+    route: '/purchasing',
     layout: 'list',
     bodyClassName: 'flex h-full min-h-0 flex-col',
     header: [

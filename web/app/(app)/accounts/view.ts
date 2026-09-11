@@ -427,6 +427,7 @@ export function accountsSpec(data: AccountsData): PageSpec {
     props: { currentParams: data.currentParams, label: data.newAccountLabel },
   }
   return page({
+    route: '/accounts',
     layout: 'list',
     header: [
       pageHeader({

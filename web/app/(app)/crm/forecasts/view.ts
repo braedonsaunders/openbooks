@@ -378,6 +378,7 @@ const rootF = rootRef<ForecastsData>()
 
 export function forecastsSpec(data: ForecastsData): PageSpec {
   return page({
+    route: '/crm/forecasts',
     layout: 'list',
     header: [
       pageHeader({

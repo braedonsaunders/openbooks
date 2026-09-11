@@ -222,6 +222,7 @@ export function projectProfitabilitySpec(data: ProjectProfitabilityData): PageSp
     widget('export-menu', { kind: 'project-profitability', params: data.exportParams }),
   ]
   return page({
+    route: '/reports/project-profitability',
     layout: 'list',
     header: [
       pageHeader({

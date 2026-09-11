@@ -51,6 +51,7 @@ export async function loadSpendVelocity(sp: Record<string, string | undefined>):
 
 export function spendVelocitySpec(data: SpendVelocityData): PageSpec {
   return page({
+    route: '/analytics/spend-velocity',
     layout: 'list',
     header: [
       frame('analytics-header', [widgetBlock('report-period-filter')], {

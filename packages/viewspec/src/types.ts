@@ -618,6 +618,16 @@ export type PageLayout = 'list' | 'detail' | 'bare'
 
 export interface PageSpec {
   specVersion: typeof SPEC_VERSION
+  /**
+   * The route this spec describes, as a Next.js route PATTERN —
+   * `/banking`, `/apps/[key]`. It is the key a tenant override is stored
+   * under, so it must name the route rather than the url: one stored spec
+   * customizes `/apps/[key]` for every app, not `/apps/payroll` alone.
+   *
+   * Optional because a page that never declares it simply cannot be
+   * overridden, which is a safe default rather than a broken one.
+   */
+  route?: string
   layout: PageLayout
   /** Override for the layout's body wrapper — cockpit pages pass a flex
    *  column so the content fits the viewport and scrolls inside panels. */

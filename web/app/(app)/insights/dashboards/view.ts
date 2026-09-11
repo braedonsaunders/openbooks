@@ -169,6 +169,7 @@ const MUTED = 'text-slate-500 dark:text-slate-400'
 
 export function dashboardsSpec(data: DashboardsData): PageSpec {
   return page({
+    route: '/insights/dashboards',
     layout: 'list',
     header: [
       pageHeader({

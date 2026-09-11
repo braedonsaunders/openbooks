@@ -92,6 +92,7 @@ const f = ref<SeparationsData>()
 
 export function separationsSpec(data: SeparationsData): PageSpec {
   return page({
+    route: '/payroll/separations',
     layout: 'list',
     header: [
       pageHeader({

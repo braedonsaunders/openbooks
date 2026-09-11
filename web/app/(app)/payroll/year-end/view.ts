@@ -106,6 +106,7 @@ const f = ref<YearEndData>()
 
 export function yearEndSpec(_data: YearEndData): PageSpec {
   return page({
+    route: '/payroll/year-end',
     layout: 'list',
     header: [
       pageHeader({

@@ -248,6 +248,7 @@ const rootF = rootRef<CloseData>()
 
 export function closeSpec(data: CloseData): PageSpec {
   return page({
+    route: '/close',
     layout: 'list',
     header: [
       pageHeader({

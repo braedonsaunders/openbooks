@@ -116,6 +116,7 @@ const item = field
 
 export function platformAccessSpec(data: PlatformAccessData): PageSpec {
   return page({
+    route: '/platform/access',
     layout: 'list',
     bodyClassName: 'space-y-5',
     header: [

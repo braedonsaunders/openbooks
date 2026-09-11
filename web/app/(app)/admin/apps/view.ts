@@ -225,6 +225,7 @@ const MUTED = 'text-xs text-slate-500'
 
 export function adminAppsSpec(data: AdminAppsData): PageSpec {
   return page({
+    route: '/admin/apps',
     layout: 'list',
     header: [
       pageHeader({

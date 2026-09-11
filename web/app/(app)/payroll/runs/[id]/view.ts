@@ -335,6 +335,7 @@ const f = ref<PayRunWizardData>()
 
 export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
   return page({
+    route: '/payroll/runs/[id]',
     layout: 'list',
     header: [
       pageHeader({

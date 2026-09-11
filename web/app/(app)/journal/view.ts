@@ -198,6 +198,7 @@ const f = ref<JournalData>()
 
 export function journalSpec(data: JournalData): PageSpec {
   return page({
+    route: '/journal',
     layout: 'list',
     header: [
       pageHeader({

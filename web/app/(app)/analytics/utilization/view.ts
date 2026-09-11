@@ -55,6 +55,7 @@ export async function loadUtilization(sp: Record<string, string | undefined>): P
 
 export function utilizationSpec(data: UtilizationData): PageSpec {
   return page({
+    route: '/analytics/utilization',
     layout: 'list',
     header: [
       frame('analytics-header', [widgetBlock('report-period-filter')], {

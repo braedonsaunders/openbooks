@@ -466,6 +466,7 @@ const MUTED = 'text-slate-500 dark:text-slate-400'
 
 export function bankingAccountSpec(data: BankingAccountData): PageSpec {
   return page({
+    route: '/banking/[accountId]',
     layout: 'list',
     header: [
       pageHeader({

@@ -122,6 +122,7 @@ const f = ref<TrialBalanceData>()
 
 export function trialBalanceSpec(data: TrialBalanceData): PageSpec {
   return page({
+    route: '/reports/trial-balance',
     layout: 'list',
     header: [
       pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),

@@ -96,6 +96,7 @@ export function activitiesSpec(data: ActivitiesData): PageSpec {
     },
   }
   return page({
+    route: '/crm/activities',
     layout: 'list',
     header: [
       pageHeader({

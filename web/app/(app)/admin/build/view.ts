@@ -164,6 +164,7 @@ const f = ref<BuildHubData>()
 export function buildHubSpec(data: BuildHubData): PageSpec {
   void data
   return page({
+    route: '/admin/build',
     // The hub owns its own full-height shell — ListPageLayout's centered
     // container would nest the chrome, so header and body concatenate.
     layout: 'bare',

@@ -237,6 +237,7 @@ const f = ref<CashFlowData>()
 
 export function cashFlowSpec(data: CashFlowData): PageSpec {
   return page({
+    route: '/reports/cash-flow',
     layout: 'list',
     header: [
       pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),

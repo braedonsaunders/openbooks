@@ -137,6 +137,7 @@ export function equipmentSpec(data: EquipmentData): PageSpec {
     props: {},
   }
   return page({
+    route: '/assets/equipment',
     layout: 'list',
     header: [
       pageHeader({

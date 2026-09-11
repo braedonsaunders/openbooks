@@ -168,6 +168,7 @@ export function expenseReportsSpec(data: ExpenseReportsData): PageSpec {
     },
   }
   return page({
+    route: '/expenses/reports',
     layout: 'list',
     header: [
       pageHeader({

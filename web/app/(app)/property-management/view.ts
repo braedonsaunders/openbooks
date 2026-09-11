@@ -189,6 +189,7 @@ const f = ref<PropertyManagementData>()
 
 export function propertyManagementSpec(data: PropertyManagementData): PageSpec {
   return page({
+    route: '/property-management',
     layout: 'list',
     header: [
       pageHeader({

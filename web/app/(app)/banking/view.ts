@@ -292,6 +292,7 @@ const f = ref<BankingData>()
 
 export function bankingSpec(data: BankingData): PageSpec {
   return page({
+    route: '/banking',
     layout: 'list',
     bodyClassName: 'flex h-full min-h-0 flex-col',
     header: [

@@ -41,6 +41,7 @@ export async function loadSecurity(
 
 export function securitySpec(_data: SecurityData): PageSpec {
   return page({
+    route: '/settings/security',
     layout: 'bare',
     header: [],
     body: [widgetBlock('security-panel')],

@@ -429,6 +429,7 @@ const rootF = rootRef<CustomizationData>()
 
 export function customizationSpec(data: CustomizationData): PageSpec {
   return page({
+    route: '/admin/customization',
     layout: 'list',
     header: [
       // The back link is presence, not branching: two headers with

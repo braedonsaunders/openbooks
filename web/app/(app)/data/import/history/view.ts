@@ -123,6 +123,7 @@ const rootF = rootRef<ImportHistoryData>()
 
 export function importHistorySpec(): PageSpec {
   return page({
+    route: '/data/import/history',
     layout: 'list',
     header: [
       pageHeader({

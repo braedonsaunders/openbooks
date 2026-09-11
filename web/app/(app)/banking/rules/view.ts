@@ -149,6 +149,7 @@ const f = ref<BankingRulesData>()
 export function bankingRulesSpec(data: BankingRulesData): PageSpec {
   const newRule = { widget: 'new-bank-rule', props: {} }
   return page({
+    route: '/banking/rules',
     layout: 'list',
     header: [
       pageHeader({

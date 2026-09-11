@@ -54,6 +54,7 @@ const f = ref<ReceiptsData>()
 
 export function receiptsSpec(data: ReceiptsData): PageSpec {
   return page({
+    route: '/receipts',
     layout: 'list',
     header: [
       pageHeader({

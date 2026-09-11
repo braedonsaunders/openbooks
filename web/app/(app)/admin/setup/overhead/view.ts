@@ -200,6 +200,7 @@ const f = ref<OverheadData>()
 
 export function overheadSpec(data: OverheadData): PageSpec {
   return page({
+    route: '/admin/setup/overhead',
     // The setup workspace renders its own shell around every entity page;
     // wrapping it in a second page layout would nest the chrome — the
     // [entity] precedent. The native page owns its outer

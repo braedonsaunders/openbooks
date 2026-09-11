@@ -39,6 +39,7 @@ export async function loadDataExport(
 
 export function dataExportSpec(_data: DataExportData): PageSpec {
   return page({
+    route: '/data/export',
     // Bare with the `page-container` frame: the native page wraps the
     // workbench in `<PageContainer>` (scroll wrapper + centered container
     // + fade-in), which the grid vocabulary cannot name. `list`/`detail`

@@ -81,6 +81,7 @@ const f = ref<PlatformHubData>()
 export function platformHubSpec(data: PlatformHubData): PageSpec {
   void data
   return page({
+    route: '/platform',
     // The hub owns its own shell (PageContainer) the way the analytics hub
     // does — ListPageLayout's sticky-header chrome would nest a second shell
     // around it, so header and body concatenate and the frame renders the

@@ -198,6 +198,7 @@ const rootF = rootRef<ViewsData>()
 
 export function viewsSpec(data: ViewsData): PageSpec {
   return page({
+    route: '/knowledge/views',
     layout: 'list',
     header: [
       pageHeader({

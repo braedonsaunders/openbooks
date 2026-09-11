@@ -214,6 +214,7 @@ const f = ref<MatchData>()
 
 export function matchSpec(data: MatchData): PageSpec {
   return page({
+    route: '/banking/match',
     layout: 'list',
     header: [pageHeader({ title: f('title'), description: f('description') })],
     body: [

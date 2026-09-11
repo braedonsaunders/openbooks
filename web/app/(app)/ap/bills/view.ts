@@ -248,6 +248,7 @@ export function apBillsSpec(data: ApBillsData): PageSpec {
     },
   }
   return page({
+    route: '/ap/bills',
     layout: 'list',
     header: [
       pageHeader({

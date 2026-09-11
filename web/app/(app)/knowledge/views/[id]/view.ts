@@ -201,6 +201,7 @@ const f = ref<SavedViewRunData>()
 
 export function savedViewRunSpec(data: SavedViewRunData): PageSpec {
   return page({
+    route: '/knowledge/views/[id]',
     layout: 'list',
     header: [
       {

@@ -333,6 +333,7 @@ const f = ref<PayrollData>()
 
 export function payrollSpec(data: PayrollData): PageSpec {
   return page({
+    route: '/payroll',
     layout: 'list',
     header: [
       pageHeader({

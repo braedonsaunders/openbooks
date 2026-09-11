@@ -105,6 +105,7 @@ export function leadsSpec(data: LeadsData): PageSpec {
     },
   }
   return page({
+    route: '/crm/leads',
     layout: 'list',
     header: [
       pageHeader({

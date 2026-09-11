@@ -30,6 +30,7 @@ export async function loadPaymentProviders(): Promise<PaymentProvidersData> {
 
 export function paymentProvidersSpec(_data: PaymentProvidersData): PageSpec {
   return page({
+    route: '/admin/setup/payment-providers',
     // The setup workspace renders its own shell around every setup page, so a
     // page layout here would nest the chrome — and the island owns whatever
     // container it wants inside that.

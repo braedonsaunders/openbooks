@@ -99,6 +99,7 @@ export function fieldTicketsSpec(data: FieldTicketsData): PageSpec {
     },
   }
   return page({
+    route: '/field-tickets',
     layout: 'list',
     header: [
       pageHeader({

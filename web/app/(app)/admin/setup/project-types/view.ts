@@ -87,6 +87,7 @@ export async function loadProjectTypes(): Promise<ProjectTypesData> {
 
 export function projectTypesSpec(data: ProjectTypesData): PageSpec {
   return page({
+    route: '/admin/setup/project-types',
     // The setup workspace renders its own shell around every setup page, so
     // a second page layout would nest the chrome. And the
     // `grid gap-5 lg:grid-cols-[16rem_1fr]` wrapper belongs to

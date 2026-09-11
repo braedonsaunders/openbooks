@@ -64,6 +64,7 @@ export function bankingReconciliationsSpec(data: BankingReconciliationsData): Pa
     props: { href: data.chooseAccountHref, label: data.chooseAccountLabel },
   }
   return page({
+    route: '/banking/reconciliations',
     layout: 'list',
     header: [
       pageHeader({

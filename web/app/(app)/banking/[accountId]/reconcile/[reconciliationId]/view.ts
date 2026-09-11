@@ -326,6 +326,7 @@ const f = ref<ReconciliationData>()
 
 export function reconcileSpec(data: ReconciliationData): PageSpec {
   return page({
+    route: '/banking/[accountId]/reconcile/[reconciliationId]',
     layout: 'list',
     header: [
       pageHeader({

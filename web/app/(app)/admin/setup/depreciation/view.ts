@@ -90,6 +90,7 @@ const f = ref<DepreciationSetupData>()
 export function depreciationSetupSpec(data: DepreciationSetupData): PageSpec {
   const basePath = '/admin/setup/depreciation'
   return page({
+    route: '/admin/setup/depreciation',
     // The setup workspace renders its own shell around every entity page;
     // wrapping it in a second page layout would nest the chrome. The native
     // page owns its outer `<div className="space-y-5">`, so the spec places

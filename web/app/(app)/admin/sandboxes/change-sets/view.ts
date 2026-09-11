@@ -68,6 +68,7 @@ const f = ref<ChangeSetsData>()
 
 export function changeSetsSpec(data: ChangeSetsData): PageSpec {
   return page({
+    route: '/admin/sandboxes/change-sets',
     layout: 'list',
     header: [
       pageHeader({

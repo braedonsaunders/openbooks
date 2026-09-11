@@ -513,6 +513,7 @@ export function paymentOperationsSpec(data: PaymentOperationsData): PageSpec {
     label: data.newLabel,
   })
   return page({
+    route: '/admin/setup/payment-operations',
     // The setup workspace renders its own shell around every setup page;
     // wrapping it in a second page layout would nest the chrome. The native
     // page owns its outer `<div className="space-y-4">`, so the spec places

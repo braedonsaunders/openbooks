@@ -318,6 +318,7 @@ export async function loadLaborPricing(
 
 export function laborPricingSpec(data: LaborPricingData): PageSpec {
   return page({
+    route: '/admin/setup/labor-pricing',
     // A setup-workspace child: the setup layout's header, tab rail and
     // centered container wrap the page and the widget registry, so the spec draws no chrome.
     layout: 'bare',

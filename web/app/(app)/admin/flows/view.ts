@@ -189,6 +189,7 @@ const rootF = rootRef<FlowsData>()
 
 export function flowsSpec(data: FlowsData): PageSpec {
   return page({
+    route: '/admin/flows',
     layout: 'list',
     header: [
       pageHeader({

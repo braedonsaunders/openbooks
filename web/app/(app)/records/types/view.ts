@@ -236,6 +236,7 @@ const LINK = 'text-teal-700 hover:underline dark:text-teal-300'
 
 export function recordTypesSpec(data: RecordTypesData): PageSpec {
   return page({
+    route: '/records/types',
     layout: 'list',
     header: [
       pageHeader({

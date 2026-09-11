@@ -175,6 +175,7 @@ const rootF = rootRef<OrdersData>()
 
 export function ordersSpec(): PageSpec {
   return page({
+    route: '/reports/orders',
     layout: 'list',
     header: [
       pageHeader({

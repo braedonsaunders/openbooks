@@ -135,6 +135,7 @@ const rootF = rootRef<PlatformUserData>()
 
 export function platformUserSpec(data: PlatformUserData): PageSpec {
   return page({
+    route: '/platform/users/[id]',
     layout: 'detail',
     header: [
       widgetBlock('platform-user-header', {

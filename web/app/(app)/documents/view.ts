@@ -279,6 +279,7 @@ export function documentsSpec(data: DocumentsData): PageSpec {
     newFolderParentId: data.activeFolderId ?? null,
   }
   return page({
+    route: '/documents',
     // The cabinet owns its own full-height shell — ListPageLayout's centered
     // container would nest the chrome, so header and body concatenate.
     layout: 'bare',

@@ -65,6 +65,7 @@ export async function loadFeatures(): Promise<FeaturesData> {
 
 export function featuresSpec(data: FeaturesData): PageSpec {
   return page({
+    route: '/admin/setup/features',
     // The setup workspace renders its own shell around every setup page, so
     // a second page layout would nest the chrome. And the `space-y-8`
     // wrapper belongs to FeaturesWorkspace itself — the spec must NOT

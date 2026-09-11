@@ -96,6 +96,7 @@ const f = ref<WipBillingData>()
 
 export function wipBillingSpec(data: WipBillingData): PageSpec {
   return page({
+    route: '/projects/wip-billing',
     layout: 'list',
     header: [pageHeader({ title: f('title'), description: f('description') })],
     body: [

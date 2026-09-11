@@ -69,6 +69,7 @@ export async function loadReportBuilder(id: string): Promise<ReportBuilderData> 
 
 export function reportBuilderSpec(data: ReportBuilderData): PageSpec {
   return page({
+    route: '/reports/custom/builder/[id]',
     // The builder owns its own full-height shell; the native page wraps it in
     // nothing at all.
     layout: 'bare',

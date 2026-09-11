@@ -136,6 +136,7 @@ export function budgetsSpec(data: BudgetsData): PageSpec {
     props: { currentParams: data.currentParams },
   }
   return page({
+    route: '/budgets',
     layout: 'list',
     header: [
       pageHeader({

@@ -249,6 +249,7 @@ export function auditSpec(data: AuditData): PageSpec {
     props: { href: data.docsHref, label: data.docsLabel },
   }
   return page({
+    route: '/admin/audit',
     layout: 'list',
     header: [
       pageHeader({

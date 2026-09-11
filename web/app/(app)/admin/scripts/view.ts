@@ -187,6 +187,7 @@ const LINK = 'font-medium text-teal-700 hover:underline dark:text-teal-300'
 
 export function scriptsSpec(data: ScriptsData): PageSpec {
   return page({
+    route: '/admin/scripts',
     layout: 'list',
     header: [
       pageHeader({
