@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
+import { readingPagePairs } from './page-source'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { getRecordType } from '@openbooks/customization'
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
-const source = (path: string) => readFileSync(join(webRoot, path), 'utf8')
+const source = readingPagePairs((path: string) => readFileSync(join(webRoot, path), 'utf8'))
 
 test('project charges are first-class customizable transactions, not a parallel project tab', () => {
   const project = getRecordType('project')
@@ -70,8 +71,10 @@ test('project transactions filter by native type and stack the transaction drawe
   assert.doesNotMatch(tab, /\/field-tickets\?ticket=/)
   assert.match(tab, /showKpis=\{false\}/)
   assert.match(tab, /<DocTypeBadge\b/)
-  assert.match(page, /<RelatedTransactionDrawer\b/)
-  assert.match(page, /projectId=\{String\(openProject\.project\.id\)\}/)
+  // Mounted as JSX or placed as the `related-txn-drawer` widget — the widget
+  // renders the same component, and the project id reaches it the same way.
+  assert.match(page, /<RelatedTransactionDrawer\b|widget: 'related-txn-drawer'/)
+  assert.match(page, /projectId[=:]\s*\{?String\(openProject\.project\.id\)/)
   assert.match(related, /kind === 'field_ticket'/)
   assert.match(related, /loadFieldTicketDrawerData/)
   assert.match(relatedClient, /type: 'fieldTicket'/)

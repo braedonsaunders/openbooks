@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { readingPagePairs } from './page-source'
 import test from 'node:test'
 import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 
@@ -15,7 +16,7 @@ import { REPORT_ENTITY_MAP } from '@openbooks/reports'
  * that: the shared helper keeps the rule, and every path is wired to it.
  */
 
-const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
+const read = readingPagePairs((path: string) => readFileSync(new URL(path, import.meta.url), 'utf8'))
 
 test('payroll entities still declare a permission beyond reports.read', () => {
   // If this ever empties out, the gate below is guarding nothing.

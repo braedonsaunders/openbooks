@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readingPagePairs } from './page-source'
 import test from "node:test";
 
 /**
@@ -8,21 +9,26 @@ import test from "node:test";
  * loaders are where the caller's subsidiary scope is applied, and a page that
  * bypassed them once rendered a restricted caller the year-end slips its own
  * JSON route refused with 404.
+ *
+ * A page is its `page.tsx` AND its `view.ts`: the ViewSpec conversion moved
+ * the loaders into the sibling, and these greps must follow the code. The
+ * `never` patterns match a CALL rather than a bare name, so a comment that
+ * explains why the unscoped loader is not used does not read as using it.
  */
-const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+const read = readingPagePairs((path: string) => readFileSync(new URL(path, import.meta.url), "utf8"));
 
 const PAGES: Record<string, { uses: RegExp[]; never: RegExp[] }> = {
   "../app/(app)/payroll/year-end/page.tsx": {
-    uses: [/scopedYearEndFilings\(authz, year\)/, /if \(!filings\) notFound\(\)/],
-    never: [/orgYearEndFilings/],
+    uses: [/scopedYearEndFilings\(authz, year\)/, /if \(!filings\)[\s\S]{0,200}?notFound\(\)/],
+    never: [/orgYearEndFilings\(/],
   },
   "../app/(app)/payroll/separations/page.tsx": {
-    uses: [/scopedYearEndFilings\(authz, year\)/, /if \(!filings\) notFound\(\)/],
-    never: [/orgYearEndFilings/],
+    uses: [/scopedYearEndFilings\(authz, year\)/, /if \(!filings\)[\s\S]{0,200}?notFound\(\)/],
+    never: [/orgYearEndFilings\(/],
   },
   "../app/(app)/payroll/remittances/page.tsx": {
-    uses: [/scopedRemittanceSummary\(authz, \{ from, to \}\)/, /if \(!groups\) notFound\(\)/],
-    never: [/payrollRemittanceSummary/],
+    uses: [/scopedRemittanceSummary\(authz, \{ from, to \}\)/, /if \(!groups\)[\s\S]{0,200}?notFound\(\)/],
+    never: [/payrollRemittanceSummary\(/],
   },
   "../app/(app)/payroll/opening-balances/page.tsx": {
     uses: [/scopedOpeningBalances\(authz, year\)/, /scopedEntitlementOpenings\(authz\)/],

@@ -1,6 +1,6 @@
 import { registerHooks } from 'node:module'
+import { resolveAppModule } from './test-module-hooks'
 import { pathToFileURL } from 'node:url'
-import { existsSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
@@ -31,11 +31,8 @@ registerHooks({
         ),
       }
     }
-    if (s.startsWith('@/')) {
-      const path = root + 'web/' + s.slice(2)
-      for (const suffix of ['.ts', '.tsx', '/index.ts', '/index.tsx']) if (existsSync(new URL(path + suffix))) return next(path + suffix, c)
-      return next(path, c)
-    }
+    const app = resolveAppModule(s, c, next, root)
+    if (app) return app
     return next(s, c)
   },
 })
@@ -44,18 +41,20 @@ const { db, withOrgContext } = await import(root + 'engine/src/db.ts') as typeof
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js') as typeof import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/test-fixtures.ts')
 const { startReconciliation, importStatement, createMatch } = await import(root + 'engine/src/banking.ts')
-const matchPage = (await import(root + 'web/app/(app)/banking/match/page.tsx')).default
-const reconcilePage = (await import(root + 'web/app/(app)/banking/[accountId]/reconcile/[reconciliationId]/page.tsx')).default
-
-function componentProps(node: unknown, name: string): Record<string, unknown> | null {
-  if (Array.isArray(node)) {
-    for (const child of node) { const found = componentProps(child, name); if (found) return found }
-    return null
-  }
-  if (!React.isValidElement<{ children?: React.ReactNode }>(node)) return null
-  if (typeof node.type === 'function' && node.type.name === name) return node.props as Record<string, unknown>
-  return componentProps(node.props.children, name)
-}
+// The page's LOADER, not its rendered tree.
+//
+// This test asserts which book and which currency the page's queries use, and
+// that decision now lives entirely in the loader — the spec only names where
+// the resolved rows are drawn. Walking the tree for a workspace component's
+// props stopped working when `ModuleView` became the single render path (an
+// async server component's children do not exist until it is rendered), and
+// reaching for its props was always indirection: the loader's own output is
+// the thing under test, and reading it directly is both stronger and stable
+// against any later change to how the page is arranged.
+const { loadMatch } = await import(root + 'web/app/(app)/banking/match/view.ts')
+const { loadReconciliation } = await import(
+  root + 'web/app/(app)/banking/[accountId]/reconcile/[reconciliationId]/view.ts'
+)
 
 for (const page of ['match', 'reconcile'] as const) {
   test(`bank ${page} page uses primary book and bank-currency amounts`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -91,20 +90,19 @@ for (const page of ['match', 'reconcile'] as const) {
         lines: [{ postedOn: org.date, amount: '100', description: 'Deposit', bankTransactionId: 'usd-deposit' }] }, ctx)
       const recon = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: '100' }, ctx)
       await withOrgContext(org.orgId, async () => {
-        const tree = page === 'match'
-          ? await matchPage({ searchParams: Promise.resolve({ account: org.accounts.bank }) })
-          : await reconcilePage({ params: Promise.resolve({ accountId: org.accounts.bank, reconciliationId: recon.id }), searchParams: Promise.resolve({}) })
-        const props = componentProps(tree, page === 'match' ? 'MatchWorkspace' : 'ReconcileWorkspace')!
-        assert.ok(props)
-        const data = (page === 'match' ? props.data : props) as { glRows: Array<{ id: string; amount: string }>; glTotal: number }
+        const loaded = page === 'match'
+          ? await loadMatch({ account: org.accounts.bank })
+          : await loadReconciliation(org.accounts.bank, recon.id, {})
+        assert.ok(loaded)
+        const data = (page === 'match' ? loaded.data : loaded) as { glRows: Array<{ id: string; amount: string }>; glTotal: number }
         assert.equal(data.glTotal, 1)
         assert.deepEqual(data.glRows.map(row => ({ id: row.id, amount: row.amount })), [{ id: primaryLine, amount: '100.0000' }])
-        assert.equal(((page === 'match' ? props.session : props.reconciliation) as { currency: string }).currency, 'USD')
+        assert.equal(((page === 'match' ? loaded.session : loaded.reconciliation) as { currency: string }).currency, 'USD')
         if (page === 'reconcile') {
           const statement = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${org.orgId}`)).rows[0]!
           await createMatch({ reconciliationId: recon.id, statementLineId: statement.id, journalLineIds: [primaryLine] }, ctx)
-          const updated = await reconcilePage({ params: Promise.resolve({ accountId: org.accounts.bank, reconciliationId: recon.id }), searchParams: Promise.resolve({}) })
-          const matched = componentProps(updated, 'ReconcileWorkspace')!.matchedRows as Array<{ gl_amount: string; stmt_amount: string }>
+          const updated = await loadReconciliation(org.accounts.bank, recon.id, {})
+          const matched = updated.matchedRows as Array<{ gl_amount: string; stmt_amount: string }>
           assert.equal(matched[0]!.gl_amount, '100.0000')
           assert.equal(matched[0]!.stmt_amount, '100.0000')
         }

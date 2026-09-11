@@ -87,6 +87,7 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
       () => layouts.describeLayoutVocabulary(reader),
       () => layouts.setLayout(reader, { route: '/banking', spec: validSpec('/banking') }),
       () => layouts.clearLayout(reader, { route: '/banking' }),
+      () => layouts.describePageLayout(reader, { route: '/banking' }),
     ]) {
       await assert.rejects(call, /forbidden/i, 'a reader must not reach page layouts')
     }
@@ -104,7 +105,7 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
     })
     assert.equal(bad.valid, false)
     assert.ok(bad.errors.some((e) => e.includes('no-such-widget')))
-    assert.deepEqual(await layouts.listLayouts(allowed), { layouts: [] }, 'validating stores nothing')
+    assert.deepEqual((await layouts.listLayouts(allowed)).layouts, [], 'validating stores nothing')
 
     const stored = await layouts.setLayout(allowed, {
       route: '/banking',
@@ -116,12 +117,25 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
     const listed = await layouts.listLayouts(allowed)
     assert.equal(listed.layouts.length, 1)
     assert.equal(listed.layouts[0]!.route, '/banking')
+    // The list also says which routes CAN be customized, so an author does not
+    // have to guess a route pattern and learn it was wrong at save time.
+    assert.ok(listed.customizableRoutes.includes('/banking'))
+
+    // A route nothing declares is refused with candidates rather than an
+    // empty answer: a typo is the likeliest reason to land here, and "no such
+    // route" with no help is where an author gives up.
+    const unknown = await layouts.describePageLayout(allowed, { route: '/bankng' })
+    assert.equal(unknown.known, false)
+    assert.ok(
+      'didYouMean' in unknown && unknown.didYouMean.includes('/banking'),
+      `expected /banking among the suggestions, got ${JSON.stringify(unknown)}`,
+    )
   })
 
   // The other org sees none of it. This is the property that makes storing a
   // renderable document per tenant safe to do at all.
   await withOrgContext(orgB, async () => {
-    assert.deepEqual(await layouts.listLayouts(otherOrg), { layouts: [] })
+    assert.deepEqual((await layouts.listLayouts(otherOrg)).layouts, [])
   })
 
   await withOrgContext(orgA, async () => {
@@ -131,7 +145,7 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
 
     const cleared = await layouts.clearLayout(allowed, { route: '/banking' })
     assert.equal(cleared.cleared, 1)
-    assert.deepEqual(await layouts.listLayouts(allowed), { layouts: [] })
+    assert.deepEqual((await layouts.listLayouts(allowed)).layouts, [])
 
     // Deactivated, not deleted — the audit entries point at rows someone can
     // still read.

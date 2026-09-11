@@ -10,7 +10,7 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
+import { requirePermission } from '../../../../lib/authz'
 import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
 import { mapBankFeedRows } from './sections'
 

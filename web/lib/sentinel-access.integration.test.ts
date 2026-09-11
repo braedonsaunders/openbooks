@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
+import { resolveAppModule } from './test-module-hooks'
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import * as React from "react";
@@ -14,16 +14,11 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "next-intl/server") return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__sentinelAccess.user}" };
-  if (specifier.endsWith("/lib/periods") && context.parentURL?.endsWith("/analytics/sentinel/page.tsx")) {
+  if (specifier.endsWith("/lib/periods") && /\/analytics\/sentinel\/(?:page\.tsx|view\.ts)$/.test(context.parentURL ?? "")) {
     return { shortCircuit: true, url: "data:text/javascript,export async function resolvePeriod(){return globalThis.__sentinelAccess.period}" };
   }
-  if (specifier.startsWith("@/")) {
-    const path = root + "web/" + specifier.slice(2);
-    for (const suffix of [".ts", ".tsx", "/index.ts", "/index.tsx"]) {
-      if (existsSync(new URL(path + suffix))) return next(path + suffix, context);
-    }
-    return next(path, context);
-  }
+  const app = resolveAppModule(specifier, context, next, root)
+  if (app) return app
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");

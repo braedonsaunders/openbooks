@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { readingPagePairs } from './page-source'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
-const source = (path: string) => readFileSync(join(webRoot, path), 'utf8')
+const source = readingPagePairs((path: string) => readFileSync(join(webRoot, path), 'utf8'))
 
 test('WIP schema separates review snapshots, source holds, and append-only evidence', () => {
   const schema = source('../schema/src/wip-billing.ts')

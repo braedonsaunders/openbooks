@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
+import { resolveAppModule } from './test-module-hooks'
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import * as React from 'react';
@@ -15,13 +15,10 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__analyticsScope.user}' };
-  if (specifier.endsWith('/lib/periods') && /analytics\/(customer-intelligence|vendor-performance|spend-velocity)\/page.tsx$/.test(context.parentURL ?? '')) return { shortCircuit: true, url: 'data:text/javascript,export async function resolvePeriod(){return '+JSON.stringify(period)+'}' };
+  if (specifier.endsWith('/lib/periods') && /analytics\/(customer-intelligence|vendor-performance|spend-velocity)\/(?:page\.tsx|view\.ts)$/.test(context.parentURL ?? '')) return { shortCircuit: true, url: 'data:text/javascript,export async function resolvePeriod(){return '+JSON.stringify(period)+'}' };
   if (specifier === '../money-server' && context.parentURL?.includes('/analytics/')) return { shortCircuit: true, url: 'data:text/javascript,export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}' };
-  if (specifier.startsWith('@/')) {
-    const path = root + 'web/' + specifier.slice(2);
-    for (const suffix of ['.ts', '.tsx', '/index.ts', '/index.tsx']) if (existsSync(new URL(path + suffix))) return next(path + suffix, context);
-    return next(path, context);
-  }
+  const app = resolveAppModule(specifier, context, next, root);
+  if (app) return app;
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
@@ -31,9 +28,15 @@ const { getAuthz } = await import('./authz');
 const { customerData, customerProfitability } = await import('./analytics/customer-data');
 const { vendorData } = await import('./analytics/vendor-data');
 const { spendVelocityData } = await import('./analytics/spend-velocity-data');
-const { default: CustomerPage } = await import('../app/(app)/analytics/customer-intelligence/page');
-const { default: VendorPage } = await import('../app/(app)/analytics/vendor-performance/page');
-const { default: SpendPage } = await import('../app/(app)/analytics/spend-velocity/page');
+// The page LOADERS. The `page` boundary below asks whether the page applies
+// the reader's subsidiary scope, and that decision lives in the loader — the
+// spec only names where the resolved data is drawn. Reading the loader output
+// is both the honest place to assert it and stable against how the page is
+// arranged; digging props out of a rendered element stopped working when
+// `ModuleView` became the single render path.
+const { loadCustomerIntelligence } = await import('../app/(app)/analytics/customer-intelligence/view');
+const { loadVendorPerformance } = await import('../app/(app)/analytics/vendor-performance/view');
+const { loadSpendVelocity } = await import('../app/(app)/analytics/spend-velocity/view');
 const { executeAssistantTool } = await import('./assistant/registry');
 type Summary = { kpis?: { totalRevenue: number }; totals?: { spend: number }; summary?: { totalSpend: number }; commitmentCliff?: { summary: { totalPO: number; totalSO: number } }; expenseAnalysis?: { topSpenders: { totalSpend: number }[] | { items: { totalSpend: number }[] } } };
 
@@ -84,12 +87,10 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
                 : await spendVelocityData(org.orgId, period, authz.allowedSubsidiaryIds);
               if (surface === 'customer') profitability = await customerProfitability(period, org.orgId, authz.allowedSubsidiaryIds);
             } else if (boundary === 'page') {
-              const page = surface === 'customer' ? CustomerPage : surface === 'vendor' ? VendorPage : SpendPage;
-              const output = await page({ searchParams: Promise.resolve({}) });
-              const children = React.Children.toArray((output.props as { children: React.ReactNode }).children);
-              const view = children.find(React.isValidElement); assert.ok(view && React.isValidElement(view));
-              const props = view.props as { data: Summary; profitability?: unknown };
-              data = props.data; profitability = props.profitability;
+              const load = surface === 'customer' ? loadCustomerIntelligence
+                : surface === 'vendor' ? loadVendorPerformance : loadSpendVelocity;
+              const loaded = await load({}) as { data: Summary; profitability?: unknown };
+              data = loaded.data; profitability = loaded.profitability;
             } else {
               const tool = surface === 'customer' ? 'analytics_customer_intelligence' : surface === 'vendor' ? 'analytics_vendor_performance' : 'analytics_spend_velocity';
               const result = await executeAssistantTool(authz, tool, { fromDate: period.from, toDate: period.to });

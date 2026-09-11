@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
+import { resolveAppModule } from './test-module-hooks'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
+import * as React from 'react'
 import type { SessionUser } from './auth'
 
 const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __closeLifecycleUser: state })
+// The tsx runner compiles these RSC sources with the CLASSIC JSX transform,
+// which emits bare `React.createElement`. Next supplies the automatic runtime
+// in production; here the global is the equivalent. Needed since a page import
+// reaches the whole widget registry, and some of those components are JSX.
+Object.assign(globalThis, { __closeLifecycleUser: state, React })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
@@ -16,7 +22,8 @@ registerHooks({
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__closeLifecycleUser.user}')
     }
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
+    const app = resolveAppModule(specifier, context, next, root)
+    if (app) return app
     return next(specifier, context)
   },
 })

@@ -21,12 +21,17 @@ import { requirePermission } from '../../../../lib/authz'
  * wizard, identically wherever it renders.
  */
 
-export interface DataImportData {
-  // Intentionally fieldless. The native page's only server logic is the
-  // `data.import` permission gate above; everything the wizard shows arrives
-  // through its own client fetches, so there is no presentation-ready data
-  // for the loader to compute.
-}
+/**
+ * Intentionally fieldless. The page's only server logic is the `data.import`
+ * permission gate below; everything the wizard shows arrives through its own
+ * client fetches, so there is no presentation-ready data for the loader to
+ * compute.
+ *
+ * Written as `Record<string, never>` rather than an empty interface: an empty
+ * interface accepts any non-nullish value, including `0` and `""`, so it
+ * would type-check a loader that returned something other than nothing.
+ */
+export type DataImportData = Record<string, never>
 
 export async function loadDataImport(): Promise<DataImportData> {
   await requirePermission('data.import')

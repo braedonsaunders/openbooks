@@ -27,7 +27,6 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
 import { pickString } from '../../../../lib/list-params'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import type { DocumentDrawer } from '../../../../components/document-drawer'
 
 /**
  * Vendor bills + credits — the AP document list, split into a loader and a spec.
@@ -46,8 +45,6 @@ import type { DocumentDrawer } from '../../../../components/document-drawer'
  * drawer's client state, and a widget at a fixed position would otherwise be
  * reused.
  */
-
-type DocumentDrawerProps = Parameters<typeof DocumentDrawer>[0]
 
 export interface ApBillsDrawer {
   remountKey: string

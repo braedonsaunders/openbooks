@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { pageSource } from './page-source'
 import test from 'node:test'
 import { accountParentPath, orderAccountHierarchy } from './account-hierarchy'
 import { decimalAdd, decimalCmp, decimalSum } from './statement-format'
@@ -66,7 +68,7 @@ test('roll-up arithmetic remains exact for large and fractional ledger balances'
 })
 
 test('accounts hierarchy keeps exact arithmetic at the query-to-tree boundary', () => {
-  const page = readFileSync(new URL('../app/(app)/accounts/page.tsx', import.meta.url), 'utf8')
+  const page = pageSource(fileURLToPath(new URL('../app/(app)/accounts/page.tsx', import.meta.url)))
 
   assert.match(page, /new Map<string, string>\(accounts\.map\(\(a\) => \[a\.id, a\.balance\]\)\)/)
   assert.match(page, /rolled\.set\(p, decimalAdd\(rolled\.get\(p\) \?\? '0\.0000', a\.balance\)\)/)
@@ -89,10 +91,14 @@ test('account balance SQL distinguishes unrestricted, restricted, and empty scop
 })
 
 test('both chart-of-accounts callers forward subsidiary scope and preserve balance text', () => {
-  const page = readFileSync(new URL('../app/(app)/accounts/page.tsx', import.meta.url), 'utf8')
+  const page = pageSource(fileURLToPath(new URL('../app/(app)/accounts/page.tsx', import.meta.url)))
   const assistant = readFileSync(new URL('./assistant/tools.ts', import.meta.url), 'utf8')
 
-  assert.match(page, /accountsWithBalances\(authz\.user\.orgId, undefined, authz\.allowedSubsidiaryIds\)/)
+  // Whitespace-tolerant: the same call, formatted across lines in the loader.
+  assert.match(
+    page,
+    /accountsWithBalances\(\s*authz\.user\.orgId,\s*undefined,\s*authz\.allowedSubsidiaryIds,?\s*\)/,
+  )
   assert.match(assistant, /accountsWithBalances\(authz\.user\.orgId, a\.asOf, authz\.allowedSubsidiaryIds\)/)
   assert.match(assistant, /balance: r\.balance/)
 })

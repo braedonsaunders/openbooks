@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { guardPermission } from '../../../lib/authz'
+import { applicationContextFromSession } from '../../../lib/application/context'
+import { describePageLayout } from '../../../lib/application/page-layouts'
 import { clearPageSpec, listPageSpecs, savePageSpec } from '../../../lib/page-specs'
 import { FRAME_NAMES, WIDGET_NAMES } from '../../../components/viewspec/registry-names'
 
@@ -23,11 +26,38 @@ export const runtime = 'nodejs'
 
 const registries = { widgets: WIDGET_NAMES, frames: FRAME_NAMES }
 
-/** GET — every route this org has customized. */
-export async function GET() {
+/**
+ * GET — every route this org has customized.
+ *
+ * With `?route=…`, describes that ONE route instead: its built-in layout, the
+ * override if any, and the field paths its loader exposes. An editor needs the
+ * layout it is about to change and the vocabulary of the data behind it, and
+ * both come from running the page's own loader — under this session, so a
+ * route the caller cannot view answers with that rather than with its layout.
+ */
+export async function GET(req: Request) {
   const gate = await guardPermission('admin.customization.manage')
   if (gate instanceof NextResponse) return gate
-  return NextResponse.json({ rows: await listPageSpecs(gate.user.orgId) })
+  const url = new URL(req.url)
+  const route = url.searchParams.get('route')
+  if (!route) return NextResponse.json({ rows: await listPageSpecs(gate.user.orgId) })
+
+  // Everything except `route` is forwarded to the loader as its query string,
+  // which is how an editor previews a report page under a chosen period.
+  const searchParams: Record<string, string> = {}
+  for (const [key, value] of url.searchParams) {
+    if (key !== 'route' && !key.startsWith('param.')) searchParams[key] = value
+  }
+  // `param.accountId=…` supplies a dynamic segment; the prefix keeps segments
+  // and query parameters from colliding on a page that has both.
+  const params: Record<string, string> = {}
+  for (const [key, value] of url.searchParams) {
+    if (key.startsWith('param.')) params[key.slice('param.'.length)] = value
+  }
+
+  const context = applicationContextFromSession(gate, 'assistant', randomUUID())
+  const described = await describePageLayout(context, { route, params, searchParams })
+  return NextResponse.json(described, { status: described.known ? 200 : 404 })
 }
 
 /** POST — store a spec for a route. Body: `{ route, spec, note? }`. */

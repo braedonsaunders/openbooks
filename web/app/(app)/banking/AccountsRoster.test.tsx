@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { pageSource } from '../../../lib/page-source'
 import test from 'node:test'
 
 const rosterSource = readFileSync(new URL('./AccountsRoster.tsx', import.meta.url), 'utf8')
-const homeSource = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8')
+const homeSource = pageSource(fileURLToPath(new URL('./page.tsx', import.meta.url)))
 
 function daysSince(iso: string | null, now: string): number | null {
   if (!iso) return null

@@ -24,7 +24,7 @@ import {
 import { can, requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { resolvedFeatureState, featureEnabled } from '../../../../../lib/features'
-import { isUuid, mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
+import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
 import {
   SETUP_ENTITY_BY_KEY,
   setupEntityForFeatureState,

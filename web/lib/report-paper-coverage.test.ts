@@ -3,12 +3,33 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { readingPagePairs } from './page-source'
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-function source(relativePath: string): string {
-  return readFileSync(join(webRoot, relativePath), 'utf8')
-}
+const source = readingPagePairs((relativePath: string) =>
+  readFileSync(join(webRoot, relativePath), 'utf8'),
+)
+
+/**
+ * A report reaches a shared surface two ways, and both are the same fact.
+ *
+ * Before the ViewSpec conversion a page wrote `<ReportPaper>` in its own JSX.
+ * Now it declares `paper({…})`, or places the surface as a widget block —
+ * `widgetBlock('paper-view')` renders the same PaperView the old pages did.
+ * The invariant these tests defend is that every report goes through the
+ * shared document chrome rather than rolling its own; which of the two
+ * spellings a page uses is not part of it.
+ *
+ * Written as one predicate rather than a widened regex at each call site, so
+ * the reason the alternatives are equivalent is stated once instead of being
+ * inferred from a growing alternation.
+ */
+const PAPER_SURFACE =
+  /<(?:ReportPaper|PaperView|ResultView|ProjectProfitabilityTable)\b|\bpaper\(\{|widgetBlock\('(?:paper-view|result-view|statement-matrix|project-profitability-table)'/
+const FILTER_BAR = /<ReportFilterBar\b|\bfilterBar\(/
+/** A drill target or a transaction link, however the page spells it. */
+const DRILL_THROUGH = /ReportDrillLink|TxnLink|\bdrills?\b|\btxn\(/
 
 test('every in-app report result uses the shared paper surface', () => {
   const directReportPages = [
@@ -29,7 +50,7 @@ test('every in-app report result uses the shared paper surface', () => {
 
   for (const page of directReportPages) {
     const pageSource = source(page)
-    assert.match(pageSource, /<(?:ReportPaper|PaperView|ProjectProfitabilityTable)\b/, `${page} must render the shared report paper`)
+    assert.match(pageSource, PAPER_SURFACE, `${page} must render the shared report paper`)
     assert.doesNotMatch(
       pageSource,
       /import\s*\{[^}]*\bTable\b[^}]*\}\s*from '@openbooks\/ui'/s,
@@ -41,8 +62,8 @@ test('every in-app report result uses the shared paper surface', () => {
   assert.match(source('app/(app)/reports/PaperView.tsx'), /from '.\/ReportTable'/)
   assert.match(source('app/(app)/reports/custom/ResultView.tsx'), /<PaperView\b/)
   assert.match(source('app/(app)/reports/custom/builder/[id]/ReportBuilder.tsx'), /<PaperView\b/)
-  assert.match(source('app/(app)/reports/custom/run/[id]/page.tsx'), /<(?:ResultView|ReportPaper)\b/)
-  assert.match(source('app/(app)/knowledge/views/[id]/page.tsx'), /<ResultView\b/)
+  assert.match(source('app/(app)/reports/custom/run/[id]/page.tsx'), PAPER_SURFACE)
+  assert.match(source('app/(app)/knowledge/views/[id]/page.tsx'), PAPER_SURFACE)
   assert.match(source('app/(app)/knowledge/views/ViewStudio.tsx'), /<ResultView\b/)
   assert.match(source('components/app-shell.tsx'), /<GlobalReportDrawerHost\b/)
   assert.match(source('app/(app)/reports/PaperView.tsx'), /<ReportDrillLink\b/)
@@ -70,7 +91,7 @@ test('every report result uses the P&L filter bar as one non-wrapping row', () =
 
   for (const page of directReportPages) {
     const pageSource = source(page)
-    assert.match(pageSource, /<ReportFilterBar\b/, `${page} must render the shared P&L filter bar`)
+    assert.match(pageSource, FILTER_BAR, `${page} must render the shared P&L filter bar`)
     assert.doesNotMatch(pageSource, /<SearchInput\b/, `${page} must not render search outside the shared filter bar`)
   }
 
@@ -79,7 +100,7 @@ test('every report result uses the P&L filter bar as one non-wrapping row', () =
   assert.match(filterBar, /overflow-x-auto/)
   assert.doesNotMatch(filterBar, /flex-wrap/)
   assert.match(filterBar, /controls\.search[\s\S]*<SearchInput\b/)
-  assert.match(source('app/(app)/reports/custom/run/[id]/page.tsx'), /<ReportFilterBar\b/)
+  assert.match(source('app/(app)/reports/custom/run/[id]/page.tsx'), FILTER_BAR)
   assert.match(source('app/(app)/reports/custom/page.tsx'), /if \(!query\) return/)
 })
 
@@ -125,7 +146,7 @@ test('every direct report with numeric output exposes a drill target or native t
     'app/(app)/reports/trial-balance/page.tsx',
   ]
   for (const page of numericReports) {
-    assert.match(source(page), /(?:ReportDrillLink|TxnLink|drills)/, `${page} must expose numeric drill-through`)
+    assert.match(source(page), DRILL_THROUGH, `${page} must expose numeric drill-through`)
   }
   assert.match(source('app/(app)/reports/custom/ResultView.tsx'), /drillTarget/)
   assert.match(source('components/global-report-drawer-host.tsx'), /RelatedTransactionDrawerClient/)

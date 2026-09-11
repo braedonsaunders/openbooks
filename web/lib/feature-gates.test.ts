@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { readingPagePairs } from './page-source'
 import test from 'node:test'
 import { FEATURES } from '@openbooks/engine/src/feature-registry.ts'
 
@@ -26,7 +27,7 @@ const APP_SEGMENT = 'app/(app)'
 
 const GATE = /requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardWipBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(/
 
-const read = (path: string) => readFileSync(new URL(path, WEB), 'utf8')
+const read = readingPagePairs((path: string) => readFileSync(new URL(path, WEB), 'utf8'))
 const exists = (path: string) => existsSync(new URL(path, WEB))
 
 /** Inspect the same pure registry used by the web and engine gates. */
@@ -2214,7 +2215,9 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/(app)/accounts/page.tsx'),
-    /multiSubsidiary=\{subsidiaryUiEnabled\}/,
+    // JSX attribute or spec prop: `multiSubsidiary: subsidiaryUiEnabled` in
+    // the loader is the same forwarding the attribute used to be.
+    /multiSubsidiary[=:]\s*\{?subsidiaryUiEnabled\b/,
     'the accounts page must not load the eliminate control when Multi-subsidiary is off',
   )
   assert.match(

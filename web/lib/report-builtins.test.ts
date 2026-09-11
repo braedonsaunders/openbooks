@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { readingPagePairs } from './page-source'
 import test from 'node:test'
 import {
   applyBuiltInUrlFilters,
@@ -15,7 +16,7 @@ const ITEM_ID = '018f47aa-7c11-7a12-8bc3-1234567890ab'
 const DOC_ID = '018f47aa-7c11-7a12-8bc3-1234567890ac'
 const ENTRY_ID = '018f47aa-7c11-7a12-8bc3-1234567890ad'
 
-const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
+const read = readingPagePairs((path: string) => readFileSync(new URL(path, import.meta.url), 'utf8'))
 const definition = BUILT_IN_REPORT_DEFINITION_MAP['lot-recall']!
 const entity = REPORT_ENTITY_MAP.inventory_lot_movements!
 
@@ -176,7 +177,8 @@ test('legacy, native screen, saved-view and export paths share the built-in filt
   assert.match(screen, /applyBuiltInUrlFilters/)
   assert.match(screen, /reportPeriodField\(definition\.query\)[\s\S]*applyBuiltInUrlFilters/)
   assert.match(screen, /key === 'page' \|\| key === 'perPage' \|\| key === 'format'/)
-  assert.match(screen, /<SaveViewButton\b/)
+  // JSX or the `save-view` widget: the widget mounts the same button.
+  assert.match(screen, /<SaveViewButton\b|widget\('save-view'\)/)
 
   const exportRun = read('./report-run.ts')
   assert.match(exportRun, /reportPeriodField\(query\)[\s\S]*applyBuiltInUrlFilters/)
@@ -226,8 +228,11 @@ test('native report paging is URL-backed and uses the engine count', () => {
   assert.match(screen, /pickString\(sp\.page\)/)
   assert.match(screen, /pickString\(sp\.perPage\)/)
   assert.match(screen, /executeReportPage\(authz\.user\.orgId, query/)
-  assert.match(screen, /total=\{result\.pageInfo\.totalRows\}/)
+  // The count comes from the engine's own pageInfo, whether it is passed as a
+  // JSX prop or resolved by the loader and bound by the spec's pagination
+  // block. Guessing a total is the failure this guards against.
+  assert.match(screen, /total(?:=\{|Rows: )result\??\.pageInfo\??\.totalRows/)
   assert.match(screen, /Number\.MAX_SAFE_INTEGER \/ pagination\.maxPageSize/)
   assert.doesNotMatch(screen, /pickString\(sp\.page\)[\s\S]{0,120}10_000/)
-  assert.match(screen, /<Pagination/)
+  assert.match(screen, /<Pagination|\bpagination\(\{/)
 })
