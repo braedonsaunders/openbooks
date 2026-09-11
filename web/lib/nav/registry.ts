@@ -718,6 +718,15 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'admin.customization.manage',
   },
   {
+    key: 'admin-page-layouts',
+    href: '/admin/page-layouts',
+    label: 'Page Layouts',
+    iconKey: 'grid',
+    group: 'settings',
+    subgroup: 'customize',
+    requiredPermission: 'admin.customization.manage',
+  },
+  {
     key: 'admin-pdf-templates',
     href: '/admin/pdf-templates',
     label: 'PDF Templates',
@@ -879,6 +888,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'records',
     'admin-custom-fields',
     'admin-customization',
+    'admin-page-layouts',
     'admin-pdf-templates',
     'flows',
     'admin-scripts',

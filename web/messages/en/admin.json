@@ -3753,5 +3753,85 @@
       "delete": "Delete",
       "inProgress": "in progress…"
     }
+  },
+  "pageLayouts": {
+    "title": "Page Layouts",
+    "description": "Change what a page shows for everyone in this organization, or reset it to the layout the app ships.",
+    "searchPlaceholder": "Search routes and modules",
+    "empty": "No pages match this search.",
+    "summary": "{customized} of {total} pages customized.",
+    "columns": {
+      "route": "Route",
+      "module": "Module",
+      "status": "Status",
+      "updated": "Updated",
+      "note": "Note"
+    },
+    "status": {
+      "filter": "Status",
+      "customized": "Customized",
+      "builtIn": "Built-in"
+    },
+    "tabs": {
+      "aria": "Layout editor sections",
+      "structure": "Structure",
+      "json": "Advanced",
+      "fields": "Available fields"
+    },
+    "outline": {
+      "header": "Header",
+      "body": "Body",
+      "count": "{count, plural, one {# part} other {# parts}}",
+      "conditional": "Sometimes hidden",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "hide": "Hide this block"
+    },
+    "blocks": {
+      "page-header": "Page header",
+      "filter-bar": "Filter bar",
+      "summary-line": "Summary line",
+      "paper": "Report sheet",
+      "table": "Table",
+      "pagination": "Pagination",
+      "text": "Text",
+      "widget": "Component",
+      "grid": "Group",
+      "heading": "Heading",
+      "panel": "Panel",
+      "stat-tile": "Stat tile",
+      "repeat": "Repeating group",
+      "frame": "Wrapper"
+    },
+    "fields": {
+      "help": "Paths a layout can bind, taken from this page’s own data. Indented paths belong to one row of the list above them.",
+      "truncated": "Some deeper fields were left out to keep this list readable.",
+      "count": "{count, plural, one {# row} other {# rows}}"
+    },
+    "drawer": {
+      "builtIn": "This page renders the layout the app ships.",
+      "customized": "This page renders your organization’s layout.",
+      "replacesWarning": "A saved layout replaces the built-in page rather than patching it, so later improvements to this page will not appear until you remove the customization.",
+      "note": "Note",
+      "notePlaceholder": "Why this page was changed"
+    },
+    "unavailable": {
+      "segment": "This route needs a record to show — add ?param.{segment}=… to the address to edit it.",
+      "redirect": "This page sends you to {href} instead of rendering. That is usually a permission you do not hold or a feature that is off.",
+      "notFound": "This page answers “not found” for you, so there is no layout to read.",
+      "empty": "This page renders nothing for you, so there is no layout to read."
+    },
+    "errors": {
+      "json": "That is not valid JSON: {message}"
+    },
+    "actions": {
+      "save": "Save layout",
+      "validate": "Check",
+      "undo": "Undo",
+      "remove": "Remove customization",
+      "saved": "Layout saved.",
+      "validated": "This layout is valid.",
+      "removed": "Customization removed; the page renders the built-in layout."
+    }
   }
 }

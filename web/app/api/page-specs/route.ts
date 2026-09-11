@@ -5,6 +5,7 @@ import { guardPermission } from '../../../lib/authz'
 import { applicationContextFromSession } from '../../../lib/application/context'
 import { describePageLayout } from '../../../lib/application/page-layouts'
 import { clearPageSpec, listPageSpecs, savePageSpec } from '../../../lib/page-specs'
+import { validateAgainstRegistries } from '../../../lib/page-spec-validate'
 import { FRAME_NAMES, WIDGET_NAMES } from '../../../components/viewspec/registry-names'
 
 export const runtime = 'nodejs'
@@ -60,7 +61,14 @@ export async function GET(req: Request) {
   return NextResponse.json(described, { status: described.known ? 200 : 404 })
 }
 
-/** POST — store a spec for a route. Body: `{ route, spec, note? }`. */
+/**
+ * POST — store a spec for a route. Body: `{ route, spec, note? }`.
+ *
+ * With `?validate=1` the document is checked and NOT stored. The editor needs
+ * to answer "would this be accepted" without an author having to save a broken
+ * layout to find out, and a dry run costs one validation instead of a write
+ * plus an undo.
+ */
 export async function POST(req: Request) {
   const gate = await guardPermission('admin.customization.manage')
   if (gate instanceof NextResponse) return gate
@@ -71,6 +79,23 @@ export async function POST(req: Request) {
   const route = typeof body.route === 'string' ? body.route : null
   if (!route) return NextResponse.json({ error: 'route is required' }, { status: 400 })
   if (body.spec === undefined) return NextResponse.json({ error: 'spec is required' }, { status: 400 })
+
+  if (new URL(req.url).searchParams.get('validate') === '1') {
+    const checked = validateAgainstRegistries(body.spec, registries)
+    if (!checked.ok) {
+      return NextResponse.json({ error: 'spec rejected', errors: checked.errors }, { status: 400 })
+    }
+    // The route check the writer makes, made here too: a spec that declares a
+    // different route would be refused at save, so a dry run that ignored it
+    // would report a document as fine and then reject it.
+    if (checked.spec.route && checked.spec.route !== route) {
+      return NextResponse.json(
+        { error: 'spec rejected', errors: [`spec declares route ${checked.spec.route}, saved under ${route}`] },
+        { status: 400 },
+      )
+    }
+    return NextResponse.json({ valid: true })
+  }
 
   const result = await savePageSpec({
     orgId: gate.user.orgId,

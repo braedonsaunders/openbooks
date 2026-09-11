@@ -227,6 +227,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'new-role-party',
   'new-role-party-redirect',
   'new-saved-view',
+  'page-layout-drawer',
+  'page-layout-summary',
   'new-script',
   'new-setup-button',
   'new-setup-record',
