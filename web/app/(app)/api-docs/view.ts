@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { page, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { loadApiSchema, type ApiRecordTypeSchema } from '../../../lib/api/schema-registry'

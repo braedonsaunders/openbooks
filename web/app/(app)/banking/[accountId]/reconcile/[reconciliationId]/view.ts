@@ -6,7 +6,7 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/src/banking.ts'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../../../lib/authz'
 import { isUuid, parsePrefixedListParams } from '../../../../../../lib/list-params'
 

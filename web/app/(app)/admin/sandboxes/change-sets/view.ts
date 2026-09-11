@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { notFound, redirect } from 'next/navigation'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { pickString } from '../../../../../lib/list-params'
 import { loadChangeSetDetail } from '../../../../../lib/sandbox-change-sets'

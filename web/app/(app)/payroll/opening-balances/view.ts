@@ -7,7 +7,7 @@ import {
   type OpeningBalanceYear,
 } from '@openbooks/engine/src/payroll-opening-balances.ts'
 import type { EntitlementOpeningsResult } from '@openbooks/engine/src/payroll-entitlements-openings.ts'
-import { grid, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { grid, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'

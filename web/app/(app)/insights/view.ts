@@ -20,7 +20,7 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { insightVisibilitySql } from '@/lib/insight-access'
 import { can, requirePermission } from '../../../lib/authz'
 import { featureEnabled, orgFeatureState } from '../../../lib/features'

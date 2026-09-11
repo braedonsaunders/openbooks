@@ -8,7 +8,7 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can } from '../../../../lib/authz'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { orgInfo } from '../../../../lib/data'

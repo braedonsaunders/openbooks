@@ -2,7 +2,7 @@ import 'server-only'
 
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { page, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { adjacentArticles, getArticle, getCategory } from '../../../../lib/docs'
 import type { DocArticleContent } from './sections'
 

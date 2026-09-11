@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { page, widgetBlock, textBlock, frame, ref, validateSpec } from '@openbooks/viewspec'
+import { page, widgetBlock, textBlock, frame, ref, validateSpec } from '@braedonsaunders/appkit-viewspec'
 import { validateAgainstRegistries } from './page-spec-validate'
 
 /**

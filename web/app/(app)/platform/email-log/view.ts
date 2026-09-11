@@ -14,7 +14,7 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { platformEmails, type PlatformEmail } from '../../../../lib/platform-admin'
 

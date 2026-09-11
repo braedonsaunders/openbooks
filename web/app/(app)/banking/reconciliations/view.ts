@@ -7,7 +7,7 @@ import {
   ref,
   widgetBlock,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 
 /**

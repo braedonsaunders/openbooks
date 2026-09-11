@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { supportedTaxCountries } from '@openbooks/engine/src/tax-pack-provisioning.ts'
-import { grid, page, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import type { TaxSetupGuideProps } from './sections'
 

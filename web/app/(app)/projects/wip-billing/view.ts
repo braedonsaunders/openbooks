@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'

@@ -12,7 +12,7 @@ import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import type { PaperCell } from '../PaperView'
 import { mergeHref } from '../../../../lib/list-params'
-import { filterBar, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { filterBar, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
 /**
  * The trial balance, split into a loader and a spec.

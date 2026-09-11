@@ -16,7 +16,7 @@ import {
   widget,
   widgetCell,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { dateTime } from '../../../../../lib/format'
 

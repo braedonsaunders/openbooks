@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { page, ref, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { categoriesWithArticles, getArticle } from '../../../lib/docs'
 import type { DocsHomeContent } from './sections'
 

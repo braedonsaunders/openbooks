@@ -19,7 +19,7 @@ import {
   widgetCell,
   type PageSpec,
   type TableSpanRow,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { agingByParty, agingDetail, dimensionOptions, type AgingSide } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'

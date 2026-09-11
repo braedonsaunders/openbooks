@@ -1,6 +1,6 @@
 import { Fragment, type ComponentProps, type ReactNode } from 'react'
-import type { WidgetRef } from '@openbooks/viewspec'
-import { isFieldRef, resolvePath } from '@openbooks/viewspec'
+import type { WidgetRef } from '@braedonsaunders/appkit-viewspec'
+import { isFieldRef, resolvePath } from '@braedonsaunders/appkit-viewspec'
 import { ExportMenu } from '../../app/(app)/reports/ExportMenu'
 import { SaveViewButton } from '../../app/(app)/reports/SaveViewButton'
 import { ScheduleReportButton } from '../../app/(app)/reports/ScheduleReportButton'

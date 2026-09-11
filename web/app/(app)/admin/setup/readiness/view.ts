@@ -2,7 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { field, grid, page, ref, repeat, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { field, grid, page, ref, repeat, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { onboardingStatus } from '../../../../../lib/onboarding'
 import type { SetupReadinessCheck } from './sections'

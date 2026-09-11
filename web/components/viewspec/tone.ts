@@ -9,7 +9,7 @@
  * values to pick a colour.
  */
 
-import type { Tone } from '@openbooks/viewspec'
+import type { Tone } from '@braedonsaunders/appkit-viewspec'
 
 export const TONE_CLASS: Record<Tone, string> = {
   default: '',

@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { getAuthz, can } from '../../../lib/authz'
 import { featureEnabled, resolvedFeatureState } from '../../../lib/features'
-import { grid, heading, page, pageHeader, ref, repeat, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { grid, heading, page, pageHeader, ref, repeat, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
 // The admin hub. Every card is gated by the permission of the surface it opens;
 // the whole page is gated by holding at least one of them. Copy lives in the

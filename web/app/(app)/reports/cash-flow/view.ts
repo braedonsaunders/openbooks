@@ -10,7 +10,7 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { cashFlow, dimensionOptions, type CashFlowSection } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'

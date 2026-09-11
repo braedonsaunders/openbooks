@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { notFound } from 'next/navigation'
-import { frame, page, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { isDocKindEnabled } from '../../../../../lib/documents'
 import { PDF_RECORD_TYPE_BY_KEY } from '../../../../../lib/pdf-templates/catalog'

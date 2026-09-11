@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { frame, grid, page, pageHeader, ref, widgetBlock, type PageSpec } from '@openbooks/viewspec'
+import { frame, grid, page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { AI_PROVIDER_SPECS } from '../../../../lib/assistant/client'
 import { getOrgAiSettings, type OrgAiSettings } from '../../../../lib/assistant/ai-config'

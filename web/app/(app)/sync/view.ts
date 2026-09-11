@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { page, widgetBlock, frame, type PageSpec } from '@openbooks/viewspec'
+import { page, widgetBlock, frame, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
 /**
  * Platform → Migrations & Mirror, split into a loader and a spec.

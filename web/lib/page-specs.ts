@@ -2,7 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import type { PageSpec } from '@openbooks/viewspec'
+import type { PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { validateAgainstRegistries, type SpecRejection } from './page-spec-validate'
 
 /**

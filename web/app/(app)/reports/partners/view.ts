@@ -21,7 +21,7 @@ import {
   toggleLinks,
   widget,
   type PageSpec,
-} from '@openbooks/viewspec'
+} from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { parseListParams } from '../../../../lib/list-params'
