@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, matchesGlob, posix } from "node:path";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -77,6 +78,47 @@ for (const [index, line] of dockerfile.split(/\r?\n/).entries()) {
     throw new Error(`container security check failed: Dockerfile:${index + 1} external base is not digest-pinned`);
   }
   if (stage) localStages.add(stage);
+}
+
+// Validate host inputs against the tracked checkout, not ignored local files.
+// Docker still validates .dockerignore rules and the full build semantics.
+const trackedFiles = execFileSync("git", ["ls-files", "--cached", "-z"], { cwd: repoRoot, encoding: "utf8" })
+  .split("\0").filter(Boolean);
+const matchesInput = (file, input) => {
+  const normalized = posix.normalize(input.replace(/^\/+/, "")).replace(/\/$/, "");
+  if (normalized === ".") return true;
+  return file.split("/").some((_, index, parts) => matchesGlob(parts.slice(0, index + 1).join("/"), normalized));
+};
+const dependencyInputs = [];
+let dependencyInstallSeen = false;
+for (const line of dockerfile.replace(/\\\r?\n/g, " ").split(/\r?\n/)) {
+  if (/^\s*RUN\s+npm\s+ci(?:\s|$)/i.test(line)) dependencyInstallSeen = true;
+  const copy = /^\s*COPY\s+(.+)$/i.exec(line);
+  if (!copy) continue;
+  let operands = copy[1];
+  let fromStage = false;
+  while (operands.startsWith("--")) {
+    const flag = /^(--\S+)\s+/.exec(operands);
+    if (!flag) throw new Error("container security check failed: malformed COPY flag");
+    if (flag[1].startsWith("--from=")) fromStage = true;
+    operands = operands.slice(flag[0].length);
+  }
+  if (fromStage) continue;
+  const paths = operands.startsWith("[") ? JSON.parse(operands) : operands.trim().split(/\s+/);
+  for (const input of paths.slice(0, -1)) {
+    if (!trackedFiles.some((file) => matchesInput(file, input) && existsSync(join(repoRoot, file)))) {
+      throw new Error(`container security check failed: Dockerfile COPY input is absent from tracked context: ${input}`);
+    }
+    if (!dependencyInstallSeen) dependencyInputs.push(input);
+  }
+}
+const workspacePatterns = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).workspaces;
+const workspaceManifests = trackedFiles.filter((file) => file.endsWith("/package.json")
+  && workspacePatterns.some((pattern) => matchesGlob(file.slice(0, -"/package.json".length), pattern)));
+for (const manifest of workspaceManifests) {
+  if (!existsSync(join(repoRoot, manifest)) || !dependencyInputs.some((input) => matchesInput(manifest, input))) {
+    throw new Error(`container security check failed: workspace manifest missing before npm ci: ${manifest}`);
+  }
 }
 
 for (const { name, source } of workflows) {
