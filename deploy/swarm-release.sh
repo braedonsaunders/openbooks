@@ -30,6 +30,8 @@
 #
 # Usage: swarm-release.sh sha256:<64 hex>
 set -euo pipefail
+# Recovery files include deployment credentials and must remain owner-only.
+umask 077
 
 NEW="${1:-}"
 APP="${OPENBOOKS_STACK_APP:-compose-bypass-open-source-driver-miu7hf}"
@@ -103,6 +105,7 @@ DIR="/etc/dokploy/compose/$APP/code"
 sudo mkdir -p "$DIR"
 dokploy_sql "select \"composeFile\" from compose where \"appName\"='$APP'" | sudo tee "$DIR/docker-compose.yml" >/dev/null
 dokploy_sql "select env from compose where \"appName\"='$APP'" | sudo tee "$DIR/.env" >/dev/null
+sudo chmod 600 "$DIR/.env"
 
 set +u
 while IFS= read -r line; do
