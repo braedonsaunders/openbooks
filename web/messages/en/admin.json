@@ -3858,5 +3858,50 @@
       "orgHelp": "Changes the page for every person here. This is the usual choice.",
       "userHelp": "Changes the page only for you, and leaves everyone else on the organization’s layout."
     }
+  },
+  "modules": {
+    "title": "Modules",
+    "description": "Installable packages of pages, records, and automation. Nothing installs or upgrades without an approval first — this list and its history are the evidence.",
+    "searchPlaceholder": "Search modules…",
+    "status": "Status",
+    "statuses": {
+      "installed": "Installed",
+      "disabled": "Disabled",
+      "awaitingApproval": "Awaiting approval"
+    },
+    "columns": {
+      "name": "Name",
+      "key": "Key",
+      "version": "Version",
+      "contents": "Contents",
+      "status": "Status",
+      "updated": "Updated"
+    },
+    "empty": "No modules match. A module appears here once its install is approved — nothing installs on its own.",
+    "drawer": {
+      "noDescription": "No description.",
+      "lifecycle": "Lifecycle",
+      "liveVersion": "Live version",
+      "noLiveVersion": "No live version — the latest proposal is still awaiting approval.",
+      "versions": "Versions",
+      "versionStatus": {
+        "pending": "Pending",
+        "active": "Active",
+        "superseded": "Superseded",
+        "rolled_back": "Rolled back"
+      },
+      "approvals": "Approvals",
+      "pendingApproval": "Version {version} has waited since {date}.",
+      "noPendingApprovals": "No proposals awaiting approval.",
+      "reviewInApprovals": "Review in approvals",
+      "permissions": "Granted permissions",
+      "noPermissions": "No permissions granted.",
+      "contents": "Contents",
+      "noContents": "This version declares no contents.",
+      "history": "History",
+      "historyHelp": "Newest first. Each entry names who acted, what changed, and why.",
+      "noHistory": "No recorded changes yet.",
+      "unknownActor": "Unknown"
+    }
   }
 }

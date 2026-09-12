@@ -763,6 +763,15 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'apps.manage',
   },
   {
+    key: 'admin-modules',
+    href: '/admin/modules',
+    label: 'Modules',
+    iconKey: 'package',
+    group: 'settings',
+    subgroup: 'extend',
+    requiredPermission: 'apps.manage',
+  },
+  {
     key: 'sql',
     href: '/query',
     label: 'Query Console',
@@ -893,6 +902,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'flows',
     'admin-scripts',
     'admin-apps',
+    'admin-modules',
     'sql',
     'admin-api-keys',
     'api-docs',
