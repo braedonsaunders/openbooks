@@ -5,6 +5,7 @@ import {
   assertModulePermitted,
   assertModuleSeparationOfDuties,
   ModuleCapabilityError,
+  moduleEffectivePermissions,
   moduleUpgradeRequiresReapproval,
   resolveModuleGrants,
 } from "./capabilities.ts";
@@ -119,6 +120,59 @@ test("projection executors permit only granted ∩ installer-effective permissio
     (error: unknown) =>
       error instanceof ModuleCapabilityError && error.code === "capability_denied",
   );
+});
+
+test("a full-wildcard installer conveys every approved permission", () => {
+  const resolution = resolveModuleGrants({
+    requested: [RECORDS_READ, GL_POST],
+    approved: [RECORDS_READ, GL_POST],
+    installerEffective: ["*"],
+    knownPermissions: CATALOGUE,
+  });
+  assert.deepEqual(resolution.granted, [GL_POST, RECORDS_READ]);
+  assert.deepEqual(resolution.withheld, []);
+});
+
+test("a module-scoped wildcard installer conveys only the permissions under it", () => {
+  const resolution = resolveModuleGrants({
+    requested: ["ap.post", GL_POST],
+    approved: ["ap.post", GL_POST],
+    installerEffective: ["ap.*"],
+    knownPermissions: CATALOGUE,
+  });
+  assert.deepEqual(resolution.granted, ["ap.post"]);
+  assert.deepEqual(resolution.withheld, [GL_POST]);
+});
+
+test("projection executors honor wildcard authority on either side", () => {
+  assert.doesNotThrow(() =>
+    assertModulePermitted({
+      grantedPermissions: ["ap.post"],
+      installerEffectivePermissions: ["ap.*"],
+      requiredPermission: "ap.post",
+    }),
+  );
+  assert.doesNotThrow(() =>
+    assertModulePermitted({
+      grantedPermissions: ["ap.post"],
+      installerEffectivePermissions: ["*"],
+      requiredPermission: "ap.post",
+    }),
+  );
+  assert.throws(
+    () =>
+      assertModulePermitted({
+        grantedPermissions: ["ap.post"],
+        installerEffectivePermissions: ["ap.*"],
+        requiredPermission: GL_POST,
+      }),
+    (error: unknown) =>
+      error instanceof ModuleCapabilityError && error.code === "capability_denied",
+  );
+});
+
+test("effective permissions stay concrete when the installer holds a wildcard", () => {
+  assert.deepEqual(moduleEffectivePermissions(["ap.post", GL_POST], ["ap.*"]), ["ap.post"]);
 });
 
 test("an upgrade adding capabilities requires re-approval; narrowing does not", () => {
