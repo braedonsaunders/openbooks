@@ -199,6 +199,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0106_page_spec_user_scope.sql",
     "0107_modules.sql",
     "0108_module_contributions.sql",
+    "0109_absorb_apps.sql",
     "0110_modules_key_length.sql",
     "0111_page_specs_module_precedence.sql",
   ]);
