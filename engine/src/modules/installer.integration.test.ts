@@ -161,6 +161,63 @@ test(
 );
 
 test(
+  "an omitted optional description installs as NULL, never a raw SQL error",
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture();
+    try {
+      // The optional path: description absent, explicitly undefined, or
+      // explicitly null must all persist as NULL. An undefined reaching the
+      // modules INSERT renders as empty text (`, ,`) and dies as a raw
+      // DrizzleQueryError instead of installing.
+      const absent: Record<string, unknown> = manifest();
+      delete absent.description;
+      const undefd = manifest({
+        key: "nodesc-undefined",
+        contributions: [
+          { kind: "page", route: "/reports/nodesc-undefined", spec: specFor("/reports/nodesc-undefined") },
+        ],
+        description: undefined,
+      });
+      const nulld = manifest({
+        key: "nodesc-null",
+        contributions: [{ kind: "page", route: "/reports/nodesc-null", spec: specFor("/reports/nodesc-null") }],
+        description: null,
+      });
+      for (const m of [absent, undefd, nulld]) {
+        const out = await withBypass(() =>
+          installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: m, installerEffectivePermissions: ["records.read"] }),
+        );
+        assert.equal(out.outcome, "installed");
+      }
+      const stored = (
+        await withOrgContext(fx.orgId, () =>
+          db.execute<{ key: string; description: string | null }>(
+            sql`select key, description from modules where org_id = ${fx.orgId} order by key`,
+          ),
+        )
+      ).rows;
+      assert.deepEqual(
+        stored.map((r) => [r.key, r.description]),
+        [
+          ["nodesc-null", null],
+          ["nodesc-undefined", null],
+          ["qilish-report", null],
+        ],
+      );
+      const one = (
+        await withOrgContext(fx.orgId, () =>
+          db.execute<{ id: string }>(sql`select id from modules where org_id = ${fx.orgId} and key = 'qilish-report'`),
+        )
+      ).rows[0]!;
+      assertAudited(await auditFor(fx.orgId, "modules", one.id), fx.actorId);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
+
+test(
   "a one-character key installs: the canonical slug rule is 1..64",
   { skip: !DB },
   async () => {
