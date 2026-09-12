@@ -73,13 +73,30 @@ while IFS= read -r line; do
 done < "$ENV_FILE"
 [ -n "$DB_URL" ] || { echo "OPENBOOKS_DB_URL missing from the stack env" >&2; exit 1; }
 
+# Keep credentialed URLs out of the Docker process argument list.
+MIGRATION_ENV=$(mktemp "$BK/migration.XXXXXXXX.env")
+cleanup_migration_env() {
+  local release_status=$?
+  trap - EXIT
+  trap '' INT TERM
+  if ! timeout 5 rm -f -- "$MIGRATION_ENV" || [ -e "$MIGRATION_ENV" ]; then
+    echo "migration credential file cleanup failed: $MIGRATION_ENV" >&2
+    [ "$release_status" -ne 0 ] || release_status=1
+  fi
+  exit "$release_status"
+}
+trap cleanup_migration_env EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+printf 'OPENBOOKS_DB_URL=%s\nOPENBOOKS_RUNTIME_DB_URL=%s\n' "$DB_URL" "$DB_URL" > "$MIGRATION_ENV"
+chmod 600 "$MIGRATION_ENV"
+
 echo "applying migrations from ${IMAGE_REPO}@${NEW} ..."
 sudo docker run --rm \
   -e NODE_ENV=production \
   -e OPENBOOKS_BOOTSTRAP=1 \
   -e OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION=1 \
-  -e "OPENBOOKS_DB_URL=$DB_URL" \
-  -e "OPENBOOKS_RUNTIME_DB_URL=$DB_URL" \
+  --env-file "$MIGRATION_ENV" \
   "${IMAGE_REPO}@${NEW}" node scripts/bootstrap.mjs
 
 # ---------------------------------------------------------------------------

@@ -14,14 +14,13 @@ COPY engine/package.json engine/
 COPY web/package.json web/
 COPY packages/analytics/package.json packages/analytics/
 COPY packages/customization/package.json packages/customization/
+COPY packages/emails/package.json packages/emails/
 COPY packages/forms-core/package.json packages/forms-core/
+COPY packages/jobs/package.json packages/jobs/
 COPY packages/office/package.json packages/office/
 COPY packages/pdf/package.json packages/pdf/
 COPY packages/reports/package.json packages/reports/
 COPY packages/ui/package.json packages/ui/
-# npm resolves these workspace dependencies from repository-local, versioned
-# tarballs. They must be present in the dependency layer before `npm ci`.
-COPY vendor/appkit/ vendor/appkit/
 RUN npm ci
 
 # --- build: next standalone + bootstrap bundle -------------------------------
