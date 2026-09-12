@@ -2,6 +2,7 @@ import { pageSpecSchema } from "@braedonsaunders/appkit-viewspec";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../db.ts";
 import { isCataloguePermission } from "../permissions.ts";
+import { MODULE_PLATFORM_PERMISSIONS_MIRROR, isModulePermission } from "./module-catalogue.ts";
 import { ModuleCapabilityError, resolveModuleGrants } from "./capabilities.ts";
 
 /**
@@ -18,26 +19,24 @@ import { ModuleCapabilityError, resolveModuleGrants } from "./capabilities.ts";
  * Layering: parseModuleManifest in web/lib/modules/manifest.ts (zod, shared
  * client-side for pre-upload checks) is the fast path, not the boundary —
  * this engine module cannot import it (engine never imports from web), so
- * the installer enforces canonical strictness itself in TWO layers:
+ * the installer enforces canonical strictness itself in TWO layers, both
+ * engine-closed (no caller-supplied catalogue exists to lie about):
  *
- * OUTER (engine-closed): every requested permission must be a real platform
- * permission (isCataloguePermission, same engine package). No caller input
- * influences this check, so even a lying caller-supplied catalogue cannot
- * persist a name the platform never issued.
+ * OUTER: every requested permission must be a real platform permission
+ * (isCataloguePermission, same engine package).
  *
- * INNER (module vocabulary narrowing): grants resolve through the
- * capability lattice (resolveModuleGrants) with the module vocabulary
- * supplied as DATA at trusted call sites — the API route, the agent tools,
- * the marketplace installer, all server code passing the imported
- * MODULE_PLATFORM_PERMISSIONS constant, never user input. The recorded
- * grant is approved ∩ requested ∩ the installer's effective set.
+ * INNER: every requested permission must be in the module vocabulary
+ * (MODULE_PLATFORM_PERMISSIONS_MIRROR — a materialized mirror of the
+ * contract owner's list, drift-guarded by module-catalogue.test.ts), then
+ * grants resolve through the capability lattice against the installing
+ * actor's honestly-resolved effective set: recorded grant = approved ∩
+ * requested ∩ effective. Intersection only narrows, so overstating
+ * authority cannot widen the grant beyond what the admin approved from
+ * the manifest's request.
  *
- * Accepted residual, stated plainly: a valid-platform-but-off-vocabulary
- * key requires a lying caller AND an admin grant AND installer coverage —
- * a trusted-party conspiracy, not a boundary hole. Every page spec is
- * validated with pageSpecSchema (the same schema object the canonical
- * validator uses, never a hand-mirror); installer-persisted bytes equal
- * validator-accepted bytes.
+ * Every page spec is validated with pageSpecSchema (the same schema object
+ * the canonical validator uses, never a hand-mirror); installer-persisted
+ * bytes equal validator-accepted bytes.
  *
  * Transactional shape (mirrors installApp in web/lib/apps/store.ts): the
  * module upsert, the version append, every projection, and every audit row
@@ -157,13 +156,21 @@ function validateManifest(raw: unknown): ValidManifest {
   ) {
     throw new ModuleInstallError("invalid manifest: permissions must be a list of at most 50 permission strings");
   }
-  // OUTER backstop (engine-closed): the platform catalogue, independent of
-  // anything the caller supplies. A lying knownPermissions list cannot smuggle
-  // a name the platform never issued past this line. Concrete names only:
-  // wildcards live in effective sets, never in manifests.
+  // OUTER backstop (engine-closed): the platform catalogue. No caller input
+  // influences this check. Concrete names only: wildcards live in effective
+  // sets, never in manifests.
   for (const p of permissions as string[]) {
     if (!isCataloguePermission(p)) {
       throw new ModuleInstallError(`invalid manifest: unknown permission: ${p}`);
+    }
+  }
+  // INNER vocabulary check (engine-closed): the module vocabulary mirror.
+  // Requested names pass the platform catalogue above yet mean nothing to
+  // the module surface unless they are vocabulary members. There is no
+  // catalogue parameter to lie about — the boundary reads its own mirror.
+  for (const p of permissions as string[]) {
+    if (!isModulePermission(p)) {
+      throw new ModuleInstallError(`invalid manifest: permission "${p}" is outside the module vocabulary`);
     }
   }
   const contributions = m.contributions ?? [];
@@ -231,34 +238,25 @@ function validateManifest(raw: unknown): ValidManifest {
 }
 
 /**
- * Grant resolution through the capability lattice: unknown requested names
- * are rejected against the caller-supplied catalogue, approvals beyond the
+ * Grant resolution through the capability lattice: approvals beyond the
  * request fail closed, and the recorded grant is approved ∩ requested ∩ the
- * installer's effective set. Lattice errors surface as ModuleInstallError —
+ * installer's effective set, checked against the engine vocabulary mirror.
+ * Requested names outside the mirror never reach the lattice (the manifest
+ * boundary refuses them first). Lattice errors surface as ModuleInstallError —
  * raw lattice codes never reach callers.
  */
 function resolveGranted(
   manifest: ValidManifest,
   opts: {
     grantedPermissions?: unknown;
-    knownPermissions?: readonly string[];
-    installerEffectivePermissions?: readonly string[];
+    installerEffectivePermissions: readonly string[];
   },
 ): { granted: string[]; withheld: string[] } {
   const approved = opts.grantedPermissions ?? manifest.permissions;
   if (!Array.isArray(approved) || approved.some((p) => typeof p !== "string")) {
     throw new ModuleInstallError("invalid install: grantedPermissions must be a list of permission strings");
   }
-  // The catalogue is mandatory: without it an unknown requested name would
-  // persist, and an unenforced caller convention is exactly the bypass this
-  // boundary exists to close. Callers pass MODULE_PLATFORM_PERMISSIONS.
-  if (!opts.knownPermissions || !Array.isArray(opts.knownPermissions)) {
-    throw new ModuleInstallError(
-      "invalid install: knownPermissions (the platform permission catalogue) is required; " +
-        "pass MODULE_PLATFORM_PERMISSIONS",
-    );
-  }
-  // Authority is mandatory too: no default effective set, no undefined path.
+  // Authority is mandatory: no default effective set, no undefined path.
   // A caller that cannot state its authority must not install.
   if (
     !opts.installerEffectivePermissions ||
@@ -274,7 +272,7 @@ function resolveGranted(
       requested: manifest.permissions,
       approved: approved as string[],
       installerEffective: opts.installerEffectivePermissions,
-      knownPermissions: opts.knownPermissions,
+      knownPermissions: MODULE_PLATFORM_PERMISSIONS_MIRROR,
     });
   } catch (error) {
     if (error instanceof ModuleCapabilityError) {
@@ -703,11 +701,6 @@ export async function installModule(opts: {
   /** Admin-chosen grants, defaulting to everything requested. Must be a subset of requested. */
   grantedPermissions?: string[];
   /**
-   * The platform permission catalogue (MODULE_PLATFORM_PERMISSIONS).
-   * Required: requested names outside it are rejected, unconditionally.
-   */
-  knownPermissions: readonly string[];
-  /**
    * The installing actor's resolved permission set. Required, no default:
    * the recorded grant is approved ∩ requested ∩ effective, and a caller
    * that cannot state its authority must not install.
@@ -750,11 +743,6 @@ export async function upgradeModule(opts: {
   key: string;
   manifest: unknown;
   grantedPermissions?: string[];
-  /**
-   * The platform permission catalogue (MODULE_PLATFORM_PERMISSIONS).
-   * Required: requested names outside it are rejected, unconditionally.
-   */
-  knownPermissions: readonly string[];
   /**
    * The installing actor's resolved permission set. Required, no default:
    * the recorded grant is approved ∩ requested ∩ effective, and a caller
