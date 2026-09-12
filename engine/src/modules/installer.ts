@@ -114,13 +114,16 @@ function stableStringify(value: unknown): string {
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(",")}}`;
 }
 
-/** The exact document a version row carries; what approvals grant and audit keeps verbatim. */
+/** The exact document a version row carries; what approvals grant and audit keeps verbatim.
+ * An absent description stays absent: the contract declares description
+ * optional-but-never-null, so persisting an explicit null would store bytes
+ * the validator refuses when diff/rollback re-parse them. */
 function canonicalManifest(m: ValidManifest): Record<string, unknown> {
   return {
     key: m.key,
     name: m.name,
     version: m.version,
-    description: m.description,
+    ...(m.description != null ? { description: m.description } : {}),
     permissions: m.permissions,
     contributions: m.contributions.map((c) => ({ kind: "page", route: c.route, spec: c.spec, scope: "org" })),
   };
