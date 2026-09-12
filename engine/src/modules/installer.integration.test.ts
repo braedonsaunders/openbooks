@@ -221,6 +221,46 @@ test(
 );
 
 test(
+  "two concurrent identical installs converge: one installed, one already-installed, zero errors",
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture();
+    try {
+      const [a, b] = await Promise.all([
+        withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest() })),
+        withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest() })),
+      ]);
+      // The loser serializes on the unique keys and converges — raw PG
+      // constraint codes never reach callers.
+      assert.deepEqual([a.outcome, b.outcome].sort(), ["already-installed", "installed"]);
+      assert.equal(a.moduleId, b.moduleId);
+      assert.equal(a.versionId, b.versionId);
+      assert.equal(await moduleCount(fx.orgId), 1);
+      const versions = Number(
+        (
+          await withOrgContext(fx.orgId, () =>
+            db.execute<{ n: string }>(sql`select count(*) as n from module_versions where org_id = ${fx.orgId}`),
+          )
+        ).rows[0]!.n,
+      );
+      assert.equal(versions, 1);
+      const activeSpecs = Number(
+        (
+          await withOrgContext(fx.orgId, () =>
+            db.execute<{ n: string }>(
+              sql`select count(*) as n from page_specs where org_id = ${fx.orgId} and route = '/reports/qilish' and is_active`,
+            ),
+          )
+        ).rows[0]!.n,
+      );
+      assert.equal(activeSpecs, 1);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
+
+test(
   "reinstalling the same version with a different manifest is refused; upgrade appends and re-projects",
   { skip: !DB },
   async () => {
