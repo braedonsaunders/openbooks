@@ -1,4 +1,4 @@
--- 0137_inventory_original_cost_basis.sql: exact surviving inventory original cost.
+-- OpenBooks forward migration 0137_inventory_original_cost_basis.
 -- Additive provenance only: legacy pooled receipt anchors cannot establish cost.
 ALTER TABLE public.cost_layers ADD COLUMN IF NOT EXISTS remaining_original_cost numeric(19,4);
 ALTER TABLE public.cost_layer_consumptions ADD COLUMN IF NOT EXISTS original_cost numeric(19,4);
