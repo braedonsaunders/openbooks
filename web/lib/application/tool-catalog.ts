@@ -41,6 +41,15 @@ import {
   setLayout,
   validateLayout,
 } from "./page-layouts";
+import {
+  applyModule,
+  describeModuleVocabulary,
+  diffModule,
+  installModuleStaged,
+  listModules,
+  rollbackModule,
+  validateModule,
+} from "./modules";
 import { orgVitals } from "./vitals";
 
 export type ApplicationToolConfirmation = "never" | "always";
@@ -73,6 +82,10 @@ const ROUTE = z.string().regex(/^\/[A-Za-z0-9\-_/[\]().]*$/).max(120)
   .describe("Next.js route PATTERN the layout replaces, e.g. /banking or /apps/[key]. Never a concrete url.");
 const LAYOUT_SPEC = z.unknown()
   .describe("A ViewSpec PageSpec document. Call validate_page_layout first; errors name the offending widget or path.");
+const MODULE_MANIFEST = z.unknown()
+  .describe("A module manifest document (key, name, version, permissions, contributions). Call validate_module first; errors name the offending contribution or permission.");
+const MODULE_KEY = z.string().regex(/^[a-z][a-z0-9-]*$/).max(64)
+  .describe("Installed module key, e.g. atlas. Listed by list_modules.");
 const CUSTOM = z.record(z.string(), z.unknown());
 const DOCUMENT_REVISION = z.string()
   .regex(new RegExp(DOCUMENT_REVISION_PATTERN), "must be the exact persisted document updated_at token")
@@ -350,6 +363,77 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     readOnly: false, destructive: true, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await clearLayout(context, input) }),
+  }),
+  definition({
+    name: "describe_module_vocabulary", title: "Describe Module Vocabulary",
+    description: "The contribution kinds a module manifest may declare, which of them install today and where each projects, plus the permission catalogue a module may request and the rules a manifest must obey. Start here before writing one: a kind this does not list as projected is refused at install.",
+    inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context) => ({ ok: true, ...await describeModuleVocabulary(context) }),
+  }),
+  definition({
+    name: "list_modules", title: "List Modules",
+    description: "List the modules this org has installed, with each module's live version and granted permissions. A module absent from this list has never been installed here.",
+    inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context) => ({ ok: true, ...await listModules(context) }),
+  }),
+  definition({
+    name: "validate_module", title: "Validate Module",
+    description: "Check a draft module manifest without storing it. Returns the specific errors — an unknown permission is named, an illegal contribution is pointed at. Iterate here rather than against install_module.",
+    inputSchema: z.object({ manifest: MODULE_MANIFEST }),
+    readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await validateModule(context, input) }),
+  }),
+  definition({
+    name: "install_module", title: "Install Module",
+    description: "Stage a module manifest for this org. A zero-permission page-only manifest applies immediately with audit; anything requesting a permission stages a signed approval instead, and a distinct approver applies it with apply_module — the requester can never approve their own install. A rejected manifest is returned with its errors rather than stored.",
+    inputSchema: z.object({
+      manifest: MODULE_MANIFEST,
+      reason: z.string().trim().min(1).max(500).optional()
+        .describe("Why this module is installed; recorded on every audit row."),
+      approverUserId: UUID.optional()
+        .describe("The approver to ask. Omit to ask every admin through the approval worklist."),
+    }),
+    readOnly: false, destructive: false, openWorld: false,
+    assistantConfirmation: "always", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await installModuleStaged(context, input) }),
+  }),
+  definition({
+    name: "diff_module", title: "Diff Module",
+    description: "What installing a manifest would change: per-kind added, changed, and removed projections against the module's live version, plus the permission delta and whether the change needs re-approval. Nothing is stored.",
+    inputSchema: z.object({ key: MODULE_KEY.optional().describe("The installed module to compare against; defaults to the manifest's own key."), manifest: MODULE_MANIFEST }),
+    readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await diffModule(context, input) }),
+  }),
+  definition({
+    name: "apply_module", title: "Apply Module",
+    description: "Apply a staged module proposal by approving its gate — the decision install_module staged. Permission-bearing stages require the approver's explicit signature; pass the signature the gate asks for. Returns the activated version, or the reason the gate cannot be decided.",
+    inputSchema: z.object({
+      gateId: UUID,
+      comment: z.string().trim().max(2000).optional()
+        .describe("Decision note; recorded as the audit reason."),
+      signature: z.string().trim().min(1).max(200).optional()
+        .describe("Explicit attestation. Required when the staged install carries permissions."),
+    }),
+    readOnly: false, destructive: false, openWorld: false,
+    assistantConfirmation: "always", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await applyModule(context, input) }),
+  }),
+  definition({
+    name: "rollback_module", title: "Rollback Module",
+    description: "Publish a previous version of a module again, by version id (omit it to return to the most recent superseded version). Re-projects the previous version's contributions and marks the version it replaces rolled back, so the history stays a true record of what was live when.",
+    inputSchema: z.object({
+      key: MODULE_KEY,
+      versionId: UUID.optional().describe("The earlier version to restore. Omit for the most recent superseded one."),
+      reason: z.string().trim().min(1).max(500).optional()
+        .describe("Why this rollback happens; recorded on every audit row."),
+    }),
+    readOnly: false, destructive: true, openWorld: false,
+    assistantConfirmation: "always", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await rollbackModule(context, input) }),
   }),
   definition({
     name: "list_approvals", title: "List Approvals",
