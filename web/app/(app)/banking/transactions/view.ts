@@ -55,6 +55,7 @@ type LoadedDocument = NonNullable<Awaited<ReturnType<typeof loadDocument>>>
 export interface BankingTransactionsDrawer {
   /** Remount key: switching documents must reset the drawer's client state. */
   remountKey: string
+  basePath: string
   payload: LoadedDocument
   config: DocKindConfig
   initialMode: 'edit' | 'view'
@@ -177,6 +178,7 @@ export async function loadBankingTransactions(
   const drawer =
     openDoc && pickers && resolvedForm && openKind
       ? {
+          basePath: '/banking/transactions',
           remountKey: String(openDoc.doc.id),
           payload: openDoc,
           config: DOC_KINDS[openKind]!,

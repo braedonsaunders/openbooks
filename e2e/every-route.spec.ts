@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type BrowserContext } from '@playwright/test'
 import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { authedContext } from './auth'
@@ -74,38 +74,37 @@ test('the route list was actually discovered', () => {
   expect(routes).toContain('/reports/pnl')
 })
 
-test('every page renders without throwing', async ({ browser, baseURL }) => {
-  test.slow()
-  const { context, page } = await authedContext(browser, baseURL)
-  const failures: string[] = []
-  try {
-    for (const route of routes) {
-      const errors: string[] = []
-      const onError = (error: Error) => errors.push(String(error))
-      page.on('pageerror', onError)
-      try {
-        const response = await page.goto(route, { waitUntil: 'domcontentloaded' })
-        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
-        const status = response?.status() ?? 0
-        // A redirect is a legitimate answer — nine routes exist only to issue
-        // one, and several more redirect when a feature is off.
-        const text = await page.locator('main').first().innerText().catch(() => '')
-        // A page that crashes into the app's error boundary answers 200 with
-        // text in <main> and emits no `pageerror`, so it reads as a clean
-        // render unless the boundary is detected explicitly. Proven by
-        // deliberately throwing from a shared block: without this check the
-        // whole suite passed while most of the app was broken.
-        const boundary = await page.locator('[data-route-state="error"]').count()
-        if (status >= 400) failures.push(`${route}: HTTP ${status}`)
-        else if (boundary > 0) failures.push(`${route}: crashed into the error boundary`)
-        else if (errors.length > 0) failures.push(`${route}: ${errors[0]}`)
-        else if (text.trim().length === 0) failures.push(`${route}: rendered no content`)
-      } finally {
-        page.off('pageerror', onError)
-      }
-    }
-  } finally {
-    await context.close()
-  }
-  expect(failures, `${failures.length} of ${routes.length} routes failed`).toEqual([])
+// Authenticate once per worker; every route still gets a fresh browser context.
+// The login form and credential policy retain their separate browser coverage.
+let routeStorageState: Awaited<ReturnType<BrowserContext['storageState']>>
+test.beforeAll(async ({ browser, baseURL }) => {
+  const { context } = await authedContext(browser, baseURL)
+  try { routeStorageState = await context.storageState() }
+  finally { await context.close() }
 })
+
+// Each discovered route owns its timeout and trace. A single aggregate test
+// exhausted its budget after only 30 cold Next compiles, leaving most routes
+// unvisited and making a retry repeat all earlier work.
+for (const route of routes) {
+  test(`${route} renders without throwing`, async ({ browser, baseURL }) => {
+    const context = await browser.newContext({
+      baseURL,
+      storageState: routeStorageState,
+      ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === '1',
+    })
+    const page = await context.newPage()
+    const errors: string[] = []
+    page.on('pageerror', (error: Error) => errors.push(String(error)))
+    try {
+      const response = await page.goto(route, { waitUntil: 'domcontentloaded' })
+      await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
+      expect(response?.status(), `${route}: HTTP response`).toBeLessThan(400)
+      await expect(page.locator('main').first(), `${route}: rendered content`).toContainText(/\S/)
+      await expect(page.locator('[data-route-state="error"]'), `${route}: error boundary`).toHaveCount(0)
+      expect(errors, `${route}: browser errors`).toEqual([])
+    } finally {
+      await context.close()
+    }
+  })
+}

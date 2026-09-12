@@ -48,6 +48,7 @@ import { resolveFormLayout } from '../../../../lib/customization/resolve'
 
 export interface ApBillsDrawer {
   remountKey: string
+  basePath: string
   payload: unknown
   config: unknown
   parties: unknown
@@ -186,6 +187,7 @@ export async function loadApBills(
   const drawer: ApBillsDrawer | null =
     openDoc && pickers && resolvedForm && openKind
       ? {
+          basePath: '/ap/bills',
           remountKey: String((openDoc.doc as Record<string, unknown>).id),
           payload: openDoc,
           config: DOC_KINDS[openKind]!,

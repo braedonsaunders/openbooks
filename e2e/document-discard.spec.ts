@@ -1,27 +1,32 @@
 import { expect, test } from '@playwright/test'
 import { authedContext } from './auth'
 
-test('document drawer discards the reviewed draft with a JSON revision token', async ({ browser, baseURL }) => {
+for (const { route, kind } of [
+  { route: '/ar/invoices', kind: 'customer_invoice' },
+  { route: '/ap/bills', kind: 'vendor_bill' },
+  { route: '/banking/transactions', kind: 'check' },
+]) {
+test(`${route} drawer discards the reviewed draft with a JSON revision token`, async ({ browser, baseURL }) => {
   const { context, page } = await authedContext(browser, baseURL)
   let id: string | undefined
   try {
-    await page.goto('/ar/invoices')
-    const created = await page.evaluate(async () => {
+    await page.goto(route)
+    const created = await page.evaluate(async (kind) => {
       const response = await fetch('/api/documents/draft', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'customer_invoice' }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind }),
       })
       return { status: response.status, body: await response.json() }
-    })
+    }, kind)
     expect(created.status, JSON.stringify(created.body)).toBe(200)
     id = created.body.id
     expect(id).toBeTruthy()
-    await page.goto(`/ar/invoices?doc=${id}`)
+    await page.goto(`${route}?doc=${id}`)
     const wizard = page.getByTestId('setup-wizard')
     if (await wizard.isVisible()) {
       await wizard.getByRole('button', { name: 'Skip for now', exact: true }).click()
       await expect(wizard).toBeHidden()
       await page.waitForURL('**/admin/setup/readiness')
-      await page.goto(`/ar/invoices?doc=${id}`)
+      await page.goto(`${route}?doc=${id}`)
     }
     await page.getByRole('button', { name: 'Actions', exact: true }).last().click()
     await page.getByRole('button', { name: 'Delete', exact: true }).click()
@@ -31,7 +36,7 @@ test('document drawer discards the reviewed draft with a JSON revision token', a
     expect(response.status(), await response.text()).toBe(200)
     expect(response.request().postDataJSON().expectedUpdatedAt).toMatch(/\.\d{6}Z$/)
     id = undefined
-    await expect(page).toHaveURL(/\/ar\/invoices$/)
+    await expect(page).toHaveURL(new URL(route, baseURL).href)
   } finally {
     try {
       if (id) {
@@ -49,3 +54,4 @@ test('document drawer discards the reviewed draft with a JSON revision token', a
     } finally { await context.close() }
   }
 })
+}

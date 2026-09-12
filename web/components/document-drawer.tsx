@@ -5,7 +5,8 @@ import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { isDocumentRevisionToken } from '@/lib/api/registry-data'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { documentDrawerHref } from '../lib/document-drawer-navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
@@ -463,6 +464,8 @@ export interface DocumentDrawerProps {
   payload: DocPayload
   config: DocKindConfig
   basePath: string
+  /** Related records retain their party/project/report drawer host. */
+  relatedNavigation?: boolean
   parties?: Opt[]
   accounts: Opt[]
   taxCodes?: Opt[]
@@ -507,6 +510,7 @@ export function DocumentDrawer({
   payload,
   config,
   basePath,
+  relatedNavigation,
   parties,
   accounts,
   taxCodes,
@@ -537,7 +541,13 @@ export function DocumentDrawer({
   const t = useTranslations(config.i18n)
   const tCommon = useTranslations('common')
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const doc = payload.doc
+  const hrefForDocument = (targetId: string, form?: string) => documentDrawerHref({
+    pathname, query: searchParams.toString(), basePath, currentId: String(doc.id),
+    targetId, kind: config.kind, related: relatedNavigation, form,
+  })
   const isDraft = doc.status === 'draft'
   const isPosted = doc.status === 'posted'
   const isTransfer = config.kind === 'transfer'
@@ -875,7 +885,7 @@ export function DocumentDrawer({
             : tCommon('amendment.correctionCreated'),
         )
         setBusy(false)
-        router.push(`${basePath}?doc=${data.correctionId}`)
+        router.push(hrefForDocument(data.correctionId))
         router.refresh()
         return
       }
@@ -1547,7 +1557,7 @@ export function DocumentDrawer({
           </span>
           <Select
             value={currentLayoutId ?? ''}
-            onChange={(e) => router.push(`${basePath}?doc=${doc.id}&form=${e.target.value}`)}
+            onChange={(e) => router.push(hrefForDocument(String(doc.id), e.target.value))}
             aria-label={t('drawer.formLabel')}
             triggerClassName="!h-8 !min-h-0 !px-2 !py-0 !text-xs"
           >
