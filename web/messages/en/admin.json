@@ -3770,7 +3770,8 @@
     "status": {
       "filter": "Status",
       "customized": "Customized",
-      "builtIn": "Built-in"
+      "builtIn": "Built-in",
+      "personal": "Personal"
     },
     "tabs": {
       "aria": "Layout editor sections",
@@ -3815,7 +3816,8 @@
       "customized": "This page renders your organization’s layout.",
       "replacesWarning": "A saved layout replaces the built-in page rather than patching it, so later improvements to this page will not appear until you remove the customization.",
       "note": "Note",
-      "notePlaceholder": "Why this page was changed"
+      "notePlaceholder": "Why this page was changed",
+      "customizedByYou": "This page renders your own personal layout."
     },
     "unavailable": {
       "segment": "This route needs a record to show — add ?param.{segment}=… to the address to edit it.",
@@ -3848,6 +3850,13 @@
       "empty": "This page has never been customized.",
       "active": "Live now",
       "loading": "Loading…"
+    },
+    "scope": {
+      "legend": "Who is this layout for?",
+      "org": "Everyone in this organization",
+      "user": "Just me",
+      "orgHelp": "Changes the page for every person here. This is the usual choice.",
+      "userHelp": "Changes the page only for you, and leaves everyone else on the organization’s layout."
     }
   }
 }

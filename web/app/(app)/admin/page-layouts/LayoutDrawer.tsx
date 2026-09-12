@@ -162,6 +162,11 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
   // Blank each time: a note explains THIS change, so carrying the previous
   // one forward would quietly attribute an old reason to a new edit.
   const [note, setNote] = useState('')
+  /**
+   * Who the save is for. Defaults to the whole org because that is the
+   * decision this screen exists to make; personal is the deliberate choice.
+   */
+  const [scope, setScope] = useState<'org' | 'user'>('org')
   const [errors, setErrors] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   /** The url of the live preview, and a token that forces the frame to reload. */
@@ -201,7 +206,8 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
   }
 
   const post = async (spec: PageSpec, validateOnly: boolean) => {
-    const response = await fetch(`/api/page-specs${validateOnly ? '?validate=1' : ''}`, {
+    const query = validateOnly ? '?validate=1' : scope === 'user' ? '?scope=user' : ''
+    const response = await fetch(`/api/page-specs${query}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ route: drawer.route, spec, note: note.trim() || null }),
@@ -311,7 +317,11 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
   const remove = async () => {
     setBusy(true)
     try {
-      const response = await fetch(`/api/page-specs?route=${encodeURIComponent(drawer.route)}`, { method: 'DELETE' })
+      const response = await fetch(
+        `/api/page-specs?route=${encodeURIComponent(drawer.route)}` +
+          (drawer.overrideScope === 'user' ? '&scope=user' : ''),
+        { method: 'DELETE' },
+      )
       if (!response.ok) {
         setErrors([tCommon('errors.unknown')])
         return
@@ -357,7 +367,11 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
       closeHref="/admin/page-layouts"
       size="xl"
       title={drawer.route}
-      description={drawer.override ? t('drawer.customized') : t('drawer.builtIn')}
+      description={
+        drawer.override
+          ? t(drawer.overrideScope === 'user' ? 'drawer.customizedByYou' : 'drawer.customized')
+          : t('drawer.builtIn')
+      }
       subtabs={subtabs}
       headerActions={
         <>
@@ -518,6 +532,24 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
                 fields there is no save to explain, and an input that does
                 nothing invites someone to fill it in. */}
             {mode === 'structure' || mode === 'json' ? (
+            <div className="space-y-3">
+              <fieldset className="space-y-1">
+                <legend className={`text-xs ${TONE.chrome}`}>{t('scope.legend')}</legend>
+                <div className="flex flex-wrap gap-3">
+                  {(['org', 'user'] as const).map((value) => (
+                    <label key={value} className="flex items-center gap-1.5 text-sm">
+                      <input
+                        type="radio"
+                        name="page-layout-scope"
+                        checked={scope === value}
+                        onChange={() => setScope(value)}
+                      />
+                      <span>{t(`scope.${value}`)}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className={`text-xs ${TONE.chrome}`}>{t(`scope.${scope}Help`)}</p>
+              </fieldset>
             <div className="space-y-1">
               <label className={`text-xs ${TONE.chrome}`} htmlFor="page-layout-note">
                 {t('drawer.note')}
@@ -529,6 +561,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
                 placeholder={t('drawer.notePlaceholder')}
                 maxLength={500}
               />
+            </div>
             </div>
             ) : null}
           </>

@@ -36,6 +36,7 @@ import {
   describePageLayout,
   listLayoutHistory,
   listLayouts,
+  previewLayout,
   restoreLayout,
   setLayout,
   validateLayout,
@@ -304,9 +305,23 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     execute: async (context, input) => ({ ok: true, ...await validateLayout(context, input) }),
   }),
   definition({
+    name: "preview_page_layout", title: "Preview Page Layout",
+    description: "Stage a draft layout and get a url that renders the REAL page with it applied — visible only to you, expiring on its own, published to nobody. Use this to show a layout before set_page_layout makes it live for the whole org.",
+    inputSchema: z.object({
+      route: ROUTE,
+      spec: LAYOUT_SPEC,
+      params: z.record(z.string(), z.string()).optional()
+        .describe("Values for the route's dynamic segments, e.g. { key: \"inventory\" } for /apps/[key]."),
+    }),
+    readOnly: false, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await previewLayout(context, input as never) }),
+  }),
+  definition({
     name: "set_page_layout", title: "Set Page Layout",
-    description: "Replace what a route renders for everyone in this org. The layout binds fields the page's loader already resolved; it cannot reach data the reader could not already see. A rejected layout is returned with its errors rather than stored.",
-    inputSchema: z.object({ route: ROUTE, spec: LAYOUT_SPEC, note: z.string().max(500).optional() }),
+    description: "Replace what a route renders — for everyone in this org, or for you alone with scope: \"user\". The layout binds fields the page's loader already resolved; it cannot reach data the reader could not already see. A rejected layout is returned with its errors rather than stored.",
+    inputSchema: z.object({ route: ROUTE, spec: LAYOUT_SPEC, note: z.string().max(500).optional(), scope: z.enum(["org", "user"]).optional()
+        .describe("org (default) changes the page for everyone; user stores it for you alone.") }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await setLayout(context, input) }),
@@ -329,8 +344,9 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "clear_page_layout", title: "Clear Page Layout",
-    description: "Drop this org's layout for a route so the page returns to its built-in one. The stored layout is deactivated, not destroyed.",
-    inputSchema: z.object({ route: ROUTE }),
+    description: "Drop a layout for a route so the page returns to what it would otherwise render. The stored layout is deactivated, not destroyed.",
+    inputSchema: z.object({ route: ROUTE, scope: z.enum(["org", "user"]).optional()
+        .describe("org (default) changes the page for everyone; user stores it for you alone.") }),
     readOnly: false, destructive: true, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await clearLayout(context, input) }),

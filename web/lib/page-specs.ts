@@ -32,7 +32,18 @@ export interface StoredPageSpec {
   spec: PageSpec
   note: string | null
   updatedAt: string
+  /** The one person this layout is for, or null for the whole org. */
+  userId: string | null
 }
+
+/**
+ * Who a layout is for.
+ *
+ * `'user'` wins over `'org'` for its owner and changes nothing for anyone
+ * else, which is the whole point: someone who wants one panel gone should not
+ * have to take it away from their colleagues to get it.
+ */
+export type LayoutScope = 'org' | 'user'
 
 /**
  * The active override for a route, or null.
@@ -48,10 +59,16 @@ export async function loadPageSpec(
   orgId: string,
   route: string,
   registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> },
-): Promise<{ spec: PageSpec; id: string } | null> {
-  const rows = await db.execute<{ id: string; spec: unknown }>(sql`
-    select id, spec from page_specs
+  /** When given, this reader's personal layout is preferred over the org's. */
+  userId?: string,
+): Promise<{ spec: PageSpec; id: string; scope: LayoutScope } | null> {
+  // One query, ordered so the reader's own layout sorts first. Two round
+  // trips would be a second chance to get the precedence wrong.
+  const rows = await db.execute<{ id: string; spec: unknown; user_id: string | null }>(sql`
+    select id, spec, user_id from page_specs
      where org_id = ${orgId} and route = ${route} and is_active
+       and (user_id is null ${userId ? sql`or user_id = ${userId}` : sql``})
+     order by user_id nulls last
      limit 1`)
   const row = rows.rows[0]
   if (!row) return null
@@ -72,27 +89,36 @@ export async function loadPageSpec(
     )
     return null
   }
-  return { spec: checked.spec, id: row.id }
+  return { spec: checked.spec, id: row.id, scope: row.user_id ? 'user' : 'org' }
 }
 
-/** Every route this org has customized, for the admin surface. */
-export async function listPageSpecs(orgId: string): Promise<StoredPageSpec[]> {
+/**
+ * Every customized route, for the admin surface.
+ *
+ * Org layouts, plus this reader's own personal ones — never a colleague's. A
+ * personal layout is nobody else's business, and listing them all would turn
+ * an admin screen into a window onto what each person has hidden.
+ */
+export async function listPageSpecs(orgId: string, userId?: string): Promise<StoredPageSpec[]> {
   const rows = await db.execute<{
     id: string
     route: string
     spec: PageSpec
     note: string | null
     updated_at: string
+    user_id: string | null
   }>(sql`
-    select id, route, spec, note, updated_at from page_specs
+    select id, route, spec, note, updated_at, user_id from page_specs
      where org_id = ${orgId} and is_active
-     order by route`)
+       and (user_id is null ${userId ? sql`or user_id = ${userId}` : sql``})
+     order by route, user_id nulls first`)
   return rows.rows.map((row) => ({
     id: row.id,
     route: row.route,
     spec: row.spec,
     note: row.note,
     updatedAt: String(row.updated_at),
+    userId: row.user_id,
   }))
 }
 
@@ -113,6 +139,8 @@ export async function savePageSpec(opts: {
   spec: PageSpec
   note?: string | null
   registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> }
+  /** `'user'` stores it for the actor alone; `'org'` for everyone. */
+  scope?: LayoutScope
 }): Promise<{ ok: true; id: string } | SpecRejection> {
   const checked = validateAgainstRegistries(opts.spec, opts.registries)
   if (!checked.ok) return checked
@@ -120,6 +148,10 @@ export async function savePageSpec(opts: {
     return { ok: false, errors: [`spec declares route ${checked.spec.route}, saved under ${opts.route}`] }
   }
 
+  // The owner of the row being written. A personal save must supersede only
+  // the actor's own layout: scoping this wrongly would let one person's
+  // preference switch off the layout their whole org is using.
+  const owner = opts.scope === 'user' ? opts.actorId : null
   return await db.transaction(async (tx) => {
     // The supersession is audited too, not just the new row. Without it the
     // trail shows two inserts for one route and no record of which replaced
@@ -127,6 +159,7 @@ export async function savePageSpec(opts: {
     const superseded = await tx.execute<{ id: string }>(sql`
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
+         and user_id is not distinct from ${owner}
       returning id`)
     for (const row of superseded.rows) {
       await tx.execute(sql`
@@ -136,15 +169,15 @@ export async function savePageSpec(opts: {
                 ${opts.actorId})`)
     }
     const inserted = await tx.execute<{ id: string }>(sql`
-      insert into page_specs (org_id, route, spec, note, created_by, updated_by)
-      values (${opts.orgId}, ${opts.route}, ${JSON.stringify(checked.spec)}::jsonb,
+      insert into page_specs (org_id, user_id, route, spec, note, created_by, updated_by)
+      values (${opts.orgId}, ${owner}, ${opts.route}, ${JSON.stringify(checked.spec)}::jsonb,
               ${opts.note ?? null}, ${opts.actorId}, ${opts.actorId})
       returning id`)
     const id = inserted.rows[0]!.id
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${opts.orgId}, 'page_specs', ${id}, 'insert',
-              ${JSON.stringify({ route: opts.route, note: opts.note ?? null })}, ${opts.actorId})`)
+              ${JSON.stringify({ route: opts.route, note: opts.note ?? null, scope: opts.scope ?? 'org' })}, ${opts.actorId})`)
     return { ok: true as const, id }
   })
 }
@@ -349,11 +382,14 @@ export async function clearPageSpec(opts: {
   orgId: string
   actorId: string
   route: string
+  scope?: LayoutScope
 }): Promise<{ cleared: number }> {
+  const owner = opts.scope === 'user' ? opts.actorId : null
   return await db.transaction(async (tx) => {
     const rows = await tx.execute<{ id: string }>(sql`
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
+         and user_id is not distinct from ${owner}
       returning id`)
     for (const row of rows.rows) {
       await tx.execute(sql`

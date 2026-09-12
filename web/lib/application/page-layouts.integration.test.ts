@@ -183,6 +183,25 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
       false,
     )
 
+    // A personal layout is a preference, not a policy change: it wins for its
+    // owner and is invisible to everyone else, including in the admin list.
+    const personal = await layouts.setLayout(allowed, {
+      route: '/banking',
+      spec: validSpec('/banking'),
+      scope: 'user',
+    })
+    assert.equal(personal.stored, true)
+    const mine = await layouts.listLayouts(allowed)
+    assert.equal(mine.layouts.filter((layout) => layout.userId !== null).length, 1)
+
+    // Clearing the PERSONAL layout must leave the org's alone. Scoping this
+    // wrongly would let one person's preference switch off the layout their
+    // whole organization is using.
+    assert.equal((await layouts.clearLayout(allowed, { route: '/banking', scope: 'user' })).cleared, 1)
+    const afterPersonalClear = await layouts.listLayouts(allowed)
+    assert.equal(afterPersonalClear.layouts.filter((layout) => layout.userId !== null).length, 0)
+    assert.equal(afterPersonalClear.layouts.filter((layout) => layout.userId === null).length, 1)
+
     const cleared = await layouts.clearLayout(allowed, { route: '/banking' })
     assert.equal(cleared.cleared, 1)
     assert.deepEqual((await layouts.listLayouts(allowed)).layouts, [])
@@ -192,14 +211,14 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
     const rows = await db.execute<{ n: string }>(
       sql`select count(*) as n from page_specs where org_id = ${orgA}`,
     )
-    assert.equal(Number(rows.rows[0]!.n), 4, 'every stored layout survives as an inactive row')
+    assert.equal(Number(rows.rows[0]!.n), 5, 'every stored layout survives as an inactive row')
 
     const audit = await db.execute<{ action: string }>(
       sql`select action from audit_log where org_id = ${orgA} and table_name = 'page_specs' order by at`,
     )
     assert.deepEqual(
       audit.rows.map((r) => r.action),
-      ['insert', 'update', 'insert', 'update', 'insert', 'update', 'insert', 'update'],
+      ['insert', 'update', 'insert', 'update', 'insert', 'update', 'insert', 'insert', 'update', 'update'],
       'every save, every restore and every clear is recorded, with its supersession',
     )
   })
