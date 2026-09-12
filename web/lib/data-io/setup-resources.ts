@@ -128,7 +128,8 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
         created: 0, updated: 0, failed: rows.length,
         errors: rows.map((_, index) => ({ row: index + 1, message })),
       })
-      if (entity.readOnly || entity.dataSource) return refuse('Use the module settings drawer for audited value changes')
+      if (entity.readOnly) return refuse('resource is read-only')
+      if (entity.dataSource) return refuse('Use the module settings drawer for audited value changes')
       if (ctx.orgId !== orgId) return refuse('resource belongs to another organization')
       return withOrgTransaction(orgId, async () => {
         // Keep discovery, field validation and every row savepoint on the same
