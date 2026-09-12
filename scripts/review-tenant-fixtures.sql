@@ -2015,7 +2015,7 @@ begin
   -- The simulator never connects an external accounting system, so the SIM
   -- org holds zero `connections` and zero `sync_runs` rows: /sync renders
   -- its "No connections yet" note and no runs table at all. One populated
-  -- connection card (netsuite, token auth, mirror on) + one qbd connection
+  -- connection card (external accounting connector, token auth, mirror on) + one desktop-connector connection
   -- (token auth, exercises the qbd heartbeat/capture/docs branch) + two
   -- finished runs (an `incremental` mirror run carrying
   -- mirror/openItems/periods stats for the result-summary path, and an
