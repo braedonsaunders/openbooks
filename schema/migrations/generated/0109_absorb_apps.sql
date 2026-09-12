@@ -85,6 +85,19 @@ ALTER TABLE public.modules
 
 CREATE UNIQUE INDEX modules_app_id_unique ON public.modules USING btree (app_id) WHERE (app_id IS NOT NULL);
 
+-- The key vocabulary relaxes HERE, before the backfill — not in a later
+-- migration. The manifest SLUG (^[a-z][a-z0-9-]*$, 1..64, owned by
+-- web/lib/apps/manifest.ts) admits 1-char keys, so the backfill below
+-- legitimately inserts 1-char module rows; relaxing only in 0110 would
+-- halt an upgrade containing a valid 1-char app at this migration's
+-- INSERT (the 0107 2-char floor). 0110 re-asserts the same shape so any
+-- database converges regardless of which 0109 text it ran.
+ALTER TABLE public.modules
+    DROP CONSTRAINT modules_key_length;
+
+ALTER TABLE public.modules
+    ADD CONSTRAINT modules_key_length CHECK (((length(key) >= 1) AND (length(key) <= 64)));
+
 -- Backfill, part 1: one modules row per installed app. Presentation, grants
 -- and status are copied verbatim; the apps runtime keeps owning them.
 INSERT INTO public.modules

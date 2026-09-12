@@ -1,7 +1,12 @@
 -- OpenBooks forward migration 0110_modules_key_length.
 --
 -- Relaxes modules_key_length from 2..64 to 1..64 so the storage boundary
--- accepts exactly what the manifest vocabulary already allows.
+-- accepts exactly what the manifest vocabulary already allows. 0109 performs
+-- the same relaxation before its own backfill (a later-only relax would halt
+-- an upgrade holding a valid 1-char app at 0109's INSERT); this migration
+-- re-asserts the shape — DROP + ADD is definition-agnostic — so every
+-- database converges to 1..64 regardless of which 0109 text it ran, then
+-- repeats the idempotent backfill to pick up rows an older backfill skipped.
 --
 -- The canonical key rule lives in the manifests, not here: SLUG
 -- (^[a-z][a-z0-9-]*$, 1..64) in web/lib/apps/manifest.ts accepts 1-char
