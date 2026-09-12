@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button, Input, Label, Textarea } from '@openbooks/ui'
+import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { promptDialog } from '@/lib/prompt'
 import { enterOrg } from '@/lib/sandbox-session'
 import type { AdminModuleDrawer } from './view'
@@ -84,9 +84,9 @@ export function ModuleActions({ drawer, sandboxes, canCustomize }: {
       <div className="flex gap-2"><Button size="sm" variant="outline" disabled={busy} onClick={() => run('diff')}>{t('diff')}</Button><Button size="sm" disabled={busy || !reason.trim()} onClick={() => run('install')}>{t('install')}</Button></div>
       {sandboxes.length > 0 ? <div className="space-y-2">
         <Label htmlFor="module-sandbox">{t('sandbox')}</Label>
-        <select id="module-sandbox" value={sandboxOrgId} onChange={e => { setSandbox(e.target.value); setDiff(null); setPreviews([]) }} className="h-10 w-full rounded-md border border-slate-200 bg-transparent px-3 text-sm dark:border-slate-800">
+        <Select id="module-sandbox" aria-label={t('sandbox')} value={sandboxOrgId} onChange={e => { setSandbox(e.target.value); setDiff(null); setPreviews([]) }}>
           {sandboxes.map(s => <option key={s.orgId} value={s.orgId}>{s.name}</option>)}
-        </select>
+        </Select>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" disabled={busy || !reason.trim()} onClick={() => run('stageRehearsal')}>{t('stageRehearsal')}</Button>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => run('describeRehearsal')}>{t('describeRehearsal')}</Button>
