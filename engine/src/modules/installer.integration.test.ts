@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, env, withBypass, withOrgContext } from "../db.ts";
+import { isCataloguePermission } from "../permissions.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -653,7 +654,7 @@ test(
             installerEffectivePermissions: ["records.read"],
           }),
         ),
-        /unknown permission requested/,
+        /unknown permission: bogus\.write/,
       );
       assert.equal(await moduleCount(fx.orgId), 0);
 
@@ -684,6 +685,52 @@ test(
       assert.deepEqual((installAudit.changes as { after?: { withheld_permissions?: string[] } }).after?.withheld_permissions, [
         "gl.post",
       ]);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
+
+test(
+  "permission boundary is self-sufficient: outer catalogue backstop plus inner vocabulary",
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture();
+    try {
+      // Verifier probe verbatim: a lying caller-supplied catalogue listing
+      // bogus.write cannot smuggle it past the engine-closed outer layer.
+      await assert.rejects(
+        withBypass(() =>
+          installModule({
+            orgId: fx.orgId,
+            actorId: fx.actorId,
+            manifest: manifest({ permissions: ["bogus.write"] }),
+            knownPermissions: ["bogus.write"],
+            installerEffectivePermissions: ["bogus.write"],
+          }),
+        ),
+        /unknown permission: bogus\.write/,
+      );
+      assert.equal(await moduleCount(fx.orgId), 0);
+
+      // Off-vocabulary but real: close.run is a platform permission outside
+      // the module vocabulary — outer passes, inner refuses. Both
+      // memberships asserted here, never hardcoded.
+      assert.equal(isCataloguePermission("close.run"), true);
+      assert.equal(known().includes("close.run"), false);
+      await assert.rejects(
+        withBypass(() =>
+          installModule({
+            orgId: fx.orgId,
+            actorId: fx.actorId,
+            manifest: manifest({ permissions: ["close.run"] }),
+            knownPermissions: known(),
+            installerEffectivePermissions: ["close.run"],
+          }),
+        ),
+        /unknown permission requested/,
+      );
+      assert.equal(await moduleCount(fx.orgId), 0);
     } finally {
       await dropScratchOrg(fx.orgId);
     }
