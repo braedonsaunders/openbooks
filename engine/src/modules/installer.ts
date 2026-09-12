@@ -1,6 +1,7 @@
 import { pageSpecSchema } from "@braedonsaunders/appkit-viewspec";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../db.ts";
+import { isCataloguePermission } from "../permissions.ts";
 import { ModuleCapabilityError, resolveModuleGrants } from "./capabilities.ts";
 
 /**
@@ -17,12 +18,26 @@ import { ModuleCapabilityError, resolveModuleGrants } from "./capabilities.ts";
  * Layering: parseModuleManifest in web/lib/modules/manifest.ts (zod, shared
  * client-side for pre-upload checks) is the fast path, not the boundary —
  * this engine module cannot import it (engine never imports from web), so
- * the installer enforces canonical strictness itself with the same
- * primitives: every page spec is validated with pageSpecSchema (the same
- * schema object the canonical validator uses, never a hand-mirror), and
- * grants resolve through the capability lattice (resolveModuleGrants) with
- * a caller-supplied catalogue. A direct installModule call carrying a
- * manifest parseModuleManifest would reject fails here too.
+ * the installer enforces canonical strictness itself in TWO layers:
+ *
+ * OUTER (engine-closed): every requested permission must be a real platform
+ * permission (isCataloguePermission, same engine package). No caller input
+ * influences this check, so even a lying caller-supplied catalogue cannot
+ * persist a name the platform never issued.
+ *
+ * INNER (module vocabulary narrowing): grants resolve through the
+ * capability lattice (resolveModuleGrants) with the module vocabulary
+ * supplied as DATA at trusted call sites — the API route, the agent tools,
+ * the marketplace installer, all server code passing the imported
+ * MODULE_PLATFORM_PERMISSIONS constant, never user input. The recorded
+ * grant is approved ∩ requested ∩ the installer's effective set.
+ *
+ * Accepted residual, stated plainly: a valid-platform-but-off-vocabulary
+ * key requires a lying caller AND an admin grant AND installer coverage —
+ * a trusted-party conspiracy, not a boundary hole. Every page spec is
+ * validated with pageSpecSchema (the same schema object the canonical
+ * validator uses, never a hand-mirror); installer-persisted bytes equal
+ * validator-accepted bytes.
  *
  * Transactional shape (mirrors installApp in web/lib/apps/store.ts): the
  * module upsert, the version append, every projection, and every audit row
@@ -141,6 +156,15 @@ function validateManifest(raw: unknown): ValidManifest {
     permissions.some((p) => typeof p !== "string" || (p as string).length > 80)
   ) {
     throw new ModuleInstallError("invalid manifest: permissions must be a list of at most 50 permission strings");
+  }
+  // OUTER backstop (engine-closed): the platform catalogue, independent of
+  // anything the caller supplies. A lying knownPermissions list cannot smuggle
+  // a name the platform never issued past this line. Concrete names only:
+  // wildcards live in effective sets, never in manifests.
+  for (const p of permissions as string[]) {
+    if (!isCataloguePermission(p)) {
+      throw new ModuleInstallError(`invalid manifest: unknown permission: ${p}`);
+    }
   }
   const contributions = m.contributions ?? [];
   if (!Array.isArray(contributions) || contributions.length > MAX_CONTRIBUTIONS) {
