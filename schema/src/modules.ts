@@ -43,6 +43,15 @@ import { auditColumns, id, orgRef } from "./helpers";
 export const MODULE_STATUSES = ["installed", "disabled"] as const;
 
 /**
+ * Which runtime owns a modules row. Native installer-created rows are
+ * 'module'; rows absorbed from apps by migration 0109 are 'app' (their
+ * bundle keeps serving from the apps runtime, app_files stays the single
+ * store). Mirrors the modules_kind_shape CHECK exactly; the installer
+ * consumes this spelling, so the two lists must agree.
+ */
+export const MODULE_KINDS = ["module", "app"] as const;
+
+/**
  * The contribution kinds a manifest may declare. Each names something a
  * version projects into a table this app already ships — page into
  * page_specs, and the rest into their own existing surfaces as those kinds
@@ -83,6 +92,12 @@ export const modules = pgTable(
     iconKey: text("icon_key").notNull().default("box"),
     status: text("status", { enum: MODULE_STATUSES }).notNull().default("installed"),
     /**
+     * Which runtime owns the package: 'module' (installer-created) or 'app'
+     * (absorbed from apps; the apps runtime still serves it). Defaults so
+     * pre-0109 rows read as native modules without a data rewrite.
+     */
+    kind: text("kind", { enum: MODULE_KINDS }).notNull().default("module"),
+    /**
      * The version whose contributions are projected right now. NULL only
      * transiently between install and first version activation, or after a
      * full rollback. Pinned tenant-coherently to module_versions by the
@@ -95,6 +110,13 @@ export const modules = pgTable(
      * manifest's requested permissions — an admin may grant fewer.
      */
     grantedPermissions: jsonb("granted_permissions").$type<string[]>().notNull().default([]),
+    /**
+     * The absorbed app this module row is the lifecycle surface for, or NULL
+     * for a native module. Pinned tenant-coherently by the composite FK
+     * (org_id, app_id) → apps (org_id, id); bundle files stay in app_files
+     * under this id — never duplicated. Deleted with the app.
+     */
+    appId: uuid("app_id"),
     ...auditColumns,
   },
   (t) => [
@@ -147,6 +169,7 @@ export const moduleVersions = pgTable(
 FOREIGN KEYS (added by the integrator's migration pass — referential-integrity.sql):
   modules.org_id                          → orgs.id ON DELETE CASCADE
   modules.active_version_id               → module_versions (org_id, id) ON DELETE SET NULL (active_version_id)
+  modules.(org_id, app_id)                → apps (org_id, id) ON DELETE CASCADE (0109; NULL for native modules)
   modules.created_by/updated_by           → users.id
   module_versions.org_id                  → orgs.id ON DELETE CASCADE
   module_versions.module_id               → modules (org_id, id) ON DELETE CASCADE
