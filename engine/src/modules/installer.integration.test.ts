@@ -525,7 +525,7 @@ test(
 );
 
 test(
-  "a module page never shadows tenant customization: the install fails closed and the org row is untouched",
+  "a module page installs alongside tenant customization: both rows stay active and the org row shadows the module row",
   { skip: !DB },
   async () => {
     const fx = await makeFixture();
@@ -538,12 +538,13 @@ test(
           returning id, updated_at`);
         return inserted.rows[0]!;
       });
-      await assert.rejects(
-        withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest(), installerEffectivePermissions: ["records.read"] })),
-        /already customized for this org/,
+      // Shadowing coexistence (0111): the tenant row stays exactly as it
+      // was and the install succeeds beside it — never a 409, never a
+      // deactivation of the other provenance's row.
+      const out = await withBypass(() =>
+        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest(), installerEffectivePermissions: ["records.read"] }),
       );
-      // Atomic: the failed install leaves no module, version, or audit rows behind.
-      assert.equal(await moduleCount(fx.orgId), 0);
+      assert.equal(out.outcome, "installed");
       const orgRow = (
         await withOrgContext(fx.orgId, () =>
           db.execute<{ spec: unknown; is_active: boolean; updated_at: string; module_version_id: string | null }>(
@@ -555,6 +556,31 @@ test(
       assert.equal(orgRow.module_version_id, null);
       assert.deepEqual(orgRow.spec, specFor("/reports/qilish"));
       assert.equal(String(orgRow.updated_at), String(before.updated_at));
+      const moduleRow = (
+        await withOrgContext(fx.orgId, () =>
+          db.execute<{ id: string; is_active: boolean; module_version_id: string | null }>(
+            sql`select id, is_active, module_version_id from page_specs
+                 where org_id = ${fx.orgId} and route = '/reports/qilish' and module_version_id is not null`,
+          ),
+        )
+      ).rows;
+      assert.equal(moduleRow.length, 1);
+      assert.equal(moduleRow[0]!.is_active, true);
+      assert.equal(moduleRow[0]!.module_version_id, out.versionId);
+      // Resolution shadows: the read-time order (user > org-native > module,
+      // owned by pickPageSpecRow in web/lib/page-specs.ts) ranks the
+      // org-native row first while both are active.
+      const winner = (
+        await withOrgContext(fx.orgId, () =>
+          db.execute<{ id: string }>(sql`
+            select id from page_specs
+             where org_id = ${fx.orgId} and route = '/reports/qilish' and is_active and user_id is null
+             order by module_version_id nulls first, updated_at desc, id
+             limit 1`),
+        )
+      ).rows[0]!;
+      assert.equal(winner.id, before.id);
+      assertAudited(await auditFor(fx.orgId, "page_specs", moduleRow[0]!.id), fx.actorId);
     } finally {
       await dropScratchOrg(fx.orgId);
     }

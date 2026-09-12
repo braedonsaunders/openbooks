@@ -40,9 +40,11 @@ import { ModuleCapabilityError, resolveModuleGrants } from "./capabilities.ts";
  *
  * Transactional shape (mirrors installApp in web/lib/apps/store.ts): the
  * module upsert, the version append, every projection, and every audit row
- * commit in ONE transaction. A conflict anywhere — an org-native layout on a
+ * commit in ONE transaction. A conflict anywhere — another module owning a
  * claimed route, a duplicate version label with different bytes — aborts the
- * whole install and leaves zero rows behind.
+ * whole install and leaves zero rows behind. Org-native tenant layouts are
+ * not conflicts: they coexist under their own partial index (0111) and
+ * shadow the projection by read-time precedence instead.
  *
  * Org isolation is by explicit org_id predicates on every statement; RLS
  * enforces it again at storage. Callers run under the org's request context
@@ -315,9 +317,12 @@ async function writeAudit(
 
 /**
  * Project one page contribution: deactivate this module's live rows for the
- * route, then insert the new row pointing at the installing version. Org rows
- * (module_version_id NULL) and other modules' rows are never touched — a
- * claimed route aborts the whole install instead.
+ * route, then insert the new row pointing at the installing version.
+ * Org-native tenant rows (module_version_id NULL) live under their own
+ * partial index (0111) and are never touched — they shadow this projection
+ * by read-time precedence (user > org-native > module > built-in) instead
+ * of blocking it, and a tenant clear falls back to this row naturally.
+ * Other modules' rows still refuse: one module owns a route.
  */
 async function projectPage(
   tx: SqlExecutor,
@@ -333,6 +338,9 @@ async function projectPage(
   },
 ): Promise<string> {
   const { orgId, contribution } = opts;
+  // Module rows only: org-native layouts coexist (see above) so they are
+  // not occupants here. The FOR UPDATE lock serializes same-route installs
+  // of module rows against each other for the check below.
   const occupants = (
     await tx.execute<{ id: string; module_version_id: string | null; module_id: string | null; module_key: string | null }>(sql`
       select s.id, s.module_version_id, v.module_id, m.key as module_key
@@ -340,19 +348,11 @@ async function projectPage(
         left join module_versions v on v.org_id = s.org_id and v.id = s.module_version_id
         left join modules m on m.org_id = v.org_id and m.id = v.module_id
        where s.org_id = ${orgId} and s.route = ${contribution.route} and s.is_active and s.user_id is null
+         and s.module_version_id is not null
        for update of s`)
   ).rows;
 
   for (const row of occupants) {
-    if (row.module_version_id === null) {
-      // Tenant customization always beats an installed module: the row stays
-      // exactly as it was and the install fails instead of shadowing it.
-      throw new ModuleInstallError(
-        `route ${contribution.route} is already customized for this org (org-native layout); ` +
-          `module "${opts.moduleKey}" not installed — remove the customization first`,
-        409,
-      );
-    }
     if (row.module_id !== opts.moduleId) {
       throw new ModuleInstallError(
         `route ${contribution.route} is already projected by module "${row.module_key ?? "unknown"}" (${row.module_version_id}); ` +
@@ -385,15 +385,17 @@ async function projectPage(
 
   // A concurrent identical install may have projected this route between
   // our occupant check and this insert; converge on its row instead of
-  // leaking a raw unique violation. Anything else owning the route live is
-  // a hard conflict, never a silent share.
+  // leaking a raw unique violation. The arbiter is the 0111 module partial
+  // index — one live row per module VERSION per route — so a conflict here
+  // can only be this same version's row, never the org-native row (its own
+  // partial index) and never a superseded version (a different version id).
   const inserted = (
     await tx.execute<{ id: string }>(sql`
       insert into page_specs (org_id, user_id, route, spec, note, module_version_id, created_by, updated_by)
       values (${orgId}, null, ${contribution.route}, ${JSON.stringify(contribution.spec)}::jsonb,
               ${`Projected by module "${opts.moduleKey}" version ${opts.version}`},
               ${opts.versionId}, ${opts.actorId}, ${opts.actorId})
-      on conflict (org_id, route) where (is_active and user_id is null) do nothing
+      on conflict (org_id, route, module_version_id) where (is_active and module_version_id is not null) do nothing
       returning id`)
   ).rows[0] ?? null;
   if (!inserted) {
@@ -401,6 +403,7 @@ async function projectPage(
       await tx.execute<{ id: string; module_version_id: string; spec: unknown }>(sql`
         select id, module_version_id, spec from page_specs
          where org_id = ${orgId} and route = ${contribution.route} and is_active and user_id is null
+           and module_version_id = ${opts.versionId}
          limit 1`)
     ).rows[0];
     if (
@@ -412,8 +415,11 @@ async function projectPage(
       // race); its audit row covers this projection, so converge silently.
       return live.id;
     }
+    // Unreachable through the version gate above (same label with different
+    // bytes is refused before any projection): a live row for this version
+    // carrying other bytes is a hard conflict, never a silent share.
     throw new ModuleInstallError(
-      `route ${contribution.route} was concurrently claimed by another layout; ` +
+      `route ${contribution.route} already has a different live projection for this version; ` +
         `module "${opts.moduleKey}" not installed`,
       409,
     );
