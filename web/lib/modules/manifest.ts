@@ -407,7 +407,14 @@ export const moduleManifestSchema = z.object({
   name: z.string().min(1).max(120),
   /** This version's tag — immutable once installed. */
   version: z.string().regex(VERSION, 'version must look like 1.0.0').max(32),
-  description: z.string().max(2000).optional(),
+  /**
+   * Optional blurb. Nullable on input because installed versions persist
+   * the canonical manifest verbatim and rows written before the installer
+   * omitted absent descriptions carry an explicit null — read-back
+   * (diff/rollback re-parse the stored manifest) must accept what the
+   * installer once wrote.
+   */
+  description: z.string().max(2000).nullable().optional(),
   /**
    * Requested platform permissions from MODULE_PLATFORM_PERMISSIONS; an
    * admin grants a subset at approval. Unknown strings are rejected — the

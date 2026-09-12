@@ -15,6 +15,13 @@ import {
   uninstallModule,
   upgradeModule,
 } from "./installer.ts";
+// Test-only cross-boundary import (house precedent:
+// engine/src/modules/module-catalogue.test.ts); runtime engine code never
+// imports web. The installer persists the canonical manifest verbatim and
+// later surfaces (diff, rollback, approvals) re-parse those stored bytes
+// through the contract validator, so the round-trip below pins that the
+// stored document is validator-accepted bytes.
+import { parseModuleManifest } from "../../../web/lib/modules/manifest.ts";
 
 const DB = !!env.OPENBOOKS_DB_URL;
 
@@ -211,6 +218,36 @@ test(
         )
       ).rows[0]!;
       assertAudited(await auditFor(fx.orgId, "modules", one.id), fx.actorId);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
+
+test(
+  "a stored canonical manifest without a description re-parses through the contract validator",
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture();
+    try {
+      // Install sans description, then read back the exact bytes the
+      // version row carries and re-parse them: an absent description must
+      // stay absent (never an explicit null the contract refuses), because
+      // diff/rollback re-parse the stored manifest before projecting it.
+      const raw: Record<string, unknown> = manifest();
+      delete raw.description;
+      const out = await withBypass(() =>
+        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: raw, installerEffectivePermissions: ["records.read"] }),
+      );
+      assert.equal(out.outcome, "installed");
+      const stored = (
+        await withOrgContext(fx.orgId, () =>
+          db.execute<{ manifest: unknown }>(sql`select manifest from module_versions where id = ${out.versionId}`),
+        )
+      ).rows[0]!.manifest;
+      assert.ok(!("description" in (stored as Record<string, unknown>)), "absent description stays absent in the stored manifest");
+      const reparsed = parseModuleManifest(stored);
+      assert.equal(reparsed.ok, true, `stored manifest must re-parse: ${reparsed.errors.join("; ")}`);
     } finally {
       await dropScratchOrg(fx.orgId);
     }
