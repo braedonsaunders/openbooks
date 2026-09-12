@@ -11,6 +11,24 @@ import {
   shipTransferOrder, transferInventory, reverseInventoryMovement, issueInventory,
 } from "./inventory.ts";
 
+test("moving-average withdrawal after exhaustion and old issue reversal remains weighted", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const position = { itemId: org.items.movingAvg, stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId, date: org.date };
+    await receiveInventory(org.orgId, actor, { ...position, quantity: "1", unitCost: "10", offsetAccountId: org.accounts.clearing });
+    const exhausted = await issueInventory(org.orgId, actor, { ...position, quantity: "1" });
+    await receiveInventory(org.orgId, actor, { ...position, quantity: "1", unitCost: "20", offsetAccountId: org.accounts.clearing });
+    await reverseInventoryMovement(org.orgId, actor, { movementId: exhausted.movementId,
+      reversalDate: org.date, reason: "Restore prior receipt after stock replenishment" });
+    assert.equal((await getOnHand(org.orgId, position.itemId, position.stockLocationId)).value, "30.0000");
+    const next = await issueInventory(org.orgId, actor, { ...position, quantity: "1" });
+    assert.equal(next.value, "-15.0000", "all restored and replenished stock participates in moving average");
+    assert.equal((await getOnHand(org.orgId, position.itemId, position.stockLocationId)).value, "15.0000");
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
 test("exact carried-cost fragments preserve quantity and value at fractional and large scales", () => {
   for (const [quantity, value] of [["0.0001", "0.0001"], ["0.5", "1.6667"], ["1.9", "0.0017"], ["3", "5"], ["30000", "50000"], ["3.125", "0"]]) {
     const fragments = exactCostFragments(quantity!, value!);
@@ -91,9 +109,9 @@ test(`inventory ${item}${legacy ? " legacy" : ""} transfer orders retain their o
         where org_id=${org.orgId} and stock_location_id=${transitId} and remaining_quantity>0
         order by received_at,created_at,id`)).rows;
       assert.equal(layers.length, 2);
-      await db.execute(sql`update cost_layers set original_quantity='10',remaining_quantity='10',unit_cost='15'
+      await db.execute(sql`update cost_layers set original_quantity='10',remaining_quantity='10',unit_cost='15',remaining_original_cost=null
         where org_id=${org.orgId} and id=${layers[0]!.id}`);
-      await db.execute(sql`update cost_layers set original_quantity='0',remaining_quantity='0'
+      await db.execute(sql`update cost_layers set original_quantity='0',remaining_quantity='0',remaining_original_cost=null
         where org_id=${org.orgId} and id=${layers[1]!.id}`);
       await db.execute(sql`update cost_layers set unit_cost='15.0001' where org_id=${org.orgId} and id=${layers[0]!.id}`);
       const before = (await db.execute(sql`select
