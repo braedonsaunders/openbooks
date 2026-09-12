@@ -307,6 +307,72 @@ test(
 );
 
 test(
+  "upgrade withdraws routes the new manifest drops, with audit",
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture();
+    try {
+      const v1 = manifest({
+        key: "prune-report",
+        contributions: [
+          { kind: "page", route: "/reports/keep", spec: specFor("/reports/keep") },
+          { kind: "page", route: "/reports/drop", spec: specFor("/reports/drop") },
+        ],
+      });
+      const first = await withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: v1 }));
+      const upgraded = await withBypass(() =>
+        upgradeModule({
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          key: "prune-report",
+          manifest: manifest({
+            key: "prune-report",
+            version: "2.0.0",
+            contributions: [{ kind: "page", route: "/reports/keep", spec: specFor("/reports/keep") }],
+          }),
+        }),
+      );
+      // The dropped route keeps its row (history preserved) but goes
+      // inactive; the kept route has exactly one live row on the new version.
+      const dropped = (
+        await withOrgContext(fx.orgId, () =>
+          db.execute<{ module_version_id: string; is_active: boolean }>(
+            sql`select module_version_id, is_active from page_specs where org_id = ${fx.orgId} and route = '/reports/drop'`,
+          ),
+        )
+      ).rows;
+      assert.equal(dropped.length, 1);
+      assert.equal(dropped[0]!.is_active, false);
+      assert.equal(dropped[0]!.module_version_id, first.versionId);
+      const kept = (
+        await withOrgContext(fx.orgId, () =>
+          db.execute<{ module_version_id: string; is_active: boolean }>(
+            sql`select module_version_id, is_active from page_specs where org_id = ${fx.orgId} and route = '/reports/keep' order by created_at`,
+          ),
+        )
+      ).rows;
+      assert.equal(kept.filter((r) => r.is_active).length, 1);
+      assert.equal(kept.find((r) => r.is_active)!.module_version_id, upgraded.versionId);
+      // The withdrawal is audited with actor, before/after, and reason.
+      const dropRowId = (
+        await withOrgContext(fx.orgId, () =>
+          db.execute<{ id: string }>(
+            sql`select id from page_specs where org_id = ${fx.orgId} and route = '/reports/drop'`,
+          ),
+        )
+      ).rows[0]!.id;
+      const withdrawal = (await auditFor(fx.orgId, "page_specs", dropRowId)).filter(
+        (a) => (a.changes as { event?: string }).event === "module_projection_withdrawn",
+      );
+      assert.equal(withdrawal.length, 1);
+      assertAudited(withdrawal, fx.actorId);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
+
+test(
   "uninstall deactivates projections without deleting; reinstalling reactivates append-style",
   { skip: !DB },
   async () => {

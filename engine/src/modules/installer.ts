@@ -525,6 +525,38 @@ async function applyVersion(
     });
   }
 
+  // Routes the new manifest drops: withdraw this module's live rows for
+  // them. Scoped strictly by this module's version ids — org-native rows
+  // (module_version_id NULL) and other modules' rows can never match — and
+  // every withdrawal writes its audit row like any other projection.
+  const newRoutes = manifest.contributions.map((c) => c.route);
+  const withdrawnStale = (
+    await tx.execute<{ id: string; route: string; module_version_id: string }>(sql`
+      update page_specs set is_active = false, updated_at = now(), updated_by = ${actorId}
+       where org_id = ${orgId} and is_active and user_id is null
+         and module_version_id in (select id from module_versions where org_id = ${orgId} and module_id = ${moduleRow.id})
+         and (${newRoutes.length === 0 ? sql`true` : sql`route not in (${sql.join(newRoutes.map((r) => sql`${r}`), sql`, `)})`})
+      returning id, route, module_version_id`)
+  ).rows;
+  for (const row of withdrawnStale) {
+    await writeAudit(tx, {
+      orgId,
+      table: "page_specs",
+      rowId: row.id,
+      action: "update",
+      event: "module_projection_withdrawn",
+      reason: opts.reason,
+      before: { route: row.route, is_active: true, module_version_id: row.module_version_id },
+      after: {
+        route: row.route,
+        is_active: false,
+        module_version_id: row.module_version_id,
+        withdrawn_in_version: manifest.version,
+      },
+      actorId,
+    });
+  }
+
   for (const contribution of manifest.contributions) {
     await projectPage(tx, {
       orgId,
