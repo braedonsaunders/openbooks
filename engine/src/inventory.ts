@@ -662,8 +662,10 @@ export async function revalueOpenLayersToStandardCost(
         remaining_quantity: string;
         unit_cost: string;
         remaining_original_cost: string | null;
+        evidence: string;
       }>(sql`
-      select id, subsidiary_id, remaining_quantity, unit_cost, remaining_original_cost
+      select id, subsidiary_id, remaining_quantity, unit_cost, remaining_original_cost,
+             to_jsonb(cost_layers)::text as evidence
         from cost_layers
        where org_id = ${orgId} and item_id = ${itemId} and remaining_quantity > 0
        order by received_at, id
@@ -684,16 +686,37 @@ export async function revalueOpenLayersToStandardCost(
       );
     }
     const changed = [...deltasByOwner].filter(([, delta]) => delta !== 0n);
-    if (changed.length === 0) {
-      // A new standard equal to the written-down carrying rate still replaces
-      // the prior policy basis; it cannot preserve an obsolete NRV allowance.
+    const standardCost = p.standardCost;
+    const memo = p.memo ?? "Costing method revaluation to standard";
+    const repriceLayers = async () => {
       for (const layer of layers.rows) {
-        if (layer.remaining_original_cost == null) continue;
-        const basis = extendCost(layer.remaining_quantity, p.standardCost);
-        if (cmp(basis, layer.remaining_original_cost) === 0) continue;
-        await tx.execute(sql`update cost_layers set remaining_original_cost=${basis},
-          updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${layer.id}`);
+        // A revised policy replaces known original basis (including an old
+        // NRV allowance), but never invents provenance for a legacy layer.
+        const basis = layer.remaining_original_cost == null
+          ? null : extendCost(layer.remaining_quantity, standardCost);
+        if (cmp(layer.unit_cost, standardCost) === 0 &&
+          (basis == null || cmp(basis, layer.remaining_original_cost!) === 0)) continue;
+        const after = (await tx.execute<{ evidence: string }>(sql`update cost_layers
+          set unit_cost=${standardCost}, remaining_original_cost=${basis},
+              updated_at=now(), updated_by=${actorId}
+          where org_id=${orgId} and id=${layer.id}
+          returning to_jsonb(cost_layers)::text as evidence`)).rows[0]!;
+        // JSON stays text between database calls so financial numbers never
+        // round through JavaScript's JSON-number representation.
+        // A rate change is material even when owner deltas cancel or original
+        // basis remains unknown, so neither a journal nor the basis trigger
+        // alone provides sufficient audit evidence.
+        await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+          values(${orgId},'cost_layers',${layer.id},'update',jsonb_build_object(
+            'reason',${memo}::text,'before',${layer.evidence}::jsonb,'after',${after.evidence}::jsonb,
+            'ownerRevaluationAmount',${fromUnits(deltasByOwner.get(layer.subsidiary_id) ?? 0n)}::text
+          ),${actorId})`);
       }
+    };
+    if (changed.length === 0) {
+      // Net-zero owner balances require no journal, but heterogeneous layers
+      // still need normalization before the next standard-cost issue.
+      await repriceLayers();
       return null;
     }
     if (!p.varianceAccountId) {
@@ -726,15 +749,8 @@ export async function revalueOpenLayersToStandardCost(
     const periodId = await periodForDate(orgId, date, tx);
     if (!periodId) throw new InventoryError(`no accounting period for ${date}`);
     const bookId = await primaryBookId(orgId, tx);
-    for (const layer of layers.rows) {
-      await tx.execute(sql`
-        update cost_layers set unit_cost = ${p.standardCost},
-          remaining_original_cost = case when remaining_original_cost is null then null else ${extendCost(layer.remaining_quantity, p.standardCost)}::numeric end,
-          updated_at = now(), updated_by = ${actorId}
-         where id = ${layer.id} and org_id = ${orgId}`);
-    }
+    await repriceLayers();
 
-    const memo = p.memo ?? "Costing method revaluation to standard";
     const entryIds: string[] = [];
     for (const [ownerSubsidiaryId, deltaUnits] of changed) {
       const currency = await subsidiaryCurrency(orgId, ownerSubsidiaryId, tx);
