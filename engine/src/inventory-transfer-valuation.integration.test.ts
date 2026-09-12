@@ -425,3 +425,72 @@ test("fractional moving-average withdrawals remain reversible after a later exac
     assert.equal(gl, onHand.value);
   } finally { await dropScratchOrg(org.orgId); }
 });
+
+for (const reverseFirst of [true, false]) {
+for (const exhaustPool of [false, true]) {
+  test(`ordinary moving-average receipt re-pooling preserves issue reversal (reverse issue first: ${reverseFirst}, exhaust pool: ${exhaustPool})`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const receive = (quantity: string, unitCost: string) => receiveInventory(org.orgId, actor, {
+        itemId: org.items.movingAvg, stockLocationId: org.stockLocationId, quantity, unitCost,
+        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+      });
+      const issue = (quantity: string) => issueInventory(org.orgId, actor, {
+        itemId: org.items.movingAvg, stockLocationId: org.stockLocationId, quantity,
+        subsidiaryId: org.subsidiaryId, date: org.date,
+      });
+      const reverse = (movementId: string) => reverseInventoryMovement(org.orgId, actor, {
+        movementId, reversalDate: org.date, reason: "Reverse ordinary moving-average inventory activity",
+      });
+      await receive("10", "10");
+      const first = await issue("1");
+      assert.equal(first.value, "-10.0000");
+      const evidence = async () => (await db.execute(sql`select c.*,l.unit_cost as layer_unit_cost,
+        l.source_movement_id from cost_layer_consumptions c join cost_layers l on l.id=c.cost_layer_id
+        and l.org_id=c.org_id where c.org_id=${org.orgId} and c.issue_movement_id=${first.movementId}`)).rows;
+      const before = await evidence();
+      const laterReceipt = await receive("1", "20");
+      assert.equal((await getOnHand(org.orgId, org.items.movingAvg, org.stockLocationId)).value, "110.0000");
+      assert.deepEqual(await evidence(), before, "re-pooling must not rewrite a consumed layer rate");
+      const audit = (await db.execute<{ actor_id: string; changes: { incomingMovementId: string; createdFragments: unknown[]; before: { unit_cost: string }; after: { unit_cost: string } } }>(sql`
+        select actor_id, changes from audit_log where org_id=${org.orgId} and table_name='cost_layers'
+          and changes->>'reason'='Re-pool remaining moving-average basis without changing historical rates'`)).rows;
+      assert.equal(audit.length, 1);
+      assert.equal(audit[0]!.actor_id, actor);
+      assert.equal(audit[0]!.changes.incomingMovementId, laterReceipt.movementId);
+      assert.equal(audit[0]!.changes.before.unit_cost, "10.0000");
+      assert.equal(audit[0]!.changes.after.unit_cost, "10.0000");
+      assert.ok(audit[0]!.changes.createdFragments.length > 0);
+      const assertBlendedReceiptRefusal = async () => {
+        const snapshot = async () => {
+          const result: Record<string, unknown[]> = {};
+          for (const table of ["inventory_movements", "cost_layers", "cost_layer_consumptions", "journal_entries", "journal_lines", "audit_log"]) {
+            result[table] = (await db.execute(sql`select * from ${sql.identifier(table)}
+              where org_id=${org.orgId} order by id`)).rows;
+          }
+          return result;
+        };
+        const beforeRefusal = await snapshot();
+        await assert.rejects(reverse(laterReceipt.movementId), /exact receipt reversal is unavailable for blended provenance/);
+        assert.deepEqual(await snapshot(), beforeRefusal, "refused blended receipt reversal must leave all accounting and audit evidence unchanged");
+      };
+      await assertBlendedReceiptRefusal();
+      if (reverseFirst) await reverse(first.movementId);
+      const second = await issue(exhaustPool ? (reverseFirst ? "11" : "10") : "1");
+      assert.equal(second.value, exhaustPool ? (reverseFirst ? "-120.0000" : "-110.0000") : (reverseFirst ? "-10.9091" : "-11.0000"));
+      await reverse(second.movementId);
+      if (!reverseFirst) await reverse(first.movementId);
+      assert.deepEqual(await evidence(), before, "receipt re-pooling preserves historical rates and consumptions");
+      const onHand = await getOnHand(org.orgId, org.items.movingAvg, org.stockLocationId);
+      assert.equal(onHand.quantity, "11.0000");
+      assert.equal(onHand.value, "120.0000");
+      const gl = (await db.execute<{ value: string }>(sql`select sum(amount)::text as value from journal_lines
+        where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`)).rows[0]!.value;
+      assert.equal(gl, onHand.value);
+      await assertBlendedReceiptRefusal();
+      assert.deepEqual(await getOnHand(org.orgId, org.items.movingAvg, org.stockLocationId), onHand);
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+}
+}
