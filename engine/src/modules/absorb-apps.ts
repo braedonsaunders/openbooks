@@ -27,6 +27,19 @@ import { db } from "../db.ts";
  *   the test fixtures) — it writes across the apps/modules seam that RLS
  *   otherwise keeps separate.
  *
+ * The projected manifest is shaped so it PASSES the module contract
+ * (parseModuleManifest), never merely resembles it:
+ *
+ *   description is omitted when the app has none (absent and empty differ;
+ *   a null would fail the contract's optional string), and requested
+ *   permissions are filtered to catalogue members — an app manifest accepts
+ *   any string, the module contract only MODULE_PLATFORM_PERMISSIONS.
+ *   Filtering is never silent: every dropped permission is named in
+ *   provenance.unmappedPermissions, carried inside the immutable version
+ *   manifest, which IS the audit note (version-pinned, never rewritten).
+ *   The modules row's granted_permissions keeps the admin's actual grants
+ *   verbatim — that column is the grant record, not the request record.
+ *
  * Deliberately no installer semantics here and no audit_log writes. The
  * installer (engine/src/modules/installer.ts, owned by Phase 1c) decides
  * what installing MEANS — approvals, capability grants, projections; absorb
@@ -38,6 +51,48 @@ import { db } from "../db.ts";
 
 /** modules.kind value for rows absorbed from apps (native rows are 'module'). */
 export const ABSORBED_APP_MODULE_KIND = "app" as const;
+
+/**
+ * Requested-permission members that survive projection, mirrored with
+ * citation from MODULE_PLATFORM_PERMISSIONS in
+ * web/lib/modules/manifest.ts (the module contract owner) — mirrored rather
+ * than imported because engine must not import web/lib (see the
+ * REPORT_KINDS/FIELD_TYPES mirrors inside manifest.ts itself for the house
+ * precedent). The absorb integration test asserts parity, so catalogue drift
+ * fails loudly instead of silently changing what absorbs.
+ */
+export const ABSORBED_APP_MAPPED_PERMISSIONS: readonly string[] = [
+  "ap.create",
+  "ap.pay",
+  "ap.post",
+  "ap.read",
+  "ar.create",
+  "ar.post",
+  "ar.read",
+  "assets.manage",
+  "assets.read",
+  "gl.post",
+  "gl.read",
+  "items.manage",
+  "items.read",
+  "parties.manage",
+  "parties.read",
+  "projects.manage",
+  "projects.read",
+  "records.create",
+  "records.read",
+];
+
+const MAPPED_PERMISSIONS = new Set<string>(ABSORBED_APP_MAPPED_PERMISSIONS);
+
+/**
+ * The SQL array literal for the catalogue mirror above — rendered once so
+ * the literal and the exported list cannot drift within this file (drift
+ * against the contract owner is caught by the parity test instead).
+ * Embedded via sql.raw: a bound JS array would interpolate as a row
+ * constructor under ANY(), not a PostgreSQL array.
+ */
+const MAPPED_PERMISSIONS_LITERAL = `ARRAY[${ABSORBED_APP_MAPPED_PERMISSIONS.map((p) => `'${p}'`).join(",")}]`;
 
 /** App slug shape — the same SLUG web/lib/apps/manifest.ts enforces. */
 const APP_SLUG = /^[a-z][a-z0-9-]*$/;
@@ -62,23 +117,38 @@ export interface AbsorbAppVersionSource {
 }
 
 /**
- * The manifest an absorbed version carries. Identity + requested permissions
- * mirror the app bundle manifest; kind/appId/appKey/appVersionId are the
- * provenance that says "this version IS that app bundle, served by the apps
- * runtime". Contributions stay empty: nothing about an app projects into a
+ * Provenance carried inside every absorbed version manifest: which runtime
+ * owns the package and which bundle it projects, plus the requested
+ * permissions the module contract has no member for. The manifest row is
+ * immutable, so this object is the permanent, version-pinned audit note for
+ * both the absorption and the permission narrowing — nothing about it can
+ * be edited after the fact, only superseded by a new version.
+ */
+export interface AbsorbedAppProvenance {
+  kind: typeof ABSORBED_APP_MODULE_KIND;
+  appId: string;
+  appKey: string;
+  appVersionId: string;
+  /** Requested permissions dropped by the catalogue filter, in request order. */
+  unmappedPermissions: string[];
+}
+
+/**
+ * The manifest an absorbed version carries. Identity mirrors the app bundle
+ * manifest; permissions are the requested ones the module contract accepts;
+ * contributions stay empty because nothing about an app projects into a
  * module target table — app_files remains the single store of the bundle.
+ * description is present only when the app has one (absent and empty
+ * differ); provenance names the source bundle and the dropped permissions.
  */
 export interface AbsorbedAppModuleManifest {
   key: string;
   name: string;
   version: string;
-  description: string | null;
-  kind: typeof ABSORBED_APP_MODULE_KIND;
-  appId: string;
-  appKey: string;
-  appVersionId: string;
+  description?: string;
   permissions: string[];
   contributions: unknown[];
+  provenance: AbsorbedAppProvenance;
 }
 
 export interface ProjectAppManifestResult {
@@ -90,8 +160,9 @@ export interface ProjectAppManifestResult {
 /**
  * Project an app (+ its active version) onto the module manifest 0109
  * stores. Pure and total: invalid key/version shapes are errors, never
- * exceptions, and permissions copy verbatim — they were valid against the
- * platform catalogue when the app installed, and absorb re-grants nothing.
+ * exceptions. Permissions split into contract members (kept, in request
+ * order) and unmapped ones (named in provenance, never silently dropped);
+ * a missing description stays missing.
  */
 export function projectAppManifestToModuleManifest(
   app: AbsorbAppSource,
@@ -112,13 +183,16 @@ export function projectAppManifestToModuleManifest(
       key: app.key,
       name: app.name,
       version: version.version,
-      description: app.description,
-      kind: ABSORBED_APP_MODULE_KIND,
-      appId: app.id,
-      appKey: app.key,
-      appVersionId: version.id,
-      permissions: [...version.permissions],
+      ...(app.description !== null ? { description: app.description } : {}),
+      permissions: version.permissions.filter((p) => MAPPED_PERMISSIONS.has(p)),
       contributions: [],
+      provenance: {
+        kind: ABSORBED_APP_MODULE_KIND,
+        appId: app.id,
+        appKey: app.key,
+        appVersionId: version.id,
+        unmappedPermissions: version.permissions.filter((p) => !MAPPED_PERMISSIONS.has(p)),
+      },
     },
   };
 }
@@ -163,20 +237,30 @@ export async function absorbAppsForOrg(orgId: string): Promise<AbsorbAppsResult>
                'key', a.key,
                'name', a.name,
                'version', av.version,
-               'description', a.description,
-               'kind', 'app',
-               'appId', a.id,
-               'appKey', a.key,
-               'appVersionId', av.id,
-               'permissions', CASE WHEN jsonb_typeof(av.manifest -> 'permissions') = 'array'
-                                   THEN av.manifest -> 'permissions'
-                                   ELSE '[]'::jsonb END,
-               'contributions', '[]'::jsonb
-             ),
+               'permissions', perms.mapped,
+               'contributions', '[]'::jsonb,
+               'provenance', jsonb_build_object(
+                 'kind', 'app',
+                 'appId', a.id,
+                 'appKey', a.key,
+                 'appVersionId', av.id,
+                 'unmappedPermissions', perms.unmapped
+               )
+             ) || CASE WHEN a.description IS NOT NULL
+                       THEN jsonb_build_object('description', a.description)
+                       ELSE '{}'::jsonb END,
              'active', av.created_at, av.created_by, av.updated_at, av.updated_by
         FROM apps a
         JOIN modules m ON m.app_id = a.id
         JOIN app_versions av ON av.id = a.active_version_id AND av.org_id = a.org_id
+        CROSS JOIN LATERAL (
+          SELECT coalesce(jsonb_agg(e #>> '{}' ORDER BY o) FILTER (WHERE (e #>> '{}') = ANY (${sql.raw(MAPPED_PERMISSIONS_LITERAL)})), '[]'::jsonb) AS mapped,
+                 coalesce(jsonb_agg(e #>> '{}' ORDER BY o) FILTER (WHERE NOT ((e #>> '{}') = ANY (${sql.raw(MAPPED_PERMISSIONS_LITERAL)}))), '[]'::jsonb) AS unmapped
+            FROM jsonb_array_elements(CASE WHEN jsonb_typeof(av.manifest -> 'permissions') = 'array'
+                                           THEN av.manifest -> 'permissions'
+                                           ELSE '[]'::jsonb END) WITH ORDINALITY AS t(e, o)
+           WHERE jsonb_typeof(t.e) = 'string'
+        ) AS perms
        WHERE a.org_id = ${orgId}
          AND a.active_version_id IS NOT NULL
          AND NOT EXISTS (SELECT 1 FROM module_versions mv WHERE mv.module_id = m.id AND mv.version = av.version)
@@ -200,3 +284,4 @@ export async function absorbAppsForOrg(orgId: string): Promise<AbsorbAppsResult>
     };
   });
 }
+

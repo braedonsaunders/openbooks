@@ -5,10 +5,15 @@ import { sql } from "drizzle-orm";
 import { db, env, withBypass } from "../db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../test-fixtures.ts";
 import {
+  ABSORBED_APP_MAPPED_PERMISSIONS,
   ABSORBED_APP_MODULE_KIND,
   absorbAppsForOrg,
   projectAppManifestToModuleManifest,
 } from "./absorb-apps.ts";
+import {
+  MODULE_PLATFORM_PERMISSIONS,
+  parseModuleManifest,
+} from "../../../web/lib/modules/manifest.ts";
 
 const DB = !!env.OPENBOOKS_DB_URL;
 
@@ -77,14 +82,20 @@ async function makeApp(opts: {
   status?: "installed" | "disabled";
   withVersion?: boolean;
   granted?: string[];
+  /** Bundle-manifest requested permissions; defaults to the granted set. */
+  requested?: string[];
+  /** undefined → a default description; null → no description. */
+  description?: string | null;
 }): Promise<AppFixture> {
+  const description = opts.description === undefined ? "Desc " + opts.key : opts.description;
+  const requested = opts.requested ?? opts.granted ?? ["records.read"];
   return await withBypass(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Absorb Caller", "admin");
     const appId = randomUUID();
     await db.execute(sql`
       insert into apps (id, org_id, key, name, description, icon_key, status, granted_permissions, created_by, updated_by)
-      values (${appId}, ${org.orgId}, ${opts.key}, ${"App " + opts.key}, ${"Desc " + opts.key},
+      values (${appId}, ${org.orgId}, ${opts.key}, ${"App " + opts.key}, ${description},
               'chart', ${opts.status ?? "installed"}, ${(JSON.stringify(opts.granted ?? ["records.read"]))}::jsonb,
               ${actorId}, ${actorId})`);
     let versionId: string | null = null;
@@ -94,8 +105,8 @@ async function makeApp(opts: {
         key: opts.key,
         name: "App " + opts.key,
         version: "1.2.0",
-        description: "Desc " + opts.key,
-        permissions: opts.granted ?? ["records.read"],
+        ...(description !== null ? { description } : {}),
+        permissions: requested,
         frontend: { entry: "frontend/index.html" },
         endpoints: [],
       };
@@ -145,13 +156,27 @@ test("the projector mirrors identity and grants and marks provenance, and refuse
     name: "Ledger Lens",
     version: "1.2.0",
     description: "Sees ledgers",
-    kind: ABSORBED_APP_MODULE_KIND,
-    appId,
-    appKey: "ledger-lens",
-    appVersionId: versionId,
     permissions: ["records.read", "gl.post"],
     contributions: [],
+    provenance: {
+      kind: ABSORBED_APP_MODULE_KIND,
+      appId,
+      appKey: "ledger-lens",
+      appVersionId: versionId,
+      unmappedPermissions: [],
+    },
   });
+
+  // Narrowing is recorded, never silent; a missing description stays missing.
+  const narrowed = projectAppManifestToModuleManifest(
+    { id: appId, key: "ledger-lens", name: "Ledger Lens", description: null, grantedPermissions: ["records.read"] },
+    { id: versionId, version: "1.2.0", permissions: ["gl.read", "custom.widget.use"] },
+  );
+  assert.equal(narrowed.ok, true);
+  assert.deepEqual(narrowed.manifest?.permissions, ["gl.read"]);
+  assert.deepEqual(narrowed.manifest?.provenance.unmappedPermissions, ["custom.widget.use"]);
+  assert.ok(narrowed.manifest && !("description" in narrowed.manifest));
+  assert.ok(parseModuleManifest(narrowed.manifest).ok);
 
   const badKey = projectAppManifestToModuleManifest(
     { id: appId, key: "Bad Key!", name: "Bad", description: null, grantedPermissions: [] },
@@ -203,12 +228,17 @@ test(
       assert.equal(versions[0]!.status, "active");
       assert.equal(mod.activeVersionId, versions[0]!.id);
       const manifest = versions[0]!.manifest;
-      assert.equal(manifest["kind"], "app");
-      assert.equal(manifest["appId"], fx.appId);
-      assert.equal(manifest["appKey"], "ledger-lens");
-      assert.equal(manifest["appVersionId"], fx.versionId);
       assert.deepEqual(manifest["permissions"], ["records.read"]);
       assert.deepEqual(manifest["contributions"], []);
+      assert.equal(manifest["description"], "Desc ledger-lens");
+      assert.deepEqual(manifest["provenance"], {
+        kind: "app",
+        appId: fx.appId,
+        appKey: "ledger-lens",
+        appVersionId: fx.versionId,
+        unmappedPermissions: [],
+      });
+      assert.ok(parseModuleManifest(manifest).ok);
 
       // The apps runtime is byte-identical: same row, same active bundle, same files.
       assert.deepEqual(await snapshotRuntime(fx), before);
@@ -257,6 +287,51 @@ test(
     }
   },
 );
+test("the absorbed permission mirror tracks the module contract catalogue", () => {
+  assert.deepEqual([...ABSORBED_APP_MAPPED_PERMISSIONS].sort(), [...MODULE_PLATFORM_PERMISSIONS].sort());
+});
+
+test(
+  "absorb narrows unmapped permissions into provenance and omits a missing description",
+  { skip: !DB },
+  async () => {
+    const fx = await makeApp({
+      key: "odd-perms",
+      description: null,
+      granted: ["gl.read", "custom.widget.use"],
+      requested: ["gl.read", "custom.widget.use"],
+    });
+    try {
+      assert.deepEqual(await withBypass(() => absorbAppsForOrg(fx.orgId)), {
+        modulesInserted: 1,
+        versionsInserted: 1,
+        linked: 1,
+      });
+      const mod = await readModule(fx.orgId, fx.appId);
+      assert.ok(mod);
+      // The grant record keeps the admin's actual grants verbatim.
+      assert.deepEqual(mod.grantedPermissions, ["gl.read", "custom.widget.use"]);
+      const versions = await readVersions(fx.orgId, mod.id);
+      assert.equal(versions.length, 1);
+      const manifest = versions[0]!.manifest;
+      assert.deepEqual(manifest["permissions"], ["gl.read"]);
+      assert.deepEqual(manifest["provenance"], {
+        kind: "app",
+        appId: fx.appId,
+        appKey: "odd-perms",
+        appVersionId: fx.versionId,
+        unmappedPermissions: ["custom.widget.use"],
+      });
+      assert.ok(!("description" in manifest));
+      const parsed = parseModuleManifest(manifest);
+      assert.deepEqual(parsed.errors, []);
+      assert.ok(parsed.ok);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
+
 test(
   "absorb handles a versionless app and a disabled app without inventing versions",
   { skip: !DB },

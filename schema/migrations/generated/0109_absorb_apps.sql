@@ -24,11 +24,20 @@
 --   and status copied verbatim — 'installed'/'disabled' is the same
 --   vocabulary on both tables) and one module_versions row per absorbed app
 --   that has an active app version. The version manifest is PROJECTED from
---   the active app bundle manifest — identity, requested permissions and
---   provenance (kind 'app', appId/appKey/appVersionId) — with an empty
---   contributions list: an app's bundle files stay in app_files and are
+--   the active app bundle manifest — identity, the requested permissions
+--   the module contract accepts, and a provenance object (kind 'app',
+--   appId/appKey/appVersionId, plus unmappedPermissions naming every
+--   requested permission the contract has no member for: an app manifest
+--   accepts any string, the module contract only its catalogue, and the
+--   narrowing is recorded, never silent) — with an empty contributions
+--   list: an app's bundle files stay in app_files and are
 --   referenced by app_id, never duplicated into module storage, and nothing
---   projects into page_specs or any other module target. The version status
+--   projects into page_specs or any other module target. The manifest is
+--   shaped so it passes the module contract validator: description is
+--   omitted when the app has none (absent and empty differ; a null would
+--   fail the contract's optional string). The row's granted_permissions
+--   keep the admin's actual grants verbatim — that column is the grant
+--   record, not the request record. The version status
 --   is 'active' and modules.active_version_id is linked, because the app is
 --   live; a future uninstall/deactivation flows through the same lifecycle
 --   transitions native modules use.
@@ -90,10 +99,13 @@ SELECT a.org_id, a.key, a.name, a.description, a.icon_key, a.status, a.granted_p
 ON CONFLICT (org_id, key) DO NOTHING;
 
 -- Backfill, part 2: one ACTIVE module version per absorbed app, its manifest
--- projected from the active app bundle manifest. Requested permissions come
--- from the bundle manifest (what the app asked for); the row's
--- granted_permissions (part 1) remain what the admin granted. Bundle files
--- are NOT copied: they stay in app_files under their app_id.
+-- projected from the active app bundle manifest. Requested permissions are
+-- filtered to the module catalogue (the mirror below, owned by
+-- MODULE_PLATFORM_PERMISSIONS in web/lib/modules/manifest.ts); dropped
+-- permissions are named in provenance.unmappedPermissions, never silently
+-- lost. Description is omitted when the app has none. The row's
+-- granted_permissions (part 1) keep the admin's grants verbatim. Bundle
+-- files are NOT copied: they stay in app_files under their app_id.
 INSERT INTO public.module_versions
   (org_id, module_id, version, manifest, status, created_at, created_by, updated_at, updated_by)
 SELECT a.org_id, m.id, av.version,
@@ -101,20 +113,30 @@ SELECT a.org_id, m.id, av.version,
          'key', a.key,
          'name', a.name,
          'version', av.version,
-         'description', a.description,
-         'kind', 'app',
-         'appId', a.id,
-         'appKey', a.key,
-         'appVersionId', av.id,
-         'permissions', CASE WHEN jsonb_typeof(av.manifest -> 'permissions') = 'array'
-                             THEN av.manifest -> 'permissions'
-                             ELSE '[]'::jsonb END,
-         'contributions', '[]'::jsonb
-       ),
+         'permissions', perms.mapped,
+         'contributions', '[]'::jsonb,
+         'provenance', jsonb_build_object(
+           'kind', 'app',
+           'appId', a.id,
+           'appKey', a.key,
+           'appVersionId', av.id,
+           'unmappedPermissions', perms.unmapped
+         )
+       ) || CASE WHEN a.description IS NOT NULL
+                  THEN jsonb_build_object('description', a.description)
+                  ELSE '{}'::jsonb END,
        'active', av.created_at, av.created_by, av.updated_at, av.updated_by
   FROM public.apps a
   JOIN public.modules m ON m.app_id = a.id
   JOIN public.app_versions av ON av.id = a.active_version_id AND av.org_id = a.org_id
+  CROSS JOIN LATERAL (
+    SELECT coalesce(jsonb_agg(e #>> '{}' ORDER BY o) FILTER (WHERE (e #>> '{}') = ANY (ARRAY['ap.create','ap.pay','ap.post','ap.read','ar.create','ar.post','ar.read','assets.manage','assets.read','gl.post','gl.read','items.manage','items.read','parties.manage','parties.read','projects.manage','projects.read','records.create','records.read'])), '[]'::jsonb) AS mapped,
+           coalesce(jsonb_agg(e #>> '{}' ORDER BY o) FILTER (WHERE NOT ((e #>> '{}') = ANY (ARRAY['ap.create','ap.pay','ap.post','ap.read','ar.create','ar.post','ar.read','assets.manage','assets.read','gl.post','gl.read','items.manage','items.read','parties.manage','parties.read','projects.manage','projects.read','records.create','records.read']))), '[]'::jsonb) AS unmapped
+      FROM jsonb_array_elements(CASE WHEN jsonb_typeof(av.manifest -> 'permissions') = 'array'
+                                     THEN av.manifest -> 'permissions'
+                                     ELSE '[]'::jsonb END) WITH ORDINALITY AS t(e, o)
+     WHERE jsonb_typeof(t.e) = 'string'
+  ) AS perms
  WHERE a.active_version_id IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM public.module_versions mv WHERE mv.module_id = m.id AND mv.version = av.version)
 ON CONFLICT (module_id, version) DO NOTHING;
