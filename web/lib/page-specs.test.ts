@@ -85,7 +85,8 @@ const precedenceHooks = registerHooks({
   },
 })
 
-const { loadPageSpec, savePageSpec, clearPageSpec, restorePageSpec } = await import('./page-specs.ts')
+const { loadPageSpec, savePageSpec, clearPageSpec, restorePageSpec, pickPageSpecRow } =
+  await import('./page-specs.ts')
 precedenceHooks.deregister()
 
 /**
@@ -284,13 +285,19 @@ function precedenceSpec(marker: string): PageSpec {
 
 function candidateRow(
   marker: string,
-  opts: { userId?: string | null; moduleVersionId?: string | null; updatedAt?: string } = {},
+  opts: {
+    userId?: string | null
+    moduleVersionId?: string | null
+    isCurrent?: boolean
+    updatedAt?: string
+  } = {},
 ) {
   return {
     id: `row-${marker}`,
     spec: precedenceSpec(marker),
     user_id: opts.userId ?? null,
     module_version_id: opts.moduleVersionId ?? null,
+    is_current: opts.isCurrent ?? false,
     updated_at: opts.updatedAt ?? '2026-03-01T00:00:00.000Z',
   }
 }
@@ -309,44 +316,83 @@ function recordedUpdates(): string[] {
   return precedenceDb.queries.filter((q) => q.toLowerCase().startsWith('update page_specs'))
 }
 
+/**
+ * The precedence core, asserted over row literals with no database and no
+ * mocked transport: user beats org-native beats current-module beats
+ * stale-module, whatever order the rows arrive in.
+ */
+
+test('precedence over coexisting rows: user beats org-native beats module', () => {
+  const rows = [
+    candidateRow('from-module', { moduleVersionId: 'mv-2', isCurrent: true }),
+    candidateRow('tenant-org'),
+    candidateRow('mine', { userId: 'user-1' }),
+  ]
+  assert.equal(pickPageSpecRow(rows)?.id, 'row-mine')
+  assert.equal(
+    pickPageSpecRow(rows.filter((row) => row.user_id === null))?.id,
+    'row-tenant-org',
+  )
+  assert.equal(
+    pickPageSpecRow(rows.filter((row) => row.user_id === null && row.module_version_id !== null))?.id,
+    'row-from-module',
+  )
+})
+
+test('a superseded version never resolves while the current projection is active', () => {
+  // Newer write, but behind a superseded version: currency beats recency.
+  const rows = [
+    candidateRow('module-old', {
+      moduleVersionId: 'mv-1',
+      isCurrent: false,
+      updatedAt: '2026-05-01T00:00:00.000Z',
+    }),
+    candidateRow('module-new', {
+      moduleVersionId: 'mv-2',
+      isCurrent: true,
+      updatedAt: '2026-02-01T00:00:00.000Z',
+    }),
+  ]
+  assert.equal(pickPageSpecRow(rows)?.id, 'row-module-new')
+})
+
+test('a stale projection still beats built-in when nothing newer is stored', () => {
+  assert.equal(
+    pickPageSpecRow([candidateRow('module-old', { moduleVersionId: 'mv-1', isCurrent: false })])?.id,
+    'row-module-old',
+  )
+  assert.equal(pickPageSpecRow([]), null)
+})
+
+test('same-rank ties break toward the most recent write', () => {
+  const rows = [
+    candidateRow('module-old', {
+      moduleVersionId: 'mv-1',
+      isCurrent: true,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }),
+    candidateRow('module-new', {
+      moduleVersionId: 'mv-2',
+      isCurrent: true,
+      updatedAt: '2026-02-01T00:00:00.000Z',
+    }),
+  ]
+  assert.equal(pickPageSpecRow(rows)?.id, 'row-module-new')
+})
+
+/**
+ * The SQL wiring around the core, asserted through the canned-response mock:
+ * the read fetches provenance and currency, tenant writes touch tenant rows
+ * only, and read validation still gates the winner.
+ */
+
 test('an installed module spec resolves when the tenant stored nothing', async () => {
-  resetPrecedenceDb([{ rows: [candidateRow('from-module', { moduleVersionId: 'mv-1' })] }])
+  resetPrecedenceDb([{ rows: [candidateRow('from-module', { moduleVersionId: 'mv-1', isCurrent: true })] }])
   const result = await loadPageSpec('org-1', PRECEDENCE_ROUTE, registries)
   assert.ok(result)
   assert.equal(contentMarker(result), 'from-module')
   assert.equal(result.scope, 'org')
   assert.equal(result.moduleVersionId, 'mv-1')
-})
-
-test('a tenant org layout beats an installed module, whatever order the rows arrive in', async () => {
-  resetPrecedenceDb([
-    {
-      rows: [
-        candidateRow('from-module', { moduleVersionId: 'mv-1' }),
-        candidateRow('tenant-org'),
-      ],
-    },
-  ])
-  const result = await loadPageSpec('org-1', PRECEDENCE_ROUTE, registries)
-  assert.ok(result)
-  assert.equal(contentMarker(result), 'tenant-org')
-  assert.equal(result.moduleVersionId, null)
-})
-
-test('a personal layout beats the org layout and the module', async () => {
-  resetPrecedenceDb([
-    {
-      rows: [
-        candidateRow('from-module', { moduleVersionId: 'mv-1' }),
-        candidateRow('tenant-org'),
-        candidateRow('mine', { userId: 'user-1' }),
-      ],
-    },
-  ])
-  const result = await loadPageSpec('org-1', PRECEDENCE_ROUTE, registries, 'user-1')
-  assert.ok(result)
-  assert.equal(contentMarker(result), 'mine')
-  assert.equal(result.scope, 'user')
 })
 
 test('nothing stored resolves to nothing: the page renders its built-in spec', async () => {
@@ -365,9 +411,10 @@ test('a corrupt tenant layout does not fall through to the module: the page rend
           spec: { nonsense: true },
           user_id: null,
           module_version_id: null,
+          is_current: false,
           updated_at: '2026-03-01T00:00:00.000Z',
         },
-        candidateRow('from-module', { moduleVersionId: 'mv-1' }),
+        candidateRow('from-module', { moduleVersionId: 'mv-1', isCurrent: true }),
       ],
     },
   ])
@@ -383,6 +430,7 @@ test('a corrupt module row does not block the tenant layout above it', async () 
           spec: { nonsense: true },
           user_id: null,
           module_version_id: 'mv-1',
+          is_current: true,
           updated_at: '2026-03-01T00:00:00.000Z',
         },
         candidateRow('tenant-org'),
@@ -398,8 +446,16 @@ test('two modules on one route resolve deterministically: last write wins', asyn
   resetPrecedenceDb([
     {
       rows: [
-        candidateRow('module-old', { moduleVersionId: 'mv-1', updatedAt: '2026-01-01T00:00:00.000Z' }),
-        candidateRow('module-new', { moduleVersionId: 'mv-2', updatedAt: '2026-02-01T00:00:00.000Z' }),
+        candidateRow('module-old', {
+          moduleVersionId: 'mv-1',
+          isCurrent: true,
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+        candidateRow('module-new', {
+          moduleVersionId: 'mv-2',
+          isCurrent: true,
+          updatedAt: '2026-02-01T00:00:00.000Z',
+        }),
       ],
     },
   ])
@@ -409,24 +465,21 @@ test('two modules on one route resolve deterministically: last write wins', asyn
   assert.equal(result.moduleVersionId, 'mv-2')
 })
 
-test('resolution reads the module pointer, so installer rows are distinguishable', async () => {
+test('resolution reads the module pointer and version currency', async () => {
   resetPrecedenceDb([{ rows: [] }])
   await loadPageSpec('org-1', PRECEDENCE_ROUTE, registries)
   const selects = precedenceDb.queries.filter((q) => q.toLowerCase().startsWith('select'))
   assert.ok(selects.length >= 1, 'expected a select against page_specs')
-  for (const q of selects) assert.match(q, /module_version_id/)
+  for (const q of selects) {
+    assert.match(q, /module_version_id/)
+    assert.match(q, /active_version_id/)
+  }
 })
 
-test('saving a tenant layout replaces a module projection instead of colliding with it', async () => {
-  // The org layer holds exactly one active occupant (partial unique index),
-  // so the save must deactivate the module row it replaces — excluding
-  // module rows here would let the insert below violate the index and hand
-  // the tenant a 500 for daring to customize an installed page.
-  resetPrecedenceDb([
-    { rows: [{ id: 'row-module', module_version_id: 'mv-1' }] },
-    { rows: [] },
-    { rows: [{ id: 'new-row' }] },
-  ])
+test('saving a tenant layout shadows a module projection without touching it', async () => {
+  // Coexistence is legal now: the save supersedes tenant rows only, and the
+  // module row stays active underneath for a later clear to reveal.
+  resetPrecedenceDb([{ rows: [] }, { rows: [{ id: 'new-row' }] }])
   const saved = await savePageSpec({
     orgId: 'org-1',
     actorId: 'user-1',
@@ -437,28 +490,21 @@ test('saving a tenant layout replaces a module projection instead of colliding w
   assert.equal(saved.ok, true)
   const updates = recordedUpdates()
   assert.ok(updates.length >= 1, 'expected a supersession update')
-  for (const q of updates) assert.doesNotMatch(q, /module_version_id is null/)
-  assert.ok(
-    precedenceDb.queries.some((q) => q.includes('insert into audit_log')),
-    'expected the replaced projection to be audited',
-  )
+  for (const q of updates) assert.match(q, /module_version_id is null/)
 })
 
-test('clearing an override switches a module projection off too', async () => {
-  // Clearing is the tenant choosing the built-in page over everything
-  // stored; the module row survives inactive with an audit entry.
-  resetPrecedenceDb([{ rows: [{ id: 'row-module' }] }])
+test('clearing a tenant override leaves the module projection active', async () => {
+  resetPrecedenceDb([{ rows: [{ id: 'row-tenant' }] }])
   const cleared = await clearPageSpec({ orgId: 'org-1', actorId: 'user-1', route: PRECEDENCE_ROUTE })
   assert.equal(cleared.cleared, 1)
   const updates = recordedUpdates()
   assert.equal(updates.length, 1)
-  assert.doesNotMatch(updates[0]!, /module_version_id is null/)
+  assert.match(updates[0]!, /module_version_id is null/)
 })
 
-test('restoring a version replaces a module projection too', async () => {
+test('restoring a version supersedes tenant rows only', async () => {
   resetPrecedenceDb([
     { rows: [{ spec: precedenceSpec('restored'), note: null, is_active: false }] },
-    { rows: [{ id: 'row-module', module_version_id: 'mv-1' }] },
     { rows: [] },
     { rows: [{ id: 'restored-row' }] },
   ])
@@ -472,5 +518,5 @@ test('restoring a version replaces a module projection too', async () => {
   assert.equal(restored.ok, true)
   const updates = recordedUpdates()
   assert.ok(updates.length >= 1, 'expected a supersession update')
-  for (const q of updates) assert.doesNotMatch(q, /module_version_id is null/)
+  for (const q of updates) assert.match(q, /module_version_id is null/)
 })
