@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, inDbTransaction, schema } from "./db.ts";
+import { assertExpenseEmployee } from "./expense-validation.ts";
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "./billing-source-integrity.ts";
 import {
   add,
@@ -1840,6 +1841,14 @@ export async function postDocument(
       .from(schema.documents)
       .where(and(eq(schema.documents.id, doc.id), eq(schema.documents.orgId, doc.orgId)));
     if (refreshed) effectiveDoc = refreshed;
+  }
+
+  // Revalidate the effective header after scripts/flows, including legacy
+  // approved reports that never passed the current submission boundary.
+  try {
+    await assertExpenseEmployee(db, effectiveDoc);
+  } catch (error) {
+    throw new PostingError((error as Error).message);
   }
 
   // -- build + validate kernel lines --------------------------------------

@@ -221,13 +221,11 @@ test('a non-draft expense report still refuses edits outright', async () => {
 test('PATCH saves only under an exact matching revision and returns the fresh token', async () => {
   reset()
   let storedRevision = STORED_REVISION
-  routeState.report = { doc: { id: EXPENSE_ID, subtotal: '10.00' }, lines: [] }
+  routeState.report = { doc: { id: EXPENSE_ID, subtotal: '10.00', updated_at: NEXT_REVISION }, lines: [] }
   routeState.respondExecute = (text) => {
     if (text.includes('status') && text.includes('document_date')) {
       return { rows: [{ status: 'draft', document_date: '2026-08-24', subsidiaryId: null }] }
     }
-    // The exact-token projection that adorns the response payload.
-    if (text.includes('updatedAt')) return { rows: [{ updatedAt: storedRevision }] }
     return { rows: [] }
   }
   routeState.respondTxExecute = (text) => {
@@ -254,11 +252,10 @@ test('PATCH saves only under an exact matching revision and returns the fresh to
 
 test('GET exposes the exact persisted revision so callers can fence their next save', async () => {
   reset()
-  routeState.report = { doc: { id: EXPENSE_ID }, lines: [] }
+  routeState.report = { doc: { id: EXPENSE_ID, updated_at: STORED_REVISION }, lines: [] }
   routeState.respondExecute = (text) => {
-    // The org-wide subsidiary scope probe runs before the payload loads.
+    // Any direct query is recorded; the loader now owns the coherent snapshot.
     if (text.includes('subsidiaryId')) return { rows: [{ subsidiaryId: null }] }
-    if (text.includes('updatedAt')) return { rows: [{ updatedAt: STORED_REVISION }] }
     return { rows: [] }
   }
 
@@ -267,4 +264,5 @@ test('GET exposes the exact persisted revision so callers can fence their next s
   assert.equal(response.status, 200)
   const payload = (await response.json()) as { doc: { updated_at: string } }
   assert.equal(payload.doc.updated_at, STORED_REVISION)
+  assert.equal(routeState.calls.length, 0, 'the coherent loader token is never replaced by a later query')
 })
