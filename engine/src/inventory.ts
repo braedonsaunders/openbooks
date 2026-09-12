@@ -1925,6 +1925,10 @@ async function addLayerAtCost(
   sourceUnitCost?: string,
 ): Promise<void> {
   let fragments = exactCostFragments(quantity, value, sourceUnitCost);
+  let retiredLayers: {
+    id: string; original_quantity: string; remaining_quantity: string; unit_cost: string;
+    source_movement_id: string; received_at: string;
+  }[] = [];
   let sourceMovementId = movementId;
   let receivedAt = date;
   if (method === "moving_average") {
@@ -1948,27 +1952,38 @@ async function addLayerAtCost(
         fragments = exactCostFragments(poolQuantity, poolValue);
         sourceMovementId = first.source_movement_id;
         receivedAt = first.received_at;
-        // Keep existing rows as historical consumption evidence. Pool only the
-        // remaining stock, including any exact residual fragments from earlier receipts.
+        // Retire only the live basis. A partially consumed layer's rate and
+        // source are historical evidence used by exact issue reversal, so it
+        // must never be reused as the newly blended pool.
+        retiredLayers = existing;
         for (const layer of existing) {
-          await tx.execute(sql`update cost_layers set remaining_quantity='0', updated_at=now(), updated_by=${actorId}
+          await tx.execute(sql`update cost_layers
+            set original_quantity=original_quantity-remaining_quantity,
+                remaining_quantity='0', updated_at=now(), updated_by=${actorId}
             where org_id=${orgId} and id=${layer.id}`);
         }
-        const fragment = fragments.shift()!;
-        await tx.execute(sql`update cost_layers
-          set original_quantity=original_quantity-${first.remaining_quantity}+${fragment.quantity},
-              remaining_quantity=${fragment.quantity}, unit_cost=${fragment.unitCost}, updated_at=now(), updated_by=${actorId}
-          where org_id=${orgId} and id=${first.id}`);
       }
     }
   }
+  const createdFragments: { id: string; quantity: string; unitCost: string }[] = [];
   for (const fragment of fragments) {
+    const id = randomUUID();
     await tx.execute(sql`
       insert into cost_layers
-        (org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at,
+        (id, org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at,
          original_quantity, remaining_quantity, unit_cost, created_at, created_by, updated_by)
-      values (${orgId}, ${subsidiaryId}, ${itemId}, ${stockLocationId}, ${sourceMovementId}, ${receivedAt},
+      values (${id}, ${orgId}, ${subsidiaryId}, ${itemId}, ${stockLocationId}, ${sourceMovementId}, ${receivedAt},
         ${fragment.quantity}, ${fragment.quantity}, ${fragment.unitCost}, clock_timestamp(), ${actorId}, ${actorId})`);
+    createdFragments.push({ id, ...fragment });
+  }
+  for (const layer of retiredLayers) {
+    await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+      values (${orgId},'cost_layers',${layer.id},'update',${JSON.stringify({
+        reason: "Re-pool remaining moving-average basis without changing historical rates",
+        before: layer,
+        after: { original_quantity: add(layer.original_quantity, neg(layer.remaining_quantity)), remaining_quantity: "0.0000", unit_cost: layer.unit_cost },
+        sourceMovementId, incomingMovementId: movementId, quantity, value, createdFragments,
+      })}::jsonb,${actorId})`);
   }
 }
 
@@ -2413,7 +2428,7 @@ async function removeInboundLayer(
   `)).rows;
   if (!layers.length) {
     throw new InventoryError(
-      "the inbound movement was blended into another cost layer; exact reversal requires reversing later inventory activity first",
+      "the inbound movement was blended into another cost layer; exact receipt reversal is unavailable for blended provenance and requires a controlled inventory correction",
     );
   }
   const layerIds = uuidArray(layers.map((layer) => layer.id));
