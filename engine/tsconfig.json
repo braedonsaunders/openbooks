@@ -4,6 +4,7 @@
     "strict": true, "noEmit": true, "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
     "allowImportingTsExtensions": true, "types": ["node"],
+    // Solely so engine tests importing the real installApp hook resolve web's transitive @/ graph (precedent: close.test.ts); no non-test engine file imports web.
     "paths": { "@/*": ["../web/*"] }
   },
   "include": ["src"]
