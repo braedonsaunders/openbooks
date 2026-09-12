@@ -10,12 +10,14 @@ import { boundPaths, describeFields } from '../page-fields'
 import { MissingSegmentError, PAGE_REGISTRY, PAGE_ROUTES } from '../page-registry'
 import { validateAgainstRegistries } from '../page-spec-validate'
 import {
+  DRAFT_TTL_MINUTES,
   clearPageSpec,
   listPageSpecHistory,
   listPageSpecs,
   loadPageSpec,
   restorePageSpec,
   savePageSpec,
+  savePageSpecDraft,
 } from '../page-specs'
 
 /**
@@ -65,6 +67,7 @@ export async function describeLayoutVocabulary(context: ApplicationContext) {
       'Widgets and frames must be named from the lists above; anything else is refused at save.',
       'A widget prop the widget does not read is refused at save: it would reach nothing and fail silently.',
       'The org is taken from the session. A spec that names an org id is refused.',
+      'A layout is org-wide by default. scope: "user" stores it for you alone and changes nothing for anyone else.',
     ],
     limits: {
       note: 'A layout replaces the built-in spec for one route pattern. Fields it binds must exist in that page loader\'s output; a missing path renders as absent, not as an error.',
@@ -76,7 +79,7 @@ export async function describeLayoutVocabulary(context: ApplicationContext) {
 export async function listLayouts(context: ApplicationContext) {
   requireCustomization(context)
   return {
-    layouts: await listPageSpecs(context.authz.user.orgId),
+    layouts: await listPageSpecs(context.authz.user.orgId, context.authz.user.id),
     customizableRoutes: PAGE_ROUTES,
   }
 }
@@ -165,14 +168,19 @@ export async function describePageLayout(
   // before the prop contracts existed is still what this route renders, so
   // describing it away as "no override" would show the author a page they
   // are not looking at.
-  const stored = await loadPageSpec(context.authz.user.orgId, entry.route, RENDER_REGISTRIES)
+  const stored = await loadPageSpec(
+    context.authz.user.orgId,
+    entry.route,
+    RENDER_REGISTRIES,
+    context.authz.user.id,
+  )
   const common = {
     known: true as const,
     route: entry.route,
     requiredSegments: entry.segments,
     readsSearchParams: entry.searchParams,
     /** The org's own layout for this route, or null if it renders the built-in one. */
-    override: stored ? { id: stored.id, spec: stored.spec } : null,
+    override: stored ? { id: stored.id, spec: stored.spec, scope: stored.scope } : null,
   }
 
   const page = await entry.module()
@@ -257,10 +265,59 @@ export async function validateLayout(
   return { valid: false, route: null, errors: result.errors }
 }
 
+/**
+ * Stage a layout so its author can LOOK at it before anyone else does.
+ *
+ * The asymmetry this closes: a person could preview, an agent could only
+ * publish. "Show me what you would do before you do it" is the right default
+ * for something editing what an entire org sees, and without this the only
+ * way for an agent to demonstrate a layout was to make it live.
+ *
+ * The draft applies to the AUTHOR's own request and only when that request
+ * asks for it, so staging one changes nothing for anyone else. It expires on
+ * its own, which is what makes it safe to leave lying around.
+ */
+export async function previewLayout(
+  context: ApplicationContext,
+  input: { route: string; spec: unknown; params?: Record<string, string> },
+) {
+  requireCustomization(context)
+  const entry = PAGE_REGISTRY[input.route]
+  if (!entry) return { staged: false, errors: [`no page declares the route ${input.route}`] }
+
+  const missing = entry.segments.find((segment) => !input.params?.[segment])
+  if (missing) {
+    // A preview url with a blank segment renders some other page entirely,
+    // and the author would be told their layout looks wrong when what they
+    // were shown was never their page.
+    return { staged: false, errors: [`preview needs a value for [${missing}]`] }
+  }
+
+  const saved = await savePageSpecDraft({
+    orgId: context.authz.user.orgId,
+    userId: context.authz.user.id,
+    route: input.route,
+    spec: input.spec as PageSpec,
+    registries,
+  })
+  if (!saved.ok) return { staged: false, errors: saved.errors }
+
+  const path = input.route.replace(/\[([^\]]+)\]/g, (_, name: string) =>
+    encodeURIComponent(input.params![name]!),
+  )
+  return {
+    staged: true,
+    previewUrl: `${path}?layoutPreview=1`,
+    expiresInMinutes: DRAFT_TTL_MINUTES,
+    note: 'Only you see this, and only on a request carrying ?layoutPreview=1. Nothing is published until set_page_layout.',
+    errors: [] as string[],
+  }
+}
+
 /** Store a layout for a route, replacing whatever was active. */
 export async function setLayout(
   context: ApplicationContext,
-  input: { route: string; spec: unknown; note?: string | null },
+  input: { route: string; spec: unknown; note?: string | null; scope?: 'org' | 'user' },
 ) {
   requireCustomization(context)
   const result = await savePageSpec({
@@ -270,6 +327,7 @@ export async function setLayout(
     spec: input.spec as PageSpec,
     note: input.note ?? null,
     registries,
+    scope: input.scope ?? 'org',
   })
   if (!result.ok) {
     // Returned, not thrown: a rejected layout is an ordinary outcome an agent
@@ -318,12 +376,16 @@ export async function restoreLayout(
 }
 
 /** Drop a layout; the page returns to its built-in spec. */
-export async function clearLayout(context: ApplicationContext, input: { route: string }) {
+export async function clearLayout(
+  context: ApplicationContext,
+  input: { route: string; scope?: 'org' | 'user' },
+) {
   requireCustomization(context)
   const { cleared } = await clearPageSpec({
     orgId: context.authz.user.orgId,
     actorId: context.authz.user.id,
     route: input.route,
+    scope: input.scope ?? 'org',
   })
   return { cleared }
 }

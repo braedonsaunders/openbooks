@@ -138,6 +138,9 @@ async function resolveSpec(
     if (draft) return draft
   }
 
-  const stored = await loadPageSpec(authz.user.orgId, builtIn.route, registries)
+  // The reader's OWN layout first, then the org's, then the built-in. A
+  // personal layout is a preference, not an override of policy: it changes
+  // what one person sees and nothing about what anyone else does.
+  const stored = await loadPageSpec(authz.user.orgId, builtIn.route, registries, authz.user.id)
   return stored?.spec ?? builtIn
 }

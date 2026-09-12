@@ -79,9 +79,11 @@ export interface PageLayoutDrawerData {
   route: string
   /** The layout the app ships. Null when the loader would not run for us. */
   builtIn: Spec | null
-  /** This org's stored layout, or null when the page renders the built-in one. */
+  /** The stored layout this reader would get, or null for the built-in one. */
   override: Spec | null
   overrideId: string | null
+  /** Whose layout it is: the org's, or this reader's own. */
+  overrideScope: 'org' | 'user' | null
   /** Dot paths the loader output exposes, with samples. */
   fields: FieldDescriptor[]
   fieldsTruncated: boolean
@@ -130,15 +132,19 @@ async function readLayout(
   route: string,
   segments: Record<string, string>,
   orgId: string,
+  userId: string,
   t: Awaited<ReturnType<typeof getTranslations>>,
 ): Promise<PageLayoutDrawerData> {
   const entry = PAGE_REGISTRY[route]!
-  const stored = await loadPageSpec(orgId, route, registries)
+  // The reader's own layout wins here exactly as it does at render, so the
+  // editor opens on the layout they are actually looking at.
+  const stored = await loadPageSpec(orgId, route, registries, userId)
   const base: PageLayoutDrawerData = {
     route,
     builtIn: null,
     override: stored?.spec ?? null,
     overrideId: stored?.id ?? null,
+    overrideScope: stored?.scope ?? null,
     fields: [],
     fieldsTruncated: false,
     unavailable: null,
@@ -179,7 +185,9 @@ export async function loadPageLayouts(
   const t = await getTranslations('admin.pageLayouts')
   const tHub = await getTranslations('admin.hub')
 
-  const stored = await listPageSpecs(authz.user.orgId)
+  // The org's layouts plus this reader's own — never a colleague's, which is
+  // nobody else's business.
+  const stored = await listPageSpecs(authz.user.orgId, authz.user.id)
   const byRoute = new Map(stored.map((row) => [row.route, row]))
 
   const search = (pickString(sp.q) ?? '').trim().toLowerCase()
@@ -194,7 +202,11 @@ export async function loadPageLayouts(
       module,
       group,
       href: `/admin/page-layouts?route=${encodeURIComponent(route)}`,
-      statusLabel: override ? t('status.customized') : t('status.builtIn'),
+      statusLabel: override
+        ? override.userId
+          ? t('status.personal')
+          : t('status.customized')
+        : t('status.builtIn'),
       statusVariant: override ? ('success' as const) : ('secondary' as const),
       customized: Boolean(override),
       // Formatted here, never in the spec: a spec binds resolved values.
@@ -239,7 +251,9 @@ export async function loadPageLayouts(
     summary: t('summary', { customized: stored.length, total: PAGE_ROUTES.length }),
     rows,
     drawerOpen: drawerRoute !== null,
-    drawer: drawerRoute ? await readLayout(drawerRoute, segments, authz.user.orgId, t) : null,
+    drawer: drawerRoute
+      ? await readLayout(drawerRoute, segments, authz.user.orgId, authz.user.id, t)
+      : null,
   }
 }
 

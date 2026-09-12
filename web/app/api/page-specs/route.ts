@@ -74,7 +74,9 @@ export async function GET(req: Request) {
   if (gate instanceof NextResponse) return gate
   const url = new URL(req.url)
   const route = url.searchParams.get('route')
-  if (!route) return NextResponse.json({ rows: await listPageSpecs(gate.user.orgId) })
+  if (!route) {
+    return NextResponse.json({ rows: await listPageSpecs(gate.user.orgId, gate.user.id) })
+  }
 
   // Everything except `route` is forwarded to the loader as its query string,
   // which is how an editor previews a report page under a chosen period.
@@ -171,6 +173,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ valid: true })
   }
 
+  // `?scope=user` stores the layout for the caller alone. Default org-wide,
+  // because that is what every existing caller meant before this existed.
+  const scope = new URL(req.url).searchParams.get('scope') === 'user' ? 'user' : 'org'
   const result = await savePageSpec({
     orgId: gate.user.orgId,
     actorId: gate.user.id,
@@ -178,6 +183,7 @@ export async function POST(req: Request) {
     spec: body.spec as never,
     note: typeof body.note === 'string' ? body.note : null,
     registries,
+    scope,
   })
   // The errors are returned, not logged and swallowed. An author who wrote an
   // unknown widget needs to be told WHICH one; "invalid spec" is not a message
@@ -198,6 +204,7 @@ export async function DELETE(req: Request) {
     orgId: gate.user.orgId,
     actorId: gate.user.id,
     route,
+    scope: new URL(req.url).searchParams.get('scope') === 'user' ? 'user' : 'org',
   })
   if (cleared === 0) return NextResponse.json({ error: 'no active spec for that route' }, { status: 404 })
   return NextResponse.json({ cleared })
