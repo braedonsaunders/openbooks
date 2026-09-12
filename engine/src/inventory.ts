@@ -1,3 +1,4 @@
+import { consumeOriginalCost, splitOriginalCost, sumOriginalCosts } from "./inventory-original-cost.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "./db.ts";
@@ -648,6 +649,7 @@ export async function revalueOpenLayersToStandardCost(
   // Keep layer repricing and every balancing journal one indivisible operation.
   return withTransactionSavepoint(tx, async () => {
     await assertInventoryFeature(tx, orgId);
+    await tx.execute(sql`select set_config('openbooks.inventory_original_cost_writer','basis-v1',true)`);
     await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     if (p.standardCost == null) {
       throw new InventoryError(
@@ -659,8 +661,11 @@ export async function revalueOpenLayersToStandardCost(
         subsidiary_id: string;
         remaining_quantity: string;
         unit_cost: string;
+        remaining_original_cost: string | null;
+        evidence: string;
       }>(sql`
-      select id, subsidiary_id, remaining_quantity, unit_cost
+      select id, subsidiary_id, remaining_quantity, unit_cost, remaining_original_cost,
+             to_jsonb(cost_layers)::text as evidence
         from cost_layers
        where org_id = ${orgId} and item_id = ${itemId} and remaining_quantity > 0
        order by received_at, id
@@ -681,7 +686,39 @@ export async function revalueOpenLayersToStandardCost(
       );
     }
     const changed = [...deltasByOwner].filter(([, delta]) => delta !== 0n);
-    if (changed.length === 0) return null;
+    const standardCost = p.standardCost;
+    const memo = p.memo ?? "Costing method revaluation to standard";
+    const repriceLayers = async () => {
+      for (const layer of layers.rows) {
+        // A revised policy replaces known original basis (including an old
+        // NRV allowance), but never invents provenance for a legacy layer.
+        const basis = layer.remaining_original_cost == null
+          ? null : extendCost(layer.remaining_quantity, standardCost);
+        if (cmp(layer.unit_cost, standardCost) === 0 &&
+          (basis == null || cmp(basis, layer.remaining_original_cost!) === 0)) continue;
+        const after = (await tx.execute<{ evidence: string }>(sql`update cost_layers
+          set unit_cost=${standardCost}, remaining_original_cost=${basis},
+              updated_at=now(), updated_by=${actorId}
+          where org_id=${orgId} and id=${layer.id}
+          returning to_jsonb(cost_layers)::text as evidence`)).rows[0]!;
+        // JSON stays text between database calls so financial numbers never
+        // round through JavaScript's JSON-number representation.
+        // A rate change is material even when owner deltas cancel or original
+        // basis remains unknown, so neither a journal nor the basis trigger
+        // alone provides sufficient audit evidence.
+        await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+          values(${orgId},'cost_layers',${layer.id},'update',jsonb_build_object(
+            'reason',${memo}::text,'before',${layer.evidence}::jsonb,'after',${after.evidence}::jsonb,
+            'ownerRevaluationAmount',${fromUnits(deltasByOwner.get(layer.subsidiary_id) ?? 0n)}::text
+          ),${actorId})`);
+      }
+    };
+    if (changed.length === 0) {
+      // Net-zero owner balances require no journal, but heterogeneous layers
+      // still need normalization before the next standard-cost issue.
+      await repriceLayers();
+      return null;
+    }
     if (!p.varianceAccountId) {
       // Refuse BEFORE touching a single layer: with nowhere to book the
       // variance, the revaluation would post DR asset / CR asset on ONE account
@@ -712,13 +749,8 @@ export async function revalueOpenLayersToStandardCost(
     const periodId = await periodForDate(orgId, date, tx);
     if (!periodId) throw new InventoryError(`no accounting period for ${date}`);
     const bookId = await primaryBookId(orgId, tx);
-    for (const layer of layers.rows) {
-      await tx.execute(sql`
-        update cost_layers set unit_cost = ${p.standardCost}, updated_at = now(), updated_by = ${actorId}
-         where id = ${layer.id} and org_id = ${orgId}`);
-    }
+    await repriceLayers();
 
-    const memo = p.memo ?? "Costing method revaluation to standard";
     const entryIds: string[] = [];
     for (const [ownerSubsidiaryId, deltaUnits] of changed) {
       const currency = await subsidiaryCurrency(orgId, ownerSubsidiaryId, tx);
@@ -886,7 +918,8 @@ export async function lockInventoryPosition(
   stockLocationId: string,
 ): Promise<void> {
   await tx.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${`inventory:${itemId}:${stockLocationId}`},0))`,
+    sql`select pg_advisory_xact_lock(hashtextextended(${`inventory:${itemId}:${stockLocationId}`},0)),
+      set_config('openbooks.inventory_original_cost_writer','basis-v1',true)`,
   );
 }
 
@@ -1655,6 +1688,7 @@ function planQuantityConsumption(
 }
 
 interface Consumption {
+  originalCost?: string | null;
   layerId: string;
   quantity: string;
   unitCost: string;
@@ -1695,8 +1729,8 @@ async function consumeLayers(
   const ownershipScope = subsidiaryId
     ? sql`and layer.subsidiary_id = ${subsidiaryId}`
     : sql``;
-  const layersRes = (await tx.execute<{ id: string; remaining: string; original_quantity: string; unit_cost: string; source_movement_id: string; subsidiary_id: string; received_at: string }>(sql`
-    select layer.id, layer.remaining_quantity as remaining, layer.original_quantity, layer.unit_cost, layer.source_movement_id, layer.subsidiary_id, layer.received_at::text
+  const layersRes = (await tx.execute<{ id: string; remaining: string; original_quantity: string; unit_cost: string; source_movement_id: string; subsidiary_id: string; received_at: string; remaining_original_cost: string | null }>(sql`
+    select layer.id, layer.remaining_original_cost, layer.remaining_quantity as remaining, layer.original_quantity, layer.unit_cost, layer.source_movement_id, layer.subsidiary_id, layer.received_at::text
       from cost_layers layer
       join inventory_movements source
         on source.id = layer.source_movement_id
@@ -1734,15 +1768,13 @@ async function consumeLayers(
         unitCost: l.unit_cost,
       })) as CostLayer[];
     let r = consumeFifo(costingLayers, quantity, provisionalUnitCost);
-    const oneAveragePool = profile.costingMethod === "moving_average" && layers.length > 0 &&
-      layers.every((layer) => layer.source_movement_id === layers[0]!.source_movement_id) &&
-      requestedUnits <= availableUnits;
+    const oneAveragePool = profile.costingMethod === "moving_average" && layers.length > 0 && coveredUnits > 0n;
     if (oneAveragePool) {
       const poolValue = sum(layers.map((layer) => extendCost(layer.remaining, layer.unit_cost)));
-      const weightedCost = fromUnits(roundDiv(toUnits(poolValue) * requestedUnits, availableUnits));
+      const weightedCost = fromUnits(roundDiv(toUnits(poolValue) * coveredUnits, availableUnits));
       const dependsOnResidualRounding = r.consumptions.some((consumption) =>
         cmp(consumption.cost, extendCost(consumption.quantity, consumption.unitCost)) !== 0);
-      if (cmp(r.totalCost, weightedCost) !== 0 || dependsOnResidualRounding) {
+      if (layers.length > 1 || cmp(r.totalCost, add(weightedCost, extendCost(shortfallQuantity, provisionalUnitCost))) !== 0 || dependsOnResidualRounding) {
         // Four-decimal quantities cannot always express the weighted draw by
         // selecting portions of existing rates. Partition ONLY the remaining
         // pool into exact drawn/retained values. Historical consumption rows
@@ -1751,25 +1783,30 @@ async function consumeLayers(
         // Each drawn fragment must also extend to its cost on its own, so a
         // later re-pool cannot remove residual rounding needed by its reversal.
         const source = layers[0]!;
+        const poolBasis = sumOriginalCosts(layers.map((layer) => layer.remaining_original_cost));
+        const drawnBasis = consumeOriginalCost(poolBasis, fromUnits(coveredUnits), fromUnits(availableUnits));
         const partitions = [
-          { quantity, value: weightedCost, consumed: true },
-          { quantity: fromUnits(availableUnits - requestedUnits), value: add(poolValue, neg(weightedCost)), consumed: false },
+          { quantity: fromUnits(coveredUnits), value: weightedCost, consumed: true, basis: drawnBasis },
+          { quantity: fromUnits(availableUnits - coveredUnits), value: add(poolValue, neg(weightedCost)), consumed: false,
+            basis: poolBasis == null || drawnBasis == null ? null : add(poolBasis, neg(drawnBasis)) },
         ];
-        const created: { id: string; quantity: string; unitCost: string; consumed: boolean }[] = [];
+        const created: { id: string; quantity: string; unitCost: string; consumed: boolean; originalCost: string | null }[] = [];
         for (const layer of layers) {
           await tx.execute(sql`update cost_layers set original_quantity=original_quantity-remaining_quantity,
-            remaining_quantity='0',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${layer.id}`);
+            remaining_quantity='0',remaining_original_cost=case when remaining_original_cost is null then null else 0 end,updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${layer.id}`);
         }
         for (const partition of partitions) {
           if (isZero(partition.quantity)) continue;
-          for (const fragment of exactCostFragments(partition.quantity, partition.value)) {
+          const fragments = exactCostFragments(partition.quantity, partition.value);
+          const bases = splitOriginalCost(partition.basis, fragments.map((fragment) => fragment.quantity), fragments.map((fragment) => extendCost(fragment.quantity, fragment.unitCost)));
+          for (const [index, fragment] of fragments.entries()) {
             const id = randomUUID();
             await tx.execute(sql`insert into cost_layers
               (id,org_id,subsidiary_id,item_id,stock_location_id,source_movement_id,received_at,
-               original_quantity,remaining_quantity,unit_cost,created_at,created_by,updated_by)
+               original_quantity,remaining_quantity,unit_cost,remaining_original_cost,created_at,created_by,updated_by)
               values (${id},${orgId},${source.subsidiary_id},${itemId},${stockLocationId},${source.source_movement_id},${source.received_at},
-                ${fragment.quantity},${fragment.quantity},${fragment.unitCost},clock_timestamp(),${actorId},${actorId})`);
-            created.push({ id, ...fragment, consumed: partition.consumed });
+                ${fragment.quantity},${fragment.quantity},${fragment.unitCost},${bases[index]},clock_timestamp(),${actorId},${actorId})`);
+            created.push({ id, ...fragment, consumed: partition.consumed, originalCost: bases[index]! });
           }
         }
         for (const layer of layers) {
@@ -1784,20 +1821,33 @@ async function consumeLayers(
         }
         r = consumeFifo(created.filter((fragment) => fragment.consumed).map((fragment) => ({
           id: fragment.id, remaining: fragment.quantity, unitCost: fragment.unitCost,
-        })), quantity, "0");
+        })), fromUnits(coveredUnits), "0");
         if (cmp(r.totalCost, weightedCost) !== 0 || !isZero(r.shortfallQuantity)) {
           throw new InventoryError("moving-average partition did not preserve its weighted withdrawal value");
+        }
+        r.totalCost = add(r.totalCost, extendCost(shortfallQuantity, provisionalUnitCost));
+        for (const consumption of r.consumptions) {
+          const fragment = created.find((entry) => entry.id === consumption.layerId)!;
+          consumptions.push({ ...consumption, originalCost: fragment.originalCost });
         }
       }
     }
 
     cost = r.totalCost;
-    consumptions = r.consumptions.map((c) => ({
+    if (!consumptions.length) consumptions = r.consumptions.map((c) => ({
       layerId: c.layerId,
       quantity: c.quantity,
       unitCost: c.unitCost,
       cost: c.cost,
     }));
+  }
+  for (const consumption of consumptions) {
+    if (consumption.originalCost !== undefined) continue;
+    const layer = layers.find((entry) => entry.id === consumption.layerId)!;
+    consumption.originalCost = layer.remaining_original_cost != null &&
+      cmp(layer.remaining_original_cost, extendCost(layer.remaining, layer.unit_cost)) === 0
+      ? consumption.cost
+      : consumeOriginalCost(layer.remaining_original_cost, consumption.quantity, layer.remaining);
   }
   const unitCost = isZero(quantity)
     ? "0"
@@ -1816,11 +1866,12 @@ async function recordConsumptions(
 ): Promise<void> {
   for (const c of consumptions) {
     await tx.execute(sql`
-      update cost_layers set remaining_quantity = remaining_quantity - ${c.quantity}, updated_at = now()
+      update cost_layers set remaining_quantity = remaining_quantity - ${c.quantity},
+        remaining_original_cost = remaining_original_cost - ${c.originalCost ?? null}::numeric, updated_at = now(), updated_by = ${actorId}
        where id = ${c.layerId} and org_id = ${orgId}`);
     await tx.execute(sql`
-      insert into cost_layer_consumptions (org_id, subsidiary_id, cost_layer_id, issue_movement_id, quantity, unit_cost, created_by, updated_by)
-      values (${orgId}, ${subsidiaryId}, ${c.layerId}, ${movementId}, ${c.quantity}, ${c.unitCost}, ${actorId}, ${actorId})`);
+      insert into cost_layer_consumptions (org_id, subsidiary_id, cost_layer_id, issue_movement_id, quantity, unit_cost, original_cost, created_by, updated_by)
+      values (${orgId}, ${subsidiaryId}, ${c.layerId}, ${movementId}, ${c.quantity}, ${c.unitCost}, ${c.originalCost ?? null}, ${actorId}, ${actorId})`);
   }
 }
 
@@ -1923,8 +1974,13 @@ async function addLayerAtCost(
   date: string,
   actorId: string | null,
   sourceUnitCost?: string,
+  originalCost: string | null = value,
 ): Promise<void> {
   let fragments = exactCostFragments(quantity, value, sourceUnitCost);
+  let retiredLayers: {
+    id: string; original_quantity: string; remaining_quantity: string; unit_cost: string;
+    source_movement_id: string; received_at: string; remaining_original_cost: string | null;
+  }[] = [];
   let sourceMovementId = movementId;
   let receivedAt = date;
   if (method === "moving_average") {
@@ -1935,9 +1991,9 @@ async function addLayerAtCost(
     if (location?.kind !== "transit") {
       const existing = (await tx.execute<{
         id: string; original_quantity: string; remaining_quantity: string; unit_cost: string;
-        source_movement_id: string; received_at: string;
+        source_movement_id: string; received_at: string; remaining_original_cost: string | null;
       }>(sql`
-        select id, original_quantity, remaining_quantity, unit_cost, source_movement_id, received_at::text
+        select id, original_quantity, remaining_quantity, unit_cost, source_movement_id, received_at::text, remaining_original_cost
           from cost_layers where org_id=${orgId} and item_id=${itemId}
            and stock_location_id=${stockLocationId} and subsidiary_id=${subsidiaryId} and remaining_quantity>0
          order by received_at, created_at, id for update`)).rows;
@@ -1946,29 +2002,42 @@ async function addLayerAtCost(
         const poolQuantity = add(quantity, sum(existing.map((layer) => layer.remaining_quantity)));
         const poolValue = add(value, sum(existing.map((layer) => extendCost(layer.remaining_quantity, layer.unit_cost))));
         fragments = exactCostFragments(poolQuantity, poolValue);
+        originalCost = sumOriginalCosts([originalCost, ...existing.map((layer) => layer.remaining_original_cost)]);
         sourceMovementId = first.source_movement_id;
         receivedAt = first.received_at;
-        // Keep existing rows as historical consumption evidence. Pool only the
-        // remaining stock, including any exact residual fragments from earlier receipts.
+        // Retire only the live basis. A partially consumed layer's rate and
+        // source are historical evidence used by exact issue reversal, so it
+        // must never be reused as the newly blended pool.
+        retiredLayers = existing;
         for (const layer of existing) {
-          await tx.execute(sql`update cost_layers set remaining_quantity='0', updated_at=now(), updated_by=${actorId}
+          await tx.execute(sql`update cost_layers
+            set original_quantity=original_quantity-remaining_quantity,
+                remaining_quantity='0', remaining_original_cost=case when remaining_original_cost is null then null else 0 end, updated_at=now(), updated_by=${actorId}
             where org_id=${orgId} and id=${layer.id}`);
         }
-        const fragment = fragments.shift()!;
-        await tx.execute(sql`update cost_layers
-          set original_quantity=original_quantity-${first.remaining_quantity}+${fragment.quantity},
-              remaining_quantity=${fragment.quantity}, unit_cost=${fragment.unitCost}, updated_at=now(), updated_by=${actorId}
-          where org_id=${orgId} and id=${first.id}`);
       }
     }
   }
-  for (const fragment of fragments) {
+  const createdFragments: { id: string; quantity: string; unitCost: string }[] = [];
+  const bases = splitOriginalCost(originalCost, fragments.map((fragment) => fragment.quantity), fragments.map((fragment) => extendCost(fragment.quantity, fragment.unitCost)));
+  for (const [index, fragment] of fragments.entries()) {
+    const id = randomUUID();
     await tx.execute(sql`
       insert into cost_layers
-        (org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at,
-         original_quantity, remaining_quantity, unit_cost, created_at, created_by, updated_by)
-      values (${orgId}, ${subsidiaryId}, ${itemId}, ${stockLocationId}, ${sourceMovementId}, ${receivedAt},
-        ${fragment.quantity}, ${fragment.quantity}, ${fragment.unitCost}, clock_timestamp(), ${actorId}, ${actorId})`);
+        (id, org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at,
+         original_quantity, remaining_quantity, unit_cost, remaining_original_cost, created_at, created_by, updated_by)
+      values (${id}, ${orgId}, ${subsidiaryId}, ${itemId}, ${stockLocationId}, ${sourceMovementId}, ${receivedAt},
+        ${fragment.quantity}, ${fragment.quantity}, ${fragment.unitCost}, ${bases[index]}, clock_timestamp(), ${actorId}, ${actorId})`);
+    createdFragments.push({ id, ...fragment });
+  }
+  for (const layer of retiredLayers) {
+    await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+      values (${orgId},'cost_layers',${layer.id},'update',${JSON.stringify({
+        reason: "Re-pool remaining moving-average basis without changing historical rates",
+        before: layer,
+        after: { original_quantity: add(layer.original_quantity, neg(layer.remaining_quantity)), remaining_quantity: "0.0000", unit_cost: layer.unit_cost },
+        sourceMovementId, incomingMovementId: movementId, quantity, value, createdFragments,
+      })}::jsonb,${actorId})`);
   }
 }
 
@@ -2048,7 +2117,7 @@ async function restoreLegacyTransitProvenance(
     return false;
   }
   for (const layer of layers) {
-    await tx.execute(sql`update cost_layers set original_quantity='0',remaining_quantity='0',updated_at=now(),updated_by=${actorId}
+    await tx.execute(sql`update cost_layers set original_quantity='0',remaining_quantity='0',remaining_original_cost=case when remaining_original_cost is null then null else 0 end,updated_at=now(),updated_by=${actorId}
       where org_id=${orgId} and id=${layer.id}`);
     await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values (${orgId},'cost_layers',${layer.id},'update',${JSON.stringify({
@@ -2060,7 +2129,7 @@ async function restoreLegacyTransitProvenance(
   for (const shipment of shipments) {
     await addLayerAtCost(tx, orgId, input.subsidiaryId, input.itemId, input.fromStockLocationId,
       shipment.quantity, shipment.total_value, "moving_average", shipment.id, shipment.moved_at.slice(0, 10),
-      actorId, shipment.unit_cost);
+      actorId, shipment.unit_cost, null);
   }
   return true;
 }
@@ -2261,12 +2330,12 @@ async function transferInventoryTx(
     actorId,
   );
   const carried = profile.costingMethod === "fifo"
-    ? consumptions.map((consumption) => ({ quantity: consumption.quantity, value: consumption.cost, unitCost: consumption.unitCost }))
-    : [{ quantity: input.quantity, value: cost, unitCost }];
+    ? consumptions.map((consumption) => ({ quantity: consumption.quantity, value: consumption.cost, unitCost: consumption.unitCost, originalCost: consumption.originalCost ?? null }))
+    : [{ quantity: input.quantity, value: cost, unitCost, originalCost: sumOriginalCosts(consumptions.map((consumption) => consumption.originalCost ?? null)) }];
   for (const fragment of carried) {
     await addLayerAtCost(tx, orgId, input.subsidiaryId, input.itemId,
       input.toStockLocationId, fragment.quantity, fragment.value, profile.costingMethod,
-      toMovementId, input.date, actorId, fragment.unitCost);
+      toMovementId, input.date, actorId, fragment.unitCost, fragment.originalCost);
   }
   if (profile.tracking === "serial") {
     await tx.execute(sql`
@@ -2320,6 +2389,7 @@ async function restoreIssueLayers(
   tx: Runner,
   orgId: string,
   movement: ReversibleMovement,
+  actorId: string,
 ): Promise<void> {
   const provisional = (await tx.execute(sql`
     select 1
@@ -2340,8 +2410,9 @@ async function restoreIssueLayers(
       remaining_quantity: string;
       original_quantity: string;
       current_unit_cost: string;
+      original_cost: string | null;
     }>(sql`
-    select c.cost_layer_id, c.quantity, c.unit_cost,
+    select c.cost_layer_id, c.quantity, c.unit_cost, c.original_cost,
            l.remaining_quantity, l.original_quantity, l.unit_cost as current_unit_cost
       from cost_layer_consumptions c
       join cost_layers l
@@ -2380,7 +2451,7 @@ async function restoreIssueLayers(
     await tx.execute(sql`
       update cost_layers
          set remaining_quantity = remaining_quantity + ${row.quantity},
-             updated_at = now()
+             remaining_original_cost = remaining_original_cost + ${row.original_cost}::numeric, updated_at = now(), updated_by = ${actorId}
        where id = ${row.cost_layer_id} and org_id = ${orgId}
     `);
   }
@@ -2390,6 +2461,7 @@ async function removeInboundLayer(
   tx: Runner,
   orgId: string,
   movement: ReversibleMovement,
+  actorId: string,
 ): Promise<void> {
   const settlements = (await tx.execute(sql`
     select 1
@@ -2413,7 +2485,7 @@ async function removeInboundLayer(
   `)).rows;
   if (!layers.length) {
     throw new InventoryError(
-      "the inbound movement was blended into another cost layer; exact reversal requires reversing later inventory activity first",
+      "the inbound movement was blended into another cost layer; exact receipt reversal is unavailable for blended provenance and requires a controlled inventory correction",
     );
   }
   const layerIds = uuidArray(layers.map((layer) => layer.id));
@@ -2456,7 +2528,7 @@ async function removeInboundLayer(
       cmp(sum(layers.map((layer) => extendCost(layer.remaining_quantity, layer.unit_cost))), movement.total_value) !== 0) {
     throw new InventoryError("the inbound movement cannot be removed from its cost layers exactly; reverse later inventory activity first");
   }
-  await tx.execute(sql`update cost_layers set remaining_quantity='0', original_quantity='0', updated_at=now()
+  await tx.execute(sql`update cost_layers set remaining_quantity='0', original_quantity='0', remaining_original_cost=case when remaining_original_cost is null then null else 0 end, updated_at=now(), updated_by=${actorId}
     where org_id=${orgId} and id=any(${layerIds}::uuid[])`);
 
 }
@@ -2764,13 +2836,13 @@ export async function reverseInventoryMovement(
     }
     if (sources.length === 1) {
       if (sources[0]!.kind === "issue") {
-        await restoreIssueLayers(tx, orgId, sources[0]!);
+        await restoreIssueLayers(tx, orgId, sources[0]!, actorId);
       } else {
-        await removeInboundLayer(tx, orgId, sources[0]!);
+        await removeInboundLayer(tx, orgId, sources[0]!, actorId);
       }
     } else {
-      await restoreIssueLayers(tx, orgId, sources[0]!);
-      await removeInboundLayer(tx, orgId, sources[1]!);
+      await restoreIssueLayers(tx, orgId, sources[0]!, actorId);
+      await removeInboundLayer(tx, orgId, sources[1]!, actorId);
     }
 
     const reversalEntryId = sourceEntryId
@@ -3262,11 +3334,11 @@ export async function reverseAssemblyBuild(
     const finished = sources.rows.find(
       (row) => row.kind === "assembly_build",
     )!;
-    await removeInboundLayer(tx, orgId, finished);
+    await removeInboundLayer(tx, orgId, finished, actorId);
     for (const component of sources.rows.filter(
       (row) => row.kind === "assembly_consume",
     )) {
-      await restoreIssueLayers(tx, orgId, component);
+      await restoreIssueLayers(tx, orgId, component, actorId);
     }
 
     const reversalEntryId = await reverseInventoryJournal(
@@ -3323,6 +3395,7 @@ export async function reverseAssemblyBuild(
 // Landed cost (allocate freight/duty onto receipt layers)
 // ---------------------------------------------------------------------------
 type RevaluableLayer = {
+  remaining_original_cost: string | null;
   id: string;
   subsidiary_id: string;
   source_movement_id: string;
@@ -3382,7 +3455,7 @@ async function revalueLayerExactly(
   if (exactRate != null) {
     await tx.execute(sql`
       update cost_layers
-         set unit_cost = ${fromUnits(exactRate)}, updated_at = now(), updated_by = ${actorId}
+         set unit_cost = ${fromUnits(exactRate)}, remaining_original_cost = remaining_original_cost + ${fromUnits(shareUnits)}::numeric, updated_at = now(), updated_by = ${actorId}
        where id = ${layer.id} and org_id = ${orgId}
     `);
     return [{ layerId: layer.id, amount: fromUnits(shareUnits) }];
@@ -3412,12 +3485,16 @@ async function revalueLayerExactly(
   const roundingDelta = shareUnits - mainDelta;
   const roundingRateUnits = oldRateUnits + roundingDelta;
   const splitLayerId = randomUUID();
+  const splitBasis = consumeOriginalCost(layer.remaining_original_cost, "1", layer.remaining_quantity);
+  const mainBasis = layer.remaining_original_cost == null || splitBasis == null ? null
+    : add(add(layer.remaining_original_cost, neg(splitBasis)), fromUnits(mainDelta));
+  const roundingBasis = splitBasis == null ? null : add(splitBasis, fromUnits(roundingDelta));
 
   await tx.execute(sql`
     update cost_layers
        set original_quantity = original_quantity - '1.0000',
            remaining_quantity = remaining_quantity - '1.0000',
-           unit_cost = ${fromUnits(mainRateUnits)},
+           unit_cost = ${fromUnits(mainRateUnits)}, remaining_original_cost = ${mainBasis},
            updated_at = now(),
            updated_by = ${actorId}
      where id = ${layer.id} and org_id = ${orgId}
@@ -3425,10 +3502,10 @@ async function revalueLayerExactly(
   await tx.execute(sql`
     insert into cost_layers
       (id, org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at,
-       original_quantity, remaining_quantity, unit_cost, created_at, created_by, updated_by)
+       original_quantity, remaining_quantity, unit_cost, remaining_original_cost, created_at, created_by, updated_by)
     select ${splitLayerId}, org_id, subsidiary_id, item_id, stock_location_id,
            ${layer.source_movement_id}, ${layer.received_at},
-           '1.0000', '1.0000', ${fromUnits(roundingRateUnits)}, clock_timestamp(),
+           '1.0000', '1.0000', ${fromUnits(roundingRateUnits)}, ${roundingBasis}, clock_timestamp(),
            ${actorId}, ${actorId}
       from cost_layers
      where id = ${layer.id} and org_id = ${orgId}
@@ -3492,7 +3569,7 @@ async function devalueLayerExactly(
   }
   await tx.execute(sql`
     update cost_layers
-       set unit_cost = ${fromUnits(low)}, updated_at = now(), updated_by = ${actorId}
+       set unit_cost = ${fromUnits(low)}, remaining_original_cost = remaining_original_cost - ${fromUnits(amountUnits)}::numeric, updated_at = now(), updated_by = ${actorId}
      where id = ${layer.id} and org_id = ${orgId}
   `);
 }
@@ -5413,7 +5490,7 @@ export async function postLandedCostVoucher(
       const layers = (
         (await tx.execute<OpenLayer>(sql`
         select id, subsidiary_id, source_movement_id, received_at::text, original_quantity,
-               remaining_quantity, unit_cost
+               remaining_quantity, unit_cost, remaining_original_cost
           from cost_layers
          where org_id = ${orgId} and item_id = ${target.itemId}
            and stock_location_id = ${target.stockLocationId}
@@ -5748,12 +5825,13 @@ export async function reverseLandedCostVoucher(
         original_quantity: string;
         remaining_quantity: string;
         unit_cost: string;
+        remaining_original_cost: string | null;
       }>(sql`
       select allocation.id, allocation.target_cost_layer_id, allocation.basis,
              allocation.amount::text, allocation.source_document_line_id,
              layer.subsidiary_id, layer.source_movement_id, layer.received_at::text,
              layer.original_quantity::text, layer.remaining_quantity::text,
-             layer.unit_cost::text
+             layer.unit_cost::text, layer.remaining_original_cost::text
         from landed_cost_allocations allocation
         join cost_layers layer
           on layer.id = allocation.target_cost_layer_id
@@ -5808,6 +5886,7 @@ export async function reverseLandedCostVoucher(
           original_quantity: allocation.original_quantity,
           remaining_quantity: allocation.remaining_quantity,
           unit_cost: allocation.unit_cost,
+          remaining_original_cost: allocation.remaining_original_cost,
         },
         toUnits(allocation.amount),
         actorId,

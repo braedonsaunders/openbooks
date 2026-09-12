@@ -9,10 +9,8 @@ import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { computeBillTotals, persistLineTaxComponents, taxProfileMap, type BillLineInput } from '../../../../lib/bills'
 import {
-  assertDocumentEditRevision,
   DocumentEditError,
   documentRevisionSql,
-  DOCUMENT_EDIT_VERSION_REQUIRED,
   requireDocumentEditRevision,
   runDocumentVersionedTransaction,
   validateEditableDocumentLines,
@@ -35,42 +33,18 @@ function exactMoney(v: unknown): string | 'invalid' {
 
 type RouteTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
-/**
- * Replace the lossy JavaScript Date `updated_at` with the exact canonical OCC
- * token, mirroring loadDocument: node-postgres maps timestamptz to Date, which
- * discards the microseconds PostgreSQL retains, so a caller that echoes the
- * raw value back as its expected revision could never match under lock.
- */
-async function withExactDocumentRevision<T extends { doc: Record<string, unknown> }>(
-  payload: T,
-  id: string,
-  orgId: string,
-): Promise<T> {
-  const row = (await db.execute<{ updatedAt: string }>(sql`
-    select ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
-      from documents where id = ${id} and org_id = ${orgId}
-  `))
-  if (row.rows[0]) payload.doc = { ...payload.doc, updated_at: row.rows[0].updatedAt }
-  return payload
-}
-
 export const runtime = 'nodejs'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('expenses.read', 'expenses')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  // Subsidiary scope before anything about the report is disclosed — an
-  // out-of-scope report reads exactly like a nonexistent one.
-  const scope = (await db.execute<{ subsidiaryId: string | null }>(
-    sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${gate.user.orgId}`,
-  ))
-  if (!scope.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const denied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId)
-  if (denied) return denied
   const report = await loadExpenseReport(id, gate.user.orgId)
   if (!report) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return NextResponse.json(await withExactDocumentRevision(report, id, gate.user.orgId))
+  // Authorize the subsidiary from the same snapshot as the returned content.
+  const denied = guardSubsidiaryScope(gate, report.doc.subsidiary_id as string | null)
+  if (denied) return denied
+  return NextResponse.json(report)
 }
 
 /**
@@ -247,7 +221,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     await runDocumentVersionedTransaction<
       RouteTransaction,
-      { status: string; updatedAt: string },
+      { status: string; updatedAt: string; subsidiaryId: string | null },
       void
     >({
       expectedRevision,
@@ -255,13 +229,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // The row lock and exact revision comparison are the first operations in
       // the write transaction: a concurrent writer cannot slip between the
       // check and the header/line replacement.
-      lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
-        select status,
-               ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
-          from documents
-         where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}
-         for update
-      `)).rows[0] ?? null,
+      lock: async (tx) => {
+        const row = (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null }>(sql`
+          select status, subsidiary_id as "subsidiaryId",
+                 ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+            from documents
+           where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}
+           for update
+        `)).rows[0]
+        // Scope precedes revision comparison so a rehomed document remains
+        // indistinguishable from a missing row, even with a stale token.
+        return row && !guardSubsidiaryScope(gate, row.subsidiaryId) ? row : null
+      },
       mutate: async (tx, locked) => {
         if (locked.status !== 'draft') {
           throw new DocumentEditError(
@@ -340,7 +319,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const report = await loadExpenseReport(id, user.orgId)
   if (!report) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return NextResponse.json(await withExactDocumentRevision(report, id, user.orgId))
+  const responseDenied = guardSubsidiaryScope(gate, report.doc.subsidiary_id as string | null)
+  if (responseDenied) return responseDenied
+  return NextResponse.json(report)
 }
 
 /** Delete an expense report (guarded: open period, no applied payments, no downstream conversion). */

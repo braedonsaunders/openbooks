@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
 import { sql } from "drizzle-orm";
 import { db, pool, withBypassContext } from "./db.ts";
+import { SIM_ORG_PREFIX } from "./sim/db-guard.ts";
 
 /**
  * DB test fixtures — a disposable scratch org with the full accounting spine a
@@ -771,6 +772,24 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   { table: "project_financial_profile_versions", trigger: "project_financial_profile_version_guard" },
 ];
 
+type DisposableOrgKind = "scratch" | "sim";
+
+function disposableOrgPredicate(kind: DisposableOrgKind) {
+  return kind === "scratch"
+    ? sql`name like 'Scratch %'`
+    : sql`name like ${SIM_ORG_PREFIX + "%"} and settings->'simHarness' = 'true'::jsonb`;
+}
+
+/** Recheck identity under a row lock in EVERY mutating transaction. A rename
+ * or tag revocation between committed passes must stop the next pass before
+ * any tenant data or trigger changes. The policies are intentionally disjoint. */
+async function guardTeardownTransaction(tx: TeardownTx, orgId: string, kind: DisposableOrgKind): Promise<void> {
+  await setTeardownGucs(tx);
+  const r = await tx.execute(sql`
+    select id from orgs where id = ${orgId} and ${disposableOrgPredicate(kind)} for update`);
+  if (r.rows.length !== 1) throw new Error(`dropDisposableOrg refused: org ${orgId} no longer satisfies the ${kind} identity guard`);
+}
+
 /**
  * One generic pass in a single round trip: a server-side DO block attempts
  * `delete … where org_id` per table, each inside its own exception subblock
@@ -780,12 +799,13 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
 async function bulkDeletePass(
   orgId: string,
   tables: string[],
+  kind: DisposableOrgKind,
 ): Promise<{ table: string; error: string }[]> {
   for (const t of tables) {
     if (!SQL_IDENT.test(t)) throw new Error(`unsafe table identifier: ${t}`);
   }
   return await db.transaction(async (tx) => {
-    await setTeardownGucs(tx);
+    await guardTeardownTransaction(tx, orgId, kind);
     await tx.execute(sql`
       select set_config('openbooks.teardown_org', ${orgId}, true),
              set_config('openbooks.teardown_tables', ${tables.join(",")}, true)`);
@@ -824,13 +844,14 @@ async function bulkDeletePass(
 async function genericDeletePasses(
   orgId: string,
   tables: string[],
+  kind: DisposableOrgKind,
 ): Promise<{ remaining: string[]; errors: Map<string, unknown> }> {
   let remaining = tables;
   const errors = new Map<string, unknown>();
   for (let pass = 0; pass < 10 && remaining.length > 0; pass++) {
     let failed: string[];
     try {
-      const failures = await bulkDeletePass(orgId, remaining);
+      const failures = await bulkDeletePass(orgId, remaining, kind);
       failed = failures.map((f) => f.table);
       for (const t of remaining) errors.delete(t);
       for (const f of failures) errors.set(f.table, new Error(f.error));
@@ -839,7 +860,7 @@ async function genericDeletePasses(
       for (const t of remaining) {
         try {
           await db.transaction(async (tx) => {
-            await setTeardownGucs(tx);
+            await guardTeardownTransaction(tx, orgId, kind);
             await tx.execute(sql`delete from ${qualified(t)} where org_id = ${orgId}`);
           });
           errors.delete(t);
@@ -874,11 +895,23 @@ async function genericDeletePasses(
  * connection, commit, and rollback.
  */
 async function dropScratchOrgEscaped(orgId: string): Promise<void> {
+  return dropDisposableOrgEscaped(orgId, "scratch");
+}
+
+/** SIM cleanup shares the comprehensive delete machinery, never the Scratch
+ * identity exception or fixture-pool lease handling. */
+export async function dropSimOrg(orgId: string): Promise<void> {
+  return withBypassContext(() => dropDisposableOrgEscaped(orgId, "sim"));
+}
+
+async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind): Promise<void> {
+  const operation = kind === "scratch" ? "dropScratchOrg" : "dropSimOrg";
   // Hard scope guard. If the orgs row is gone the wipe already completed
   // (orgs is deleted last); if it exists under any other name, refuse.
   const orgRow = await db.transaction(async (tx) => {
     await setTeardownGucs(tx);
-    const r = (await tx.execute<{ name: string }>(sql`select name from orgs where id = ${orgId}`));
+    const r = (await tx.execute<{ name: string; allowed: boolean }>(sql`
+      select name, coalesce((${disposableOrgPredicate(kind)}), false) as allowed from orgs where id = ${orgId}`));
     return r.rows[0];
   });
   if (!orgRow) {
@@ -888,15 +921,17 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
     const leftovers = await orgRowCounts(orgId);
     if (Object.keys(leftovers).length > 0) {
       throw new Error(
-        `dropScratchOrg(${orgId}): orgs row is not visible but org-scoped rows remain ` +
+        `${operation}(${orgId}): orgs row is not visible but org-scoped rows remain ` +
           `(${JSON.stringify(leftovers)}) — refusing to report success`,
       );
     }
     return;
   }
-  if (!orgRow.name.startsWith("Scratch ")) {
+  if (!orgRow.allowed) {
     throw new Error(
-      `dropScratchOrg refused: org ${orgId} is named ${JSON.stringify(orgRow.name)}, not 'Scratch %'`,
+      kind === "scratch"
+        ? `dropScratchOrg refused: org ${orgId} is named ${JSON.stringify(orgRow.name)}, not 'Scratch %'`
+        : `dropSimOrg refused: org ${orgId} must have the SIM name prefix and simHarness=true tag`,
     );
   }
 
@@ -912,8 +947,8 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
   // movements (inv_move_guard allows posted→pending but not delete-posted),
   // and clear the known non-org_id children reachable only through parents.
   await db.transaction(async (tx) => {
-    await setTeardownGucs(tx);
-    await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId} and name like 'Scratch %'`);
+    await guardTeardownTransaction(tx, orgId, kind);
+    await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId} and ${disposableOrgPredicate(kind)}`);
     await tx.execute(sql`update users set is_active = false where org_id = ${orgId}`);
     await tx.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId} and status = 'posted'`);
     // Payroll bank files are money-moving evidence with UNCONDITIONAL guards
@@ -950,7 +985,7 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
     if (!present.has(table)) continue;
     if (!SQL_IDENT.test(trigger)) throw new Error(`unsafe trigger identifier: ${trigger}`);
     await db.transaction(async (tx) => {
-      await setTeardownGucs(tx);
+      await guardTeardownTransaction(tx, orgId, kind);
       const r = (await tx.execute(
         sql`select 1 as x from ${qualified(table)} where org_id = ${orgId} limit 1`,
       ));
@@ -967,7 +1002,7 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
   // so generic passes can delete payment_schedule_occurrences (child of both),
   // then the runs, then the schedules.
   await db.transaction(async (tx) => {
-    await setTeardownGucs(tx);
+    await guardTeardownTransaction(tx, orgId, kind);
     await tx.execute(sql`update payment_schedules
       set last_payment_run_id = null where org_id = ${orgId}`);
   });
@@ -979,13 +1014,14 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
   let { remaining } = await genericDeletePasses(
     orgId,
     orgTables.filter((t) => !core.has(t)),
+    kind,
   );
 
   // Tx A — the interlocked heavy core, children first. time_entries ↔
   // document_lines cross-reference each other (invoiced_by_line_id /
   // time_entry_id), so null the time side, then delete lines before entries.
   await db.transaction(async (tx) => {
-    await setTeardownGucs(tx);
+    await guardTeardownTransaction(tx, orgId, kind);
     await tx.execute(sql`update time_entries
       set invoiced_by_line_id = null, cost_journal_entry_id = null
       where org_id = ${orgId}`);
@@ -1004,23 +1040,23 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
   // Anything that was still blocked (e.g. parents of inventory_movements like
   // transfer_order_lines) unblocks once the core is gone.
   if (remaining.length > 0) {
-    const retry = await genericDeletePasses(orgId, remaining);
+    const retry = await genericDeletePasses(orgId, remaining, kind);
     remaining = retry.remaining;
     if (remaining.length > 0) {
       const detail = remaining
         .map((t) => `${t}: ${retry.errors.get(t) instanceof Error ? (retry.errors.get(t) as Error).message : String(retry.errors.get(t))}`)
         .join("; ");
-      throw new Error(`dropScratchOrg(${orgId}) could not clear tables — ${detail}`);
+      throw new Error(`${operation}(${orgId}) could not clear tables — ${detail}`);
     }
   }
 
   // Tx B — master-data parents, then the org row itself (name-guarded again).
   await db.transaction(async (tx) => {
-    await setTeardownGucs(tx);
+    await guardTeardownTransaction(tx, orgId, kind);
     for (const t of coreB) {
       await tx.execute(sql`delete from ${qualified(t)} where org_id = ${orgId}`);
     }
-    await tx.execute(sql`delete from orgs where id = ${orgId} and name like 'Scratch %'`);
+    await tx.execute(sql`delete from orgs where id = ${orgId} and ${disposableOrgPredicate(kind)}`);
   });
 
   // Verify: zero rows across every org_id table (and no orgs row). A leak
@@ -1028,7 +1064,7 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
   // fail loudly instead of littering the shared database.
   const leftovers = await orgRowCounts(orgId);
   if (Object.keys(leftovers).length > 0) {
-    throw new Error(`dropScratchOrg(${orgId}) left rows behind: ${JSON.stringify(leftovers)}`);
+    throw new Error(`${operation}(${orgId}) left rows behind: ${JSON.stringify(leftovers)}`);
   }
 }
 

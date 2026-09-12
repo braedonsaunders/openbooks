@@ -206,10 +206,13 @@ export const costLayers = pgTable(
     originalQuantity: money("original_quantity").notNull(),
     remainingQuantity: money("remaining_quantity").notNull(),
     unitCost: money("unit_cost").notNull(),
+    /** Exact surviving cost absent NRV. NULL is unknown legacy provenance. */
+    remainingOriginalCost: money("remaining_original_cost"),
     ...auditColumns,
   },
   (t) => [
     index("cost_layers_item_loc_fifo").on(t.itemId, t.stockLocationId, t.receivedAt),
+    check("cost_layers_original_cost", sql`${t.remainingOriginalCost} >= 0 AND (${t.remainingQuantity} > 0 OR ${t.remainingOriginalCost} = 0)`),
     check("cost_layers_remaining", sql`${t.remainingQuantity} >= 0 AND ${t.remainingQuantity} <= ${t.originalQuantity}`),
   ],
 );
@@ -226,9 +229,12 @@ export const costLayerConsumptions = pgTable(
     issueMovementId: uuid("issue_movement_id").notNull(),
     quantity: money("quantity").notNull(),
     unitCost: money("unit_cost").notNull(),
+    /** Immutable original-cost amount relieved by this consumption. */
+    originalCost: money("original_cost"),
     ...auditColumns,
   },
   (t) => [
+    check("layer_consumptions_original_cost", sql`${t.originalCost} >= 0`),
     index("layer_consumptions_layer").on(t.costLayerId),
     index("layer_consumptions_movement").on(t.issueMovementId),
     check("layer_consumptions_positive", sql`${t.quantity} > 0`),
