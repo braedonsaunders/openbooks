@@ -232,6 +232,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/modules': {
+    route: '/admin/modules',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/admin/modules/view')
+      return {
+        load: (input) => m.loadAdminModules(input.searchParams ?? {}),
+        spec: (data) => m.adminModulesSpec(data as never),
+      }
+    },
+  },
   '/admin/navigation': {
     route: '/admin/navigation',
     segments: [],
