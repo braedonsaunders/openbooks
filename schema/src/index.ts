@@ -53,6 +53,7 @@ export * from "./email";
 export * from "./account-groups";
 export * from "./sandboxes";
 export * from "./apps";
+export * from "./modules";
 export * from "./flows";
 export * from "./close";
 export * from "./crm-core";

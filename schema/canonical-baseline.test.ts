@@ -197,6 +197,8 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0104_page_specs.sql",
     "0105_page_spec_drafts.sql",
     "0106_page_spec_user_scope.sql",
+    "0107_modules.sql",
+    "0108_module_contributions.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
