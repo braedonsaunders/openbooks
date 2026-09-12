@@ -50,7 +50,7 @@
 --   …8801-8899  labor bill rate books
 --   …1901-1999  pay stubs, employee profiles, wage rates
 --   …9801-9810  app marketplace listings
---   …9821-9899  platform sync connections, runs, QBD sessions/captures
+--   …9821-9899  platform sync connections, runs, desktop-connector sessions/captures
 --   …9901-9999  tax depreciation regimes, pool classes, asset categories
 --   …1201-1299  bank feed connections
 --   …1301-1399  CRM prospect parties and account profiles
@@ -2016,7 +2016,7 @@ begin
   -- org holds zero `connections` and zero `sync_runs` rows: /sync renders
   -- its "No connections yet" note and no runs table at all. One populated
   -- connection card (external accounting connector, token auth, mirror on) + one desktop-connector connection
-  -- (token auth, exercises the qbd heartbeat/capture/docs branch) + two
+  -- (token auth, exercises the desktop-connector heartbeat/capture/docs branch) + two
   -- finished runs (an `incremental` mirror run carrying
   -- mirror/openItems/periods stats for the result-summary path, and an
   -- `attachments` run for the attachments-summary path) give the harness
@@ -2040,7 +2040,7 @@ begin
   declare
     v_conn_ns uuid := '00000000-0000-7000-9000-000000009821';
   begin
-    if not exists (select 1 from connections where org_id = v_org and display_name = 'ViewSpec NetSuite') then
+    if not exists (select 1 from connections where org_id = v_org and display_name = 'ViewSpec Cloud Connector') then
       insert into connections
         (id, org_id, source, display_name, auth_kind, status, config,
          secrets, mirror_enabled, mirror_schedule, cursor, last_run_at,
@@ -2048,19 +2048,20 @@ begin
       values
         -- Token-auth connection with mirror on: exercises the source +
         -- status + mirror badges, the lastRun/cursor line, the mirror-health
-        -- line, and the netsuite-only project-financials/attachments
+        -- line, and the cloud-connector-only project-financials/attachments
         -- actions + attachment-health line.
-        (v_conn_ns, v_org, 'netsuite', 'ViewSpec NetSuite', 'token',
+        (v_conn_ns, v_org, 'netsuite', 'ViewSpec Cloud Connector', 'token',
          'active', '{"account": "1234567", "baseCurrency": "USD"}',
          'sealed:viewspec-fixture', true, 'daily',
          timestamptz '2026-08-28 06:00:00+00',
          timestamptz '2026-08-28 06:04:11+00',
          null, 'review_required'),
-        -- Second connection on the qbd branch: heartbeat + capture status
-        -- + docs link (qbdStatus comes from qbd_sessions/qbd_captures,
-        -- seeded below). No secrets: shows the unconfigured-status path.
+        -- Second connection on the desktop-connector branch: heartbeat +
+        -- capture status + docs link (desktop status comes from
+        -- qbd_sessions/qbd_captures, seeded below). No secrets: shows the
+        -- unconfigured-status path.
         ('00000000-0000-7000-9000-000000009822', v_org, 'qbd',
-         'ViewSpec QuickBooks Desktop', 'token', 'unconfigured',
+         'ViewSpec Desktop Connector', 'token', 'unconfigured',
          '{"historyStartDate": "2020-01-01", "region": "US", "baseCurrency": "USD"}',
          null, false, 'daily', null, null, null, 'review_required')
       on conflict (id) do nothing;
@@ -2089,7 +2090,7 @@ begin
          '{}', null, 'manual')
       on conflict (id) do nothing;
 
-      -- qbd heartbeat + latest capture for the second connection (the API
+      -- Desktop-connector heartbeat + latest capture for the second connection (the API
       -- takes max(last_seen_at) and the latest capture row).
       insert into qbd_sessions
         (id, org_id, connection_id, status, last_seen_at, expires_at)
