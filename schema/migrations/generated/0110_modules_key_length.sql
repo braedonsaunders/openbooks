@@ -21,8 +21,9 @@
 -- already ran a 1-char app may still lack its modules row. The three
 -- backfill statements are repeated below with the corrected filter —
 -- rerunnable by construction (provenance NOT EXISTS plus unique-conflict
--- skips), no-ops for every row 0109 already absorbed. Ongoing absorption
--- (engine absorbAppsForOrg) carries the same corrected filter.
+-- skips), no-ops for every row 0109 already absorbed. Steady-state rows are
+-- maintained inline by installApp; absorbAppsForOrg (engine) carries the
+-- same corrected filter as the repair path.
 
 -- The old floor (2..64, from 0107) goes first so the relaxed shape below is
 -- the only modules_key_length in the catalog — never two competing checks.

@@ -20,6 +20,7 @@ import {
 import { createScriptJournal, type ScriptJournalInput } from '@openbooks/engine/src/journal-writes.ts'
 import { requestHash } from '@/lib/application/idempotency-core'
 import { parseManifest, validateBundle, contentTypeFor, type AppManifest } from './manifest'
+import { projectAppManifestToModuleManifest } from '@openbooks/engine/src/modules/absorb-apps.ts'
 import { APP_CAPABILITIES } from './manifest'
 import { parseObjectSpecs, type ParsedObjects } from './objects'
 import { createAppPlatformAdapter, AppPlatformError } from './platform'
@@ -202,6 +203,89 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     // Supersede the previous active version, then activate the new one.
     await tx.execute(sql`update app_versions set status = 'superseded' where app_id = ${appId} and org_id = ${orgId} and id <> ${versionId} and status = 'active'`)
     await tx.execute(sql`update apps set active_version_id = ${versionId}, updated_at = now() where id = ${appId} and org_id = ${orgId}`)
+
+    // Mirror onto the modules lifecycle surface (kind 'app') in the SAME
+    // transaction: both surfaces commit or roll back together. The manifest
+    // is built by the absorb projector — reused here, never reimplemented —
+    // so the hook and the backfill project byte-identical provenance.
+    // Unreachable in practice (installApp already validated key/version
+    // against the same shapes), but an unprojectable app must fail closed,
+    // never install half-mirrored.
+    const projected = projectAppManifestToModuleManifest(
+      { id: appId, key: manifest.key, name: manifest.name, description: manifest.description ?? null, grantedPermissions: granted },
+      { id: versionId, version: manifest.version, permissions: manifest.permissions },
+    )
+    if (!projected.ok || !projected.manifest) throw new AppError(`cannot mirror app onto modules: ${projected.errors.join('; ')}`)
+    const moduleManifest = projected.manifest
+    const priorModule = (await tx.execute<{
+      id: string
+      status: 'installed' | 'disabled'
+      grantedPermissions: string[]
+      activeVersionId: string | null
+    }>(sql`
+      select id, status, granted_permissions as "grantedPermissions", active_version_id as "activeVersionId"
+        from modules where org_id = ${orgId} and (app_id = ${appId} or key = ${manifest.key}) limit 1`)).rows[0]
+    const moduleRes = (await tx.execute<{ id: string }>(sql`
+      insert into modules (org_id, key, name, description, icon_key, status, granted_permissions, kind, app_id, created_by, updated_by)
+      values (${orgId}, ${manifest.key}, ${manifest.name}, ${manifest.description ?? null},
+              ${manifest.icon ?? 'box'}, 'installed', ${JSON.stringify(granted)}::jsonb,
+              'app', ${appId}, ${userId}, ${userId})
+      on conflict (org_id, key) do update set
+        name = excluded.name, description = excluded.description, icon_key = excluded.icon_key,
+        granted_permissions = excluded.granted_permissions, kind = 'app', app_id = excluded.app_id,
+        status = 'installed', updated_at = now(), updated_by = ${userId}
+      where modules.org_id = ${orgId}
+      returning id`))
+    const moduleId = moduleRes.rows[0]!.id
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'modules', ${moduleId}, ${priorModule ? 'update' : 'insert'},
+        ${JSON.stringify({
+          event: 'app_absorbed',
+          appKey: manifest.key,
+          moduleVersion: manifest.version,
+          statusBefore: priorModule?.status ?? null,
+          statusAfter: 'installed',
+          permissionsBefore: priorModule?.grantedPermissions ?? null,
+          permissionsAfter: granted,
+          unmappedPermissions: moduleManifest.provenance.unmappedPermissions,
+        })}::jsonb,
+        ${userId})`)
+    // One active module version at a time: supersede the prior (with its
+    // audit row) before appending the new one, mirroring the app_versions
+    // discipline above.
+    const priorModuleVersions = await tx.execute<{ id: string; version: string }>(sql`
+      select id, version from module_versions
+       where org_id = ${orgId} and module_id = ${moduleId} and status = 'active'`)
+    for (const prior of priorModuleVersions.rows) {
+      await tx.execute(sql`update module_versions set status = 'superseded', updated_at = now(), updated_by = ${userId} where id = ${prior.id} and org_id = ${orgId}`)
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'module_versions', ${prior.id}, 'update',
+          ${JSON.stringify({
+            event: 'version_superseded',
+            before: { version: prior.version, status: 'active' },
+            after: { version: prior.version, status: 'superseded' },
+            supersededByVersion: manifest.version,
+          })}::jsonb,
+          ${userId})`)
+    }
+    const moduleVersionRes = (await tx.execute<{ id: string }>(sql`
+      insert into module_versions (org_id, module_id, version, manifest, status, created_by, updated_by)
+      values (${orgId}, ${moduleId}, ${manifest.version}, ${JSON.stringify(moduleManifest)}::jsonb, 'active', ${userId}, ${userId})
+      returning id`))
+    const moduleVersionId = moduleVersionRes.rows[0]!.id
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'module_versions', ${moduleVersionId}, 'insert',
+        ${JSON.stringify({
+          event: 'app_version_absorbed',
+          appKey: manifest.key,
+          version: manifest.version,
+          unmappedPermissions: moduleManifest.provenance.unmappedPermissions,
+        })}::jsonb,
+        ${userId})`)
+    await tx.execute(sql`update modules set active_version_id = ${moduleVersionId}, updated_at = now(), updated_by = ${userId} where id = ${moduleId} and org_id = ${orgId}`)
   })
 
   return { key: manifest.key }
@@ -396,6 +480,24 @@ export async function setAppStatus(
           after: { key: app.key, name: app.name, status },
         })}::jsonb,
         ${userId})`)
+    // Mirror deactivation onto the modules surface (never delete it here —
+    // the row is the lifecycle evidence for the absorbed app). Apps without
+    // a module row predate the absorb wiring; absorbAppsForOrg repairs those.
+    const mirrored = (await tx.execute<{ id: string; status: string }>(sql`
+      update modules set status = ${status}, updated_at = now(), updated_by = ${userId}
+       where org_id = ${orgId} and app_id = ${app.id} and status <> ${status}
+       returning id, status`)).rows[0]
+    if (mirrored) {
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'modules', ${mirrored.id}, 'update',
+          ${JSON.stringify({
+            event: 'app_status_changed',
+            before: { key: app.key, status: app.status },
+            after: { key: app.key, status },
+          })}::jsonb,
+          ${userId})`)
+    }
   })
 }
 
@@ -483,6 +585,27 @@ export async function deleteApp(orgId: string, userId: string, key: string): Pro
           after: null,
         })}::jsonb,
         ${userId})`)
+
+    // Deactivate — never delete — the absorbed lifecycle row, and detach its
+    // provenance edge BEFORE the apps delete below: modules.app_id cascades,
+    // and the cascade must not take the evidence row with the app. The
+    // version manifests keep pointing at the app by id/key, so the audit
+    // trail stays readable after the edge is gone.
+    const detached = (await tx.execute<{ id: string; status: string }>(sql`
+      update modules set status = 'disabled', app_id = null, updated_at = now(), updated_by = ${userId}
+       where org_id = ${orgId} and app_id = ${app.id}
+       returning id, status`)).rows[0]
+    if (detached) {
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'modules', ${detached.id}, 'update',
+          ${JSON.stringify({
+            event: 'app_uninstall',
+            before: { key: app.key, status: detached.status },
+            after: { key: app.key, status: 'disabled' },
+          })}::jsonb,
+          ${userId})`)
+    }
 
     await tx.execute(sql`delete from apps where org_id = ${orgId} and id = ${app.id}`)
   })

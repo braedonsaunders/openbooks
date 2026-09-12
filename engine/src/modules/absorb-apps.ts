@@ -19,13 +19,21 @@ import { db } from "../db.ts";
  *   runtime caller project byte-identical provenance. Returns errors instead
  *   of throwing, following web/lib/apps/manifest.ts.
  *
- *   absorbAppsForOrg — idempotent per-org backfill repeating 0109's three
- *   statements (insert module rows, insert active versions, link
- *   active_version_id) for apps installed AFTER the migration ran. Safe to
- *   re-run: every statement skips rows it already absorbed and reports what
- *   it did. Must run inside withBypass (the trusted backfill boundary, like
- *   the test fixtures) — it writes across the apps/modules seam that RLS
- *   otherwise keeps separate.
+ *   absorbAppsForOrg — idempotent per-org backfill and repair. Repeats 0109's
+ *   three statements (insert module rows, insert active versions, link
+ *   active_version_id) for apps the migration never saw or that predate the
+ *   installApp hook below. Safe to re-run: every statement skips rows it
+ *   already absorbed and reports what it did. When it appends a version
+ *   while another is active, the prior version is marked superseded with an
+ *   audit row, in the same transaction. Must run inside withBypass (the
+ *   trusted backfill boundary, like the test fixtures) — it writes across
+ *   the apps/modules seam that RLS otherwise keeps separate.
+ *
+ * Steady-state maintenance lives in web/lib/apps/store.ts: installApp
+ * creates/updates the module row and appends the version inline, in the
+ * SAME transaction as the apps writes, so the two surfaces commit or roll
+ * back together. absorbAppsForOrg is the repair path for rows that predate
+ * that wiring or were missed, not the primary writer.
  *
  * The projected manifest is shaped so it PASSES the module contract
  * (parseModuleManifest), never merely resembles it:
@@ -201,20 +209,27 @@ export function projectAppManifestToModuleManifest(
 export interface AbsorbAppsResult {
   modulesInserted: number;
   versionsInserted: number;
+  versionsSuperseded: number;
   linked: number;
 }
 
 /**
  * Idempotently absorb every installed app of one org into modules. Repeats
  * migration 0109 part-for-part for rows the migration never saw (apps
- * installed later, or a retry): module rows for unabsorbed apps, active
- * versions projected from each absorbed app's active bundle version, then
- * the active_version_id link. Concurrent passes converge via the same
- * guards the migration uses (provenance NOT EXISTS plus unique-conflict
- * skips), so a double-run reports zeros rather than doubling rows.
+ * installed later, predating the installApp hook, or a retry): module rows
+ * for unabsorbed apps, active versions projected from each absorbed app's
+ * active bundle version, then the active_version_id link. Appending a
+ * version while another is active supersedes the prior one with an audit
+ * row, in the same transaction — the one-active-version invariant holds at
+ * every commit. Concurrent passes converge via the same guards the
+ * migration uses (provenance NOT EXISTS plus unique-conflict skips), so a
+ * double-run reports zeros rather than doubling rows. The actorId owns the
+ * supersession audit rows; initial-registration inserts write none (the
+ * app's own install evidence already carries that grant's before/after).
  */
-export async function absorbAppsForOrg(orgId: string): Promise<AbsorbAppsResult> {
+export async function absorbAppsForOrg(orgId: string, actorId: string): Promise<AbsorbAppsResult> {
   if (!orgId.trim()) throw new Error("absorbAppsForOrg requires an org id");
+  if (!actorId.trim()) throw new Error("absorbAppsForOrg requires an actor id");
   return await db.transaction(async (tx) => {
     const modules = await tx.execute(sql`
       INSERT INTO modules
@@ -230,9 +245,10 @@ export async function absorbAppsForOrg(orgId: string): Promise<AbsorbAppsResult>
       ON CONFLICT (org_id, key) DO NOTHING`);
 
     const versions = await tx.execute(sql`
-      INSERT INTO module_versions
-        (org_id, module_id, version, manifest, status, created_at, created_by, updated_at, updated_by)
-      SELECT a.org_id, m.id, av.version,
+      WITH ins AS (
+        INSERT INTO module_versions
+          (org_id, module_id, version, manifest, status, created_at, created_by, updated_at, updated_by)
+        SELECT a.org_id, m.id, av.version,
              jsonb_build_object(
                'key', a.key,
                'name', a.name,
@@ -264,11 +280,37 @@ export async function absorbAppsForOrg(orgId: string): Promise<AbsorbAppsResult>
        WHERE a.org_id = ${orgId}
          AND a.active_version_id IS NOT NULL
          AND NOT EXISTS (SELECT 1 FROM module_versions mv WHERE mv.module_id = m.id AND mv.version = av.version)
-      ON CONFLICT (module_id, version) DO NOTHING`);
+        ON CONFLICT (module_id, version) DO NOTHING
+        RETURNING id, module_id, version
+      ),
+      sup AS (
+        UPDATE module_versions mv
+           SET status = 'superseded', updated_at = now(), updated_by = ${actorId}
+          FROM ins
+         WHERE mv.module_id = ins.module_id
+           AND mv.status = 'active'
+           AND mv.id <> ins.id
+        RETURNING mv.id, mv.module_id, mv.version, ins.version AS by_version
+      ),
+      aud AS (
+        INSERT INTO audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        SELECT ${orgId}, 'module_versions', sup.id, 'update',
+               jsonb_build_object(
+                 'event', 'version_superseded',
+                 'before', jsonb_build_object('version', sup.version, 'status', 'active'),
+                 'after', jsonb_build_object('version', sup.version, 'status', 'superseded'),
+                 'supersededByVersion', sup.by_version
+               ),
+               ${actorId}
+          FROM sup
+        RETURNING 1
+      )
+      SELECT (SELECT count(*)::int FROM ins) AS inserted, (SELECT count(*)::int FROM sup) AS superseded`);
+    const inserted = (versions.rows[0] as { inserted: number; superseded: number } | undefined);
 
     const linked = await tx.execute(sql`
       UPDATE modules m
-         SET active_version_id = mv.id
+         SET active_version_id = mv.id, updated_at = now(), updated_by = ${actorId}
         FROM apps a
         JOIN app_versions av ON av.id = a.active_version_id AND av.org_id = a.org_id
         JOIN module_versions mv ON mv.version = av.version AND mv.org_id = a.org_id
@@ -279,7 +321,8 @@ export async function absorbAppsForOrg(orgId: string): Promise<AbsorbAppsResult>
 
     return {
       modulesInserted: modules.rowCount ?? 0,
-      versionsInserted: versions.rowCount ?? 0,
+      versionsInserted: inserted?.inserted ?? 0,
+      versionsSuperseded: inserted?.superseded ?? 0,
       linked: linked.rowCount ?? 0,
     };
   });

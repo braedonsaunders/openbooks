@@ -3,7 +3,8 @@
     "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler",
     "strict": true, "noEmit": true, "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
-    "allowImportingTsExtensions": true, "types": ["node"]
+    "allowImportingTsExtensions": true, "types": ["node"],
+    "paths": { "@/*": ["../web/*"] }
   },
   "include": ["src"]
 }
