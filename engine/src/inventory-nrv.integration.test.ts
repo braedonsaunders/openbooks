@@ -20,6 +20,24 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+test("moving-average NRV recovery excludes consumed loss after replenishment", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await setFramework(org.orgId, "ifrs");
+    const position = { itemId: org.items.movingAvg, stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId, date: org.date };
+    await receiveInventory(org.orgId, null, { ...position, quantity: "2", unitCost: "100", offsetAccountId: org.accounts.ap });
+    await writeDownInventoryToNrv(org.orgId, null, { ...position, nrvPerUnit: "50" });
+    await issueInventory(org.orgId, null, { ...position, quantity: "1", offsetAccountId: org.accounts.cogs });
+    await receiveInventory(org.orgId, null, { ...position, quantity: "1", unitCost: "10", offsetAccountId: org.accounts.ap });
+    assert.equal((await getOnHand(org.orgId, position.itemId, position.stockLocationId)).value, "60.0000");
+    const recovery = await reverseInventoryWritedown(org.orgId, null, { ...position, nrvPerUnit: "100" });
+    assert.equal(recovery.amount, "50.0000", "only the original unit still on hand retains its 50 loss");
+    assert.equal((await getOnHand(org.orgId, position.itemId, position.stockLocationId)).value, "110.0000");
+    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("110"));
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
 async function glBalance(orgId: string, accountId: string): Promise<bigint> {
   const r = (await db.execute<{ bal: string }>(sql`
     select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`));
@@ -450,7 +468,7 @@ test("NRV reversal apportions heterogeneous FIFO headroom without crossing any s
          and original_quantity = '1.0000' and remaining_quantity = '1.0000'
        returning id`);
     assert.equal(fragment.rows.length, 1, "the write-down produced the rounding fragment under test");
-    // FIFO consumes two units from the main fragment of the earlier $6 receipt.
+    // FIFO consumes the adjacent-rate fragments of the earlier $6 receipt.
     await issueInventory(org.orgId, null, {
       itemId: org.items.fifo,
       stockLocationId: org.stockLocationId,
@@ -470,7 +488,7 @@ test("NRV reversal apportions heterogeneous FIFO headroom without crossing any s
       date: org.date,
       nrvPerUnit: "6.25",
     });
-    assert.equal(reversal.amount, "9.2306");
+    assert.equal(reversal.amount, "9.2307");
 
     const afterLayers = await nrvLayerAudit(
       org.orgId,
