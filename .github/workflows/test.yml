@@ -319,9 +319,17 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U openbooks -d openbooks_e2e"
           --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7.4.5-alpine3.21@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_e2e
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_e2e
+      OPENBOOKS_REDIS_URL: redis://localhost:6379/0
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
       PGPASSWORD: openbooks
       SESSION_SECRET: e2e-ci-secret-not-production

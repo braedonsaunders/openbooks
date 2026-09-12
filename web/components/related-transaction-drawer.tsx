@@ -361,7 +361,8 @@ export async function loadRelatedTransactionDrawerData({
     props: {
       payload: (payload),
       config,
-      basePath: config.family === 'ap' ? '/ap' : config.family === 'ar' ? '/ar' : '/banking/transactions',
+      basePath: kind === 'project_charge' ? '/projects' : config.family === 'ap' ? '/ap/bills' : config.family === 'ar' ? '/ar/invoices' : '/banking/transactions',
+      relatedNavigation: true,
       parties: (parties),
       accounts: (accounts),
       taxCodes: (taxCodes),
