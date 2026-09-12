@@ -279,6 +279,8 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
   }
   const args = [
     '--import',
+    './scripts/test-output-drain.mjs',
+    '--import',
     'tsx',
     '--import',
     './engine/src/test-database-bypass.ts',
