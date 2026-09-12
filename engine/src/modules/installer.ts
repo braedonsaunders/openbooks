@@ -341,14 +341,41 @@ async function projectPage(
     });
   }
 
+  // A concurrent identical install may have projected this route between
+  // our occupant check and this insert; converge on its row instead of
+  // leaking a raw unique violation. Anything else owning the route live is
+  // a hard conflict, never a silent share.
   const inserted = (
     await tx.execute<{ id: string }>(sql`
       insert into page_specs (org_id, user_id, route, spec, note, module_version_id, created_by, updated_by)
       values (${orgId}, null, ${contribution.route}, ${JSON.stringify(contribution.spec)}::jsonb,
               ${`Projected by module "${opts.moduleKey}" version ${opts.version}`},
               ${opts.versionId}, ${opts.actorId}, ${opts.actorId})
+      on conflict (org_id, route) where (is_active and user_id is null) do nothing
       returning id`)
-  ).rows[0]!;
+  ).rows[0] ?? null;
+  if (!inserted) {
+    const live = (
+      await tx.execute<{ id: string; module_version_id: string; spec: unknown }>(sql`
+        select id, module_version_id, spec from page_specs
+         where org_id = ${orgId} and route = ${contribution.route} and is_active and user_id is null
+         limit 1`)
+    ).rows[0];
+    if (
+      live &&
+      live.module_version_id === opts.versionId &&
+      stableStringify(live.spec) === stableStringify(contribution.spec)
+    ) {
+      // Identical bytes already projected (the concurrent install won the
+      // race); its audit row covers this projection, so converge silently.
+      return live.id;
+    }
+    throw new ModuleInstallError(
+      `route ${contribution.route} was concurrently claimed by another layout; ` +
+        `module "${opts.moduleKey}" not installed`,
+      409,
+    );
+  }
   await writeAudit(tx, {
     orgId,
     table: "page_specs",
@@ -384,15 +411,28 @@ async function applyVersion(
   const { orgId, actorId, manifest, op } = opts;
   let moduleRow = opts.module;
 
+  // Insert-first: a first-install SELECT ... FOR UPDATE locks nothing, so
+  // two concurrent identical installs would both INSERT and the loser would
+  // eat a raw 23505. ON CONFLICT DO NOTHING serializes them on the unique
+  // key instead; the loser re-selects the winner's row below and converges
+  // to already-installed instead of throwing.
+  const createdModule = (
+    await tx.execute<{ id: string }>(sql`
+      insert into modules (org_id, key, name, description, status, granted_permissions, created_by, updated_by)
+      values (${orgId}, ${manifest.key}, ${manifest.name}, ${manifest.description},
+              'installed', ${JSON.stringify(opts.grants.granted)}::jsonb, ${actorId}, ${actorId})
+      on conflict (org_id, key) do nothing
+      returning id`)
+  ).rows[0] ?? null;
   if (!moduleRow) {
-    const inserted = (
+    moduleRow = (
       await tx.execute<ModuleRow>(sql`
-        insert into modules (org_id, key, name, description, status, granted_permissions, created_by, updated_by)
-        values (${orgId}, ${manifest.key}, ${manifest.name}, ${manifest.description},
-                'installed', ${JSON.stringify(opts.grants.granted)}::jsonb, ${actorId}, ${actorId})
-        returning id, key, name, description, status, active_version_id, granted_permissions`)
+        select id, key, name, description, status, active_version_id, granted_permissions
+          from modules where org_id = ${orgId} and key = ${manifest.key}
+          for update`)
     ).rows[0]!;
-    moduleRow = inserted;
+  }
+  if (createdModule) {
     await writeAudit(tx, {
       orgId,
       table: "modules",
@@ -414,16 +454,41 @@ async function applyVersion(
 
   const canonical = canonicalManifest(manifest);
   const canonicalJson = JSON.stringify(canonical);
-  const existingVersion = (
-    await tx.execute<{ id: string; status: string; manifest: unknown }>(sql`
-      select id, status, manifest from module_versions
-       where org_id = ${orgId} and module_id = ${moduleRow.id} and version = ${manifest.version}
-       for update`)
-  ).rows[0];
+  type VersionRow = { id: string; status: string; manifest: unknown };
+  // Same insert-first convergence as the module row: concurrent identical
+  // installs serialize on (module_id, version); the loser re-selects.
+  const createdVersion = (
+    await tx.execute<{ id: string }>(sql`
+      insert into module_versions (org_id, module_id, version, manifest, status, created_by, updated_by)
+      values (${orgId}, ${moduleRow.id}, ${manifest.version}, ${canonicalJson}::jsonb, 'active', ${actorId}, ${actorId})
+      on conflict (module_id, version) do nothing
+      returning id`)
+  ).rows[0] ?? null;
+  const existingVersion: VersionRow | undefined = createdVersion
+    ? { id: createdVersion.id, status: "active", manifest: canonical }
+    : (
+        await tx.execute<VersionRow>(sql`
+          select id, status, manifest from module_versions
+           where org_id = ${orgId} and module_id = ${moduleRow.id} and version = ${manifest.version}
+           for update`)
+      ).rows[0];
 
   let versionId: string;
   let preexistingVersion = false;
-  if (existingVersion) {
+  if (createdVersion) {
+    versionId = createdVersion.id;
+    await writeAudit(tx, {
+      orgId,
+      table: "module_versions",
+      rowId: versionId,
+      action: "insert",
+      event: op === "upgrade" ? "module_version_upgrade" : "module_version_install",
+      reason: opts.reason,
+      before: null,
+      after: { module_key: manifest.key, version: manifest.version, status: "active" },
+      actorId,
+    });
+  } else if (existingVersion) {
     // Append-only history: a label that ran before keeps its bytes. The same
     // bytes re-converge (reinstall, reactivation); different bytes are a new
     // version wearing an old label and are refused.
@@ -437,23 +502,12 @@ async function applyVersion(
     versionId = existingVersion.id;
     preexistingVersion = true;
   } else {
-    versionId = (
-      await tx.execute<{ id: string }>(sql`
-        insert into module_versions (org_id, module_id, version, manifest, status, created_by, updated_by)
-        values (${orgId}, ${moduleRow.id}, ${manifest.version}, ${canonicalJson}::jsonb, 'active', ${actorId}, ${actorId})
-        returning id`)
-    ).rows[0]!.id;
-    await writeAudit(tx, {
-      orgId,
-      table: "module_versions",
-      rowId: versionId,
-      action: "insert",
-      event: op === "upgrade" ? "module_version_upgrade" : "module_version_install",
-      reason: opts.reason,
-      before: null,
-      after: { module_key: manifest.key, version: manifest.version, status: "active" },
-      actorId,
-    });
+    // Unreachable: the insert either wrote or another transaction holds the
+    // key. A named error rather than a downstream TypeError, fail-closed.
+    throw new ModuleInstallError(
+      `version ${manifest.version} of module "${manifest.key}" could not be recorded`,
+      500,
+    );
   }
 
   // True idempotence: already installed, active, same bytes, same grants —
