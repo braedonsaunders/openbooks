@@ -1,5 +1,8 @@
 import { z } from 'zod'
-import { pageSpecSchema, SPEC_VERSION, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { blockSchema, pageSpecSchema, SPEC_VERSION, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { automationGraphSchema, formSectionSchema } from '@openbooks/forms-core'
+import { API_RECORD_TYPES } from '../api/registry-data'
+import { RESERVED_TYPE_KEYS } from '../record-schema'
 
 /**
  * Module manifest — the contract that describes an installable platform
@@ -33,6 +36,43 @@ const KEY = /^[a-z][a-z0-9_]{0,63}$/
 const PERMISSION_KEY = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_*]*){1,3}$/
 /** Cron expression, at least the 5-field shape; the scheduler re-parses. */
 const CRON = /^[^\s]+(\s+[^\s]+){4,5}$/
+
+/**
+ * Capability permissions a module may request. Modules run outside the
+ * sandboxed iframe bridge, but they ask for the same governed operations an
+ * App asks for (record reads/writes through platform CRUD, ledger writes
+ * through the posting engine), so the constants mirror APP_CAPABILITIES in
+ * web/lib/apps/manifest.ts. An admin grants a subset at approval; the
+ * installer (Phase 1c) and the capability lattice (Phase 2a) enforce
+ * granted ∩ installer's-effective — never the manifest's word alone.
+ */
+export const MODULE_CAPABILITIES = {
+  /** Read custom records via platform CRUD (org-scoped). */
+  RECORDS_READ: 'records.read',
+  /** Create, update, and delete published custom records via platform CRUD. */
+  RECORDS_CREATE: 'records.create',
+  /** Governed ledger writes via the posting engine (draft + post). */
+  GL_POST: 'gl.post',
+} as const
+
+/**
+ * Every permission a module manifest may request, built exactly the way
+ * APP_PLATFORM_PERMISSIONS is built: the capability constants above plus the
+ * posting permissions and every record API read/write surface. A requested
+ * string outside this catalogue is a manifest error, not a grant the
+ * approval UI can meaningfully show — the catalogue is the shared language
+ * approvals, installer, and admin UI all read from.
+ */
+export const MODULE_PLATFORM_PERMISSIONS = [
+  ...new Set([
+    MODULE_CAPABILITIES.RECORDS_READ,
+    MODULE_CAPABILITIES.RECORDS_CREATE,
+    MODULE_CAPABILITIES.GL_POST,
+    'ap.post',
+    'ar.post',
+    ...API_RECORD_TYPES.flatMap((type) => [type.readPermission, type.writePermission].filter((p): p is string => !!p)),
+  ]),
+].sort()
 
 /** Every contribution kind a manifest may declare, in lifecycle order. */
 export const CONTRIBUTION_KINDS = [
@@ -81,59 +121,162 @@ const panelContributionSchema = z.object({
   route: z.string().regex(ROUTE, 'route must be an absolute route pattern').max(120),
   /** Named slot the page declares (e.g. 'header', 'aside'). */
   slot: z.string().regex(SLUG, 'slot must be a slug').max(64),
-  /** ViewSpec block subtree rendered inside the slot. */
-  blocks: z.array(z.unknown()).max(40),
+  /** ViewSpec block subtree rendered inside the slot — every block must satisfy the closed blockSchema vocabulary. */
+  blocks: z.array(blockSchema).max(40),
   /** Render order among panels claiming the same slot. */
   sortOrder: z.number().int().min(0).max(10_000).default(0),
 })
 
 const recordTypeContributionSchema = z.object({
   kind: z.literal('record-type'),
-  /** URL segment key (/records/<key>), as TYPE_KEY_RE in record-schema. */
-  key: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/, 'key must be a 2–64 char slug'),
+  /** URL segment key (/records/<key>) — TYPE_KEY_RE plus the reserved keys record-schema refuses. */
+  key: z
+    .string()
+    .regex(/^[a-z][a-z0-9-]{1,63}$/, 'key must be a 2–64 char slug')
+    .refine((k) => !RESERVED_TYPE_KEYS.has(k), { message: 'key is reserved by the records surface' }),
   label: z.string().min(1).max(120),
   description: z.string().max(2000).optional(),
-  /** Ordered forms-core sections, exactly as the record-type builder stores them. */
-  sections: z.array(z.unknown()).min(1).max(50),
+  /** Ordered form sections, validated against the same formSectionSchema the record-type builder persists. */
+  sections: z.array(formSectionSchema).min(1).max(50),
 })
 
-const fieldContributionSchema = z.object({
+/**
+ * Tables that actually carry custom-field storage today — the storage side of
+ * CUSTOM_FIELD_TARGETS in packages/customization/src/custom-field-targets.ts.
+ * A field contribution naming any other table could never project: the
+ * installer would have nowhere to persist it.
+ */
+const CUSTOM_FIELD_TABLES = [
+  'documents',
+  'document_lines',
+  'parties',
+  'projects',
+  'managed_properties',
+  'accounts',
+  'items',
+  'crm_account_profiles',
+  'crm_activities',
+  'crm_opportunities',
+  'item_rate_versions',
+  'fixed_assets',
+  'time_entries',
+] as const
+
+/** Tables a reference field may point at — CUSTOM_FIELD_REFERENCE_TABLES. */
+const CUSTOM_FIELD_REFERENCE_TABLES = ['parties', 'projects', 'accounts', 'items'] as const
+
+/**
+ * Field-type vocabulary custom_field_defs accepts — FIELD_TYPES in
+ * packages/customization/src/custom-field-definition.ts. Deliberately NOT the
+ * wider forms-core fieldTypeSchema (no file/formula/pickers): a field
+ * contribution projects into custom_field_defs, so only that table's nine
+ * types are expressible.
+ */
+const CUSTOM_FIELD_TYPES = [
+  'text',
+  'long_text',
+  'number',
+  'currency',
+  'date',
+  'boolean',
+  'select',
+  'multi_select',
+  'reference',
+] as const
+
+const fieldContributionBase = z.object({
   kind: z.literal('field'),
-  /** Table the field extends (documents, parties, …), as custom_field_defs.target_table. */
-  targetTable: z.string().regex(KEY, 'targetTable must be a snake_case identifier').max(64),
-  /** Optional narrowing, e.g. documents of a kind. */
+  /** Table the field extends, as custom_field_defs.target_table. */
+  targetTable: z.enum(CUSTOM_FIELD_TABLES),
+  /** Optional narrowing, e.g. documents of a kind — validated against live kinds at install. */
   targetKind: z.string().max(64).optional(),
-  /** snake_case key, unique per target. */
-  key: z.string().regex(KEY, 'key must be a snake_case identifier'),
-  label: z.string().min(1).max(500),
-  /** Field types custom_field_defs already accepts. */
-  fieldType: z.enum([
-    'text',
-    'long_text',
-    'number',
-    'currency',
-    'date',
-    'boolean',
-    'select',
-    'multi_select',
-    'reference',
-    'file',
-  ]),
+  /** snake_case key, unique per target — the shape validator allows 2–61 chars. */
+  key: z.string().regex(/^[a-z][a-z0-9_]{1,60}$/, 'key must be snake_case (a-z, 0-9, _)'),
+  label: z.string().min(1).max(120),
+  fieldType: z.enum(CUSTOM_FIELD_TYPES),
   config: z.record(z.string(), z.unknown()).default({}),
   isRequired: z.boolean().default(false),
   sortOrder: z.number().int().min(0).max(10_000).default(0),
 })
 
-const reportContributionSchema = z.object({
+/**
+ * Field contribution with the config cross-rules the write path enforces
+ * (validateCustomFieldDefinitionShape): select kinds need a non-empty unique
+ * string option list, reference needs a valid referenceTable. Without these a
+ * manifest parses here and dies at the projection it advertises.
+ */
+const fieldContributionSchema = fieldContributionBase.superRefine((f, ctx) => {
+  if (f.fieldType === 'select' || f.fieldType === 'multi_select') {
+    const opts = (f.config as { options?: unknown }).options
+    if (!Array.isArray(opts) || opts.length === 0 || opts.some((o) => typeof o !== 'string' || !o.trim())) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['config', 'options'], message: 'select fields need at least one option' })
+    } else if (new Set(opts).size !== opts.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['config', 'options'], message: 'select options must be unique' })
+    }
+  }
+  if (f.fieldType === 'reference') {
+    const table = (f.config as { referenceTable?: unknown }).referenceTable
+    if (typeof table !== 'string' || !(CUSTOM_FIELD_REFERENCE_TABLES as readonly string[]).includes(table)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['config', 'referenceTable'],
+        message: 'reference fields need a valid referenceTable (parties, projects, accounts, items)',
+      })
+    }
+  }
+})
+
+/**
+ * Statement kinds the matrix/statement engine resolves — mirrors REPORT_KINDS
+ * in web/lib/report-run.ts (server-only, so mirrored with citation rather
+ * than imported; the installer re-checks against the live engine anyway).
+ */
+const REPORT_STATEMENT_KINDS = [
+  'pnl',
+  'balance-sheet',
+  'trial-balance',
+  'partners',
+  'aging',
+  'cash-flow',
+  'cash-flow-indirect',
+  'general-ledger',
+  'journal',
+  'registers',
+  'budget',
+  'partner-statement',
+  'project-profitability',
+  'true-cost',
+] as const
+
+const reportContributionBase = z.object({
   kind: z.literal('report'),
   /** URL slug (/reports/<slug>), as report_definitions.slug. */
   slug: z.string().regex(SLUG, 'slug must be a slug').max(64),
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
   reportType: z.enum(['query', 'statement']).default('query'),
-  /** Custom-report query plan (report_type 'query') or statement spec ({ kind, params }). */
+  /**
+   * Custom-report query plan (report_type 'query'; validated by
+   * validateCustomQuery on write, NULL for statements) or statement spec
+   * ({ kind, params? }; NULL for queries) — schema/src/reporting.ts.
+   */
   query: z.record(z.string(), z.unknown()).optional(),
-  statement: z.record(z.string(), z.unknown()).optional(),
+  statement: z.object({ kind: z.enum(REPORT_STATEMENT_KINDS), params: z.record(z.string(), z.unknown()).optional() }).optional(),
+})
+
+/**
+ * Report contribution with the storage exclusivity report_definitions
+ * enforces: a query report carries no statement, a statement report carries
+ * no query. A manifest claiming both (or the wrong one) parses here and
+ * contradicts its row later.
+ */
+const reportContributionSchema = reportContributionBase.superRefine((r, ctx) => {
+  if (r.reportType === 'query' && r.statement !== undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['statement'], message: 'query reports must not carry a statement spec' })
+  }
+  if (r.reportType === 'statement' && r.query !== undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['query'], message: 'statement reports must not carry a query plan' })
+  }
 })
 
 const cardContributionSchema = z.object({
@@ -190,8 +333,8 @@ const flowContributionSchema = z.object({
   description: z.string().max(2000).optional(),
   /** Document/record subject kind the flow runs over (customer_invoice, …). */
   subjectKind: z.string().regex(KEY, 'subjectKind must be a snake_case identifier').max(64),
-  /** Automation graph; structure validated here, vocabulary at install. */
-  graph: z.unknown(),
+  /** Automation graph, validated against the same automationGraphSchema the flows table persists. */
+  graph: automationGraphSchema,
   enabled: z.boolean().default(true),
 })
 
@@ -215,7 +358,7 @@ const permissionContributionSchema = z.object({
   description: z.string().max(2000).optional(),
 })
 
-const settingContributionSchema = z.object({
+const settingContributionBase = z.object({
   kind: z.literal('setting'),
   /** Org settings key (orgs.settings jsonb path segment). */
   key: z.string().regex(KEY, 'key must be a snake_case identifier').max(64),
@@ -224,6 +367,19 @@ const settingContributionSchema = z.object({
   /** Value type the admin surface renders. */
   valueType: z.enum(['boolean', 'number', 'string', 'json']),
   defaultValue: z.unknown().optional(),
+})
+
+/** Setting contribution whose default, when given, matches its value type — a boolean setting defaulting to 'yes' renders nowhere. */
+const settingContributionSchema = settingContributionBase.superRefine((s, ctx) => {
+  if (s.defaultValue === undefined) return
+  const ok =
+    s.valueType === 'json' ||
+    (s.valueType === 'boolean' && typeof s.defaultValue === 'boolean') ||
+    (s.valueType === 'number' && typeof s.defaultValue === 'number') ||
+    (s.valueType === 'string' && typeof s.defaultValue === 'string')
+  if (!ok) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['defaultValue'], message: `defaultValue must be a ${s.valueType}` })
+  }
 })
 
 /** One contribution: discriminated by `kind` against the per-kind payloads. */
@@ -252,8 +408,22 @@ export const moduleManifestSchema = z.object({
   /** This version's tag — immutable once installed. */
   version: z.string().regex(VERSION, 'version must look like 1.0.0').max(32),
   description: z.string().max(2000).optional(),
-  /** Requested platform permissions; an admin grants a subset at approval. */
-  permissions: z.array(z.string().max(80)).max(50).default([]),
+  /**
+   * Requested platform permissions from MODULE_PLATFORM_PERMISSIONS; an
+   * admin grants a subset at approval. Unknown strings are rejected — the
+   * approval UI can only show grants from the shared catalogue.
+   */
+  permissions: z
+    .array(z.string().max(80))
+    .max(50)
+    .default([])
+    .superRefine((perms, ctx) => {
+      for (let i = 0; i < perms.length; i++) {
+        if (!(MODULE_PLATFORM_PERMISSIONS as readonly string[]).includes(perms[i]!)) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: [i], message: `unknown permission: ${perms[i]}` })
+        }
+      }
+    }),
   contributions: z.array(contributionSchema).max(200).default([]),
 })
 export type ModuleManifest = z.infer<typeof moduleManifestSchema>

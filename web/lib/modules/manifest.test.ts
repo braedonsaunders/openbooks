@@ -9,6 +9,8 @@ import assert from 'node:assert/strict'
 import { page } from '@braedonsaunders/appkit-viewspec'
 import {
   CONTRIBUTION_KINDS,
+  MODULE_CAPABILITIES,
+  MODULE_PLATFORM_PERMISSIONS,
   PROJECTION_TARGETS,
   PROJECTED_KINDS,
   moduleManifestSchema,
@@ -173,7 +175,7 @@ test('record-type contribution requires sections', () => {
 
 test('field contribution validates against the custom_field_defs vocabulary', () => {
   const ok = parseModuleManifest(base({
-    contributions: [{ kind: 'field', targetTable: 'documents', targetKind: 'vendor_bill', key: 'recast_bucket', label: 'Recast bucket', fieldType: 'select', config: { options: [{ value: 'a', label: 'A' }] } }],
+    contributions: [{ kind: 'field', targetTable: 'documents', targetKind: 'vendor_bill', key: 'recast_bucket', label: 'Recast bucket', fieldType: 'select', config: { options: ['a', 'b'] } }],
   }))
   assert.equal(ok.ok, true, ok.errors.join('; '))
   const c = ok.manifest!.contributions[0] as Extract<ModuleContribution, { kind: 'field' }>
@@ -396,7 +398,7 @@ test('a manifest with one of every contribution kind parses and summarizes', () 
       { kind: 'job', name: 'Nightly', cron: '0 3 * * *' },
       { kind: 'endpoint', path: 'totals' },
       { kind: 'hook', trigger: 'after_post', path: 'index' },
-      { kind: 'flow', name: 'Gate', subjectKind: 'vendor_bill', graph: {} },
+      { kind: 'flow', name: 'Gate', subjectKind: 'vendor_bill', graph: { schemaVersion: 1, nodes: [], edges: [] } },
       { kind: 'agent', key: 'reconciler', name: 'Reconciler' },
       { kind: 'permission', key: 'revenue.recast', label: 'Recast' },
       { kind: 'setting', key: 'recast_enabled', label: 'Recast', valueType: 'boolean' },
@@ -412,4 +414,115 @@ test('moduleManifestSchema type inference compiles with every kind', () => {
     contributions: [{ kind: 'page', route: '/x', spec: validSpec('/x') }],
   }))
   assert.equal(m.contributions[0]!.kind, 'page')
+})
+
+// --- verifier regressions: capability catalogue ---------------------------------
+
+test('MODULE_PLATFORM_PERMISSIONS covers every record API read and write surface', () => {
+  for (const permission of ['gl.read', 'ap.read', 'ap.create', 'ar.read', 'ar.create', 'parties.manage', 'records.create']) {
+    assert.equal(MODULE_PLATFORM_PERMISSIONS.includes(permission), true, permission)
+  }
+  assert.equal(MODULE_PLATFORM_PERMISSIONS.includes(MODULE_CAPABILITIES.GL_POST), true)
+})
+
+test('parseModuleManifest rejects permissions outside the platform catalogue', () => {
+  const r = parseModuleManifest(base({ permissions: ['gl.read', 'warpdrive.overdrive'] }))
+  assert.equal(r.ok, false)
+  assert.match(r.errors.join('\n'), /unknown permission: warpdrive\.overdrive/)
+})
+
+// --- verifier regressions: structural payloads -----------------------------------
+
+test('panel contribution rejects blocks outside the viewspec vocabulary', () => {
+  const r = parseModuleManifest(base({
+    contributions: [{ kind: 'panel', route: '/revenue', slot: 'aside', blocks: [42] }],
+  }))
+  assert.equal(r.ok, false)
+})
+
+test('record-type contribution rejects empty section objects', () => {
+  const r = parseModuleManifest(base({
+    contributions: [{ kind: 'record-type', key: 'wip-transactions', label: 'WIP', sections: [{}] }],
+  }))
+  assert.equal(r.ok, false)
+})
+
+test('record-type contribution rejects reserved keys', () => {
+  for (const key of ['types', 'new']) {
+    const r = parseModuleManifest(base({
+      contributions: [{ kind: 'record-type', key, label: 'X', sections: [{ id: 's', fields: [] }] }],
+    }))
+    assert.equal(r.ok, false, `expected rejection for reserved key ${key}`)
+    assert.match(r.errors.join('\n'), /reserved/)
+  }
+})
+
+test('field contribution rejects the wider form field types custom_field_defs cannot store', () => {
+  const r = parseModuleManifest(base({
+    contributions: [{ kind: 'field', targetTable: 'documents', key: 'attachment', label: 'Attachment', fieldType: 'file' }],
+  }))
+  assert.equal(r.ok, false)
+})
+
+test('field contribution requires options for select and a table for reference', () => {
+  const noOptions = parseModuleManifest(base({
+    contributions: [{ kind: 'field', targetTable: 'documents', key: 'bucket', label: 'Bucket', fieldType: 'select', config: {} }],
+  }))
+  assert.equal(noOptions.ok, false)
+  assert.match(noOptions.errors.join('\n'), /at least one option/)
+
+  const objectOptions = parseModuleManifest(base({
+    contributions: [{ kind: 'field', targetTable: 'documents', key: 'bucket', label: 'Bucket', fieldType: 'select', config: { options: [{ value: 'a', label: 'A' }] } }],
+  }))
+  assert.equal(objectOptions.ok, false, 'options must be strings, as the value validator compares')
+
+  const noTable = parseModuleManifest(base({
+    contributions: [{ kind: 'field', targetTable: 'documents', key: 'vendor', label: 'Vendor', fieldType: 'reference', config: {} }],
+  }))
+  assert.equal(noTable.ok, false)
+  assert.match(noTable.errors.join('\n'), /referenceTable/)
+
+  const badTable = parseModuleManifest(base({
+    contributions: [{ kind: 'field', targetTable: 'gl_postings', key: 'x', label: 'X', fieldType: 'text' }],
+  }))
+  assert.equal(badTable.ok, false, 'gl_postings carries no custom-field storage')
+})
+
+test('report contribution rejects mismatched query/statement payloads', () => {
+  const queryWithStatement = parseModuleManifest(base({
+    contributions: [{ kind: 'report', slug: 'recast', name: 'Recast', reportType: 'query', statement: { kind: 'pnl' } }],
+  }))
+  assert.equal(queryWithStatement.ok, false)
+  assert.match(queryWithStatement.errors.join('\n'), /must not carry a statement/)
+
+  const statementWithQuery = parseModuleManifest(base({
+    contributions: [{ kind: 'report', slug: 'recast', name: 'Recast', reportType: 'statement', query: { entity: 'x' } }],
+  }))
+  assert.equal(statementWithQuery.ok, false)
+  assert.match(statementWithQuery.errors.join('\n'), /must not carry a query/)
+
+  const statementOk = parseModuleManifest(base({
+    contributions: [{ kind: 'report', slug: 'recast', name: 'Recast', reportType: 'statement', statement: { kind: 'pnl', params: {} } }],
+  }))
+  assert.equal(statementOk.ok, true, statementOk.errors.join('; '))
+})
+
+test('flow contribution rejects a payload outside the automation graph schema', () => {
+  const r = parseModuleManifest(base({
+    contributions: [{ kind: 'flow', name: 'Gate', subjectKind: 'vendor_bill', graph: {} }],
+  }))
+  assert.equal(r.ok, false)
+})
+
+test('setting contribution rejects a default outside its value type', () => {
+  const r = parseModuleManifest(base({
+    contributions: [{ kind: 'setting', key: 'recast_enabled', label: 'Recast', valueType: 'boolean', defaultValue: 'yes' }],
+  }))
+  assert.equal(r.ok, false)
+  assert.match(r.errors.join('\n'), /defaultValue must be a boolean/)
+
+  const n = parseModuleManifest(base({
+    contributions: [{ kind: 'setting', key: 'threshold', label: 'Threshold', valueType: 'number', defaultValue: 'ten' }],
+  }))
+  assert.equal(n.ok, false)
 })
