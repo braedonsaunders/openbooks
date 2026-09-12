@@ -103,7 +103,7 @@ for (const policy of [
   { name:'straight line', opts:{}, ceiling:'800', refused:'850', august:'50.0000' },
   { name:'unrelated fiscal calendar', opts:{}, ceiling:'800', refused:'850', august:'50.0000' },
   { name:'double declining', opts:{method:'double_declining' as const,julyDepreciation:'200.0000'}, ceiling:'640', refused:'690', august:'50.0000' },
-  { name:'custom formula', opts:{customFormula:'((OC-RV)/AL)*2',julyDepreciation:'200.0000'}, ceiling:'600', refused:'650', august:'112.5000' },
+  { name:'custom formula', opts:{customFormula:'((OC-RV)/AL)*2',julyDepreciation:'200.0000'}, ceiling:'600', refused:'650', august:'50.0000' },
   { name:'book policy', opts:{bookLifeMonths:5,julyDepreciation:'200.0000'}, ceiling:'600', refused:'650', august:'112.5000' },
   { name:'salvage floor', opts:{salvage:'100',julyDepreciation:'90.0000'}, ceiling:'820', refused:'850', august:'38.8888' },
 ]) {
@@ -162,7 +162,10 @@ for (const method of ['manual','units_of_production'] as const) {
       await record('2026-08-15','150');
       await record('2026-08-15','200'); // Superseded unposted evidence is excluded.
       await record('2026-09-15','100'); // Future evidence does not affect August.
+      const retainedInputs = await scheduleRows(org,assetId);
       await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'450'});
+      await buildSchedule(assetId,org.orgId,actorId,org.bookId);
+      assert.deepEqual(await scheduleRows(org,assetId),retainedInputs,'formula rebuilding must not reinterpret retained input amounts');
       assert.equal(await unimpairedAssetCarryingValue(db,assetId,org.orgId,org.bookId,'2026-07-31'),'900.0000');
       assert.equal(await unimpairedAssetCarryingValue(db,assetId,org.orgId,org.bookId,'2026-08-31'),'700.0000');
     } finally { await dropScratchOrg(org.orgId); }

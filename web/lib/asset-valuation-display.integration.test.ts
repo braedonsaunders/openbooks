@@ -81,7 +81,7 @@ for(const scenario of cases){
    assert.equal(toUnits(detail.totals.accumulated),toUnits(expectedAccumulated),'current accumulated balance');
    assert.equal(detail.hasAccountingEvidence,scenario!=='plain','lifecycle journals are accounting evidence');
    if(scenario==='future impairment')assert.deepEqual(detail.schedule.map(line=>line.netBookValue),['500.0000','0.0000'],'future impairment does not alter the earlier period');
-   if(scenario==='dated reversal')assert.deepEqual(detail.schedule.map(line=>line.netBookValue),['700.0000','800.0000'],'reversal affects only its effective date onward');
+   if(scenario==='dated reversal')assert.deepEqual(detail.schedule.map(line=>line.netBookValue),['720.0000','817.7778'],'July retains its impaired 80 charge; August allocates restored 920 over nine remaining months');
    if(scenario==='alternate book'){
     assert.equal(detail.schedule.find(line=>line.bookId===org.bookId)?.netBookValue,'700.0000');
     const alternate=await loadAsset(assetId,org.orgId,{bookId:alternateId});
@@ -92,3 +92,25 @@ for(const scenario of cases){
   }finally{await dropScratchOrg(org.orgId)}
  });
 }
+
+test('asset detail valuation: dated reversal retains posted July and restores current 900 and August 800',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+ const org=await createScratchOrg();
+ try {
+  const {actorId,assetId}=await seedAsset(org);
+  await db.execute(sql`insert into accounting_periods(org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
+    select org_id,2026,8,'2026-08','2026-08-01','2026-08-31',false,fiscal_calendar_id from accounting_periods where org_id=${org.orgId} limit 1`);
+  await buildSchedule(assetId,org.orgId,actorId,org.bookId);
+  assert.equal((await runDepreciation(org.orgId,'2026-07-31',actorId,assetId)).totalAmount,'100.0000');
+  const history=(await db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} and posted_amount is not null`)).rows;
+  const impairment=await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'800'});
+  await reverseAssetLifecycleEvent(org.orgId,await eventFor(org.orgId,impairment.entryId),{actorId,date:'2026-08-01',reason:'Correct the impairment after July depreciation'});
+  for(let i=0;i<2;i++) {
+   await buildSchedule(assetId,org.orgId,actorId,org.bookId);
+   const detail=await loadAsset(assetId,org.orgId);
+   assert.ok(detail);
+   assert.equal(detail.totals.netBookValue,'900.0000');
+   assert.deepEqual(detail.schedule.map(line=>line.netBookValue),['800.0000','800.0000']);
+   assert.deepEqual((await db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} and posted_amount is not null`)).rows,history);
+  }
+ } finally {await dropScratchOrg(org.orgId);}
+});
