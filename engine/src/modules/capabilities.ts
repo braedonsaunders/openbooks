@@ -20,13 +20,8 @@
  * catalogue is caller-supplied (the installer passes
  * MODULE_PLATFORM_PERMISSIONS) so this file never forks that list into a
  * parallel source of truth, and so it stays dependency-free for the parallel
- * installer slice. Wildcard matching reuses permissionSetCovers from
- * engine/src/permissions.ts — the same `*` / `module.*` semantics every
- * server authorization check enforces — so a wildcard-carrying admin or role
- * is never under-authorized here relative to the rest of the platform.
+ * installer slice.
  */
-
-import { permissionSetCovers } from "../permissions.ts";
 
 export type ModuleCapabilityErrorCode =
   | "unknown_permission"
@@ -94,10 +89,8 @@ export interface GrantResolution {
  *
  * Fail-closed throughout: unknown requested permissions throw (manifest
  * error), approvals exceeding the request throw (an admin cannot grant what
- * the module never asked for), and anything the installer's effective set
- * does not COVER is withheld — coverage uses the platform's wildcard
- * semantics, so an installer holding `ap.*` or `*` genuinely conveys the
- * permissions under it, while a low-privilege installer can never arm a
+ * the module never asked for), and anything the installer does not
+ * effectively hold is withheld — a low-privilege installer can never arm a
  * module with permissions they could not exercise themselves.
  */
 export function resolveModuleGrants(input: GrantResolutionInput): GrantResolution {
@@ -125,15 +118,9 @@ export function resolveModuleGrants(input: GrantResolutionInput): GrantResolutio
       );
     }
   }
-  const effective = new Set(
-    input.installerEffective.map((p) => normalizePermission(p, "installer permission")),
-  );
+  const effective = new Set(input.installerEffective);
   const approvedSet = new Set(approved);
-  // Granted stores the concrete approved permissions (a subset of the
-  // request), not the installer's wildcards: the grant record stays auditable
-  // against exactly what the admin approved, and executor checks remain a
-  // simple coverage test on both sides.
-  const granted = sortedUnique([...approvedSet].filter((p) => permissionSetCovers(effective, p)));
+  const granted = sortedUnique([...approvedSet].filter((p) => effective.has(p)));
   const grantedSet = new Set(granted);
   const withheld = sortedUnique([...requestedSet].filter((p) => !grantedSet.has(p)));
   return { granted, withheld };
@@ -143,16 +130,14 @@ export function resolveModuleGrants(input: GrantResolutionInput): GrantResolutio
  * The permissions a module version may exercise right now: its recorded
  * grants intersected with the CURRENT installer's effective permissions.
  * Recomputed at use time (not just stored at install) so a later privilege
- * revocation narrows the module without a reinstall. Coverage follows the
- * platform wildcard semantics: an installer holding `ap.*` still conveys
- * `ap.post`; the returned list stays concrete (the covered grants).
+ * revocation narrows the module without a reinstall.
  */
 export function moduleEffectivePermissions(
   grantedPermissions: readonly string[],
   installerEffectivePermissions: readonly string[],
 ): string[] {
   const effective = new Set(installerEffectivePermissions);
-  return sortedUnique(grantedPermissions.filter((p) => permissionSetCovers(effective, p)));
+  return sortedUnique(grantedPermissions.filter((p) => effective.has(p)));
 }
 
 export interface PermittedUseInput {
@@ -165,18 +150,17 @@ export interface PermittedUseInput {
 }
 
 /**
- * Executor-side enforcement: throw unless `requiredPermission` is covered by
- * the recorded grants AND by the installer's current effective permissions
- * (platform wildcard semantics on both sides). Projection executors call this
- * before every capability-gated write, so a grant recorded at install time
- * cannot outlive the authority behind it and UI approval alone never
- * authorizes execution.
+ * Executor-side enforcement: throw unless `requiredPermission` is in
+ * granted ∩ installer-effective. Projection executors call this before every
+ * capability-gated write, so a grant recorded at install time cannot outlive
+ * the authority behind it and UI approval alone never authorizes execution.
  */
 export function assertModulePermitted(input: PermittedUseInput): void {
   const required = normalizePermission(input.requiredPermission, "required permission");
-  const grantedCovers = permissionSetCovers(new Set(input.grantedPermissions), required);
-  const effectiveCovers = permissionSetCovers(new Set(input.installerEffectivePermissions), required);
-  if (!grantedCovers || !effectiveCovers) {
+  const usable = new Set(
+    moduleEffectivePermissions(input.grantedPermissions, input.installerEffectivePermissions),
+  );
+  if (!usable.has(required)) {
     throw new ModuleCapabilityError(
       `module lacks required permission: ${required}`,
       "capability_denied",
