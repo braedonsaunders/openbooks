@@ -109,6 +109,12 @@ const connectorPaths = [
   /^schema\/src\/(?:extension|qbd)\.ts$/,
   /^schema\/migrations\/generated\/0045_canonical_customer_parties\.sql$/,
   /^schema\/migrations\/generated\/0109_schema_convergence_and_legacy_evidence\.sql$/,
+  // Review-tenant fixtures seed functional connector-branch rows: the stable
+  // source keys the /sync UI and engine branch on (the engine/src/sync entry
+  // above, and the 0045/0109 migration precedent for functional seeds).
+  // Display copy in the fixture stays vendor-neutral; only the functional
+  // keys may name a system.
+  /^scripts\/review-tenant-fixtures\.sql$/,
   /^web\/app\/\(app\)\/sync\//,
   /^web\/app\/api\/(?:platform\/connections|qbd)\//,
   /^web\/lib\/docs\/articles\/(?:netsuite-bridge|quickbooks-desktop-connector)\.ts$/,

@@ -79,6 +79,15 @@ test('the full audit accepts every tracked connector test file, including its ve
   assert.deepEqual(auditPublicSnapshot([...CONNECTOR_TEST_FILES, ...CONNECTOR_IMPLEMENTATION_FILES]), [])
 })
 
+test('review-tenant fixtures may seed functional connector-branch rows', () => {
+  // scripts/review-tenant-fixtures.sql seeds connections/sync_runs rows keyed
+  // on the stable source keys the /sync UI and engine branch on (the same
+  // reason engine/src/sync and the 0045/0109 migrations hold connector scope):
+  // display copy stays vendor-neutral, only the functional keys name a system.
+  assert.equal(isConnectorPath('scripts/review-tenant-fixtures.sql'), true)
+  assert.deepEqual(auditPublicSnapshot(['scripts/review-tenant-fixtures.sql']), [])
+})
+
 test('the audit still rejects vendor names outside connector scope', () => {
   const dir = mkdtempSync(join(tmpdir(), 'neutrality-audit-'))
   try {
