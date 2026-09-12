@@ -554,10 +554,25 @@ async function applyVersion(
     actorId,
   });
 
-  if (!preexistingVersion || existingVersion!.status !== "active") {
+  if (preexistingVersion && existingVersion!.status !== "active") {
+    // Convergent reinstall of a superseded version: the flip back to active
+    // is a lifecycle transition and is audited exactly like the others —
+    // actor, timestamp, before/after, reason. (2b owns transition policy and
+    // may restrict reinstall; visibility via audit is this slice's bar.)
     await tx.execute(sql`
       update module_versions set status = 'active', updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${versionId}`);
+    await writeAudit(tx, {
+      orgId,
+      table: "module_versions",
+      rowId: versionId,
+      action: "update",
+      event: "module_version_reactivated",
+      reason: opts.reason,
+      before: { version: manifest.version, status: existingVersion!.status },
+      after: { version: manifest.version, status: "active" },
+      actorId,
+    });
   }
   const supersededVersions = (
     await tx.execute<{ id: string; version: string }>(sql`
