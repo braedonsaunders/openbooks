@@ -49,11 +49,12 @@
 --   No audit_log rows are written here. The app's own install audit evidence
 --   already records the grant decision with before/after; the backfill makes
 --   no new decision, it only registers the existing one on the modules
---   surface. Ongoing absorption of apps installed AFTER this migration is
---   owned by engine/src/modules/absorb-apps.ts (absorbAppsForOrg), which
---   repeats these three statements idempotently per org; the installer and
---   admin flows call it, so this migration only ever has to cover rows that
---   predate it. Every statement below is rerunnable (NOT EXISTS guards plus
+--   surface. Steady-state maintenance lives in installApp
+--   (web/lib/apps/store.ts), which mirrors the module row and version
+--   inline in the same transaction as the apps writes; absorbAppsForOrg in
+--   engine/src/modules/absorb-apps.ts is the idempotent repair path for
+--   rows that predate that wiring or were missed, so this migration only
+--   ever has to cover rows that predate it. Every statement below is rerunnable (NOT EXISTS guards plus
 --   ON CONFLICT DO NOTHING) so a retry never double-absorbs.
 --
 --   The shape guard mirrors the manifest SLUG exactly (1..64 plus the

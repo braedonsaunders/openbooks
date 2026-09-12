@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { registerHooks } from "node:module";
 import { sql } from "drizzle-orm";
 import { db, env, withBypass } from "../db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../test-fixtures.ts";
@@ -28,6 +29,20 @@ const DB = !!env.OPENBOOKS_DB_URL;
  * The migration SQL itself is proven by the isolated-template scratch-DB
  * gate (it builds the template these tests run against).
  */
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    if (specifier.startsWith("@/")) {
+      return nextResolve(new URL(`../../../web/${specifier.slice(2)}`, import.meta.url).href, context);
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const { installApp, setAppStatus, deleteApp } = await import("../../../web/lib/apps/store.ts");
 
 type ModuleRow = {
   id: string;
@@ -209,8 +224,8 @@ test(
     try {
       const before = await snapshotRuntime(fx);
 
-      const first = await withBypass(() => absorbAppsForOrg(fx.orgId));
-      assert.deepEqual(first, { modulesInserted: 1, versionsInserted: 1, linked: 1 });
+      const first = await withBypass(() => absorbAppsForOrg(fx.orgId, fx.actorId));
+      assert.deepEqual(first, { modulesInserted: 1, versionsInserted: 1, versionsSuperseded: 0, linked: 1 });
 
       const mod = await readModule(fx.orgId, fx.appId);
       assert.ok(mod);
@@ -243,9 +258,9 @@ test(
       // The apps runtime is byte-identical: same row, same active bundle, same files.
       assert.deepEqual(await snapshotRuntime(fx), before);
 
-      // A rerun converges: nothing new, nothing doubled.
-      const second = await withBypass(() => absorbAppsForOrg(fx.orgId));
-      assert.deepEqual(second, { modulesInserted: 0, versionsInserted: 0, linked: 0 });
+      // A rerun converges: nothing new, nothing doubled, nothing superseded.
+      const second = await withBypass(() => absorbAppsForOrg(fx.orgId, fx.actorId));
+      assert.deepEqual(second, { modulesInserted: 0, versionsInserted: 0, versionsSuperseded: 0, linked: 0 });
       assert.equal((await readVersions(fx.orgId, mod.id)).length, 1);
       assert.deepEqual(await snapshotRuntime(fx), before);
     } finally {
@@ -262,9 +277,10 @@ test(
     const wild = await makeApp({ key: "Bad Key!", withVersion: false });
     try {
       // 1-char keys are valid manifest SLUGs (0110): absorbed like any other.
-      assert.deepEqual(await withBypass(() => absorbAppsForOrg(tiny.orgId)), {
+      assert.deepEqual(await withBypass(() => absorbAppsForOrg(tiny.orgId, tiny.actorId)), {
         modulesInserted: 1,
         versionsInserted: 1,
+        versionsSuperseded: 0,
         linked: 1,
       });
       const tinyMod = await readModule(tiny.orgId, tiny.appId);
@@ -275,9 +291,10 @@ test(
 
       // Outside the SLUG the app manifest enforces: left for a rename,
       // loudly visible as an apps row with no absorbing module row.
-      assert.deepEqual(await withBypass(() => absorbAppsForOrg(wild.orgId)), {
+      assert.deepEqual(await withBypass(() => absorbAppsForOrg(wild.orgId, wild.actorId)), {
         modulesInserted: 0,
         versionsInserted: 0,
+        versionsSuperseded: 0,
         linked: 0,
       });
       assert.equal(await readModule(wild.orgId, wild.appId), undefined);
@@ -302,9 +319,10 @@ test(
       requested: ["gl.read", "custom.widget.use"],
     });
     try {
-      assert.deepEqual(await withBypass(() => absorbAppsForOrg(fx.orgId)), {
+      assert.deepEqual(await withBypass(() => absorbAppsForOrg(fx.orgId, fx.actorId)), {
         modulesInserted: 1,
         versionsInserted: 1,
+        versionsSuperseded: 0,
         linked: 1,
       });
       const mod = await readModule(fx.orgId, fx.appId);
@@ -339,9 +357,10 @@ test(
     const bare = await makeApp({ key: "empty-shell", withVersion: false });
     const off = await makeApp({ key: "retired-widget", status: "disabled" });
     try {
-      assert.deepEqual(await withBypass(() => absorbAppsForOrg(bare.orgId)), {
+      assert.deepEqual(await withBypass(() => absorbAppsForOrg(bare.orgId, bare.actorId)), {
         modulesInserted: 1,
         versionsInserted: 0,
+        versionsSuperseded: 0,
         linked: 0,
       });
       const bareMod = await readModule(bare.orgId, bare.appId);
@@ -350,9 +369,10 @@ test(
       assert.equal(bareMod.activeVersionId, null);
       assert.deepEqual(await readVersions(bare.orgId, bareMod.id), []);
 
-      assert.deepEqual(await withBypass(() => absorbAppsForOrg(off.orgId)), {
+      assert.deepEqual(await withBypass(() => absorbAppsForOrg(off.orgId, off.actorId)), {
         modulesInserted: 1,
         versionsInserted: 1,
+        versionsSuperseded: 0,
         linked: 1,
       });
       const offMod = await readModule(off.orgId, off.appId);
@@ -365,6 +385,233 @@ test(
     } finally {
       await dropScratchOrg(bare.orgId);
       await dropScratchOrg(off.orgId);
+    }
+  },
+);
+
+/** A minimal installable bundle: one frontend entry, no endpoints, no objects. */
+function testBundle(key: string, version: string, permissions: string[] = ["records.read"]) {
+  return {
+    manifest: {
+      key,
+      name: `App ${key}`,
+      version,
+      description: `Desc ${key}`,
+      permissions,
+      frontend: { entry: "frontend/index.html" },
+      endpoints: [],
+    },
+    files: [{ path: "frontend/index.html", content: "<h1>hi</h1>" }],
+  };
+}
+
+type AuditNote = { table: string; action: string; changes: Record<string, unknown> };
+
+async function readModuleAudit(orgId: string): Promise<AuditNote[]> {
+  const r = await withBypass(() =>
+    db.execute<AuditNote>(sql`
+      select table_name as "table", action, changes
+        from audit_log
+       where org_id = ${orgId} and table_name in ('modules', 'module_versions')
+       order by at, id`),
+  );
+  return r.rows;
+}
+
+test(
+  "installApp mirrors the modules row and active version in the same transaction",
+  { skip: !DB },
+  async () => {
+    const { orgId } = await withBypass(async () => {
+      const org = await createScratchOrg();
+      return { orgId: org.orgId };
+    });
+    const actorId = await withBypass(() => createScratchUser(orgId, "Hook Caller", "admin"));
+    try {
+      await withBypass(() => installApp(orgId, actorId, testBundle("hooked-app", "1.0.0")));
+      const appId = (
+        await withBypass(() =>
+          db.execute<{ id: string }>(sql`select id from apps where org_id = ${orgId} and key = 'hooked-app'`),
+        )
+      ).rows[0]!.id;
+      const mod = await readModule(orgId, appId);
+      assert.ok(mod);
+      assert.equal(mod.kind, "app");
+      assert.equal(mod.status, "installed");
+      assert.equal(mod.appId, appId);
+      assert.deepEqual(mod.grantedPermissions, ["records.read"]);
+      const versions = await readVersions(orgId, mod.id);
+      assert.equal(versions.length, 1);
+      assert.equal(versions[0]!.version, "1.0.0");
+      assert.equal(versions[0]!.status, "active");
+      assert.equal(mod.activeVersionId, versions[0]!.id);
+      assert.ok(parseModuleManifest(versions[0]!.manifest).ok);
+      const audit = await readModuleAudit(orgId);
+      assert.ok(audit.some((a) => a.table === "modules" && a.action === "insert"));
+      assert.ok(audit.some((a) => a.table === "module_versions" && a.action === "insert"));
+    } finally {
+      await dropScratchOrg(orgId);
+    }
+  },
+);
+
+test(
+  "app upgrade appends a module version with exactly one active and audited supersession",
+  { skip: !DB },
+  async () => {
+    const { orgId } = await withBypass(async () => {
+      const org = await createScratchOrg();
+      return { orgId: org.orgId };
+    });
+    const actorId = await withBypass(() => createScratchUser(orgId, "Hook Caller", "admin"));
+    try {
+      await withBypass(() => installApp(orgId, actorId, testBundle("upgraded-app", "1.0.0")));
+      await withBypass(() => installApp(orgId, actorId, testBundle("upgraded-app", "2.0.0")));
+      const appId = (
+        await withBypass(() =>
+          db.execute<{ id: string }>(sql`select id from apps where org_id = ${orgId} and key = 'upgraded-app'`),
+        )
+      ).rows[0]!.id;
+      const mod = await readModule(orgId, appId);
+      assert.ok(mod);
+      const versions = await readVersions(orgId, mod.id);
+      assert.equal(versions.length, 2);
+      const actives = versions.filter((v) => v.status === "active");
+      assert.equal(actives.length, 1);
+      assert.equal(actives[0]!.version, "2.0.0");
+      assert.equal(mod.activeVersionId, actives[0]!.id);
+      const v1 = versions.find((v) => v.version === "1.0.0")!;
+      assert.equal(v1.status, "superseded");
+      assert.ok(parseModuleManifest(actives[0]!.manifest).ok);
+      const audit = await readModuleAudit(orgId);
+      const sup = audit.find(
+        (a) =>
+          a.table === "module_versions" &&
+          a.action === "update" &&
+          (a.changes as { event?: string }).event === "version_superseded",
+      );
+      assert.ok(sup);
+      assert.deepEqual((sup.changes as { before?: unknown }).before, { version: "1.0.0", status: "active" });
+      assert.deepEqual((sup.changes as { after?: unknown }).after, { version: "1.0.0", status: "superseded" });
+      assert.equal((sup.changes as { supersededByVersion?: string }).supersededByVersion, "2.0.0");
+    } finally {
+      await dropScratchOrg(orgId);
+    }
+  },
+);
+
+test(
+  "uninstall and deactivation mark the modules row deactivated but preserve it",
+  { skip: !DB },
+  async () => {
+    const { orgId } = await withBypass(async () => {
+      const org = await createScratchOrg();
+      return { orgId: org.orgId };
+    });
+    const actorId = await withBypass(() => createScratchUser(orgId, "Hook Caller", "admin"));
+    try {
+      await withBypass(() => installApp(orgId, actorId, testBundle("retired-app", "1.0.0")));
+      const appId = (
+        await withBypass(() =>
+          db.execute<{ id: string }>(sql`select id from apps where org_id = ${orgId} and key = 'retired-app'`),
+        )
+      ).rows[0]!.id;
+
+      await withBypass(() => setAppStatus(orgId, actorId, "retired-app", "disabled"));
+      assert.equal((await readModule(orgId, appId))?.status, "disabled");
+
+      await withBypass(() => deleteApp(orgId, actorId, "retired-app"));
+      const appsLeft = (
+        await withBypass(() =>
+          db.execute<{ n: string }>(sql`select count(*) as n from apps where org_id = ${orgId}`),
+        )
+      ).rows[0]!.n;
+      assert.equal(appsLeft, "0");
+      // The lifecycle row survives the uninstall that deleted its app row.
+      const survivor = (
+        await withBypass(() =>
+          db.execute<ModuleRow>(sql`
+            select id, key, name, status, kind,
+                   app_id as "appId",
+                   granted_permissions as "grantedPermissions",
+                   active_version_id as "activeVersionId",
+                   created_by as "createdBy"
+              from modules where org_id = ${orgId} and key = 'retired-app'`),
+        )
+      ).rows[0];
+      assert.ok(survivor);
+      assert.equal(survivor.status, "disabled");
+      assert.equal(survivor.appId, null);
+      assert.equal((await readVersions(orgId, survivor.id)).length, 1);
+    } finally {
+      await dropScratchOrg(orgId);
+    }
+  },
+);
+
+test(
+  "absorb rerun on an upgraded app appends once, supersedes once, audits once",
+  { skip: !DB },
+  async () => {
+    const fx = await makeApp({ key: "rerun-app" });
+    try {
+      assert.deepEqual(await withBypass(() => absorbAppsForOrg(fx.orgId, fx.actorId)), {
+        modulesInserted: 1,
+        versionsInserted: 1,
+        versionsSuperseded: 0,
+        linked: 1,
+      });
+      // Simulate the app upgrade outside the installApp hook: a new ACTIVE
+      // app version takes over, isolating the backfill rerun path.
+      const v2 = randomUUID();
+      await withBypass(() =>
+        db.execute(sql`
+          insert into app_versions (id, org_id, app_id, version, manifest, status, created_by, updated_by)
+          values (${v2}, ${fx.orgId}, ${fx.appId}, '2.0.0',
+                  '{"key":"rerun-app","name":"App rerun-app","version":"2.0.0","permissions":["records.read"],"frontend":{"entry":"frontend/index.html"},"endpoints":[]}'::jsonb,
+                  'active', ${fx.actorId}, ${fx.actorId})`),
+      );
+      await withBypass(() =>
+        db.execute(sql`
+          update app_versions set status = 'superseded'
+           where org_id = ${fx.orgId} and app_id = ${fx.appId} and id <> ${v2} and status = 'active'`),
+      );
+      await withBypass(() =>
+        db.execute(sql`update apps set active_version_id = ${v2} where id = ${fx.appId} and org_id = ${fx.orgId}`),
+      );
+
+      assert.deepEqual(await withBypass(() => absorbAppsForOrg(fx.orgId, fx.actorId)), {
+        modulesInserted: 0,
+        versionsInserted: 1,
+        versionsSuperseded: 1,
+        linked: 1,
+      });
+      const mod = await readModule(fx.orgId, fx.appId);
+      assert.ok(mod);
+      const versions = await readVersions(fx.orgId, mod.id);
+      assert.equal(versions.length, 2);
+      const actives = versions.filter((v) => v.status === "active");
+      assert.deepEqual(actives.map((v) => v.version), ["2.0.0"]);
+      assert.equal(mod.activeVersionId, actives[0]!.id);
+      const audit = await readModuleAudit(fx.orgId);
+      const sup = audit.filter(
+        (a) =>
+          a.table === "module_versions" &&
+          a.action === "update" &&
+          (a.changes as { event?: string }).event === "version_superseded",
+      );
+      assert.equal(sup.length, 1);
+      assert.equal((sup[0]!.changes as { supersededByVersion?: string }).supersededByVersion, "2.0.0");
+
+      // A third pass converges again.
+      assert.deepEqual(await withBypass(() => absorbAppsForOrg(fx.orgId, fx.actorId)), {
+        modulesInserted: 0,
+        versionsInserted: 0,
+        versionsSuperseded: 0,
+        linked: 0,
+      });
+    } finally {
+      await dropScratchOrg(fx.orgId);
     }
   },
 );
