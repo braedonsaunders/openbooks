@@ -259,16 +259,6 @@ async function primaryBookId(runner: SqlExecutor, orgId: string): Promise<string
   return result.rows[0].id;
 }
 
-/** Resolve the (non-adjustment) accounting period covering a date, or null. */
-async function periodForDate(runner: SqlExecutor, orgId: string, calendarId: string, date: string): Promise<string | null> {
-  const res = (await runner.execute<{ id: string }>(sql`
-    select id from accounting_periods
-     where org_id = ${orgId} and fiscal_calendar_id = ${calendarId} and is_adjustment = false
-       and starts_on <= ${date} and ends_on >= ${date}
-     limit 1`));
-  return res.rows[0]?.id ?? null;
-}
-
 /** Retain the schedule's calendar; a new schedule uses the org's active default. */
 async function assetDepreciationCalendar(runner: SqlExecutor, orgId: string, assetId: string, bookId: string): Promise<string> {
   const retained = (await runner.execute<{ id: string }>(sql`
@@ -534,89 +524,129 @@ export async function buildScheduleWithRunner(
       scheduleId = ins.rows[0]!.id;
     }
 
-    // preserve posted lines; drop only the unposted plan and rewrite it
-    const posted = (await tx.execute<{ period_id: string; posted_amount: string }>(sql`
-      select period_id, posted_amount from depreciation_schedule_lines
-       where org_id = ${orgId} and schedule_id = ${scheduleId} and posted_amount is not null`));
-    const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
+    // Input-driven amounts are retained evidence, not a formula schedule.
+    if (!depreciationMethodId && (method === "manual" || method === "units_of_production")) {
+      return { scheduleId, lineCount: 0, skippedMonths: [] };
+    }
 
-    // What is actually left to depreciate, measured against what was POSTED
-    // rather than against what the new plan assumes was posted.
-    //
-    // The rebuild recomputes the whole plan from the current basis and then
-    // skips periods that already posted — which silently assumes those periods
-    // posted the amounts the NEW plan says they did. Whenever that is false the
-    // lifetime total stops equalling (cost − salvage): change an asset's cost,
-    // life or convention mid-life and the remaining plan is computed as though
-    // history had always used the new value. Correcting the half-year convention
-    // is one such change, so an asset that posted months under the old reading
-    // would otherwise be planned to depreciate well past its basis.
-    //
-    // Clamping here keeps the invariant the module header promises. It does not
-    // repair the periods already posted — that is a controlled adjustment, not
-    // something a rebuild may do silently — but it stops the schedule from
-    // planning value the asset does not have.
-    // A reversal can leave earlier remeasurements in force. Their journals
-    // changed this book's carrying value without changing acquisition cost or
-    // posted depreciation. Rebuilding from cost alone would depreciate those
-    // impairment losses a second time (or omit a retained revaluation).
-    const remeasurement = (await tx.execute<{ delta: string; events: number }>(sql`
+    const periods = (await tx.execute<{ id: string; starts_on: string; ends_on: string }>(sql`
+      select id, starts_on::text, ends_on::text from accounting_periods
+       where org_id = ${orgId} and fiscal_calendar_id = ${calendarId} and not is_adjustment
+       order by starts_on for share
+    `)).rows;
+    const retained = (await tx.execute<{
+      id: string; period_id: string; sequence: number; planned_amount: string;
+      posted_amount: string | null; source: string; ends_on: string;
+    }>(sql`
+      select line.id, line.period_id, line.sequence, line.planned_amount::text,
+             line.posted_amount::text, line.source, period.ends_on::text
+        from depreciation_schedule_lines line
+        join accounting_periods period on period.id = line.period_id and period.org_id = line.org_id
+       where line.org_id = ${orgId} and line.schedule_id = ${scheduleId}
+       for update of line
+    `)).rows;
+
+    // A reversal restores basis as of its own date, not retroactively. Keep the
+    // latest cutoff even when all valuation deltas have been reversed, so a
+    // subsequent explicit rebuild cannot rewrite earlier projections.
+    const remeasurement = (await tx.execute<{ delta: string; cutoff: string | null }>(sql`
       select coalesce(sum(event.amount) filter (
-               where entry.status = 'posted' and not exists (
-                 select 1 from asset_events reversal
-                  where reversal.org_id = event.org_id and reversal.reverses_event_id = event.id)
+               where entry.status = 'posted' and reversal.id is null
              ), 0)::text as delta,
-             count(*)::int as events
+             max(greatest(event.occurred_on, reversal.occurred_on))::text as cutoff
         from asset_events event
         join journal_entries entry on entry.id = event.journal_entry_id and entry.org_id = event.org_id
+        left join asset_events reversal on reversal.org_id = event.org_id and reversal.reverses_event_id = event.id
        where event.org_id = ${orgId} and event.asset_id = ${assetId}
          and entry.book_id = ${bookId} and entry.status in ('posted', 'reversed')
          and event.kind in ('impaired', 'revalued')
     `)).rows[0]!;
+    const preserved = retained.filter(line => line.posted_amount !== null ||
+      (remeasurement.cutoff !== null && line.ends_on < remeasurement.cutoff));
+    const preservedIds = new Set(preserved.map(line => line.id));
+    const preservedPeriods = new Set(preserved.map(line => line.period_id));
+    const byPeriod = new Map(retained.map(line => [line.period_id, line]));
+    // Reserving an earlier unposted projection does not make it posted: it
+    // remains due to the depreciation runner and is excluded from current NBV.
+    const reserved = preserved.reduce((sum, line) =>
+      add(sum, line.posted_amount ?? line.planned_amount), "0");
     const depreciableBase = add(add(asset.acquisition_cost, remeasurement.delta), neg(asset.salvage_value));
-    const postedTotal = posted.rows.reduce((total, row) => add(total, row.posted_amount), "0");
-    const remainingBase = cmp(depreciableBase, postedTotal) > 0
-      ? add(depreciableBase, neg(postedTotal))
-      : "0";
-
-    if (depreciationMethodId || (method !== "manual" && method !== "units_of_production")) {
-      await tx.execute(sql`
-        delete from depreciation_schedule_lines
-         where org_id = ${orgId} and schedule_id = ${scheduleId} and posted_amount is null and source = 'formula'`);
+    const postedTotal = preserved.reduce((sum, line) => add(sum, line.posted_amount ?? "0"), "0");
+    const unpostedReserved = add(reserved, neg(postedTotal));
+    const afterPosted = cmp(depreciableBase, postedTotal) > 0 ? add(depreciableBase, neg(postedTotal)) : "0";
+    if (cmp(unpostedReserved, afterPosted) > 0) {
+      throw new Error("retained unposted depreciation exceeds the remaining depreciable basis; reconcile earlier projections before remeasurement");
     }
+    // Legacy posted-over-basis history is still clamped, but unposted amounts
+    // must never be left due when the new basis cannot fund them.
+    const remainingBase = add(afterPosted, neg(unpostedReserved));
 
     const skippedMonths: string[] = [];
-    const unpostedPlan: { periodId: string; plan: ScheduleLinePlan }[] = [];
+    const future: { periodId: string | null; plan: ScheduleLinePlan }[] = [];
+    const mappedPeriods = new Set<string>();
     for (const p of plan) {
-      const periodId = await periodForDate(tx, orgId, calendarId, p.periodMonth);
-      if (!periodId) {
+      const period = periods.find(period => period.starts_on <= p.periodMonth && period.ends_on >= p.periodMonth);
+      if (!period) {
+        // A missing earlier month cannot be reconstructed from today's basis.
+        // Future calendar gaps are harmless: they still consume native life.
+        if (remeasurement.cutoff && p.periodMonth < monthStart(remeasurement.cutoff)) {
+          throw new Error(`historical accounting period missing for depreciation projection (${p.periodMonth})`);
+        }
         skippedMonths.push(p.periodMonth);
-        continue;
       }
-      if (postedPeriods.has(periodId)) continue; // already posted — keep as is
-      unpostedPlan.push({ periodId, plan: p });
+      if (period) {
+        // Formula storage has one line per period. A broader fiscal period
+        // must not turn repeated updates into a last-month-wins allocation.
+        if (mappedPeriods.has(period.id)) throw new Error("multiple native depreciation months map to one accounting period");
+        mappedPeriods.add(period.id);
+      }
+      const prior = period ? byPeriod.get(period.id) : undefined;
+      if (period && remeasurement.cutoff && period.ends_on < remeasurement.cutoff && !prior) {
+        throw new Error(`historical depreciation projection missing (${p.periodMonth}); reconcile retained evidence before rebuilding`);
+      }
+      if (period && preservedPeriods.has(period.id)) continue;
+      if (prior && prior.source !== "formula") throw new Error("formula rebuild cannot reinterpret depreciation input evidence");
+      future.push({ periodId: period?.id ?? null, plan: p });
     }
-    // Match remeasureAsset's remaining-life straight-line contract. Merely
-    // capping the original formula would exhaust an impaired asset too early.
-    // Even a fully reversed impairment can have changed posted depreciation;
-    // restore the remaining basis without rewriting that posted evidence.
-    const rebaseUnits = toUnits(remainingBase);
-    const perPeriod = unpostedPlan.length > 0 ? rebaseUnits / BigInt(unpostedPlan.length) : 0n;
+
+    // Allocate across the entire native remaining horizon BEFORE mapping to
+    // available accounting periods. The last native month gets the remainder,
+    // even when that month's accounting period has not been created yet.
+    const perPeriod = future.length > 0 ? toUnits(remainingBase) / BigInt(future.length) : 0n;
     let lineCount = 0;
     let plannedSoFar = "0";
-    for (const [index, { periodId, plan: p }] of unpostedPlan.entries()) {
+    const keptIds = new Set(preservedIds);
+    for (const [index, { periodId, plan: p }] of future.entries()) {
       const roomLeft = add(remainingBase, neg(plannedSoFar));
-      if (cmp(roomLeft, "0") <= 0) break; // basis exhausted by what already posted
-      const proposed = remeasurement.events > 0
-        ? index === unpostedPlan.length - 1 ? roomLeft : fromUnits(perPeriod)
+      const proposed = remeasurement.cutoff
+        ? index === future.length - 1 ? roomLeft : fromUnits(perPeriod)
         : p.planned;
       const amount = cmp(proposed, roomLeft) > 0 ? roomLeft : proposed;
-      await tx.execute(sql`
-        insert into depreciation_schedule_lines
-          (org_id, schedule_id, period_id, sequence, planned_amount, source, created_by, updated_by)
-        values (${orgId}, ${scheduleId}, ${periodId}, ${p.sequence}, ${amount}, 'formula', ${actorId}, ${actorId})`);
       plannedSoFar = add(plannedSoFar, amount);
+      if (!periodId) continue;
+      const prior = byPeriod.get(periodId);
+      if (prior) {
+        // Keep line identity and exercise the same transactional update path
+        // used by remeasurement. Historical rows never reach this statement.
+        await tx.execute(sql`
+          update depreciation_schedule_lines
+             set planned_amount = ${amount}, sequence = ${p.sequence}, updated_at = now(), updated_by = ${actorId}
+           where id = ${prior.id} and org_id = ${orgId}`);
+        keptIds.add(prior.id);
+      } else {
+        await tx.execute(sql`
+          insert into depreciation_schedule_lines
+            (org_id, schedule_id, period_id, sequence, planned_amount, source, created_by, updated_by)
+          values (${orgId}, ${scheduleId}, ${periodId}, ${p.sequence}, ${amount}, 'formula', ${actorId}, ${actorId})`);
+      }
+      // Zero-valued rows are evidence too: a later reversal must be able to
+      // distinguish an earlier zero projection from missing history.
       lineCount++;
+    }
+    for (const prior of retained) {
+      if (!keptIds.has(prior.id) && prior.source === "formula") {
+        await tx.execute(sql`delete from depreciation_schedule_lines where id = ${prior.id} and org_id = ${orgId}`);
+      }
     }
     return { scheduleId, lineCount, skippedMonths };
   })(runner);

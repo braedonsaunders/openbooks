@@ -798,28 +798,11 @@ export async function remeasureAsset(
       insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by, created_at)
       values (${orgId}, ${assetId}, ${kind}, ${opts.date}, ${delta}, ${eid}, ${opts.actorId}, clock_timestamp())`);
 
-    // Rebuild remaining unposted lines INSIDE this transaction: straight-line
-    // (newCV − salvage) over them. Journal, event, and future schedule commit
-    // atomically or not at all, and the row locks serialize the rebuild against
-    // a concurrent depreciation run claiming the same lines.
-    const remaining = (await tx.execute<{ id: string }>(sql`
-      select l.id from depreciation_schedule_lines l
-        join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
-       where l.org_id = ${orgId} and s.asset_id = ${assetId} and l.posted_amount is null
-       order by l.sequence
-       for update of l`));
-    const count = remaining.rows.length;
-    let rebuilt = 0;
-    const depreciable = count > 0 ? toUnits(add(opts.newCarryingValue, neg(asset.salvage_value))) : 0n;
-    const per = depreciable > 0n ? depreciable / BigInt(count) : 0n;
-    let allocated = 0n;
-    for (let i = 0; i < count; i++) {
-      const amt = i === count - 1 ? depreciable - allocated : per;
-      allocated += amt;
-      await tx.execute(sql`update depreciation_schedule_lines set planned_amount = ${fromUnits(amt < 0n ? 0n : amt)}, updated_at = now(), updated_by = ${opts.actorId} where id = ${remaining.rows[i]!.id} and org_id = ${orgId}`);
-      rebuilt++;
-    }
+    // Use the same full-lifetime, effective-date plan as explicit rebuilds and
+    // reversals, inside this journal/event transaction. Manual and usage input
+    // evidence remains unchanged; only formula projections are recalculated.
+    const rebuilt = await buildScheduleWithRunner(tx, assetId, orgId, opts.actorId, bookId);
     await reconcileAssetDepreciationStatusWithRunner(tx, orgId, opts.actorId, assetId);
-    return { assetId, entryId: eid, delta, kind, rebuiltLines: rebuilt };
+    return { assetId, entryId: eid, delta, kind, rebuiltLines: rebuilt.lineCount };
   });
 }
