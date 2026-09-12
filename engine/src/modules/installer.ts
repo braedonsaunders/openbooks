@@ -240,6 +240,20 @@ function validateManifest(raw: unknown): ValidManifest {
 }
 
 /**
+ * Persistence-boundary text: a SQL parameter must never be `undefined` —
+ * drizzle renders an undefined parameter as empty text, so an optional that
+ * slips through as undefined turns `values (..., ..., ...)` into
+ * `values (..., , ...)` and the install dies as a raw DrizzleQueryError
+ * (`syntax error at or near ","`) instead of a named ModuleInstallError.
+ * Validation normalizes every optional to null today; this coerces at the
+ * boundary anyway so no future ValidManifest construction path can
+ * reintroduce the crash class.
+ */
+function nullableText(value: string | null | undefined): string | null {
+  return value ?? null;
+}
+
+/**
  * Grant resolution through the capability lattice: approvals beyond the
  * request fail closed, and the recorded grant is approved ∩ requested ∩ the
  * installer's effective set, checked against the engine vocabulary mirror.
@@ -467,7 +481,7 @@ async function applyVersion(
   const createdModule = (
     await tx.execute<{ id: string }>(sql`
       insert into modules (org_id, key, name, description, status, granted_permissions, created_by, updated_by)
-      values (${orgId}, ${manifest.key}, ${manifest.name}, ${manifest.description},
+      values (${orgId}, ${manifest.key}, ${manifest.name}, ${nullableText(manifest.description)},
               'installed', ${JSON.stringify(opts.grants.granted)}::jsonb, ${actorId}, ${actorId})
       on conflict (org_id, key) do nothing
       returning id`)
@@ -574,7 +588,7 @@ async function applyVersion(
 
   await tx.execute(sql`
     update modules
-       set name = ${manifest.name}, description = ${manifest.description},
+       set name = ${manifest.name}, description = ${nullableText(manifest.description)},
            granted_permissions = ${JSON.stringify(opts.grants.granted)}::jsonb,
            status = 'installed', active_version_id = ${versionId},
            updated_at = now(), updated_by = ${actorId}
