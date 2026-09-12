@@ -615,3 +615,90 @@ test(
     }
   },
 );
+
+test(
+  "uninstall then reinstall at the same version converges without duplicating",
+  { skip: !DB },
+  async () => {
+    const { orgId } = await withBypass(async () => {
+      const org = await createScratchOrg();
+      return { orgId: org.orgId };
+    });
+    const actorId = await withBypass(() => createScratchUser(orgId, "Hook Caller", "admin"));
+    try {
+      await withBypass(() => installApp(orgId, actorId, testBundle("recon-app", "1.0.0")));
+      await withBypass(() => deleteApp(orgId, actorId, "recon-app"));
+      await withBypass(() => installApp(orgId, actorId, testBundle("recon-app", "1.0.0")));
+      const appId = (
+        await withBypass(() =>
+          db.execute<{ id: string }>(sql`select id from apps where org_id = ${orgId} and key = 'recon-app'`),
+        )
+      ).rows[0]!.id;
+      const mod = await readModule(orgId, appId);
+      assert.ok(mod);
+      assert.equal(mod.status, "installed");
+      const versions = await readVersions(orgId, mod.id);
+      assert.equal(versions.length, 1);
+      assert.equal(versions[0]!.version, "1.0.0");
+      assert.equal(versions[0]!.status, "active");
+      assert.equal(mod.activeVersionId, versions[0]!.id);
+      assert.ok(parseModuleManifest(versions[0]!.manifest).ok);
+      const audit = await readModuleAudit(orgId);
+      assert.ok(
+        audit.some(
+          (a) =>
+            a.table === "module_versions" &&
+            a.action === "update" &&
+            (a.changes as { event?: string }).event === "version_reactivated",
+        ),
+      );
+    } finally {
+      await dropScratchOrg(orgId);
+    }
+  },
+);
+
+test(
+  "reinstall reusing a version label with different content refuses fail-closed",
+  { skip: !DB },
+  async () => {
+    const { orgId } = await withBypass(async () => {
+      const org = await createScratchOrg();
+      return { orgId: org.orgId };
+    });
+    const actorId = await withBypass(() => createScratchUser(orgId, "Hook Caller", "admin"));
+    const differentBytes = { ...testBundle("recon-app", "1.0.0"), manifest: { ...testBundle("recon-app", "1.0.0").manifest, description: "Something else entirely" } };
+    try {
+      await withBypass(() => installApp(orgId, actorId, testBundle("recon-app", "1.0.0")));
+      await withBypass(() => deleteApp(orgId, actorId, "recon-app"));
+      await assert.rejects(
+        withBypass(() => installApp(orgId, actorId, differentBytes)),
+        /different content/,
+      );
+      // The whole reinstall rolled back: no apps row, lifecycle row untouched.
+      const appsLeft = (
+        await withBypass(() =>
+          db.execute<{ n: string }>(sql`select count(*) as n from apps where org_id = ${orgId}`),
+        )
+      ).rows[0]!.n;
+      assert.equal(appsLeft, "0");
+      const survivor = (
+        await withBypass(() =>
+          db.execute<ModuleRow>(sql`
+            select id, key, name, status, kind,
+                   app_id as "appId",
+                   granted_permissions as "grantedPermissions",
+                   active_version_id as "activeVersionId",
+                   created_by as "createdBy"
+              from modules where org_id = ${orgId} and key = 'recon-app'`),
+        )
+      ).rows[0];
+      assert.ok(survivor);
+      assert.equal(survivor.status, "disabled");
+      assert.equal(survivor.appId, null);
+      assert.equal((await readVersions(orgId, survivor.id)).length, 1);
+    } finally {
+      await dropScratchOrg(orgId);
+    }
+  },
+);
