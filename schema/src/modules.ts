@@ -74,7 +74,7 @@ export const modules = pgTable(
     orgId: orgRef(),
     /**
      * Stable slug, unique per org — the module's identity across installs and
-     * upgrades. Lowercase [a-z0-9-], 2-64 chars.
+     * upgrades. Lowercase [a-z0-9-], 1-64 chars.
      */
     key: text("key").notNull(),
     name: text("name").notNull(),
