@@ -167,6 +167,10 @@ export function SetupDrawer({
       }
     }
     if (!creating) body.id = row![idColumn]
+    if (!creating && entity.dataSource === 'module-settings') {
+      body.expectedValue = row!.value
+      body.expectedModuleVersionId = row!.module_version_id
+    }
     const res = await fetch(`/api/admin/setup/${entity.key}`, {
       method: creating ? 'POST' : 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -253,7 +257,7 @@ export function SetupDrawer({
         </Button> : undefined
       }
       footer={
-        nestedTabActive ? undefined : !creating && !entity.hasActive ? (
+        nestedTabActive ? undefined : !creating && !entity.hasActive && entity.allowDelete !== false ? (
           <button
             type="button"
             onClick={remove}
@@ -511,7 +515,7 @@ function FieldControl({
     return (
       <div className={wrap}>
         <Label help={help}>{label}</Label>
-        <Select value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
+        <Select aria-label={label} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
           {!field.required ? <option value="">—</option> : null}
           {field.options?.map((o) => (
             <option key={o.value} value={o.value}>
@@ -527,7 +531,7 @@ function FieldControl({
     return (
       <div className={wrap}>
         <Label help={help}>{label}</Label>
-        <Textarea className={field.kind === 'json' ? 'min-h-40 font-mono text-xs' : undefined} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />
+        <Textarea aria-label={label} className={field.kind === 'json' ? 'min-h-40 font-mono text-xs' : undefined} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />
       </div>
     )
   }
@@ -537,6 +541,7 @@ function FieldControl({
     <div className={wrap}>
       <Label help={help}>{label}</Label>
       <Input
+        aria-label={label}
         type={field.kind === 'date' ? 'date' : 'text'}
         inputMode={numeric ? 'decimal' : undefined}
         value={String(value ?? '')}

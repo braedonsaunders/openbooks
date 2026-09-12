@@ -334,7 +334,7 @@ const provisionPostHooks = registerHooks({
         url: 'data:text/javascript,export function redirect(){throw new Error("redirect")}',
       }
     }
-    if (specifier === '@openbooks/engine/src/db.ts') {
+    if (specifier === '@openbooks/engine/src/db.ts' || (specifier === '../db.ts' && context.parentURL?.endsWith('/modules/permission-availability.ts'))) {
       return { url: 'mock:provision-post-db', shortCircuit: true }
     }
     if (specifier === '@openbooks/engine/src/income-tax-provision.ts') {

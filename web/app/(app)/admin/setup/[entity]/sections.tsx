@@ -1,4 +1,5 @@
 import 'server-only'
+import { loadModuleSettingRows, moduleSettingDrawerEntity } from '../../../../../lib/setup/module-settings'
 
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
@@ -159,6 +160,13 @@ export async function SetupDrawerSlot({
     segValPage: undefined,
   })
 
+  if (entity.dataSource === 'module-settings') {
+    if (!rowParam || rowParam === 'new') return null
+    const row = (await loadModuleSettingRows(orgId)).find((candidate) => candidate.id === rowParam)
+    if (!row) return null
+    return <SetupDrawer entity={moduleSettingDrawerEntity(entity, row)} row={row} members={[]} refOptions={{}} closeHref={closeHref} />
+  }
+  if (rowParam === 'new' && entity.allowCreate === false) return null
   const refOptions = await loadRefOptions(entity, orgId)
 
   const idColumn = entity.idColumn ?? 'id'

@@ -1,24 +1,13 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { UrlDrawer } from '@openbooks/ui'
+import { ModuleActions } from './ModuleActions'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { adminModulesSpec, loadAdminModules, type AdminModulesData } from './view'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-/**
- * Module detail flyout — read-only evidence, rendered on the server.
- *
- * Sibling admin lists bind their flyout through a bespoke client widget, but
- * this detail needs no client state: lifecycle state, pending approvals,
- * granted permissions, contents, and the audit trail are all facts the loader
- * already resolved, and approval decisions happen in the approvals worklist
- * (linked below), never here. So the shared server-side `UrlDrawer` wraps
- * loader data directly — no new widget, no parallel drawer system. Every
- * string on screen comes from next-intl or loader data; there are no literals
- * here by construction.
- */
 async function ModuleDrawer({ data }: { data: AdminModulesData }) {
   const t = await getTranslations('admin.modules')
   const drawer = data.drawer
@@ -32,6 +21,7 @@ async function ModuleDrawer({ data }: { data: AdminModulesData }) {
       description={`${drawer.key} · ${drawer.versionLabel}`}
     >
       <div className="space-y-6">
+        <ModuleActions key={`${drawer.key}:${drawer.versionLabel}:${drawer.pendingGates.map(g => g.gateId).join(',')}`} drawer={drawer} sandboxes={data.sandboxes} canCustomize={data.canCustomize} />
         <p className="text-sm text-slate-600 dark:text-slate-300">{drawer.description}</p>
 
         <section>
@@ -70,7 +60,7 @@ async function ModuleDrawer({ data }: { data: AdminModulesData }) {
             <ul className="mt-2 space-y-1 text-sm">
               {drawer.pendingGates.map((g) => (
                 <li key={g.gateId}>
-                  {t('pendingApproval', { version: g.version, date: g.waitingSince })}
+                  {t('drawer.pendingApproval', { version: g.version, date: g.waitingSince })}
                 </li>
               ))}
             </ul>
@@ -136,6 +126,10 @@ async function ModuleDrawer({ data }: { data: AdminModulesData }) {
                     <code className="text-xs">{a.event}</code>
                     {a.reason ? <span className="text-slate-600 dark:text-slate-300"> — {a.reason}</span> : null}
                   </div>
+                  <details className="mt-1"><summary className="cursor-pointer text-xs">{t('drawer.auditEvidence')}</summary>
+                    <p className="mt-2 text-xs font-medium">{t('drawer.before')}</p><pre className="overflow-auto text-xs">{a.before}</pre>
+                    <p className="mt-2 text-xs font-medium">{t('drawer.after')}</p><pre className="overflow-auto text-xs">{a.after}</pre>
+                  </details>
                 </li>
               ))}
             </ul>
@@ -155,10 +149,12 @@ export default async function ModulesAdminPage({
 }) {
   const sp = await searchParams
   const data = await loadAdminModules(sp)
+  const t = await getTranslations('admin.modules')
   return (
     <>
       <ModuleView spec={adminModulesSpec(data)} data={data} searchParams={sp} trusted />
       <ModuleDrawer data={data} />
+      {sp.new === '1' && !data.drawerOpen && data.canCustomize ? <UrlDrawer open closeHref="/admin/modules" size="xl" title={t('actions.new')}><ModuleActions drawer={null} sandboxes={data.sandboxes} canCustomize /></UrlDrawer> : null}
     </>
   )
 }

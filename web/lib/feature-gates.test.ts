@@ -1,3 +1,4 @@
+import { NAV_MODULES } from './nav/registry'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { readingPagePairs } from './page-source'
@@ -41,10 +42,7 @@ function featuresWithNav(): Array<{ key: string; navModules: string[] }> {
 
 /** nav module key → href, from the nav registry. */
 function navHrefs(): Record<string, string> {
-  const source = read('lib/nav/registry.ts')
-  return Object.fromEntries(
-    [...source.matchAll(/key: '([\w-]+)',\s*\n\s*href: '([^']+)'/g)].map((m) => [m[1], m[2]]),
-  )
+  return Object.fromEntries(NAV_MODULES.map((module) => [module.key, module.href]))
 }
 
 /**

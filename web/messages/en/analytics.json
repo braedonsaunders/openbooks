@@ -978,6 +978,40 @@
   },
   "utilization": {
     "title": "Utilization",
+    "metric": {
+      "percentBilled": "Billable percentage",
+      "nonBillableCost": "Non-billable cost",
+      "totalHours": "Total hours",
+      "billableHours": "Billable hours",
+      "nonBillableHours": "Non-billable hours",
+      "costPerDay": "Cost per day"
+    },
+    "table": {
+      "metric": "Metric",
+      "currentRange": "Current range",
+      "priorRange": "Prior range",
+      "change": "Change",
+      "avgPct": "Average %",
+      "billable": "Billable",
+      "billablePct": "Billable %",
+      "cost": "Cost",
+      "customer": "Customer",
+      "date": "Date",
+      "department": "Department",
+      "employees": "Employees",
+      "hours": "Hours",
+      "jobTitle": "Job title",
+      "max": "Maximum",
+      "min": "Minimum",
+      "nonBill": "Non-billable",
+      "nonBillCost": "Non-billable cost",
+      "outliers": "Outliers",
+      "pctBilled": "Billable %",
+      "pctPrior": "Prior %",
+      "share": "Share",
+      "spread": "Spread",
+      "totalHrs": "Total hours"
+    },
     "backToHub": "Analytics",
     "tabs": {
       "overview": "Overview",
@@ -1118,7 +1152,7 @@
       "modelAssumptions": "Model & Assumptions",
       "dataSources": "Data sources & derivations"
     },
-    "table": "Table",
+    "tableLabel": "Table",
     "chart": {
       "billable": "Billable",
       "nonBillable": "Non-Billable",

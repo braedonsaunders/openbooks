@@ -4,6 +4,8 @@ import { getTranslations } from 'next-intl/server'
 import { grid, heading, page, pageHeader, pagination, ref, repeat, field, textBlock, widget, widgetBlock, type FieldRef, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { parseListParams } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
+import { db } from '@openbooks/engine/src/db.ts'
+import { sql } from 'drizzle-orm'
 import { listApps, listListings } from '../../../../lib/apps/store'
 
 /**
@@ -38,6 +40,7 @@ export interface ListingCardRow {
   description: string
   installed: boolean
   current: boolean
+  canInstall: boolean
 }
 
 export interface AppsLibraryData {
@@ -73,15 +76,20 @@ export async function loadAppsLibrary(
     perPage: 12,
     allowedSorts: ['name'] as const,
   })
-  const [{ listings, total }, installedApps] = await Promise.all([
+  const [{ listings, total }, installedApps, installedModules] = await Promise.all([
     listListings({
       query: params.q,
       page: params.page,
       perPage: params.perPage,
     }),
     listApps(authz.user.orgId),
+    db.execute<{ key: string; version: string | null; status: string }>(sql`
+      select m.key, v.version, m.status from modules m
+        left join module_versions v on v.id = m.active_version_id and v.org_id = m.org_id
+       where m.org_id = ${authz.user.orgId} and m.kind = 'module'`),
   ])
   const installedByKey = new Map(installedApps.map((app) => [app.key, app]))
+  const installedModulesByKey = new Map(installedModules.rows.map((module) => [module.key, module]))
   // Past the gate the reader always holds `apps.manage`, so the docs action
   // always renders — but the flag stays a loader-resolved field (not a
   // literal) so the spec never hardcodes a permission outcome.
@@ -99,7 +107,7 @@ export async function loadAppsLibrary(
     hasCards: listings.length > 0,
     empty: listings.length === 0,
     cards: listings.map((listing) => {
-      const installed = installedByKey.get(listing.key)
+      const installed = listing.kind === 'module' ? installedModulesByKey.get(listing.key) : installedByKey.get(listing.key)
       return {
         id: listing.id,
         listingId: listing.id,
@@ -108,7 +116,8 @@ export async function loadAppsLibrary(
         versionLine: t('version', { version: listing.version }),
         description: listing.description || t('noDescription'),
         installed: Boolean(installed),
-        current: installed?.version === listing.version,
+        current: installed?.status === 'installed' && installed.version === listing.version,
+        canInstall: listing.kind !== 'module' || can(authz, 'admin.customization.manage'),
       }
     }),
     emptyTitle: params.q ? t('library.noResults.title') : t('library.empty.title'),
@@ -176,6 +185,7 @@ export function appsLibrarySpec(data: AppsLibraryData): PageSpec {
               description: item('description'),
               installed: item('installed'),
               current: item('current'),
+              canInstall: item('canInstall'),
             }),
           ],
         }),

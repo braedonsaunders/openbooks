@@ -42,10 +42,13 @@ async function makeFixture(): Promise<Fixture> {
     const production = await createScratchOrg();
     const sandbox = await createScratchOrg();
     await db.execute(sql`
-      insert into sandboxes (org_id, production_org_id, name)
-      values (${sandbox.orgId}, ${production.orgId}, 'rehearsal sandbox')`);
+      insert into sandboxes (org_id, production_org_id, name, status)
+      values (${sandbox.orgId}, ${production.orgId}, 'rehearsal sandbox', 'ready')`);
+    await db.execute(sql`update orgs set env_kind = 'sandbox', sandbox_of = ${production.orgId} where id = ${sandbox.orgId}`);
     const authorId = await createScratchUser(sandbox.orgId, "Rehearsal Author", "admin");
-    const promoterId = await createScratchUser(production.orgId, "Production Approver", "admin");
+    const promoterId = await createScratchUser(production.orgId, "Production Requester", "admin");
+    await createScratchUser(production.orgId, "Production Approver", "admin");
+    await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id in (${production.orgId}, ${sandbox.orgId}) and key = 'admin'`);
     return {
       productionOrgId: production.orgId,
       sandboxOrgId: sandbox.orgId,
@@ -72,7 +75,7 @@ function manifest(overrides: Record<string, unknown> = {}) {
     name: "Qilish Report",
     version: "1.0.0",
     description: "A reporting module",
-    permissions: ["records.read"],
+    permissions: [],
     contributions: [{ kind: "page", route: "/reports/qilish", spec: specFor("/reports/qilish") }],
     ...overrides,
   };
@@ -351,3 +354,67 @@ test(
     }
   },
 );
+
+
+test("capability-bearing rehearsal promotion requires another administrator's signed approval", { skip: !DB }, async () => {
+  const fx = await makeFixture();
+  try {
+    await withBypass(() => stageModuleRehearsal({ productionOrgId: fx.productionOrgId, sandboxOrgId: fx.sandboxOrgId,
+      actorId: fx.authorId, manifest: manifest({ permissions: ["records.read"] }), installerEffectivePermissions: ["*"] }));
+    const promoted = await withBypass(() => promoteRehearsal({ productionOrgId: fx.productionOrgId, sandboxOrgId: fx.sandboxOrgId,
+      actorId: fx.promoterId, key: "qilish-report", installerEffectivePermissions: ["*"] }));
+    assert.equal(promoted.outcome, "awaiting-approval");
+    assert.ok(promoted.gateIds?.length);
+    assert.deepEqual(await activeSpecs(fx.productionOrgId), []);
+    const gates = await withBypass(() => db.execute<{ signature_required: boolean; status: string }>(sql`
+      select signature_required, status from flow_gates where org_id = ${fx.productionOrgId} and subject_id = ${promoted.moduleId}`));
+    assert.ok(gates.rows.every(g => g.signature_required && g.status === "pending"));
+  } finally { await dropFixture(fx); }
+});
+
+
+test("restaging removed routes clears rehearsal drafts while discard preserves independent draft edits", { skip: !DB }, async () => {
+  const fx = await makeFixture();
+  try {
+    const options = { productionOrgId: fx.productionOrgId, sandboxOrgId: fx.sandboxOrgId, actorId: fx.authorId, installerEffectivePermissions: ["*"] };
+    await withBypass(() => stageModuleRehearsal({ ...options, manifest: manifest() }));
+    await withBypass(() => stageModuleRehearsal({ ...options, manifest: manifest({ version: "2.0.0", contributions: [
+      { kind: "page", route: "/reports/other", spec: specFor("/reports/other") },
+    ] }) }));
+    assert.deepEqual((await authorDrafts(fx.sandboxOrgId, fx.authorId)).map(d => d.route), ["/reports/other"]);
+    const independentlyEdited = specFor("/reports/other", { layout: "detail" });
+    await withBypass(() => db.execute(sql`update page_spec_drafts set spec = ${JSON.stringify(independentlyEdited)}::jsonb where org_id = ${fx.sandboxOrgId} and user_id = ${fx.authorId}`));
+    await withBypass(() => discardRehearsal({ ...options, key: "qilish-report" }));
+    assert.deepEqual((await authorDrafts(fx.sandboxOrgId, fx.authorId))[0]?.spec, independentlyEdited);
+    assert.deepEqual(await activeSpecs(fx.productionOrgId), []);
+  } finally { await dropFixture(fx); }
+});
+
+test("a linked production org and a non-ready sandbox cannot masquerade as a rehearsal target", { skip: !DB }, async () => {
+  const fx = await makeFixture();
+  try {
+    const options = { productionOrgId: fx.productionOrgId, sandboxOrgId: fx.sandboxOrgId, actorId: fx.authorId, manifest: manifest(), installerEffectivePermissions: ["*"] };
+    await withBypass(() => db.execute(sql`update orgs set env_kind = 'production' where id = ${fx.sandboxOrgId}`));
+    await assert.rejects(withBypass(() => stageModuleRehearsal(options)), (e: unknown) => e instanceof ModuleRehearsalError && e.status === 403);
+    await withBypass(() => db.execute(sql`update orgs set env_kind = 'sandbox' where id = ${fx.sandboxOrgId}`));
+    await withBypass(() => db.execute(sql`update sandboxes set status = 'refreshing' where org_id = ${fx.sandboxOrgId}`));
+    await assert.rejects(withBypass(() => stageModuleRehearsal(options)), (e: unknown) => e instanceof ModuleRehearsalError && e.status === 403);
+    assert.deepEqual(await moduleRows(fx.sandboxOrgId), []);
+  } finally { await dropFixture(fx); }
+});
+
+test("rehearsal diff keeps setting identity stable across edits and reports the actual storage target", { skip: !DB }, async () => {
+  const fx = await makeFixture();
+  const { decideModuleApproval } = await import("./lifecycle.ts");
+  try {
+    const options = { productionOrgId: fx.productionOrgId, sandboxOrgId: fx.sandboxOrgId, actorId: fx.authorId, installerEffectivePermissions: ["*"] };
+    const setting = { kind: "setting", key: "review_window", label: "Review window", valueType: "string", defaultValue: "Daily" };
+    await withBypass(() => stageModuleRehearsal({ ...options, manifest: manifest({ permissions: ["admin.setup.manage"], contributions: [setting] }) }));
+    const promoted = await withBypass(() => promoteRehearsal({ ...options, actorId: fx.promoterId, key: "qilish-report" }));
+    const gate = await withBypass(() => db.execute<{ assignee_user_id: string }>(sql`select assignee_user_id from flow_gates where org_id = ${fx.productionOrgId} and id = ${promoted.gateIds![0]}`));
+    await withBypass(() => decideModuleApproval({ gateId: promoted.gateIds![0]!, userId: gate.rows[0]!.assignee_user_id, decision: "approved", signature: "Production Approver", approverEffectivePermissions: ["*"] }));
+    await withBypass(() => stageModuleRehearsal({ ...options, manifest: manifest({ version: "2.0.0", permissions: ["admin.setup.manage"], contributions: [{ ...setting, label: "Posting review window" }] }) }));
+    const diff = await withBypass(() => describeRehearsal({ ...options, key: "qilish-report" }));
+    assert.deepEqual(diff.changes, [{ kind: "setting", identity: "review_window", change: "changed", target: "orgs.settings" }]);
+  } finally { await dropFixture(fx); }
+});

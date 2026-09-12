@@ -18,48 +18,15 @@ import {
   table,
   text,
   widgetBlock,
+  widget,
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { dateTime } from '../../../../lib/format'
 
-/**
- * Installed modules, split into a loader and a spec.
- *
- * An admin list page — search bar, status filter chips, a module-variant table
- * with an in-table spanning empty row, pagination, and the module flyout
- * (`?module=<key>`). The table decomposes into a `table` block exactly like
- * the sibling apps list: every cell is one element (the status badge owns its
- * own variant), so no composite cell component is needed. The Key column
- * reuses the apps list's `app-key-cell` — a shared presentational cell, not a
- * fork.
- *
- * The flyout is NOT a spec widget. Every drawer in the widget registry is a
- * bespoke client workspace with its own registration; this surface needs none
- * of that — the detail is read-only evidence (lifecycle state, pending
- * approvals, granted permissions, contents, audit trail) plus links into the
- * existing approval worklist, where decisions already happen through
- * decideGate. So `page.tsx` renders the shared server-side `UrlDrawer`
- * directly around loader-resolved data, and this spec owns only PageHeader +
- * list. No new widget, no parallel drawer system.
- *
- * The permission is `apps.manage` — the same authority that governs the app
- * builder list, because it is the same decision: what composed software runs
- * for everyone in the org. There is deliberately no feature gate here. The
- * `apps` feature flag governs the apps runtime; installed modules project
- * into live surfaces (page_specs resolution does not consult it), so gating
- * this admin door on that flag would hide the controls for projections that
- * are still rendering. No `modules.*` permission exists in the catalogue yet;
- * minting one is a permissions-model change, not an admin page.
- *
- * Approval decisions are never taken here. A pending proposal is decided in
- * the approvals worklist (authz, quorum, delegation, signature enforcement
- * all come from the engine); this page links to it and shows the wait.
- * Deactivation and reactivation ride `/api/admin/modules`, which calls the
- * lifecycle functions that already audit every transition.
- */
+/** Uses the same list composition as admin/apps; the shared UrlDrawer owns authoring and lifecycle actions. */
 
 export interface AdminModuleRow {
   key: string
@@ -73,12 +40,15 @@ export interface AdminModuleRow {
 }
 
 export interface AdminModuleVersionInfo {
+  id: string
+  status: string
   version: string
   statusLabel: string
   created: string
 }
 
 export interface AdminModuleGateInfo {
+  canApply: boolean
   gateId: string
   version: string
   waitingSince: string
@@ -94,10 +64,16 @@ export interface AdminModuleAuditInfo {
   actorLabel: string
   event: string
   reason: string
+  before: string
+  after: string
 }
 
 /** Everything the `?module=<key>` flyout renders. All copy resolved here. */
 export interface AdminModuleDrawer {
+  kind: string
+  id: string
+  status: string
+  manifest: unknown
   key: string
   name: string
   description: string
@@ -114,6 +90,9 @@ export interface AdminModuleDrawer {
 }
 
 export interface AdminModulesData {
+  canCustomize: boolean
+  sandboxes: { orgId: string; name: string }[]
+  newLabel: string
   title: string
   description: string
   backHref: string
@@ -192,7 +171,7 @@ export async function loadAdminModules(
   if (moduleKey) {
     const detail = (
       await db.execute(sql`
-        select m.id, m.key, m.name, m.description, m.status,
+        select m.id, m.kind, m.key, m.name, m.description, m.status,
                m.granted_permissions as "grantedPermissions",
                v.version, v.status as "versionStatus", v.manifest
           from modules m
@@ -202,6 +181,7 @@ export async function loadAdminModules(
     ).rows[0] as
       | {
           id: string
+          kind: string
           key: string
           name: string
           description: string | null
@@ -222,7 +202,8 @@ export async function loadAdminModules(
       ).rows as { id: string; version: string; status: string; createdAt: string }[]
       const gates = (
         await db.execute(sql`
-          select g.id as "gateId", coalesce(r.context->>'version', '') as version,
+          select g.id as "gateId", coalesce(r.context->>'version', '') as version, r.context->'manifest' as manifest,
+                 (g.assignee_user_id = ${authz.user.id} and g.created_by <> ${authz.user.id}) as "canApply",
                  g.created_at as "createdAt"
             from flow_gates g
             join flow_runs r on r.org_id = g.org_id and r.id = g.run_id
@@ -231,7 +212,7 @@ export async function loadAdminModules(
              and g.subject_id = ${detail.id}
              and g.status = 'pending'
            order by g.created_at`)
-      ).rows as { gateId: string; version: string; createdAt: string }[]
+      ).rows as { gateId: string; version: string; manifest: unknown; canApply: boolean; createdAt: string }[]
       const versionIds = versions.map((v) => v.id)
       const auditRows = (
         await db.execute(sql`
@@ -256,6 +237,10 @@ export async function loadAdminModules(
         ? detail.grantedPermissions.filter((p): p is string => typeof p === 'string')
         : []
       drawer = {
+        id: detail.id,
+        kind: detail.kind,
+        status: detail.status,
+        manifest: gates[0]?.manifest ?? detail.manifest,
         key: String(detail.key),
         name: String(detail.name),
         description: detail.description ?? t('drawer.noDescription'),
@@ -271,11 +256,14 @@ export async function loadAdminModules(
           target: contributionTarget(c),
         })),
         versions: versions.map((v) => ({
+          id: v.id,
+          status: v.status,
           version: `v${v.version}`,
           statusLabel: t(`drawer.versionStatus.${v.status}`),
           created: dateTime(v.createdAt),
         })),
         pendingGates: gates.map((g) => ({
+          canApply: g.canApply,
           gateId: String(g.gateId),
           version: g.version ? `v${g.version}` : '—',
           waitingSince: dateTime(g.createdAt),
@@ -293,6 +281,8 @@ export async function loadAdminModules(
             actorLabel: a.actorLabel || t('drawer.unknownActor'),
             event,
             reason,
+            before: JSON.stringify(changes?.before ?? null, null, 2),
+            after: JSON.stringify(changes?.after ?? null, null, 2),
           }
         }),
       }
@@ -301,7 +291,12 @@ export async function loadAdminModules(
 
   const total = Number((totalRow.rows[0] as { n: unknown } | undefined)?.n ?? 0)
 
+  const sandboxes = can(authz, 'admin.sandboxes.manage') && authz.user.envKind === 'production'
+    ? (await db.execute<{ orgId: string; name: string }>(sql`select org_id as "orgId", name from sandboxes where production_org_id = ${orgId} and status = 'ready' order by name`)).rows : []
   return {
+    canCustomize: can(authz, 'admin.customization.manage'),
+    sandboxes,
+    newLabel: t('actions.new'),
     title: t('title'),
     description: t('description'),
     backHref: '/admin',
@@ -374,6 +369,7 @@ export function adminModulesSpec(data: AdminModulesData): PageSpec {
         back: { href: f('backHref'), label: f('backLabel') },
         title: f('title'),
         description: f('description'),
+        actions: data.canCustomize ? [widget('link-button', { href: '/admin/modules?new=1', label: data.newLabel })] : [],
       }),
       grid('flex flex-wrap items-center gap-2', [
         widgetBlock('search-input', { placeholder: data.searchPlaceholder }),

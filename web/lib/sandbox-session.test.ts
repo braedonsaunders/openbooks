@@ -131,3 +131,13 @@ test("enterOrg clears the cookie when returning home", async () => {
   assert.deepEqual(state.cookieDeletes, ["ob_active_env"]);
   assert.deepEqual(state.cookieSets, []);
 });
+
+
+test("enterOrg opens the real preview route and refuses external redirect destinations", async () => {
+  reset();
+  state.resolved = { orgId: SANDBOX_ORG };
+  await assert.rejects(() => enterOrg(SANDBOX_ORG, "/reports/pnl?layoutPreview=1"), /^Error: NEXT_REDIRECT:\/reports\/pnl\?layoutPreview=1$/);
+  for (const target of ["//outside.test", "/\\outside.test", "https://outside.test", "/\noutside"]) {
+    await assert.rejects(() => enterOrg(SANDBOX_ORG, target), /^Error: NEXT_REDIRECT:\/$/);
+  }
+});

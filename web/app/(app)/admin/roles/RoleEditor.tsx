@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -8,7 +8,6 @@ import { Badge, Button, Drawer, Input, Label, SearchSelect, Select, Textarea } f
 import { confirmDialog } from '@/lib/confirm'
 import {
   PERMISSION_GROUPS,
-  type CataloguePermission,
 } from '@/lib/permissions'
 import type { SubsidiaryRestriction } from '@openbooks/schema'
 
@@ -98,16 +97,31 @@ function RoleDrawer({
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
+  const [modulePermissions, setModulePermissions] = useState<{ moduleKey: string; key: string; label: string }[]>([])
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch('/api/admin/roles', { signal: controller.signal }).then(async (response) => {
+      if (!response.ok) throw new Error(t('drawer.permissionsLoadFailed'))
+      const payload = await response.json()
+      setModulePermissions(payload.permissions)
+    }).catch((error: unknown) => { if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : t('drawer.permissionsLoadFailed')) })
+    return () => controller.abort()
+  }, [t])
+  const permissionGroups = useMemo(() => [
+    ...PERMISSION_GROUPS.map((group) => ({ ...group, label: tAdmin(group.labelKey), permissions: group.permissions.map((permission) => ({ ...permission, label: tAdmin(permission.labelKey) })) })),
+    ...[...new Set(modulePermissions.map((permission) => permission.moduleKey))].map((moduleKey) => ({ key: `module:${moduleKey}`, label: moduleKey, permissions: modulePermissions.filter((permission) => permission.moduleKey === moduleKey) })),
+    { key: 'inactive-modules', label: t('drawer.inactivePermissions'), permissions: (role?.permissions ?? []).filter((key) => !key.includes('*') && !PERMISSION_GROUPS.some((group) => group.permissions.some((permission) => permission.key === key)) && !modulePermissions.some((permission) => permission.key === key)).map((key) => ({ key, label: key })) },
+  ].filter((group) => group.permissions.length > 0), [modulePermissions, role?.permissions, t, tAdmin])
   const selectedCount = useMemo(
     () =>
-      PERMISSION_GROUPS.reduce(
+      permissionGroups.reduce(
         (n, g) => n + g.permissions.filter((p) => selected.has(p.key)).length,
         0,
       ),
-    [selected],
+    [selected, permissionGroups],
   )
 
-  function togglePermission(permKey: CataloguePermission) {
+  function togglePermission(permKey: string) {
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(permKey)) next.delete(permKey)
@@ -117,7 +131,7 @@ function RoleDrawer({
   }
 
   function toggleGroup(groupKey: string) {
-    const group = PERMISSION_GROUPS.find((g) => g.key === groupKey)
+    const group = permissionGroups.find((g) => g.key === groupKey)
     if (!group) return
     setSelected((prev) => {
       const next = new Set(prev)
@@ -316,7 +330,7 @@ function RoleDrawer({
               {t('drawer.selectedCount', { count: selectedCount })}
             </span>
           </div>
-          {PERMISSION_GROUPS.map((group) => {
+          {permissionGroups.map((group) => {
             const allOn = group.permissions.every((p) => selected.has(p.key))
             const someOn = group.permissions.some((p) => selected.has(p.key))
             return (
@@ -324,7 +338,7 @@ function RoleDrawer({
                 key={group.key}
                 className="rounded-lg border border-slate-200 dark:border-slate-800"
               >
-                <legend className="sr-only">{tAdmin(group.labelKey)}</legend>
+                <legend className="sr-only">{group.label}</legend>
                 <label className="flex cursor-pointer items-center gap-2.5 border-b border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/60">
                   <input
                     type="checkbox"
@@ -337,7 +351,7 @@ function RoleDrawer({
                     className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-800"
                   />
                   <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                    {tAdmin(group.labelKey)}
+                    {group.label}
                   </span>
                 </label>
                 <div className="grid gap-x-4 px-3 py-2 sm:grid-cols-2">
@@ -355,7 +369,7 @@ function RoleDrawer({
                       />
                       <span className="min-w-0">
                         <span className="block text-sm text-slate-800 dark:text-slate-200">
-                          {tAdmin(perm.labelKey)}
+                          {perm.label}
                         </span>
                         <span className="block font-mono text-[11px] text-slate-400 dark:text-slate-500">
                           {perm.key}

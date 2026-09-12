@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { safeNextPath } from '../../lib/login-return-path'
 import { Button, Card, CardContent, Input, Label, cn } from '@openbooks/ui'
 
 // Hero book that physically opens on load: the spine draws in, both covers
@@ -25,22 +26,6 @@ const RIGHT_ENTRIES = [
   'M28 23.4 C 31 21.6 35 20.8 38.5 21.5',
   'M28 29.4 C 31 27.6 35 26.8 38.5 27.5',
 ]
-
-// Keep the post-login destination on this origin. Parsing against a fixed
-// sentinel also catches backslash-normalized protocol-relative URLs such as
-// `/\\evil.example`, which a browser would otherwise treat as cross-origin.
-const SAFE_RETURN_TO_ORIGIN = 'https://openbooks.invalid'
-
-export function safeNextPath(value: string | null): string {
-  if (!value || value.length > 2048 || !value.startsWith('/') || value.startsWith('//')) return '/'
-  try {
-    const parsed = new URL(value, SAFE_RETURN_TO_ORIGIN)
-    if (parsed.origin !== SAFE_RETURN_TO_ORIGIN) return '/'
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`
-  } catch {
-    return '/'
-  }
-}
 
 // Entries fade in one-by-one once the covers finish opening (~1.05s).
 const entryDelay = (i: number): CSSProperties => ({ animationDelay: `${1.0 + i * 0.1}s` })

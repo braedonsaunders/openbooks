@@ -1,4 +1,5 @@
 import "server-only";
+import { loadModuleSettingRows } from "../setup/module-settings";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -89,6 +90,11 @@ const listSetupRecordsTool: AssistantToolDef = {
       fieldTickets: featureEnabled(features, "fieldTickets"),
     });
     const limit = Math.min(a.limit ?? 50, 200);
+    if (entity.dataSource === 'module-settings') {
+      const rows = (await loadModuleSettingRows(orgId)).filter((row) => !a.query || Object.values(row).some((value) => String(value).toLowerCase().includes(a.query!.toLowerCase())));
+      return { ok: true, data: { entityKey: entity.key, total: rows.length, returned: Math.min(rows.length, limit), truncated: rows.length > limit,
+        href: `/admin/setup/${entity.key}`, items: rows.slice(0, limit) } };
+    }
     const idColumn = entity.idColumn ?? "id";
     const columnKeys = entity.columns.map((c) => toSnake(c.key));
     // TRUSTED identifiers from the registry, never from the request — the same

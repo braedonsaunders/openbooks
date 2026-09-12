@@ -39,6 +39,9 @@ export const MODULE_CAPABILITIES = {
  * the check.
  */
 export const MODULE_PLATFORM_PERMISSIONS_MIRROR: readonly string[] = [
+  "admin.customization.manage",
+  "admin.roles.manage",
+  "admin.setup.manage",
   "ap.create",
   "ap.pay",
   "ap.post",

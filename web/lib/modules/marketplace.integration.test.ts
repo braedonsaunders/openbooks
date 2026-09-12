@@ -52,6 +52,7 @@ async function makeFixture(): Promise<Fixture> {
   return await withBypass(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Module Admin", "admin");
+    await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`);
     return { orgId: org.orgId, actorId };
   });
 }
@@ -69,7 +70,7 @@ function manifest(key: string, overrides: Record<string, unknown> = {}): Record<
     name: "Bazaar Ledger",
     version: "1.0.0",
     description: "A marketplace-probed module",
-    permissions: ["records.read"],
+    permissions: [],
     contributions: [{ kind: "page", route, spec: specFor(route) }],
     ...overrides,
   };
@@ -141,7 +142,7 @@ async function publishFixtureModule(fx: Fixture, key: string): Promise<string> {
       orgId: fx.orgId,
       actorId: fx.actorId,
       manifest: manifest(key),
-      installerEffectivePermissions: ["records.read"],
+      installerEffectivePermissions: ["admin.customization.manage", "records.read"],
     }),
   );
   const pub = await withBypass(() => publishModule(fx.orgId, fx.actorId, key));
@@ -200,7 +201,7 @@ test(
 
       const out = await withBypass(() =>
         installModuleFromListing(installer.orgId, installer.actorId, listingId, {
-          installerEffectivePermissions: ["records.read"],
+          installerEffectivePermissions: ["admin.customization.manage", "records.read"],
         }),
       );
       assert.equal(out.key, key);
@@ -224,7 +225,7 @@ test(
       assert.equal(installed[0]!.status, "installed");
       assert.equal(installed[0]!.active_version_id, out.versionId);
       assert.equal(installed[0]!.id, out.moduleId);
-      assert.deepEqual(installed[0]!.granted_permissions, ["records.read"]);
+      assert.deepEqual(installed[0]!.granted_permissions, []);
 
       const versions = (
         await withOrgContext(installer.orgId, () =>
@@ -254,7 +255,7 @@ test(
 
       // The install is audited in the INSTALLING org with marketplace provenance.
       assertAudited(await auditFor(installer.orgId, "modules", out.moduleId), installer.actorId);
-      assertAudited(await auditFor(installer.orgId, "module_versions", out.versionId), installer.actorId);
+      assertAudited(await auditFor(installer.orgId, "module_versions", out.versionId!), installer.actorId);
       const projectionAudit = await auditFor(installer.orgId, "page_specs", specs[0]!.id);
       assertAudited(projectionAudit, installer.actorId);
       for (const row of [
@@ -336,7 +337,7 @@ test(
               { kind: "page", route: "/reports/bazaar-frozen-detail", spec: specFor("/reports/bazaar-frozen-detail") },
             ],
           }),
-          installerEffectivePermissions: ["records.read"],
+          installerEffectivePermissions: ["admin.customization.manage", "records.read"],
         }),
       );
       const afterUpgrade = (await listingByKey(key))!;
@@ -346,7 +347,7 @@ test(
       // A later org installs the FROZEN v1 bytes through the installer.
       const v1 = await withBypass(() =>
         installModuleFromListing(first.orgId, first.actorId, listingId, {
-          installerEffectivePermissions: ["records.read"],
+          installerEffectivePermissions: ["admin.customization.manage", "records.read"],
         }),
       );
       assert.equal(v1.key, key);
@@ -383,7 +384,7 @@ test(
       assert.equal(resnapshotted.version, "2.0.0");
       const v2 = await withBypass(() =>
         installModuleFromListing(second.orgId, second.actorId, resnapshotted.id, {
-          installerEffectivePermissions: ["records.read"],
+          installerEffectivePermissions: ["admin.customization.manage", "records.read"],
         }),
       );
       const v2Version = (
@@ -402,7 +403,7 @@ test(
       assert.deepEqual(afterUninstall.manifest, resnapshotted.manifest);
       const v2Again = await withBypass(() =>
         installModuleFromListing(third.orgId, third.actorId, afterUninstall.id, {
-          installerEffectivePermissions: ["records.read"],
+          installerEffectivePermissions: ["admin.customization.manage", "records.read"],
         }),
       );
       assert.equal(v2Again.key, key);
@@ -441,7 +442,7 @@ test(
       // Installing from a listing id that does not exist is a named 404.
       const ghost = await withBypass(() =>
         installModuleFromListing(publisher.orgId, publisher.actorId, "00000000-0000-4000-8000-000000000000", {
-          installerEffectivePermissions: ["records.read"],
+          installerEffectivePermissions: ["admin.customization.manage", "records.read"],
         }),
       ).then(
         () => null,
@@ -475,7 +476,7 @@ test(
       await assert.rejects(
         withBypass(() =>
           installModuleFromListing(publisher.orgId, publisher.actorId, appListingId, {
-            installerEffectivePermissions: ["records.read"],
+            installerEffectivePermissions: ["admin.customization.manage", "records.read"],
           }),
         ),
         /not a module listing/,
@@ -489,7 +490,7 @@ test(
           orgId: other.orgId,
           actorId: other.actorId,
           manifest: manifest(key),
-          installerEffectivePermissions: ["records.read"],
+          installerEffectivePermissions: ["admin.customization.manage", "records.read"],
         }),
       );
       await assert.rejects(
@@ -512,7 +513,7 @@ test(
           orgId: publisher.orgId,
           actorId: publisher.actorId,
           manifest: manifest("bazaar-claimed"),
-          installerEffectivePermissions: ["records.read"],
+          installerEffectivePermissions: ["admin.customization.manage", "records.read"],
         }),
       );
       await assert.rejects(
@@ -525,3 +526,43 @@ test(
     }
   },
 );
+
+
+test("marketplace capabilities stage signed approval and leave target projections untouched", { skip: !DB }, async () => {
+  const publisher = await makeFixture(); const installer = await makeFixture();
+  const key = 'bazaar-signed';
+  const approver = await withBypass(() => createScratchUser(installer.orgId, 'Distinct Approver', 'admin'));
+  try {
+    const listingId = await publishFixtureModule(publisher, key);
+    await withBypass(() => db.execute(sql`update app_listings set manifest = jsonb_set(manifest, '{permissions}', '["records.read"]'::jsonb) where id = ${listingId}`));
+    const result = await withBypass(() => installModuleFromListing(installer.orgId, installer.actorId, listingId, {
+      installerEffectivePermissions: ['admin.customization.manage', 'records.read'],
+    }));
+    assert.equal(result.outcome, 'pending-approval');
+    assert.equal(result.versionId, null);
+    assert.ok(result.gateIds?.length);
+    const counts = await withBypass(() => db.execute(sql`select count(*)::int as n from page_specs where org_id = ${installer.orgId}`));
+    assert.equal(counts.rows[0]!.n, 0);
+    const { decideGate } = await import('@openbooks/engine/src/flows/gates.ts');
+    await withBypass(() => decideGate({ gateId: result.gateIds![0]!, userId: approver, decision: 'approved', signature: 'Distinct Approver' }));
+    const replay = await withBypass(() => installModuleFromListing(installer.orgId, installer.actorId, listingId, {
+      installerEffectivePermissions: ['admin.customization.manage', 'records.read'],
+    }));
+    assert.equal(replay.outcome, 'already-installed');
+    await assert.rejects(withBypass(() => installModuleFromListing(installer.orgId, installer.actorId, listingId, {
+      installerEffectivePermissions: ['records.read'],
+    })), /admin.customization.manage/);
+  } finally { await withBypass(() => dropScratchOrg(installer.orgId)); await withBypass(() => dropScratchOrg(publisher.orgId)); }
+});
+
+test("publishing disabled modules is refused and publication carries audit evidence", { skip: !DB }, async () => {
+  const publisher = await makeFixture(); const key = 'bazaar-disabled';
+  try {
+    const listingId = await publishFixtureModule(publisher, key);
+    assertAudited(await auditFor(publisher.orgId, 'app_listings', listingId), publisher.actorId);
+    const reader = await withBypass(() => createScratchUser(publisher.orgId, 'Unprivileged publisher', 'viewer'));
+    await assert.rejects(withBypass(() => publishModule(publisher.orgId, reader, key)), /admin.customization.manage/);
+    await withBypass(() => uninstallModule({ orgId: publisher.orgId, actorId: publisher.actorId, key }));
+    await assert.rejects(withBypass(() => publishModule(publisher.orgId, publisher.actorId, key)), /no active version/);
+  } finally { await withBypass(() => dropScratchOrg(publisher.orgId)); }
+});

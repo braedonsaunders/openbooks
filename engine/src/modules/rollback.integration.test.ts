@@ -8,7 +8,11 @@ import {
   dropScratchOrg,
 } from "../test-fixtures.ts";
 import { installModule, upgradeModule } from "./installer.ts";
-import { decideModuleApproval } from "./lifecycle.ts";
+import {
+  decideModuleApproval,
+  requestModuleInstallApproval,
+  requestModuleUpgradeApproval,
+} from "./lifecycle.ts";
 import {
   ModuleRollbackError,
   moduleApplyRequiresSignature,
@@ -50,8 +54,18 @@ type Fixture = {
 async function makeFixture(): Promise<Fixture> {
   return await withBypass(async () => {
     const org = await createScratchOrg();
-    const requesterId = await createScratchUser(org.orgId, "Rollback Requester", "admin");
-    const approverId = await createScratchUser(org.orgId, "Rollback Approver", "admin");
+    const requesterId = await createScratchUser(
+      org.orgId,
+      "Rollback Requester",
+      "admin",
+    );
+    const approverId = await createScratchUser(
+      org.orgId,
+      "Rollback Approver",
+      "admin",
+    );
+    await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb
+      where org_id = ${org.orgId} and key = 'admin'`);
     return { orgId: org.orgId, requesterId, approverId };
   });
 }
@@ -72,55 +86,108 @@ function manifest(overrides: Record<string, unknown> = {}) {
     name: "Rollback Widget",
     version: "1.0.0",
     description: "A module exercising signed apply and rollback",
-    permissions: ["records.read"],
-    contributions: [{ kind: "page", route: "/rollback/widget", spec: specFor("/rollback/widget") }],
+    permissions: [],
+    contributions: [
+      {
+        kind: "page",
+        route: "/rollback/widget",
+        spec: specFor("/rollback/widget"),
+      },
+    ],
     ...overrides,
   };
 }
 
 const EFFECTIVE = ["records.read", "records.create"];
 
-async function installV1(f: Fixture) {
-  return await withBypass(() =>
-    installModule({
-      orgId: f.orgId,
-      actorId: f.requesterId,
-      manifest: manifest(),
-      installerEffectivePermissions: EFFECTIVE,
-      reason: "rollback test setup",
+async function installV1(f: Fixture, signed = false) {
+  if (!signed)
+    return withBypass(() =>
+      installModule({
+        orgId: f.orgId,
+        actorId: f.requesterId,
+        manifest: manifest(),
+        installerEffectivePermissions: EFFECTIVE,
+      }),
+    );
+  const request = await requestModuleInstallApproval({
+    orgId: f.orgId,
+    requesterId: f.requesterId,
+    manifest: manifest({ permissions: ["records.read"] }),
+    installerEffectivePermissions: EFFECTIVE,
+    assignees: [{ type: "user", userId: f.approverId }],
+  });
+  const decision = await withOrgContext(f.orgId, () =>
+    decideModuleApproval({
+      gateId: request.gateIds[0]!,
+      decision: "approved",
+      userId: f.approverId,
+      signature: "Rollback Approver",
     }),
   );
+  return { versionId: decision.versionId!, moduleId: decision.moduleId };
 }
 
-async function upgradeToV2(f: Fixture) {
-  return await withBypass(() =>
-    upgradeModule({
-      orgId: f.orgId,
-      actorId: f.requesterId,
-      key: "rollback-widget",
-      manifest: manifest({
-        version: "2.0.0",
-        contributions: [
-          { kind: "page", route: "/rollback/widget", spec: specFor("/rollback/widget", "detail") },
-        ],
+async function upgradeToV2(f: Fixture, signed = false) {
+  const proposal = manifest({
+    version: "2.0.0",
+    permissions: signed ? ["records.read"] : [],
+    contributions: [
+      {
+        kind: "page",
+        route: "/rollback/widget",
+        spec: specFor("/rollback/widget", "detail"),
+      },
+    ],
+  });
+  if (!signed)
+    return withBypass(() =>
+      upgradeModule({
+        orgId: f.orgId,
+        actorId: f.requesterId,
+        key: "rollback-widget",
+        manifest: proposal,
+        installerEffectivePermissions: EFFECTIVE,
       }),
-      installerEffectivePermissions: EFFECTIVE,
-      reason: "rollback test setup",
+    );
+  const request = await requestModuleUpgradeApproval({
+    orgId: f.orgId,
+    requesterId: f.requesterId,
+    key: "rollback-widget",
+    manifest: proposal,
+    installerEffectivePermissions: EFFECTIVE,
+    assignees: [{ type: "user", userId: f.approverId }],
+  });
+  const decision = await withOrgContext(f.orgId, () =>
+    decideModuleApproval({
+      gateId: request.gateIds[0]!,
+      decision: "approved",
+      userId: f.approverId,
+      signature: "Rollback Approver",
     }),
   );
+  return { versionId: decision.versionId!, moduleId: decision.moduleId };
 }
 
 async function versionRows(orgId: string, moduleId: string) {
   return (
     await withOrgContext(orgId, () =>
-      db.execute<{ id: string; version: string; status: string; manifest: unknown }>(sql`
+      db.execute<{
+        id: string;
+        version: string;
+        status: string;
+        manifest: unknown;
+      }>(sql`
         select id, version, status, manifest from module_versions
          where org_id = ${orgId} and module_id = ${moduleId} order by version`),
     )
   ).rows;
 }
 
-async function liveProjectionSpec(orgId: string, route: string): Promise<unknown> {
+async function liveProjectionSpec(
+  orgId: string,
+  route: string,
+): Promise<unknown> {
   const rows = (
     await withOrgContext(orgId, () =>
       db.execute<{ spec: unknown }>(sql`
@@ -128,7 +195,11 @@ async function liveProjectionSpec(orgId: string, route: string): Promise<unknown
          where org_id = ${orgId} and route = ${route} and is_active and user_id is null`),
     )
   ).rows;
-  assert.equal(rows.length, 1, `expected exactly one live projection for ${route}`);
+  assert.equal(
+    rows.length,
+    1,
+    `expected exactly one live projection for ${route}`,
+  );
   return rows[0]!.spec;
 }
 
@@ -136,11 +207,20 @@ type AuditRow = {
   table_name: string;
   row_id: string;
   action: string;
-  changes: { event?: unknown; reason?: unknown; before?: unknown; after?: unknown };
+  changes: {
+    event?: unknown;
+    reason?: unknown;
+    before?: unknown;
+    after?: unknown;
+  };
   actor_id: string | null;
 };
 
-async function auditFor(orgId: string, table: string, rowId: string): Promise<AuditRow[]> {
+async function auditFor(
+  orgId: string,
+  table: string,
+  rowId: string,
+): Promise<AuditRow[]> {
   return (
     await withOrgContext(orgId, () =>
       db.execute<AuditRow>(sql`
@@ -153,7 +233,10 @@ async function auditFor(orgId: string, table: string, rowId: string): Promise<Au
 }
 
 test("capability-bearing versions require a signature; page-only versions do not", () => {
-  assert.equal(moduleApplyRequiresSignature({ permissions: ["records.read"] }), true);
+  assert.equal(
+    moduleApplyRequiresSignature({ permissions: ["records.read"] }),
+    true,
+  );
   assert.equal(moduleApplyRequiresSignature({ permissions: [] }), false);
 });
 
@@ -163,8 +246,8 @@ test(
   async () => {
     const f = await makeFixture();
     try {
-      const v1 = await installV1(f);
-      const v2 = await upgradeToV2(f);
+      const v1 = await installV1(f, true);
+      const v2 = await upgradeToV2(f, true);
       assert.ok(v1.versionId !== v2.versionId);
 
       // The restoring version carries the same capability request, so the
@@ -186,7 +269,11 @@ test(
 
       await assert.rejects(
         withBypass(() =>
-          decideModuleApproval({ gateId: req.gateIds[0]!, decision: "approved", userId: f.approverId }),
+          decideModuleApproval({
+            gateId: req.gateIds[0]!,
+            decision: "approved",
+            userId: f.approverId,
+          }),
         ),
         "a capability-bearing apply refuses an unsigned approval",
       );
@@ -201,8 +288,20 @@ test(
       );
       assert.equal(decision.resumed, "approve");
       assert.ok(decision.versionId);
+      const history = await versionRows(f.orgId, decision.moduleId);
+      assert.equal(history.length, 3);
+      assert.equal(
+        history.find((row) => row.id === v1.versionId)?.status,
+        "superseded",
+      );
+      assert.equal(
+        history.find((row) => row.id === v2.versionId)?.status,
+        "rolled_back",
+      );
 
-      const spec = (await liveProjectionSpec(f.orgId, "/rollback/widget")) as { layout?: string };
+      const spec = (await liveProjectionSpec(f.orgId, "/rollback/widget")) as {
+        layout?: string;
+      };
       assert.equal(spec.layout, "list");
     } finally {
       await dropFixture(f);
@@ -218,7 +317,14 @@ test(
     try {
       const v1 = await installV1(f);
       const v2 = await upgradeToV2(f);
-      assert.equal((await liveProjectionSpec(f.orgId, "/rollback/widget") as { layout?: string }).layout, "detail");
+      assert.equal(
+        (
+          (await liveProjectionSpec(f.orgId, "/rollback/widget")) as {
+            layout?: string;
+          }
+        ).layout,
+        "detail",
+      );
 
       const out = await withBypass(() =>
         rollbackModuleVersion({
@@ -247,12 +353,20 @@ test(
       const restoringRow = versions.find((v) => v.version === "1.0.1")!;
       assert.equal(restoringRow.id, out.versionId);
       const v1Manifest = v1Row.manifest as { contributions: unknown };
-      const restoringManifest = restoringRow.manifest as { contributions: unknown; version: string };
-      assert.deepEqual(restoringManifest.contributions, v1Manifest.contributions);
+      const restoringManifest = restoringRow.manifest as {
+        contributions: unknown;
+        version: string;
+      };
+      assert.deepEqual(
+        restoringManifest.contributions,
+        v1Manifest.contributions,
+      );
       assert.equal(restoringManifest.version, "1.0.1");
 
       // Projections return: the live row renders v1 again, pointing at the restoring version.
-      const spec = (await liveProjectionSpec(f.orgId, "/rollback/widget")) as { layout?: string };
+      const spec = (await liveProjectionSpec(f.orgId, "/rollback/widget")) as {
+        layout?: string;
+      };
       assert.equal(spec.layout, "list");
       const liveVersion = (
         await withOrgContext(f.orgId, () =>
@@ -264,12 +378,15 @@ test(
       assert.equal(liveVersion, out.versionId);
 
       // Every transition names its actor and carries before/after/reason.
-      const rollbackAudits = (await auditFor(f.orgId, "modules", out.moduleId)).filter(
-        (r) => r.changes.event === "module_rollback",
-      );
+      const rollbackAudits = (
+        await auditFor(f.orgId, "modules", out.moduleId)
+      ).filter((r) => r.changes.event === "module_rollback");
       assert.equal(rollbackAudits.length, 1);
       assert.equal(rollbackAudits[0]!.actor_id, f.approverId);
-      assert.equal(rollbackAudits[0]!.changes.reason, "v2 regressed the widget");
+      assert.equal(
+        rollbackAudits[0]!.changes.reason,
+        "v2 regressed the widget",
+      );
       assert.ok("before" in rollbackAudits[0]!.changes);
       assert.ok("after" in rollbackAudits[0]!.changes);
     } finally {
@@ -299,7 +416,8 @@ test(
           }),
         ),
         (error: unknown) =>
-          error instanceof ModuleRollbackError && /already the live version/.test(error.message),
+          error instanceof ModuleRollbackError &&
+          /already the live version/.test(error.message),
       );
       await assert.rejects(
         withBypass(() =>
@@ -312,13 +430,16 @@ test(
           }),
         ),
         (error: unknown) =>
-          error instanceof ModuleRollbackError && /not a version of module/.test(error.message),
+          error instanceof ModuleRollbackError &&
+          /not a version of module/.test(error.message),
       );
 
       // Refusals change nothing: v2 still live, no restoring version appended.
       const moduleId = (
         await withOrgContext(f.orgId, () =>
-          db.execute<{ id: string }>(sql`select id from modules where org_id = ${f.orgId} and key = 'rollback-widget'`),
+          db.execute<{ id: string }>(
+            sql`select id from modules where org_id = ${f.orgId} and key = 'rollback-widget'`,
+          ),
         )
       ).rows[0]!.id;
       const versions = await versionRows(f.orgId, moduleId);
@@ -330,34 +451,38 @@ test(
         ],
       );
       assert.equal(v1.versionId !== v2.versionId, true);
-      assert.equal((await liveProjectionSpec(f.orgId, "/rollback/widget") as { layout?: string }).layout, "detail");
-    } finally {
-      await dropFixture(f);
-    }
-  },
-);
-
-test(
-  "rollback with no earlier version is refused",
-  { skip: !DB },
-  async () => {
-    const f = await makeFixture();
-    try {
-      await installV1(f);
-      await assert.rejects(
-        withBypass(() =>
-          rollbackModuleVersion({
-            orgId: f.orgId,
-            actorId: f.approverId,
-            key: "rollback-widget",
-            restoringVersion: "1.0.1",
-          }),
-        ),
-        (error: unknown) =>
-          error instanceof ModuleRollbackError && /no earlier version/.test(error.message),
+      assert.equal(
+        (
+          (await liveProjectionSpec(f.orgId, "/rollback/widget")) as {
+            layout?: string;
+          }
+        ).layout,
+        "detail",
       );
     } finally {
       await dropFixture(f);
     }
   },
 );
+
+test("rollback with no earlier version is refused", { skip: !DB }, async () => {
+  const f = await makeFixture();
+  try {
+    await installV1(f);
+    await assert.rejects(
+      withBypass(() =>
+        rollbackModuleVersion({
+          orgId: f.orgId,
+          actorId: f.approverId,
+          key: "rollback-widget",
+          restoringVersion: "1.0.1",
+        }),
+      ),
+      (error: unknown) =>
+        error instanceof ModuleRollbackError &&
+        /no earlier version/.test(error.message),
+    );
+  } finally {
+    await dropFixture(f);
+  }
+});

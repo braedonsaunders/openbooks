@@ -60,7 +60,7 @@ const hooks = registerHooks({
   },
 });
 const routeUrl = "./route.ts?admin-roles-integration";
-const { POST, PATCH, DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
+const { POST, PATCH, DELETE, GET } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const skip = !process.env.OPENBOOKS_DB_URL;
@@ -413,3 +413,35 @@ for (const mode of ["subtree", "list"] as const) {
     } finally { routeState.authz = null; await dropScratchOrg(f.orgId); await dropScratchOrg(other.orgId); }
   });
 }
+
+
+test("module permission declarations are tenant-scoped, explicitly grantable inside the ceiling, and withdrawn without erasing stored grants", { skip }, async () => {
+  const f = await seed(["*"]);
+  const other = await createScratchOrg();
+  const { requestModuleInstallApproval, decideModuleApproval } = await import("@openbooks/engine/src/modules/lifecycle.ts");
+  const { uninstallModule } = await import("@openbooks/engine/src/modules/installer.ts");
+  try {
+    const requesterId = await createScratchUser(f.orgId, "Module requester", "roles_admin");
+    const staged = await requestModuleInstallApproval({ orgId: f.orgId, requesterId,
+      manifest: { key: "role-addon", name: "Role addon", version: "1.0.0", permissions: ["admin.roles.manage"], contributions: [{ kind: "permission", key: "role_addon.read", label: "Read role addon" }] },
+      installerEffectivePermissions: ["*"], assignees: [{ type: "user", userId: f.actorId }], reason: "Add governed permission" });
+    await decideModuleApproval({ gateId: staged.gateIds[0]!, userId: f.actorId, decision: "approved", signature: "Roles admin", approverEffectivePermissions: ["*"] });
+    const available = await (await GET()).json();
+    assert.ok(available.permissions.some((permission: { key: string }) => permission.key === "role_addon.read"));
+    const created = await call("POST", { name: "Addon reader", permissions: ["role_addon.read"] });
+    assert.equal(created.status, 200);
+    const { id } = await created.json() as { id: string };
+    routeState.authz!.permissions = new Set(["admin.roles.manage"]);
+    assert.equal((await call("POST", { name: "Beyond ceiling", permissions: ["role_addon.read"] })).status, 403);
+    routeState.authz!.user.orgId = other.orgId;
+    assert.deepEqual((await (await GET()).json()).permissions, []);
+    routeState.authz!.user.orgId = f.orgId;
+    routeState.authz!.permissions = new Set(["*"]);
+    await uninstallModule({ orgId: f.orgId, actorId: f.actorId, key: "role-addon", reason: "Withdraw addon" });
+    assert.deepEqual((await (await GET()).json()).permissions, []);
+    assert.deepEqual(await rolePermissions(id), ["role_addon.read"]);
+    assert.equal((await call("POST", { name: "Inactive permission", permissions: ["role_addon.read"] })).status, 400);
+    assert.equal((await call("PATCH", { id, permissions: ["role_addon.read", "gl.read"] })).status, 200);
+    assert.equal((await call("PATCH", { id, permissions: ["gl.read"] })).status, 200);
+  } finally { routeState.authz = null; await dropScratchOrg(f.orgId); await dropScratchOrg(other.orgId); }
+});

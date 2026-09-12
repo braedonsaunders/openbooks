@@ -1,9 +1,12 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
+import { actorHasPermission } from '@openbooks/engine/src/actor-permissions.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { installModule, type InstallOutcome } from '@openbooks/engine/src/modules/installer.ts'
 import { parseModuleManifest } from './manifest'
+import { requestModuleInstallApproval, requestModuleUpgradeApproval } from '@openbooks/engine/src/modules/lifecycle.ts'
+import { permissionSetCovers } from '@openbooks/engine/src/permissions.ts'
 
 /**
  * Module marketplace — the cross-org distribution surface for modules.
@@ -114,7 +117,11 @@ export async function isModulePublished(key: string): Promise<boolean> {
  * snapshot frozen until someone publishes again.
  */
 export async function publishModule(orgId: string, userId: string, key: string): Promise<{ id: string }> {
-  const found = await rows<{
+  return db.transaction(async (tx) => {
+    if (!(await actorHasPermission(tx, orgId, userId, 'admin.customization.manage'))) throw new ModuleMarketplaceError('admin.customization.manage is required to publish modules', 403)
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`app-listing:${key}`}, 0))`)
+    const txRows = async <T extends Record<string, unknown>>(query: ReturnType<typeof sql>) => (await tx.execute<T>(query)).rows
+  const found = await txRows<{
     moduleId: string
     key: string
     name: string
@@ -127,7 +134,8 @@ export async function publishModule(orgId: string, userId: string, key: string):
            v.version, v.manifest
       from modules m
       join module_versions v on v.id = m.active_version_id and v.org_id = m.org_id
-     where m.org_id = ${orgId} and m.key = ${key}
+     where m.org_id = ${orgId} and m.key = ${key} and m.kind = 'module'
+       and m.status = 'installed' and v.status = 'active'
      limit 1`)
   const mod = found[0]
   if (!mod || !mod.manifest) throw new ModuleMarketplaceError('module not found or has no active version', 404)
@@ -137,7 +145,7 @@ export async function publishModule(orgId: string, userId: string, key: string):
     throw new ModuleMarketplaceError(`module "${key}" has no publishable active manifest`, 500)
   }
 
-  const existing = await rows<{ id: string; publisherOrgId: string; manifest: unknown }>(
+  const existing = await txRows<{ id: string; publisherOrgId: string; manifest: unknown }>(
     sql`select id, publisher_org_id as "publisherOrgId", manifest from app_listings where key = ${key} limit 1`,
   )
   if (existing[0] && existing[0].publisherOrgId !== orgId) {
@@ -150,8 +158,9 @@ export async function publishModule(orgId: string, userId: string, key: string):
     )
   }
 
+  const before = existing[0] ? (await tx.execute(sql`select to_jsonb(l) as value from app_listings l where id = ${existing[0].id}`)).rows[0]?.value : null
   const manifestJson = JSON.stringify(mod.manifest)
-  const r = await db.execute<{ id: string }>(sql`
+  const r = await tx.execute<{ id: string }>(sql`
     insert into app_listings (publisher_org_id, key, name, description, icon_key, version, manifest, files, is_active, created_by, updated_by)
     values (${orgId}, ${key}, ${mod.name}, ${mod.description}, ${mod.iconKey}, ${mod.version},
             ${manifestJson}::jsonb, '[]'::jsonb, true, ${userId}, ${userId})
@@ -160,12 +169,18 @@ export async function publishModule(orgId: string, userId: string, key: string):
       version = excluded.version, manifest = excluded.manifest, files = excluded.files,
       is_active = true, updated_at = now(), updated_by = ${userId}
     where app_listings.publisher_org_id = ${orgId}
+      and app_listings.manifest ? 'contributions' and not (app_listings.manifest ? 'frontend')
     returning id`)
   const id = r.rows[0]?.id
   // Unreachable past the pre-checks (the upsert's publisher guard updated
   // zero rows): someone else's key won the race. Named conflict, never a TypeError.
   if (!id) throw new ModuleMarketplaceError(`"${key}" is already published by another org`, 409)
+  const after = (await tx.execute(sql`select to_jsonb(l) as value from app_listings l where id = ${id}`)).rows[0]?.value
+  await tx.execute(sql`insert into audit_log (org_id, actor_id, table_name, row_id, action, changes)
+    values (${orgId}, ${userId}, 'app_listings', ${id}, ${existing[0] ? 'update' : 'insert'},
+      ${JSON.stringify({ event: 'module_marketplace_publish', reason: `publish module ${key}`, before, after })}::jsonb)`)
   return { id }
+  })
 }
 
 /**
@@ -191,7 +206,7 @@ export async function installModuleFromListing(
     /** Why: recorded on every audit row this install writes (defaults to the marketplace provenance). */
     reason?: string
   },
-): Promise<{ key: string; moduleId: string; versionId: string; outcome: InstallOutcome }> {
+): Promise<{ key: string; moduleId: string; versionId: string | null; outcome: InstallOutcome | 'pending-approval'; gateIds?: string[] }> {
   const found = await rows<{ key: string; version: string; manifest: unknown }>(sql`
     select key, version, manifest from app_listings where id = ${listingId} and is_active = true limit 1`)
   const listing = found[0]
@@ -201,6 +216,38 @@ export async function installModuleFromListing(
       `listing "${listing.key}" is an app listing, not a module listing — install it from the app surface`,
       400,
     )
+  }
+  if (!permissionSetCovers(new Set(opts.installerEffectivePermissions), 'admin.customization.manage')) {
+    throw new ModuleMarketplaceError('admin.customization.manage is required to install modules', 403)
+  }
+  const parsed = parseModuleManifest(listing.manifest)
+  if (!parsed.ok) throw new ModuleMarketplaceError(parsed.errors.join('; '), 422)
+  if (parsed.manifest!.key !== listing.key || parsed.manifest!.version !== listing.version) {
+    throw new ModuleMarketplaceError('listing identity does not match its manifest', 409)
+  }
+  const reason = opts.reason?.trim() || `marketplace install of "${listing.key}" version ${listing.version}`
+  if (parsed.manifest!.permissions.length > 0) {
+    const current = (await db.execute<{ active_version_id: string | null; version: string | null; granted_permissions: string[] }>(sql`
+      select m.active_version_id, v.version, m.granted_permissions from modules m
+      left join module_versions v on v.org_id = m.org_id and v.id = m.active_version_id
+      where m.org_id = ${orgId} and m.key = ${listing.key}`)).rows[0]
+    if (current?.version === listing.version) {
+      const installed = await installModule({ orgId, actorId, manifest: listing.manifest,
+        grantedPermissions: opts.grantedPermissions ?? current.granted_permissions, installerEffectivePermissions: opts.installerEffectivePermissions, reason })
+      return { key: listing.key, ...installed }
+    }
+    const request = {
+      orgId, requesterId: actorId, manifest: listing.manifest,
+      installerEffectivePermissions: opts.installerEffectivePermissions,
+      grantedPermissions: opts.grantedPermissions,
+      assignees: [{ type: 'role' as const, role: 'admin' }],
+      signatureRequired: true, reason,
+    }
+    const staged = current?.active_version_id
+      ? await requestModuleUpgradeApproval({ ...request, key: listing.key })
+      : await requestModuleInstallApproval(request)
+    return { key: listing.key, moduleId: staged.moduleId, versionId: null,
+      outcome: 'pending-approval', gateIds: staged.gateIds }
   }
   const result = await installModule({
     orgId,

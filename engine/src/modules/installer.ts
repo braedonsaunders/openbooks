@@ -1,54 +1,20 @@
+import { actorHasPermission } from "../actor-permissions.ts";
 import { pageSpecSchema } from "@braedonsaunders/appkit-viewspec";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../db.ts";
 import { isCataloguePermission } from "../permissions.ts";
 import { MODULE_PLATFORM_PERMISSIONS_MIRROR, isModulePermission } from "./module-catalogue.ts";
-import { ModuleCapabilityError, resolveModuleGrants } from "./capabilities.ts";
+import { supplementalContributionSchema, type SupplementalContribution } from "./contribution-schemas.ts";
+import { CONTRIBUTION_PERMISSIONS, projectSupplementalContributions, withdrawSupplementalContributions } from "./projections.ts";
+import { assertModuleApproval } from "./approval-proof.ts";
+import { ModuleCapabilityError, assertModulePermitted, resolveModuleGrants } from "./capabilities.ts";
 
 /**
- * Module installer — the ONLY writer of module lifecycle and projection rows.
- *
- * A module VERSION is immutable: its manifest declares CONTRIBUTIONS, and each
- * contribution projects into a table the app already ships. In v1 the only
- * projected kind is `page` (→ page_specs with module_version_id); every other
- * kind is structurally valid per the canonical manifest validator but has no
- * projection yet, so an install carrying one is REFUSED rather than half
- * performed. A silent partial install would be a fake success path, and the
- * approval UI already reports those kinds as NOT_IMPLEMENTED_YET.
- *
- * Layering: parseModuleManifest in web/lib/modules/manifest.ts (zod, shared
- * client-side for pre-upload checks) is the fast path, not the boundary —
- * this engine module cannot import it (engine never imports from web), so
- * the installer enforces canonical strictness itself in TWO layers, both
- * engine-closed (no caller-supplied catalogue exists to lie about):
- *
- * OUTER: every requested permission must be a real platform permission
- * (isCataloguePermission, same engine package).
- *
- * INNER: every requested permission must be in the module vocabulary
- * (MODULE_PLATFORM_PERMISSIONS_MIRROR — a materialized mirror of the
- * contract owner's list, drift-guarded by module-catalogue.test.ts), then
- * grants resolve through the capability lattice against the installing
- * actor's honestly-resolved effective set: recorded grant = approved ∩
- * requested ∩ effective. Intersection only narrows, so overstating
- * authority cannot widen the grant beyond what the admin approved from
- * the manifest's request.
- *
- * Every page spec is validated with pageSpecSchema (the same schema object
- * the canonical validator uses, never a hand-mirror); installer-persisted
- * bytes equal validator-accepted bytes.
- *
- * Transactional shape (mirrors installApp in web/lib/apps/store.ts): the
- * module upsert, the version append, every projection, and every audit row
- * commit in ONE transaction. A conflict anywhere — another module owning a
- * claimed route, a duplicate version label with different bytes — aborts the
- * whole install and leaves zero rows behind. Org-native tenant layouts are
- * not conflicts: they coexist under their own partial index (0111) and
- * shadow the projection by read-time precedence instead.
- *
- * Org isolation is by explicit org_id predicates on every statement; RLS
- * enforces it again at storage. Callers run under the org's request context
- * (or another trusted boundary such as the test bypass).
+ * Atomic module installation: immutable version append, page/navigation/settings/
+ * permission projection, signed approval proof, and complete audit evidence.
+ * Engine-owned schemas and the shared navigation registry are the persistence
+ * boundary; unknown contribution kinds fail before any write. All lifecycle
+ * operations serialize by organization to protect projection ownership.
  */
 
 export class ModuleInstallError extends Error {
@@ -101,7 +67,7 @@ interface ValidManifest {
   version: string;
   description: string | null;
   permissions: string[];
-  contributions: ValidPageContribution[];
+  contributions: (ValidPageContribution | SupplementalContribution)[];
 }
 
 /** Deterministic JSON encoding so a stored manifest compares equal to the bytes that wrote it. */
@@ -115,17 +81,16 @@ function stableStringify(value: unknown): string {
 }
 
 /** The exact document a version row carries; what approvals grant and audit keeps verbatim.
- * An absent description stays absent: the contract declares description
- * optional-but-never-null, so persisting an explicit null would store bytes
- * the validator refuses when diff/rollback re-parse them. */
-function canonicalManifest(m: ValidManifest): Record<string, unknown> {
+ * Optional descriptions normalize to absence, yielding deterministic approval,
+ * version, diff and rollback bytes across read/write cycles. */
+function canonicalManifest(m: ValidManifest): Omit<ValidManifest, "description"> & { description?: string } {
   return {
     key: m.key,
     name: m.name,
     version: m.version,
     ...(m.description != null ? { description: m.description } : {}),
     permissions: m.permissions,
-    contributions: m.contributions.map((c) => ({ kind: "page", route: c.route, spec: c.spec, scope: "org" })),
+    contributions: m.contributions.map((c) => c.kind === "page" ? { ...c, scope: "org" } : c),
   };
 }
 
@@ -184,16 +149,22 @@ function validateManifest(raw: unknown): ValidManifest {
   }
 
   const seenRoutes = new Set<string>();
-  const valid: ValidPageContribution[] = contributions.map((rawContribution, i) => {
+  const seenSupplemental = new Set<string>();
+  const valid: ValidManifest["contributions"] = contributions.map((rawContribution, i) => {
     if (typeof rawContribution !== "object" || rawContribution === null || Array.isArray(rawContribution)) {
       throw new ModuleInstallError(`invalid manifest: contributions[${i}] must be an object`);
     }
     const c = rawContribution as Record<string, unknown>;
     if (c.kind !== "page") {
-      throw new ModuleInstallError(
-        `contribution kind "${String(c.kind)}" is not projectable yet (v1 projects only "page"); ` +
-          `refusing the install rather than pretending it happened`,
-      );
+      const parsed = supplementalContributionSchema.safeParse(c);
+      if (!parsed.success) throw new ModuleInstallError(`contribution kind "${String(c.kind)}" is not projectable yet or invalid: ${parsed.error.message}`);
+      const contribution = parsed.data;
+      const identity = `${contribution.kind}:${contribution.kind === "nav" ? contribution.href : contribution.key}`;
+      if (seenSupplemental.has(identity)) throw new ModuleInstallError(`duplicate contribution ${identity}`);
+      seenSupplemental.add(identity);
+      const required = CONTRIBUTION_PERMISSIONS[contribution.kind];
+      if (!permissions.includes(required)) throw new ModuleInstallError(`${contribution.kind} contribution requires requested permission ${required}`);
+      return contribution;
     }
     if (typeof c.route !== "string" || !ROUTE.test(c.route) || c.route.length > 120) {
       throw new ModuleInstallError(
@@ -240,6 +211,10 @@ function validateManifest(raw: unknown): ValidManifest {
     permissions: permissions as string[],
     contributions: valid,
   };
+}
+
+export function validateModuleInstallManifest(raw: unknown): Omit<ValidManifest, "description"> & { description?: string } {
+  return canonicalManifest(validateManifest(raw));
 }
 
 /**
@@ -307,6 +282,7 @@ type ModuleRow = {
   name: string;
   description: string | null;
   status: string;
+  kind: "module" | "app";
   active_version_id: string | null;
   granted_permissions: string[];
 };
@@ -475,6 +451,7 @@ async function applyVersion(
 ): Promise<InstallResult> {
   const { orgId, actorId, manifest, op } = opts;
   let moduleRow = opts.module;
+  if (moduleRow && moduleRow.kind !== "module") throw new ModuleInstallError("This key belongs to an app; manage its lifecycle through Apps", 409);
 
   // Insert-first: a first-install SELECT ... FOR UPDATE locks nothing, so
   // two concurrent identical installs would both INSERT and the loser would
@@ -492,11 +469,12 @@ async function applyVersion(
   if (!moduleRow) {
     moduleRow = (
       await tx.execute<ModuleRow>(sql`
-        select id, key, name, description, status, active_version_id, granted_permissions
+        select id, key, name, description, status, kind, active_version_id, granted_permissions
           from modules where org_id = ${orgId} and key = ${manifest.key}
           for update`)
     ).rows[0]!;
   }
+  if (moduleRow.kind !== "module") throw new ModuleInstallError("This key belongs to an app; manage its lifecycle through Apps", 409);
   if (createdModule) {
     await writeAudit(tx, {
       orgId,
@@ -563,6 +541,9 @@ async function applyVersion(
           `append a new version instead`,
         409,
       );
+    }
+    if (existingVersion.status !== "active" || moduleRow.active_version_id !== existingVersion.id) {
+      throw new ModuleInstallError("A historical module version cannot be reactivated; append a restoring version through rollback", 409);
     }
     versionId = existingVersion.id;
     preexistingVersion = true;
@@ -663,7 +644,7 @@ async function applyVersion(
   // them. Scoped strictly by this module's version ids — org-native rows
   // (module_version_id NULL) and other modules' rows can never match — and
   // every withdrawal writes its audit row like any other projection.
-  const newRoutes = manifest.contributions.map((c) => c.route);
+  const newRoutes = manifest.contributions.filter((c) => c.kind === "page").map((c) => c.route);
   const withdrawnStale = (
     await tx.execute<{ id: string; route: string; module_version_id: string }>(sql`
       update page_specs set is_active = false, updated_at = now(), updated_by = ${actorId}
@@ -691,7 +672,12 @@ async function applyVersion(
     });
   }
 
+  try {
+    await projectSupplementalContributions(tx, { orgId, actorId, moduleId: moduleRow.id, moduleKey: manifest.key, versionId, previousVersionId: moduleRow.active_version_id, contributions: manifest.contributions.filter((c) => c.kind !== "page"), reason: opts.reason });
+  } catch (error) { throw new ModuleInstallError(error instanceof Error ? error.message : "Module projection refused", 409); }
+
   for (const contribution of manifest.contributions) {
+    if (contribution.kind !== "page") continue;
     await projectPage(tx, {
       orgId,
       actorId,
@@ -729,19 +715,28 @@ export async function installModule(opts: {
    * that cannot state its authority must not install.
    */
   installerEffectivePermissions: readonly string[];
+  approvalRunId?: string;
+  rehearsalProductionOrgId?: string;
   /** Why: recorded on every audit row this install writes. */
   reason?: string;
 }): Promise<InstallResult> {
   const manifest = validateManifest(opts.manifest);
   const grants = resolveGranted(manifest, opts);
+  try {
+  for (const contribution of manifest.contributions) if (contribution.kind !== "page") assertModulePermitted({ grantedPermissions: grants.granted, installerEffectivePermissions: opts.installerEffectivePermissions, requiredPermission: CONTRIBUTION_PERMISSIONS[contribution.kind] });
+  } catch (error) { throw new ModuleInstallError(error instanceof Error ? error.message : "Projection capability denied", 403); }
   const reason = opts.reason && opts.reason.length > 0 ? opts.reason : "install";
   return await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`module-projections:${opts.orgId}`}, 0))`);
     const moduleRow = (
       await tx.execute<ModuleRow>(sql`
-        select id, key, name, description, status, active_version_id, granted_permissions
+        select id, key, name, description, status, kind, active_version_id, granted_permissions
           from modules where org_id = ${opts.orgId} and key = ${manifest.key}
           for update`)
     ).rows[0] ?? null;
+    try {
+      await assertModuleApproval(tx, { orgId: opts.orgId, actorId: opts.actorId, manifest: canonicalManifest(manifest), approvalRunId: opts.approvalRunId, rehearsalProductionOrgId: opts.rehearsalProductionOrgId, grants: grants.granted });
+    } catch (error) { throw new ModuleInstallError(error instanceof Error ? error.message : "Module approval required", 403); }
     return await applyVersion(tx, {
       orgId: opts.orgId,
       actorId: opts.actorId,
@@ -772,6 +767,8 @@ export async function upgradeModule(opts: {
    * that cannot state its authority must not install.
    */
   installerEffectivePermissions: readonly string[];
+  approvalRunId?: string;
+  rehearsalProductionOrgId?: string;
   reason?: string;
 }): Promise<InstallResult> {
   const manifest = validateManifest(opts.manifest);
@@ -781,11 +778,15 @@ export async function upgradeModule(opts: {
     );
   }
   const grants = resolveGranted(manifest, opts);
+  try {
+  for (const contribution of manifest.contributions) if (contribution.kind !== "page") assertModulePermitted({ grantedPermissions: grants.granted, installerEffectivePermissions: opts.installerEffectivePermissions, requiredPermission: CONTRIBUTION_PERMISSIONS[contribution.kind] });
+  } catch (error) { throw new ModuleInstallError(error instanceof Error ? error.message : "Projection capability denied", 403); }
   const reason = opts.reason && opts.reason.length > 0 ? opts.reason : "upgrade";
   return await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`module-projections:${opts.orgId}`}, 0))`);
     const moduleRow = (
       await tx.execute<ModuleRow>(sql`
-        select id, key, name, description, status, active_version_id, granted_permissions
+        select id, key, name, description, status, kind, active_version_id, granted_permissions
           from modules where org_id = ${opts.orgId} and key = ${opts.key}
           for update`)
     ).rows[0] ?? null;
@@ -804,6 +805,9 @@ export async function upgradeModule(opts: {
         409,
       );
     }
+    try {
+      await assertModuleApproval(tx, { orgId: opts.orgId, actorId: opts.actorId, manifest: canonicalManifest(manifest), approvalRunId: opts.approvalRunId, rehearsalProductionOrgId: opts.rehearsalProductionOrgId, grants: grants.granted });
+    } catch (error) { throw new ModuleInstallError(error instanceof Error ? error.message : "Module approval required", 403); }
     return await applyVersion(tx, {
       orgId: opts.orgId,
       actorId: opts.actorId,
@@ -831,14 +835,18 @@ export async function uninstallModule(opts: {
 }): Promise<UninstallResult> {
   const reason = opts.reason && opts.reason.length > 0 ? opts.reason : "uninstall";
   return await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`module-projections:${opts.orgId}`}, 0))`);
+    if (!(await actorHasPermission(tx, opts.orgId, opts.actorId, "admin.customization.manage"))) throw new ModuleInstallError("admin.customization.manage required", 403);
     const moduleRow = (
       await tx.execute<ModuleRow>(sql`
-        select id, key, name, description, status, active_version_id, granted_permissions
+        select id, key, name, description, status, kind, active_version_id, granted_permissions
           from modules where org_id = ${opts.orgId} and key = ${opts.key}
           for update`)
     ).rows[0] ?? null;
     if (!moduleRow) return { moduleId: null, deactivatedProjections: 0 };
+    if (moduleRow.kind !== "module") throw new ModuleInstallError("This key belongs to an app; manage its lifecycle through Apps", 409);
 
+    const supplementalWithdrawn = await withdrawSupplementalContributions(tx, { orgId: opts.orgId, actorId: opts.actorId, moduleId: moduleRow.id, moduleKey: moduleRow.key, reason });
     const withdrawn = (
       await tx.execute<{ id: string; route: string; module_version_id: string }>(sql`
         update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
@@ -876,6 +884,6 @@ export async function uninstallModule(opts: {
         actorId: opts.actorId,
       });
     }
-    return { moduleId: moduleRow.id, deactivatedProjections: withdrawn.length };
+    return { moduleId: moduleRow.id, deactivatedProjections: withdrawn.length + supplementalWithdrawn };
   });
 }

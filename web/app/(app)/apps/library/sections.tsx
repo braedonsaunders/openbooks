@@ -22,6 +22,7 @@ export function ListingCard({
   description,
   installed,
   current,
+  canInstall = true,
 }: {
   listingId: string
   listingKey: string
@@ -30,6 +31,7 @@ export function ListingCard({
   description: string
   installed: boolean
   current: boolean
+  canInstall?: boolean
 }) {
   return (
     <Card className="flex h-full flex-col">
@@ -51,6 +53,7 @@ export function ListingCard({
             name={name}
             installed={installed}
             current={current}
+            canInstall={canInstall}
           />
         </div>
       </CardContent>

@@ -702,3 +702,21 @@ test(
     }
   },
 );
+
+test('app absorption refuses a native module key without overwriting its lifecycle or projections', { skip: !DB }, async () => {
+  const { orgId } = await withBypass(() => createScratchOrg());
+  const actorId = await withBypass(() => createScratchUser(orgId, 'Collision proof', 'admin'));
+  const { installModule } = await import('./installer.ts');
+  await withBypass(() => db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${orgId} and key = 'admin'`));
+  try {
+    const original = await withBypass(() => installModule({ orgId, actorId, installerEffectivePermissions: ['*'], manifest: {
+      key: 'native-key', name: 'Native module', version: '1.0.0', permissions: [], contributions: [],
+    }}));
+    await assert.rejects(withBypass(() => installApp(orgId, actorId, testBundle('native-key', '2.0.0'))), /belongs to a native module/);
+    const modules = await withBypass(() => db.execute(sql`select id, kind, active_version_id from modules where org_id = ${orgId}`));
+    assert.equal(modules.rows[0]!.kind, 'module');
+    assert.equal(modules.rows[0]!.active_version_id, original.versionId);
+    const apps = await withBypass(() => db.execute(sql`select id from apps where org_id = ${orgId}`));
+    assert.equal(apps.rows.length, 0, 'app insert rolls back with the refused absorption');
+  } finally { await withBypass(() => dropScratchOrg(orgId)); }
+});

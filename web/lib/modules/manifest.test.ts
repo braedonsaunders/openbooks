@@ -78,7 +78,7 @@ test('parseModuleManifest never throws on garbage input', () => {
 
 test('CONTRIBUTION_KINDS covers all thirteen kinds', () => {
   assert.deepEqual([...CONTRIBUTION_KINDS], [
-    'page', 'panel', 'record-type', 'field', 'report', 'card', 'job',
+    'page', 'nav', 'panel', 'record-type', 'field', 'report', 'card', 'job',
     'endpoint', 'hook', 'flow', 'agent', 'permission', 'setting',
   ])
 })
@@ -89,8 +89,8 @@ test('every contribution kind has a projection target', () => {
   }
 })
 
-test('PROJECTED_KINDS is exactly page in v1', () => {
-  assert.deepEqual([...PROJECTED_KINDS], ['page'])
+test('PROJECTED_KINDS includes the completed projection kinds', () => {
+  assert.deepEqual([...PROJECTED_KINDS], ['page', 'nav', 'setting', 'permission'])
 })
 
 // --- page kind: the v1 projection contract ------------------------------------
@@ -291,12 +291,12 @@ test('permission contribution requires a hierarchical key', () => {
 
 test('setting contribution validates value type', () => {
   const ok = parseModuleManifest(base({
-    contributions: [{ kind: 'setting', key: 'recast_enabled', label: 'Recast enabled', valueType: 'boolean', defaultValue: false }],
+    contributions: [{ kind: 'setting', key: 'recast_footer_visible', label: 'Recast enabled', valueType: 'boolean', defaultValue: false }],
   }))
   assert.equal(ok.ok, true, ok.errors.join('; '))
 
   const bad = parseModuleManifest(base({
-    contributions: [{ kind: 'setting', key: 'recast_enabled', label: 'X', valueType: 'hologram' }],
+    contributions: [{ kind: 'setting', key: 'recast_footer_visible', label: 'X', valueType: 'hologram' }],
   }))
   assert.equal(bad.ok, false)
 })
@@ -317,6 +317,7 @@ test('duplicate page routes are rejected', () => {
 test('same route different slots is fine; same route+slot collides', () => {
   const fine = parseModuleManifest(base({
     contributions: [
+      { kind: 'nav', href: '/module-example', label: 'Example', group: 'insights' },
       { kind: 'panel', route: '/x', slot: 'aside', blocks: [] },
       { kind: 'panel', route: '/x', slot: 'header', blocks: [] },
     ],
@@ -325,7 +326,9 @@ test('same route different slots is fine; same route+slot collides', () => {
 
   const collide = parseModuleManifest(base({
     contributions: [
+      { kind: 'nav', href: '/module-example', label: 'Example', group: 'insights' },
       { kind: 'panel', route: '/x', slot: 'aside', blocks: [] },
+      { kind: 'nav', href: '/module-example', label: 'Example', group: 'insights' },
       { kind: 'panel', route: '/x', slot: 'aside', blocks: [] },
     ],
   }))
@@ -371,10 +374,10 @@ test('projectionStatuses: page is projected, everything else NOT_IMPLEMENTED_YET
   assert.equal(statuses[0]!.target, 'page_specs')
   assert.equal(statuses[1]!.status, 'NOT_IMPLEMENTED_YET')
   assert.match(statuses[1]!.target, /user_scripts/)
-  assert.equal(statuses[2]!.status, 'NOT_IMPLEMENTED_YET')
+  assert.equal(statuses[2]!.status, 'projected')
 
   const summary = projectionSummary(r.manifest!)
-  assert.deepEqual(summary, { projected: 1, notImplementedYet: 2 })
+  assert.deepEqual(summary, { projected: 2, notImplementedYet: 1 })
 })
 
 test('projectionSummary counts an empty manifest as zero/zero', () => {
@@ -390,6 +393,7 @@ test('a manifest with one of every contribution kind parses and summarizes', () 
   const r = parseModuleManifest(base({
     contributions: [
       { kind: 'page', route: '/x', spec: validSpec('/x') },
+      { kind: 'nav', href: '/module-example', label: 'Example', group: 'insights' },
       { kind: 'panel', route: '/x', slot: 'aside', blocks: [] },
       { kind: 'record-type', key: 'wip-transactions', label: 'WIP', sections: [{ id: 's', title: 'S', repeating: false, fields: [] }] },
       { kind: 'field', targetTable: 'documents', key: 'bucket', label: 'Bucket', fieldType: 'text' },
@@ -401,12 +405,12 @@ test('a manifest with one of every contribution kind parses and summarizes', () 
       { kind: 'flow', name: 'Gate', subjectKind: 'vendor_bill', graph: { schemaVersion: 1, nodes: [], edges: [] } },
       { kind: 'agent', key: 'reconciler', name: 'Reconciler' },
       { kind: 'permission', key: 'revenue.recast', label: 'Recast' },
-      { kind: 'setting', key: 'recast_enabled', label: 'Recast', valueType: 'boolean' },
+      { kind: 'setting', key: 'recast_footer_visible', label: 'Recast', valueType: 'boolean' },
     ],
   }))
   assert.equal(r.ok, true, r.errors.join('; '))
-  assert.equal(r.manifest!.contributions.length, 13)
-  assert.deepEqual(projectionSummary(r.manifest!), { projected: 1, notImplementedYet: 12 })
+  assert.equal(r.manifest!.contributions.length, 14)
+  assert.deepEqual(projectionSummary(r.manifest!), { projected: 4, notImplementedYet: 10 })
 })
 
 test('moduleManifestSchema type inference compiles with every kind', () => {
@@ -516,7 +520,7 @@ test('flow contribution rejects a payload outside the automation graph schema', 
 
 test('setting contribution rejects a default outside its value type', () => {
   const r = parseModuleManifest(base({
-    contributions: [{ kind: 'setting', key: 'recast_enabled', label: 'Recast', valueType: 'boolean', defaultValue: 'yes' }],
+    contributions: [{ kind: 'setting', key: 'recast_footer_visible', label: 'Recast', valueType: 'boolean', defaultValue: 'yes' }],
   }))
   assert.equal(r.ok, false)
   assert.match(r.errors.join('\n'), /defaultValue must be a boolean/)

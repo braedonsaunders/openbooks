@@ -62,6 +62,7 @@ export const MODULE_KINDS = ["module", "app"] as const;
  */
 export const MODULE_CONTRIBUTION_KINDS = [
   "page",
+  "nav",
   "panel",
   "record-type",
   "field",
@@ -101,7 +102,7 @@ export const modules = pgTable(
      * The version whose contributions are projected right now. NULL only
      * transiently between install and first version activation, or after a
      * full rollback. Pinned tenant-coherently to module_versions by the
-     * composite FK (org_id, active_version_id) → module_versions (org_id, id).
+     * composite FK (org_id, id, active_version_id) → module_versions (org_id, module_id, id).
      */
     activeVersionId: uuid("active_version_id"),
     /**
@@ -160,6 +161,7 @@ export const moduleVersions = pgTable(
   },
   (t) => [
     uniqueIndex("module_versions_module_version").on(t.moduleId, t.version),
+    uniqueIndex("module_versions_org_module_id_unique").on(t.orgId, t.moduleId, t.id),
     index("module_versions_org_module").on(t.orgId, t.moduleId),
     index("module_versions_module_status").on(t.moduleId, t.status),
   ],

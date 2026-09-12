@@ -179,7 +179,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'lien-waiver-toolbar': { props: ['canManage', 'direction', 'projects', 'status', 'vendors'] },
   'link-button': { props: ['href', 'iconKey', 'label', 'size', 'variant'] },
   'list-view-drawer': { props: ['canManageOrg', 'crmEnabled', 'def', 'filterOptions', 'inventoryEnabled', 'recordType', 'showInListDefs', 'userId'] },
-  'listing-card': { props: ['current', 'description', 'installed', 'listingId', 'listingKey', 'name', 'versionLine'] },
+  'listing-card': { props: ['canInstall', 'current', 'description', 'installed', 'listingId', 'listingKey', 'name', 'versionLine'] },
   'live-directory': { props: ['items'] },
   'manage-books-button': { props: ['href', 'label'] },
   'manage-quotas-button': { props: ['ariaLabel', 'href', 'label'] },

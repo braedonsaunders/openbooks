@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { safeNextPath } from './page.tsx'
+import { safeNextPath } from '../../lib/login-return-path'
 
 const pageSource = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8')
 
