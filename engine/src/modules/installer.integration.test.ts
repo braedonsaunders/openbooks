@@ -261,6 +261,41 @@ test(
 );
 
 test(
+  "reactivating a superseded version audits the transition",
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture();
+    try {
+      const v1 = manifest();
+      await withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: v1 }));
+      await withBypass(() =>
+        upgradeModule({
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          key: "qilish-report",
+          manifest: manifest({ version: "1.1.0" }),
+        }),
+      );
+      const reactivated = await withBypass(() =>
+        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: v1 }),
+      );
+      assert.equal(reactivated.outcome, "reactivated");
+      const versionAudits = await auditFor(fx.orgId, "module_versions", reactivated.versionId);
+      const flips = versionAudits.filter(
+        (a) => (a.changes as { event?: string }).event === "module_version_reactivated",
+      );
+      assert.equal(flips.length, 1);
+      assertAudited(flips, fx.actorId);
+      const changes = flips[0]!.changes as { before?: { status?: string }; after?: { status?: string } };
+      assert.equal(changes.before?.status, "superseded");
+      assert.equal(changes.after?.status, "active");
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
+
+test(
   "reinstalling the same version with a different manifest is refused; upgrade appends and re-projects",
   { skip: !DB },
   async () => {
