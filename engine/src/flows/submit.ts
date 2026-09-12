@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema, withOrgTransaction } from "../db.ts";
 import { runTriggerScripts, type ScriptContext } from "../scripting.ts";
+import { assertExpenseEmployee } from "../expense-validation.ts";
 import { runRecordFlows } from "./run.ts";
 
 /**
@@ -104,6 +105,15 @@ async function submitForApprovalLocked(
     if (Object.keys(mutations).length > 0) {
       await db.update(schema.documents).set(mutations).where(and(eq(schema.documents.id, doc.id), eq(schema.documents.orgId, doc.orgId)));
     }
+  }
+
+  // Scripts may change the draft; validate the persisted employee under the
+  // submission row lock before approval routing can release this evidence.
+  if (doc.kind === "expense_report") {
+    const [effective] = await db.select().from(schema.documents)
+      .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, orgId)));
+    if (!effective) throw new Error("target document not found");
+    await assertExpenseEmployee(db, effective);
   }
 
   // -- flows: on_submit --------------------------------------------------

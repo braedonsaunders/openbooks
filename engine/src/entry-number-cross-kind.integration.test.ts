@@ -18,9 +18,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, pool } from "./db.ts";
 import { postDocument } from "./posting.ts";
-import { createScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -43,6 +43,12 @@ async function approvedDocument(
   const id = randomUUID();
   const actor = randomUUID();
   await db.transaction(async (tx) => {
+    // The numbering case shares a party across document kinds; model the
+    // expense employee explicitly instead of using a vendor-only identity.
+    if (kind === "expense_report") {
+      await tx.execute(sql`insert into employee_roles (org_id, party_id)
+        values (${o.orgId}, ${o.vendorId}) on conflict do nothing`);
+    }
     await tx.execute(sql`
       insert into documents (id, org_id, kind, status, document_number, party_id,
                              document_date, currency, subtotal, tax_total, total, created_by)
@@ -161,3 +167,11 @@ test(
     );
   },
 );
+
+test.after(async () => {
+  try {
+    if (org) await dropScratchOrg(org.orgId);
+  } finally {
+    await pool.end();
+  }
+});

@@ -1,3 +1,5 @@
+import { splitOriginalCost } from "./inventory-original-cost.ts";
+import { exactCostFragments, extendCost } from "./inventory-costing.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withTransactionSavepoint } from "./db.ts";
@@ -36,6 +38,7 @@ const SCALE = 10_000n;
 const valueAt = (quantityUnits: bigint, rateUnits: bigint): bigint =>
   roundDiv(quantityUnits * rateUnits, SCALE);
 type RemainingLayer = {
+  remaining_original_cost: string | null;
   id: string;
   subsidiary_id: string;
   source_movement_id: string;
@@ -55,106 +58,37 @@ const SUPPORTED_INBOUND_LAYER_KINDS = new Set([
   "assembly_build",
 ]);
 
-/**
- * Set one layer's remaining value to exactly `targetUnits` (4dp money units).
- *
- * Same exactness discipline as the landed-cost allocator, generalised to work
- * in BOTH directions: binary-search a 4dp unit cost whose extended value hits
- * the target exactly; when no such rate exists and the layer holds more than
- * one unit, split a single unit into a deterministic rounding layer (one unit
- * maps rate units to value units 1:1, so any residual is representable).
- */
+/** Remeasure through the shared adjacent-rate fragments, preserving exact basis. */
 async function setLayerValueExactly(
   tx: Pick<typeof db, "execute">,
   orgId: string,
   layer: RemainingLayer,
   targetUnits: bigint,
   actorId: string | null,
-  respectSourceCeiling = false,
 ): Promise<void> {
-  const quantityUnits = toUnits(layer.remaining_quantity);
-  if (quantityUnits <= 0n) throw new InventoryNrvError("cannot revalue an empty layer");
-  if (targetUnits < 0n) throw new InventoryNrvError("layer value cannot go negative");
-
-  const findExactRate = (): bigint | null => {
-    let low = 0n;
-    let high = (targetUnits * SCALE) / quantityUnits + 2n;
-    while (valueAt(quantityUnits, high) < targetUnits) high = high * 2n + 1n;
-    while (low < high) {
-      const mid = (low + high) / 2n;
-      if (valueAt(quantityUnits, mid) < targetUnits) low = mid + 1n;
-      else high = mid;
-    }
-    return valueAt(quantityUnits, low) === targetUnits ? low : null;
-  };
-
-  const exactRate = findExactRate();
-  if (exactRate != null) {
-    await tx.execute(sql`
-      update cost_layers
-         set unit_cost = ${fromUnits(exactRate)}, updated_at = now(), updated_by = ${actorId}
-       where id = ${layer.id} and org_id = ${orgId}`);
-    return;
+  if (toUnits(layer.remaining_quantity) <= 0n || targetUnits < 0n) {
+    throw new InventoryNrvError("invalid inventory remeasurement quantity or value");
   }
-
-  if (quantityUnits <= SCALE) {
-    // Exactly one unit (or a fraction) always has an exact rate; reaching here
-    // means the target is unrepresentable — a logic error, not a data state.
-    throw new InventoryNrvError("layer value not representable at 4dp precision");
+  const fragments = exactCostFragments(layer.remaining_quantity, fromUnits(targetUnits));
+  const bases = splitOriginalCost(layer.remaining_original_cost,
+    fragments.map((fragment) => fragment.quantity),
+    fragments.map((fragment) => extendCost(fragment.quantity, fragment.unitCost)));
+  const first = fragments[0]!;
+  const splitQuantity = fromUnits(toUnits(layer.remaining_quantity) - toUnits(first.quantity));
+  await tx.execute(sql`update cost_layers
+    set original_quantity=original_quantity-${splitQuantity}::numeric,
+        remaining_quantity=${first.quantity}, unit_cost=${first.unitCost},
+        remaining_original_cost=${bases[0]}, updated_at=now(), updated_by=${actorId}
+    where org_id=${orgId} and id=${layer.id}`);
+  for (let index = 1; index < fragments.length; index++) {
+    const fragment = fragments[index]!;
+    await tx.execute(sql`insert into cost_layers
+      (id,org_id,subsidiary_id,item_id,stock_location_id,source_movement_id,received_at,
+       original_quantity,remaining_quantity,unit_cost,remaining_original_cost,created_at,created_by,updated_by)
+      select ${randomUUID()},org_id,subsidiary_id,item_id,stock_location_id,source_movement_id,received_at,
+        ${fragment.quantity},${fragment.quantity},${fragment.unitCost},${bases[index]},clock_timestamp(),${actorId},${actorId}
+      from cost_layers where org_id=${orgId} and id=${layer.id}`);
   }
-
-  // Split one whole unit off as the rounding layer.
-  const mainQuantityUnits = quantityUnits - SCALE;
-  let mainRate = (targetUnits * SCALE) / quantityUnits;
-  let mainValue = valueAt(mainQuantityUnits, mainRate);
-  while (mainValue > targetUnits && mainRate > 0n) {
-    mainRate -= 1n;
-    mainValue = valueAt(mainQuantityUnits, mainRate);
-  }
-  // Keep both fragments at or below the immutable source rate when this is a
-  // reversal. A floor average can leave a one-unit residual just above source
-  // cost because of four-decimal multiplication rounding (for example,
-  // 3 × 1.0001 with a 3.0002 target). Move the main fragment up, while still
-  // below the target, until the residual has the same ceiling.
-  const sourceRate =
-    respectSourceCeiling && layer.source_unit_cost != null
-      ? toUnits(layer.source_unit_cost)
-      : null;
-  if (sourceRate != null) {
-    while (mainValue < targetUnits - sourceRate && mainRate < sourceRate) {
-      mainRate += 1n;
-      mainValue = valueAt(mainQuantityUnits, mainRate);
-    }
-    if (mainValue > targetUnits) {
-      while (mainValue > targetUnits && mainRate > 0n) {
-        mainRate -= 1n;
-        mainValue = valueAt(mainQuantityUnits, mainRate);
-      }
-    }
-  }
-  const roundingValue = targetUnits - mainValue;
-  if (roundingValue < 0n) throw new InventoryNrvError("NRV remeasurement produced an invalid layer split");
-  if (sourceRate != null && roundingValue > sourceRate) {
-    throw new InventoryNrvError("NRV remeasurement exceeded an inventory layer's original source cost");
-  }
-
-  const splitLayerId = randomUUID();
-  await tx.execute(sql`
-    update cost_layers
-       set original_quantity = original_quantity - '1.0000',
-           remaining_quantity = remaining_quantity - '1.0000',
-           unit_cost = ${fromUnits(mainRate)},
-           updated_at = now(), updated_by = ${actorId}
-     where id = ${layer.id} and org_id = ${orgId}`);
-  await tx.execute(sql`
-    insert into cost_layers
-      (id, org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at,
-       original_quantity, remaining_quantity, unit_cost, created_at, created_by, updated_by)
-    select ${splitLayerId}, org_id, subsidiary_id, item_id, stock_location_id,
-           ${layer.source_movement_id}, ${layer.received_at},
-           '1.0000', '1.0000', ${fromUnits(roundingValue)}, clock_timestamp(), ${actorId}, ${actorId}
-      from cost_layers
-     where id = ${layer.id} and org_id = ${orgId}`);
 }
 
 /** Distribute a total value change across layers in proportion to value. */
@@ -217,7 +151,7 @@ async function remainingLayers(
     select layer.id, layer.subsidiary_id, layer.source_movement_id,
            layer.received_at::text as received_at,
            layer.remaining_quantity::text as remaining_quantity,
-           layer.unit_cost::text as unit_cost,
+           layer.unit_cost::text as unit_cost, layer.remaining_original_cost::text,
            source.kind as source_kind, source.status as source_status,
            source.unit_cost::text as source_unit_cost
       from cost_layers layer
@@ -551,48 +485,33 @@ export async function reverseInventoryWritedown(
     if (requested <= 0n) {
       throw new InventoryNrvError("revised net realisable value is not above the carrying amount — nothing to reverse");
     }
-    // IAS 2.33 cap: an issue consumes the written-down cost layer, but the
-    // historical evidence row remains open. Allocate each row's unreversed
-    // amount only to the quantity that survives on hand; otherwise a write-down
-    // on 10 units followed by an issue of 9 could release the full 10-unit loss
-    // onto the one unit left in inventory.
-    const onHandQuantityUnits = toUnits(onHand.quantity);
-    const reversibleForOnHand = open.rows.reduce((total, row) => {
-      const rowQuantityUnits = toUnits(row.quantity);
-      if (rowQuantityUnits <= 0n) return total;
-      const survivingQuantityUnits =
-        onHandQuantityUnits < rowQuantityUnits ? onHandQuantityUnits : rowQuantityUnits;
-      return total + (toUnits(row.remaining) * survivingQuantityUnits) / rowQuantityUnits;
-    }, 0n);
-    // Every remaining layer must carry immutable provenance for its original
-    // cost ceiling. A position-wide source-cost total is insufficient: it can
-    // spend a cheap layer's headroom on a fresh, already-at-cost receipt.
-    // Supported inbound movement kinds all persist their original unit_cost;
-    // anything else (or a missing source row/cost) fails closed.
+    // The surviving original-cost balance follows actual withdrawals and
+    // receipts. Current quantity cannot establish how much of an old loss
+    // survives: replenishment must never revive loss already consumed.
     const enriched = layers.map((layer) => {
       if (
         layer.source_kind == null ||
         layer.source_status !== "posted" ||
         !SUPPORTED_INBOUND_LAYER_KINDS.has(layer.source_kind) ||
-        layer.source_unit_cost == null
+        layer.source_unit_cost == null || layer.remaining_original_cost == null
       ) {
         throw new InventoryNrvError(
           "inventory layer original-cost provenance is unavailable; reversal is refused",
         );
       }
-      const originalRateUnits = toUnits(layer.source_unit_cost);
-      if (originalRateUnits < 0n) {
+      const originalValue = toUnits(layer.remaining_original_cost!);
+      if (originalValue < 0n) {
         throw new InventoryNrvError(
           "inventory layer original-cost provenance is invalid; reversal is refused",
         );
       }
       const value = valueAt(toUnits(layer.remaining_quantity), toUnits(layer.unit_cost));
-      const originalValue = valueAt(toUnits(layer.remaining_quantity), originalRateUnits);
       const headroom = originalValue > value ? originalValue - value : 0n;
-      return { layer, value, headroom };
+      return { layer, value, headroom, originalValue };
     });
     const layerHeadroom = enriched.reduce((total, layer) => total + layer.headroom, 0n);
-    const increaseCap = [totalReversible, reversibleForOnHand, layerHeadroom].reduce(
+    const positionHeadroom = enriched.reduce((total, layer) => total + layer.originalValue - layer.value, 0n);
+    const increaseCap = [totalReversible, positionHeadroom, layerHeadroom].reduce(
       (cap, candidate) => (candidate < cap ? candidate : cap),
     );
     const increase = requested < increaseCap ? requested : increaseCap;
@@ -614,7 +533,6 @@ export async function reverseInventoryWritedown(
         enriched[i]!.layer,
         enriched[i]!.value + shares[i]!,
         actorId,
-        true,
       );
     }
 

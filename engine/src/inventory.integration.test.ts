@@ -1379,16 +1379,15 @@ test("costing method and tracking flips are guarded, revalued under standard, an
     `);
 
     // The reported reproduction: issue 15 across two strata under moving
-    // average. It must price across layers exactly instead of charging all 15
-    // to layers[0] (which drove it to -5 and tripped check constraint 23514).
+    // average. All 20 units contribute to the weighted rate of 6.
     const degradedIssue = await issueInventory(org.orgId, null, {
       itemId: org.items.fifo, stockLocationId: loc, quantity: "15",
       subsidiaryId: sub, date: org.date,
     });
-    assert.equal(toUnits(degradedIssue.value), toUnits("-85")); // 10x5 + 5x7
+    assert.equal(toUnits(degradedIssue.value), toUnits("-90")); // 15 × ((10×5 + 10×7) / 20)
     let onHand = await getOnHand(org.orgId, org.items.fifo, loc);
     assert.equal(toUnits(onHand.quantity), toUnits("5"));
-    assert.equal(toUnits(onHand.value), toUnits("35"));
+    assert.equal(toUnits(onHand.value), toUnits("30"));
     await assertInvariant(org);
 
     // A controlled switch to standard revalues open layers onto the standard
@@ -1423,11 +1422,11 @@ test("costing method and tracking flips are guarded, revalued under standard, an
     assert.equal(toUnits(onHand.value), toUnits("50"));
     assert.equal(
       toUnits(await glBalance(org.orgId, org.accounts.invAsset)) - toUnits(assetBefore),
-      toUnits("15"),
+      toUnits("20"),
     );
     assert.equal(
       toUnits(await glBalance(org.orgId, org.accounts.adjustment)) - toUnits(varianceBefore),
-      toUnits("-15"),
+      toUnits("-20"),
     );
     await assertInvariant(org);
 
