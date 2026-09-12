@@ -1696,6 +1696,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       description={str(props, 'description') ?? ''}
       installed={props.installed === true}
       current={props.current === true}
+      canInstall={props.canInstall === undefined || Boolean(props.canInstall)}
     />
   ),
   /** NOT `apps-empty-icon` — that one renders Boxes; this renders Library. */

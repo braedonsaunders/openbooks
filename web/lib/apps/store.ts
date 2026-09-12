@@ -137,12 +137,14 @@ function sameAbsorbedRelease(a: ComparableAbsorbedManifest, b: ComparableAbsorbe
     name: m.name,
     version: m.version,
     description: m.description ?? null,
-    permissions: m.permissions,
+    permissions: [...new Set([
+      ...(Array.isArray(m.permissions) ? m.permissions : []),
+      ...(Array.isArray(m.provenance?.unmappedPermissions) ? m.provenance.unmappedPermissions : []),
+    ])].sort(),
     contributions: m.contributions,
     provenance: {
       kind: m.provenance?.kind,
       appKey: m.provenance?.appKey,
-      unmappedPermissions: m.provenance?.unmappedPermissions,
     },
   })
   return stableStringify(release(a)) === stableStringify(release(b))
@@ -286,9 +288,10 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
         name = excluded.name, description = excluded.description, icon_key = excluded.icon_key,
         granted_permissions = excluded.granted_permissions, kind = 'app', app_id = excluded.app_id,
         status = 'installed', updated_at = now(), updated_by = ${userId}
-      where modules.org_id = ${orgId}
+      where modules.org_id = ${orgId} and modules.kind = 'app'
       returning id`))
-    const moduleId = moduleRes.rows[0]!.id
+    const moduleId = moduleRes.rows[0]?.id
+    if (!moduleId) throw new AppError(`The key ${manifest.key} belongs to a native module`, 409)
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'modules', ${moduleId}, ${priorModule ? 'update' : 'insert'},
@@ -1379,6 +1382,7 @@ export type ListingRow = {
   version: string
   publisherOrgId: string
   updatedAt: string
+  kind: 'app' | 'module'
 };
 
 export interface ListingPage {
@@ -1402,6 +1406,7 @@ export async function listListings({
   const [listings, count] = await Promise.all([
     rows<ListingRow>(sql`
       select id, key, name, description, icon_key as "iconKey", version,
+             case when manifest ? 'contributions' and not (manifest ? 'frontend') then 'module' else 'app' end as kind,
              publisher_org_id as "publisherOrgId", updated_at as "updatedAt"
         from app_listings
        where ${where}
@@ -1434,13 +1439,14 @@ export async function publishApp(orgId: string, userId: string, key: string): Pr
     select path, content, is_binary as "isBinary"
       from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId} order by path`)
 
-  const existing = await rows<{ id: string; publisherOrgId: string }>(
-    sql`select id, publisher_org_id as "publisherOrgId" from app_listings where key = ${key} limit 1`,
+  const existing = await rows<{ id: string; publisherOrgId: string; isApp: boolean }>(
+    sql`select id, publisher_org_id as "publisherOrgId", manifest ? 'frontend' as "isApp" from app_listings where key = ${key} limit 1`,
   )
   if (existing[0] && existing[0].publisherOrgId !== orgId) {
     throw new AppError(`"${key}" is already published by another org`, 409)
   }
 
+  if (existing[0] && !existing[0].isApp) throw new AppError(`"${key}" is already published as a module`, 409)
   const filesJson = JSON.stringify(files)
   const manifestJson = JSON.stringify(app.manifest)
   const r = (await db.execute<{ id: string }>(sql`
@@ -1451,9 +1457,11 @@ export async function publishApp(orgId: string, userId: string, key: string): Pr
       name = excluded.name, description = excluded.description, icon_key = excluded.icon_key,
       version = excluded.version, manifest = excluded.manifest, files = excluded.files,
       is_active = true, updated_at = now(), updated_by = ${userId}
-    where app_listings.publisher_org_id = ${orgId}
+    where app_listings.publisher_org_id = ${orgId} and app_listings.manifest ? 'frontend'
     returning id`))
-  return { id: r.rows[0]!.id }
+  const id = r.rows[0]?.id
+  if (!id) throw new AppError(`"${key}" is already published by another org or as another kind`, 409)
+  return { id }
 }
 
 /** Install a marketplace listing into the caller's org via the normal path. */

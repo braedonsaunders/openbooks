@@ -12,11 +12,13 @@ export function InstallListingButton({
   name,
   installed,
   current,
+  canInstall = true,
 }: {
   listingId: string
   name: string
   installed: boolean
   current: boolean
+  canInstall?: boolean
 }) {
   const router = useRouter()
   const t = useTranslations('apps.library')
@@ -32,7 +34,8 @@ export function InstallListingButton({
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || t('installFailed'))
-      toast.success(installed ? t('updateSuccess', { name }) : t('installSuccess', { name }))
+      toast.success(data.outcome === 'pending-approval' ? t('approvalPending', { name }) : installed ? t('updateSuccess', { name }) : t('installSuccess', { name }))
+      if (data.kind === 'module') router.push(`/admin/modules?module=${encodeURIComponent(data.key)}`)
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('installFailed'))
@@ -42,7 +45,7 @@ export function InstallListingButton({
   }
 
   return (
-    <Button size="sm" variant={installed ? 'outline' : 'default'} disabled={busy || current} onClick={install}>
+    <Button size="sm" variant={installed ? 'outline' : 'default'} disabled={busy || current || !canInstall} onClick={install}>
       {installed ? <RefreshCw size={14} aria-hidden /> : <Download size={14} aria-hidden />}
       {busy ? t('installing') : current ? t('installed') : installed ? t('update') : t('install')}
     </Button>

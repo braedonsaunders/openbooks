@@ -6,7 +6,8 @@ import { seedDashboardDefaultsForOrg } from "@openbooks/engine/src/dashboard-def
 import { permissionsOutsideCeiling } from "@openbooks/engine/src/permissions.ts";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { type Authz, guardPermission } from "../../../../lib/authz";
-import { isCataloguePermission, PERMISSION_CATALOGUE } from "../../../../lib/permissions";
+import { listActiveModuleContributions } from "@openbooks/engine/src/modules/projections.ts";
+import { PERMISSION_CATALOGUE } from "../../../../lib/permissions";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -37,14 +38,16 @@ function slugify(name: string): string {
 }
 
 /** Validate + normalize a permissions payload to deduped catalogue keys in catalogue order. */
-function normalizePermissions(input: unknown): string[] | null {
+async function normalizePermissions(input: unknown, orgId: string, preserved: readonly string[] = []): Promise<string[] | null> {
+  const contributions = await listActiveModuleContributions(orgId);
+  const catalogue = [...PERMISSION_CATALOGUE, ...contributions.flatMap((entry) => entry.contribution.kind === "permission" ? [entry.contribution.key] : []), ...preserved];
   if (!Array.isArray(input)) return null;
   const set = new Set<string>();
   for (const p of input) {
-    if (typeof p !== "string" || !isCataloguePermission(p)) return null;
+    if (typeof p !== "string" || !catalogue.includes(p)) return null;
     set.add(p);
   }
-  return PERMISSION_CATALOGUE.filter((p) => set.has(p));
+  return [...new Set(catalogue)].filter((p) => set.has(p));
 }
 
 /**
@@ -158,7 +161,7 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const permissions = normalizePermissions(body.permissions ?? []);
+  const permissions = await normalizePermissions(body.permissions ?? [], actor.orgId);
   if (!permissions) {
     return NextResponse.json({ error: "permissions must be known catalogue keys" }, { status: 400 });
   }
@@ -172,6 +175,8 @@ export async function POST(req: Request) {
   }
 
   return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`module-projections:${actor.orgId}`}, 0))`);
+    if (!await normalizePermissions(permissions, actor.orgId)) return NextResponse.json({ error: "A module permission is no longer active" }, { status: 409 });
     const inserted = await db.execute<{ id: string }>(sql`
       insert into app_roles (org_id, key, name, description, is_built_in, permissions,
                              subsidiary_restriction, created_by, updated_by)
@@ -223,6 +228,7 @@ export async function PATCH(req: Request) {
   }
   const id = body.id;
   return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`module-projections:${actor.orgId}`}, 0))`);
     const existing = ((await db.execute(sql`
       select id, key, name, description, is_built_in, permissions, subsidiary_restriction
         from app_roles where id = ${id} and org_id = ${actor.orgId} for update`)));
@@ -236,7 +242,7 @@ export async function PATCH(req: Request) {
     const sets: SQL[] = [];
 
     if (body.permissions !== undefined) {
-      const permissions = normalizePermissions(body.permissions);
+      const permissions = await normalizePermissions(body.permissions, actor.orgId, rolePermissionList(role.permissions));
       if (!permissions) {
         return NextResponse.json(
           { error: "permissions must be known catalogue keys" },
@@ -439,4 +445,11 @@ export async function DELETE(req: Request) {
       reassignedUsers: replacement ? stranded.length : 0,
     });
   }));
+}
+
+export async function GET() {
+  const gate = await guardPermission("admin.roles.manage");
+  if (gate instanceof NextResponse) return gate;
+  const contributions = await listActiveModuleContributions(gate.user.orgId);
+  return NextResponse.json({ permissions: contributions.flatMap((entry) => entry.contribution.kind === "permission" ? [{ moduleKey: entry.moduleKey, ...entry.contribution }] : []) });
 }

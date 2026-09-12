@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, env, withBypass, withOrgContext } from "../db.ts";
+import { requestModuleInstallApproval, decideModuleApproval } from "./lifecycle.ts";
 import { isCataloguePermission } from "../permissions.ts";
 import { isModulePermission } from "./module-catalogue.ts";
 import {
@@ -41,6 +42,7 @@ async function makeFixture(): Promise<Fixture> {
   return await withBypass(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Module Admin", "admin");
+    await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`);
     return { orgId: org.orgId, actorId };
   });
 }
@@ -57,7 +59,7 @@ function manifest(overrides: Record<string, unknown> = {}) {
     name: "Qilish Report",
     version: "1.0.0",
     description: "A reporting module",
-    permissions: ["records.read"],
+    permissions: [],
     contributions: [{ kind: "page", route: "/reports/qilish", spec: specFor("/reports/qilish") }],
     ...overrides,
   };
@@ -128,7 +130,7 @@ test(
       assert.equal(modules.length, 1);
       assert.equal(modules[0]!.key, "qilish-report");
       assert.equal(modules[0]!.status, "installed");
-      assert.deepEqual(modules[0]!.granted_permissions, ["records.read"]);
+      assert.deepEqual(modules[0]!.granted_permissions, []);
 
       const versions = (
         await withOrgContext(fx.orgId, () =>
@@ -357,7 +359,7 @@ test(
 );
 
 test(
-  "reactivating a superseded version audits the transition",
+  "superseded versions require append-only rollback and cannot be directly reactivated",
   { skip: !DB },
   async () => {
     const fx = await makeFixture();
@@ -373,19 +375,9 @@ test(
           installerEffectivePermissions: ["records.read"],
         }),
       );
-      const reactivated = await withBypass(() =>
+      await assert.rejects(() => withBypass(() =>
         installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: v1, installerEffectivePermissions: ["records.read"] }),
-      );
-      assert.equal(reactivated.outcome, "reactivated");
-      const versionAudits = await auditFor(fx.orgId, "module_versions", reactivated.versionId);
-      const flips = versionAudits.filter(
-        (a) => (a.changes as { event?: string }).event === "module_version_reactivated",
-      );
-      assert.equal(flips.length, 1);
-      assertAudited(flips, fx.actorId);
-      const changes = flips[0]!.changes as { before?: { status?: string }; after?: { status?: string } };
-      assert.equal(changes.before?.status, "superseded");
-      assert.equal(changes.after?.status, "active");
+      ), /historical module version cannot be reactivated/);
     } finally {
       await dropScratchOrg(fx.orgId);
     }
@@ -769,15 +761,14 @@ test(
 
       // The installer holds only gl.read: gl.post is requested and approved
       // but withheld, and the audit trail says so.
-      const out = await withBypass(() =>
-        installModule({
-          orgId: fx.orgId,
-          actorId: fx.actorId,
-          manifest: manifest({ permissions: ["gl.read", "gl.post"] }),
-          installerEffectivePermissions: ["gl.read"],
-        }),
-      );
-      assert.equal(out.outcome, "installed");
+      const requesterId = await withBypass(() => createScratchUser(fx.orgId, "Grant Requester", "admin"));
+      const staged = await withBypass(() => requestModuleInstallApproval({
+        orgId: fx.orgId, requesterId, manifest: manifest({ permissions: ["gl.read", "gl.post"] }),
+        installerEffectivePermissions: ["gl.read"], assignees: [{ type: "user", userId: fx.actorId }], reason: "Review bounded grants",
+      }));
+      const out = await withBypass(() => decideModuleApproval({ gateId: staged.gateIds[0]!, userId: fx.actorId,
+        decision: "approved", signature: "Module Admin", approverEffectivePermissions: ["gl.read"] }));
+      assert.equal(out.resumed, "approve");
       const stored = (
         await withOrgContext(fx.orgId, () =>
           db.execute<{ granted_permissions: string[] }>(

@@ -97,6 +97,8 @@ test('module agent tools gate, self-apply page-only installs, and stage capabili
     })
   })
 
+  await withBypassContext(() => db.execute(sql`update app_roles set permissions = '["*"]'::jsonb
+    where org_id in (${orgA}, ${orgB}) and key = 'admin'`))
   const requester = contextFor(orgA, requesterA, FULL)
   const approver = contextFor(orgA, approverA, FULL)
   const reader = contextFor(orgA, requesterA, ['reports.read'])
@@ -239,6 +241,30 @@ test('module agent tools gate, self-apply page-only installs, and stage capabili
       )
     ).rows[0]!
     assert.deepEqual(grant.granted_permissions, ['records.read'])
+
+    const next = await modules.installModuleStaged(requester, {
+      manifest: capabilityManifest({ version: '2.0.0' }),
+    })
+    assert.equal(next.staged, true)
+    if (!next.staged) throw new Error('expected an upgrade approval')
+    const upgraded = await modules.applyModule(approver, {
+      gateId: next.gateIds[0]!, signature: 'reviewed upgrade',
+    })
+    const rollback = await modules.rollbackModule(requester, { key: 'agent-ledger', versionId: decided.versionId })
+    assert.equal(rollback.rolledBack, false)
+    assert.equal(rollback.staged, true)
+    if (!rollback.staged) throw new Error('expected a rollback approval')
+    const restored = await modules.applyModule(approver, {
+      gateId: rollback.gateIds[0]!, signature: 'reviewed restore',
+    })
+    assert.notEqual(restored.versionId, decided.versionId)
+    assert.notEqual(restored.versionId, upgraded.versionId)
+    const history = (await db.execute<{ id: string; status: string }>(sql`
+      select id, status from module_versions where org_id = ${orgA} and module_id = ${restored.moduleId}`)).rows
+    assert.equal(history.length, 3)
+    assert.equal(history.find((row) => row.id === upgraded.versionId)?.status, 'rolled_back')
+    assert.equal(history.find((row) => row.id === decided.versionId)?.status, 'superseded')
+
   })
 
   // The other org sees none of it.
@@ -257,6 +283,8 @@ test('module diff reports per-kind changes and rollback restores the prior versi
       await dropScratchOrg(orgId)
     })
   })
+  await withOrgContext(orgId, () => db.execute(sql`update app_roles set permissions = '["*"]'::jsonb
+    where org_id = ${orgId} and key = 'admin'`))
   const actor = contextFor(orgId, requesterId, FULL)
 
   await withOrgContext(orgId, async () => {
@@ -309,7 +337,7 @@ test('module diff reports per-kind changes and rollback restores the prior versi
     // the bad version rolled back — history is appended, never rewritten.
     const rolled = await modules.rollbackModule(actor, { key: 'agent-atlas', versionId: v1.versionId! })
     assert.equal(rolled.rolledBack, true)
-    assert.equal(rolled.versionId, v1.versionId)
+    assert.notEqual(rolled.versionId, v1.versionId)
     assert.deepEqual(rolled.markedRolledBack, [v2.versionId!])
 
     const live = (
@@ -335,12 +363,12 @@ test('module diff reports per-kind changes and rollback restores the prior versi
     ).rows
     assert.deepEqual(
       statuses.map((s) => [s.version, s.status]),
-      [['1.0.0', 'active'], ['1.1.0', 'rolled_back']],
+      [[rolled.version, 'active'], ['1.0.0', 'superseded'], ['1.1.0', 'rolled_back']],
     )
 
     // Rolling back the version that is already live is refused, not a no-op
     // pretending to be work.
-    const refused = await modules.rollbackModule(actor, { key: 'agent-atlas', versionId: v1.versionId! })
+    const refused = await modules.rollbackModule(actor, { key: 'agent-atlas', versionId: rolled.versionId! })
     assert.equal(refused.rolledBack, false)
     assert.ok(refused.errors.length > 0)
 

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "../db.ts";
+import { db, withOrg, type SqlExecutor } from "../db.ts";
 import { upgradeModule } from "./installer.ts";
 import {
   markVersionRolledBack,
@@ -51,12 +51,17 @@ const VERSION = /^\d+(\.\d+){0,2}(-[0-9a-z.-]+)?$/;
  * Capability-bearing versions (any requested permission) do; page-only
  * versions carry no authority worth attesting and self-apply with audit.
  */
-export function moduleApplyRequiresSignature(manifest: { permissions?: unknown }): boolean {
-  return Array.isArray(manifest?.permissions) && manifest.permissions.length > 0;
+export function moduleApplyRequiresSignature(manifest: {
+  permissions?: unknown;
+}): boolean {
+  return (
+    Array.isArray(manifest?.permissions) && manifest.permissions.length > 0
+  );
 }
 
 type ModuleRow = {
   id: string;
+  kind: string;
   key: string;
   name: string;
   description: string | null;
@@ -117,21 +122,33 @@ function checkRestoringLabel(restoringVersion: unknown): string {
     restoringVersion.length > 32 ||
     !VERSION.test(restoringVersion)
   ) {
-    throw new ModuleRollbackError("invalid rollback: restoringVersion must look like 1.0.1");
+    throw new ModuleRollbackError(
+      "invalid rollback: restoringVersion must look like 1.0.1",
+    );
   }
   return restoringVersion;
 }
 
-async function lockModule(tx: SqlExecutor, orgId: string, key: string): Promise<ModuleRow | null> {
+async function lockModule(
+  tx: SqlExecutor,
+  orgId: string,
+  key: string,
+): Promise<ModuleRow | null> {
   return (
-    await tx.execute<ModuleRow>(sql`
-      select id, key, name, description, status, active_version_id, granted_permissions
+    (
+      await tx.execute<ModuleRow>(sql`
+      select id, kind, key, name, description, status, active_version_id, granted_permissions
         from modules where org_id = ${orgId} and key = ${key}
         for update`)
-  ).rows[0] ?? null;
+    ).rows[0] ?? null
+  );
 }
 
-async function listVersions(tx: SqlExecutor, orgId: string, moduleId: string): Promise<VersionRow[]> {
+async function listVersions(
+  tx: SqlExecutor,
+  orgId: string,
+  moduleId: string,
+): Promise<VersionRow[]> {
   return (
     await tx.execute<VersionRow>(sql`
       select id, version, status, manifest from module_versions
@@ -182,7 +199,9 @@ function resolveTarget(
     }
     return target;
   }
-  const target = versions.find((v) => v.id !== activeVersionId && v.status === "superseded");
+  const target = versions.find(
+    (v) => v.id !== activeVersionId && v.status === "superseded",
+  );
   if (!target) {
     throw new ModuleRollbackError(
       `module "${moduleKey}" has no earlier version to roll back to`,
@@ -192,10 +211,14 @@ function resolveTarget(
   return target;
 }
 
-function assertModuleRollable(moduleRow: ModuleRow | null, key: string): ModuleRow {
+function assertModuleRollable(
+  moduleRow: ModuleRow | null,
+  key: string,
+): ModuleRow {
   if (!moduleRow) {
     throw new ModuleRollbackError(`module "${key}" is not installed`, 404);
   }
+  if (moduleRow.kind !== "module") throw new ModuleRollbackError("app-backed modules use the Apps lifecycle", 409);
   if (moduleRow.status === "disabled") {
     throw new ModuleRollbackError(
       `module "${key}" is disabled; reactivate it before rolling back`,
@@ -203,10 +226,16 @@ function assertModuleRollable(moduleRow: ModuleRow | null, key: string): ModuleR
     );
   }
   if (moduleRow.status !== "installed") {
-    throw new ModuleRollbackError(`module "${key}" is ${moduleRow.status}, not installed`, 409);
+    throw new ModuleRollbackError(
+      `module "${key}" is ${moduleRow.status}, not installed`,
+      409,
+    );
   }
   if (!moduleRow.active_version_id) {
-    throw new ModuleRollbackError(`module "${key}" has no live version to roll back from`, 409);
+    throw new ModuleRollbackError(
+      `module "${key}" has no live version to roll back from`,
+      409,
+    );
   }
   return moduleRow;
 }
@@ -218,14 +247,24 @@ function assertModuleRollable(moduleRow: ModuleRow | null, key: string): ModuleR
  * because the label is new the apply always appends — convergence on the
  * target's own row is impossible, so history only grows.
  */
-function restoringManifest(target: VersionRow, restoringVersion: string): Record<string, unknown> {
-  if (typeof target.manifest !== "object" || target.manifest === null || Array.isArray(target.manifest)) {
+function restoringManifest(
+  target: VersionRow,
+  restoringVersion: string,
+): Record<string, unknown> {
+  if (
+    typeof target.manifest !== "object" ||
+    target.manifest === null ||
+    Array.isArray(target.manifest)
+  ) {
     throw new ModuleRollbackError(
       `version ${target.version} carries a corrupt manifest; refusing to restore it`,
       500,
     );
   }
-  return { ...(target.manifest as Record<string, unknown>), version: restoringVersion };
+  return {
+    ...(target.manifest as Record<string, unknown>),
+    version: restoringVersion,
+  };
 }
 
 /**
@@ -249,17 +288,34 @@ export async function rollbackModuleVersion(opts: {
   reason?: string;
 }): Promise<RollbackResult> {
   const restoringVersion = checkRestoringLabel(opts.restoringVersion);
-  const reason = opts.reason && opts.reason.length > 0 ? opts.reason : "rollback";
-  return await db.transaction(async (tx) => {
+  const reason =
+    opts.reason && opts.reason.length > 0 ? opts.reason : "rollback";
+  return await withOrg(opts.orgId, async () => {
+    const tx = db;
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${"module-projections:" + opts.orgId}, 0))`,
+    );
     // The module row lock serializes concurrent rollbacks of the same
     // module; the installer (savepoint below) serializes the projection
     // writes against concurrent installs.
-    const moduleRow = assertModuleRollable(await lockModule(tx, opts.orgId, opts.key), opts.key);
+    const moduleRow = assertModuleRollable(
+      await lockModule(tx, opts.orgId, opts.key),
+      opts.key,
+    );
     const activeVersionId = moduleRow.active_version_id!;
     const versions = await listVersions(tx, opts.orgId, moduleRow.id);
-    const target = resolveTarget(versions, opts.key, activeVersionId, opts.targetVersionId);
+    const target = resolveTarget(
+      versions,
+      opts.key,
+      activeVersionId,
+      opts.targetVersionId,
+    );
     const restoring = restoringManifest(target, restoringVersion);
-    const recorded = moduleRow.granted_permissions;
+    const recorded = moduleRow.granted_permissions.filter(
+      (permission) =>
+        Array.isArray(restoring.permissions) &&
+        restoring.permissions.includes(permission),
+    );
 
     const installed = await upgradeModule({
       orgId: opts.orgId,
@@ -363,14 +419,29 @@ export async function requestRollbackApproval(
   opts: RequestRollbackApprovalOptions,
 ): Promise<RollbackApprovalRequest> {
   const restoringVersion = checkRestoringLabel(opts.restoringVersion);
-  const reason = opts.reason && opts.reason.length > 0 ? opts.reason : "rollback";
-  return await db.transaction(async (tx) => {
-    const moduleRow = assertModuleRollable(await lockModule(tx, opts.orgId, opts.key), opts.key);
+  const reason =
+    opts.reason && opts.reason.length > 0 ? opts.reason : "rollback";
+  return await withOrg(opts.orgId, async () => {
+    const tx = db;
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${"module-projections:" + opts.orgId}, 0))`,
+    );
+    const moduleRow = assertModuleRollable(
+      await lockModule(tx, opts.orgId, opts.key),
+      opts.key,
+    );
     const activeVersionId = moduleRow.active_version_id!;
     const versions = await listVersions(tx, opts.orgId, moduleRow.id);
-    const target = resolveTarget(versions, opts.key, activeVersionId, opts.targetVersionId);
+    const target = resolveTarget(
+      versions,
+      opts.key,
+      activeVersionId,
+      opts.targetVersionId,
+    );
     const restoring = restoringManifest(target, restoringVersion);
-    const signatureRequired = opts.signatureRequired ?? moduleApplyRequiresSignature(restoring);
+    const signatureRequired =
+      moduleApplyRequiresSignature(restoring) ||
+      opts.signatureRequired === true;
 
     // The upgrade request runs in a savepoint below: same refusal checks
     // (no pending proposal, assignees resolve, label new) the installer
@@ -380,12 +451,20 @@ export async function requestRollbackApproval(
       requesterId: opts.requesterId,
       key: opts.key,
       manifest: restoring,
-      ...(opts.grantedPermissions !== undefined ? { grantedPermissions: opts.grantedPermissions } : {}),
+      ...(opts.grantedPermissions !== undefined
+        ? { grantedPermissions: opts.grantedPermissions }
+        : {}),
       installerEffectivePermissions: opts.installerEffectivePermissions,
       assignees: opts.assignees,
       ...(opts.quorum !== undefined ? { quorum: opts.quorum } : {}),
       signatureRequired,
-      ...(opts.allowSelfApproval !== undefined ? { allowSelfApproval: opts.allowSelfApproval } : {}),
+      rollback: {
+        restoredFromVersionId: target.id,
+        replacedVersionId: activeVersionId,
+      },
+      ...(opts.allowSelfApproval !== undefined
+        ? { allowSelfApproval: opts.allowSelfApproval }
+        : {}),
       reason,
     });
 

@@ -1,4 +1,5 @@
 import "server-only";
+import { denyInactiveModulePermissions, modulePermissionAvailability } from "@openbooks/engine/src/modules/permission-availability.ts";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -32,9 +33,11 @@ export async function getAuthz(): Promise<Authz | null> {
 
 /** Resolve current grants for a verified active identity, including scheduled execution. */
 export async function resolveUserAuthz(user: SessionUser): Promise<Authz> {
+  const modulePermissions = await modulePermissionAvailability(user.orgId);
+  const inactivePermissions = modulePermissions.inactive;
   // Super admins hold every permission in whatever org they're currently in.
   if (user.isSuperAdmin) {
-    return { user, permissions: new Set<string>(["*"]), allowedSubsidiaryIds: null };
+    return { user, permissions: denyInactiveModulePermissions(new Set<string>(["*"]), inactivePermissions), allowedSubsidiaryIds: null };
   }
   const [assignments, overrides, allowedSubs] = (await Promise.all([
     db.execute<{ permissions: string[] }>(sql`
@@ -49,11 +52,13 @@ export async function resolveUserAuthz(user: SessionUser): Promise<Authz> {
     allowedSubsidiaryIds(user.id, user.orgId),
   ]));
   const permissions = resolveEffectivePermissions({
+    additionalKnownPermissions: modulePermissions.active,
     rolePermissionSets: assignments.rows.map((r) =>
       Array.isArray(r.permissions) ? r.permissions : [],
     ),
     overrides: overrides.rows,
   });
+  denyInactiveModulePermissions(permissions, inactivePermissions);
   return { user, permissions, allowedSubsidiaryIds: allowedSubs };
 }
 

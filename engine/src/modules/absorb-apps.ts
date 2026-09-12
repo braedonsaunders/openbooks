@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
+import { MODULE_PLATFORM_PERMISSIONS_MIRROR } from "./module-catalogue.ts";
 
 /**
  * Absorb apps into the modules lifecycle surface.
@@ -14,9 +15,9 @@ import { db } from "../db.ts";
  *
  * Two entry points share one contract:
  *
- *   projectAppManifestToModuleManifest — pure, never throws. Builds the exact
- *   manifest document migration 0109 writes, so the migration's SQL and any
- *   runtime caller project byte-identical provenance. Returns errors instead
+ *   projectAppManifestToModuleManifest — pure, never throws. Builds the same manifest shape as
+ *   migration 0109 using the current permission vocabulary, so new app versions include capabilities introduced after that migration;
+ *   historical immutable version snapshots keep their original vocabulary. Returns errors instead
  *   of throwing, following web/lib/apps/manifest.ts.
  *
  *   absorbAppsForOrg — idempotent per-org backfill and repair. Repeats 0109's
@@ -69,27 +70,7 @@ export const ABSORBED_APP_MODULE_KIND = "app" as const;
  * precedent). The absorb integration test asserts parity, so catalogue drift
  * fails loudly instead of silently changing what absorbs.
  */
-export const ABSORBED_APP_MAPPED_PERMISSIONS: readonly string[] = [
-  "ap.create",
-  "ap.pay",
-  "ap.post",
-  "ap.read",
-  "ar.create",
-  "ar.post",
-  "ar.read",
-  "assets.manage",
-  "assets.read",
-  "gl.post",
-  "gl.read",
-  "items.manage",
-  "items.read",
-  "parties.manage",
-  "parties.read",
-  "projects.manage",
-  "projects.read",
-  "records.create",
-  "records.read",
-];
+export const ABSORBED_APP_MAPPED_PERMISSIONS: readonly string[] = MODULE_PLATFORM_PERMISSIONS_MIRROR;
 
 const MAPPED_PERMISSIONS = new Set<string>(ABSORBED_APP_MAPPED_PERMISSIONS);
 

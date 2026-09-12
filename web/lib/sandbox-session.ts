@@ -19,7 +19,7 @@ import { resolveActiveEnv } from "./org-access";
  * admin.sandboxes.manage (or super admin) server-side, and a stale cookie
  * cannot keep a member inside once that permission is revoked.
  */
-export async function enterOrg(orgId: string): Promise<void> {
+export async function enterOrg(orgId: string, returnTo = "/"): Promise<void> {
   const authz = await getAuthz();
   if (!authz) redirect("/login");
   if (typeof orgId !== "string" || !isUuid(orgId)) {
@@ -48,7 +48,8 @@ export async function enterOrg(orgId: string): Promise<void> {
       maxAge: SESSION_TTL_S,
     });
   }
-  redirect("/");
+  const target = typeof returnTo === "string" && returnTo.startsWith("/") && !returnTo.startsWith("//") && !/[\\\r\n]/.test(returnTo) ? returnTo : "/";
+  redirect(target);
 }
 
 /** Return to the home production org (clears the active-workspace cookie). */

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
 import {
   MODULE_VERSION_APPROVAL_SUBJECT,
   ModuleLifecycleError,
@@ -9,8 +9,14 @@ import {
   reactivateModule,
 } from "@openbooks/engine/src/modules/lifecycle.ts";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
-import { guardPermission } from "../../../../lib/authz";
+import { can, guardPermission, resolveUserAuthz } from "../../../../lib/authz";
 import { isUuid, parseListParams, pickString } from "../../../../lib/list-params";
+
+import { applyModule, diffModule, installModuleStaged, rollbackModule } from "@/lib/application/modules";
+import { ApplicationError } from "@/lib/application/errors";
+import { resolveActiveEnv } from "@/lib/org-access";
+import { ModuleInstallError } from "@openbooks/engine/src/modules/installer.ts";
+import { describeRehearsal, discardRehearsal, promoteRehearsal, stageModuleRehearsal, ModuleRehearsalError } from "@openbooks/engine/src/modules/rehearsal.ts";
 
 export const runtime = "nodejs";
 
@@ -154,7 +160,7 @@ export async function GET(req: Request) {
   });
 }
 
-const ACTIONS = ["deactivate", "reactivate", "cancelApproval"] as const;
+const ACTIONS = ["deactivate", "reactivate", "cancelApproval", "install", "diff", "apply", "rollback", "stageRehearsal", "describeRehearsal", "discardRehearsal", "promoteRehearsal"] as const;
 
 /** Lifecycle mutations — deactivate, reactivate, or cancel a pending request. */
 export async function POST(req: Request) {
@@ -165,16 +171,67 @@ export async function POST(req: Request) {
 
   const parsed = await parseJsonBody(req, jsonObject);
   if (!parsed.ok) return parsed.response;
-  const body = parsed.data as { action?: unknown; key?: unknown; moduleId?: unknown; reason?: unknown };
+  const body = parsed.data;
   if (typeof body.action !== "string" || !(ACTIONS as readonly string[]).includes(body.action)) {
-    return NextResponse.json({ error: "action must be one of deactivate, reactivate, cancelApproval" }, { status: 400 });
+    return NextResponse.json({ error: "unknown module action" }, { status: 400 });
+  }
+  if (body.reason != null && typeof body.reason !== "string") {
+    return NextResponse.json({ error: "reason must be text" }, { status: 400 });
   }
   const reason = body.reason === undefined || body.reason === null ? undefined : String(body.reason).trim();
   if (reason !== undefined && (reason.length === 0 || reason.length > 500)) {
     return NextResponse.json({ error: "reason must be 1–500 characters when given" }, { status: 400 });
   }
 
+  if (["install", "diff", "stageRehearsal"].includes(body.action) && typeof body.key === "string"
+    && body.manifest && typeof body.manifest === "object" && !Array.isArray(body.manifest)
+    && (body.manifest as Record<string, unknown>).key !== body.key) {
+    return NextResponse.json({ error: "Manifest key must match the selected module" }, { status: 400 });
+  }
+
   try {
+    const context = { authz: gate, source: "api" as const, requestId: crypto.randomUUID(), apiKeyId: null };
+    if (["install", "diff", "apply", "rollback"].includes(body.action)) {
+      if (body.action === "install") return NextResponse.json(await installModuleStaged(context, { manifest: body.manifest, reason }));
+      if (body.action === "diff") return NextResponse.json(await diffModule(context, { manifest: body.manifest }));
+      if (body.action === "apply") {
+        if (typeof body.gateId !== "string" || typeof body.signature !== "string" || !body.signature.trim()) {
+          return NextResponse.json({ error: "gateId and signature are required" }, { status: 400 });
+        }
+        return NextResponse.json(await applyModule(context, { gateId: body.gateId, signature: body.signature.trim(), comment: reason }));
+      }
+      if (typeof body.key !== "string" || (body.versionId != null && (typeof body.versionId !== "string" || !isUuid(body.versionId)))) {
+        return NextResponse.json({ error: "key and a valid versionId are required" }, { status: 400 });
+      }
+      return NextResponse.json(await rollbackModule(context, { key: body.key, versionId: body.versionId as string | undefined, reason }));
+    }
+    if (body.action.endsWith("Rehearsal")) {
+      if (!can(gate, "admin.customization.manage") || !can(gate, "admin.sandboxes.manage") || gate.user.envKind !== "production") {
+        return NextResponse.json({ error: "Manage rehearsals from production with customization and sandbox permissions" }, { status: 403 });
+      }
+      if (typeof body.sandboxOrgId !== "string" || !isUuid(body.sandboxOrgId)) {
+        return NextResponse.json({ error: "sandboxOrgId must be a uuid" }, { status: 400 });
+      }
+      const sandbox = await resolveActiveEnv({ id: gate.user.homeUserId, orgId: gate.user.homeOrgId, isSuperAdmin: gate.user.isSuperAdmin }, body.sandboxOrgId);
+      if (!sandbox || sandbox.envKind !== "sandbox" || sandbox.productionOrgId !== orgId) {
+        return NextResponse.json({ error: "sandbox is not available to this actor and organization" }, { status: 403 });
+      }
+      if (body.action !== "stageRehearsal" && typeof body.key !== "string") {
+        return NextResponse.json({ error: "key is required" }, { status: 400 });
+      }
+      // Resolve the real sandbox identity and its current grants through the
+      // same environment resolver used by the workspace switcher.
+      const result = await withBypassContext(async () => {
+        const sandboxAuth = await resolveUserAuthz({ ...gate.user, id: sandbox.actingUserId, orgId: sandbox.orgId, envKind: "sandbox" });
+        if (!can(sandboxAuth, "admin.customization.manage")) throw new ModuleRehearsalError("Sandbox customization permission is required", 403);
+        const options = { productionOrgId: orgId, sandboxOrgId: sandbox.orgId, actorId: sandbox.actingUserId, key: body.key as string, reason };
+        if (body.action === "stageRehearsal") return stageModuleRehearsal({ ...options, manifest: body.manifest, installerEffectivePermissions: [...sandboxAuth.permissions] });
+        if (body.action === "describeRehearsal") return describeRehearsal(options);
+        if (body.action === "discardRehearsal") return discardRehearsal(options);
+        return promoteRehearsal({ ...options, actorId, installerEffectivePermissions: [...gate.permissions] });
+      });
+      return NextResponse.json(result);
+    }
     if (body.action === "cancelApproval") {
       if (typeof body.moduleId !== "string" || !isUuid(body.moduleId)) {
         return NextResponse.json({ error: "moduleId must be a uuid" }, { status: 400 });
@@ -191,7 +248,7 @@ export async function POST(req: Request) {
         : await reactivateModule({ orgId, actorId, key: body.key, reason });
     return NextResponse.json(result);
   } catch (error) {
-    if (error instanceof ModuleLifecycleError) {
+    if (error instanceof ModuleLifecycleError || error instanceof ModuleRehearsalError || error instanceof ModuleInstallError || error instanceof ApplicationError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     throw error;

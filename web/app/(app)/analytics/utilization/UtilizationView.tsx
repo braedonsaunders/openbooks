@@ -1039,7 +1039,7 @@ function DepartmentsTab({ data }: { data: UtilizationData }) {
         </div>
         <div className="flex gap-1">
           <button type="button" aria-label={`${t('show')} ${t('tabs.departments')}`} aria-pressed={view === 'cards'} onClick={() => setView('cards')} className={cn('rounded-md border p-1.5', view === 'cards' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Grid3X3 size={15} /></button>
-          <button type="button" aria-label={`${t('show')} ${t('table')}`} aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn('rounded-md border p-1.5', view === 'table' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Table2 size={15} /></button>
+          <button type="button" aria-label={`${t('show')} ${t('tableLabel')}`} aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn('rounded-md border p-1.5', view === 'table' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Table2 size={15} /></button>
         </div>
       </div>
 
@@ -1375,7 +1375,7 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
         </div>
         <div className="ml-auto flex gap-1">
           <button type="button" onClick={() => setView('heatmap')} className={cn('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium', view === 'heatmap' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Grid3X3 size={13} />{t('heatmap')}</button>
-          <button type="button" onClick={() => setView('table')} className={cn('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium', view === 'table' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Table2 size={13} />{t('table')}</button>
+          <button type="button" onClick={() => setView('table')} className={cn('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium', view === 'table' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Table2 size={13} />{t('tableLabel')}</button>
         </div>
       </div>
 

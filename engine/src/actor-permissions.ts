@@ -1,6 +1,7 @@
+import { modulePermissionAvailability } from "./modules/permission-availability.ts";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, type SqlExecutor } from "./db.ts";
-import { permissionSetCovers, resolveEffectivePermissions } from "./permissions.ts";
+import { isCataloguePermission, permissionSetCovers, resolveEffectivePermissions } from "./permissions.ts";
 
 /** Read a home identity without losing changes in the caller's tenant transaction. */
 export async function actorIdentity(exec: SqlExecutor, orgId: string, actorId: string) {
@@ -39,6 +40,8 @@ export async function actorHasPermission(
   actorId: string,
   permission: string,
 ): Promise<boolean> {
+  const modulePermissions = !isCataloguePermission(permission) ? await modulePermissionAvailability(orgId, exec) : null;
+  if (modulePermissions?.inactive.includes(permission)) return false;
   const row = await actorIdentity(exec, orgId, actorId);
   if (!row?.isActive) return false;
   if (row.isSuperAdmin) return true;
@@ -60,6 +63,7 @@ export async function actorHasPermission(
   `));
   return permissionSetCovers(
     resolveEffectivePermissions({
+      additionalKnownPermissions: modulePermissions?.active,
       rolePermissionSets: assignments.rows.map((r) =>
         Array.isArray(r.permissions) ? r.permissions : [],
       ),

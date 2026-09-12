@@ -1,6 +1,7 @@
 /** Setup-registry import/export resources. */
 
 import 'server-only'
+import { loadModuleSettingRows } from '../setup/module-settings'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { COUNTRY_CODES } from '../countries'
@@ -76,7 +77,7 @@ export function setupDescriptor(entity: SetupEntity): ResourceDescriptor {
     iconKey: entity.iconKey || 'sliders',
     readPermission: 'admin.setup.manage',
     writePermission: 'admin.setup.manage',
-    supportsImport: !entity.readOnly,
+    supportsImport: !entity.readOnly && !entity.dataSource,
     naturalKey: entity.naturalKey,
   }
 }
@@ -106,7 +107,9 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
       const fields = setupFields(await gatedSetupEntity(entity, orgId))
       const resolver = new RefResolver(orgId)
       const cols = fields.map((f) => sql.raw(toSnake(f.key)))
-      const result = (await db.execute(sql`
+      const result = entity.dataSource === 'module-settings'
+        ? { rows: (await loadModuleSettingRows(orgId)).slice(0, MAX_EXPORT_ROWS) as Record<string, unknown>[] }
+        : (await db.execute(sql`
         select ${sql.join(cols, sql`, `)}
           from ${sql.raw(entity.table)}
          ${entity.orgScoped ? sql`where org_id = ${orgId}` : sql``}
@@ -125,7 +128,7 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
         created: 0, updated: 0, failed: rows.length,
         errors: rows.map((_, index) => ({ row: index + 1, message })),
       })
-      if (entity.readOnly) return refuse('resource is read-only')
+      if (entity.readOnly || entity.dataSource) return refuse('Use the module settings drawer for audited value changes')
       if (ctx.orgId !== orgId) return refuse('resource belongs to another organization')
       return withOrgTransaction(orgId, async () => {
         // Keep discovery, field validation and every row savepoint on the same

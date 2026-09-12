@@ -431,7 +431,9 @@
       "subsidiaryPlaceholder": "Choose a subsidiary…",
       "subsidiarySearchPlaceholder": "Search subsidiaries…",
       "subsidiaryRequired": "Choose a subsidiary",
-      "subsidiaryListRequired": "Select at least one subsidiary"
+      "subsidiaryListRequired": "Select at least one subsidiary",
+      "permissionsLoadFailed": "Unable to load module permissions",
+      "inactivePermissions": "Inactive module permissions"
     }
   },
   "scripts": {
@@ -1908,6 +1910,10 @@
         "title": "Holidays",
         "singularTitle": "Holiday",
         "description": "Which optional statutory holidays you observe, and the company closures you add. Mandatory statutory holidays come from the country pack and cannot be removed here."
+      },
+      "module-settings": {
+        "title": "Module settings",
+        "description": "Configure settings declared by installed modules. Changes preserve prior values and their effective dates."
       }
     },
     "fields": {
@@ -2162,7 +2168,10 @@
       "observance": "If it falls on a weekend",
       "isObserved": "Observed",
       "isPaid": "Paid",
-      "equipmentUnitId": "Equipment unit"
+      "equipmentUnitId": "Equipment unit",
+      "moduleKey": "Module",
+      "settingKey": "Setting",
+      "reason": "Reason for change"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -3861,7 +3870,7 @@
   },
   "modules": {
     "title": "Modules",
-    "description": "Installable packages of pages, records, and automation. Nothing installs or upgrades without an approval first — this list and its history are the evidence.",
+    "description": "Installable packages of pages, records, and automation. Review changes, approvals, and complete version history.",
     "searchPlaceholder": "Search modules…",
     "status": "Status",
     "statuses": {
@@ -3877,7 +3886,7 @@
       "status": "Status",
       "updated": "Updated"
     },
-    "empty": "No modules match. A module appears here once its install is approved — nothing installs on its own.",
+    "empty": "No modules match. Create a module or install one from the library.",
     "drawer": {
       "noDescription": "No description.",
       "lifecycle": "Lifecycle",
@@ -3901,7 +3910,50 @@
       "history": "History",
       "historyHelp": "Newest first. Each entry names who acted, what changed, and why.",
       "noHistory": "No recorded changes yet.",
-      "unknownActor": "Unknown"
+      "unknownActor": "Unknown",
+      "auditEvidence": "View audit evidence",
+      "before": "Before",
+      "after": "After"
+    },
+    "actions": {
+      "new": "New module",
+      "manifest": "Module manifest",
+      "reason": "Reason",
+      "signature": "Signature (full name)",
+      "diff": "Review changes",
+      "install": "Apply or request approval",
+      "sandbox": "Rehearsal sandbox",
+      "stageRehearsal": "Stage in sandbox",
+      "describeRehearsal": "Review sandbox changes",
+      "discardRehearsal": "Discard rehearsal",
+      "promoteRehearsal": "Promote rehearsal",
+      "preview": "Open preview",
+      "previewHelp": "Preview switches your workspace to the selected sandbox. Return to production using the workspace switcher to promote or discard.",
+      "rollback": "Roll back",
+      "deactivate": "Deactivate",
+      "reactivate": "Reactivate",
+      "cancelApproval": "Cancel approval request",
+      "apply": "Sign and apply",
+      "added": "Added",
+      "changed": "Changed",
+      "removed": "Removed",
+      "unchanged": "No contribution changes",
+      "permissionsAdded": "Permissions added",
+      "permissionsRemoved": "Permissions removed",
+      "awaitingApproval": "Staged for signed approval by another administrator.",
+      "done": "Completed.",
+      "failed": "The action could not be completed.",
+      "invalidJson": "Enter a valid JSON manifest.",
+      "rollbackConfirm": "Restore the previous module version",
+      "deactivateConfirm": "Deactivate this module",
+      "reactivateConfirm": "Reactivate this module",
+      "cancelApprovalConfirm": "Cancel the pending approval request",
+      "discardRehearsalConfirm": "Discard this sandbox rehearsal",
+      "promoteRehearsalConfirm": "Promote the staged version to production",
+      "applyConfirm": "Sign approval for this module version",
+      "publish": "Publish to library",
+      "publishConfirm": "Publish this module version to the library",
+      "manageApp": "Manage app"
     }
   }
 }

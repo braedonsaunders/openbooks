@@ -1,4 +1,5 @@
 import { jsonObject, parseJsonBody, uuidId } from "@/lib/api/json";
+import { saveModuleSettingRow } from '../../../../../lib/setup/module-settings'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { CurrencyError, updateFxRate } from '@openbooks/engine/src/currencies.ts'
@@ -662,6 +663,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   const entity = resolveEntity((await params).entity)
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
   if (!(await setupEntityEnabled(entity, orgId))) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
+  if (entity.allowCreate === false) return NextResponse.json({ error: 'This configuration is declared by its module' }, { status: 405 })
   if (entity.readOnly) return NextResponse.json({ error: 'read-only' }, { status: 405 })
 
   const parsedBody = await parseJsonBody(req, jsonObject);
@@ -868,6 +870,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   )
   const id = String(body.id ?? '')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+  if (entity.dataSource === 'module-settings') {
+    try { return NextResponse.json(await saveModuleSettingRow(orgId, actorId, [...gate.permissions], body)) }
+    catch (error) {
+      const status = error instanceof Error && 'status' in error && error.status === 409 ? 409 : 400
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid module setting' }, { status })
+    }
+  }
 
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
@@ -1126,6 +1136,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
   const entity = resolveEntity((await params).entity)
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
   if (!(await setupEntityEnabled(entity, orgId))) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
+  if (entity.allowDelete === false) return NextResponse.json({ error: 'Module setting history is preserved' }, { status: 405 })
   if (entity.readOnly) return NextResponse.json({ error: 'read-only' }, { status: 405 })
   if (entity.key === 'accounting-books') {
     return NextResponse.json({ error: 'archive-only' }, { status: 405 })

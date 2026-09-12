@@ -670,6 +670,8 @@ export const BUILT_IN_ROLE_KEYS = Object.keys(BUILT_IN_ROLES);
  * grant whose prefix covers the requested key.
  */
 export function permissionSetCovers(permissions: ReadonlySet<string>, perm: string): boolean {
+  // Runtime-only exact denies deactivate declared module permissions beneath any wildcard.
+  if (permissions.has(`!${perm}`)) return false;
   if (permissions.has("*")) return true;
   if (permissions.has(perm)) return true;
   // wildcard convention: 'ap.*' grants any 'ap.x'
@@ -686,21 +688,22 @@ export function permissionSetCovers(permissions: ReadonlySet<string>, perm: stri
  * survive), then every denied key — and everything under a wildcard deny —
  * is removed.
  */
-export function applyPermissionDenies(permissions: Set<string>, denies: string[]): void {
+export function applyPermissionDenies(permissions: Set<string>, denies: string[], additionalKnownPermissions: readonly string[] = []): void {
+  const catalogue: readonly string[] = [...PERMISSION_CATALOGUE, ...additionalKnownPermissions];
   const specificDenies = denies.filter((deny) => !deny.endsWith(".*"));
   // A full wildcard must be materialized before denies are applied. Leaving
   // `*` in the set would make permissionSetCovers return true immediately,
   // bypassing every specific (or module-scoped) deny.
   if (permissions.has("*") && denies.length > 0) {
     permissions.delete("*");
-    for (const key of PERMISSION_CATALOGUE) permissions.add(key);
+    for (const key of catalogue) permissions.add(key);
   }
   for (const grant of [...permissions]) {
     if (!grant.endsWith(".*")) continue;
     const prefix = grant.slice(0, -1);
     if (!specificDenies.some((deny) => deny.startsWith(prefix))) continue;
     permissions.delete(grant);
-    for (const key of PERMISSION_CATALOGUE) if (key.startsWith(prefix)) permissions.add(key);
+    for (const key of catalogue) if (key.startsWith(prefix)) permissions.add(key);
   }
   for (const denied of denies) {
     permissions.delete(denied);
@@ -715,6 +718,7 @@ export function applyPermissionDenies(permissions: Set<string>, denies: string[]
  * overrides. A user without an assigned role has no permissions.
  */
 export function resolveEffectivePermissions(args: {
+  additionalKnownPermissions?: readonly string[];
   rolePermissionSets: readonly (readonly string[])[];
   overrides: readonly { permission: string; effect: "grant" | "deny" }[];
 }): Set<string> {
@@ -724,6 +728,7 @@ export function resolveEffectivePermissions(args: {
   applyPermissionDenies(
     permissions,
     args.overrides.filter((o) => o.effect === "deny").map((o) => o.permission),
+    args.additionalKnownPermissions,
   );
   return permissions;
 }

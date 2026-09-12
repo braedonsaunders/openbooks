@@ -1,6 +1,7 @@
 import { pageSpecSchema } from "@braedonsaunders/appkit-viewspec";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../db.ts";
+import { requestModuleInstallApproval, requestModuleUpgradeApproval } from "./lifecycle.ts";
 import { verifyUser } from "../flows/targets.ts";
 import {
   installModule,
@@ -84,9 +85,10 @@ export interface StageRehearsalResult {
 
 export interface PromoteRehearsalResult {
   moduleId: string;
-  versionId: string;
-  outcome: InstallOutcome;
+  versionId: string | null;
+  outcome: InstallOutcome | "awaiting-approval";
   version: string;
+  gateIds?: string[];
 }
 
 export interface DiscardRehearsalResult {
@@ -157,14 +159,28 @@ function readStoredManifest(raw: unknown, what: string): StoredManifest {
 
 /** Stable identity per contribution — page claims one route, the installer's dedupe namespace. */
 function contributionIdentity(contribution: StoredContribution): string {
-  if (contribution.kind === "page" && typeof contribution.route === "string") return contribution.route;
-  return stableStringify(contribution);
+  switch (contribution.kind) {
+    case "page": return String(contribution.route);
+    case "nav": return String(contribution.href);
+    case "panel": return `${contribution.route}#${contribution.slot}`;
+    case "field": return `${contribution.targetTable}/${contribution.targetKind ?? ""}#${contribution.key}`;
+    case "report": return String(contribution.slug);
+    case "card": case "job": case "flow": return String(contribution.name);
+    case "endpoint": return String(contribution.path);
+    case "hook": return `${contribution.trigger}#${contribution.path}`;
+    default: return String(contribution.key);
+  }
 }
 
-/** Where a contribution renders from — v1 projects only page → page_specs. */
+/** Projected storage targets, matching the application diff contract. */
 function contributionTarget(contribution: StoredContribution): string {
-  if (contribution.kind === "page") return "page_specs";
-  return contribution.kind;
+  switch (contribution.kind) {
+    case "page": return "page_specs";
+    case "nav": return "org_nav_configs";
+    case "setting": return "orgs.settings";
+    case "permission": return "app_roles permission catalogue";
+    default: return contribution.kind;
+  }
 }
 
 async function writeAudit(
@@ -196,8 +212,10 @@ async function writeAudit(
 async function assertSandboxLink(productionOrgId: string, sandboxOrgId: string): Promise<void> {
   const link = (
     await db.execute<{ org_id: string }>(sql`
-      select org_id from sandboxes
-       where org_id = ${sandboxOrgId} and production_org_id = ${productionOrgId}
+      select s.org_id from sandboxes s
+        join orgs o on o.id = s.org_id
+       where s.org_id = ${sandboxOrgId} and s.production_org_id = ${productionOrgId}
+         and s.status = 'ready' and o.env_kind = 'sandbox' and o.sandbox_of = ${productionOrgId}
        limit 1`)
   ).rows[0];
   if (!link) {
@@ -355,14 +373,19 @@ export async function stageModuleRehearsal(opts: {
   await assertSandboxAuthor(opts.sandboxOrgId, opts.actorId);
   const reason = opts.reason && opts.reason.length > 0 ? opts.reason : "rehearsal stage";
 
-  const installed = await installModule({
+  const existing = await readStaged(db, opts.sandboxOrgId, (opts.manifest as { key?: string })?.key ?? "");
+  const stageOptions = {
+    rehearsalProductionOrgId: opts.productionOrgId,
     orgId: opts.sandboxOrgId,
     actorId: opts.actorId,
     manifest: opts.manifest,
     ...(opts.grantedPermissions !== undefined ? { grantedPermissions: opts.grantedPermissions } : {}),
     installerEffectivePermissions: opts.installerEffectivePermissions,
     reason,
-  });
+  };
+  const installed = existing && existing.manifest.version !== (opts.manifest as { version?: string })?.version
+    ? await upgradeModule({ ...stageOptions, key: existing.manifest.key })
+    : await installModule(stageOptions);
 
   // The installer owns its transaction; drafts follow in a second one. On a
   // draft failure the install stands and the error names it — restaging
@@ -387,6 +410,14 @@ export async function stageModuleRehearsal(opts: {
       throw new ModuleRehearsalError("rehearsal failed: the staged version row is missing", 500);
     }
     const manifest = readStoredManifest(version.manifest, `the staged version of module "${moduleRow.key}"`);
+    // Removed routes must stop previewing earlier rehearsal bytes. Preserve
+    // drafts independently edited since the last rehearsal.
+    for (const old of existing?.manifest.contributions ?? []) {
+      if (old.kind !== "page" || manifest.contributions.some(c => c.kind === "page" && c.route === old.route)) continue;
+      await tx.execute(sql`delete from page_spec_drafts where org_id = ${opts.sandboxOrgId}
+        and user_id = ${opts.actorId} and route = ${old.route as string}
+        and spec = ${JSON.stringify(old.spec)}::jsonb`);
+    }
     await writePreviewDrafts(tx, { sandboxOrgId: opts.sandboxOrgId, actorId: opts.actorId, manifest });
     await writeAudit(tx, {
       orgId: opts.sandboxOrgId,
@@ -454,12 +485,12 @@ export async function promoteRehearsal(opts: {
 
   const production = await db.transaction(async (tx) => {
     const moduleRow = (
-      await tx.execute<{ id: string }>(sql`
-        select id from modules
+      await tx.execute<{ id: string; active_version_id: string | null }>(sql`
+        select id, active_version_id from modules
          where org_id = ${opts.productionOrgId} and key = ${opts.key}
          limit 1`)
     ).rows[0] ?? null;
-    if (!moduleRow) return { moduleId: null as string | null, labels: new Map<string, string>() };
+    if (!moduleRow) return { moduleId: null as string | null, activeVersionId: null as string | null, labels: new Map<string, string>() };
     const versions = (
       await tx.execute<{ version: string; manifest: unknown }>(sql`
         select version, manifest from module_versions
@@ -467,9 +498,30 @@ export async function promoteRehearsal(opts: {
     ).rows;
     return {
       moduleId: moduleRow.id,
+      activeVersionId: moduleRow.active_version_id,
       labels: new Map(versions.map((v) => [v.version, stableStringify(v.manifest)])),
     };
   });
+
+  // Production promotion has exactly the same signed approval boundary as
+  // authored installs. A sandbox grant is rehearsal evidence, not approval.
+  if (staged.manifest.permissions.length > 0 || staged.manifest.contributions.some(c => c.kind !== "page")) {
+    const approvalOpts = {
+      orgId: opts.productionOrgId,
+      requesterId: opts.actorId,
+      manifest: staged.manifest,
+      grantedPermissions: staged.granted,
+      installerEffectivePermissions: opts.installerEffectivePermissions,
+      assignees: [{ type: "role" as const, role: "admin" }],
+      signatureRequired: true,
+      reason,
+    };
+    const request = production.activeVersionId
+      ? await requestModuleUpgradeApproval({ ...approvalOpts, key: opts.key })
+      : await requestModuleInstallApproval(approvalOpts);
+    return { moduleId: request.moduleId, versionId: null, outcome: "awaiting-approval",
+      version: staged.manifest.version, gateIds: request.gateIds };
+  }
 
   const installOpts = {
     orgId: opts.productionOrgId,
@@ -537,12 +589,12 @@ export async function discardRehearsal(opts: {
   await assertSandboxLink(opts.productionOrgId, opts.sandboxOrgId);
   const reason = opts.reason && opts.reason.length > 0 ? opts.reason : "rehearsal discard";
 
-  const stagedRoutes = await db.transaction(async (tx) => {
+  const stagedPages = await db.transaction(async (tx) => {
     const staged = await readStaged(tx, opts.sandboxOrgId, opts.key);
     return staged
       ? staged.manifest.contributions
           .filter((c) => c.kind === "page" && typeof c.route === "string")
-          .map((c) => c.route as string)
+
       : [];
   });
 
@@ -554,14 +606,14 @@ export async function discardRehearsal(opts: {
   });
 
   let clearedDrafts = 0;
-  if (stagedRoutes.length > 0) {
+  if (stagedPages.length > 0) {
     clearedDrafts = Number(
       (
         await db.execute<{ n: string }>(sql`
           with deleted as (
             delete from page_spec_drafts
              where org_id = ${opts.sandboxOrgId} and user_id = ${opts.actorId}
-               and route in (${sql.join(stagedRoutes.map((r) => sql`${r}`), sql`, `)})
+               and (${sql.join(stagedPages.map((p) => sql`(route = ${p.route as string} and spec = ${JSON.stringify(p.spec)}::jsonb)`), sql` or `)})
             returning id
           )
           select count(*) as n from deleted`)
@@ -670,7 +722,7 @@ export async function describeRehearsal(opts: {
     if (seenLive.has(namespaced)) continue;
     const hash = namespaced.indexOf("#");
     const kind = namespaced.slice(0, hash);
-    changes.push({ kind, identity: namespaced.slice(hash + 1), change: "removed", target: kind === "page" ? "page_specs" : kind });
+    changes.push({ kind, identity: namespaced.slice(hash + 1), change: "removed", target: contributionTarget({ kind }) });
   }
   changes.sort((a, b) => a.identity.localeCompare(b.identity) || a.kind.localeCompare(b.kind));
   const changed = changes.filter((c) => c.change === "changed").length;

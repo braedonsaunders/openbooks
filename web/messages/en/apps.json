@@ -37,7 +37,8 @@
     "noResults": {
       "title": "No apps found",
       "description": "Try a different name, key, or description."
-    }
+    },
+    "approvalPending": "{name} is awaiting signed approval."
   },
   "frame": {
     "loading": "Loading…",

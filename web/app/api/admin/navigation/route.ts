@@ -86,9 +86,17 @@ export async function PUT(req: Request) {
   }
 
   await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`module-projections:${user.orgId}`}, 0))`);
     const before = (await tx.execute<{ id: string; config: OrgNavConfig }>(sql`
-      select id, config from org_nav_configs where org_id = ${user.orgId} limit 1
+      select id, config from org_nav_configs where org_id = ${user.orgId} limit 1 for update
     `))
+    const owned = new Map((before.rows[0]?.config.groups ?? []).flatMap((group) => group.items).flatMap((item) => item.kind === 'link' && item.moduleKey ? [[item.href, item] as const] : []))
+    for (const group of config.groups) for (const item of group.items) if (item.kind === 'link') {
+      const source = owned.get(item.href)
+      // Preserve installer provenance across editor round trips; only the installer can mint it.
+      if (source) { item.moduleKey = source.moduleKey; item.requiredPermission = source.requiredPermission }
+      else { delete item.moduleKey; delete item.requiredPermission }
+    }
     const saved = (await tx.execute<{ id: string }>(sql`
       insert into org_nav_configs (org_id, config, created_by, updated_by)
       values (${user.orgId}, ${JSON.stringify(config)}, ${user.id}, ${user.id})

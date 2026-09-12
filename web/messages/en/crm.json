@@ -45,6 +45,7 @@
     "winLossReason": "Win/loss reason",
     "number": "Number",
     "projectedAmount": "Projected amount",
+    "weightedAmount": "Weighted amount",
     "periodStart": "Period start",
     "periodEnd": "Period end"
   },

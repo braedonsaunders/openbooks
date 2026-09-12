@@ -1,4 +1,5 @@
 import 'server-only'
+import { loadModuleSettingRows } from '../../../../../lib/setup/module-settings'
 
 import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
@@ -92,6 +93,7 @@ export interface SetupEntityData {
   docHref: string | null
   learnMore: string
   newLabel: string
+  canCreate?: boolean
   showLibrary: boolean
   libraryPacks: SetupLibraryPack[]
   libraryInstalled: string[]
@@ -224,7 +226,11 @@ export async function loadSetupEntity(
     ${entity.hasActive && !showInactive ? sql`and is_active` : sql``}
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
     : sql``
-  const [rowsRes, countRes, refOptions, installedPackRows] = entity
+  const moduleRows = entity?.dataSource === 'module-settings'
+    ? (await loadModuleSettingRows(orgId)).filter((row) => !list.q || Object.values(row).some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase()))) : null
+  const [rowsRes, countRes, refOptions, installedPackRows] = moduleRows
+    ? [{ rows: moduleRows.slice((list.page - 1) * list.perPage, list.page * list.perPage) }, { rows: [{ n: moduleRows.length }] }, {}, { rows: [] }]
+    : entity
     ? await Promise.all([
         (db.execute(sql`
       select * from ${sql.raw(entity.table)} ${rowFilter}
@@ -237,7 +243,7 @@ export async function loadSetupEntity(
           : Promise.resolve({ rows: [] as { code: string }[] }),
       ])
     : [{ rows: [] }, { rows: [] }, {}, { rows: [] }]
-  const rows = (rowsRes.rows)
+  const rows: Record<string, unknown>[] = rowsRes.rows
 
   // Lookup maps for rendering ref columns.
   const refLabels: Record<string, Map<string, string>> = {}
@@ -260,6 +266,7 @@ export async function loadSetupEntity(
     docHref: entity?.docSlug ? `/docs/${entity.docSlug}` : null,
     learnMore: t('learnMore'),
     newLabel: t('new'),
+    canCreate: entity?.allowCreate !== false && !entity?.readOnly,
     showLibrary: entity?.key === 'tax-return-forms',
     libraryPacks: TAX_RETURN_PACKS.map(({ code, name, country }) => ({ code, name, country })),
     libraryInstalled: installedPackRows.rows.map((row: { code: string }) => row.code),
@@ -395,7 +402,7 @@ export function setupEntitySpec(data: SetupEntityData): PageSpec {
                 },
                 f('showLibrary'),
               ),
-              widgetBlock('new-setup-button', { entityKey: data.entityKey, label: data.newLabel }),
+              widgetBlock('new-setup-button', { entityKey: data.entityKey, label: data.newLabel }, f('canCreate')),
             ]),
           ]),
           grid('flex flex-wrap items-center gap-2', [

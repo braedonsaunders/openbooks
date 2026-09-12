@@ -154,6 +154,7 @@ export async function loadPageSpec(
       left join module_versions mv on mv.org_id = p.org_id and mv.id = p.module_version_id
       left join modules m on m.org_id = mv.org_id and m.id = mv.module_id
      where p.org_id = ${orgId} and p.route = ${route} and p.is_active
+       and (p.module_version_id is null or (m.status = 'installed' and mv.status = 'active' and m.active_version_id = mv.id))
        and (p.user_id is null ${userId ? sql`or p.user_id = ${userId}` : sql``})
      order by p.user_id nulls last, p.module_version_id nulls first, p.updated_at desc, p.id`)
   const winner = pickPageSpecRow(rows.rows)

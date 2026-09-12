@@ -1,4 +1,5 @@
 import 'server-only'
+import { listActiveModuleContributions } from '@openbooks/engine/src/modules/projections.ts'
 import { sql } from 'drizzle-orm'
 import { hiddenNavModules, resolvedFeatureState } from '../features'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -38,7 +39,7 @@ export async function resolveNav(
   roleKeys: readonly string[],
   t: (key: string) => string,
 ): Promise<SidebarNavGroup[]> {
-  const [r, appResult, featureState] = await Promise.all([
+  const [r, appResult, featureState, moduleContributions] = await Promise.all([
     db.execute<{ config: OrgNavConfig }>(sql`select config from org_nav_configs where org_id = ${orgId} limit 1`),
     db.execute<NavAppOption>(sql`
       select a.key,
@@ -50,6 +51,7 @@ export async function resolveNav(
        order by a.sort_order, a.name
     `),
     resolvedFeatureState(orgId),
+    listActiveModuleContributions(orgId),
   ])
   const saved = r.rows[0]?.config
   const baseConfig = saved?.version === 2 ? layerInNewModules(saved) : defaultNavConfig()
@@ -108,6 +110,11 @@ export async function resolveNav(
           mobile: item.mobile,
         })
       } else {
+        if (NAV_MODULES.some((module) => featureHiddenModules.has(module.key) && (item.href === module.href || item.href.startsWith(`${module.href}/`)))) continue
+        if (item.moduleKey) {
+          const entry = moduleContributions.find((entry) => entry.moduleKey === item.moduleKey && entry.contribution.kind === 'nav' && entry.contribution.href === item.href)
+          if (!entry || entry.contribution.kind !== 'nav' || !can(entry.contribution.requiredPermission)) continue
+        } else if (!can(item.requiredPermission)) continue
         items.push({
           href: item.href,
           label: item.label,

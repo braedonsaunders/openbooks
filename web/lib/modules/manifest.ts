@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { navContributionSchema, permissionContributionSchema, settingContributionSchema } from '@openbooks/engine/src/modules/contribution-schemas.ts'
 import { blockSchema, pageSpecSchema, SPEC_VERSION, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { automationGraphSchema, formSectionSchema } from '@openbooks/forms-core'
 import { API_RECORD_TYPES } from '../api/registry-data'
@@ -18,10 +19,9 @@ import { RESERVED_TYPE_KEYS } from '../record-schema'
  * manifest IS and never touches the database.
  *
  * Conventions follow web/lib/apps/manifest.ts: SLUG/VERSION regexes,
- * parseManifest never throws, capability constants. The v1 projection surface
- * is `page`; every other kind validates structurally and reports
- * NOT_IMPLEMENTED_YET from projectionStatus so an install can never claim a
- * silent success it did not perform.
+ * parseManifest never throws, capability constants. Page, nav, setting and
+ * permission contributions project through the atomic installer. Other kinds
+ * validate structurally and explicitly report NOT_IMPLEMENTED_YET.
  */
 
 /** Slug: lowercase, starts with a letter, [a-z0-9-]. */
@@ -33,7 +33,7 @@ const ROUTE = /^\/[A-Za-z0-9\-_/[\]().]+$/
 /** snake_case identifier, as every projection table already keys on. */
 const KEY = /^[a-z][a-z0-9_]{0,63}$/
 /** Permission key: hierarchical module.action[.qualifier], as authz checks. */
-const PERMISSION_KEY = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_*]*){1,3}$/
+
 /** Cron expression, at least the 5-field shape; the scheduler re-parses. */
 const CRON = /^[^\s]+(\s+[^\s]+){4,5}$/
 
@@ -68,6 +68,9 @@ export const MODULE_PLATFORM_PERMISSIONS = [
     MODULE_CAPABILITIES.RECORDS_READ,
     MODULE_CAPABILITIES.RECORDS_CREATE,
     MODULE_CAPABILITIES.GL_POST,
+    'admin.customization.manage',
+    'admin.setup.manage',
+    'admin.roles.manage',
     'ap.post',
     'ar.post',
     ...API_RECORD_TYPES.flatMap((type) => [type.readPermission, type.writePermission].filter((p): p is string => !!p)),
@@ -77,6 +80,7 @@ export const MODULE_PLATFORM_PERMISSIONS = [
 /** Every contribution kind a manifest may declare, in lifecycle order. */
 export const CONTRIBUTION_KINDS = [
   'page',
+  'nav',
   'panel',
   'record-type',
   'field',
@@ -93,7 +97,7 @@ export const CONTRIBUTION_KINDS = [
 export type ContributionKind = (typeof CONTRIBUTION_KINDS)[number]
 
 /** Contribution kinds whose projection into platform tables is implemented. */
-export const PROJECTED_KINDS: readonly ContributionKind[] = ['page']
+export const PROJECTED_KINDS: readonly ContributionKind[] = ['page', 'nav', 'setting', 'permission']
 
 /** Kind names that are structurally validated but not yet projected. */
 export const NOT_IMPLEMENTED_YET = 'NOT_IMPLEMENTED_YET' as const
@@ -107,7 +111,7 @@ export const NOT_IMPLEMENTED_YET = 'NOT_IMPLEMENTED_YET' as const
  */
 const pageContributionSchema = z.object({
   kind: z.literal('page'),
-  /** Route PATTERN (/apps/[key]), matching page_specs.route. */
+  /** Existing registered route PATTERN (/apps/[key]); customizes its layout through page_specs, without minting a route handler. */
   route: z.string().regex(ROUTE, 'route must be an absolute route pattern').max(120),
   /** The PageSpec document itself — validated against the closed schema. */
   spec: pageSpecSchema,
@@ -350,41 +354,10 @@ const agentContributionSchema = z.object({
   settings: z.record(z.string(), z.unknown()).default({}),
 })
 
-const permissionContributionSchema = z.object({
-  kind: z.literal('permission'),
-  /** New permission key the module introduces, e.g. 'revenue.recast'. */
-  key: z.string().regex(PERMISSION_KEY, 'key must be a hierarchical permission key').max(80),
-  label: z.string().min(1).max(120),
-  description: z.string().max(2000).optional(),
-})
-
-const settingContributionBase = z.object({
-  kind: z.literal('setting'),
-  /** Org settings key (orgs.settings jsonb path segment). */
-  key: z.string().regex(KEY, 'key must be a snake_case identifier').max(64),
-  label: z.string().min(1).max(120),
-  description: z.string().max(2000).optional(),
-  /** Value type the admin surface renders. */
-  valueType: z.enum(['boolean', 'number', 'string', 'json']),
-  defaultValue: z.unknown().optional(),
-})
-
-/** Setting contribution whose default, when given, matches its value type — a boolean setting defaulting to 'yes' renders nowhere. */
-const settingContributionSchema = settingContributionBase.superRefine((s, ctx) => {
-  if (s.defaultValue === undefined) return
-  const ok =
-    s.valueType === 'json' ||
-    (s.valueType === 'boolean' && typeof s.defaultValue === 'boolean') ||
-    (s.valueType === 'number' && typeof s.defaultValue === 'number') ||
-    (s.valueType === 'string' && typeof s.defaultValue === 'string')
-  if (!ok) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['defaultValue'], message: `defaultValue must be a ${s.valueType}` })
-  }
-})
-
 /** One contribution: discriminated by `kind` against the per-kind payloads. */
 export const contributionSchema = z.discriminatedUnion('kind', [
   pageContributionSchema,
+  navContributionSchema,
   panelContributionSchema,
   recordTypeContributionSchema,
   fieldContributionSchema,
@@ -516,6 +489,9 @@ export function parseModuleManifest(raw: unknown): ModuleManifestResult {
       case 'agent':
         uniqueIn('agent', 'key', c.key, 'agent contribution key')
         break
+      case 'nav':
+        uniqueIn('nav', 'href', c.href, 'nav contribution href')
+        break
       case 'permission':
         uniqueIn('permission', 'key', c.key, 'permission contribution key')
         break
@@ -549,8 +525,9 @@ export const PROJECTION_TARGETS: Readonly<Record<ContributionKind, string>> = {
   hook: 'user_scripts trigger (pending)',
   flow: 'flows (pending)',
   agent: 'ai_agent_policies (pending)',
-  permission: 'permission catalogue (pending)',
-  setting: 'orgs.settings (pending)',
+  nav: 'org_nav_configs',
+  permission: 'app_roles permission catalogue',
+  setting: 'orgs.settings',
 }
 
 /**

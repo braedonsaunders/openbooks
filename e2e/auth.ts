@@ -31,7 +31,8 @@ export async function authedContext(
 ): Promise<{ context: BrowserContext; page: Page }> {
   if (!baseURL) throw new Error("e2e baseURL is required for API login");
   const origin = new URL(baseURL).origin;
-  const api = await request.newContext({ baseURL });
+  const ignoreHTTPSErrors = process.env.E2E_IGNORE_HTTPS_ERRORS === "1";
+  const api = await request.newContext({ baseURL, ignoreHTTPSErrors });
   try {
     const res = await api.post("/api/login", {
       data: { email: E2E_EMAIL, password: E2E_PASSWORD },
@@ -43,7 +44,7 @@ export async function authedContext(
       );
     }
     const state = await api.storageState();
-    const context = await browser.newContext({ baseURL, storageState: state });
+    const context = await browser.newContext({ baseURL, storageState: state, ignoreHTTPSErrors });
     const page = await context.newPage();
     return { context, page };
   } finally {

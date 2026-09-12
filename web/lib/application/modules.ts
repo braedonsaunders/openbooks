@@ -1,19 +1,17 @@
 import 'server-only'
 
+import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { GateError } from '@openbooks/engine/src/flows/index.ts'
-import {
-  moduleUpgradeRequiresReapproval,
-} from '@openbooks/engine/src/modules/capabilities.ts'
 import { installModule, ModuleInstallError } from '@openbooks/engine/src/modules/installer.ts'
 import {
   decideModuleApproval,
-  markVersionRolledBack,
   ModuleLifecycleError,
   requestModuleInstallApproval,
   requestModuleUpgradeApproval,
 } from '@openbooks/engine/src/modules/lifecycle.ts'
+import { rollbackModuleVersion, requestRollbackApproval, ModuleRollbackError } from '@openbooks/engine/src/modules/rollback.ts'
 import { can } from '../authz'
 import type { ApplicationContext } from './context'
 import { ApplicationError, forbidden, invalidInput } from './errors'
@@ -57,7 +55,7 @@ function requireModules(context: ApplicationContext): void {
 }
 
 function mapModuleError(error: unknown): never {
-  if (error instanceof ModuleInstallError || error instanceof ModuleLifecycleError) {
+  if (error instanceof ModuleInstallError || error instanceof ModuleLifecycleError || error instanceof ModuleRollbackError) {
     const status = error.status
     if (status === 404) throw new ApplicationError('not_found', error.message, 404)
     if (status === 409) throw new ApplicationError('conflict', error.message, 409)
@@ -98,14 +96,14 @@ export async function describeModuleVocabulary(context: ApplicationContext) {
     rules: [
       'A manifest names a module key, a version label, the permissions it requests, and the contributions it projects.',
       'Only projected kinds install today; every other kind validates structurally and is refused at install rather than half performed.',
-      'A page contribution claims one route pattern and carries the PageSpec that renders there. Scope is always "org".',
+      'A page contribution customizes an existing application route and its existing loader with a PageSpec. Scope is always "org"; it does not create a new route handler.',
       'A version label is immutable once installed: changing anything means appending a new version, never editing.',
       'Requested permissions must come from the list above; an admin grants a subset at approval and the grant narrows to what the installer holds.',
       'An install carrying permissions stages an approval a distinct approver must sign; a zero-permission page-only install applies directly with audit.',
       'The org is taken from the session. A manifest that names an org id is refused.',
     ],
     limits: {
-      note: 'A module customizes the org. Tenant customization of the same route always beats an installed module: the install is refused rather than shadowing it.',
+      note: 'A module customizes the org. Tenant customization of the same route always takes precedence; the module projection remains preserved underneath it.',
     },
   }
 }
@@ -198,6 +196,8 @@ function normalizeStoredManifest(raw: unknown): unknown {
 /** Stable identity per kind — the same namespaces the manifest validator dedupes on. */
 function contributionIdentity(contribution: ModuleManifest['contributions'][number]): string {
   switch (contribution.kind) {
+    case 'nav':
+      return contribution.href
     case 'page':
       return contribution.route
     case 'panel':
@@ -274,7 +274,7 @@ export async function installModuleStaged(
   const orgId = context.authz.user.orgId
   const actorId = context.authz.user.id
 
-  if (manifest.permissions.length === 0) {
+  if (manifest.permissions.length === 0 && manifest.contributions.every((c) => c.kind === 'page')) {
     try {
       const installed = await installModule({
         orgId,
@@ -300,10 +300,18 @@ export async function installModuleStaged(
 
   try {
     const live = (
-      await db.execute<{ id: string; active_version_id: string | null }>(sql`
-        select id, active_version_id from modules
-         where org_id = ${orgId} and key = ${manifest.key} limit 1`)
+      await db.execute<{ id: string; active_version_id: string | null; version: string | null; granted_permissions: string[] }>(sql`
+        select m.id, m.active_version_id, v.version, m.granted_permissions from modules m
+        left join module_versions v on v.org_id = m.org_id and v.id = m.active_version_id
+         where m.org_id = ${orgId} and m.key = ${manifest.key} limit 1`)
     ).rows[0]
+    if (live?.version === manifest.version) {
+      const installed = await installModule({ orgId, actorId, manifest: input.manifest,
+        grantedPermissions: live.granted_permissions, installerEffectivePermissions: effective, reason })
+      return { staged: false as const, applied: true as const, errors: [] as string[],
+        moduleId: installed.moduleId, versionId: installed.versionId, outcome: installed.outcome,
+        granted: live.granted_permissions, withheld: manifest.permissions.filter((p) => !live.granted_permissions.includes(p)) }
+    }
     const assignees = stageAssignees(input.approverUserId)
     const request =
       live && live.active_version_id !== null
@@ -443,9 +451,7 @@ export async function diffModule(
     unchanged,
     permissions: { live: sortedLive, proposed: proposedPermissions, added, removed },
     requiresReapproval:
-      liveVersion === null
-        ? proposedPermissions.length > 0
-        : moduleUpgradeRequiresReapproval(sortedLive, proposedPermissions),
+      proposedPermissions.length > 0 || manifest.contributions.some((contribution) => contribution.kind !== 'page'),
   }
 }
 
@@ -474,7 +480,7 @@ export async function applyModule(
       approverEffectivePermissions: [...context.authz.permissions],
     })
     return {
-      applied: true as const,
+      applied: decided.resumed === 'approve' && decided.versionId !== null,
       errors: [] as string[],
       moduleId: decided.moduleId,
       versionId: decided.versionId,
@@ -574,34 +580,32 @@ export async function rollbackModule(
   }
 
   try {
-    // Re-assert the RECORDED grant exactly — mirroring the engine's own
-    // reactivation. Narrowing a grant is a new approval, not a rollback.
-    const recorded = moduleRow.granted_permissions
-    const installed = await installModule({
-      orgId,
-      actorId,
-      manifest: target.manifest,
-      grantedPermissions: recorded,
-      installerEffectivePermissions: recorded,
-      reason,
-    })
-    // The version this rollback replaces stops being merely superseded: it
-    // is marked rolled back, the same status 3c's restoring versions leave
-    // behind, so the history reads as what happened.
-    const replacedId = moduleRow.active_version_id
-    const markedRolledBack: string[] = []
-    if (replacedId !== installed.versionId) {
-      const marked = await markVersionRolledBack({ orgId, actorId, versionId: replacedId, reason })
-      markedRolledBack.push(marked.versionId)
+    const restoringVersion = `0.0.0-restore-${randomUUID().replaceAll('-', '').slice(0, 16)}`
+    const parsed = parseModuleManifest(normalizeStoredManifest(target.manifest))
+    if (!parsed.ok) return { rolledBack: false as const, errors: parsed.errors }
+    const requiresApproval = parsed.manifest!.permissions.length > 0 ||
+      parsed.manifest!.contributions.some((contribution) => contribution.kind !== 'page')
+    if (requiresApproval) {
+      const request = await requestRollbackApproval({
+        orgId, requesterId: actorId, key: input.key, targetVersionId: target.id,
+        restoringVersion, installerEffectivePermissions: [...context.authz.permissions],
+        assignees: stageAssignees(), reason,
+      })
+      return { rolledBack: false as const, staged: true as const, errors: [] as string[],
+        moduleId: request.moduleId, gateIds: request.gateIds, runId: request.runId,
+        signatureRequired: request.signatureRequired }
     }
+    const restored = await rollbackModuleVersion({
+      orgId, actorId, key: input.key, targetVersionId: target.id, restoringVersion, reason,
+    })
     return {
       rolledBack: true as const,
+      staged: false as const,
       errors: [] as string[],
-      moduleId: installed.moduleId,
-      versionId: installed.versionId,
-      version: target.version,
-      outcome: installed.outcome,
-      markedRolledBack,
+      moduleId: restored.moduleId,
+      versionId: restored.versionId,
+      version: restored.restoringVersion,
+      markedRolledBack: [restored.replacedVersionId],
     }
   } catch (error) {
     mapModuleError(error)
