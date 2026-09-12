@@ -24,6 +24,16 @@ import { validateAgainstRegistries, type SpecRejection } from './page-spec-valid
  * renderer can assume. The rules themselves live in `./page-spec-validate`,
  * which has no database and no `server-only`, so every caller shares one
  * answer instead of reimplementing it.
+ *
+ * Module-projected rows share this table: the installer writes one row per
+ * page contribution with `module_version_id` set, and resolution treats those
+ * as the weakest stored layer — any tenant layout wins over every module row.
+ * The org layer holds exactly ONE active occupant (the partial unique index
+ * on active user-null rows says so), so a tenant save, restore, or clear
+ * deactivates a competing module projection rather than coexisting with it.
+ * The module row survives as an inactive row with an audit entry naming it,
+ * which the installer's uninstall (a no-op on an already-inactive row) and
+ * rollback (which re-projects) both tolerate.
  */
 
 export interface StoredPageSpec {
@@ -46,7 +56,63 @@ export interface StoredPageSpec {
 export type LayoutScope = 'org' | 'user'
 
 /**
+ * One active `page_specs` row competing to render a route.
+ *
+ * `module_version_id` is the provenance pointer only the module installer
+ * sets: null means someone in this org authored the row, non-null means an
+ * installed module version projected it. Tenant writes never SET the pointer
+ * (a save may deactivate a module row to replace it, but never claims it).
+ */
+type PageSpecCandidate = {
+  id: string
+  spec: unknown
+  user_id: string | null
+  module_version_id: string | null
+  updated_at: string | Date
+}
+
+/** Lower wins: the reader's own layout, then the org's, then an installed module. */
+function pageSpecRank(row: PageSpecCandidate): number {
+  if (row.user_id !== null) return 0
+  if (row.module_version_id === null) return 1
+  return 2
+}
+
+// node-postgres parses timestamptz into a Date; canned rows in tests carry
+// ISO strings. Normalize before comparing so both order the same way.
+function pageSpecStamp(value: string | Date): string {
+  return value instanceof Date ? value.toISOString() : String(value)
+}
+
+/**
+ * Which stored row a route renders.
+ *
+ * Pure so the precedence is checkable without a database: the SQL below
+ * fetches every candidate and this decides, which keeps one implementation
+ * owning the order instead of splitting it between ORDER BY and code. Ties
+ * between module rows — two installed modules claiming one route — break
+ * toward the most recently written row, deterministically by id after that;
+ * the installer owns refusing or merging such conflicts, this only orders.
+ */
+function pickPageSpecRow(rows: PageSpecCandidate[]): PageSpecCandidate | null {
+  if (rows.length === 0) return null
+  const ordered = [...rows].sort(
+    (a, b) =>
+      pageSpecRank(a) - pageSpecRank(b) ||
+      pageSpecStamp(b.updated_at).localeCompare(pageSpecStamp(a.updated_at)) ||
+      a.id.localeCompare(b.id),
+  )
+  return ordered[0] ?? null
+}
+
+/**
  * The active override for a route, or null.
+ *
+ * Precedence is user > org-native > module > built-in (null). The first
+ * three are the active `page_specs` rows for the route; the last is this
+ * function's null, which is what "renders the built-in page" means.
+ * Tenant customization always wins: a personal layout beats the org's, and
+ * any tenant layout beats every installed module's.
  *
  * Returns null rather than throwing when the stored document does not
  * validate. A tenant whose saved layout has gone stale — a widget retired, a
@@ -61,22 +127,26 @@ export async function loadPageSpec(
   registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> },
   /** When given, this reader's personal layout is preferred over the org's. */
   userId?: string,
-): Promise<{ spec: PageSpec; id: string; scope: LayoutScope } | null> {
-  // One query, ordered so the reader's own layout sorts first. Two round
-  // trips would be a second chance to get the precedence wrong.
-  const rows = await db.execute<{ id: string; spec: unknown; user_id: string | null }>(sql`
-    select id, spec, user_id from page_specs
+): Promise<{ spec: PageSpec; id: string; scope: LayoutScope; moduleVersionId: string | null } | null> {
+  // Every candidate, not just the winner. Two round trips would be a second
+  // chance to get the precedence wrong, and LIMIT 1 would split the decision
+  // between SQL and `pickPageSpecRow`; the ORDER BY mirrors the picker so a
+  // raw look at the rows tells the same story the renderer uses.
+  const rows = await db.execute<PageSpecCandidate>(sql`
+    select id, spec, user_id, module_version_id, updated_at from page_specs
      where org_id = ${orgId} and route = ${route} and is_active
        and (user_id is null ${userId ? sql`or user_id = ${userId}` : sql``})
-     order by user_id nulls last
-     limit 1`)
-  const row = rows.rows[0]
-  if (!row) return null
+     order by user_id nulls last, module_version_id nulls first, updated_at desc, id`)
+  const winner = pickPageSpecRow(rows.rows)
+  if (!winner) return null
 
-  const checked = validateAgainstRegistries(row.spec, registries)
+  // Validation gates the WINNER only, as it always has: an invalid winner
+  // resolves to null (the built-in renders) rather than promoting a lower
+  // layer the tenant did not choose.
+  const checked = validateAgainstRegistries(winner.spec, registries)
   if (!checked.ok) {
     console.warn(
-      `[page-specs] ignoring stored spec ${row.id} for ${route}: ${checked.errors.slice(0, 3).join('; ')}`,
+      `[page-specs] ignoring stored spec ${winner.id} for ${route}: ${checked.errors.slice(0, 3).join('; ')}`,
     )
     return null
   }
@@ -85,11 +155,18 @@ export async function loadPageSpec(
   // document was copied between routes without being re-pointed.
   if (checked.spec.route && checked.spec.route !== route) {
     console.warn(
-      `[page-specs] ignoring stored spec ${row.id}: declares route ${checked.spec.route}, stored under ${route}`,
+      `[page-specs] ignoring stored spec ${winner.id}: declares route ${checked.spec.route}, stored under ${route}`,
     )
     return null
   }
-  return { spec: checked.spec, id: row.id, scope: row.user_id ? 'user' : 'org' }
+  return {
+    spec: checked.spec,
+    id: winner.id,
+    // A module customizes the org, never one person, so a module row reads as
+    // 'org'; `moduleVersionId` carries whose module it is.
+    scope: winner.user_id ? 'user' : 'org',
+    moduleVersionId: winner.module_version_id,
+  }
 }
 
 /**
@@ -153,19 +230,30 @@ export async function savePageSpec(opts: {
   // preference switch off the layout their whole org is using.
   const owner = opts.scope === 'user' ? opts.actorId : null
   return await db.transaction(async (tx) => {
+    // The whole org layer, module projections included. Exactly one active
+    // user-null row per route fits (the partial unique index insists), so the
+    // new row must DEACTIVATE a competing module projection rather than sit
+    // beside it — otherwise the insert below violates the index. The module
+    // row survives inactive and the audit names it, so the trail answers why
+    // an installed page stopped rendering.
     // The supersession is audited too, not just the new row. Without it the
     // trail shows two inserts for one route and no record of which replaced
     // which — which is the question anyone reading the trail is asking.
-    const superseded = await tx.execute<{ id: string }>(sql`
+    const superseded = await tx.execute<{ id: string; module_version_id: string | null }>(sql`
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
          and user_id is not distinct from ${owner}
-      returning id`)
+      returning id, module_version_id`)
     for (const row of superseded.rows) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${opts.orgId}, 'page_specs', ${row.id}, 'update',
-                ${JSON.stringify({ route: opts.route, is_active: false, reason: 'superseded' })},
+                ${JSON.stringify({
+                  route: opts.route,
+                  is_active: false,
+                  reason: 'superseded',
+                  ...(row.module_version_id ? { moduleVersionId: row.module_version_id } : {}),
+                })},
                 ${opts.actorId})`)
     }
     const inserted = await tx.execute<{ id: string }>(sql`
@@ -265,15 +353,23 @@ export async function restorePageSpec(opts: {
   if (!checked.ok) return checked
 
   return await db.transaction(async (tx) => {
-    const superseded = await tx.execute<{ id: string }>(sql`
+    // The whole active set for the route, module projections included: the
+    // restored tenant row must be the single org-layer occupant (see the save
+    // path), and the audit below names any module row it replaces.
+    const superseded = await tx.execute<{ id: string; module_version_id: string | null }>(sql`
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
-      returning id`)
+      returning id, module_version_id`)
     for (const previous of superseded.rows) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${opts.orgId}, 'page_specs', ${previous.id}, 'update',
-                ${JSON.stringify({ route: opts.route, is_active: false, reason: 'superseded' })},
+                ${JSON.stringify({
+                  route: opts.route,
+                  is_active: false,
+                  reason: 'superseded',
+                  ...(previous.module_version_id ? { moduleVersionId: previous.module_version_id } : {}),
+                })},
                 ${opts.actorId})`)
     }
     const inserted = await tx.execute<{ id: string }>(sql`
@@ -377,7 +473,13 @@ export async function clearPageSpecDraft(orgId: string, userId: string, route: s
      where org_id = ${orgId} and user_id = ${userId} and route = ${route}`)
 }
 
-/** Turn an override off; the page falls back to its built-in spec. */
+/**
+ * Turn an override off; the page falls back to its built-in spec.
+ *
+ * Deactivates the active occupant even when it is a module projection:
+ * clearing is the tenant choosing the built-in page over everything stored.
+ * The module row survives inactive with an audit entry, as with a save.
+ */
 export async function clearPageSpec(opts: {
   orgId: string
   actorId: string
