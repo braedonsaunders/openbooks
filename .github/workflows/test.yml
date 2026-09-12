@@ -335,7 +335,6 @@ jobs:
       OPENBOOKS_REDIS_URL: redis://localhost:6379/0
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
       PGPASSWORD: openbooks
-      SESSION_SECRET: e2e-ci-secret-not-production
       ADMIN_EMAIL: e2e@openbooks.test
       ADMIN_NAME: E2E Admin
       ADMIN_PASSWORD: e2e-test-password-123
@@ -357,7 +356,26 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
+      - name: Generate ephemeral browser session secret
+        run: |
+          node --input-type=module <<'NODE'
+          import { randomBytes } from 'node:crypto';
+          import { appendFileSync } from 'node:fs';
+          const secret = randomBytes(48).toString('base64');
+          console.log(`::add-mask::${secret}`);
+          appendFileSync(process.env.GITHUB_ENV, `SESSION_SECRET=${secret}\n`);
+          NODE
+
+      - name: Build browser application
+        env:
+          OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
+        run: npm run build -w web
+
       - name: Playwright smoke suite
+        env:
+          OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
+          E2E_PRODUCTION: "1"
+          E2E_IGNORE_HTTPS_ERRORS: "1"
         run: npx playwright test
 
       - name: Upload Playwright report
@@ -368,4 +386,5 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            e2e-server.log
           if-no-files-found: ignore

@@ -41,6 +41,7 @@ engine/harness-checkpoints/
 engine/sim-runs/
 .playwright-cli/
 playwright-report/
+e2e-server.log
 test-results/
 objects-list.txt
 

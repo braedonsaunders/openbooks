@@ -21,9 +21,11 @@ test('email settings echo the committed revision and refuse a stale form', async
     }, { path: endpoint, config })
   }
   async function saveForm(name: string) {
-    await page.getByPlaceholder('Acme Accounting', { exact: true }).fill(name)
+    // React streaming can stage a hidden form outside main during reload.
+    const main = page.getByRole('main')
+    await main.getByPlaceholder('Acme Accounting', { exact: true }).fill(name)
     const response = page.waitForResponse((r) => r.url().endsWith(endpoint) && r.request().method() === 'PUT')
-    await page.getByRole('button', { name: 'Save settings', exact: true }).click()
+    await main.getByRole('button', { name: 'Save settings', exact: true }).click()
     return response
   }
   try {

@@ -1,9 +1,13 @@
 import { defineConfig } from "@playwright/test";
 
+const production = process.env.E2E_PRODUCTION === "1";
+const baseURL = process.env.E2E_BASE_URL ?? (production ? "https://localhost:4780" : "http://localhost:4780");
+
 /**
- * Browser smoke suite for the app shell. The webServer block boots the real
- * Next dev server against OPENBOOKS_DB_URL; CI provisions Postgres + seeds an
- * admin via scripts/bootstrap.ts before `npx playwright test` runs.
+ * Browser smoke suite for the app shell. CI builds the standalone app and
+ * runs it over ephemeral HTTPS against a constrained database role. Local
+ * development retains the Next dev server unless E2E_PRODUCTION=1 is set.
+ * Bootstrap the disposable database before running either mode.
  *
  * Local: bootstrap a scratch DB, then
  *   ADMIN_EMAIL=e2e@openbooks.test ADMIN_PASSWORD=e2e-test-password-123 \
@@ -17,7 +21,8 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["github"], ["html"]] : [["list"], ["html"]],
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? "http://localhost:4780",
+    baseURL,
+    ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === "1",
     navigationTimeout: 90_000, // dev-mode cold compiles are slow on first hit
     actionTimeout: 30_000,
     trace: "retain-on-failure",
@@ -25,8 +30,10 @@ export default defineConfig({
   webServer: process.env.E2E_EXTERNAL
     ? undefined // E2E_EXTERNAL=1: caller started the app (e.g. `next start`)
     : {
-        command: "npm run dev -w web",
-        url: "http://localhost:4780/api/v1/health",
+        command: production ? "node scripts/e2e-production-server.mjs" : "npm run dev -w web",
+        url: `${baseURL}/api/v1/health`,
+        ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === "1",
+        gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
         reuseExistingServer: !process.env.CI,
         timeout: 240_000,
       },
