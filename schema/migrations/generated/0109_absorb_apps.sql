@@ -47,11 +47,12 @@
 --   predate it. Every statement below is rerunnable (NOT EXISTS guards plus
 --   ON CONFLICT DO NOTHING) so a retry never double-absorbs.
 --
---   One pathological row shape is skipped on purpose: an app key shorter
---   than 2 chars satisfies the apps slug but violates modules_key_length.
---   Failing the whole migration over it would hold every database hostage to
---   one ancient key; the row is left for a rename, and the guard below says
---   so.
+--   The shape guard mirrors the manifest SLUG exactly (1..64 plus the
+--   slug-shape match, owned by web/lib/apps/manifest.ts): storage floors
+--   length and shape so the backfill can never write a row the relaxed
+--   modules_key_length CHECK (0110) would refuse. App keys outside that
+--   shape predate even manifest validation and stay out, loudly visible
+--   as apps rows with no absorbing module row.
 
 -- PostgreSQL requires an exact unique key for each composite foreign key, so
 -- apps publishes (org_id, id) explicitly — the same reason 0107 publishes
@@ -84,7 +85,8 @@ SELECT a.org_id, a.key, a.name, a.description, a.icon_key, a.status, a.granted_p
        'app', a.id, a.created_at, a.created_by, a.updated_at, a.updated_by
   FROM public.apps a
  WHERE NOT EXISTS (SELECT 1 FROM public.modules m WHERE m.app_id = a.id)
-   AND length(a.key) BETWEEN 2 AND 64
+   AND length(a.key) BETWEEN 1 AND 64
+   AND a.key ~ '^[a-z][a-z0-9-]*$'
 ON CONFLICT (org_id, key) DO NOTHING;
 
 -- Backfill, part 2: one ACTIVE module version per absorbed app, its manifest

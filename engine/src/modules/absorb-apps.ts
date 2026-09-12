@@ -98,8 +98,8 @@ export function projectAppManifestToModuleManifest(
   version: AbsorbAppVersionSource,
 ): ProjectAppManifestResult {
   const errors: string[] = [];
-  if (!APP_SLUG.test(app.key) || app.key.length < 2 || app.key.length > 64) {
-    errors.push(`app key ${JSON.stringify(app.key)} is not a module key (a-z, 0-9, -, 2-64 chars)`);
+  if (!APP_SLUG.test(app.key) || app.key.length < 1 || app.key.length > 64) {
+    errors.push(`app key ${JSON.stringify(app.key)} is not a module key (a-z, 0-9, -, 1-64 chars)`);
   }
   if (!APP_VERSION.test(version.version)) {
     errors.push(`app version ${JSON.stringify(version.version)} must look like 1.0.0`);
@@ -151,7 +151,8 @@ export async function absorbAppsForOrg(orgId: string): Promise<AbsorbAppsResult>
         FROM apps a
        WHERE a.org_id = ${orgId}
          AND NOT EXISTS (SELECT 1 FROM modules m WHERE m.app_id = a.id)
-         AND length(a.key) BETWEEN 2 AND 64
+         AND length(a.key) BETWEEN 1 AND 64
+         AND a.key ~ '^[a-z][a-z0-9-]*$'
       ON CONFLICT (org_id, key) DO NOTHING`);
 
     const versions = await tx.execute(sql`
