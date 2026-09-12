@@ -18,7 +18,8 @@ test('module rehearsal renders the real sandbox route, promotes, and discards wi
     const drawer = page.getByRole('dialog')
     await drawer.getByLabel('Module manifest', { exact: true }).fill(JSON.stringify(manifest))
     await drawer.getByLabel('Reason', { exact: true }).fill('Verify sandbox rehearsal workflow')
-    await drawer.getByRole('combobox', { name: 'Rehearsal sandbox' }).selectOption({ label: process.env.E2E_SANDBOX_NAME! })
+    await drawer.getByRole('button', { name: 'Rehearsal sandbox', exact: true }).click()
+    await page.getByRole('option', { name: process.env.E2E_SANDBOX_NAME!, exact: true }).click()
   }
   try {
     await page.goto('/admin/modules?new=1')
@@ -35,6 +36,15 @@ test('module rehearsal renders the real sandbox route, promotes, and discards wi
     await expect(page.locator('main').getByText('Sandbox rehearsal rendered', { exact: true })).toBeVisible()
     await expect(page.getByText(/Sandbox environment/)).toBeVisible()
     await dismissSetupWizard(page)
+    const rendered = page.locator('main').getByText('Sandbox rehearsal rendered', { exact: true })
+    await expect(rendered).toBeVisible()
+    // Page-enter motion may still have opacity zero after DOM visibility;
+    // capture only once the actual content has painted after onboarding refresh.
+    await expect.poll(() => rendered.evaluate(element => {
+      let opacity = 1
+      for (let node: Element | null = element; node; node = node.parentElement) opacity *= Number(getComputedStyle(node).opacity)
+      return opacity
+    })).toBeGreaterThan(0.99)
     await page.locator('[data-splash-root]').waitFor({ state: 'hidden' })
     if (process.env.E2E_ARTIFACT_DIR) await page.screenshot({ path: `${process.env.E2E_ARTIFACT_DIR}/module-sandbox-preview.png`, fullPage: true })
     await page.getByRole('button', { name: 'Exit to production', exact: true }).click()
