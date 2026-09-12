@@ -246,7 +246,7 @@ test(
           manifest: manifest({
             version: "1.1.0",
             contributions: [
-              { kind: "page", route: "/reports/qilish", spec: specFor("/reports/qilish", { title: "v2" }) },
+              { kind: "page", route: "/reports/qilish", spec: { ...specFor("/reports/qilish"), layout: "detail" } },
               { kind: "page", route: "/reports/qilish-detail", spec: specFor("/reports/qilish-detail") },
             ],
           }),
@@ -442,6 +442,7 @@ test(
         ],
         ["relative route", manifest({ contributions: [{ kind: "page", route: "x", spec: specFor("x") }] })],
         ["non-object spec", manifest({ contributions: [{ kind: "page", route: "/x", spec: 42 }] })],
+        ["empty spec object", manifest({ contributions: [{ kind: "page", route: "/x", spec: {} }] })],
         ["garbage manifest", { key: 5 } as unknown as Record<string, unknown>],
       ];
       for (const [label, bad] of cases) {
@@ -464,6 +465,60 @@ test(
         ModuleInstallError,
       );
       assert.equal(await moduleCount(fx.orgId), 0);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
+
+test(
+  "grants resolve through the lattice: unknown names rejected, recorded grant is approved∩requested∩effective",
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture();
+    try {
+      // A permission outside the caller-supplied catalogue is a manifest
+      // error, even on a direct installModule call with no prior validation.
+      await assert.rejects(
+        withBypass(() =>
+          installModule({
+            orgId: fx.orgId,
+            actorId: fx.actorId,
+            manifest: manifest({ permissions: ["bogus.write"] }),
+            knownPermissions: ["records.read"],
+          }),
+        ),
+        /unknown permission requested/,
+      );
+      assert.equal(await moduleCount(fx.orgId), 0);
+
+      // The installer holds only gl.read: gl.post is requested and approved
+      // but withheld, and the audit trail says so.
+      const out = await withBypass(() =>
+        installModule({
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          manifest: manifest({ permissions: ["gl.read", "gl.post"] }),
+          knownPermissions: ["gl.read", "gl.post", "records.read"],
+          installerEffectivePermissions: ["gl.read"],
+        }),
+      );
+      assert.equal(out.outcome, "installed");
+      const stored = (
+        await withOrgContext(fx.orgId, () =>
+          db.execute<{ granted_permissions: string[] }>(
+            sql`select granted_permissions from modules where org_id = ${fx.orgId}`,
+          ),
+        )
+      ).rows[0]!;
+      assert.deepEqual(stored.granted_permissions, ["gl.read"]);
+      const audits = await auditFor(fx.orgId, "modules", out.moduleId);
+      const installAudit = audits.find(
+        (a) => (a.changes as { event?: string }).event === "module_install",
+      )!;
+      assert.deepEqual((installAudit.changes as { after?: { withheld_permissions?: string[] } }).after?.withheld_permissions, [
+        "gl.post",
+      ]);
     } finally {
       await dropScratchOrg(fx.orgId);
     }

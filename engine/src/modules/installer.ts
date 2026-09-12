@@ -1,5 +1,7 @@
+import { pageSpecSchema } from "@braedonsaunders/appkit-viewspec";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../db.ts";
+import { ModuleCapabilityError, resolveModuleGrants } from "./capabilities.ts";
 
 /**
  * Module installer — the ONLY writer of module lifecycle and projection rows.
@@ -12,14 +14,15 @@ import { db, type SqlExecutor } from "../db.ts";
  * performed. A silent partial install would be a fake success path, and the
  * approval UI already reports those kinds as NOT_IMPLEMENTED_YET.
  *
- * Layering: the canonical manifest validator is parseModuleManifest in
- * web/lib/modules/manifest.ts (zod, shared client-side for pre-upload
- * checks). This engine module cannot import it — engine never imports from
- * web — so callers validate there first and the installer re-checks at the
- * persistence boundary everything its SQL depends on (identity shape, page
- * payload shape, org scope, duplicate routes). Catalogue membership of
- * requested permissions and capability intersection belong to the manifest
- * module and the Phase 2a lattice, not to this projection boundary.
+ * Layering: parseModuleManifest in web/lib/modules/manifest.ts (zod, shared
+ * client-side for pre-upload checks) is the fast path, not the boundary —
+ * this engine module cannot import it (engine never imports from web), so
+ * the installer enforces canonical strictness itself with the same
+ * primitives: every page spec is validated with pageSpecSchema (the same
+ * schema object the canonical validator uses, never a hand-mirror), and
+ * grants resolve through the capability lattice (resolveModuleGrants) with
+ * a caller-supplied catalogue. A direct installModule call carrying a
+ * manifest parseModuleManifest would reject fails here too.
  *
  * Transactional shape (mirrors installApp in web/lib/apps/store.ts): the
  * module upsert, the version append, every projection, and every audit row
@@ -161,8 +164,17 @@ function validateManifest(raw: unknown): ValidManifest {
         `invalid manifest: page contribution ${i} route must be an absolute route pattern of at most 120 chars`,
       );
     }
-    if (typeof c.spec !== "object" || c.spec === null || Array.isArray(c.spec)) {
-      throw new ModuleInstallError(`invalid manifest: page contribution for route ${c.route} needs a spec object`);
+    // Canonical strictness at the boundary: the same pageSpecSchema object
+    // the manifest validator uses. The stored spec is the schema's output,
+    // so installer-persisted bytes equal validator-accepted bytes.
+    const parsedSpec = pageSpecSchema.safeParse(c.spec);
+    if (!parsedSpec.success) {
+      const detail = parsedSpec.error.issues
+        .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+        .join("; ");
+      throw new ModuleInstallError(
+        `invalid manifest: page contribution for route ${c.route} has an invalid spec: ${detail}`,
+      );
     }
     // A module version is org-wide by definition: reviewed and approved once
     // for everyone. `user` is a personal preference, never something an
@@ -172,17 +184,16 @@ function validateManifest(raw: unknown): ValidManifest {
         `invalid manifest: page contribution scope must be "org" — a module customizes the org, never one person`,
       );
     }
-    const spec = c.spec as Record<string, unknown>;
-    if (typeof spec.route === "string" && spec.route !== c.route) {
+    if (typeof parsedSpec.data.route === "string" && parsedSpec.data.route !== c.route) {
       throw new ModuleInstallError(
-        `invalid manifest: page contribution for route ${c.route} carries a spec declaring route ${spec.route}`,
+        `invalid manifest: page contribution for route ${c.route} carries a spec declaring route ${parsedSpec.data.route}`,
       );
     }
     if (seenRoutes.has(c.route)) {
       throw new ModuleInstallError(`invalid manifest: duplicate page contribution route ${c.route}`);
     }
     seenRoutes.add(c.route);
-    return { kind: "page" as const, route: c.route, spec };
+    return { kind: "page" as const, route: c.route, spec: parsedSpec.data as unknown as Record<string, unknown> };
   });
 
   return {
@@ -196,22 +207,37 @@ function validateManifest(raw: unknown): ValidManifest {
 }
 
 /**
- * Grants are a SUBSET of what the manifest requested: an admin may grant
- * fewer, never more. Anything outside the requested set is a caller bug and
- * fails closed here instead of persisting a grant nobody approved.
+ * Grant resolution through the capability lattice: unknown requested names
+ * are rejected against the caller-supplied catalogue, approvals beyond the
+ * request fail closed, and the recorded grant is approved ∩ requested ∩ the
+ * installer's effective set. Lattice errors surface as ModuleInstallError —
+ * raw lattice codes never reach callers.
  */
-function resolveGranted(manifest: ValidManifest, grantedPermissions: unknown): string[] {
-  const granted = grantedPermissions ?? manifest.permissions;
-  if (!Array.isArray(granted) || granted.some((p) => typeof p !== "string")) {
+function resolveGranted(
+  manifest: ValidManifest,
+  opts: {
+    grantedPermissions?: unknown;
+    knownPermissions?: readonly string[];
+    installerEffectivePermissions?: readonly string[];
+  },
+): { granted: string[]; withheld: string[] } {
+  const approved = opts.grantedPermissions ?? manifest.permissions;
+  if (!Array.isArray(approved) || approved.some((p) => typeof p !== "string")) {
     throw new ModuleInstallError("invalid install: grantedPermissions must be a list of permission strings");
   }
-  const requested = new Set(manifest.permissions);
-  for (const p of granted as string[]) {
-    if (!requested.has(p)) {
-      throw new ModuleInstallError(`invalid install: granted permission "${p}" was never requested by the manifest`);
+  try {
+    return resolveModuleGrants({
+      requested: manifest.permissions,
+      approved: approved as string[],
+      installerEffective: opts.installerEffectivePermissions ?? manifest.permissions,
+      knownPermissions: opts.knownPermissions,
+    });
+  } catch (error) {
+    if (error instanceof ModuleCapabilityError) {
+      throw new ModuleInstallError(`invalid install: ${error.message}`, 400);
     }
+    throw error;
   }
-  return [...(granted as string[])];
 }
 
 type ModuleRow = {
@@ -350,7 +376,7 @@ async function applyVersion(
     actorId: string;
     module: ModuleRow | null;
     manifest: ValidManifest;
-    granted: string[];
+    grants: { granted: string[]; withheld: string[] };
     op: "install" | "upgrade";
     reason: string;
   },
@@ -363,7 +389,7 @@ async function applyVersion(
       await tx.execute<ModuleRow>(sql`
         insert into modules (org_id, key, name, description, status, granted_permissions, created_by, updated_by)
         values (${orgId}, ${manifest.key}, ${manifest.name}, ${manifest.description},
-                'installed', ${JSON.stringify(opts.granted)}::jsonb, ${actorId}, ${actorId})
+                'installed', ${JSON.stringify(opts.grants.granted)}::jsonb, ${actorId}, ${actorId})
         returning id, key, name, description, status, active_version_id, granted_permissions`)
     ).rows[0]!;
     moduleRow = inserted;
@@ -380,6 +406,7 @@ async function applyVersion(
         name: moduleRow.name,
         status: moduleRow.status,
         granted_permissions: moduleRow.granted_permissions,
+        withheld_permissions: opts.grants.withheld,
       },
       actorId,
     });
@@ -432,7 +459,7 @@ async function applyVersion(
   // True idempotence: already installed, active, same bytes, same grants —
   // converge without writing. Anything else re-projects append-style below.
   const grantsEqual =
-    JSON.stringify([...moduleRow.granted_permissions].sort()) === JSON.stringify([...opts.granted].sort());
+    JSON.stringify([...moduleRow.granted_permissions].sort()) === JSON.stringify([...opts.grants.granted].sort());
   if (
     preexistingVersion &&
     moduleRow.status === "installed" &&
@@ -446,7 +473,7 @@ async function applyVersion(
   await tx.execute(sql`
     update modules
        set name = ${manifest.name}, description = ${manifest.description},
-           granted_permissions = ${JSON.stringify(opts.granted)}::jsonb,
+           granted_permissions = ${JSON.stringify(opts.grants.granted)}::jsonb,
            status = 'installed', active_version_id = ${versionId},
            updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${moduleRow.id}`);
@@ -467,7 +494,8 @@ async function applyVersion(
       name: manifest.name,
       status: "installed",
       active_version_id: versionId,
-      granted_permissions: opts.granted,
+      granted_permissions: opts.grants.granted,
+      withheld_permissions: opts.grants.withheld,
     },
     actorId,
   });
@@ -525,15 +553,26 @@ async function applyVersion(
 export async function installModule(opts: {
   orgId: string;
   actorId: string;
-  /** Raw manifest: validate canonically with parseModuleManifest first; the installer enforces the boundary again. */
+  /** Raw manifest: caller pre-validation with parseModuleManifest is a fast path; the installer enforces canonical strictness itself. */
   manifest: unknown;
   /** Admin-chosen grants, defaulting to everything requested. Must be a subset of requested. */
   grantedPermissions?: string[];
+  /**
+   * The platform permission catalogue (MODULE_PLATFORM_PERMISSIONS). When
+   * supplied, requested names outside it are rejected; omit only when the
+   * caller already validated the manifest through parseModuleManifest.
+   */
+  knownPermissions?: readonly string[];
+  /**
+   * The installing actor's resolved permission set. The recorded grant is
+   * approved ∩ requested ∩ effective; defaults to everything requested.
+   */
+  installerEffectivePermissions?: readonly string[];
   /** Why: recorded on every audit row this install writes. */
   reason?: string;
 }): Promise<InstallResult> {
   const manifest = validateManifest(opts.manifest);
-  const granted = resolveGranted(manifest, opts.grantedPermissions);
+  const grants = resolveGranted(manifest, opts);
   const reason = opts.reason && opts.reason.length > 0 ? opts.reason : "install";
   return await db.transaction(async (tx) => {
     const moduleRow = (
@@ -547,7 +586,7 @@ export async function installModule(opts: {
       actorId: opts.actorId,
       module: moduleRow,
       manifest,
-      granted,
+      grants,
       op: "install",
       reason,
     });
@@ -566,6 +605,17 @@ export async function upgradeModule(opts: {
   key: string;
   manifest: unknown;
   grantedPermissions?: string[];
+  /**
+   * The platform permission catalogue (MODULE_PLATFORM_PERMISSIONS). When
+   * supplied, requested names outside it are rejected; omit only when the
+   * caller already validated the manifest through parseModuleManifest.
+   */
+  knownPermissions?: readonly string[];
+  /**
+   * The installing actor's resolved permission set. The recorded grant is
+   * approved ∩ requested ∩ effective; defaults to everything requested.
+   */
+  installerEffectivePermissions?: readonly string[];
   reason?: string;
 }): Promise<InstallResult> {
   const manifest = validateManifest(opts.manifest);
@@ -574,7 +624,7 @@ export async function upgradeModule(opts: {
       `upgrade target is module "${opts.key}" but the manifest declares "${manifest.key}"`,
     );
   }
-  const granted = resolveGranted(manifest, opts.grantedPermissions);
+  const grants = resolveGranted(manifest, opts);
   const reason = opts.reason && opts.reason.length > 0 ? opts.reason : "upgrade";
   return await db.transaction(async (tx) => {
     const moduleRow = (
@@ -603,7 +653,7 @@ export async function upgradeModule(opts: {
       actorId: opts.actorId,
       module: moduleRow,
       manifest,
-      granted,
+      grants,
       op: "upgrade",
       reason,
     });
