@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext } from '@playwright/test'
 import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { authedContext } from './auth'
+import { authedContext, dismissSetupWizard } from './auth'
 
 /**
  * Every page renders.
@@ -95,8 +95,24 @@ for (const route of routes) {
     })
     const page = await context.newPage()
     const errors: string[] = []
+    let restorePayrollDisabled = false
     page.on('pageerror', (error: Error) => errors.push(String(error)))
     try {
+      // Payroll deliberately defaults off. Adopt it through the authoritative
+      // switchboard for this one render case, then restore the prior gate.
+      if (route === '/admin/setup/payroll') {
+        await page.goto('/admin/setup/features')
+        await dismissSetupWizard(page)
+        await page.goto('/admin/setup/features')
+        const payroll = page.getByRole('switch', { name: 'Payroll', exact: true })
+        if ((await payroll.getAttribute('aria-checked')) === 'false') {
+          restorePayrollDisabled = true
+          const saved = page.waitForResponse((response) => response.url().endsWith('/api/admin/setup/features') && response.request().method() === 'PUT')
+          await payroll.click()
+          expect((await saved).status()).toBe(200)
+          await expect(payroll).toHaveAttribute('aria-checked', 'true')
+        }
+      }
       const response = await page.goto(route, { waitUntil: 'domcontentloaded' })
       await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
       expect(response?.status(), `${route}: HTTP response`).toBeLessThan(400)
@@ -104,7 +120,15 @@ for (const route of routes) {
       await expect(page.locator('[data-route-state="error"]'), `${route}: error boundary`).toHaveCount(0)
       expect(errors, `${route}: browser errors`).toEqual([])
     } finally {
-      await context.close()
+      try {
+        if (restorePayrollDisabled) {
+          const restored = await context.request.put('/api/admin/setup/features', {
+            headers: { Origin: new URL(baseURL!).origin },
+            data: { features: { payroll: false } },
+          })
+          expect(restored.status(), await restored.text()).toBe(200)
+        }
+      } finally { await context.close() }
     }
   })
 }
