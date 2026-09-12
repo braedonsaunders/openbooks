@@ -96,6 +96,58 @@ export async function getAppByKey(orgId: string, key: string): Promise<AppRow | 
  * app row, inserts an immutable version + its files, and points the app at the
  * new active version. Returns the app key.
  */
+/**
+ * Canonical JSON for manifest byte-equality. jsonb reorders object keys on
+ * storage, so a naive stringify mismatches identical content; sorting keys
+ * recursively makes equal documents compare equal regardless of which side
+ * (projector object or stored jsonb) they came from.
+ */
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`
+}
+
+/** The reinstall-stable subset of an absorbed manifest: everything except
+ *  the row-identity provenance (appId/appVersionId), which necessarily
+ *  changes across reinstalls because the apps/version rows are new. */
+type ComparableAbsorbedManifest = {
+  key?: unknown
+  name?: unknown
+  version?: unknown
+  description?: unknown
+  permissions?: unknown
+  contributions?: unknown
+  provenance?: { kind?: unknown; appKey?: unknown; unmappedPermissions?: unknown }
+}
+
+/**
+ * Whether two absorbed manifests declare the same release. Compares the
+ * release content canonically and ignores reinstall-volatile provenance:
+ * a reinstall mints new app/version rows, so appId/appVersionId always
+ * differ — treating that as a content change would refuse every
+ * convergent reinstall. The preserved row keeps its ORIGINAL bundle ids
+ * by design (the manifest is immutable evidence); appKey re-links it
+ * logically while modules.app_id points at the live app row.
+ */
+function sameAbsorbedRelease(a: ComparableAbsorbedManifest, b: ComparableAbsorbedManifest): boolean {
+  const release = (m: ComparableAbsorbedManifest) => ({
+    key: m.key,
+    name: m.name,
+    version: m.version,
+    description: m.description ?? null,
+    permissions: m.permissions,
+    contributions: m.contributions,
+    provenance: {
+      kind: m.provenance?.kind,
+      appKey: m.provenance?.appKey,
+      unmappedPermissions: m.provenance?.unmappedPermissions,
+    },
+  })
+  return stableStringify(release(a)) === stableStringify(release(b))
+}
+
 export async function installApp(orgId: string, userId: string, bundle: UploadBundle): Promise<{ key: string }> {
   const parsed = parseManifest(bundle.manifest)
   if (!parsed.ok || !parsed.manifest) throw new AppError(`invalid manifest: ${parsed.errors.join('; ')}`)
@@ -251,13 +303,16 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
           unmappedPermissions: moduleManifest.provenance.unmappedPermissions,
         })}::jsonb,
         ${userId})`)
-    // One active module version at a time: supersede the prior (with its
-    // audit row) before appending the new one, mirroring the app_versions
-    // discipline above.
-    const priorModuleVersions = await tx.execute<{ id: string; version: string }>(sql`
-      select id, version from module_versions
-       where org_id = ${orgId} and module_id = ${moduleId} and status = 'active'`)
-    for (const prior of priorModuleVersions.rows) {
+    // One active module version at a time, converging on reinstall:
+    // uninstall preserves version rows, so the row for this label may
+    // already exist. Same release → adopt it (status to active, move the
+    // pointer, audit the reactivation; never duplicate). Different release
+    // under a reused label → fail closed: ambiguous history, the same rule
+    // as the duplicate-label abort for app versions above. Same-release
+    // ignores reinstall-volatile provenance (see sameAbsorbedRelease);
+    // jsonb reorders keys on storage, so the comparison is canonical,
+    // not textual.
+    const supersedeActiveModuleVersion = async (prior: { id: string; version: string }): Promise<void> => {
       await tx.execute(sql`update module_versions set status = 'superseded', updated_at = now(), updated_by = ${userId} where id = ${prior.id} and org_id = ${orgId}`)
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -270,21 +325,57 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
           })}::jsonb,
           ${userId})`)
     }
-    const moduleVersionRes = (await tx.execute<{ id: string }>(sql`
-      insert into module_versions (org_id, module_id, version, manifest, status, created_by, updated_by)
-      values (${orgId}, ${moduleId}, ${manifest.version}, ${JSON.stringify(moduleManifest)}::jsonb, 'active', ${userId}, ${userId})
-      returning id`))
-    const moduleVersionId = moduleVersionRes.rows[0]!.id
-    await tx.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'module_versions', ${moduleVersionId}, 'insert',
-        ${JSON.stringify({
-          event: 'app_version_absorbed',
-          appKey: manifest.key,
-          version: manifest.version,
-          unmappedPermissions: moduleManifest.provenance.unmappedPermissions,
-        })}::jsonb,
-        ${userId})`)
+    const sameLabel = (await tx.execute<{ id: string; version: string; status: string; manifest: unknown }>(sql`
+      select id, version, status, manifest from module_versions
+       where org_id = ${orgId} and module_id = ${moduleId} and version = ${manifest.version} limit 1`)).rows[0]
+    if (sameLabel && !sameAbsorbedRelease(sameLabel.manifest as ComparableAbsorbedManifest, moduleManifest)) {
+      throw new AppError(`version ${manifest.version} already exists for this module with different content; bump the version instead of reusing the label`)
+    }
+    let moduleVersionId: string
+    if (sameLabel) {
+      const otherActives = await tx.execute<{ id: string; version: string }>(sql`
+        select id, version from module_versions
+         where org_id = ${orgId} and module_id = ${moduleId} and status = 'active' and id <> ${sameLabel.id}`)
+      for (const prior of otherActives.rows) {
+        await supersedeActiveModuleVersion(prior)
+      }
+      if (sameLabel.status !== 'active') {
+        await tx.execute(sql`update module_versions set status = 'active', updated_at = now(), updated_by = ${userId} where id = ${sameLabel.id} and org_id = ${orgId}`)
+      }
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'module_versions', ${sameLabel.id}, 'update',
+          ${JSON.stringify({
+            event: 'version_reactivated',
+            before: { version: sameLabel.version, status: sameLabel.status },
+            after: { version: sameLabel.version, status: 'active' },
+            adoptedByAppVersion: versionId,
+          })}::jsonb,
+          ${userId})`)
+      moduleVersionId = sameLabel.id
+    } else {
+      const priorModuleVersions = await tx.execute<{ id: string; version: string }>(sql`
+        select id, version from module_versions
+         where org_id = ${orgId} and module_id = ${moduleId} and status = 'active'`)
+      for (const prior of priorModuleVersions.rows) {
+        await supersedeActiveModuleVersion(prior)
+      }
+      const moduleVersionRes = (await tx.execute<{ id: string }>(sql`
+        insert into module_versions (org_id, module_id, version, manifest, status, created_by, updated_by)
+        values (${orgId}, ${moduleId}, ${manifest.version}, ${JSON.stringify(moduleManifest)}::jsonb, 'active', ${userId}, ${userId})
+        returning id`))
+      moduleVersionId = moduleVersionRes.rows[0]!.id
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'module_versions', ${moduleVersionId}, 'insert',
+          ${JSON.stringify({
+            event: 'app_version_absorbed',
+            appKey: manifest.key,
+            version: manifest.version,
+            unmappedPermissions: moduleManifest.provenance.unmappedPermissions,
+          })}::jsonb,
+          ${userId})`)
+    }
     await tx.execute(sql`update modules set active_version_id = ${moduleVersionId}, updated_at = now(), updated_by = ${userId} where id = ${moduleId} and org_id = ${orgId}`)
   })
 
