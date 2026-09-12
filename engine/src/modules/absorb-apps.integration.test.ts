@@ -154,11 +154,19 @@ test("the projector mirrors identity and grants and marks provenance, and refuse
   });
 
   const badKey = projectAppManifestToModuleManifest(
-    { id: appId, key: "X", name: "Bad", description: null, grantedPermissions: [] },
+    { id: appId, key: "Bad Key!", name: "Bad", description: null, grantedPermissions: [] },
     { id: versionId, version: "1.0.0", permissions: [] },
   );
   assert.equal(badKey.ok, false);
   assert.match(badKey.errors.join("; "), /module key/);
+
+  // The manifest SLUG owns the vocabulary: a 1-char key is valid (0110).
+  const singleChar = projectAppManifestToModuleManifest(
+    { id: appId, key: "x", name: "X", description: null, grantedPermissions: [] },
+    { id: versionId, version: "1.0.0", permissions: [] },
+  );
+  assert.equal(singleChar.ok, true);
+  assert.equal(singleChar.manifest?.key, "x");
 
   const badVersion = projectAppManifestToModuleManifest(
     { id: appId, key: "ledger-lens", name: "Lens", description: null, grantedPermissions: [] },
@@ -216,6 +224,39 @@ test(
   },
 );
 
+test(
+  "absorb takes a 1-char app key and skips a key outside the manifest SLUG",
+  { skip: !DB },
+  async () => {
+    const tiny = await makeApp({ key: "x" });
+    const wild = await makeApp({ key: "Bad Key!", withVersion: false });
+    try {
+      // 1-char keys are valid manifest SLUGs (0110): absorbed like any other.
+      assert.deepEqual(await withBypass(() => absorbAppsForOrg(tiny.orgId)), {
+        modulesInserted: 1,
+        versionsInserted: 1,
+        linked: 1,
+      });
+      const tinyMod = await readModule(tiny.orgId, tiny.appId);
+      assert.ok(tinyMod);
+      assert.equal(tinyMod.key, "x");
+      assert.equal(tinyMod.kind, "app");
+      assert.ok(tinyMod.activeVersionId);
+
+      // Outside the SLUG the app manifest enforces: left for a rename,
+      // loudly visible as an apps row with no absorbing module row.
+      assert.deepEqual(await withBypass(() => absorbAppsForOrg(wild.orgId)), {
+        modulesInserted: 0,
+        versionsInserted: 0,
+        linked: 0,
+      });
+      assert.equal(await readModule(wild.orgId, wild.appId), undefined);
+    } finally {
+      await dropScratchOrg(tiny.orgId);
+      await dropScratchOrg(wild.orgId);
+    }
+  },
+);
 test(
   "absorb handles a versionless app and a disabled app without inventing versions",
   { skip: !DB },
