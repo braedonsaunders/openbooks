@@ -225,11 +225,31 @@ function resolveGranted(
   if (!Array.isArray(approved) || approved.some((p) => typeof p !== "string")) {
     throw new ModuleInstallError("invalid install: grantedPermissions must be a list of permission strings");
   }
+  // The catalogue is mandatory: without it an unknown requested name would
+  // persist, and an unenforced caller convention is exactly the bypass this
+  // boundary exists to close. Callers pass MODULE_PLATFORM_PERMISSIONS.
+  if (!opts.knownPermissions || !Array.isArray(opts.knownPermissions)) {
+    throw new ModuleInstallError(
+      "invalid install: knownPermissions (the platform permission catalogue) is required; " +
+        "pass MODULE_PLATFORM_PERMISSIONS",
+    );
+  }
+  // Authority is mandatory too: no default effective set, no undefined path.
+  // A caller that cannot state its authority must not install.
+  if (
+    !opts.installerEffectivePermissions ||
+    !Array.isArray(opts.installerEffectivePermissions) ||
+    opts.installerEffectivePermissions.some((p) => typeof p !== "string")
+  ) {
+    throw new ModuleInstallError(
+      "invalid install: installerEffectivePermissions (the installing actor's resolved permission set) is required",
+    );
+  }
   try {
     return resolveModuleGrants({
       requested: manifest.permissions,
       approved: approved as string[],
-      installerEffective: opts.installerEffectivePermissions ?? manifest.permissions,
+      installerEffective: opts.installerEffectivePermissions,
       knownPermissions: opts.knownPermissions,
     });
   } catch (error) {
@@ -659,16 +679,16 @@ export async function installModule(opts: {
   /** Admin-chosen grants, defaulting to everything requested. Must be a subset of requested. */
   grantedPermissions?: string[];
   /**
-   * The platform permission catalogue (MODULE_PLATFORM_PERMISSIONS). When
-   * supplied, requested names outside it are rejected; omit only when the
-   * caller already validated the manifest through parseModuleManifest.
+   * The platform permission catalogue (MODULE_PLATFORM_PERMISSIONS).
+   * Required: requested names outside it are rejected, unconditionally.
    */
-  knownPermissions?: readonly string[];
+  knownPermissions: readonly string[];
   /**
-   * The installing actor's resolved permission set. The recorded grant is
-   * approved ∩ requested ∩ effective; defaults to everything requested.
+   * The installing actor's resolved permission set. Required, no default:
+   * the recorded grant is approved ∩ requested ∩ effective, and a caller
+   * that cannot state its authority must not install.
    */
-  installerEffectivePermissions?: readonly string[];
+  installerEffectivePermissions: readonly string[];
   /** Why: recorded on every audit row this install writes. */
   reason?: string;
 }): Promise<InstallResult> {
@@ -707,16 +727,16 @@ export async function upgradeModule(opts: {
   manifest: unknown;
   grantedPermissions?: string[];
   /**
-   * The platform permission catalogue (MODULE_PLATFORM_PERMISSIONS). When
-   * supplied, requested names outside it are rejected; omit only when the
-   * caller already validated the manifest through parseModuleManifest.
+   * The platform permission catalogue (MODULE_PLATFORM_PERMISSIONS).
+   * Required: requested names outside it are rejected, unconditionally.
    */
-  knownPermissions?: readonly string[];
+  knownPermissions: readonly string[];
   /**
-   * The installing actor's resolved permission set. The recorded grant is
-   * approved ∩ requested ∩ effective; defaults to everything requested.
+   * The installing actor's resolved permission set. Required, no default:
+   * the recorded grant is approved ∩ requested ∩ effective, and a caller
+   * that cannot state its authority must not install.
    */
-  installerEffectivePermissions?: readonly string[];
+  installerEffectivePermissions: readonly string[];
   reason?: string;
 }): Promise<InstallResult> {
   const manifest = validateManifest(opts.manifest);

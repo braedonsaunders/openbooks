@@ -41,6 +41,11 @@ function specFor(route: string, extra: Record<string, unknown> = {}) {
   return { specVersion: 1, route, layout: "list", header: [], body: [], ...extra };
 }
 
+/** Catalogue subset covering every permission the fixtures request. */
+function known() {
+  return ["gl.post", "gl.read", "records.create", "records.read"];
+}
+
 /** A minimal valid module manifest in the shape parseModuleManifest accepts. */
 function manifest(overrides: Record<string, unknown> = {}) {
   return {
@@ -101,7 +106,7 @@ test(
     const fx = await makeFixture();
     try {
       const out = await withBypass(() =>
-        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest() }),
+        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest(), knownPermissions: known(), installerEffectivePermissions: ["records.read"] }),
       );
       assert.equal(out.outcome, "installed");
 
@@ -165,7 +170,7 @@ test(
     const fx = await makeFixture();
     try {
       const out = await withBypass(() =>
-        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest({ key: "q" }) }),
+        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest({ key: "q" }), knownPermissions: known(), installerEffectivePermissions: ["records.read"] }),
       );
       assert.equal(out.outcome, "installed");
       const modules = (
@@ -187,10 +192,10 @@ test(
     const fx = await makeFixture();
     try {
       const first = await withBypass(() =>
-        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest() }),
+        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest(), knownPermissions: known(), installerEffectivePermissions: ["records.read"] }),
       );
       const second = await withBypass(() =>
-        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest() }),
+        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest(), knownPermissions: known(), installerEffectivePermissions: ["records.read"] }),
       );
       assert.equal(second.outcome, "already-installed");
       assert.equal(second.moduleId, first.moduleId);
@@ -227,8 +232,8 @@ test(
     const fx = await makeFixture();
     try {
       const [a, b] = await Promise.all([
-        withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest() })),
-        withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest() })),
+        withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest(), knownPermissions: known(), installerEffectivePermissions: ["records.read"] })),
+        withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest(), knownPermissions: known(), installerEffectivePermissions: ["records.read"] })),
       ]);
       // The loser serializes on the unique keys and converges — raw PG
       // constraint codes never reach callers.
@@ -267,17 +272,19 @@ test(
     const fx = await makeFixture();
     try {
       const v1 = manifest();
-      await withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: v1 }));
+      await withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: v1, knownPermissions: known(), installerEffectivePermissions: ["records.read"] }));
       await withBypass(() =>
         upgradeModule({
           orgId: fx.orgId,
           actorId: fx.actorId,
           key: "qilish-report",
           manifest: manifest({ version: "1.1.0" }),
+          knownPermissions: known(),
+          installerEffectivePermissions: ["records.read"],
         }),
       );
       const reactivated = await withBypass(() =>
-        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: v1 }),
+        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: v1, knownPermissions: known(), installerEffectivePermissions: ["records.read"] }),
       );
       assert.equal(reactivated.outcome, "reactivated");
       const versionAudits = await auditFor(fx.orgId, "module_versions", reactivated.versionId);
@@ -301,13 +308,15 @@ test(
   async () => {
     const fx = await makeFixture();
     try {
-      await withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest() }));
+      await withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest(), knownPermissions: known(), installerEffectivePermissions: ["records.read"] }));
       await assert.rejects(
         withBypass(() =>
           installModule({
             orgId: fx.orgId,
             actorId: fx.actorId,
             manifest: manifest({ name: "Renamed Behind The Same Tag" }),
+            knownPermissions: known(),
+            installerEffectivePermissions: ["records.read"],
           }),
         ),
         ModuleInstallError,
@@ -325,6 +334,8 @@ test(
               { kind: "page", route: "/reports/qilish-detail", spec: specFor("/reports/qilish-detail") },
             ],
           }),
+          knownPermissions: known(),
+          installerEffectivePermissions: ["records.read"],
         }),
       );
 
@@ -394,7 +405,15 @@ test(
           { kind: "page", route: "/reports/drop", spec: specFor("/reports/drop") },
         ],
       });
-      const first = await withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: v1 }));
+      const first = await withBypass(() =>
+        installModule({
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          manifest: v1,
+          knownPermissions: known(),
+          installerEffectivePermissions: ["records.read"],
+        }),
+      );
       const upgraded = await withBypass(() =>
         upgradeModule({
           orgId: fx.orgId,
@@ -405,6 +424,8 @@ test(
             version: "2.0.0",
             contributions: [{ kind: "page", route: "/reports/keep", spec: specFor("/reports/keep") }],
           }),
+          knownPermissions: known(),
+          installerEffectivePermissions: ["records.read"],
         }),
       );
       // The dropped route keeps its row (history preserved) but goes
@@ -453,7 +474,7 @@ test(
   async () => {
     const fx = await makeFixture();
     try {
-      await withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest() }));
+      await withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest(), knownPermissions: known(), installerEffectivePermissions: ["records.read"] }));
       const uninstalled = await withBypass(() =>
         uninstallModule({ orgId: fx.orgId, actorId: fx.actorId, key: "qilish-report" }),
       );
@@ -492,7 +513,7 @@ test(
       assertAudited(await auditFor(fx.orgId, "modules", uninstalled.moduleId!), fx.actorId);
 
       const reinstalled = await withBypass(() =>
-        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest() }),
+        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest(), knownPermissions: known(), installerEffectivePermissions: ["records.read"] }),
       );
       assert.equal(reinstalled.outcome, "reactivated");
       const liveAgain = Number(
@@ -526,7 +547,7 @@ test(
         return inserted.rows[0]!;
       });
       await assert.rejects(
-        withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest() })),
+        withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest(), knownPermissions: known(), installerEffectivePermissions: ["records.read"] })),
         /already customized for this org/,
       );
       // Atomic: the failed install leaves no module, version, or audit rows behind.
@@ -588,7 +609,7 @@ test(
       ];
       for (const [label, bad] of cases) {
         await assert.rejects(
-          withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: bad })),
+          withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: bad, knownPermissions: known(), installerEffectivePermissions: ["records.read"] })),
           ModuleInstallError,
           label,
         );
@@ -601,6 +622,8 @@ test(
             actorId: fx.actorId,
             manifest: manifest({ permissions: [] }),
             grantedPermissions: ["gl.post"],
+            knownPermissions: known(),
+            installerEffectivePermissions: ["records.read"],
           }),
         ),
         ModuleInstallError,
@@ -627,6 +650,7 @@ test(
             actorId: fx.actorId,
             manifest: manifest({ permissions: ["bogus.write"] }),
             knownPermissions: ["records.read"],
+            installerEffectivePermissions: ["records.read"],
           }),
         ),
         /unknown permission requested/,
@@ -667,6 +691,24 @@ test(
 );
 
 test(
+  "omitting the authority opts is a compile error and a runtime refusal",
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture();
+    try {
+      await assert.rejects(
+        // @ts-expect-error: authority opts are required — a caller that cannot state its authority must not install
+        withBypass(() => installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest() })),
+        /knownPermissions.*required/,
+      );
+      assert.equal(await moduleCount(fx.orgId), 0);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
+
+test(
   "upgrade of a never-installed module is refused; uninstall of one is a no-op",
   { skip: !DB },
   async () => {
@@ -674,7 +716,14 @@ test(
     try {
       await assert.rejects(
         withBypass(() =>
-          upgradeModule({ orgId: fx.orgId, actorId: fx.actorId, key: "qilish-report", manifest: manifest() }),
+          upgradeModule({
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          key: "qilish-report",
+          manifest: manifest(),
+          knownPermissions: known(),
+          installerEffectivePermissions: ["records.read"],
+        }),
         ),
         ModuleInstallError,
       );
