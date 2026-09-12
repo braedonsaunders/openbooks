@@ -28,6 +28,9 @@ ALTER TABLE public.modules
     ADD CONSTRAINT modules_key_length CHECK (((length(key) >= 1) AND (length(key) <= 64)));
 
 -- Re-backfill with the corrected filter: length 1..64 AND the manifest SLUG
+-- shape, the catalogue-filtered permissions with unmapped ones named in
+-- provenance, and description omitted when the app has none — the same
+-- contract-passing manifest 0109 now writes.
 -- shape. Picks up 1-char apps 0109 skipped; changes nothing otherwise.
 INSERT INTO public.modules
   (org_id, key, name, description, icon_key, status, granted_permissions, kind, app_id,
@@ -47,20 +50,30 @@ SELECT a.org_id, m.id, av.version,
          'key', a.key,
          'name', a.name,
          'version', av.version,
-         'description', a.description,
-         'kind', 'app',
-         'appId', a.id,
-         'appKey', a.key,
-         'appVersionId', av.id,
-         'permissions', CASE WHEN jsonb_typeof(av.manifest -> 'permissions') = 'array'
-                             THEN av.manifest -> 'permissions'
-                             ELSE '[]'::jsonb END,
-         'contributions', '[]'::jsonb
-       ),
+         'permissions', perms.mapped,
+         'contributions', '[]'::jsonb,
+         'provenance', jsonb_build_object(
+           'kind', 'app',
+           'appId', a.id,
+           'appKey', a.key,
+           'appVersionId', av.id,
+           'unmappedPermissions', perms.unmapped
+         )
+       ) || CASE WHEN a.description IS NOT NULL
+                  THEN jsonb_build_object('description', a.description)
+                  ELSE '{}'::jsonb END,
        'active', av.created_at, av.created_by, av.updated_at, av.updated_by
   FROM public.apps a
   JOIN public.modules m ON m.app_id = a.id
   JOIN public.app_versions av ON av.id = a.active_version_id AND av.org_id = a.org_id
+  CROSS JOIN LATERAL (
+    SELECT coalesce(jsonb_agg(e #>> '{}' ORDER BY o) FILTER (WHERE (e #>> '{}') = ANY (ARRAY['ap.create','ap.pay','ap.post','ap.read','ar.create','ar.post','ar.read','assets.manage','assets.read','gl.post','gl.read','items.manage','items.read','parties.manage','parties.read','projects.manage','projects.read','records.create','records.read'])), '[]'::jsonb) AS mapped,
+           coalesce(jsonb_agg(e #>> '{}' ORDER BY o) FILTER (WHERE NOT ((e #>> '{}') = ANY (ARRAY['ap.create','ap.pay','ap.post','ap.read','ar.create','ar.post','ar.read','assets.manage','assets.read','gl.post','gl.read','items.manage','items.read','parties.manage','parties.read','projects.manage','projects.read','records.create','records.read']))), '[]'::jsonb) AS unmapped
+      FROM jsonb_array_elements(CASE WHEN jsonb_typeof(av.manifest -> 'permissions') = 'array'
+                                     THEN av.manifest -> 'permissions'
+                                     ELSE '[]'::jsonb END) WITH ORDINALITY AS t(e, o)
+     WHERE jsonb_typeof(t.e) = 'string'
+  ) AS perms
  WHERE a.active_version_id IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM public.module_versions mv WHERE mv.module_id = m.id AND mv.version = av.version)
 ON CONFLICT (module_id, version) DO NOTHING;
