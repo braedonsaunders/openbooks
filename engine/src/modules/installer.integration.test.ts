@@ -159,6 +159,28 @@ test(
 );
 
 test(
+  "a one-character key installs: the canonical slug rule is 1..64",
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture();
+    try {
+      const out = await withBypass(() =>
+        installModule({ orgId: fx.orgId, actorId: fx.actorId, manifest: manifest({ key: "q" }) }),
+      );
+      assert.equal(out.outcome, "installed");
+      const modules = (
+        await withOrgContext(fx.orgId, () =>
+          db.execute<{ key: string }>(sql`select key from modules where org_id = ${fx.orgId}`),
+        )
+      ).rows;
+      assert.deepEqual(modules.map((m) => m.key), ["q"]);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
+
+test(
   "reinstalling the identical manifest is a no-op: one module row, one version row, one active projection",
   { skip: !DB },
   async () => {

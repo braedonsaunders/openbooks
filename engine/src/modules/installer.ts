@@ -118,8 +118,8 @@ function validateManifest(raw: unknown): ValidManifest {
   }
   const m = raw as Record<string, unknown>;
 
-  if (typeof m.key !== "string" || !SLUG.test(m.key) || m.key.length < 2 || m.key.length > 64) {
-    throw new ModuleInstallError("invalid manifest: key must be a 2–64 char slug (a-z, 0-9, -)");
+  if (typeof m.key !== "string" || !SLUG.test(m.key) || m.key.length < 1 || m.key.length > 64) {
+    throw new ModuleInstallError("invalid manifest: key must be a 1–64 char slug (a-z, 0-9, -)");
   }
   if (typeof m.name !== "string" || m.name.length < 1 || m.name.length > 120) {
     throw new ModuleInstallError("invalid manifest: name must be 1–120 chars");
