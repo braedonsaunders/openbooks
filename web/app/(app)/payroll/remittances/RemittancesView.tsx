@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Input } from '@openbooks/ui'
+import { Alert, AlertDescription, Badge, Button, Input } from '@openbooks/ui'
 import type { RemittanceGroup } from '@openbooks/engine/src/payroll-remittance.ts'
 import { useMoney } from '../../../../components/money-provider'
 
@@ -26,11 +26,13 @@ export function RemittancesView({
   from,
   to,
   canCreate,
+  populationRefusal,
 }: {
   groups: RemittanceGroup[]
   from: string
   to: string
   canCreate: boolean
+  populationRefusal?: string | null
 }) {
   const t = useTranslations('payroll.remittances')
   const router = useRouter()
@@ -81,7 +83,11 @@ export function RemittancesView({
         <Button type="submit" variant="outline">{t('apply')}</Button>
       </form>
 
-      {groups.length === 0 ? (
+      {populationRefusal ? (
+        <Alert variant="warning">
+          <AlertDescription>{populationRefusal}</AlertDescription>
+        </Alert>
+      ) : groups.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
           {t('empty')}
         </div>
