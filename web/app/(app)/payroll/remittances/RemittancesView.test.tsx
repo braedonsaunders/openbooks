@@ -4,19 +4,6 @@ import test from 'node:test'
 
 const source = readFileSync(new URL('./RemittancesView.tsx', import.meta.url), 'utf8')
 
-test('remittance bill payload follows edited dates while preserving unchanged range values', () => {
-  assert.match(source, /const \[range, setRange\] = useState\(\{ from, to \}\)/)
-  assert.match(source, /value=\{range\.from\}[\s\S]*?from: e\.target\.value/)
-  assert.match(source, /value=\{range\.to\}[\s\S]*?to: e\.target\.value/)
-
-  const payload = source.match(/body: JSON\.stringify\(\{([\s\S]*?)\n        \}\),/)?.[1]
-  assert.ok(payload, 'create-bill must serialize a request payload')
-  assert.match(payload, /from: range\.from/)
-  assert.match(payload, /to: range\.to/)
-  assert.doesNotMatch(payload, /^\s*from,\s*$/m)
-  assert.doesNotMatch(payload, /^\s*to,\s*$/m)
-})
-
 // Exercise the real client view: a refusal must never look like a zero balance.
 const { registerHooks } = await import('node:module')
 registerHooks({
@@ -35,6 +22,19 @@ const { MoneyProvider } = await import('../../../../components/money-provider')
 const { RemittancesView } = await import('./RemittancesView')
 const messages = JSON.parse(readFileSync(new URL('../../../../messages/en/payroll.json', import.meta.url), 'utf8'))
 Object.assign(globalThis, { React })
+
+test('remittance bill payload follows edited dates while preserving unchanged range values', () => {
+  assert.match(source, /const \[range, setRange\] = useState\(\{ from, to \}\)/)
+  assert.match(source, /value=\{range\.from\}[\s\S]*?from: e\.target\.value/)
+  assert.match(source, /value=\{range\.to\}[\s\S]*?to: e\.target\.value/)
+
+  const payload = source.match(/body: JSON\.stringify\(\{([\s\S]*?)\n        \}\),/)?.[1]
+  assert.ok(payload, 'create-bill must serialize a request payload')
+  assert.match(payload, /from: range\.from/)
+  assert.match(payload, /to: range\.to/)
+  assert.doesNotMatch(payload, /^\s*from,\s*$/m)
+  assert.doesNotMatch(payload, /^\s*to,\s*$/m)
+})
 
 test('refused remittance view renders an alert and date form, without an empty balance or bill action', () => {
   const message = 'Committed payroll has an unknown historical filing account.'
