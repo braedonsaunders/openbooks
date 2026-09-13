@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
+import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import {
   page,
@@ -60,6 +61,7 @@ export interface RemittancesData {
   description: string
   tabs: Awaited<ReturnType<typeof groupTabs>>
   groups: RemittanceGroup[]
+  populationRefusal: string | null
   from: string
   to: string
   canCreate: boolean
@@ -79,7 +81,16 @@ export async function loadRemittances(
 
   // Employer-level aggregate: refused outright for a caller whose scope
   // excludes any stub in the period, exactly as the JSON route answers.
-  const groups = await scopedRemittanceSummary(authz, { from, to })
+  let groups: RemittanceGroup[] | null = []
+  let populationRefusal: string | null = null
+  try {
+    groups = await scopedRemittanceSummary(authz, { from, to })
+  } catch (error) {
+    // Expected payroll integrity refusals belong in the workspace, as in
+    // the filing workspace. Unexpected failures still reach the error boundary.
+    if (!(error instanceof PayrollError)) throw error
+    populationRefusal = error.message
+  }
   if (!groups) {
     const { notFound } = await import('next/navigation')
     notFound()
@@ -93,9 +104,10 @@ export async function loadRemittances(
     description: t('description'),
     tabs: moduleTabs,
     groups,
+    populationRefusal,
     from,
     to,
-    canCreate: can(authz, 'payroll.run'),
+    canCreate: !populationRefusal && can(authz, 'payroll.run'),
     apNote: t('apNote'),
     apLinkLabel: t('apLink'),
   }
@@ -121,6 +133,7 @@ export function remittancesSpec(data: RemittancesData): PageSpec {
       // paths, so no loader formatting can drift between the renders.
       widgetBlock('remittance-cockpit', {
         groups: data.groups,
+        populationRefusal: data.populationRefusal,
         from: data.from,
         to: data.to,
         canCreate: data.canCreate,

@@ -1246,6 +1246,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'remittance-cockpit': (props) => (
     <RemittancesView
       groups={(props.groups as ComponentProps<typeof RemittancesView>['groups']) ?? []}
+      populationRefusal={str(props, 'populationRefusal')}
       from={str(props, 'from') ?? ''}
       to={str(props, 'to') ?? ''}
       canCreate={props.canCreate === true}
