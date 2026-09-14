@@ -2,10 +2,10 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { isFeatureEnabled } from '../../../lib/features'
-import { createFieldTicket, FieldTicketError, TICKET_PERIODS, type TicketPeriod } from '../../../lib/field-tickets'
+import { createFieldTicket, FieldTicketError, FieldTicketNotFoundError, TICKET_PERIODS, type TicketPeriod } from '../../../lib/field-tickets'
 
 export const runtime = 'nodejs'
 
@@ -19,10 +19,16 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const status = url.searchParams.get('status')
   const projectId = url.searchParams.get('project')
+  // The caller's subsidiary visibility narrows the list exactly like every
+  // other documents list (documentWhere): a restricted caller sees only their
+  // subsidiaries, and an empty scope sees nothing. A null subsidiary fails
+  // closed, mirroring the [id] route's record gate.
+  const scope = gate.allowedSubsidiaryIds
   const filters = sql.join(
     [
       status && ['draft', 'pending_approval', 'approved', 'voided'].includes(status) ? sql` and d.status = ${status}` : sql``,
       projectId && isUuid(projectId) ? sql` and d.project_id = ${projectId}` : sql``,
+      scope ? (scope.size ? sql` and d.subsidiary_id = any(${`{${[...scope].join(',')}}`}::uuid[])` : sql` and false`) : sql``,
     ],
     sql``,
   )
@@ -65,13 +71,28 @@ export async function POST(req: Request) {
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
   if (!isUuid(body.projectId)) return NextResponse.json({ error: 'projectId required' }, { status: 422 })
-  const period = TICKET_PERIODS.includes(body.period) ? (body.period as TicketPeriod) : undefined
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date ?? '') ? body.date : undefined
+  // Creating under a project is itself a subsidiary boundary — the ticket
+  // inherits the job's legal entity. Mirror the [id] route's project gate so
+  // a restricted caller cannot open a ticket under another subsidiary's job.
+  const scopedProject = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select p.subsidiary_id as "subsidiaryId"
+      from projects p
+     where p.id = ${body.projectId} and p.org_id = ${orgId} and p.is_active
+  `))
+  if (!scopedProject.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const projectDenied = guardSubsidiaryScope(
+    gate.allowedSubsidiaryIds === undefined ? { ...gate, allowedSubsidiaryIds: null } : gate,
+    scopedProject.rows[0].subsidiaryId,
+  )
+  if (projectDenied) return projectDenied
+  if (body.period !== undefined && !TICKET_PERIODS.includes(body.period)) return NextResponse.json({ error: 'Invalid ticket period' }, { status: 422 })
+  const period = body.period as TicketPeriod | undefined
+  const date = body.date
   try {
-    const created = await createFieldTicket(orgId, gate.user.id, { projectId: body.projectId, date, period })
+    const created = await createFieldTicket(orgId, gate.user.id, { projectId: body.projectId, date, period, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
     return NextResponse.json(created)
   } catch (e) {
-    const status = e instanceof FieldTicketError ? 422 : 500
+    const status = e instanceof FieldTicketNotFoundError ? 404 : e instanceof FieldTicketError ? 422 : 500
     return NextResponse.json({ error: (e as Error).message }, { status })
   }
 }

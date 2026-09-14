@@ -86,6 +86,33 @@ export async function POST(req: Request) {
       })
     }
 
+    // Weeks carrying amendment history correct forward only. Reopening would
+    // return an amended original to draft, where the weekly save deletes or
+    // replaces it under a new id — orphaning the offset into phantom negative
+    // hours with no original to negate. Inspect the link in both directions:
+    // offsets pointing back at an original, and originals pointed at by an
+    // offset. Either side makes the week append-only.
+    const offsets = ((await db.execute<{ n: number }>(sql`
+      select count(*)::int as n
+        from time_entries entry
+       where entry.org_id = ${orgId}
+         and entry.employee_party_id = ${employee}
+         and entry.worked_on >= ${weekFrom} and worked_on <= ${weekTo}
+         and (
+           entry.amends_entry_id is not null
+           or exists (
+             select 1 from time_entries contra
+              where contra.org_id = entry.org_id
+                and contra.amends_entry_id = entry.id
+           )
+         )`))).rows[0]!.n
+    if (Number(offsets) > 0) {
+      return bad('This week carries amendment offsets — correct it with a new amendment, not a reopen', {
+        reasons: ['amended'],
+        lockedCount: Number(offsets),
+      })
+    }
+
     // Clear the approval stamp with the status: a row reading "draft" while it
     // still names an approver would misreport who signed off on what.
     await setTimesheetWeekStatus(

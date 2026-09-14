@@ -37,6 +37,12 @@ export async function amendTimeEntry(
     const row = src.rows[0]
     if (!row) throw new Error('time entry not found')
     if (row.amends_entry_id) throw new Error('an amendment cannot itself be amended — amend the original')
+    // Only approved history is amended. An entry that is still draft,
+    // submitted, or rejected remains editable, so a contra against it would
+    // point at a row the weekly save can delete or replace — orphaning the
+    // offset into phantom negative hours. Correct editable entries by saving,
+    // and consumed ones here.
+    if (row.status !== 'approved') throw new Error('only an approved entry can be amended — edit or submit it first')
     const ownedEmployee = await pinTimesheetEmployee(orgId, row.employee_party_id)
     if (!ownedEmployee) throw new Error('employee not found')
     row.employee_party_id = ownedEmployee

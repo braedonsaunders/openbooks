@@ -175,6 +175,9 @@ function serveReads(currentRevision: () => string): void {
     if (text.includes('d.subsidiary_id as')) return { rows: [{ subsidiaryId: routeState.ticketSubsidiaryId }] }
     if (text.includes('count(*)::int')) return { rows: [{ n: 0 }] }
     if (text.includes('show_on_field_ticket')) return { rows: [{ id: TIME_TYPE_ID }] }
+    // The grid pins new crew members to active employee roles; serve the
+    // pinned crew member so the fenced save can land.
+    if (text.includes('employee_roles r')) return { rows: [{ id: EMPLOYEE_ID }] }
     return { rows: [] }
   }
 }

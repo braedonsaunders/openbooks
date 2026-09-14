@@ -7,7 +7,7 @@ import {
   type FieldTicketLaborEvidenceLine,
 } from '@openbooks/engine/src/field-ticket-labor-evidence.ts'
 import { mul, div, isZero, add, sum, cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { nextDocumentNumber } from './bills'
 import {
   assertDocumentEditRevision,
@@ -127,23 +127,28 @@ export async function resolveTicketPeriod(
 export async function createFieldTicket(
   orgId: string,
   userId: string,
-  input: { projectId?: string | null; date?: string; period?: TicketPeriod } = {},
+  input: { projectId?: string | null; date?: string; period?: TicketPeriod; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
 ): Promise<{ id: string; documentNumber: string }> {
-  const proj = input.projectId
-    ? (
-        (await db.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }>(sql`
-          select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
-            from projects p where p.id = ${input.projectId} and p.org_id = ${orgId}`))
-      ).rows[0] ?? null
-    : null
-  if (input.projectId && !proj) throw new FieldTicketError('Project not found')
-  const anchorDate = input.date ?? await businessToday(orgId)
-  const period = input.period ?? (await resolveTicketPeriod(orgId, input.projectId ?? null, anchorDate))
-  const window = ticketWindow(period, anchorDate)
-  const org = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
-  const foreman = (await db.execute<{ party_id: string | null }>(sql`select party_id from users where id = ${userId}`))
-  const documentNumber = await nextDocumentNumber(orgId, 'field_ticket', 'FT-', proj?.subsidiary_id ?? undefined)
   return withOrg(orgId, async () => {
+    const proj = input.projectId
+      ? (
+          (await db.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }>(sql`
+            select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
+              from projects p where p.id = ${input.projectId} and p.org_id = ${orgId} and p.is_active for share of p`))
+        ).rows[0] ?? null
+      : null
+    if (input.projectId && !proj) throw new FieldTicketError('Project not found')
+    if (!subsidiaryScopeAllows(input.allowedSubsidiaryIds ?? null, proj?.subsidiary_id ?? null)) {
+      throw new FieldTicketNotFoundError('Project not found')
+    }
+    const anchorDate = input.date ?? await businessToday(orgId)
+    if (!isIsoCalendarDate(anchorDate)) throw new FieldTicketError('Invalid ticket date')
+    if (input.period !== undefined && !TICKET_PERIODS.includes(input.period)) throw new FieldTicketError('Invalid ticket period')
+    const period = input.period ?? (await resolveTicketPeriod(orgId, input.projectId ?? null, anchorDate))
+    const window = ticketWindow(period, anchorDate)
+    const org = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
+    const foreman = (await db.execute<{ party_id: string | null }>(sql`select party_id from users where id = ${userId}`))
+    const documentNumber = await nextDocumentNumber(orgId, 'field_ticket', 'FT-', proj?.subsidiary_id ?? undefined)
     const row = (await db.execute<{ id: string; document_number: string }>(sql`
       insert into documents (org_id, kind, document_number, document_date, currency, status, party_id, project_id,
                              subsidiary_id, reference_number, billing_method, subtotal, tax_total, total, custom, created_by)
@@ -292,6 +297,8 @@ export interface CrewRowInput {
   hours: Record<string, string | number>
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /** Exact numeric(19,4) hours for the money column, or null (blank/zero). */
 function exactTicketHours(value: unknown): string | null {
   if (value == null || value === '') return null
@@ -389,6 +396,50 @@ export async function saveCrewGrid(
           throw new FieldTicketError('Choose a time type enabled for field tickets')
         }
       }
+      // Crew references are pinned exactly like the drawer pickers: a new crew
+      // member must hold an active employee role in this org (and sit in the
+      // ticket's legal entity once the ticket has one), and a new item must
+      // belong to this org. Rows already stored on the ticket stay saveable,
+      // so deactivating a person or item never bricks an older draft — the
+      // same grandfathering the time-type check above applies.
+      const requestedEmployeeIds = [...new Set(rows.map((row) => row.employeePartyId).filter(Boolean))]
+      if (requestedEmployeeIds.some((id) => !UUID_RE.test(id))) {
+        throw new FieldTicketError('Choose a valid crew member')
+      }
+      const existingEmployeeIds = new Set(existing.rows.map((entry) => entry.employee_party_id))
+      const newEmployeeIds = requestedEmployeeIds.filter((id) => !existingEmployeeIds.has(id))
+      if (newEmployeeIds.length) {
+        const crewSubsidiaryFilter = doc.subsidiaryId
+          ? sql`and p.subsidiary_id = ${doc.subsidiaryId}`
+          : sql``
+        const crew = (await db.execute<{ id: string }>(sql`
+          select p.id from parties p
+           where p.org_id = ${orgId} and p.is_active
+             and exists (
+               select 1 from employee_roles r
+                where r.party_id = p.id and r.org_id = p.org_id and r.is_active
+             )
+             ${crewSubsidiaryFilter}
+             and p.id = any(${`{${newEmployeeIds.join(',')}}`}::uuid[])`))
+        if (crew.rows.length !== newEmployeeIds.length) {
+          throw new FieldTicketError('Choose an active employee in this ticket’s legal entity')
+        }
+      }
+      const requestedItemIds = [...new Set(rows.map((row) => row.itemId).filter((id): id is string => Boolean(id)))]
+      if (requestedItemIds.some((id) => !UUID_RE.test(id))) {
+        throw new FieldTicketError('Choose a valid item')
+      }
+      const existingItemIds = new Set(existing.rows.map((entry) => entry.item_id).filter((id): id is string => Boolean(id)))
+      const newItemIds = requestedItemIds.filter((id) => !existingItemIds.has(id))
+      if (newItemIds.length) {
+        const validItems = (await db.execute<{ id: string }>(sql`
+          select id from items
+           where org_id = ${orgId} and is_active
+             and id = any(${`{${newItemIds.join(',')}}`}::uuid[])`))
+        if (validItems.rows.length !== newItemIds.length) {
+          throw new FieldTicketError('Choose an active item')
+        }
+      }
       const requestedTaskIds = [...new Set(rows.map((row) => row.projectTaskId).filter((id): id is string => Boolean(id)))]
       if (requestedTaskIds.length) {
         if (requestedTaskIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
@@ -402,10 +453,15 @@ export async function saveCrewGrid(
 
       for (const row of rows) {
         for (const [day, hours] of Object.entries(row.hours)) {
-          if (day < ft.periodStart || day > ft.periodEnd) continue
-          const k = `${row.employeePartyId}|${row.itemId ?? ''}|${row.projectTaskId ?? ''}|${row.timeTypeId}|${day}`
           const h = exactTicketHours(hours)
           if (h == null) continue
+          // Real hours keyed by a malformed or out-of-window day were
+          // silently dropped here — exact crew hours fail loudly instead.
+          // Blank cells stay ignorable so a wider grid never blocks a save.
+          if (!isIsoCalendarDate(day) || day < ft.periodStart || day > ft.periodEnd) {
+            throw new FieldTicketError(`Crew hours for ${day} are outside this ticket’s ${ft.periodStart}…${ft.periodEnd} window`)
+          }
+          const k = `${row.employeePartyId}|${row.itemId ?? ''}|${row.projectTaskId ?? ''}|${row.timeTypeId}|${day}`
           seen.add(k)
           const cur = byKey.get(k)
           if (cur) {

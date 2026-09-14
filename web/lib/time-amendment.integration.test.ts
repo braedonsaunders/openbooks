@@ -84,3 +84,43 @@ test('an amendment carries the original snapshots and approves as an exact contr
     }
   })
 })
+
+/**
+ * Only approved history may be amended. A contra against a still-editable
+ * entry points at a row the weekly save can delete or replace, orphaning the
+ * offset into phantom negative hours. Draft, submitted, and rejected entries
+ * are corrected by saving, not by amending.
+ */
+test('amending an editable entry is refused and writes no offset', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+  await withBypassContext(async () => {
+    const org = await createScratchOrg()
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId
+      const employee = randomUUID(), project = randomUUID()
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${employee}, ${org.orgId}, 'employee', 'Editable worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+        values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'EDITABLE', 'Editable job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
+      await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, created_by, updated_by)
+        values (${randomUUID()}, ${org.orgId}, ${employee}, '2026-07-12', 'draft', ${actor}, ${actor})`)
+      for (const status of ['draft', 'submitted', 'rejected']) {
+        const entry = randomUUID()
+        await db.execute(sql`insert into time_entries
+          (id, org_id, employee_party_id, worked_on, hours, project_id, status, is_billable, custom, created_by, updated_by)
+          values (${entry}, ${org.orgId}, ${employee}, ${org.date}, '8.0000', ${project}, ${status}, true, '{}'::jsonb, ${actor}, ${actor})`)
+        await assert.rejects(
+          amendTimeEntry(org.orgId, actor, entry),
+          /only an approved entry can be amended/,
+          status,
+        )
+      }
+      const offsets = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from time_entries
+         where org_id = ${org.orgId} and amends_entry_id is not null`)).rows[0]!.n
+      assert.equal(offsets, 0, 'no offset may be written for an editable entry')
+    } finally {
+      await db.execute(sql`delete from time_entries where org_id = ${org.orgId}`)
+      await dropScratchOrg(org.orgId)
+    }
+  })
+})

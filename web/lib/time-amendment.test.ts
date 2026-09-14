@@ -33,3 +33,22 @@ test('the weekly editor offers Amend when reopen is refused', () => {
   assert.match(grid, /canDoAmend/)
   assert.match(grid, /rows\.filter\(\(r\) => !r\.immutable\)/)
 })
+
+test('a single-entry amendment amends approved history only', () => {
+  const service = source('lib/time-amendment.ts')
+  assert.match(service, /row\.status !== 'approved'/)
+  assert.match(service, /only an approved entry can be amended/)
+})
+
+test('reopening refuses amendment history in both link directions', () => {
+  const route = source('app/api/timesheets/reopen/route.ts')
+  assert.match(route, /entry\.amends_entry_id is not null/, 'offsets pointing at an original refuse the reopen')
+  assert.match(route, /contra\.amends_entry_id = entry\.id/, 'originals pointed at by an offset refuse the reopen')
+})
+
+test('a weekly save never deletes an amendment-referenced original', () => {
+  const route = source('app/api/timesheets/route.ts')
+  const del = route.indexOf('delete from time_entries')
+  const guard = route.indexOf('contra.amends_entry_id = time_entries.id')
+  assert.ok(del >= 0 && guard > del, 'the replace-in-place delete must keep referenced originals')
+})

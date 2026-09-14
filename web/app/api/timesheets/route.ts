@@ -221,12 +221,23 @@ async function save(req: Request) {
     // insert a second copy of the week's hours alongside the first. Entries any
     // downstream document has consumed stay put regardless: they are evidence
     // for an invoice, pay run or ledger entry that already exists.
+    //
+    // An amendment offset points at its original by id, so a referenced
+    // original stays put even when it would otherwise be deletable: removing
+    // it — through a direct or stale save — orphans the offset into phantom
+    // negative hours. Amendment history is append-only; correct such weeks
+    // with a new amendment instead.
     await tx.execute(sql`
       delete from time_entries
        where org_id = ${orgId}
          and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
          and amends_entry_id is null
+         and not exists (
+           select 1 from time_entries contra
+            where contra.org_id = time_entries.org_id
+              and contra.amends_entry_id = time_entries.id
+         )
          and (
            status in ('draft', 'rejected')
            or (${!policy.requireApproval} and status = 'approved'
