@@ -21,6 +21,7 @@ import {
   normalizeDocumentRecordRevisions,
 } from '@/lib/documents'
 import { isUuid } from '@/lib/list-params'
+import { inTypeAudience, loadRecordTypeByKey } from '@/lib/records'
 
 type PlatformOperation = ApiOperation | 'schema'
 
@@ -89,6 +90,16 @@ async function requireOperation(
 ): Promise<ResolvedApiType> {
   const resolved = await resolveApiType(ctx.orgId, typeKey)
   if (!resolved) throw new AppPlatformError(`unknown record type: ${typeKey}`, 404)
+  if (resolved.dynamic) {
+    const type = await loadRecordTypeByKey(ctx.orgId, resolved.key)
+    if (
+      !type ||
+      type.status !== 'published' ||
+      !inTypeAudience(ctx.user.roles.map(({ key }) => key), type.allowed_roles)
+    ) {
+      throw new AppPlatformError(`unknown record type: ${typeKey}`, 404)
+    }
+  }
   if (!resolved.operations.includes(operation)) {
     throw new AppPlatformError(`${typeKey} does not support ${operation}`, 405)
   }
@@ -108,10 +119,19 @@ function exposedOperations(ctx: AppPlatformContext, type: ApiRecordTypeSchema): 
 
 async function schemaForContext(ctx: AppPlatformContext): Promise<ApiRecordTypeSchema[]> {
   const schema = await loadApiSchema(ctx.orgId)
-  return schema.flatMap((type) => {
+  const visible = await Promise.all(schema.map(async (type) => {
+    if (type.dynamic) {
+      const recordType = await loadRecordTypeByKey(ctx.orgId, type.key)
+      if (
+        !recordType ||
+        recordType.status !== 'published' ||
+        !inTypeAudience(ctx.user.roles.map(({ key }) => key), recordType.allowed_roles)
+      ) return null
+    }
     const operations = exposedOperations(ctx, type)
-    return operations.length > 0 ? [{ ...type, operations }] : []
-  })
+    return operations.length > 0 ? { ...type, operations } : null
+  }))
+  return visible.flatMap((type) => type ? [type] : [])
 }
 
 function clampInteger(value: unknown, min: number, max: number, fallback: number): number {

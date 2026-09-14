@@ -36,6 +36,7 @@ import { normalizeCustomFieldConfig } from '../custom-field-config'
 import { isCustomFieldTargetEnabled } from '../customization/gates'
 import { featureGateLockKey, isFeatureEnabled } from '../features'
 import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
+import { inTypeAudience, loadRecordTypeByKey } from '@/lib/records'
 
 /**
  * Apps server store — every function is org-scoped: the caller passes the
@@ -653,9 +654,15 @@ function storageAdapter(orgId: string, appId: string): AppStorageAdapter {
   }
 }
 
-function recordsAdapter(orgId: string): AppRecordsAdapter {
+function recordsAdapter(orgId: string, user: SessionUser): AppRecordsAdapter {
   return {
     async list(typeKey, filters) {
+      const type = await loadRecordTypeByKey(orgId, typeKey)
+      if (
+        !type ||
+        type.status !== 'published' ||
+        !inTypeAudience(user.roles.map(({ key }) => key), type.allowed_roles)
+      ) return []
       const status = typeof filters?.status === 'string' ? (filters.status as string) : null
       return rows(sql`
         select id, record_number as "recordNumber", status, data
@@ -665,6 +672,12 @@ function recordsAdapter(orgId: string): AppRecordsAdapter {
          order by created_at desc limit 200`)
     },
     async get(typeKey, id) {
+      const type = await loadRecordTypeByKey(orgId, typeKey)
+      if (
+        !type ||
+        type.status !== 'published' ||
+        !inTypeAudience(user.roles.map(({ key }) => key), type.allowed_roles)
+      ) return null
       const r = await rows(sql`
         select id, record_number as "recordNumber", status, data
           from custom_records
@@ -792,7 +805,7 @@ export async function runBridgeMethod(opts: {
 
   if (opts.method === 'records.list' || opts.method === 'records.get') {
     if (!recordsGranted) return { ok: false, error: 'records.read not granted', status: 403 }
-    const rec = recordsAdapter(opts.orgId)
+    const rec = recordsAdapter(opts.orgId, opts.user)
     const result =
       opts.method === 'records.list'
         ? await rec.list(String(opts.payload?.typeKey ?? ''), opts.payload?.filters ?? {})
@@ -812,7 +825,7 @@ export async function runBridgeMethod(opts: {
     const handlerSource = src[0].content
 
     const adapters: AppHostAdapters = { storage: storageAdapter(opts.orgId, app.id) }
-    if (recordsGranted) adapters.records = recordsAdapter(opts.orgId)
+    if (recordsGranted) adapters.records = recordsAdapter(opts.orgId, opts.user)
     if (glGranted) {
       // The bridge caller's subsidiary scope travels with the write, so an App
       // backend cannot journal into an entity the signed-in user may not see.

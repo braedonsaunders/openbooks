@@ -315,3 +315,62 @@ test(
     }
   },
 )
+
+test(
+  'a platform caller outside a custom record audience cannot list or get it',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const typeKey = 'private-platform'
+    const typeId = randomUUID()
+    const recordId = randomUUID()
+    const { org, actorId, inOrg } = await makePlatformFixture(async (scratch, adminId) => {
+      await db.execute(sql`
+        insert into custom_record_types
+          (id, org_id, key, name, plural_name, fields, status, allowed_roles, created_by, updated_by)
+        values
+          (${typeId}, ${scratch.orgId}, ${typeKey}, 'Private Platform', 'Private Platforms',
+           ${JSON.stringify([{ id: 'main', title: 'Details', fields: [{ id: 'secret', type: 'text', label: 'Secret' }] }])}::jsonb,
+           'published', '["private-role"]'::jsonb, ${adminId}, ${adminId})
+      `)
+      await db.execute(sql`
+        insert into custom_records
+          (id, org_id, type_id, type_key, record_number, status, data, search_text, created_by, updated_by)
+        values
+          (${recordId}, ${scratch.orgId}, ${typeId}, ${typeKey}, 'PRIVATE-PLATFORM-1', 'active',
+           '{"secret":"classified"}'::jsonb, 'private-platform-1 classified', ${adminId}, ${adminId})
+      `)
+    })
+    const restrictedPlatform = createAppPlatformAdapter({
+      orgId: org.orgId,
+      user: {
+        id: actorId,
+        email: 'platform-audience@scratch.test',
+        name: 'Platform Audience Controller',
+        roles: [{ key: 'ordinary-role', name: 'Ordinary role' }],
+        orgId: org.orgId,
+        envKind: 'production' as const,
+        productionOrgId: org.orgId,
+        isSuperAdmin: false,
+        homeUserId: actorId,
+        homeOrgId: org.orgId,
+      },
+      grantedPermissions: ['records.read'],
+      userCan: (permission) => permission === 'records.read',
+      allowedSubsidiaryIds: null,
+    })
+    try {
+      await assert.rejects(
+        inOrg(() => restrictedPlatform.list(typeKey, {})),
+        (error) => error instanceof AppPlatformError && error.status === 404,
+      )
+      await assert.rejects(
+        inOrg(() => restrictedPlatform.get(typeKey, recordId)),
+        (error) => error instanceof AppPlatformError && error.status === 404,
+      )
+      const schema = await inOrg(() => restrictedPlatform.schema()) as Array<{ key: string }>
+      assert.equal(schema.some((type) => type.key === typeKey), false)
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  },
+)

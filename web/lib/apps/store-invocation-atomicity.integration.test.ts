@@ -195,6 +195,62 @@ test(
 )
 
 test(
+  'the App bridge hides custom records outside their role audience',
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture()
+    const typeKey = 'private-bridge'
+    const typeId = randomUUID()
+    const recordId = randomUUID()
+    try {
+      await withOrgContext(fx.org.orgId, async () => {
+        await db.execute(sql`
+          insert into custom_record_types
+            (id, org_id, key, name, plural_name, fields, status, allowed_roles, created_by, updated_by)
+          values
+            (${typeId}, ${fx.org.orgId}, ${typeKey}, 'Private Bridge', 'Private Bridges',
+             ${JSON.stringify([{ id: 'main', title: 'Details', fields: [{ id: 'secret', type: 'text', label: 'Secret' }] }])}::jsonb,
+             'published', '["private-role"]'::jsonb, ${fx.actorId}, ${fx.actorId})
+        `)
+        await db.execute(sql`
+          insert into custom_records
+            (id, org_id, type_id, type_key, record_number, status, data, search_text, created_by, updated_by)
+          values
+            (${recordId}, ${fx.org.orgId}, ${typeId}, ${typeKey}, 'PRIVATE-BRIDGE-1', 'active',
+             '{"secret":"classified"}'::jsonb, 'private-bridge-1 classified', ${fx.actorId}, ${fx.actorId})
+        `)
+      })
+      const appKey = await installProofApp(fx, financialHandler({ post: false }))
+      const restrictedUser = { ...fx.user, roles: [{ key: 'ordinary-role', name: 'Ordinary role' }] }
+      const listed = await runBridgeMethod({
+        orgId: fx.org.orgId,
+        user: restrictedUser,
+        key: appKey,
+        method: 'records.list',
+        payload: { typeKey },
+        userCan: (permission) => permission === 'records.read',
+        allowedSubsidiaryIds: null,
+      })
+      assert.equal(listed.ok, true)
+      assert.deepEqual(listed.result, [])
+      const fetched = await runBridgeMethod({
+        orgId: fx.org.orgId,
+        user: restrictedUser,
+        key: appKey,
+        method: 'records.get',
+        payload: { typeKey, id: recordId },
+        userCan: (permission) => permission === 'records.read',
+        allowedSubsidiaryIds: null,
+      })
+      assert.equal(fetched.ok, true)
+      assert.equal(fetched.result, null)
+    } finally {
+      await dropScratchOrg(fx.org.orgId)
+    }
+  },
+)
+
+test(
   'a backend that posts a ledger entry then throws leaves ZERO durable effects; retry cannot duplicate',
   { skip: !DB },
   async () => {

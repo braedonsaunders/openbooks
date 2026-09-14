@@ -19,7 +19,7 @@ registerHooks({
   },
 })
 
-const { listRecords, getRecord, normalizeDocumentRecordRevisions } = await import('./records.ts')
+const { listRecordTypes, listRecords, getRecord, normalizeDocumentRecordRevisions } = await import('./records.ts')
 const { ApplicationError } = await import('./errors.ts')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -255,3 +255,43 @@ test('document-backed record payloads keep their exact persisted revision', () =
   assert.equal(record?.updated_at, exact)
   assert.equal('__documentRevision' in (record ?? {}), false)
 })
+
+test(
+  'a custom record audience is enforced by application list types, list, and get',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const fixture = await withBypass(seed)
+    const typeKey = 'private-record'
+    const typeId = randomUUID()
+    const recordId = randomUUID()
+    try {
+      await withOrgContext(fixture.orgId, async () => {
+        await db.execute(sql`
+          insert into custom_record_types
+            (id, org_id, key, name, plural_name, fields, status, allowed_roles, created_by, updated_by)
+          values
+            (${typeId}, ${fixture.orgId}, ${typeKey}, 'Private Record', 'Private Records',
+             ${JSON.stringify([{ id: 'main', title: 'Details', fields: [{ id: 'secret', type: 'text', label: 'Secret' }] }])}::jsonb,
+             'published', '["private-role"]'::jsonb, ${fixture.actorId}, ${fixture.actorId})
+        `)
+        await db.execute(sql`
+          insert into custom_records
+            (id, org_id, type_id, type_key, record_number, status, data, search_text, created_by, updated_by)
+          values
+            (${recordId}, ${fixture.orgId}, ${typeId}, ${typeKey}, 'PRIVATE-1', 'active',
+             '{"secret":"classified"}'::jsonb, 'private-1 classified', ${fixture.actorId}, ${fixture.actorId})
+        `)
+
+        const context = contextFor(fixture, new Set(fixture.subsidiaries))
+        context.authz.user.roles = [{ key: 'ordinary-role', name: 'Ordinary role' }]
+
+        const types = await listRecordTypes(context)
+        assert.equal(types.some((type) => type.key === typeKey), false)
+        await assert.rejects(listRecords(context, { typeKey }), notFound)
+        await assert.rejects(getRecord(context, { typeKey, id: recordId }), notFound)
+      })
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId))
+    }
+  },
+)
