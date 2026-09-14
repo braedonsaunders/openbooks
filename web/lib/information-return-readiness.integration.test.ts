@@ -125,6 +125,64 @@ async function seedPayment(
   })
 }
 
+/** A payment where an early-payment discount kept part of the bill home. */
+async function seedDiscountedPayment(
+  org: Org,
+  actorId: string,
+  partyId: string,
+  opts: { gross: string; cash: string; discount: string; taxYear: number },
+): Promise<void> {
+  const paymentId = randomUUID()
+  const entryId = randomUUID()
+  const date = `${opts.taxYear}-07-15`
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, posting_date, currency,
+         subtotal, tax_total, total, custom, created_by, updated_by)
+      values
+        (${paymentId}, ${org.orgId}, 'vendor_payment', 'approved',
+         ${`IR-READY-DISC-${opts.taxYear}-${partyId.slice(0, 8)}`}, ${org.subsidiaryId}, ${partyId},
+         ${date}, ${date}, 'CAD',
+         ${opts.gross}, '0', ${opts.gross},
+         ${JSON.stringify({ bankAccountId: org.accounts.bank })}::jsonb,
+         ${actorId}, ${actorId})`)
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+         period_id, memo, status, source_document_id, origin, created_by, updated_by)
+      values
+        (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+         ${`IR-READY-DISC-${opts.taxYear}-${partyId.slice(0, 8)}`}, ${date}, ${org.periodId},
+         'Readiness discount fixture', 'draft', ${paymentId}, 'document',
+         ${actorId}, ${actorId})`)
+    await db.execute(sql`
+      insert into journal_lines
+        (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount,
+         currency, txn_amount, fx_rate, party_id, is_open_item, memo)
+      values
+        (${randomUUID()}, ${org.orgId}, ${entryId}, 1,
+         ${org.accounts.ap}, ${org.subsidiaryId}, ${opts.gross},
+         'CAD', ${opts.gross}, 1, ${partyId}, true, 'Readiness control'),
+        (${randomUUID()}, ${org.orgId}, ${entryId}, 2,
+         ${org.accounts.bank}, ${org.subsidiaryId}, ${`-${opts.cash}`},
+         'CAD', ${`-${opts.cash}`}, 1, null, false, 'Readiness cash'),
+        (${randomUUID()}, ${org.orgId}, ${entryId}, 3,
+         ${org.accounts.cogs}, ${org.subsidiaryId}, ${`-${opts.discount}`},
+         'CAD', ${`-${opts.discount}`}, 1, null, false, 'Readiness discount')`)
+    await db.execute(sql`
+      update journal_entries
+         set status = 'posted', posted_at = now(), posted_by = ${actorId}
+       where org_id = ${org.orgId} and id = ${entryId}`)
+    await db.execute(sql`
+      update documents
+         set status = 'posted', posted_entry_id = ${entryId},
+             posting_period_id = ${org.periodId}
+       where org_id = ${org.orgId} and id = ${paymentId}`)
+  })
+}
+
 const names = (rows: Array<{ vendorName: string }>) => rows.map((r) => r.vendorName)
 
 test(
@@ -169,6 +227,49 @@ test(
       assert.ok(
         !queued.some((n) => n.includes(ready.slice(0, 8))),
         'a flagged vendor with a TIN and a form never queues',
+      )
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  },
+)
+
+test(
+  'readiness measures bank cash, not the bill a discount reduced',
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg())
+    try {
+      const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'IR reader', 'ir_readiness'))
+      // $2,010 bill settled with $1,990 of bank cash and a $20 discount: the
+      // vendor received $1,990, under the 2026 $2,000 line. Counting the
+      // discount leg reports $2,010 and wrongly queues the vendor.
+      const under = await seedVendor(org, actorId, { form: '1099-NEC', flagged: false })
+      await seedDiscountedPayment(org, actorId, under, {
+        gross: '2010',
+        cash: '1990',
+        discount: '20',
+        taxYear: 2026,
+      })
+      // $2,050 bill settled with $2,010 of bank cash: queued, but the shown
+      // paid figure must be the cash, not the gross.
+      const over = await seedVendor(org, actorId, { form: '1099-NEC', flagged: false })
+      await seedDiscountedPayment(org, actorId, over, {
+        gross: '2050',
+        cash: '2010',
+        discount: '40',
+        taxYear: 2026,
+      })
+      const queue = await withOrgContext(org.orgId, () => loadInformationReturnReadiness(org.orgId, 2026))
+      assert.equal(
+        queue.find((r) => r.vendorName.includes(under.slice(0, 8))),
+        undefined,
+        'a $1,990-cash vendor is not questioned for 2026',
+      )
+      assert.equal(
+        queue.find((r) => r.vendorName.includes(over.slice(0, 8)))?.paidThisYear,
+        '2010.0000',
+        'paid means cash that left the bank',
       )
     } finally {
       await dropScratchOrg(org.orgId)
