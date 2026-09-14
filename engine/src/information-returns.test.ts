@@ -311,6 +311,25 @@ test("a box with its own lower threshold files on its own", () => {
   assert.equal(royalties.belowThreshold, false);
 });
 
+test("fishing boat proceeds file at any amount", () => {
+  // IRS Specific Instructions for Form 1099-MISC: "Any fishing boat proceeds
+  // received (box 5)" — unlike most boxes there is no dollar threshold, so a
+  // $400 boat-proceeds recipient must file even under a $600 default.
+  const boat = summarizeRecipient({
+    form: MISC,
+    payments: [
+      payment({
+        cash: "400.0000",
+        bills: [{ documentId: "b", applied: "400.0000", lines: [{ accountId: "boat", weight: "400.0000" }] }],
+      }),
+    ],
+    boxByAccount: new Map([["boat", "misc5"]]),
+    defaultBox: "misc3",
+    filingThreshold: "600",
+  });
+  assert.equal(boat.belowThreshold, false);
+});
+
 test("any withholding at all makes a recipient reportable", () => {
   const withheld = summarizeRecipient({
     form: NEC,

@@ -112,7 +112,10 @@ export const INFORMATION_RETURN_FORMS: Record<FormType, FormDefinition> = {
       { key: "misc2", number: "2", name: "Royalties", threshold: "10" },
       { key: "misc3", number: "3", name: "Other income", threshold: "600" },
       { key: "misc4", number: "4", name: "Federal income tax withheld", isWithholding: true, threshold: "0.01" },
-      { key: "misc5", number: "5", name: "Fishing boat proceeds", threshold: "600" },
+      // IRS: "Any fishing boat proceeds received (box 5)" — reportable at any
+      // amount, like backup withholding. "0.01" is this catalogue's encoding
+      // of an any-amount rule (see the withholding boxes below).
+      { key: "misc5", number: "5", name: "Fishing boat proceeds", threshold: "0.01" },
       { key: "misc6", number: "6", name: "Medical and health care payments", threshold: "600" },
       { key: "misc8", number: "8", name: "Substitute payments in lieu of dividends or interest", threshold: "10" },
       { key: "misc9", number: "9", name: "Crop insurance proceeds", threshold: "600" },
