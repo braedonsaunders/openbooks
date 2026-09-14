@@ -142,3 +142,17 @@ test('the unit deadline kills an unresponsive test worker and stays failed', { s
   assert.ok(result.status === 137 || result.signal === 'SIGKILL',
     `unresponsive worker must be killed, got ${result.status}/${result.signal}`);
 });
+
+
+test('receipt directory comparison accepts two-digit shard names and still rejects omissions', () => {
+  const step = namedStep('Verify every test file ran exactly once')
+  const statement = step.split('\n').find(line => line.includes('assert.deepEqual(dirs,'))
+  assert.ok(statement)
+  const check = new Function('assert', 'dirs', 'count', 'prefix', statement)
+  for (const count of [4, 8, 16]) {
+    const dirs = Array.from({ length: count }, (_, index) => `coverage-${index + 1}`).sort()
+    check(assert, dirs, count, 'coverage')
+    assert.throws(() => check(assert, dirs.slice(1), count, 'coverage'))
+    assert.throws(() => check(assert, [...dirs, dirs[0]].sort(), count, 'coverage'))
+  }
+})
