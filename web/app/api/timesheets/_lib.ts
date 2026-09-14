@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday, isIsoCalendarDate, parseIsoDate } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add } from '@openbooks/engine/src/money.ts'
 import { subsidiaryScopeAllows } from '../../../lib/authz'
@@ -20,11 +20,9 @@ import {
  * with seven day columns) and back, plus the pickers the editor needs.
  */
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-
 /** True for a well-formed ISO date string (YYYY-MM-DD). */
 export function isIsoDate(v: unknown): v is string {
-  return typeof v === 'string' && DATE_RE.test(v)
+  return isIsoCalendarDate(v)
 }
 
 /** Format a UTC-noon Date as an ISO date string (YYYY-MM-DD). */
@@ -34,8 +32,9 @@ function toIso(d: Date): string {
 
 /** Parse an ISO date as a UTC-noon Date (noon avoids any TZ day-shift). */
 function parseIso(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number)
-  return new Date(Date.UTC(y!, m! - 1, d!, 12, 0, 0))
+  const date = parseIsoDate(iso)
+  date.setUTCHours(12)
+  return date
 }
 
 /**

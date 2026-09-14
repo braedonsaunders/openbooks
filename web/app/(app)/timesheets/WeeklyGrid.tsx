@@ -193,8 +193,9 @@ export function WeeklyGrid({
     setDirty(false)
   }, [loadedKey, payload, pickers.timeTypes])
 
-  // Approved weeks and users without manage rights are read-only.
-  const locked = status === 'approved' || !canManage || !employeeId
+  // Manual approval seals the week. Automatic availability seals each saved
+  // row, while later days can still be added without reopening posted history.
+  const locked = (requireApproval && status === 'approved') || !canManage || !employeeId
   const readOnly = locked
 
   const timeTypeById = useMemo(
