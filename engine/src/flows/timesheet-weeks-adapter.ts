@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
-import { db } from "../db.ts";
+import { ambientTenantOrgId, db } from "../db.ts";
 import type {
   FlowExecCtx,
   FlowSubjectAdapter,
@@ -227,9 +227,22 @@ export const timesheetWeeksFlowAdapter: FlowSubjectAdapter = {
 
   /** Recent weeks awaiting a decision, for scheduled fan-out (reminders). */
   async findCandidateIds(limit: number): Promise<string[]> {
+    // The explicit org_id predicate is the tenant boundary — NOT the RLS
+    // GUCs withOrg pins on its own client: pooled sibling connections (and
+    // any bypass-ambient resolver, e.g. the test harness's) can otherwise
+    // see every tenant, which would fan one flow's firing out across orgs.
+    // Fails closed when no ambient tenant is active rather than reading
+    // unscoped. (Parity with the documents and budget-scenario adapters.)
+    const orgId = ambientTenantOrgId();
+    if (!orgId) {
+      throw new Error(
+        `findCandidateIds for "${TIMESHEET_WEEK_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
+      );
+    }
     const result = (await db.execute<{ id: string }>(sql`
       select id::text as id from timesheet_weeks
-       where status in ('draft', 'submitted', 'rejected')
+       where org_id = ${orgId}
+         and status in ('draft', 'submitted', 'rejected')
        order by week_start desc
        limit ${limit}
     `));
