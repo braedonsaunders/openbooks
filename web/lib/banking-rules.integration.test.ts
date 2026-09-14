@@ -155,3 +155,120 @@ test(
     `);
   },
 );
+
+test(
+  "applyRuleToLine refuses an inactive rule without posting",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    runIntegrationSource(`
+      import assert from "node:assert/strict";
+      import { randomUUID } from "node:crypto";
+      import { sql } from "drizzle-orm";
+      import { db } from "./engine/src/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+      import {
+        createScratchOrg,
+        dropScratchOrg,
+        seedFlowActors,
+      } from "./engine/src/test-fixtures.ts";
+      import {
+        importStatement,
+        startReconciliation,
+      } from "./engine/src/banking.ts";
+      import { applyRuleToLine } from "./web/lib/banking-rules.ts";
+
+      installTrustedTestDatabaseBypass();
+      const org = await createScratchOrg();
+      try {
+        const actorId = (await seedFlowActors(org.orgId)).adminId;
+        await db.execute(sql\`
+          update accounts
+             set reconcilable = true, currency_restriction = 'CAD'
+           where id = \${org.accounts.bank} and org_id = \${org.orgId}
+        \`);
+
+        const imported = await importStatement({
+          accountId: org.accounts.bank,
+          source: "manual",
+          statementDate: org.date,
+          openingBalance: "0",
+          closingBalance: "75.0000",
+          currency: "CAD",
+          lines: [{
+            postedOn: org.date,
+            amount: "75.0000",
+            description: "Inactive rule transaction",
+            bankTransactionId: "bank-rule-inactive-1",
+          }],
+        }, { orgId: org.orgId, userId: actorId });
+        assert.equal(imported.imported, 1);
+        const statementLineId = (await db.execute(sql\`
+          select id
+            from bank_statement_lines
+           where org_id = \${org.orgId}
+             and bank_transaction_id = 'bank-rule-inactive-1'
+        \`)).rows[0]?.id;
+        assert.ok(statementLineId);
+
+        const reconciliationId = (await startReconciliation({
+          accountId: org.accounts.bank,
+          throughDate: org.date,
+          statementBalance: "75.0000",
+        }, { orgId: org.orgId, userId: actorId })).id;
+
+        const ruleId = randomUUID();
+        await db.execute(sql\`
+          insert into bank_match_rules
+            (id, org_id, name, criteria, outcome, priority, is_active, created_by)
+          values
+            (\${ruleId}, \${org.orgId}, 'Disabled revenue rule',
+             \${JSON.stringify({
+               version: 2,
+               match: {
+                 combinator: "and",
+                 rules: [{ field: "description", op: "contains", value: "inactive" }],
+               },
+               accountScope: [org.accounts.bank],
+             })}::jsonb,
+             \${JSON.stringify({
+               action: "categorize",
+               version: 2,
+               mode: "auto",
+               lines: [{ accountId: org.accounts.revenue, portion: { kind: "remainder" } }],
+             })}::jsonb,
+             1, false, \${actorId})
+        \`);
+
+        await assert.rejects(
+          applyRuleToLine(org.orgId, actorId, {
+            statementLineId,
+            ruleId,
+            reconciliationId,
+          }),
+          /not active|disabled|inactive/,
+        );
+
+        const state = await db.execute(sql\`
+          select
+            (select count(*)::int
+               from documents
+              where org_id = \${org.orgId} and kind = 'journal') as journals,
+            (select count(*)::int
+               from reconciliation_matches
+              where org_id = \${org.orgId}
+                and statement_line_id = \${statementLineId}) as matches,
+            (select match_status
+               from bank_statement_lines
+              where org_id = \${org.orgId} and id = \${statementLineId}) as match_status
+        \`);
+        assert.deepEqual(state.rows[0], {
+          journals: 0,
+          matches: 0,
+          match_status: "unmatched",
+        });
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    `);
+  },
+);
