@@ -517,6 +517,26 @@ test("a corporation flagged as reportable is queried, not silently filed", () =>
   );
 });
 
+test("every IRS-listed corporate box suppresses the corporation query", () => {
+  // IRS "Reportable payments to corporations" on Form 1099-MISC: box 11 (fish
+  // for resale), box 6 (medical), box 8 (substitute payments), box 10
+  // (attorney gross proceeds). Each must file quietly for a corporation.
+  for (const box of ["misc6", "misc8", "misc10", "misc11"]) {
+    assert.deepEqual(
+      recipientExceptions({
+        profile: profile({ taxClassification: "c_corp", resolvedForm: "1099-MISC" }),
+        amounts: amounts("5000", { [box]: "5000" }),
+        form: MISC,
+        belowThreshold: false,
+        filingThreshold: "600",
+        unmappedAccountNames: [],
+      }),
+      [],
+      `${box} is reportable for a corporation and must not raise corporation_flagged`,
+    );
+  }
+});
+
 test("an unflagged vendor paid over the threshold is surfaced", () => {
   assert.deepEqual(exceptionsFor(profile({ reportable: false }), "5000"), [
     "unflagged_over_threshold",
