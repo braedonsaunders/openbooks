@@ -255,13 +255,20 @@ async function runOwnershipConsolidationIn(
     const profit = periodActivity.rows[0]!.profit;
     const distributions = periodActivity.rows[0]!.distributions;
 
-    if (interest.method === "full") {
+    if (interest.method === "full" || interest.method === "proportionate") {
       // The acquisition is eliminated ONCE per acquired subsidiary, not once
       // per policy row: an ownership change is recorded by closing the used
       // policy and opening a new effective-dated one for the same
       // acquisition, and that successor must not re-eliminate equity the
       // group already eliminated. Identity = (subsidiary, acquisition date)
       // across every policy row; a genuine re-acquisition carries a new date.
+      //
+      // Proportionate consolidation combines the owned share of every line
+      // (reports weight by ownership_percent), so the run eliminates the
+      // owned share of acquisition-date equity against the parent's
+      // investment. There is no NCI to recognize — only the owned share is
+      // ever combined — and no income allocation: the owned share of profit
+      // already arrives through the weighted lines.
       const acquisitions = (await tx.execute<{ in_scope: boolean; balance: number; future_activity: boolean }>(sql`
         with recursive roots as (
           select e.id,e.period_id,${financialClosePeriodScope(period)} as in_scope
@@ -314,27 +321,45 @@ async function runOwnershipConsolidationIn(
         `));
         const translatedEquity = equity.rows.map((line) => ({ accountId: line.account_id, balance: mulRate(line.amount, interest.acquisition_rate) }));
         const bookNetAssets = sum(translatedEquity.map((line) => neg(line.balance)));
-        const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
-        const nci = interest.nci_measurement === "fair_value"
-          ? interest.nci_fair_value!
-          : mulPercent(interest.fair_value_net_assets, nciPercent);
-        const fairValueAdjustment = fromUnits(toUnits(interest.fair_value_net_assets) - toUnits(bookNetAssets));
-        const goodwill = fromUnits(toUnits(interest.acquisition_cost) + toUnits(nci) - toUnits(interest.fair_value_net_assets));
-        await post(interest.id, "acquisition", [
-          ...translatedEquity.map((line) => ({ accountId: line.accountId, amount: neg(line.balance), memo: "Eliminate acquisition-date equity" })),
-          { accountId: interest.fair_value_adjustment_account_id!, amount: fairValueAdjustment, memo: "Fair-value net asset adjustment" },
-          { accountId: interest.goodwill_account_id!, amount: goodwill, memo: "Acquisition goodwill or bargain purchase" },
-          { accountId: interest.investment_account_id, amount: neg(interest.acquisition_cost), memo: "Eliminate parent investment" },
-          ...(interest.nci_equity_account_id ? [{ accountId: interest.nci_equity_account_id, amount: neg(nci), memo: "Recognize non-controlling interest" }] : []),
-        ]);
+        if (interest.method === "proportionate") {
+          const ownedEquity = translatedEquity.map((line) => ({ accountId: line.accountId, balance: mulPercent(line.balance, interest.ownership_percent) }));
+          // Derived from the rounded owned legs, not re-percentaged from the
+          // total: per-line rounding must net exactly in the posted entry.
+          const ownedNetAssets = sum(ownedEquity.map((line) => neg(line.balance)));
+          const ownedFairValue = mulPercent(interest.fair_value_net_assets, interest.ownership_percent);
+          const fairValueAdjustment = fromUnits(toUnits(ownedFairValue) - toUnits(ownedNetAssets));
+          const goodwill = fromUnits(toUnits(interest.acquisition_cost) - toUnits(ownedFairValue));
+          await post(interest.id, "acquisition", [
+            ...ownedEquity.map((line) => ({ accountId: line.accountId, amount: neg(line.balance), memo: "Eliminate owned share of acquisition-date equity" })),
+            { accountId: interest.fair_value_adjustment_account_id!, amount: fairValueAdjustment, memo: "Fair-value net asset adjustment" },
+            { accountId: interest.goodwill_account_id!, amount: goodwill, memo: "Acquisition goodwill or bargain purchase" },
+            { accountId: interest.investment_account_id, amount: neg(interest.acquisition_cost), memo: "Eliminate parent investment" },
+          ]);
+        } else {
+          const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
+          const nci = interest.nci_measurement === "fair_value"
+            ? interest.nci_fair_value!
+            : mulPercent(interest.fair_value_net_assets, nciPercent);
+          const fairValueAdjustment = fromUnits(toUnits(interest.fair_value_net_assets) - toUnits(bookNetAssets));
+          const goodwill = fromUnits(toUnits(interest.acquisition_cost) + toUnits(nci) - toUnits(interest.fair_value_net_assets));
+          await post(interest.id, "acquisition", [
+            ...translatedEquity.map((line) => ({ accountId: line.accountId, amount: neg(line.balance), memo: "Eliminate acquisition-date equity" })),
+            { accountId: interest.fair_value_adjustment_account_id!, amount: fairValueAdjustment, memo: "Fair-value net asset adjustment" },
+            { accountId: interest.goodwill_account_id!, amount: goodwill, memo: "Acquisition goodwill or bargain purchase" },
+            { accountId: interest.investment_account_id, amount: neg(interest.acquisition_cost), memo: "Eliminate parent investment" },
+            ...(interest.nci_equity_account_id ? [{ accountId: interest.nci_equity_account_id, amount: neg(nci), memo: "Recognize non-controlling interest" }] : []),
+          ]);
+        }
       }
-      const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
-      const nciIncome = mulPercent(profit, nciPercent);
-      if (interest.nci_income_account_id && interest.nci_equity_account_id) {
-        await post(interest.id, "nci_income", [
-          { accountId: interest.nci_income_account_id!, amount: nciIncome, memo: "Allocate profit to non-controlling interests" },
-          { accountId: interest.nci_equity_account_id!, amount: neg(nciIncome), memo: "Accumulate non-controlling interest" },
-        ]);
+      if (interest.method === "full") {
+        const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
+        const nciIncome = mulPercent(profit, nciPercent);
+        if (interest.nci_income_account_id && interest.nci_equity_account_id) {
+          await post(interest.id, "nci_income", [
+            { accountId: interest.nci_income_account_id!, amount: nciIncome, memo: "Allocate profit to non-controlling interests" },
+            { accountId: interest.nci_equity_account_id!, amount: neg(nciIncome), memo: "Accumulate non-controlling interest" },
+          ]);
+        }
       }
     } else if (interest.method === "equity") {
       const shareProfit = mulPercent(profit, interest.ownership_percent);
