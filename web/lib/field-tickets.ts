@@ -466,9 +466,17 @@ export async function saveCrewGrid(
           const cur = byKey.get(k)
           if (cur) {
             if (cmp(normalizeMoney(String(cur.hours)), h) !== 0) {
-              await tx.execute(sql`
+              // Approved history is immutable through this grid: a zero-row
+              // update means the entry left draft (timesheet approval runs
+              // independently), so fail loudly instead of reporting a save
+              // that changed nothing.
+              const rewritten = (await tx.execute<{ id: string }>(sql`
                 update time_entries set hours = ${h}, updated_at = now(), updated_by = ${userId}
-                 where id = ${cur.id} and org_id = ${orgId} and status = 'draft'`)
+                 where id = ${cur.id} and org_id = ${orgId} and status = 'draft'
+                 returning id`))
+              if (!rewritten.rows[0]) {
+                throw new FieldTicketError(`Crew hours for ${day} were approved and can no longer be changed on this ticket`)
+              }
             }
           } else {
             await tx.execute(sql`
@@ -482,8 +490,14 @@ export async function saveCrewGrid(
       // Remove cleared cells (draft entries only — approved history is immutable).
       for (const e of existing.rows) {
         if (!seen.has(key(e))) {
-          await tx.execute(sql`
-            delete from time_entries where id = ${e.id} and org_id = ${orgId} and status = 'draft' and field_ticket_id = ${ticketId}`)
+          // Like the update above, a zero-row delete means the entry left
+          // draft; fail loudly instead of silently keeping the cleared cell.
+          const removed = (await tx.execute<{ id: string }>(sql`
+            delete from time_entries where id = ${e.id} and org_id = ${orgId} and status = 'draft' and field_ticket_id = ${ticketId}
+            returning id`))
+          if (!removed.rows[0]) {
+            throw new FieldTicketError(`Crew hours for ${e.worked_on} were approved and can no longer be removed from this ticket`)
+          }
         }
       }
       // Crew hours are line evidence too: advance the parent document
