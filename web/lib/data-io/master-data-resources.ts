@@ -375,9 +375,34 @@ async function writeMaster(
         continue
       }
 
-      // Custom fields → validated `custom` jsonb.
+      // Custom fields → validated `custom` jsonb. Reference fields resolve
+      // through the org-scoped resolver first: custom values are schemaless
+      // jsonb with no FK, so a raw foreign UUID would otherwise persist blind
+      // (the shape check below only verifies UUID syntax, never ownership).
       const customInput: Record<string, unknown> = {}
-      for (const d of defs) if (src[d.key] !== undefined) customInput[d.key] = src[d.key]
+      for (const d of defs) {
+        // Native clear semantics: a blank is omitted and validateCustomValues
+        // leaves the stored value alone — it must never resolve to not-found.
+        if (src[d.key] === undefined || src[d.key] === null || src[d.key] === '') continue
+        if (d.fieldType === 'reference' && d.config.referenceTable) {
+          const id = await resolver.resolveId(
+            { resource: d.config.referenceTable, by: 'id' },
+            src[d.key],
+          )
+          if (!id) {
+            err = `${d.key}: "${String(src[d.key])}" not found`
+            break
+          }
+          customInput[d.key] = id
+        } else {
+          customInput[d.key] = src[d.key]
+        }
+      }
+      if (err) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: err })
+        continue
+      }
       const cv = validateCustomValues(defs, customInput)
       if (!cv.ok) {
         outcome.failed++
