@@ -9,6 +9,7 @@ export const runtime = "nodejs";
 
 const PROVIDERS = ["manual", "sftp", "plaid", "gocardless", "truelayer"] as const;
 const API_PROVIDERS = new Set(["plaid", "gocardless", "truelayer"]);
+const CADENCES = ["manual", "hourly", "daily"] as const;
 
 /** Audit-safe projection: sealed credentials never enter the trail — presence only. */
 function withoutCredentials(row: Record<string, unknown>): Record<string, unknown> {
@@ -54,9 +55,14 @@ export async function POST(req: Request) {
     credentials?: Record<string, string> | null;
   };
 
-  if (!body.name?.trim()) return NextResponse.json({ error: "name is required" }, { status: 400 });
+  if (typeof body.name !== "string" || !body.name.trim()) {
+    return NextResponse.json({ error: "name is required" }, { status: 400 });
+  }
   if (!body.provider || !PROVIDERS.includes(body.provider as (typeof PROVIDERS)[number])) {
     return NextResponse.json({ error: "invalid provider" }, { status: 400 });
+  }
+  if (body.syncCadence !== undefined && !CADENCES.includes(body.syncCadence as (typeof CADENCES)[number])) {
+    return NextResponse.json({ error: "invalid syncCadence" }, { status: 400 });
   }
   if (!body.accountId) return NextResponse.json({ error: "a bank account is required" }, { status: 400 });
   const externalAccountId = typeof body.externalAccountId === "string"

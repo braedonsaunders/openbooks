@@ -11,6 +11,8 @@ import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 
 export const runtime = "nodejs";
 
+const CADENCES = ["manual", "hourly", "daily"] as const;
+
 /** Audit-safe projection: sealed credentials never enter the trail — presence only. */
 function withoutCredentials(row: Record<string, unknown>): Record<string, unknown> {
   const { credentials, ...rest } = row;
@@ -53,6 +55,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;
+  // PATCH enforces the same field contracts as POST: a non-empty name and a
+  // cadence inside the stored CHECK constraint, so invalid input is a 400
+  // instead of an empty name or an unhandled constraint-violation 500.
+  if ("name" in body && (typeof body.name !== "string" || !body.name.trim())) {
+    return NextResponse.json({ error: "name is required" }, { status: 400 });
+  }
+  if ("syncCadence" in body && !CADENCES.includes(body.syncCadence as (typeof CADENCES)[number])) {
+    return NextResponse.json({ error: "invalid syncCadence" }, { status: 400 });
+  }
   const sets: ReturnType<typeof sql>[] = [];
   if ("name" in body) sets.push(sql`name = ${body.name as string}`);
   if ("externalAccountId" in body) sets.push(sql`external_account_id = ${(body.externalAccountId as string | null) ?? null}`);
