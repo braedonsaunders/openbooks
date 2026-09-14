@@ -12,6 +12,28 @@ test("transaction detail scopes both reads to the statement accounting book", ()
   assert.match(source, /and \$\{bookFilter\}/);
 });
 
+test("statement exports resolve every journal-backed detail report to one accounting book", () => {
+  // resolveReport validates ?book= for every kind (stale/foreign ids throw via
+  // reportBookSelection), so every journal-backed detail path must then READ
+  // that same book — otherwise an explicit secondary-book export silently
+  // returns primary-book data while the drill (book-aware) disagrees.
+  const runSource = readFileSync(new URL("./report-run.ts", import.meta.url), "utf8");
+  const threaded = runSource.match(/detailBookId/g) ?? []
+  // One declaration plus one use per journal-backed detail call:
+  // general-ledger, journal, registers, partner-statement,
+  // project-profitability, trial-balance, partners, cash-flow,
+  // cash-flow-indirect.
+  assert.ok(threaded.length >= 10, `expected every detail export to thread the resolved book, found ${threaded.length}`);
+  // Aging reads documents.open_balance, and documents carry no book column —
+  // the canonical balance is book-independent by design, so it stays unscoped.
+  assert.match(runSource, /agingByParty\(side, asOf, dims, orgId\)/);
+  for (const file of ["./reports/ledger-reports.ts", "./reports/registers.ts"]) {
+    const source = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.match(source, /bookId\?: string \| null/);
+    assert.match(source, /statementBookExpr/);
+  }
+});
+
 test("formula TAX_RATE resolves configured rates and fails closed", () => {
   const source = `
     import assert from "node:assert/strict";
@@ -544,6 +566,93 @@ test("layout statements include posted and reversed entries but exclude draft an
         const revenue = rendered?.lines.find((line) => line.kind === "total" && line.label === "Total Revenue");
         assert.ok(revenue, "the layout emits the configured Revenue total");
         assert.equal(toUnits(String(revenue.amount)), 50n * 10_000n, "draft and voided activity cannot affect the layout balance");
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(scratch.orgId));
+    }
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+test("ledger-backed detail reports read one accounting book (omitted means primary)", { skip: !env.OPENBOOKS_DB_URL }, () => {
+  const source = `
+    import assert from "node:assert/strict";
+    import { randomUUID } from "node:crypto";
+    import { sql } from "drizzle-orm";
+    import { db, withBypass, withOrg } from "./engine/src/db.ts";
+    import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+    import { cashFlow, generalLedger, journalReport, partnerBalances, partyRegister, trialBalance } from "./web/lib/reports.ts";
+
+    const scratch = await withBypass(() => createScratchOrg());
+    const taxBookId = randomUUID();
+    try {
+      await withBypass(async () => {
+        await db.execute(sql\`
+          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)\`);
+        const post = async (bookId, tag, cash, receivable) => {
+          const cashEntryId = randomUUID();
+          const arEntryId = randomUUID();
+          await db.execute(sql\`
+            insert into journal_entries
+              (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+               period_id, memo, status, origin, posted_at)
+            values
+              (\${cashEntryId}, \${scratch.orgId}, \${bookId}, \${scratch.subsidiaryId},
+               \${"BOOK-" + tag + "-CASH"}, \${scratch.date}, \${scratch.periodId},
+               \${tag}, 'draft', 'manual', null),
+              (\${arEntryId}, \${scratch.orgId}, \${bookId}, \${scratch.subsidiaryId},
+               \${"BOOK-" + tag + "-AR"}, \${scratch.date}, \${scratch.periodId},
+               \${tag}, 'draft', 'manual', null)\`);
+          await db.execute(sql\`
+            insert into journal_lines
+              (org_id, entry_id, line_number, account_id, subsidiary_id, party_id,
+               amount, currency, txn_amount, fx_rate)
+            values
+              (\${scratch.orgId}, \${cashEntryId}, 1, \${scratch.accounts.bank},
+               \${scratch.subsidiaryId}, null, \${cash}, 'CAD', \${cash}, '1'),
+              (\${scratch.orgId}, \${cashEntryId}, 2, \${scratch.accounts.revenue},
+               \${scratch.subsidiaryId}, null, \${"-" + cash}, 'CAD', \${"-" + cash}, '1'),
+              (\${scratch.orgId}, \${arEntryId}, 1, \${scratch.accounts.ar},
+               \${scratch.subsidiaryId}, \${scratch.customerId}, \${receivable}, 'CAD', \${receivable}, '1'),
+              (\${scratch.orgId}, \${arEntryId}, 2, \${scratch.accounts.revenue},
+               \${scratch.subsidiaryId}, \${scratch.customerId}, \${"-" + receivable}, 'CAD', \${"-" + receivable}, '1')\`);
+          await db.execute(sql\`
+            update journal_entries set status = 'posted', posted_at = now()
+             where id in (\${cashEntryId}, \${arEntryId})\`);
+        };
+        await post(scratch.bookId, "PRIMARY", "100.0000", "400.0000");
+        await post(taxBookId, "TAX", "250.0000", "700.0000");
+      });
+
+      await withOrg(scratch.orgId, async () => {
+        const range = { from: scratch.date, to: scratch.date, orgId: scratch.orgId };
+        // General ledger: revenue closing is debit-signed; the AR journal has
+        // no bank leg so cash flow only sees the cash journal.
+        for (const [bookId, revenue, ar, cash] of [
+          [undefined, "-500.0000", "400.0000", "100.0000"],
+          [taxBookId, "-950.0000", "700.0000", "250.0000"],
+        ]) {
+          const gl = await generalLedger(range.from, range.to, { orgId: range.orgId, bookId });
+          const glRevenue = gl.accounts.find((a) => a.id === scratch.accounts.revenue);
+          assert.equal(glRevenue?.closing, revenue, "general ledger revenue closing follows the book");
+          const journal = await journalReport(range.from, range.to, { orgId: range.orgId, bookId });
+          assert.equal(journal.entries.length, 2, "journal report sees one book's entries");
+          const register = await partyRegister("ar", { ...range, bookId });
+          assert.equal(register.parties.length, 1, "receivable register sees one book's parties");
+          assert.equal(register.parties[0]?.closing, ar, "receivable register closing follows the book");
+          const tb = await trialBalance(range.to, undefined, range.orgId, bookId ?? null);
+          assert.equal(tb.find((row) => row.id === scratch.accounts.revenue)?.balance, revenue, "trial balance follows the book");
+          const partners = await partnerBalances("receivable", range.orgId, range.to, bookId ?? null, undefined);
+          assert.equal(partners.find((row) => row.id === scratch.customerId)?.balance, ar, "partner balances follow the book");
+          const cf = await cashFlow(range.from, range.to, undefined, range.orgId, bookId ?? null);
+          assert.equal(cf.closingCash, cash, "cash flow closing cash follows the book");
+        }
       });
     } finally {
       await withBypass(() => dropScratchOrg(scratch.orgId));

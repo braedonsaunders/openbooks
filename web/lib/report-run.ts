@@ -239,24 +239,34 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   }
 
   // --- Detail reports (flat tables) -----------------------------------------
+  // Every journal-backed detail path reads the same validated book as the
+  // statement views (stale/foreign ids throw via reportBookSelection), so an
+  // explicit secondary-book export cannot silently return primary-book data
+  // while the book-aware drill disagrees. When ?book= is absent the readers
+  // keep their primary-book default. Aging reads documents.open_balance and
+  // documents carry no book column, so it stays unscoped by design.
+  const bookParam = p.get('book')
+  const detailBookId = bookParam == null
+    ? undefined
+    : (await reportBookSelection(orgId, bookParam)).selectedBook.id
   const side: AgingSide = p.get('side') === 'ap' ? 'ap' : 'ar'
   switch (kind) {
     case 'general-ledger':
       return {
         render: 'data',
         data: generalLedgerExportData(
-          await generalLedger(period.from, period.to, { accountId: isReportUuidParam(p.get('account')) ? p.get('account')! : undefined, dims, orgId }),
+          await generalLedger(period.from, period.to, { accountId: isReportUuidParam(p.get('account')) ? p.get('account')! : undefined, dims, orgId, bookId: detailBookId }),
           t('generalLedger.title'),
           t,
         ),
       }
     case 'journal':
-      return { render: 'data', data: journalExportData(await journalReport(period.from, period.to, { dims, orgId }), t('journal.title'), t) }
+      return { render: 'data', data: journalExportData(await journalReport(period.from, period.to, { dims, orgId, bookId: detailBookId }), t('journal.title'), t) }
     case 'registers':
       return {
         render: 'data',
         data: registerExportData(
-          await partyRegister(side, { from: period.from, to: period.to, dims, orgId }),
+          await partyRegister(side, { from: period.from, to: period.to, dims, orgId, bookId: detailBookId }),
           side === 'ap' ? t('registers.apTitle') : t('registers.arTitle'),
           t,
         ),
@@ -264,7 +274,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     case 'partner-statement': {
       const partyId = p.get('party')
       if (!partyId) throw new Error('party required')
-      return { render: 'data', data: partnerStatementExportData(await partnerStatement(partyId, orgId, { from: period.from, to: period.to, side, dims }), t) }
+      return { render: 'data', data: partnerStatementExportData(await partnerStatement(partyId, orgId, { from: period.from, to: period.to, side, dims, bookId: detailBookId }), t) }
     }
     case 'true-cost':
       return { render: 'data', data: await trueCostExportData(orgId, period) }
@@ -278,6 +288,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
             search: p.get('q') ?? undefined,
             projectScope: q.projectScope,
             orgId,
+            bookId: detailBookId,
           }),
           t,
         ),
@@ -290,17 +301,17 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   const to = p.get('to') ?? period.to
   switch (kind) {
     case 'trial-balance':
-      return { render: 'data', data: trialBalanceExportData(await trialBalance(asOf, dims, orgId), asOf, t) }
+      return { render: 'data', data: trialBalanceExportData(await trialBalance(asOf, dims, orgId, detailBookId), asOf, t) }
     case 'partners': {
       const s = (p.get('side') === 'receivable' ? 'receivable' : 'payable') as 'receivable' | 'payable'
-      return { render: 'data', data: partnersExportData(s, await partnerBalances(s, orgId, asOf, undefined, dims), t) }
+      return { render: 'data', data: partnersExportData(s, await partnerBalances(s, orgId, asOf, detailBookId, dims), t) }
     }
     case 'aging':
       return { render: 'data', data: agingExportData(side, await agingByParty(side, asOf, dims, orgId), t) }
     case 'cash-flow':
-      return { render: 'data', data: cashFlowExportData(await cashFlow(from, to, dims, orgId), from, to, t) }
+      return { render: 'data', data: cashFlowExportData(await cashFlow(from, to, dims, orgId, detailBookId), from, to, t) }
     case 'cash-flow-indirect':
-      return { render: 'data', data: cashFlowIndirectExportData(await cashFlowIndirect(from, to, dims, orgId), from, to, t) }
+      return { render: 'data', data: cashFlowIndirectExportData(await cashFlowIndirect(from, to, dims, orgId, detailBookId), from, to, t) }
   }
 
   throw new Error('unknown statement')

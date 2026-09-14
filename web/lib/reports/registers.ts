@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
 import { ZERO } from "./decimals";
@@ -36,6 +37,9 @@ export async function accountRegister(
   offset = 0,
   period?: { from?: string; to?: string; search?: string },
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
+  // Explicit book scope; the org's primary book when omitted — the same
+  // one-book contract as every other journal reader (see gl-summary).
+  bookId?: string | null,
 ) {
   const acct = (await db.execute<AccountRegisterAccount>(sql`
     select id, number, name, type, is_summary from accounts
@@ -63,6 +67,7 @@ export async function accountRegister(
       ? sql` and e.subsidiary_id in ${[...allowedSubsidiaryIds]}`
       : sql` and false`
     : sql``;
+  const bookFilter = sql` and e.book_id = ${statementBookExpr(orgId, bookId)}`;
   const r = (await db.execute<AccountRegisterLine>(sql`
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
@@ -80,7 +85,7 @@ export async function accountRegister(
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where l.account_id in (select id from account_scope)
-       and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter}
+       and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}
      order by e.posting_date desc, e.entry_number desc, l.line_number
      limit ${limit} offset ${offset}
   `));
@@ -99,7 +104,7 @@ export async function accountRegister(
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where l.account_id in (select id from account_scope)
-       and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter}
+       and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}
   `));
   const totals = c.rows[0] ?? { n: "0", bal: "0" };
   return { account: acct.rows[0], lines: r.rows, total: Number(totals.n), balance: totals.bal };
@@ -143,12 +148,16 @@ export interface RegisterResult {
  */
 export async function partyRegister(
   side: AgingSide,
-  opts: { from: string; to: string; partyId?: string; orgId?: string; dims?: DimFilter; maxLines?: number },
+  opts: { from: string; to: string; partyId?: string; orgId?: string; dims?: DimFilter; maxLines?: number; bookId?: string | null },
 ): Promise<RegisterResult> {
   const resolvedOrgId = await resolveOrgId(opts.orgId)
   const acctType = side === "ap" ? "liability_payable" : "asset_receivable"
   const maxLines = opts.maxLines ?? 4000
   const partyFilter = opts.partyId ? sql` and l.party_id = ${opts.partyId}` : sql``
+  // One accounting book per read (primary when omitted) — without this a
+  // parallel book's mirror entries fuse into the register while the sibling
+  // statement readers stay primary-only.
+  const bookFilter = sql` and e.book_id = ${statementBookExpr(resolvedOrgId, opts.bookId)}`
 
   const opening = (await db.execute<{ party_id: string | null; bal: string }>(sql`
     select l.party_id, coalesce(sum(l.amount), 0) as bal
@@ -156,7 +165,7 @@ export async function partyRegister(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where a.type = ${acctType} and e.posting_date < ${opts.from}
-       and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter}
+       and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
      group by l.party_id
   `))
   const openingByParty = new Map(opening.rows.map((r) => [r.party_id, r.bal]))
@@ -175,7 +184,7 @@ export async function partyRegister(
       left join parties pt on pt.id = l.party_id and pt.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where a.type = ${acctType} and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
-       and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter}
+       and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
      order by pt.display_name nulls last, e.posting_date, e.entry_number, l.line_number
      limit ${maxLines + 1}
   `))
@@ -228,9 +237,9 @@ export interface PartnerStatementResult {
 export async function partnerStatement(
   partyId: string,
   orgId: string,
-  opts: { from: string; to: string; side: AgingSide; dims?: DimFilter },
+  opts: { from: string; to: string; side: AgingSide; dims?: DimFilter; bookId?: string | null },
 ): Promise<PartnerStatementResult> {
-  const reg = await partyRegister(opts.side, { from: opts.from, to: opts.to, partyId, orgId, dims: opts.dims })
+  const reg = await partyRegister(opts.side, { from: opts.from, to: opts.to, partyId, orgId, dims: opts.dims, bookId: opts.bookId })
   const p = reg.parties[0]
   const partySubsidiaryFilter = opts.dims?.subsidiaryIds
     ? opts.dims.subsidiaryIds.length > 0
