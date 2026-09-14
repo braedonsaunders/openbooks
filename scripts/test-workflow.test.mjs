@@ -35,6 +35,8 @@ test('units, database shards and simulation run independently without omitted te
   const integration = topLevelJob('database')
   const simulation = topLevelJob('simulation')
   assert.match(unit, /npm run test:unit/)
+  assert.match(unit, /shard: \[1, 2, 3, 4\]/)
+  assert.match(unit, /OPENBOOKS_TEST_SHARD: \$\{\{ matrix.shard \}\}\/4/)
   assert.match(integration, /npm run test:integration/)
   assert.doesNotMatch(integration, /npm test\b|npm run test:unit/)
   assert.match(integration, /shard: \[1, 2, 3, 4, 5, 6, 7, 8\]/)

@@ -264,7 +264,7 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
     throw new Error(`unknown test suite ${JSON.stringify(suite)}; expected unit, integration, or all`)
   }
   if (process.env.OPENBOOKS_TEST_SHARD) {
-    if (suite !== 'integration') throw new Error('Sharding is supported only for the integration partition')
+    if (suite !== 'integration' && suite !== 'unit') throw new Error('Sharding is supported only for unit and integration partitions')
     if (forwarded.some((argument) => argument.startsWith('--test-shard'))) throw new Error('Cannot shard a partition twice')
     files = shardFiles(files, process.env.OPENBOOKS_TEST_SHARD)
   }
@@ -308,6 +308,7 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
     '--test',
     '--test-force-exit',
     ...forwarded,
+    ...(suite === 'unit' ? ['--test-timeout=180000'] : []),
     // Database files share a disposable schema and many exercise deliberate
     // lock/claim races internally. Keep file-level execution serial so one
     // fixture cannot contend with another while preserving each test's own

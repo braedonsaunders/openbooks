@@ -112,11 +112,8 @@ if (process.argv.includes("--owner")) {
   // owner's close receipt. The drain runs only when the finished test has no
   // still-running parent: subtests share their parent's fixture, so draining
   // at a subtest boundary would reset the org while siblings still use it.
-  // A file that memoizes one org across top-level tests keeps resolving the
-  // same slot — the integration partition runs files serially through one
-  // owner, so no other test can take the slot while it sits clean — and an
-  // explicit file-level drop stays idempotent, so releasing an already
-  // dropped lease is a no-op.
+  // Acquire a fresh lease in each top-level test. Memoizing an org across
+  // test boundaries would write into a released slot outside the owner ledger.
   // Depth counting assumes serial test execution, which the integration
   // partition guarantees by construction (--test-concurrency=1). A cancelled
   // test can skip its hooks, so the counter is clamped rather than trusted

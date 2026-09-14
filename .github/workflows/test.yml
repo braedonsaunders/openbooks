@@ -46,6 +46,12 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      OPENBOOKS_TEST_SHARD: ${{ matrix.shard }}/4
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -55,7 +61,19 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run test:unit
+      - name: Unit test shard
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:unit 2>&1 | tee unit.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: unit-${{ matrix.shard }}
+          include-hidden-files: true
+          path: |
+            unit.txt
+            .local/test-selection.json
 
   database:
     runs-on: ubuntu-latest
@@ -347,25 +365,32 @@ jobs:
         with:
           pattern: coverage-*
           path: integration-evidence
-      - name: Verify every database file ran exactly once
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: unit-*
+          path: unit-evidence
+      - name: Verify every test file ran exactly once
         run: |
           node --input-type=module - <<'NODE'
           import assert from 'node:assert/strict';
           import { readFileSync, readdirSync } from 'node:fs';
           import { testManifest, shardFiles } from './scripts/test-suite.mjs';
-          const files = testManifest().integration;
-          const dirs = readdirSync('integration-evidence').sort();
-          assert.deepEqual(dirs, Array.from({length:8}, (_,i)=>`coverage-${i+1}`));
-          const actual = [];
-          for (let i=1; i<=8; i++) {
-            const selection = JSON.parse(readFileSync(`integration-evidence/coverage-${i}/.local/test-selection.json`, 'utf8'));
-            assert.equal(selection.suite, 'integration');
-            assert.equal(selection.shard, `${i}/8`);
-            assert.deepEqual(selection.files, shardFiles(files, `${i}/8`));
-            actual.push(...selection.files);
+          const manifest = testManifest();
+          for (const [suite, count, root, prefix] of [['integration',8,'integration-evidence','coverage'], ['unit',4,'unit-evidence','unit']]) {
+            const files = manifest[suite];
+            const dirs = readdirSync(root).sort();
+            assert.deepEqual(dirs, Array.from({length:count}, (_,i)=>`${prefix}-${i+1}`));
+            const actual = [];
+            for (let i=1; i<=count; i++) {
+              const selection = JSON.parse(readFileSync(`${root}/${prefix}-${i}/.local/test-selection.json`, 'utf8'));
+              assert.equal(selection.suite, suite);
+              assert.equal(selection.shard, `${i}/${count}`);
+              assert.deepEqual(selection.files, shardFiles(files, `${i}/${count}`));
+              actual.push(...selection.files);
+            }
+            assert.deepEqual(actual.sort(), files);
+            console.log(`All ${files.length} ${suite} files completed exactly once across ${count} isolated runners.`);
           }
-          assert.deepEqual(actual.sort(), files);
-          console.log(`All ${files.length} database files completed exactly once across 8 isolated runners.`);
           NODE
 
   restore-drill:
