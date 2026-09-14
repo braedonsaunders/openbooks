@@ -440,6 +440,15 @@ async function runMacrs(
   classes: Map<string, PoolClassDef>,
 ): Promise<TaxPoolRunResult> {
   const { orgId, taxYear } = run;
+  // The pooled model prorates its allowance by the short-year factor, but the
+  // stateless per-asset MACRS schedule below has no short-year input: it would
+  // claim the full-year allowance while STORING the short factor on the
+  // period row. Refuse before any read or write instead of overstating.
+  if (run.shortYearFactor !== normalizeDecimal(1, 10)) {
+    throw new TaxPoolError(
+      `short tax year factor ${run.shortYearFactor} is not supported for the MACRS model — run the full tax year`,
+    );
+  }
   const assets = (await tx.execute<MacrsAssetRow>(sql`
     select a.id,
            coalesce(a.custom->'taxDepreciation'->${run.regime}->>'classCode', c.tax_attributes->>${attr}) as class_code,

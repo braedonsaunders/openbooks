@@ -385,6 +385,38 @@ test("years run consecutively: restating or skipping closed years is refused wit
   }
 });
 
+test("a MACRS run with a short-year factor is refused before persisting anything", { skip: !DB }, async () => {
+  // Live-Postgres regression: runMacrs accepted shortYearFactor, STORED it on
+  // the period row, but never applied it — a half-year MACRS run claimed the
+  // full-year allowance while its own evidence said 0.5. The stateless
+  // per-year MACRS schedule cannot carry a short-year deferral forward, so a
+  // short MACRS year must fail closed instead of silently over-claiming.
+  const { org, actorId } = await seededOrg();
+  try {
+    const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
+    await seedAsset(org, actorId, cat5, "10000.00", "2023-03-15");
+    const scope: RunScope = org;
+
+    await assert.rejects(
+      runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, "us_macrs", 2023, {
+        yearStart: "2023-01-01",
+        yearEnd: "2023-06-30",
+        shortYearFactor: "0.5",
+        actorId,
+      }),
+      (error: unknown) => error instanceof TaxPoolError && /short/i.test(error.message),
+    );
+    assert.equal((await periodsFor(org.orgId)).length, 0, "refused short MACRS year persists nothing");
+    assert.equal((await poolsFor(org.orgId)).length, 0, "refused short MACRS year creates no pool");
+
+    // The full-year run on the same scope still computes.
+    const full = await runYear(scope, actorId, "us_macrs", 2023);
+    assert.equal(full.lines[0]!.allowance, "2000.00");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("the MACRS model runs under the same fence: atomic years, chaining, ordering refusals", { skip: !DB }, async () => {
   const { org, actorId } = await seededOrg();
   try {
