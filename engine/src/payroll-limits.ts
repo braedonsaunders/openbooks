@@ -80,9 +80,11 @@ function lesser(a: string, b: string): string {
 /* ------------------------------------------------------------------ */
 
 /**
- * One resolved stub line as the protected base sees it. `amount` is always the
- * positive magnitude of the line, exactly as pay_stub_lines stores it; the
- * sign comes from `kind`.
+ * One resolved stub line as the protected base sees it. `amount` is the
+ * line's SIGNED amount, exactly as pay_stub_lines stores it; the sign comes
+ * from `kind`, and a negative line (an overpayment recovery on the earning
+ * side, a refund on the deduction side) nets the pool rather than failing
+ * the run.
  */
 export interface DisposableEarningsLine {
   kind: "earning" | "deduction" | "employer_contribution";
@@ -114,6 +116,11 @@ export interface DisposableEarningsOptions {
  * Disposable earnings = the included earnings less the included, unprotected
  * deductions. Never negative: an over-deducted period offers no pool at all,
  * it does not owe the creditor a negative amount.
+ *
+ * Lines are signed: a negative earning (an overpayment recovery entered as a
+ * pay-run adjustment) shrinks the pool and a negative deduction (a refund)
+ * grows it. Refusing either fails the whole run for an employee whose stub is
+ * otherwise exactly right.
  */
 export function disposableEarnings(
   lines: readonly DisposableEarningsLine[],
@@ -124,10 +131,10 @@ export function disposableEarnings(
   for (const line of lines) {
     if (line.accrualOnly) continue;
     if (line.includeInDisposableEarnings === false) continue;
-    if (line.kind === "earning") signed.push(requireNonNegative(line.amount, "an earning"));
+    if (line.kind === "earning") signed.push(normalizeMoney(line.amount));
     else if (line.kind === "deduction") {
       if (excludeProtected && line.protectedDeduction) continue;
-      signed.push(neg(requireNonNegative(line.amount, "a deduction")));
+      signed.push(neg(normalizeMoney(line.amount)));
     }
   }
   return atLeastZero(sum(signed));

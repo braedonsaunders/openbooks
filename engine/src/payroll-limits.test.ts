@@ -548,3 +548,28 @@ test("an earnings-assessed line dropped by a later pass is caught", () => {
     /EI for Terry Worker disappeared/,
   );
 });
+
+test("a negative stub line nets the protected base instead of failing the run", () => {
+  // A negative earning is a real stub line, not a data fault: recovering an
+  // overpayment through a pay-run adjustment (the product's own remedy for a
+  // rule that overpays) lands a negative earning beside the period's
+  // garnishment, and a benefit refund lands a negative deduction. Either one
+  // made the whole run throw "an earning cannot be negative" out of
+  // disposableEarnings — the employee was not paid at all.
+  const lines: DisposableEarningsLine[] = [
+    { kind: "earning", amount: "2000.00" },
+    { kind: "earning", amount: "-300.00" },
+    { kind: "deduction", amount: "500.00" },
+    { kind: "deduction", amount: "-50.00" },
+    { kind: "deduction", amount: "400.00", protectedDeduction: true },
+  ];
+  // 2000 − 300 − 500 + 50 = 1250 of net wages behind the order.
+  assert.equal(protectedBase("net_pay", lines), "1250.0000");
+  assert.equal(disposableEarnings(lines), "1250.0000");
+  const { applied, shortfalls } = applyDeductionProtection(
+    [{ key: "GARN", requested: "400.00", maxPercent: "20" }],
+    protectedBase("net_pay", lines),
+  );
+  assert.equal(applied[0]?.amount, "250.0000");
+  assert.equal(shortfalls[0]?.shortfall, "150.0000");
+});
