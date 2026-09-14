@@ -2,11 +2,10 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { loadWorkSchedules } from '@openbooks/engine/src/work-schedules.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
-import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
+import { parseCycleDays } from '../../../lib/work-schedule-days'
 
 export const dynamic = 'force-dynamic'
 
@@ -150,31 +149,13 @@ export async function POST(request: Request) {
     cycleAnchor = String(body.cycleAnchor ?? '')
     if (!DATE_RE.test(cycleAnchor)) return bad('the cycle needs a first day to count from')
     const supplied = Array.isArray(body.days) ? body.days : []
-    for (const entry of supplied) {
-      // Every supplied entry is intentional data: a malformed one is refused
-      // like a malformed hours value, never silently dropped from the pattern
-      // that decides holiday pay.
-      if (!entry || typeof entry !== 'object') return bad('each schedule day must name a day index and hours')
-      const raw = entry as Record<string, unknown>
-      const dayIndex = Number(raw.dayIndex)
-      if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex >= cycleDays) {
-        return bad(`day index ${String(raw.dayIndex)} is outside this ${cycleDays}-day cycle`)
-      }
-      const exact = canonicalDecimal(raw.hours, 4)
-      if (exact === null) return bad(`"${String(raw.hours)}" is not a number of hours`)
-      let hours: string
-      try {
-        hours = normalizeMoney(exact)
-      } catch {
-        return bad(`"${String(raw.hours)}" is not a number of hours`)
-      }
-      if (compareDecimal(hours, '0') < 0 || compareDecimal(hours, '24') > 0) {
-        return bad('a day holds between 0 and 24 hours')
-      }
-      // Zero is the same as no row; storing only the working days keeps the
-      // table honest about what "scheduled" means.
-      if (compareDecimal(hours, '0') === 0) continue
-      days.push({ dayIndex, hours })
+    // A row the server cannot place refuses the save: silently dropping a
+    // day would store a pattern nobody wrote, and it would go on paying
+    // somebody.
+    try {
+      days.push(...parseCycleDays(supplied, cycleDays).days)
+    } catch (error) {
+      return bad(error instanceof Error ? error.message : 'invalid days')
     }
     if (days.length === 0) {
       return bad('a work schedule must have at least one working day. If the employee has no '
