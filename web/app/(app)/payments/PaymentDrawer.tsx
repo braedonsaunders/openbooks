@@ -265,6 +265,7 @@ export function PaymentDrawer({
   // -- explicit save (no autosave) -----------------------------------------
   const payload = useMemo(
     () => ({
+      expectedUpdatedAt: doc.updated_at,
       partyId: partyId || null,
       bankAccountId: bankAccountId || null,
       documentDate: documentDate || undefined,
