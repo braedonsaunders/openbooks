@@ -18,6 +18,10 @@ import {
   type WaiverRecord
 } from '@openbooks/engine/src/compliance.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import {
+  GENERAL_THRESHOLD_CHANGE_YEAR,
+  INFORMATION_RETURN_FORMS,
+} from '@openbooks/engine/src/information-returns.ts'
 import { isFeatureEnabled } from './features'
 
 /**
@@ -696,9 +700,17 @@ export async function loadInformationReturnReadiness(
        ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        and (
          -- Reportable-but-unready, or unflagged-but-paid-enough-to-question.
+         -- The question threshold follows the statute for the vendor's form
+         -- and year: T4A past $500; the US general threshold moved $600 to
+         -- $2,000 for 2026+, so a flat 600 both spams the queue with
+         -- sub-threshold US vendors and misses T4A vendors paid $500-$599.
          (coalesce(vr.is_t4a, false) and (vr.tin_last4 is null
             or coalesce(vr.information_return_form, cc.default_information_return, 'none') = 'none'))
-         or (not coalesce(vr.is_t4a, false) and coalesce(paid.total, 0) >= 600
+         or (not coalesce(vr.is_t4a, false) and coalesce(paid.total, 0) >= case
+               when coalesce(vr.information_return_form, cc.default_information_return) = 'T4A'
+                 then ${Number(INFORMATION_RETURN_FORMS.T4A.defaultThreshold)}
+               when ${taxYear} >= ${GENERAL_THRESHOLD_CHANGE_YEAR} then 2000
+               else 600 end
              and coalesce(vr.tax_classification, '') not in ('c_corp', 's_corp'))
        )
      order by paid.total desc, p.display_name
