@@ -83,6 +83,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const gate = await guardPermission('ap.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
+  // A malformed id names nothing: same answer as an unknown one, never a
+  // PostgreSQL uuid cast error escaping as a 500.
+  if (!UUID.test(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const result = (await db.execute<Record<string, unknown>>(sql`
     select ci.*, f.content_type, f.size_bytes
       from ap_capture_items ci join files f on f.id = ci.file_id and f.org_id = ci.org_id
@@ -107,6 +110,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const gate = await guardPermission('ap.create')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
+  if (!UUID.test(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const parsedBody = await parseJsonBody(request, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>
