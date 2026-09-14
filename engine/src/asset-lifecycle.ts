@@ -335,7 +335,17 @@ export async function disposeAsset(
   opts: { proceeds?: string; proceedsAccountId?: string | null; date: string; actorId: string | null; writeOff?: boolean; allowedSubsidiaryIds?: readonly string[] | null },
 ): Promise<DisposeResult> {
   assertLifecycleDate(opts.date);
-  const proceeds = opts.writeOff ? "0" : opts.proceeds ?? "0";
+  // Fail closed on contradictory or impossible sale economics before touching
+  // the database: a write-off takes no proceeds (the API coerces them to zero;
+  // a direct caller passing both is a bug), and proceeds are never negative.
+  const rawProceeds = opts.proceeds ?? "0";
+  if (opts.writeOff && !isZero(add(rawProceeds, "0"))) {
+    throw new AssetLifecycleError("a write-off takes no proceeds — omit proceeds or record a sale disposal");
+  }
+  if (cmp(rawProceeds, "0") < 0) {
+    throw new AssetLifecycleError("proceeds must be a non-negative amount");
+  }
+  const proceeds = opts.writeOff ? "0" : rawProceeds;
   return db.transaction(async (tx) => {
     // Serialize disposal against remeasurement on the authoritative asset row.
     // This must precede every carrying-value read so a contender waits for the
@@ -699,6 +709,11 @@ export async function remeasureAsset(
   opts: { newCarryingValue: string; date: string; actorId: string | null; allowedSubsidiaryIds?: readonly string[] | null },
 ): Promise<RemeasureResult> {
   assertLifecycleDate(opts.date);
+  // A recoverable amount is never negative — fail closed before touching the
+  // database rather than posting an impairment that drives NBV below zero.
+  if (cmp(add(opts.newCarryingValue, "0"), "0") < 0) {
+    throw new AssetLifecycleError("new carrying value must be a non-negative amount");
+  }
   return db.transaction(async (tx) => {
     // Lock before reading any carrying-value input. A concurrent
     // remeasurement waits here, then its following SELECT sees the committed

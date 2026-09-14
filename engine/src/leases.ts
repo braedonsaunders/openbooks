@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions, uuidArray } from "./subsidiaries.ts";
 import { add, cmp, fromUnits, isZero, neg, normalizeDecimal, normalizeMoney, sum, toUnits } from "./money.ts";
+import { isIsoCalendarDate } from "./business-date.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { apportion } from "./revenue-recognition.ts";
 import {
@@ -184,6 +185,19 @@ export function measureLesseeLease(args: {
 }): LesseeMeasurement {
   if (args.timing === "advance") {
     throw new LeaseError("advance-timing schedules are not implemented yet — measure with arrears timing");
+  }
+  if (!Number.isSafeInteger(args.periodsPerYear) || args.periodsPerYear <= 0) {
+    throw new LeaseError("periods per year must be a positive whole number");
+  }
+  if (!Number.isSafeInteger(args.periods) || args.periods < 1) {
+    throw new LeaseError("lease term must be a positive whole number of periods");
+  }
+  // 100-year supported horizon in the caller's own frequency (division first
+  // so a huge period count cannot overflow into unsafe-integer range).
+  if (args.periods > (100 * args.periodsPerYear)) {
+    throw new LeaseError(
+      "lease term exceeds the supported 100-year horizon for its payment frequency",
+    );
   }
   const rate: PeriodRate = periodRateFromAnnualPercent(args.annualRatePercent, args.periodsPerYear);
   const liability = presentValueOfLevelStream({
@@ -402,6 +416,51 @@ export function assertLeaseTimingSupported(timing: "arrears" | "advance"): void 
   }
 }
 
+/**
+ * Longest supported lease horizon, in months: 100 years. Coordinated with
+ * revenue's MAX_FINANCING_DEFERRAL_YEARS = 100 — the supported financing
+ * horizon, not a statutory calendar rule. Commencement builds one schedule
+ * row per period, so terms beyond this hang or OOM before posting anything.
+ */
+export const MAX_LEASE_TERM_MONTHS = 1200;
+
+/** Shared calendar-date gate: the storage layer would reject garbage with a
+ *  raw `invalid input syntax for type date` instead of a domain error. Uses
+ *  the engine's ISO calendar policy (padded YYYY-MM-DD, real date, years
+ *  0001–9999) — no local parser. */
+export function assertLeaseCommencementOn(value: unknown): void {
+  if (!isIsoCalendarDate(value)) {
+    throw new LeaseError("commencement date must be a calendar date (YYYY-MM-DD)");
+  }
+}
+
+/**
+ * Shared term gate for creation AND commencement. Creation validates the
+ * request; commencement re-validates the STORED term/frequency because legacy
+ * rows persisted before the creation guard (the database only checks
+ * `term_periods > 0`) would otherwise allocate unbounded boundary arrays and
+ * schedule rows — including on the exempt path, which never reaches the
+ * present-value measurement guard. Returns the frequency's month count.
+ */
+export function assertLeaseTermWithinHorizon(termPeriods: unknown, paymentFrequency: unknown): number {
+  const frequencyMonths =
+    typeof paymentFrequency === "string" ? FREQUENCY_MONTHS[paymentFrequency] : undefined;
+  if (!frequencyMonths) {
+    throw new LeaseError("payment frequency must be one of monthly, quarterly, annual");
+  }
+  if (!Number.isSafeInteger(termPeriods) || (termPeriods as number) < 1) {
+    throw new LeaseError("lease term must be a positive whole number of periods");
+  }
+  // Division first: termPeriods is only known to be a safe integer, and
+  // termPeriods × frequencyMonths can overflow into unsafe-integer range.
+  if ((termPeriods as number) > MAX_LEASE_TERM_MONTHS / frequencyMonths) {
+    throw new LeaseError(
+      `lease term exceeds the supported 100-year horizon (${MAX_LEASE_TERM_MONTHS} months)`,
+    );
+  }
+  return frequencyMonths;
+}
+
 export interface CreateLeaseInput {
   subsidiaryId: string;
   leaseNumber: string;
@@ -438,8 +497,17 @@ export async function createLeaseAgreement(
   const classificationInputs = input.classificationInputs ?? {};
   const classification = classifyLease(classificationInputs, framework);
 
+  // Fail closed on measurement inputs before touching the database: without
+  // these, impossible terms/payments/rates/dates fall through to raw storage
+  // errors (check-constraint violations, invalid date syntax) instead of a
+  // domain LeaseError, and unbounded terms hang commencement (PV summation,
+  // apportion weights, and schedule rows all scale with the period count).
+  // The term gate is shared with commencement (legacy stored terms).
+  const frequencyMonths = assertLeaseTermWithinHorizon(input.termPeriods, input.paymentFrequency);
+  assertLeaseCommencementOn(input.commencementOn);
+
   if (input.exemption === "short_term") {
-    const months = input.termPeriods * FREQUENCY_MONTHS[input.paymentFrequency]!;
+    const months = input.termPeriods * frequencyMonths;
     if (
       !shortTermExemptionEligible({
         leaseTermMonths: months,
@@ -454,7 +522,13 @@ export async function createLeaseAgreement(
   assertLeaseTimingSupported(input.paymentTiming ?? "arrears");
 
   const paymentAmount = exactMoney(input.paymentAmount, "Payment amount");
+  if (cmp(paymentAmount, "0") <= 0) {
+    throw new LeaseError("Payment amount must be positive");
+  }
   const annualDiscountRatePercent = persistLeaseAnnualDiscountRate(input.annualDiscountRatePercent);
+  if (cmp(annualDiscountRatePercent, "0") < 0) {
+    throw new LeaseError("annual discount rate must be non-negative");
+  }
   const leaseId = randomUUID();
   await db.execute(sql`
     insert into lease_agreements
@@ -632,7 +706,11 @@ export async function commenceLease(
     }
     if (lease.status !== "draft") throw new LeaseError(`lease ${lease.lease_number} is ${lease.status}`);
 
-    const frequencyMonths = FREQUENCY_MONTHS[lease.payment_frequency]!;
+    // Re-validate the STORED term/frequency before ANY commencement loop: a
+    // legacy row persisted before the creation guard can carry a huge term
+    // (the database only checks term_periods > 0), and the boundary loop and
+    // the exempt schedule loop below never reach the measurement guard.
+    const frequencyMonths = assertLeaseTermWithinHorizon(lease.term_periods, lease.payment_frequency);
     const periodsPerYear = PERIODS_PER_YEAR[lease.payment_frequency]!;
 
     // Period boundaries: period i covers [start + i·f months, next boundary).

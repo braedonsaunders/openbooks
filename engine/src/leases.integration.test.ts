@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "./db.ts";
 import { toUnits } from "./money.ts";
-import { commenceLease, createLeaseAgreement, postDueLeaseSchedules } from "./leases.ts";
+import { commenceLease, createLeaseAgreement, LeaseError, postDueLeaseSchedules } from "./leases.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -176,6 +176,99 @@ test("a 13-month lease cannot elect the short-term exemption", { skip: !DB }, as
       }),
       /short-term exemption requires/,
     );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("invalid lease inputs are refused as LeaseError with no rows written", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const accounts = await seedLeaseAccounts(org);
+    const base = {
+      subsidiaryId: org.subsidiaryId,
+      commencementOn: "2026-07-01",
+      termPeriods: 3,
+      paymentFrequency: "monthly" as const,
+      paymentAmount: "1000",
+      annualDiscountRatePercent: "6",
+      accounts,
+    };
+    const counts = async () => {
+      const leases = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`)).rows[0]!.n;
+      const entries = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`)).rows[0]!.n;
+      return { leases, entries };
+    };
+    const before = await counts();
+    // Every case previously fell through to a raw storage error
+    // (check-constraint violation / invalid date syntax) instead of a domain
+    // LeaseError; the over-horizon term would additionally hang commencement.
+    const cases: [string, Record<string, unknown>, RegExp][] = [
+      ["negative payment", { paymentAmount: "-500" }, /Payment amount must be positive/],
+      ["zero payment", { paymentAmount: "0" }, /Payment amount must be positive/],
+      ["zero term", { termPeriods: 0 }, /positive whole number of periods/],
+      ["negative term", { termPeriods: -3 }, /positive whole number of periods/],
+      ["fractional term", { termPeriods: 2.5 }, /positive whole number of periods/],
+      ["over-horizon term", { termPeriods: 1201 }, /100-year horizon/],
+      ["negative rate", { annualDiscountRatePercent: "-5" }, /non-negative/],
+      ["garbage date", { commencementOn: "not-a-date" }, /calendar date/],
+      ["impossible date", { commencementOn: "2026-02-30" }, /calendar date/],
+      ["bad frequency", { paymentFrequency: "fortnightly" }, /payment frequency/],
+    ];
+    let n = 0;
+    for (const [label, override, pattern] of cases) {
+      n++;
+      await assert.rejects(
+        createLeaseAgreement(org.orgId, null, { ...base, leaseNumber: `L-BAD-${n}`, ...override } as never),
+        (e) => e instanceof LeaseError && pattern.test((e as Error).message),
+        label,
+      );
+      assert.deepEqual(await counts(), before, `no rows written for ${label}`);
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("commencement refuses a legacy huge exempt term with no rows written", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const accounts = await seedLeaseAccounts(org);
+    // Seeded directly, bypassing createLeaseAgreement: a row persisted before
+    // the creation guard (the database only checks term_periods > 0) can
+    // carry a horizon no commencement loop could ever finish — including on
+    // the exempt path, which never reaches the measurement guard.
+    const leaseId = randomUUID();
+    await db.execute(sql`
+      insert into lease_agreements
+        (id, org_id, subsidiary_id, lease_number, status, commencement_on, term_periods,
+         payment_frequency, payment_timing, payment_amount, annual_discount_rate_percent,
+         classification, classification_inputs, exemption,
+         rou_asset_account_id, lease_liability_account_id, interest_expense_account_id,
+         amortization_expense_account_id, lease_expense_account_id, payment_account_id,
+         custom, created_by, updated_by)
+      values (${leaseId}, ${org.orgId}, ${org.subsidiaryId}, 'L-LEGACY-HUGE', 'draft', '2026-07-01', 1000000,
+              'monthly', 'arrears', '1000', '6',
+              'finance', '{}'::jsonb, 'low_value',
+              ${accounts.rouAsset}, ${accounts.leaseLiability}, ${accounts.interestExpense},
+              ${accounts.amortizationExpense}, ${accounts.leaseExpense}, ${accounts.payment},
+              '{}'::jsonb, null, null)`);
+    await assert.rejects(
+      commenceLease(org.orgId, leaseId, null),
+      (e) => e instanceof LeaseError && /100-year horizon/.test(e.message),
+    );
+    // Refused before the boundary loop: no schedule rows, no entries, still draft.
+    const lines = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${leaseId}`)).rows[0]!.n;
+    const entries = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`)).rows[0]!.n;
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`)).rows[0]!.status;
+    assert.equal(lines, 0);
+    assert.equal(entries, 0);
+    assert.equal(status, "draft");
   } finally {
     await dropScratchOrg(org.orgId);
   }

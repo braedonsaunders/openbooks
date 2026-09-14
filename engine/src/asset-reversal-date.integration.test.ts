@@ -32,7 +32,11 @@ for (const kind of ['disposal', 'write-off', 'impairment', 'revaluation'] as con
         const source = kind === 'disposal' || kind === 'write-off'
           ? await disposeAsset(org.orgId, assetId, {
             actorId, date: sourceDate, writeOff: kind === 'write-off',
-            proceeds: '300', proceedsAccountId: org.accounts.bank,
+            // A write-off takes no proceeds (the engine rejects the
+            // contradictory input instead of silently dropping it); the
+            // pre-fix setup's '300' was coerced to '0' here, so '0' keeps the
+            // exercised pre-reversal state identical.
+            proceeds: kind === 'write-off' ? '0' : '300', proceedsAccountId: org.accounts.bank,
           })
           : await remeasureAsset(org.orgId, assetId, {
             actorId, date: sourceDate, newCarryingValue: kind === 'impairment' ? '800' : '1200',
