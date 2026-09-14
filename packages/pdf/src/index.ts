@@ -11,6 +11,7 @@ export {
   renderTemplate,
   expandRepeatMarkers,
   sanitizeTemplateHtml,
+  sanitizeRenderedHtml,
   sanitizeTemplateFragment,
   sanitizeTokenizedFragment,
   compileTemplateHtml,

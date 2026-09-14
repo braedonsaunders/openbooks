@@ -72,6 +72,12 @@ test('pay-stub YTD cannot disclose another legal entity or add another currency'
   await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${org.orgId},${org.subsidiaryId},'Other employer','CAD','CA')`)
   await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values(${employee},${org.orgId},'person','Transferred employee',${org.subsidiaryId})`)
   let ownStub=''
+  // The persisted income-tax component line is the YTD tax authority: every
+  // stub carries the withheld TAX line the engine would have pushed, alongside
+  // its factors.
+  const taxComponent=randomUUID()
+  await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,system_key)
+    values(${taxComponent},${org.orgId},'TAX','Income tax','deduction','income_tax')`)
   for(const [sub,currency,gross,tax] of [[org.subsidiaryId,'CAD','240','10'],[org.subsidiaryId,'CAD','60','5'],[hidden,'CAD','1000','100'],[org.subsidiaryId,'USD','2000','200']] as const) {
    const schedule=randomUUID(),stub=randomUUID()
    await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,subsidiary_id)
@@ -79,6 +85,8 @@ test('pay-stub YTD cannot disclose another legal entity or add another currency'
    const run=await createPayRun({orgId:org.orgId,actorId:adminId,payScheduleId:schedule,periodStart:'2026-07-05',periodEnd:'2026-07-18'})
    await db.execute(sql`insert into pay_stubs(id,org_id,pay_run_document_id,employee_party_id,province,periods_per_year,pay_date,tax_year,currency_code,gross,net_pay,factors)
     values(${stub},${org.orgId},${run.documentId},${employee},'ON',26,'2026-07-21',2026,${currency},${gross},${gross},${JSON.stringify({T:tax})}::jsonb)`)
+   await db.execute(sql`insert into pay_stub_lines(org_id,stub_id,component_id,kind,description,amount,sequence)
+    values(${org.orgId},${stub},${taxComponent},'deduction','Income tax',${tax},110)`)
    await db.execute(sql`update pay_runs set run_status='committed' where org_id=${org.orgId} and document_id=${run.documentId}`)
    if(sub===org.subsidiaryId&&currency==='CAD'&&!ownStub) ownStub=stub
   }

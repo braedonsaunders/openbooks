@@ -257,16 +257,28 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
   // YTD for this employer and currency through the stub's pay date. An
   // employee transfer must not disclose another legal entity's payroll, and
   // monetary totals cannot add a different currency into this printed amount.
+  //
+  // YTD income tax is the sum of the persisted income-tax component lines —
+  // the same withheld amounts the stubs themselves printed — never a
+  // hand-enumerated factor list. Engine factor keys are per-jurisdiction and
+  // unstable as a contract (T4127 traces federal T/TB but its A is annual
+  // income; TP-1015 traces QC_A/QC_AB; every US state traces its own
+  // <STATE>_WITHHELD keys), so any literal key list silently drops a
+  // jurisdiction. The five income-tax system keys are the closed,
+  // schema-enumerated set instead.
   const ytd = (await db.execute<{ gross: string; net: string; tax: string }>(sql`
     select coalesce(sum(s.gross), 0) as gross, coalesce(sum(s.net_pay), 0) as net,
-           coalesce(sum(
-             coalesce((s.factors->>'T')::numeric, 0)
-             + coalesce((s.factors->>'TB')::numeric, 0)
-             + coalesce((s.factors->>'FIT')::numeric, 0)
-           ), 0) as tax
+           coalesce(sum(income_tax_lines.tax), 0) as tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join documents d on d.id = r.document_id and d.org_id = r.org_id and d.kind = 'pay_run'
+      left join lateral (
+        select coalesce(sum(l.amount), 0) as tax
+          from pay_stub_lines l
+          join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+         where l.org_id = s.org_id and l.stub_id = s.id
+           and c.system_key in ('income_tax', 'qc_income_tax', 'fit', 'state_income_tax', 'local_income_tax')
+      ) income_tax_lines on true
      where s.org_id = ${orgId} and s.employee_party_id = ${stub.employee_party_id}
        and s.tax_year = ${stub.tax_year} and s.pay_date <= ${stub.pay_date}
        and d.subsidiary_id is not distinct from ${stub.subsidiary_id}

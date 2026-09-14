@@ -1,5 +1,5 @@
 import 'server-only'
-import { renderHtmlDocumentPdf, renderTemplate } from '@openbooks/pdf'
+import { renderHtmlDocumentPdf, renderTemplate, sanitizeRenderedHtml } from '@openbooks/pdf'
 import type { ResolvedPdfTemplate } from './store'
 
 /**
@@ -12,6 +12,16 @@ import type { ResolvedPdfTemplate } from './store'
  * The counter placeholders survive escaping untouched (braces are not HTML
  * metacharacters), so renderHtmlDocumentPdf still swaps them for Chromium's
  * page-number spans.
+ *
+ * The merged BODY is sanitized again after merging. Save-time sanitization
+ * sees the template with `{{tokens}}` in place, and a token is URI-inert, so
+ * an author-placed token inside an attribute (e.g. `<a href="{{website}}">`)
+ * survives the save — then record data fills the scheme (`javascript:…`).
+ * Escaping cannot stop that: `:` is not an HTML metacharacter. Sanitizing the
+ * merged output strips the dangerous scheme while keeping safe links
+ * (https/mailto), inline data: images, and all escaped text byte-identical.
+ * Sized with the rendered-output policy: a valid merge repeats content past
+ * the 1MB authored-template ceiling, and must not be refused for it.
  */
 const UNTRUSTED_VALUES = { escapeHtml: true, allowRawValues: false } as const
 
@@ -21,7 +31,7 @@ export async function mergeAndPrintPdf(
 ): Promise<Buffer> {
   const counters = { ...values, page: '{{page}}', pages: '{{pages}}' }
   return renderHtmlDocumentPdf({
-    bodyHtml: renderTemplate(tpl.compiledHtml, values, UNTRUSTED_VALUES),
+    bodyHtml: sanitizeRenderedHtml(renderTemplate(tpl.compiledHtml, values, UNTRUSTED_VALUES)),
     paperSize: tpl.paperSize,
     orientation: tpl.orientation,
     marginMm: tpl.marginMm,
