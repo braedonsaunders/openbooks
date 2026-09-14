@@ -73,6 +73,21 @@ test('WIP source kinds, lifecycle states, and inclusion switches are enforced', 
   assert.equal(priceWipSource(allowed, document, '0').eligible, true)
 })
 
+test('WIP prebilling excludes credit sources that prebill lines cannot carry', () => {
+  const kinds = profile({ billableValue: { ...profile().billableValue, costSourceKinds: ['vendor_bill', 'vendor_credit'] } })
+  const credit = {
+    ...source,
+    sourceType: 'document_line' as const,
+    documentKind: 'vendor_credit',
+    documentStatus: 'posted',
+    directCostAmount: '-100',
+    nativeBillAmount: '-100',
+  }
+  assert.equal(priceWipSource(kinds, credit, '0').eligible, false)
+  const debit = { ...credit, documentKind: 'vendor_bill', directCostAmount: '100', nativeBillAmount: '100' }
+  assert.equal(priceWipSource(kinds, debit, '0').eligible, true)
+})
+
 test('not-to-exceed capacity deterministically caps the final eligible source', () => {
   assert.deepEqual(capWipSources([
     { id: 'a', billAmount: '70' },

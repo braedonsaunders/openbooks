@@ -108,13 +108,30 @@ export function priceWipSource(
       overheadAmount = normalizeMoney(source.rateEngineOverhead ?? '0')
     }
   }
+  const loadedCostAmount = add(directCostAmount, overheadAmount)
+
+  // Prebill lines carry a non-negative CHECK on cost and bill amounts, so a
+  // credit source can never become a line: exclude it here and let creation
+  // fail closed with "no eligible work" instead of dying on the schema CHECK.
+  if (cmp(billAmount, '0') < 0 || cmp(loadedCostAmount, '0') < 0) {
+    return {
+      eligible: false,
+      reason: 'Credits are not prebilled as source lines — bill them through a credit document.',
+      directCostAmount,
+      overheadAmount,
+      loadedCostAmount,
+      billAmount,
+      pricingMode: profile.billableValue.timeRate,
+      markupPercent,
+    }
+  }
 
   return {
     eligible: cmp(billAmount, '0') !== 0,
     reason: cmp(billAmount, '0') === 0 ? 'The effective project-type policy produced no billable value.' : null,
     directCostAmount,
     overheadAmount,
-    loadedCostAmount: add(directCostAmount, overheadAmount),
+    loadedCostAmount,
     billAmount,
     pricingMode: profile.billableValue.timeRate,
     markupPercent,
