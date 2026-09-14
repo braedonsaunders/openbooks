@@ -54,7 +54,7 @@ for (const history of ['none', 'depreciation', 'impairment', 'disposal', 'write-
         } else if (history==='impairment') {
           await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'800'});
         } else if (history==='disposal' || history==='write-off') {
-          await disposeAsset(org.orgId,assetId,{actorId,date:'2026-07-31',proceeds:'300',proceedsAccountId:org.accounts.bank,writeOff:history==='write-off'});
+          await disposeAsset(org.orgId,assetId,{actorId,date:'2026-07-31',proceeds:history==='write-off'?'0':'300',proceedsAccountId:org.accounts.bank,writeOff:history==='write-off'});
         }
         const snapshot = async () => (await db.execute(sql`
           select (select jsonb_agg(to_jsonb(a) order by id) from fixed_assets a where org_id=${org.orgId}) as assets,
