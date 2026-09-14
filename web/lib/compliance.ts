@@ -687,10 +687,16 @@ export async function loadInformationReturnReadiness(
       join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
       left join compliance_classes cc on cc.id = vr.compliance_class_id and cc.org_id = p.org_id
       join lateral (
-        select coalesce(-sum(jl.amount) filter (where jl.amount < 0 and not jl.is_open_item), 0) as total
+        -- Bank cash only: a discount is a second negative, non-open-item leg,
+        -- but it never leaves the bank and must not inflate the paid figure —
+        -- the same boundary the filing's own cash trace draws.
+        select coalesce(-sum(jl.amount) filter (
+          where jl.amount < 0 and not jl.is_open_item and funding.type = 'asset_bank'
+        ), 0) as total
           from documents d
           join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status in ('posted', 'reversed')
           join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
+          join accounts funding on funding.id = jl.account_id and funding.org_id = jl.org_id
          where d.org_id = p.org_id and d.party_id = p.id
            and d.kind = 'vendor_payment' and d.status = 'posted'
            and d.document_date between ${`${taxYear}-01-01`} and ${`${taxYear}-12-31`}
