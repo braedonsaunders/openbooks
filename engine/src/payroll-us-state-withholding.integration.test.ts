@@ -10,9 +10,11 @@ import { reciprocityAgreement } from "./payroll/reciprocity.ts";
 import { regionWithholding } from "./payroll/withholding-jurisdictions.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "./payroll/packs.ts";
 import {
-  CA_WITHHOLDING, NY_WITHHOLDING, NYC_WITHHOLDING, PA_WITHHOLDING,
+  CA_WITHHOLDING, MA_WITHHOLDING, NY_WITHHOLDING, NYC_WITHHOLDING, PA_WITHHOLDING,
 } from "./payroll/us/states/index.ts";
-import { calculatePayRun, createPayRun, seedPayrollComponents } from "./payroll-run.ts";
+import {
+  calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
+} from "./payroll-run.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
 /**
@@ -454,6 +456,98 @@ test(
       const ohioStub = await stubOf(fx, run.documentId, plainOhio);
       assert.ok(ohioStub, "an Ohio employee outside every municipality is paid");
       assert.ok(ohioStub!.factors.SIT_OH);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+/* --------------------------------------------------------------------- */
+/* 6. Year-to-date — a second bonus is not the year's first                */
+/* --------------------------------------------------------------------- */
+
+test(
+  "a second Massachusetts bonus sees the first bonus in the supplemental surtax threshold",
+  { skip: !DB },
+  async () => {
+    // Circular M taxes a supplemental payment at 5% — but when the payment
+    // plus the year's earlier supplemental payments crosses the $1,107,750
+    // surtax threshold, the slice above it is taxed at 9%. computeUsStatutory
+    // called the state engines WITHOUT the run's YTD, so every bonus was
+    // taxed as the year's first: the $200,000 bonus below withheld a flat 5%
+    // although $92,250 of it sits above the threshold.
+    const fx = await usPayrollOrg();
+    try {
+      const employee = await usEmployee(fx, "Bay Stater", { state: "MA" });
+      const bonusComponent = ((await db.execute<{ id: string }>(sql`
+        select id from pay_components where org_id = ${fx.orgId} and code = 'BONUS'
+      `))).rows[0]!;
+      const bonus = async (amount: string) => {
+        const run = await createPayRun({
+          orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+          periodStart: PERIOD_START, periodEnd: PERIOD_END, runType: "bonus",
+        });
+        await db.execute(sql`
+          insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
+                                           adjustment_type, component_id, amount, note,
+                                           created_by, updated_by)
+          values (${fx.orgId}, ${run.documentId}, ${employee}, 'line', ${bonusComponent.id},
+                  ${amount}, 'Performance bonus', ${fx.actorId}, ${fx.actorId})`);
+        const result = await calculatePayRun({
+          orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+        });
+        assert.deepEqual(result.errors, []);
+        return run;
+      };
+
+      // $1,000,000 of supplemental this year: below the threshold on its own.
+      const first = await bonus("1000000");
+      const firstStub = await stubOf(fx, first.documentId, employee);
+      assert.ok(firstStub);
+      await commitPayRun({ orgId: fx.orgId, documentId: first.documentId, actorId: fx.actorId });
+
+      // The next $200,000 pushes $92,250 of itself over the $1,107,750 line.
+      const second = await bonus("200000");
+      const stub = await stubOf(fx, second.documentId, employee);
+      assert.ok(stub, "the second bonus was paid");
+
+      // The engine, called directly with the same facts INCLUDING the year's
+      // earlier supplemental pay. The retirement-contribution subtraction is
+      // reconstructed from the two stubs' own FICA figures, the way the run
+      // supplies it.
+      const fica = (factors: Record<string, string>) =>
+        ["SS", "MED", "MED2"].reduce((sum, key) => sum + Number(factors[key] ?? "0"), 0)
+          .toFixed(4);
+      const expected = MA_WITHHOLDING.compute({
+        payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26,
+        wages: "0.0000", supplemental: "200000.00",
+        certificate: resolveCertificate({
+          certificate: payrollCertificate("US", "us_ma_m4"), asOf: PAY_DATE,
+        }),
+        basis: "resident",
+        socialInsuranceDeducted: {
+          period: fica(stub!.factors),
+          yearToDate: fica(firstStub!.factors),
+        },
+        ytd: { supplemental: "1000000.00" },
+      });
+      assert.notEqual(
+        MA_WITHHOLDING.compute({
+          payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26,
+          wages: "0.0000", supplemental: "200000.00",
+          certificate: resolveCertificate({
+            certificate: payrollCertificate("US", "us_ma_m4"), asOf: PAY_DATE,
+          }),
+          basis: "resident",
+          socialInsuranceDeducted: {
+            period: fica(stub!.factors),
+            yearToDate: fica(firstStub!.factors),
+          },
+        }).tax,
+        expected.tax,
+        "the fixture must actually cross the threshold",
+      );
+      assert.equal(stub!.factors.SIT_MA, expected.tax);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
