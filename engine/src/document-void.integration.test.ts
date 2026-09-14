@@ -767,3 +767,72 @@ test("a failed before_void effect rolls back its claim and journal before a safe
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("voiding a quote with a live sales order is fenced without mutation", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Order Void Controller", "admin");
+    const quoteId = await seedApprovedQuote(org, actorId, "QUOTE-VOID-FENCE-1");
+    const salesOrderId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, document_number, party_id, subsidiary_id,
+         document_date, currency, status, created_by)
+      values (
+        ${salesOrderId}, ${org.orgId}, 'sales_order', 'SO-VOID-FENCE-1',
+        ${org.customerId}, ${org.subsidiaryId}, ${org.date}, 'CAD',
+        'approved', ${actorId}
+      )
+    `);
+    await db.execute(sql`
+      insert into document_links
+        (org_id, from_document_id, to_document_id, link_type, created_by)
+      values (${org.orgId}, ${quoteId}, ${salesOrderId}, 'created_from', ${actorId})
+    `);
+
+    await assert.rejects(
+      requestDocumentVoid({
+        documentId: quoteId,
+        orgId: org.orgId,
+        actorId,
+        reason: "Probe void fenced quote",
+        reversalDate: org.date,
+        source: "api",
+      }),
+      (error: unknown) =>
+        error instanceof DocumentVoidError
+        && /feeds .* reverse the downstream transaction first/.test(error.message),
+    );
+    const fenced = await db.execute<{
+      status: string;
+      void_requested_at: Date | null;
+    }>(sql`
+      select status, void_requested_at from documents
+       where id = ${quoteId} and org_id = ${org.orgId}
+    `);
+    assert.equal(fenced.rows[0]!.status, "approved");
+    assert.equal(fenced.rows[0]!.void_requested_at, null);
+
+    // With the downstream order voided, the quote itself voids cleanly.
+    const orderVoided = await requestDocumentVoid({
+      documentId: salesOrderId,
+      orgId: org.orgId,
+      actorId,
+      reason: "Downstream order cancelled",
+      reversalDate: org.date,
+      source: "api",
+    });
+    assert.equal(orderVoided.status, "voided");
+    const quoteVoided = await requestDocumentVoid({
+      documentId: quoteId,
+      orgId: org.orgId,
+      actorId,
+      reason: "Quote cancelled after order void",
+      reversalDate: org.date,
+      source: "api",
+    });
+    assert.equal(quoteVoided.status, "voided");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
