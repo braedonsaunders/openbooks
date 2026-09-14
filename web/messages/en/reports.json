@@ -465,7 +465,11 @@
     "entities": {
       "ledger_lines": {
         "label": "Ledger lines",
-        "description": "Every journal line with its entry, account, party and dimensions — the full general-ledger detail, posted or draft."
+        "description": "Every journal line with its entry, account, party and dimensions — the full general-ledger detail, posted or draft.",
+        "base_currency": "Functional currency",
+        "book": "Accounting book",
+        "book_code": "Book code",
+        "book_id": "Book ID"
       },
       "documents": {
         "label": "Transactions",
@@ -481,11 +485,15 @@
       },
       "transaction_lines": {
         "label": "Transaction lines",
-        "description": "Line-level transaction detail across every type — item, account, quantities, amounts, billing state and dimensions."
+        "description": "Line-level transaction detail across every type — item, account, quantities, amounts, billing state and dimensions.",
+        "currency": "Currency"
       },
       "journal_entries": {
         "label": "Journal entries",
-        "description": "Journal-entry headers — number, posting date, status, origin and memo."
+        "description": "Journal-entry headers — number, posting date, status, origin and memo.",
+        "book": "Accounting book",
+        "book_code": "Book code",
+        "book_id": "Book ID"
       },
       "items": {
         "label": "Items",

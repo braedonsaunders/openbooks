@@ -460,7 +460,11 @@
     "entities": {
       "ledger_lines": {
         "label": "Lignes du grand livre",
-        "description": "Détail des lignes d’écriture joint à l’écriture, au compte, au tiers et aux dimensions — le grand livre brut. Une ligne par ligne d’écriture de journal comptabilisée (ou en brouillon)."
+        "description": "Détail des lignes d’écriture joint à l’écriture, au compte, au tiers et aux dimensions — le grand livre brut. Une ligne par ligne d’écriture de journal comptabilisée (ou en brouillon).",
+        "base_currency": "Monnaie fonctionnelle",
+        "book": "Livre comptable",
+        "book_code": "Code du livre",
+        "book_id": "ID du livre"
       },
       "documents": {
         "label": "Transactions",
@@ -476,11 +480,15 @@
       },
       "transaction_lines": {
         "label": "Lignes de transaction",
-        "description": "Détail des transactions au niveau ligne, tous types confondus — article, compte, quantités, montants, état de facturation et dimensions."
+        "description": "Détail des transactions au niveau ligne, tous types confondus — article, compte, quantités, montants, état de facturation et dimensions.",
+        "currency": "Devise"
       },
       "journal_entries": {
         "label": "Écritures de journal",
-        "description": "En-têtes d’écritures — numéro, date de comptabilisation, statut, origine et mémo."
+        "description": "En-têtes d’écritures — numéro, date de comptabilisation, statut, origine et mémo.",
+        "book": "Livre comptable",
+        "book_code": "Code du livre",
+        "book_id": "ID du livre"
       },
       "items": {
         "label": "Articles",

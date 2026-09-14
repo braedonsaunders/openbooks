@@ -24,7 +24,7 @@ test("restricted assistant callers carry their subsidiary allowlist into every f
 test("unrestricted callers retain the explicit null-to-undefined sentinel", () => {
   assert.match(tools, /if \(authz\.allowedSubsidiaryIds === null\) return undefined/);
   assert.match(data, /subsidiaryVisibleFilter\([\s\S]*allowedSubsidiaryIds/);
-  assert.match(statements, /summaryAccountBalances\(resolvedOrgId, from, to, dims\?\.subsidiaryIds, bookId\)/);
+  assert.match(statements, /summaryAccountBalances\(resolvedOrgId, from, to, dims\?\.subsidiaryIds, bookId, PNL_TYPES\)/);
   assert.match(statements, /bucketSubsidiaryFilter\(dims\?\.subsidiaryIds\)/);
   assert.match(cashFlow, /bucketSubsidiaryFilter\(dims\?\.subsidiaryIds\)/);
 });

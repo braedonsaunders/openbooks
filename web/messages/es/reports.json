@@ -460,7 +460,11 @@
     "entities": {
       "ledger_lines": {
         "label": "Líneas del mayor",
-        "description": "Detalle de líneas de asiento unido a asiento, cuenta, tercero y dimensiones — el libro mayor en bruto. Una fila por línea de asiento contabilizada (o en borrador)."
+        "description": "Detalle de líneas de asiento unido a asiento, cuenta, tercero y dimensiones — el libro mayor en bruto. Una fila por línea de asiento contabilizada (o en borrador).",
+        "base_currency": "Moneda funcional",
+        "book": "Libro contable",
+        "book_code": "Código del libro",
+        "book_id": "ID del libro"
       },
       "documents": {
         "label": "Transacciones",
@@ -476,11 +480,15 @@
       },
       "transaction_lines": {
         "label": "Líneas de transacción",
-        "description": "Detalle de transacciones a nivel de línea para todos los tipos: artículo, cuenta, cantidades, importes, estado de facturación y dimensiones."
+        "description": "Detalle de transacciones a nivel de línea para todos los tipos: artículo, cuenta, cantidades, importes, estado de facturación y dimensiones.",
+        "currency": "Moneda"
       },
       "journal_entries": {
         "label": "Asientos de diario",
-        "description": "Encabezados de asientos: número, fecha de contabilización, estado, origen y nota."
+        "description": "Encabezados de asientos: número, fecha de contabilización, estado, origen y nota.",
+        "book": "Libro contable",
+        "book_code": "Código del libro",
+        "book_id": "ID del libro"
       },
       "items": {
         "label": "Artículos",
