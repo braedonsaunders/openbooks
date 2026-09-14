@@ -9,8 +9,10 @@ import {
   filedBoxAmounts,
   filedTotal,
   formDefinition,
+  formDefinitionForYear,
   INFORMATION_RETURN_FORMS,
   recipientExceptions,
+  statutoryFilingThreshold,
   summarizeRecipient,
   type PaymentTrace,
   type RecipientProfile,
@@ -328,6 +330,93 @@ test("fishing boat proceeds file at any amount", () => {
     filingThreshold: "600",
   });
   assert.equal(boat.belowThreshold, false);
+});
+
+test("the general threshold is $600 before 2026 and $2,000 from 2026", () => {
+  // OBBBA §70433 (payments made after 31 Dec 2025). Prior-year filings and
+  // corrections must keep judging the law that was in force then.
+  assert.equal(statutoryFilingThreshold("1099-NEC", 2025), "600");
+  assert.equal(statutoryFilingThreshold("1099-MISC", 2025), "600");
+  assert.equal(statutoryFilingThreshold("1099-NEC", 2026), "2000");
+  assert.equal(statutoryFilingThreshold("1099-MISC", 2026), "2000");
+  assert.equal(statutoryFilingThreshold("1099-NEC", 2027), "2000");
+  // Canada is untouched by the US reform.
+  assert.equal(statutoryFilingThreshold("T4A", 2025), "500");
+  assert.equal(statutoryFilingThreshold("T4A", 2026), "500");
+});
+
+test("the 2026 catalogue moves the general boxes but keeps the carve-outs", () => {
+  const misc2026 = formDefinitionForYear("1099-MISC", 2026);
+  const thresholdOf = (key: string) => misc2026.boxes.find((b) => b.key === key)?.threshold;
+  assert.equal(misc2026.defaultThreshold, "2000");
+  for (const key of ["misc1", "misc3", "misc6", "misc9", "misc11"]) {
+    assert.equal(thresholdOf(key), "2000", `${key} should follow the general threshold`);
+  }
+  // Statutory carve-outs: attorney gross proceeds stay at $600, royalties and
+  // substitute payments at $10, boat proceeds and withholding at any amount.
+  assert.equal(thresholdOf("misc10"), "600");
+  assert.equal(thresholdOf("misc2"), "10");
+  assert.equal(thresholdOf("misc8"), "10");
+  assert.equal(thresholdOf("misc5"), "0.01");
+  assert.equal(thresholdOf("misc4"), "0.01");
+  const nec2026 = formDefinitionForYear("1099-NEC", 2026);
+  assert.equal(nec2026.boxes.find((b) => b.key === "nec1")?.threshold, "2000");
+  assert.equal(nec2026.boxes.find((b) => b.key === "nec4")?.threshold, "0.01");
+  // 2025 catalogues are the old law, untouched.
+  assert.equal(formDefinitionForYear("1099-NEC", 2025).defaultThreshold, "600");
+  assert.equal(
+    formDefinitionForYear("1099-MISC", 2025).boxes.find((b) => b.key === "misc1")?.threshold,
+    "600",
+  );
+});
+
+test("a $1,500 NEC recipient files for 2025 but not for 2026", () => {
+  const paid = (form: typeof NEC) =>
+    summarizeRecipient({
+      form,
+      payments: [payment({ cash: "1500.0000" })],
+      boxByAccount: new Map([["acct-sub", "nec1"]]),
+      defaultBox: "nec1",
+      filingThreshold: form.defaultThreshold,
+    });
+  assert.equal(paid(formDefinitionForYear("1099-NEC", 2025)).belowThreshold, false);
+  assert.equal(paid(formDefinitionForYear("1099-NEC", 2026)).belowThreshold, true);
+});
+
+test("a $1,500 rents recipient files for 2025 but not for 2026", () => {
+  // The per-box threshold moves too: $1,500 of box-1 rents must not clear on
+  // its own under 2026 law even though the old $600 box threshold would fire.
+  const paid = (form: typeof MISC) =>
+    summarizeRecipient({
+      form,
+      payments: [
+        payment({
+          cash: "1500.0000",
+          bills: [{ documentId: "b", applied: "1500.0000", lines: [{ accountId: "rent", weight: "1500.0000" }] }],
+        }),
+      ],
+      boxByAccount: new Map([["rent", "misc1"]]),
+      defaultBox: "misc3",
+      filingThreshold: form.defaultThreshold,
+    });
+  assert.equal(paid(formDefinitionForYear("1099-MISC", 2025)).belowThreshold, false);
+  assert.equal(paid(formDefinitionForYear("1099-MISC", 2026)).belowThreshold, true);
+});
+
+test("a $700 attorney-gross-proceeds recipient still files for 2026", () => {
+  const paid = summarizeRecipient({
+    form: formDefinitionForYear("1099-MISC", 2026),
+    payments: [
+      payment({
+        cash: "700.0000",
+        bills: [{ documentId: "b", applied: "700.0000", lines: [{ accountId: "legal", weight: "700.0000" }] }],
+      }),
+    ],
+    boxByAccount: new Map([["legal", "misc10"]]),
+    defaultBox: "misc3",
+    filingThreshold: formDefinitionForYear("1099-MISC", 2026).defaultThreshold,
+  });
+  assert.equal(paid.belowThreshold, false);
 });
 
 test("any withholding at all makes a recipient reportable", () => {

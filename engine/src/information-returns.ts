@@ -148,6 +148,50 @@ export function formDefinition(formType: string): FormDefinition {
   return def;
 }
 
+/**
+ * Tax year the general 1099-MISC/1099-NEC reporting threshold moved from $600
+ * to $2,000 (OBBBA §70433, payments made after 31 Dec 2025; inflation-adjusted
+ * for years after 2026 — revisit when published figures exist). Thresholds are
+ * effective-dated because a 2025 filing (or correction) still judges $600.
+ */
+export const GENERAL_THRESHOLD_CHANGE_YEAR = 2026;
+const PRE_CHANGE_GENERAL_THRESHOLD = "600";
+const POST_CHANGE_GENERAL_THRESHOLD = "2000";
+
+/**
+ * Boxes that keep a $600-class statutory threshold after the general increase:
+ * gross proceeds paid to an attorney (MISC box 10) is unchanged by the reform.
+ * Every other $600 box (NEC box 1; MISC boxes 1, 3, 6, 9, 11) moves to $2,000.
+ * Category-specific rules — $10 royalties/substitute payments, any-amount
+ * fishing boat proceeds and backup withholding — are untouched whenever.
+ */
+const GENERAL_THRESHOLD_CARVE_OUTS: ReadonlySet<string> = new Set(["misc10"]);
+
+/** The statutory filing threshold for one form and tax year. */
+export function statutoryFilingThreshold(formType: FormType, taxYear: number): string {
+  const def = formDefinition(formType);
+  if (taxYear >= GENERAL_THRESHOLD_CHANGE_YEAR && def.defaultThreshold === PRE_CHANGE_GENERAL_THRESHOLD) {
+    return POST_CHANGE_GENERAL_THRESHOLD;
+  }
+  return def.defaultThreshold;
+}
+
+/** The statutory box catalogue as effective for one tax year. Pure: callers
+ * judging prior-year filings keep getting the thresholds that were law then. */
+export function formDefinitionForYear(formType: FormType, taxYear: number): FormDefinition {
+  const def = formDefinition(formType);
+  if (taxYear < GENERAL_THRESHOLD_CHANGE_YEAR) return def;
+  return {
+    ...def,
+    defaultThreshold: statutoryFilingThreshold(formType, taxYear),
+    boxes: def.boxes.map((box) =>
+      box.threshold === PRE_CHANGE_GENERAL_THRESHOLD && !GENERAL_THRESHOLD_CARVE_OUTS.has(box.key)
+        ? { ...box, threshold: POST_CHANGE_GENERAL_THRESHOLD }
+        : box,
+    ),
+  };
+}
+
 /** Corporations are outside 1099 reporting except for a handful of box types. */
 const CORPORATE_CLASSIFICATIONS: ReadonlySet<TaxClassification> = new Set<TaxClassification>([
   "c_corp",
@@ -739,7 +783,7 @@ export async function computeFiling(args: {
   runner?: Pick<typeof db, "execute">;
 }): Promise<FilingComputation> {
   const runner = args.runner ?? db;
-  const form = formDefinition(args.formType);
+  const form = formDefinitionForYear(args.formType, args.taxYear);
   const threshold = args.threshold ?? form.defaultThreshold;
   const [traces, boxByAccount] = await Promise.all([
     loadPaymentTraces({
@@ -1071,7 +1115,7 @@ export async function ensureFiling(args: {
   runner?: Pick<typeof db, "execute">;
 }): Promise<FilingRow> {
   const runner = args.runner ?? db;
-  const form = formDefinition(args.formType);
+  const form = formDefinitionForYear(args.formType, args.taxYear);
   const subsidiaryId = args.subsidiaryId ?? null;
   const existing = (await runner.execute<FilingRow>(sql`
     select id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",

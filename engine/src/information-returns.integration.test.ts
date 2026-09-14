@@ -55,7 +55,10 @@ async function seedComputedFiling(
       insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
       values (${partyId}, ${org.orgId}, 'vendor', ${`Recipient ${taxYear}-${i}`},
               null, true, '{}'::jsonb)`);
-    await seedInformationReturnPayment(org, actorId, `${1000 + i}`, `FIXTURE-${taxYear}-${i}`, {
+    // Above the current statutory filing threshold (OBBBA §70433: $2,000 from
+    // tax year 2026), so the two recipients compute as included — the status
+    // this fixture's contract promises.
+    await seedInformationReturnPayment(org, actorId, `${3000 + i}`, `FIXTURE-${taxYear}-${i}`, {
       partyId,
       taxYear,
       tinLast4: tins[i],
@@ -196,7 +199,7 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = (await seedFlowActors(org.orgId)).adminId;
-      const original = await seedInformationReturnPayment(org, actorId, "1000", "STALE-ORIGINAL");
+      const original = await seedInformationReturnPayment(org, actorId, "3000", "STALE-ORIGINAL");
       const filing = await ensureFiling({
         orgId: org.orgId,
         taxYear: 2026,
@@ -240,7 +243,7 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = (await seedFlowActors(org.orgId)).adminId;
-      const source = await seedInformationReturnPayment(org, actorId, "1000", "CURRENT");
+      const source = await seedInformationReturnPayment(org, actorId, "3000", "CURRENT");
       const filing = await ensureFiling({
         orgId: org.orgId,
         taxYear: 2026,
