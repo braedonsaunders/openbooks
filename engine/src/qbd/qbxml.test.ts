@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCapturePlan, calendarMonths, continueRequestXml, negotiateQbxmlVersion, parseReportRows, parseXml, responseStatus, xmlEscape } from "./qbxml.ts";
+import { buildCapturePlan, calendarMonths, continueRequestXml, negotiateQbxmlVersion, parseQbdReportDate, parseReportRows, parseXml, responseStatus, xmlEscape } from "./qbxml.ts";
 
 test("capture plan splits the ledger into bounded calendar months", () => {
   const through = new Date("2024-03-12T19:20:00Z");
@@ -11,6 +11,20 @@ test("capture plan splits the ledger into bounded calendar months", () => {
   assert.match(plan.find((r) => r.family === "ledger:2024-01")!.requestXml, /<FromReportDate>2024-01-15<\/FromReportDate>/);
   assert.match(plan.find((r) => r.family === "ledger:2024-03")!.requestXml, /<ToReportDate>2024-03-12<\/ToReportDate>/);
   assert.deepEqual(calendarMonths("2024-02-29", through)[0], { month: "2024-02", from: "2024-02-29", to: "2024-02-29" });
+});
+
+test("report dates normalize from QuickBooks display format to ISO", () => {
+  assert.equal(parseQbdReportDate("01/31/2024"), "2024-01-31");
+  assert.equal(parseQbdReportDate("1/5/2024"), "2024-01-05");
+  assert.equal(parseQbdReportDate("12/31/2023"), "2023-12-31");
+  assert.equal(parseQbdReportDate("02/29/2024"), "2024-02-29");
+  assert.equal(parseQbdReportDate("2024-01-31"), "2024-01-31");
+  assert.throws(() => parseQbdReportDate("02/29/2023"), /not a calendar date/);
+  assert.throws(() => parseQbdReportDate("13/01/2024"), /not a calendar date/);
+  assert.throws(() => parseQbdReportDate("2024-13-01"), /not a calendar date/);
+  assert.throws(() => parseQbdReportDate("01/31/24"), /not a recognized date/);
+  assert.throws(() => parseQbdReportDate(""), /not a recognized date/);
+  assert.throws(() => parseQbdReportDate(undefined), /not a recognized date/);
 });
 
 test("parser rejects DTD and entity declarations", () => {

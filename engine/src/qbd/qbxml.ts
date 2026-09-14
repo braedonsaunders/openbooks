@@ -118,6 +118,47 @@ export function continueRequestXml(requestXml: string, iteratorId: string): stri
   throw new Error("request is not iterator-capable");
 }
 
+/**
+ * Normalize a QuickBooks report cell date to an ISO calendar date.
+ *
+ * Report columns carry locale display strings (amounts arrive with thousands
+ * separators, dates as M/D/YYYY), while every downstream consumer — the native
+ * document contract, canonical change keys, month-bucketed verification —
+ * requires ISO yyyy-mm-dd. Passing the display string through stores a
+ * non-canonical date that can never match its own stored key (perpetual
+ * re-amendment) and breaks month slicing. Two-digit years are refused rather
+ * than guessed: a financial importer must not invent a century.
+ */
+export function parseQbdReportDate(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) {
+    if (!isCalendarDate(Number(iso[1]), Number(iso[2]), Number(iso[3]))) {
+      throw new Error(`QuickBooks report date is not a calendar date: "${raw}"`);
+    }
+    return raw;
+  }
+  const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (us) {
+    const year = Number(us[3]);
+    const month = Number(us[1]);
+    const day = Number(us[2]);
+    if (!isCalendarDate(year, month, day)) {
+      throw new Error(`QuickBooks report date is not a calendar date: "${raw}"`);
+    }
+    return `${us[3]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  throw new Error(`QuickBooks report date is not a recognized date: "${raw}"`);
+}
+
+function isCalendarDate(year: number, month: number, day: number): boolean {
+  if (!Number.isInteger(year) || year < 1 || year > 9999) return false;
+  if (!Number.isInteger(month) || month < 1 || month > 12) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]!;
+  return Number.isInteger(day) && day >= 1 && day <= days;
+}
+
 export function parseXml(xml: string): Record<string, unknown> {
   if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error("QuickBooks XML declarations may not define a DTD or entity");
   const parsed = parser.parse(xml) as unknown;

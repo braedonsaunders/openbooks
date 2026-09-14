@@ -1,5 +1,5 @@
 import { fromUnits, toUnits } from "../money.ts";
-import type { QbdReportRow } from "../qbd/qbxml.ts";
+import { parseQbdReportDate, type QbdReportRow } from "../qbd/qbxml.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 
 function cleanAmount(value: string | undefined): string {
@@ -27,6 +27,19 @@ export function buildQbdLedgerDocuments(input: {
   const unbuildable: { ref: string; reason: string }[] = [];
   for (const [txnId, transaction] of grouped) {
     const first = transaction.find((row) => row.columns.Date) ?? transaction[0]!;
+    // Report dates are locale display strings (M/D/YYYY); the native document
+    // requires ISO. A transaction with no parseable date cannot be posted to
+    // the right period, so it is refused per-transaction rather than mis-dated.
+    let documentDate: string | null = null;
+    try {
+      documentDate = first.columns.Date ? parseQbdReportDate(first.columns.Date) : null;
+    } catch {
+      documentDate = null;
+    }
+    if (!documentDate) {
+      unbuildable.push({ ref: txnId, reason: "ledger transaction has no parseable report date" });
+      continue;
+    }
     const lines: NativeDocument["lines"] = [];
     let sum = 0n;
     for (const row of transaction) {
@@ -67,7 +80,7 @@ export function buildQbdLedgerDocuments(input: {
       partyId: null,
       currency: input.baseCurrency,
       fxRate: "1",
-      documentDate: first.columns.Date!,
+      documentDate,
       dueDate: null,
       memo: first.columns.Memo || first.columns.TxnType || null,
       referenceNumber: first.columns.RefNumber || null,

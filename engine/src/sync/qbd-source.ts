@@ -3,7 +3,7 @@ import { businessToday, parseIsoDate } from "../business-date.ts";
 import { db } from "../db.ts";
 import { fromUnits, toUnits } from "../money.ts";
 import { latestWebConnectorHeartbeat, prepareCapture, releaseCapture, waitForCapture, type CaptureResponse } from "../qbd/bridge.ts";
-import { nodes, parseReportRows, parseXml } from "../qbd/qbxml.ts";
+import { nodes, parseQbdReportDate, parseReportRows, parseXml } from "../qbd/qbxml.ts";
 import type { NativeContext } from "./native.ts";
 import { allModules, fiscalYearsForRange, monthlySourcePeriods } from "./periods.ts";
 import { buildQbdLedgerDocuments } from "./qbd-native.ts";
@@ -307,8 +307,11 @@ export class QbdSource implements MigrationSource {
     for (const family of await this.ledgerFamilies()) {
       for (const row of await this.ledgerRows(family)) {
         const accountRef = byName.get(row.columns.Account ?? "");
-        const month = row.columns.Date?.slice(0, 7);
-        if (!accountRef || !month || !row.columns.TxnID) continue;
+        if (!accountRef || !row.columns.TxnID) continue;
+        // Report dates are locale display strings (M/D/YYYY); month buckets
+        // require ISO. Fail closed on an unparseable date rather than
+        // bucketing source truth into a garbage month.
+        const month = parseQbdReportDate(row.columns.Date).slice(0, 7);
         const amount = toUnits(cleanAmount(row.columns.Debit)) - toUnits(cleanAmount(row.columns.Credit));
         const key = `${accountRef}|${month}`;
         buckets.set(key, (buckets.get(key) ?? 0n) + amount);
