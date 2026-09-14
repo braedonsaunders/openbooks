@@ -230,7 +230,15 @@ export function parseRoeIssueParam(raw: string): RoeIssueInput[] {
       || !(ROE_REASON_CODES as readonly string[]).includes(reasonCode ?? "")) {
       throw new PayrollError("invalid employee selection");
     }
-    const text = decodeURIComponent(comment.join(":")).trim();
+    // The surface URI-encodes each comment; a hand-crafted body with a bare
+    // `%` or a truncated escape must fail as a malformed selection (422), not
+    // escape as a URIError past the route's error handling (500).
+    let text: string;
+    try {
+      text = decodeURIComponent(comment.join(":")).trim();
+    } catch {
+      throw new PayrollError("invalid employee selection");
+    }
     if (text.length > 500) throw new PayrollError("comment too long");
     issues.push({
       employeePartyId: employeePartyId!,
