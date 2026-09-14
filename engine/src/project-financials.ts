@@ -17,6 +17,22 @@ import { overheadRateAppliesToTimeEntry } from './overhead-apply.ts'
 
 const amount = (v: unknown): string => normalizeMoney(v == null ? '0' : String(v))
 
+/**
+ * Authoritative primary-book predicate over `journal_entries e`.
+ *
+ * Parallel books are alternate representations of the same economics, so an
+ * unqualified GL sum counts one event once per book (revenue 100 posted to
+ * the primary and tax books reads back as 200). Every posted-GL measure in
+ * this report therefore pins the same primary posting book the retainage
+ * balance (`projectRetainageHeldSql`: `is_primary and is_active and
+ * posts_gl`) and cost-to-cost progress (`project-revenue.ts`) already treat
+ * as authoritative. The default project financials have no book parameter,
+ * so primary-book parity is the contract — consistent headline and detail.
+ */
+function primaryBookSql(orgId: string): SQL {
+  return sql`e.book_id = (select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl)`
+}
+
 export interface ProjectFinancials {
   /** measure key → dollar value (marginPct is a percentage, not dollars). */
   measures: Record<string, string | number>
@@ -205,7 +221,8 @@ async function resolveProjectFinancialsInSnapshot(
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id and a.org_id = l.org_id
-       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')`),
+       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+         and ${primaryBookSql(orgId)}`),
     // committedCost — unbilled portion (by line amount) of open (approved)
     // orders. Uses amount × unbilled-fraction rather than qty×unit_price, since
     // migrated orders often carry the amount but no per-unit price.
@@ -306,7 +323,8 @@ async function resolveProjectFinancialsInSnapshot(
     // laborCost — resolved per profile source (payroll JE / time rate / group).
     profile.laborCost.source === 'payroll_je'
       ? db.execute(sql`select coalesce(sum(l.amount), 0) as labor from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-           where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed') and e.origin = 'labor_burden'`)
+           where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed') and e.origin = 'labor_burden'
+             and ${primaryBookSql(orgId)}`)
       : profile.laborCost.source === 'time_rate'
         ? db.execute(sql`select coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
              where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`)
@@ -320,7 +338,8 @@ async function resolveProjectFinancialsInSnapshot(
       ? db.execute(sql`select 0 as overhead`)
       : db.execute(sql`select coalesce(sum(l.amount) filter (where ${costPredicate(overheadCostSource, overheadIds)}), 0) as overhead
            from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id
-          where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')`),
+          where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+            and ${primaryBookSql(orgId)}`),
     // project approved labor hours (base for per-hour / rate-engine overhead).
     db.execute(sql`select coalesce(sum(te.hours), 0) as total,
              coalesce(sum(te.hours) filter (where te.is_billable), 0) as billed
@@ -331,6 +350,7 @@ async function resolveProjectFinancialsInSnapshot(
       select a.id as account_id, a.number, a.name, a.type, coalesce(sum(l.amount), 0) as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+         and ${primaryBookSql(orgId)}
          and ${costPredicate(profile.actualCost, costIds)}
        group by a.id, a.number, a.name, a.type having coalesce(sum(l.amount),0) <> 0 order by amount desc`),
     // documents on the project (transactions tab).
