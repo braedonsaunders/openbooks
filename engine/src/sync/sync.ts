@@ -266,7 +266,10 @@ export function unresolvedSourceDeletionCandidates(
 /** Compare every source AR/AP balance exactly, including closed zero-balance
  * documents. The target query must return a row for every imported source
  * document; a genuinely absent document remains a mismatch even when the
- * source balance is zero. */
+ * source balance is zero. The reverse also holds within the per-document
+ * truth scope: an open balance the source never lists is a divergence, not
+ * coverage — except a zero balance, which is exactly what a closed, voided,
+ * or paid document that the source no longer reports looks like. */
 export function verifyOpenItems(
   truth: readonly SourceOpenItem[],
   target: readonly SourceOpenItem[],
@@ -274,6 +277,7 @@ export function verifyOpenItems(
   const mineByRef = new Map(
     target.map((row) => [row.ref, toUnits(row.unpaid)]),
   );
+  const truthRefs = new Set(truth.map((item) => item.ref));
   const mismatches: NonNullable<SyncResult["openItems"]>["mismatches"] = [];
   let matches = 0;
   for (const item of truth) {
@@ -295,6 +299,16 @@ export function verifyOpenItems(
         theirs: fromUnits(wantAbs),
       });
     }
+  }
+  for (const row of target) {
+    if (truthRefs.has(row.ref)) continue;
+    const got = toUnits(row.unpaid);
+    if (got === 0n) continue;
+    mismatches.push({
+      ref: row.ref,
+      ours: fromUnits(got),
+      theirs: "not_in_source",
+    });
   }
   return {
     checked: matches + mismatches.length,
@@ -374,10 +388,16 @@ export async function verifyCurrentLedgerState(
   let openItems: SyncResult["openItems"] = null;
   if (source.openItems) {
     const truth = await source.openItems();
+    // Per-document unpaid truth covers the commercial AR/AP documents
+    // (invoices, bills, credits) — every connector's openItems() population.
+    // Settlement instruments (payments, deposits), journals, and transfers
+    // are proven through the application graph and trial balance instead; a
+    // residual there must never read as invoice-truth divergence.
     const mine = (await db.execute<SourceOpenItem>(sql`
       select custom->>${refKey} as ref, coalesce(open_balance, 0) as unpaid
         from documents
        where org_id = ${orgId} and custom->>${refKey} is not null
+         and kind in ('customer_invoice', 'vendor_bill', 'customer_credit', 'vendor_credit')
     `));
     openItems = verifyOpenItems(truth, mine.rows);
   }

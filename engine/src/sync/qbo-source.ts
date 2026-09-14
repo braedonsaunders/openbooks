@@ -1,7 +1,7 @@
 import { addCalendarDays, businessToday, parseIsoDate } from "../business-date.ts";
 import { QboClient } from "../qbo.ts";
 import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money.ts";
-import { buildNativeFromQbo, type QboBuildOpts, type QboTxn } from "./qbo-native.ts";
+import { buildNativeFromQbo, isQboVoided, qboVoidNote, type QboBuildOpts, type QboTxn } from "./qbo-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
   EntityStream, MigrationSource, NativeChanges, SourceEntity,
@@ -248,7 +248,7 @@ export class QboSource implements MigrationSource {
     for (const entity of ["Payment", "BillPayment"] as const) {
       const pays = await this.client.queryAll<QboTxn>(entity);
       for (const p of pays) {
-        if (/voided/i.test(p.PrivateNote ?? "")) continue;
+        if (isQboVoided(p)) continue;
         const rate = p.ExchangeRate && p.ExchangeRate > 0 ? p.ExchangeRate : 1;
         for (const l of p.Line ?? []) {
           const amt = mulDecimal(String(l.Amount ?? 0), String(rate));
@@ -325,13 +325,20 @@ export class QboSource implements MigrationSource {
   }
 
   async openItems(): Promise<SourceOpenItem[]> {
+    // Transaction-currency unpaid balances: documents.open_balance is
+    // denominated in the document currency (0100), and QBO Balance arrives in
+    // the transaction currency — the same basis the builder posts. Converting
+    // here would make every foreign-currency open item unverifiable.
     const out: SourceOpenItem[] = [];
     for (const entity of ["Invoice", "Bill", "CreditMemo", "VendorCredit"]) {
       const rows = await this.client.queryAll<{ Id: string; Balance?: number; ExchangeRate?: number; PrivateNote?: string }>(entity);
       for (const r of rows) {
-        if (/voided/i.test(r.PrivateNote ?? "")) continue;
-        const rate = r.ExchangeRate && r.ExchangeRate > 0 ? r.ExchangeRate : 1;
-        out.push({ ref: `${entity}:${r.Id}`, unpaid: formatMoney(mulDecimal(String(r.Balance ?? 0), String(rate)), 2) });
+        // The open-item rows carry no amount lines, so a voided transaction is
+        // recognized by the exact provider marker plus an OBSERVED zero
+        // balance. A missing balance proves nothing: the row stays covered at
+        // zero so a live document cannot drift silently.
+        if (qboVoidNote(r.PrivateNote) && r.Balance != null && Number(r.Balance) === 0) continue;
+        out.push({ ref: `${entity}:${r.Id}`, unpaid: formatMoney(String(r.Balance ?? 0), 2) });
       }
     }
     return out;
