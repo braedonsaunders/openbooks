@@ -591,7 +591,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
           base_currency = ${baseCurrency}, country = ${country},
           is_elimination = ${!!f.isElimination}, is_active = ${f.isActive !== false},
           custom = (${custom}::jsonb || subsidiaries.custom)
-            || jsonb_build_object(${refKey}, ${rec.sourceRef}),
+            || jsonb_build_object(${refKey}::text, ${rec.sourceRef}::text),
           updated_at = now()
          where id = ${id} and org_id = ${orgId}`);
       s.updated++;
@@ -649,7 +649,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       await db.execute(sql`update payment_terms set name=${name}, net_days=${netDays}, discount_days=${(f.discountDays as number) ?? null},
         discount_percent=${f.discountPercent == null || f.discountPercent === "" ? null : persistPaymentTermDiscountPercent(f.discountPercent)},
         custom=(${custom}::jsonb || payment_terms.custom)
-          || jsonb_build_object(${refKey}, ${rec.sourceRef})
+          || jsonb_build_object(${refKey}::text, ${rec.sourceRef}::text)
         where id=${id} and org_id=${orgId}`);
       s.updated++; return id;
     }
@@ -705,7 +705,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
         collected_account_id=coalesce(${collected}, collected_account_id),
         paid_account_id=coalesce(${paid}, paid_account_id),
         custom=(${taxCustom}::jsonb || tax_codes.custom)
-          || jsonb_build_object(${refKey}, ${rec.sourceRef})
+          || jsonb_build_object(${refKey}::text, ${rec.sourceRef}::text)
         where id=${id} and org_id=${orgId}`);
       await db.execute(sql`update tax_rates set rate_percent=${rate} where tax_code_id=${id} and org_id=${orgId}`);
       s.updated++; return id;
@@ -811,7 +811,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       website=coalesce(${str(f.website)}, website), legal_name=coalesce(${str(f.legalName)}, legal_name),
       tax_ids=${taxIds}::jsonb,
       custom=(${custom}::jsonb || parties.custom)
-        || jsonb_build_object(${refKey}, ${rec.sourceRef})
+        || jsonb_build_object(${refKey}::text, ${rec.sourceRef}::text)
       where id=${pid} and org_id=${orgId}`);
     s.updated++;
   } else {
