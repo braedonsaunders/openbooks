@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { toUnits } from "./money.ts";
 import {
   consumeFifo,
+  exactCostFragments,
   extendCost,
   issueMovingAverage,
   issueStandard,
@@ -14,6 +15,11 @@ import {
   toBaseQuantity,
   type CostLayer,
 } from "./inventory-costing.ts";
+import {
+  consumeOriginalCost,
+  splitOriginalCost,
+  sumOriginalCosts,
+} from "./inventory-original-cost.ts";
 import {
   buildAssembly,
   getOnHand,
@@ -138,6 +144,88 @@ test("standard-cost receipt yields a favorable (negative) variance when actual i
 
 test("standard-cost issue is always at standard", () => {
   assert.equal(issueStandard("7", "2.00"), "14.0000");
+});
+
+test("exactCostFragments conserves quantity and value with at most two adjacent rates", () => {
+  // 6 units carried at 10.0000: no single 4dp rate represents 1.6666…,
+  // so the value splits into adjacent-rate fragments that sum back exactly.
+  const frags = exactCostFragments("6", "10.0000");
+  assert.ok(frags.length <= 2, `expected at most 2 fragments, got ${frags.length}`);
+  assert.equal(frags.reduce((a, f) => a + toUnits(f.quantity), 0n), toUnits("6"));
+  const value = frags.reduce((a, f) => a + toUnits(extendCost(f.quantity, f.unitCost)), 0n);
+  assert.equal(value, toUnits("10.0000"));
+  const rates = frags.map((f) => toUnits(f.unitCost)).sort((a, b) => (a < b ? -1 : 1));
+  assert.ok(rates[rates.length - 1]! - rates[0]! <= 1n, `rates must be adjacent: ${JSON.stringify(frags)}`);
+});
+
+test("exactCostFragments keeps a representable source rate intact", () => {
+  assert.deepEqual(exactCostFragments("4", "5.3332", "1.3333"), [
+    { quantity: "4.0000", unitCost: "1.3333" },
+  ]);
+  // 3 × 1.3333 extends to 3.9999, not 4.0000, so the source rate is
+  // correctly rejected in favor of an exact adjacent-rate split.
+  assert.deepEqual(exactCostFragments("3", "4.0000", "1.3333"), [
+    { quantity: "2.0000", unitCost: "1.3333" },
+    { quantity: "1.0000", unitCost: "1.3334" },
+  ]);
+});
+
+test("exactCostFragments conserves a one-cent residual across adjacent-rate fragments", () => {
+  // The pool's extra cent must survive its representation as 4dp rates.
+  const frags = exactCostFragments("3", "3.0100");
+  assert.equal(frags.length, 2);
+  const value = frags.reduce((a, f) => a + toUnits(extendCost(f.quantity, f.unitCost)), 0n);
+  assert.equal(value, toUnits("3.0100"));
+  assert.equal(frags.reduce((a, f) => a + toUnits(f.quantity), 0n), toUnits("3"));
+});
+
+test("FIFO partial-then-remainder costs exactly the full drain (layer-value reduction)", () => {
+  const ls: CostLayer[] = [
+    { id: "a", remaining: "3", unitCost: "1.3333" },
+    { id: "b", remaining: "2", unitCost: "7.7777" },
+  ];
+  const full = consumeFifo(ls.map((l) => ({ ...l })), "5", "0");
+  const first = consumeFifo(ls.map((l) => ({ ...l })), "4", "0");
+  // Rebuild remainders exactly in units to avoid float parsing.
+  const rem = ls.map((l) => {
+    const c = first.consumptions.find((x) => x.layerId === l.id);
+    const taken = c ? toUnits(c.quantity) : 0n;
+    return { ...l, remaining: `${(toUnits(l.remaining) - taken) / 10_000n}.${String((toUnits(l.remaining) - taken) % 10_000n).padStart(4, "0")}` };
+  }).filter((l) => toUnits(l.remaining) > 0n);
+  const second = consumeFifo(rem, "1", "0");
+  assert.equal(toUnits(first.totalCost) + toUnits(second.totalCost), toUnits(full.totalCost));
+});
+
+test("moving-average two-step issue conserves the pool value exactly", () => {
+  const s = { quantity: "3", value: "10" };
+  const a = issueMovingAverage(s, "1");
+  const b = issueMovingAverage(a.state, a.state.quantity);
+  assert.equal(toUnits(a.cost) + toUnits(b.cost), toUnits("10"));
+  assert.equal(b.state.quantity, "0.0000");
+  assert.equal(b.state.value, "0.0000");
+});
+
+test("splitOriginalCost conserves the basis and covers every carrying fragment", () => {
+  // Weighted rounding alone would leave the third fragment a tick below its
+  // carrying value; the fixup moves only the necessary basis between the
+  // representational fragments, conserving the total.
+  const shares = splitOriginalCost("10.0000", ["1", "1", "1"], ["3.3333", "3.3333", "3.3334"]);
+  assert.deepEqual(shares, ["3.3333", "3.3333", "3.3334"]);
+  const basis = "42.5000";
+  const qs = ["2.5000", "1.2500", "0.7500"];
+  const out = splitOriginalCost(basis, qs);
+  assert.equal(out.reduce((a, s) => a + toUnits(s!), 0n), toUnits(basis));
+  assert.ok(out.every((s) => s != null && toUnits(s) >= 0n));
+});
+
+test("consumeOriginalCost relieves weighted basis and the retained balance owns the residual", () => {
+  const first = consumeOriginalCost("10.0000", "1", "3");
+  assert.equal(first, "3.3333");
+  const retained = splitOriginalCost("10.0000", ["1", "2"]);
+  assert.equal(toUnits(retained[0]!) + toUnits(retained[1]!), toUnits("10.0000"));
+  assert.equal(sumOriginalCosts([retained[0]!, retained[1]!]), "10.0000");
+  assert.equal(sumOriginalCosts(["1.0000", null]), null);
+  assert.throws(() => consumeOriginalCost("10.0000", "4", "3"), /invalid original-cost quantity/);
 });
 
 test("unitCostPerQuantity is half-up so 6 @ 10.0000 is 1.6667, not truncated 1.6666", () => {
