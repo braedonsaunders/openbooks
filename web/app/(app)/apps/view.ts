@@ -90,7 +90,7 @@ export async function loadAppsLauncher(
     title: t('title'),
     description: t('description'),
     searchPlaceholder: t('searchPlaceholder'),
-    docsHref: '/docs/extensions',
+    docsHref: '/docs/app-authoring',
     manageLabel: t('actions.manage'),
     docsLabel: t('actions.documentation'),
     libraryHref: '/apps/library',
@@ -158,7 +158,7 @@ export function appsLauncherSpec(data: AppsLauncherData): PageSpec {
         title: f('title'),
         description: f('description'),
         actions: [
-          widget('link-button', { href: '/admin/extensions', label: data.manageLabel, variant: 'outline', size: 'sm' }, f('canManage')),
+          widget('link-button', { href: '/admin/apps', label: data.manageLabel, variant: 'outline', size: 'sm' }, f('canManage')),
           widget('apps-launcher-button', {
             href: data.docsHref,
             label: data.docsLabel,

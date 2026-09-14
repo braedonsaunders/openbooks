@@ -755,8 +755,8 @@ export const NAV_MODULES: NavModule[] = [
   },
   {
     key: 'admin-extensions',
-    href: '/admin/extensions',
-    label: 'Extensions',
+    href: '/admin/apps',
+    label: 'Apps',
     iconKey: 'package',
     group: 'settings',
     subgroup: 'extend',

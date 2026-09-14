@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Play, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import CodeMirror from '@uiw/react-codemirror'
-import { javascript } from '@codemirror/lang-javascript'
+import { CodeEditor } from '@/components/code-editor'
 import { Badge, Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import { dateTime } from '../../../../lib/format'
 import { BUILT_IN_SCRIPT_KINDS, customRecordKind } from '../../../../lib/script-kinds'
@@ -405,17 +404,7 @@ export function ScriptDrawer({
                 {t('drawer.source')}{' '}
                 <span className="font-normal text-slate-400">{t('drawer.sourceHint')}</span>
               </Label>
-              <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
-                <CodeMirror
-                  value={source}
-                  onChange={(v) => setSource(v)}
-                  extensions={[javascript()]}
-                  theme="dark"
-                  minHeight="420px"
-                  maxHeight="640px"
-                  basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: true }}
-                />
-              </div>
+              <CodeEditor value={source} onChange={setSource} />
             </div>
           ) : null}
 

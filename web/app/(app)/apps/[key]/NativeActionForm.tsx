@@ -33,7 +33,7 @@ export function NativeActionForm({ appKey, versionId, screen, preview }: {
       if (screen.confirmation && !(await confirmDialog({ title: screen.title, message: screen.confirmation }))) return
       setError(''); setMessage('')
       invocation.current ??= crypto.randomUUID()
-      const response = await fetch(`/api/extensions/${encodeURIComponent(appKey)}/actions`, {
+      const response = await fetch(`/api/apps/${encodeURIComponent(appKey)}/actions`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ screenKey: screen.key, versionId, invocationId: invocation.current, input }),
       })

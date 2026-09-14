@@ -1,0 +1,57 @@
+import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import { NextResponse } from 'next/server'
+import { can } from '@/lib/authz'
+import { guardFeaturePermission } from '@/lib/feature-gates'
+import { isUuid } from '@/lib/list-params'
+import { runBridgeMethod } from '@/lib/apps/store'
+
+export const runtime = 'nodejs'
+
+/**
+ * POST — relay a single bridge call from a sandboxed App frontend. The AppFrame
+ * forwards { method, payload } here; this route re-authenticates the real user,
+ * enforces apps.use, and (for records) enforces app-granted ∩ user permissions
+ * before running anything. The sandbox never reaches the DB except through the
+ * org-scoped adapters wired in runBridgeMethod.
+ */
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ key: string }> },
+) {
+  const gate = await guardFeaturePermission('apps.use', 'apps')
+  if (gate instanceof NextResponse) return gate
+  const { key } = await params
+  const parsedBody = await parseJsonBody(req, jsonObject)
+  if (!parsedBody.ok) return parsedBody.response
+  const body = parsedBody.data as {
+    method?: string
+    payload?: unknown
+    versionId?: string
+  }
+  if (typeof body.method !== 'string') {
+    return NextResponse.json({ error: 'method required' }, { status: 400 })
+  }
+
+  if (
+    body.versionId !== undefined &&
+    (typeof body.versionId !== 'string' || !isUuid(body.versionId))
+  )
+    return NextResponse.json({ error: 'Invalid app version' }, { status: 400 })
+  const res = await runBridgeMethod({
+    orgId: gate.user.orgId,
+    user: gate.user,
+    key,
+    expectedVersionId: body.versionId,
+    method: body.method,
+    payload: body.payload ?? {},
+    userCan: (perm) => can(gate, perm),
+    allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+  })
+
+  if (!res.ok)
+    return NextResponse.json(
+      { ok: false, error: res.error },
+      { status: res.status },
+    )
+  return NextResponse.json({ ok: true, result: res.result })
+}

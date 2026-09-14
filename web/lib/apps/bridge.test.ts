@@ -84,3 +84,16 @@ test('APP_CSP locks down default-src and blocks app network', () => {
   assert.match(APP_CSP, /default-src 'none'/)
   assert.match(APP_CSP, /connect-src 'none'/)
 })
+
+test('inlineDocument resolves script and stylesheet references relative to the HTML entry file', () => {
+  const document = inlineDocument('<html><head><link href="./styles.css"></head><body><script src="app.js"></script></body></html>', { 'frontend/styles.css':'data:text/css;base64,eA==', 'frontend/app.js':'data:text/javascript;base64,eQ==' }, '<meta name="test">', 'frontend/index.html')
+  assert.ok(document.includes('href="data:text/css;base64,eA=="'))
+  assert.ok(document.includes('src="data:text/javascript;base64,eQ=="'))
+})
+
+test('relative frontend references prefer their own directory over same-named root assets',()=>{
+  const result=inlineDocument('<script src="./app.js"></script><img src="../assets/icon.png"><a href="https://example.test">External</a>',{'app.js':'ROOT','frontend/app.js':'LOCAL','assets/icon.png':'ICON'},'', 'frontend/index.html')
+  assert.ok(result.includes('src="LOCAL"'))
+  assert.ok(result.includes('src="ICON"'))
+  assert.ok(result.includes('href="https://example.test"'))
+})

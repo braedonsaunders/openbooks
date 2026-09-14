@@ -172,3 +172,53 @@ test('native action packages reject undeclared endpoints and invalid shared fiel
     assert.equal(await getAppByKey(org.orgId, example.manifest.key), null)
   } finally { await dropScratchOrg(org.orgId) }
 }))
+
+test('management editor refuses stale installed versions and replaced drafts without discarding the current proposal', { skip: !env.OPENBOOKS_DB_URL }, async () => withBypassContext(async () => {
+  const { org, context } = await fixture()
+  try {
+    const { createAppStarter } = await import('../apps/starter')
+    const bundle = createAppStarter('sandbox')
+    const first = await draftExtension(context,{bundle,reason:'Initial package',expectedBaseVersionId:null})
+    const next = await draftExtension(context,{bundle,reason:'Edited package',expectedBaseVersionId:null,sourceDraft:{id:first.draftId,contentHash:first.contentHash}})
+    await assert.rejects(()=>draftExtension(context,{bundle,reason:'Stale editor',expectedBaseVersionId:null,sourceDraft:{id:first.draftId,contentHash:first.contentHash}}),/draft has changed/)
+    assert.equal((await getExtensionDraft(context,next.draftId)).status,'draft')
+    await activateExtensionDraft(context,next)
+    await assert.rejects(()=>draftExtension(context,{bundle,reason:'Stale new app',expectedBaseVersionId:null}),/changed while you were editing/)
+    const current=await getAppByKey(org.orgId,'my-app')
+    const { getFrontendBundle, runBridgeMethod } = await import('../apps/store')
+    await assert.rejects(() => getFrontendBundle(org.orgId, current!.key, randomUUID()), /version changed/)
+    const staleBridge = await runBridgeMethod({ orgId: org.orgId, user: context.authz.user, key: current!.key, method: 'storage.set', payload: { key: 'stale-write', value: true }, expectedVersionId: randomUUID(), userCan: () => true, allowedSubsidiaryIds: null })
+    assert.equal(staleBridge.ok, false)
+    if (!staleBridge.ok) assert.equal(staleBridge.status, 409)
+    assert.equal((await db.execute(sql`select id from app_storage where org_id=${org.orgId} and app_id=${current!.id}`)).rows.length, 0)
+    const revision=await draftExtension(context,{bundle:{...bundle,manifest:{...current!.manifest,version:'1.0.1'}},reason:'Current editor',expectedBaseVersionId:current!.activeVersionId})
+    assert.equal((await getExtensionDraft(context,revision.draftId)).status,'draft')
+  } finally { await dropScratchOrg(org.orgId) }
+}))
+
+test('library publication and withdrawal preserve package evidence and reject another organization', { skip: !env.OPENBOOKS_DB_URL }, async () => withBypassContext(async () => {
+  const { org, context } = await fixture()
+  const foreign = await fixture()
+  try {
+    const { createAppStarter } = await import('../apps/starter')
+    const { publishApp, unpublishApp, isAppPublished } = await import('../apps/store')
+    const source=createAppStarter('sandbox')
+    const key=`library-${randomUUID()}`
+    const bundle={...source,manifest:{...source.manifest as Record<string,unknown>,key}}
+    const draft=await draftExtension(context,{bundle,reason:'Library lifecycle verification'})
+    await activateExtensionDraft(context,draft)
+    const listing=await publishApp(org.orgId,context.authz.user.id,key)
+    assert.equal(await isAppPublished(key,org.orgId),true)
+    await assert.rejects(()=>unpublishApp(foreign.org.orgId,foreign.context.authz.user.id,key),/owned by this organization/)
+    assert.equal(await isAppPublished(key,org.orgId),true)
+    await unpublishApp(org.orgId,context.authz.user.id,key)
+    assert.equal(await isAppPublished(key,org.orgId),false)
+    assert.equal((await getAppByKey(org.orgId,key))?.status,'installed')
+    const evidence=(await db.execute<{changes:Record<string,unknown>;actor_id:string}>(sql`select changes,actor_id from audit_log where org_id=${org.orgId} and table_name='app_listings' and row_id=${listing.id} order by at,id`)).rows
+    assert.equal(evidence.length,2)
+    assert.ok(evidence.every(row=>row.actor_id===context.authz.user.id))
+    assert.equal(evidence[0]!.changes.event,'app_listing_published')
+    assert.equal(evidence[1]!.changes.event,'app_listing_withdrawn')
+    assert.equal(((evidence[0]!.changes.after as {files:unknown[]}).files).length,3)
+  } finally { await dropScratchOrg(foreign.org.orgId); await dropScratchOrg(org.orgId) }
+}))

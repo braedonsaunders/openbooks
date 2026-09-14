@@ -23,7 +23,7 @@ const bundleSchema = z.object({
 
 export async function requireExtensionAuthor(context: ApplicationContext) {
   if (!can(context.authz, 'apps.manage') || !can(context.authz, 'admin.customization.manage')) throw forbidden('apps.manage and admin.customization.manage')
-  if (!(await isFeatureEnabled(context.authz.user.orgId, 'apps'))) throw notFound('extensions')
+  if (!(await isFeatureEnabled(context.authz.user.orgId, 'apps'))) throw notFound('apps')
 }
 
 /** One validation path for the agent, draft store, review and activation. */
@@ -31,7 +31,7 @@ export function validateExtensionBundle(input: unknown): UploadBundle {
   const shape = bundleSchema.safeParse(input)
   if (!shape.success) throw invalidInput(shape.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; '))
   const bundle = shape.data
-  if (Buffer.byteLength(JSON.stringify(bundle), 'utf8') > 10 * 1024 * 1024) throw invalidInput('Extension package exceeds 10 MB')
+  if (Buffer.byteLength(JSON.stringify(bundle), 'utf8') > 10 * 1024 * 1024) throw invalidInput('App package exceeds 10 MB')
   const parsed = parseManifest(bundle.manifest)
   if (!parsed.ok || !parsed.manifest) throw invalidInput(parsed.errors.join('; '))
   const manifest = parsed.manifest
@@ -47,7 +47,7 @@ export function validateExtensionBundle(input: unknown): UploadBundle {
       if (ui.screens.some(screen => screen.kind === 'records') && !manifest.permissions.includes('records.read')) errors.push('Native record screens require records.read')
     } catch (error) { errors.push(error instanceof Error ? error.message : 'Invalid native UI') }
   }
-  if (manifest.permissions.some(permission => !APP_PLATFORM_PERMISSIONS.includes(permission))) errors.push('Unknown extension permission')
+  if (manifest.permissions.some(permission => !APP_PLATFORM_PERMISSIONS.includes(permission))) errors.push('Unknown app permission')
   const granted = bundle.grantedPermissions ?? manifest.permissions
   if (granted.some(permission => !manifest.permissions.includes(permission))) errors.push('Granted permissions must be requested by the package')
   if (errors.length) throw invalidInput(errors.join('; '))
@@ -60,7 +60,7 @@ export async function getExtensionDraft(context: ApplicationContext, id: string)
   await requireExtensionAuthor(context)
   const row = (await db.execute<ExtensionDraft>(sql`select id,extension_key,bundle,content_hash,base_version_id,reason,status,created_at
     from extension_drafts where org_id=${context.authz.user.orgId} and created_by=${context.authz.user.id} and id=${id}`)).rows[0]
-  if (!row) throw notFound('extension draft')
+  if (!row) throw notFound('app draft')
   const previous = row.base_version_id ? (await db.execute<{ path: string; content: string; isBinary: boolean }>(sql`
     select path,content,is_binary as "isBinary" from app_files where org_id=${context.authz.user.orgId} and version_id=${row.base_version_id}`)).rows : []
   const previousManifest = row.base_version_id ? (await db.execute<{ manifest: unknown }>(sql`select manifest from app_versions where org_id=${context.authz.user.orgId} and id=${row.base_version_id}`)).rows[0]?.manifest : undefined
@@ -75,21 +75,26 @@ export async function getExtensionDraft(context: ApplicationContext, id: string)
   return row
 }
 
-export async function draftExtension(context: ApplicationContext, input: { bundle: unknown; reason: string }) {
+export async function draftExtension(context: ApplicationContext, input: { bundle: unknown; reason: string; expectedBaseVersionId?: string | null; sourceDraft?: { id: string; contentHash: string } }) {
   await requireExtensionAuthor(context)
   const bundle = validateExtensionBundle(input.bundle)
   const manifest = parseManifest(bundle.manifest).manifest!
   const reason = input.reason.trim()
   if (!reason || reason.length > 2000) throw invalidInput('A 1–2000 character reason is required')
-  const app = await getAppByKey(context.authz.user.orgId, manifest.key)
   const hash = requestHash(bundle)
   const row = await db.transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'extension-package:' + context.authz.user.orgId + ':' + manifest.key}, 0))`)
+    const app = (await tx.execute<{ activeVersionId: string | null }>(sql`select active_version_id as "activeVersionId" from apps where org_id=${context.authz.user.orgId} and key=${manifest.key} for update`)).rows[0]
+    if (input.expectedBaseVersionId !== undefined && input.expectedBaseVersionId !== (app?.activeVersionId ?? null)) throw conflict('This app changed while you were editing. Reload its current version before preparing a draft.')
+    if (input.sourceDraft) {
+      const source = (await tx.execute<{ id: string }>(sql`select id from extension_drafts where id=${input.sourceDraft.id} and content_hash=${input.sourceDraft.contentHash} and org_id=${context.authz.user.orgId} and created_by=${context.authz.user.id} and extension_key=${manifest.key} and status='draft' for update`)).rows[0]
+      if (!source) throw conflict('This draft has changed or closed. Reload it before saving another revision.')
+    }
     await tx.execute(sql`update extension_drafts set status='discarded' where org_id=${context.authz.user.orgId} and created_by=${context.authz.user.id} and extension_key=${manifest.key} and status='draft'`)
     return (await tx.execute<{ id: string }>(sql`insert into extension_drafts(org_id,created_by,extension_key,bundle,content_hash,base_version_id,reason)
       values(${context.authz.user.orgId},${context.authz.user.id},${manifest.key},${JSON.stringify(bundle)}::jsonb,${hash},${app?.activeVersionId ?? null},${reason}) returning id`)).rows[0]!
   })
-  return { draftId: row.id, contentHash: hash, key: manifest.key, status: 'draft', reviewUrl: `/admin/extensions?draft=${row.id}`, previewUrl: `/admin/extensions/preview/${row.id}`, requestedPermissions: manifest.permissions, activated: false }
+  return { draftId: row.id, contentHash: hash, key: manifest.key, status: 'draft', reviewUrl: `/admin/apps?draft=${row.id}`, previewUrl: `/admin/apps/preview/${row.id}`, requestedPermissions: manifest.permissions, activated: false }
 }
 
 export async function activateExtensionDraft(context: ApplicationContext, input: { draftId: string; contentHash: string }) {
@@ -100,7 +105,7 @@ export async function activateExtensionDraft(context: ApplicationContext, input:
   for (const permission of manifest.permissions) if (!can(context.authz, permission)) throw forbidden(permission)
   try {
     const installed = await withOrgTransaction(context.authz.user.orgId, () => withTransactionSavepoint(db, () => installApp(context.authz.user.orgId, context.authz.user.id, bundle, { id: draft.id, hash: draft.content_hash })))
-    return { ...installed, activated: true, reviewUrl: `/admin/extensions?extension=${installed.key}`, openUrl: `/apps/${installed.key}` }
+    return { ...installed, activated: true, reviewUrl: `/admin/apps?app=${installed.key}`, openUrl: `/apps/${installed.key}` }
   } catch (error) {
     if (error instanceof AppError || error instanceof ExtensionProjectionError) throw conflict(error.message)
     if (error instanceof z.ZodError) throw conflict(error.issues.map(issue=>issue.message).join('; '))
@@ -112,21 +117,21 @@ export async function describeExtensionVocabulary(context: ApplicationContext) {
   await requireExtensionAuthor(context)
   return {
     preferredRenderer: 'native',
-    workflow: ['describe_extension_vocabulary', 'draft_extension', 'get_extension_draft', 'activate_extension_draft'],
+    workflow: ['describe_app_vocabulary', 'draft_app', 'get_app_draft', 'activate_app_draft'],
     rules: [
-      'Use list_extensions to discover installed packages. There is one package store and one version/review lifecycle for every renderer and contribution.',
+      'Use list_app_packages to discover installed packages. There is one package store and one version/review lifecycle for every renderer and contribution.',
       'manifest.contributions supports page (route, spec, scope org), nav (href, label, group), setting (key, label, valueType, defaultValue), and permission (key, label). Page and nav require admin.customization.manage; settings require admin.setup.manage; permission definitions require admin.roles.manage. Contributions and objects activate atomically with backend files. Do not invent unsupported contribution kinds.',
-      'To restore an earlier package, read its version with get_extension_package and prepare a new reviewed revision. Never mutate an active or historical version in place.',
-      'Build an extension package, not a repository patch. It runs without a deployment of OpenBooks.',
+      'To restore an earlier package, read its version with get_app_package and prepare a new reviewed revision. Never mutate an active or historical version in place.',
+      'Build an app package using the governed platform services. It runs without a deployment of OpenBooks.',
       'Prefer native UI screens composed from the host page vocabulary and records workspaces. Only link-button widgets are supported in native page screens; record screens use the native records loader, permissions, audience, filters and drawers.',
       'Native frontend entry is a JSON document with screens. Each screen has key, title and kind page (spec: PageSpec) or records (typeKey: a published custom-record key), or action (endpoint: declared POST/ANY endpoint name, fields: shared FormSection[], submitLabel, optional description and confirmation).',
       'objects/*.json files can provision owned record_type or custom_field definitions atomically with the package. Existing foreign-owned objects cannot be overwritten. Existing data is preserved during upgrades and removal.',
       'Native action forms submit {input, invocationId} to the declared backend. Use ob.platform.create/update for governed records, ob.storage for package state and ob.journal for controlled posting. Return {message} for a user-readable result. Throw to roll back a failed operation; do not return an error status after writes. Transport retries replay the same invocation; another submission gets a new ID.',
       'Record types use existing custom-record storage; never create SQL tables, run DDL, or request database credentials. Custom fields extend supported platform records through the same controlled definition system.',
       'Backend endpoints run in the existing sandbox and use the governed host API; they never receive direct database credentials. Sandboxed HTML UI remains available with frontend.renderer sandbox.',
-      'draft_extension stores an immutable author-owned proposal and returns review/preview URLs. It does not install objects, run backend code, or activate anything.',
+      'draft_app stores an immutable author-owned proposal and returns review/preview URLs. It does not install objects, run backend code, or activate anything.',
       'Preview uses local form samples for proposed record types and never executes draft backend actions or changes live records. Rehearse stateful backend behavior in a configured organization sandbox.',
-      'Request explicit user approval of the returned draft before activate_extension_draft. Activation binds its exact hash and base version. Never replace it with a direct install to bypass a stale-draft refusal.',
+      'Request explicit user approval of the returned draft before activate_app_draft. Activation binds its exact hash and base version. Never replace it with a direct install to bypass a stale-draft refusal.',
       'Version labels are unique. Read the existing package before upgrading, preserve its owned objects and fields, and append a version.',
     ],
     permissions: APP_PLATFORM_PERMISSIONS,
@@ -138,17 +143,17 @@ export async function describeExtensionVocabulary(context: ApplicationContext) {
         { path: 'objects/checks.json', content: JSON.stringify({ type: 'record_type', key: 'equipment-check', name: 'Equipment check', pluralName: 'Equipment checks', fields: [{ id: 'details', title: 'Details', fields: [{ id: 'equipment', type: 'text', label: 'Equipment', required: true }, { id: 'notes', type: 'long_text', label: 'Notes' }] }] }) },
       ],
     },
-    documentation: '/docs/extensions',
+    documentation: '/docs/app-authoring',
   }
 }
 
 export async function getExtensionPackage(context: ApplicationContext, input: { key: string; versionId?: string }) {
   await requireExtensionAuthor(context)
   const app = await getAppByKey(context.authz.user.orgId, input.key)
-  if (!app) throw notFound('extension')
+  if (!app) throw notFound('app')
   const version = (await db.execute<{ id: string; manifest: unknown }>(sql`select id,manifest from app_versions
     where org_id=${context.authz.user.orgId} and app_id=${app.id} and id=${input.versionId ?? app.activeVersionId}`)).rows[0]
-  if (!version) throw notFound('extension version')
+  if (!version) throw notFound('app version')
   const files = (await db.execute<{ path: string; content: string; isBinary: boolean }>(sql`select path,content,is_binary as "isBinary" from app_files
     where org_id=${context.authz.user.orgId} and app_id=${app.id} and version_id=${version.id} order by path`)).rows
   return { key: input.key, versionId: version.id, bundle: { manifest: version.manifest, files, grantedPermissions: app.grantedPermissions } }
@@ -168,7 +173,7 @@ export async function discardExtensionDraft(context: ApplicationContext, input: 
 
 export async function listExtensions(context: ApplicationContext) {
   await requireExtensionAuthor(context)
-  return { extensions: (await listApps(context.authz.user.orgId)).map(app => ({ key: app.key, name: app.name, status: app.status, version: app.version, reviewUrl: `/admin/extensions?extension=${app.key}`, openUrl: `/apps/${app.key}` })) }
+  return { extensions: (await listApps(context.authz.user.orgId)).map(app => ({ key: app.key, name: app.name, status: app.status, version: app.version, reviewUrl: `/admin/apps?app=${app.key}`, openUrl: `/apps/${app.key}` })) }
 }
 
 /** Reuse the author-scoped native page preview; never install the package to preview it. */
@@ -176,6 +181,6 @@ export async function previewExtensionPage(context: ApplicationContext, input: {
   const draft = await getExtensionDraft(context,input.draftId)
   const manifest = parseManifest(validateExtensionBundle(draft.bundle).manifest).manifest!
   const page = manifest.contributions?.find(item=>item.kind==='page' && item.route===input.route)
-  if (!page || page.kind!=='page') throw notFound('extension page contribution')
+  if (!page || page.kind!=='page') throw notFound('app page contribution')
   return previewLayout(context,{route:page.route,spec:page.spec,params:input.params})
 }

@@ -75,7 +75,7 @@ const ROUTE = z.string().regex(/^\/[A-Za-z0-9\-_/[\]().]*$/).max(120)
 const LAYOUT_SPEC = z.unknown()
   .describe("A ViewSpec PageSpec document. Call validate_page_layout first; errors name the offending widget or path.");
 const EXTENSION_KEY = z.string().regex(/^[a-z][a-z0-9-]*$/).max(64)
-  .describe("Extension package key, e.g. equipment-checks.");
+  .describe("App package key, e.g. equipment-checks.");
 const CUSTOM = z.record(z.string(), z.unknown());
 const DOCUMENT_REVISION = z.string()
   .regex(new RegExp(DOCUMENT_REVISION_PATTERN), "must be the exact persisted document updated_at token")
@@ -355,43 +355,43 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     execute: async (context, input) => ({ ok: true, ...await clearLayout(context, input) }),
   }),
   definition({
-    name: "list_extensions", title: "List Extensions",
-    description: "List this organization's extension packages, their active versions, status, management and workspace links.",
+    name: "list_app_packages", title: "List Apps",
+    description: "List this organization's app packages, their active versions, status, management and workspace links.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async context => ({ ok: true, ...await listExtensions(context) }),
   }),
   definition({
-    name: "describe_extension_vocabulary", title: "Describe Extension Capabilities",
-    description: "Start here to build an extension. Returns the native screen and package contract, governed objects and backend capabilities, an example, and the draft → preview → approve workflow.",
+    name: "describe_app_vocabulary", title: "Describe App Capabilities",
+    description: "Start here to build an app. Returns the native screen and package contract, governed objects and backend capabilities, an example, and the draft → preview → approve workflow.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async context => ({ ok: true, ...await describeExtensionVocabulary(context) }),
   }),
   definition({
-    name: "draft_extension", title: "Prepare Extension Draft",
-    description: "Save an immutable unpublished extension package for this author. No installation, object creation, backend execution or activation occurs. Returns the human review URL, preview URL and exact content hash. A revision is a new draft; keep all intended files and definitions.",
+    name: "draft_app", title: "Prepare App Draft",
+    description: "Save an immutable unpublished app package for this author. No installation, object creation, backend execution or activation occurs. Returns the human review URL, preview URL and exact content hash. A revision is a new draft; keep all intended files and definitions.",
     inputSchema: z.object({ bundle: z.unknown(), reason: z.string().trim().min(1).max(2000) }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await draftExtension(context, input as never) }),
   }),
   definition({
-    name: "get_extension_draft", title: "Read Extension Draft",
+    name: "get_app_draft", title: "Read App Draft",
     description: "Read this author's exact unpublished package, base version and hash for revision or review. Other authors' drafts are unavailable.",
     inputSchema: z.object({ draftId: UUID }), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, draft: await getExtensionDraft(context, input.draftId as string) }),
   }),
   definition({
-    name: "get_extension_package", title: "Read Installed Extension Package",
+    name: "get_app_package", title: "Read Installed App Package",
     description: "Read the installed package or one of its historical versions before preparing an upgrade or rollback. Preserve owned object definitions and use a new version label, then draft and review it.",
     inputSchema: z.object({ key: EXTENSION_KEY, versionId: UUID.optional() }), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await getExtensionPackage(context, input as never) }),
   }),
   definition({
-    name: "discard_extension_draft", title: "Discard Extension Draft",
+    name: "discard_app_draft", title: "Discard App Draft",
     description: "Discard this author's unpublished draft while preserving its source and audit evidence. Activated versions cannot be discarded.",
     inputSchema: z.object({ draftId: UUID, contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
     readOnly: false, destructive: false, openWorld: false,
@@ -399,7 +399,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     execute: async (context, input) => ({ ok: true, ...await discardExtensionDraft(context, input as never) }),
   }),
   definition({
-    name: "activate_extension_draft", title: "Activate Reviewed Extension",
+    name: "activate_app_draft", title: "Activate Reviewed Extension",
     description: "Activate only the exact author-owned draft the human reviewed and explicitly approved. Bind draftId and contentHash. Refuses stale base versions or unavailable permissions. Provisioning, version activation and audit commit atomically.",
     inputSchema: z.object({ draftId: UUID, contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
     readOnly: false, destructive: false, openWorld: false,

@@ -27,7 +27,7 @@ export function InstallListingButton({
   async function install() {
     setBusy(true)
     try {
-      const response = await fetch('/api/extensions/marketplace', {
+      const response = await fetch('/api/apps/marketplace', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'install', listingId }),

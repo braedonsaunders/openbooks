@@ -12,7 +12,7 @@
   },
   "empty": {
     "title": "Aucune application installée",
-    "description": "Parcourez la bibliothèque d’applications pour trouver des extensions pour votre organisation.",
+    "description": "Parcourez la bibliothèque d’applications pour trouver des apps pour votre organisation.",
     "action": "Parcourir la bibliothèque"
   },
   "noResults": {
@@ -21,7 +21,7 @@
   },
   "library": {
     "title": "Bibliothèque d’applications",
-    "description": "Découvrez et installez des extensions pour votre organisation.",
+    "description": "Découvrez et installez des apps pour votre organisation.",
     "searchPlaceholder": "Rechercher dans la bibliothèque…",
     "install": "Installer",
     "update": "Mettre à jour",

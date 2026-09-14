@@ -24,9 +24,9 @@ export const appBuilder: DocArticle = {
   related: ['apps', 'app-api-reference', 'scripting-engine', 'scripting-api-reference', 'record-customization'],
   body: `# Advanced sandbox package reference
 
-For the current creation and review flow, see [Build extensions with an agent](/docs/extensions).
+For the current creation and review flow, see [App authoring guide](/docs/app-authoring).
 
-**Settings → Extensions** is the package inventory. An agent prepares a complete
+**Settings → Apps** is the package inventory. An agent prepares a complete
 package revision for review and activation; **Apps** launches its active workspace.
 Sandbox and native frontends use the same package, permission, and version model.
 
@@ -69,8 +69,8 @@ is frontend, endpoint files are backend, and everything else is an asset.
 
 ## Create and revise a package
 
-Choose **New extension** in Settings → Extensions and describe the business
-requirement. The agent uses the extension vocabulary and draft tools to prepare
+Choose **New app** in Settings → Apps and describe the business
+requirement. The agent uses the app vocabulary and draft tools to prepare
 screens, backend endpoints, records, fields, and optional page, navigation,
 setting, and permission contributions together. Review the draft and requested
 authority before activating it. For changes, request a new complete revision;
@@ -144,13 +144,13 @@ from the library runs the same validation, capability-grant, and provisioning
 path as any other installation. The installed copy has no access to the
 publisher's live data.
 
-## Extensions and scripts
+## Apps and scripts
 
-The **Scripts** area (**Settings → Extend → Scripts**) and extensions share
+The **Scripts** area (**Settings → Extend → Scripts**) and apps share
 the same sandbox engine and the same governed ledger-write path, but they support
-different extension models. Scripts are trigger-driven automation. They run on document
+different app models. Scripts are trigger-driven automation. They run on document
 lifecycle events (submit, post, void), on a schedule, or as standalone endpoints,
-and ship no user interface. Apps are packaged extensions with a frontend, backend
+and ship no user interface. Apps are packaged apps with a frontend, backend
 endpoints, provisioned objects, and a distribution channel. Use a script to
 automate rules on existing records. Use an app to deliver a packaged feature.
 `,

@@ -23,7 +23,7 @@ registerHooks({
 })
 
 const storeSource = readFileSync(new URL('./store.ts', import.meta.url), 'utf8')
-const routeSource = readFileSync(new URL('../../app/api/extensions/[key]/route.ts', import.meta.url), 'utf8')
+const routeSource = readFileSync(new URL('../../app/api/apps/[key]/route.ts', import.meta.url), 'utf8')
 
 function functionBody(source: string, name: string): string {
   const exported = source.indexOf(`export async function ${name}`)

@@ -6,6 +6,7 @@ import {
   buildContentSecurityPolicy,
   createContentSecurityPolicyNonce,
 } from "./lib/content-security-policy";
+import { APP_DOCUMENT_CSP, isAppDocumentRequest } from './lib/apps/document-policy';
 import { isPublicPath, isCsrfExemptPath } from "./lib/proxy-policy";
 import { hasTrustedOrigin, isUnsafeMethod } from "./lib/csrf";
 
@@ -38,7 +39,8 @@ async function validSignature(token: string, secret: string) {
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const nonce = createContentSecurityPolicyNonce();
-  const contentSecurityPolicy = buildContentSecurityPolicy(
+  const appDocument = isAppDocumentRequest(pathname, req.method);
+  const contentSecurityPolicy = appDocument ? APP_DOCUMENT_CSP : buildContentSecurityPolicy(
     nonce,
     process.env.NODE_ENV === "development",
   );
@@ -50,6 +52,10 @@ export async function proxy(req: NextRequest) {
   const next = () => NextResponse.next({ request: { headers: requestHeaders } });
   const secured = <T,>(response: NextResponse<T>) => {
     response.headers.set("Content-Security-Policy", contentSecurityPolicy);
+    if (appDocument) {
+      response.headers.set("X-Frame-Options", "SAMEORIGIN");
+      response.headers.set("Referrer-Policy", "no-referrer");
+    }
     return response;
   };
 
