@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db } from './db.ts'
-import { add, mulRate } from './money.ts'
+import { add, mulRate, normalizeDecimal } from './money.ts'
 import { evaluateUsNexus, type NexusEvaluation, type StateSales } from './us-nexus.ts'
 
 /** Role-derived subsidiary visibility; null/undefined means unrestricted. */
@@ -118,7 +118,13 @@ export async function computeUsNexusStatus(
     let usd: string
     if (row.currency === 'USD') {
       usd = row.amount
-    } else if (row.base_currency === 'USD' && row.fx_rate && row.fx_rate !== '1') {
+    // A stored rate is authoritative only when it differs from the column
+    // default at the column's own ten-decimal scale. The numeric(19,10) value
+    // reads back as '1.0000000000', so a raw string comparison against '1'
+    // treated every unstamped legacy rate as a real 1:1 peg and converted at
+    // 1.0 instead of resolving the spot rate below — the same default-vs-set
+    // distinction the posting kernel draws before honouring a header rate.
+    } else if (row.base_currency === 'USD' && row.fx_rate && normalizeDecimal(row.fx_rate, 10) !== '1.0000000000') {
       usd = mulRate(row.amount, row.fx_rate)
     } else {
       usd = mulRate(row.amount, await usdRate(row.currency, row.as_of))
