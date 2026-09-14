@@ -488,6 +488,35 @@ test(
 );
 
 test(
+  "editing the pay schedule's periods per year after Calculate makes the run stale",
+  { skip: !DB },
+  async () => {
+    // Factor P is what every statutory engine annualizes with: T4127's
+    // income, CPP exemption and K2, Pub 15-T's worksheet, the state engines.
+    // calculateStub re-reads periods_per_year from pay_schedules on every
+    // pass, but no staleness arm watched that table — so correcting a
+    // 26-to-27 long-year count after Calculate left the wizard green and the
+    // commit annualizing every withholding on the old count.
+    const run = await seedPayRun();
+    try {
+      assert.deepEqual((await payRunStaleness(run.orgId, run.documentId)).reasons, []);
+
+      await db.execute(sql`
+        update pay_runs set calculated_at = now() where document_id = ${run.documentId}`);
+      await db.execute(sql`
+        update pay_schedules set periods_per_year = 27, updated_at = now()
+         where id = ${run.scheduleId}`);
+      assert.ok(
+        (await payRunStaleness(run.orgId, run.documentId)).reasons.includes("schedule"),
+        "periods per year annualizes every statutory number on the stub",
+      );
+    } finally {
+      await dropScratchOrgReporting(run.orgId);
+    }
+  },
+);
+
+test(
   "another run committing against the same employee's tax year makes this run stale",
   { skip: !DB },
   async () => {
