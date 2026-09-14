@@ -13,6 +13,7 @@ import {
   type CsvMapping,
   type ParsedStatement,
   type ParsedStatementLine,
+  type StatementSourceContent,
 } from "../banking.ts";
 import { generatePaymentFileArtifact, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery } from "../payment-operations.ts";
 import { backendFor } from "./backend.ts";
@@ -48,13 +49,13 @@ function detectFormat(name: string, text: string): Exclude<Fmt, "auto" | "csv"> 
   return null;
 }
 
-function parse(format: Exclude<Fmt, "auto">, text: string, mapping: CsvMapping | null): { lines: ParsedStatementLine[]; meta: Omit<ParsedStatement, "lines"> } {
-  if (format === "ofx") { const p = parseOfx(text); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance } }; }
-  if (format === "camt053") { const p = parseCamt053(text); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance } }; }
-  if (format === "bai2") { const p = parseBai2(text); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance } }; }
-  if (format === "mt940") { const p = parseMt940(text); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance } }; }
+function parse(format: Exclude<Fmt, "auto">, content: StatementSourceContent, mapping: CsvMapping | null): { lines: ParsedStatementLine[]; meta: Omit<ParsedStatement, "lines"> } {
+  if (format === "ofx") { const p = parseOfx(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance } }; }
+  if (format === "camt053") { const p = parseCamt053(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance } }; }
+  if (format === "bai2") { const p = parseBai2(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance } }; }
+  if (format === "mt940") { const p = parseMt940(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance } }; }
   if (!mapping) throw new Error("CSV import needs a column mapping on the schedule");
-  return { lines: parseCsv(text, mapping), meta: {} };
+  return { lines: parseCsv(content, mapping), meta: {} };
 }
 
 /**
@@ -111,10 +112,13 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
     result.files.push(outcome);
     try {
       const sourceBytes = await backend.read(filePath);
-      const text = sourceBytes.toString("utf8");
-      const fmt = s.format === "auto" ? detectFormat(e.name, text) : s.format;
+      // Format sniffing works on lossy text, but parsing must see the exact
+      // bytes: the engine decodes BOMs and legacy encodings itself, and a
+      // UTF-8 string coercion here corrupts every non-UTF8 file (e.g. UTF-16
+      // bank exports) before the parser runs.
+      const fmt = s.format === "auto" ? detectFormat(e.name, sourceBytes.toString("utf8")) : s.format;
       if (!fmt) throw new Error(`could not detect a statement format for ${e.name}`);
-      const { lines, meta } = parse(fmt, text, s.csv_mapping);
+      const { lines, meta } = parse(fmt, sourceBytes, s.csv_mapping);
       const res = await importStatement(
         {
           accountId: s.account_id,
