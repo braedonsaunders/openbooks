@@ -8,6 +8,7 @@ import {
   type DashboardFinancialMetricsRow,
 } from '@openbooks/engine/src/dashboard-reporting.ts'
 import type { Authz } from '@/lib/authz'
+import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
 
 export type DashboardMetrics = {
   baseCurrency: string
@@ -76,7 +77,10 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
         (select coalesce(sum(g.line_count), 0) from gl_month_activity g where g.org_id = ${orgId}) as journal_lines,
         (select count(*) from accounts where is_active and org_id = ${orgId}) as accounts,
         (select count(*) from journal_entries where org_id = ${orgId} and status in ('posted', 'reversed') and posting_date = ${today}) as entries_today,
-        (select count(*) from flow_gates where org_id = ${orgId} and status = 'pending') as pending_approvals,
+        (select count(*) from flow_gates g
+          left join documents d on d.id = g.subject_id and d.org_id = g.org_id
+         where g.org_id = ${orgId} and g.status = 'pending'
+           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}) as pending_approvals,
         (select coalesce(sum(g.debit_total - g.credit_total), 0) from gl_month_activity g where g.org_id = ${orgId}) as ledger_sum
     `),
     db.execute(dashboardFinancialMetricsQuery(orgId, today)),
@@ -105,6 +109,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
         from flow_gates g
         left join documents d on d.id = g.subject_id and d.org_id = g.org_id
        where g.org_id = ${orgId} and g.status = 'pending'
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by g.created_at desc
        limit 5
     `),

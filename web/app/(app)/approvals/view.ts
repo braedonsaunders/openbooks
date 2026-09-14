@@ -26,6 +26,7 @@ import {
 import { getAuthz, can } from '../../../lib/authz'
 import { mergeHref, pickString } from '../../../lib/list-params'
 import { approvalRecordHref } from '../../../lib/approvals-links'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import type { ApprovalRow } from './ApprovalsTable'
 import type { DelegateOption } from './GateActions'
 
@@ -197,6 +198,7 @@ export async function loadApprovals(
         left join close_runs cr on cr.id = g.subject_id and cr.org_id = g.org_id and g.subject_kind = 'close_run'
         left join accounting_periods cp on cp.id = cr.period_id and cp.org_id = cr.org_id
        where g.org_id = ${orgId} and g.status = 'pending'
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by g.created_at
     `)
 
@@ -235,7 +237,7 @@ export async function loadApprovals(
       select r.id as "runId", f.name as "flowName", r.subject_id as "subjectId",
              coalesce(d.document_number, cp.name) as "documentNumber",
              coalesce(d.kind, case when cr.id is not null then 'close_run' end, r.subject_kind) as kind,
-             d.total, coalesce(d.status, cr.status) as "docStatus", p.display_name as "partyName",
+             d.total, d.subsidiary_id as "subsidiaryId", coalesce(d.status, cr.status) as "docStatus", p.display_name as "partyName",
              min(g.created_at) as "waitingSince",
              string_agg(distinct coalesce(u.name, g.assignee_role), ', ') as "pendingWith"
         from flow_runs r
@@ -248,8 +250,9 @@ export async function loadApprovals(
         left join users u on u.id = g.assignee_user_id
        where r.org_id = ${orgId} and r.status = 'waiting'
          and coalesce(d.created_by, cr.started_by) = ${user.id}
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        group by r.id, f.name, r.subject_id, d.document_number, d.kind, d.total,
-                d.status, cr.id, cr.status, cp.name, p.display_name
+                d.subsidiary_id, d.status, cr.id, cr.status, cp.name, p.display_name
        order by min(g.created_at)
     `)
 
