@@ -169,6 +169,9 @@ export async function applyRuleToLine(
   `))
   const rule = ruleRes.rows[0]
   if (!rule) throw new Error('Rule not found')
+  // A disabled rule must never post: without this, deactivation is enforced
+  // only by the UI hiding the rule while the API still fires it.
+  if (!rule.is_active) throw new Error('Rule is not active')
   const lineRes = (await db.execute<(BankLine & { account_id: string })>(sql`
     select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref, l.currency, s.source, s.account_id
       from bank_statement_lines l
