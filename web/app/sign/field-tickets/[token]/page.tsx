@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { withOrgContext } from '@openbooks/engine/src/db.ts'
 import { validateSigningRequest, verifySigningToken } from '../../../../lib/field-ticket-token'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { loadFieldTicket } from '../../../../lib/field-tickets'
 import { SignTicketForm } from './SignTicketForm'
 
@@ -19,6 +20,9 @@ export default async function SignFieldTicketPage({ params }: { params: Promise<
   let ticket
   try {
     ticket = await withOrgContext(verified.orgId, async () => {
+      if (!(await isFeatureEnabled(verified.orgId, 'fieldTickets'))) {
+        throw new Error('Field Tickets feature is disabled')
+      }
       if (!(await validateSigningRequest(token, verified, { allowResponded: true }))) {
         throw new Error('Signing request is not valid')
       }
