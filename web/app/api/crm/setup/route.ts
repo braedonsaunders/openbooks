@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/src/db.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
 import { ensureCrmDefaults } from "@openbooks/engine/src/crm.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
@@ -253,10 +254,12 @@ export async function POST(req: NextRequest) {
         body.currency !== undefined
           ? String(body.currency).toUpperCase()
           : undefined;
+      // Calendar validity (not just shape) is checked here so an impossible
+      // date can never reach the period_start/period_end cast as a 500.
       if (
         (ownerUserId ? 1 : 0) + (salesTeamId ? 1 : 0) !== 1 ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(body.periodStart ?? "") ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(body.periodEnd ?? "") ||
+        !isIsoCalendarDate(body.periodStart) ||
+        !isIsoCalendarDate(body.periodEnd) ||
         body.periodEnd < body.periodStart ||
         (currency !== undefined && !/^[A-Z]{3}$/.test(currency))
       )
