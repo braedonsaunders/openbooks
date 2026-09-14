@@ -509,11 +509,11 @@ export interface GeneratePayRunBankFileInput {
 /**
  * Produce a new, immutable bank-file artifact for a committed pay run.
  *
- * Every database READ happens before the transaction; the transaction locks
- * the run, re-verifies the entitlement, allocates the bank-facing number,
- * renders the characters (pure — the number has to be inside the characters it
- * numbers), stores them, and writes the artifact and its audit record
- * together. Nothing here ever rewrites an existing artifact.
+ * Reads used to prepare the file happen before the transaction; the transaction
+ * locks the run and document, re-verifies approval and run status, allocates the
+ * bank-facing number, renders the characters (pure — the number has to be
+ * inside the characters it numbers), stores them, and writes the artifact and
+ * its audit record together. Nothing here ever rewrites an existing artifact.
  */
 export async function generatePayRunBankFile(
   input: GeneratePayRunBankFileInput,
@@ -578,8 +578,9 @@ export async function generatePayRunBankFile(
     const locked = (await tx.execute<{ run_status: string; paid_at: string | null }>(sql`
       select r.run_status, r.paid_at
         from pay_runs r
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
-       for update of r
+       for update of r, d
     `));
     const lockedRun = locked.rows[0];
     if (!lockedRun) throw new PayrollError("pay run not found");
@@ -589,6 +590,10 @@ export async function generatePayRunBankFile(
     if (lockedRun.paid_at) {
       throw new PayrollError("this pay run is already recorded as paid");
     }
+    // The outer entitlement read is only a UX check. Approval can be rejected
+    // or expire while the file is being prepared, so resolve it again through
+    // this transaction's executor while the run/document locks are held.
+    await assertPayRunApprovalReleased(orgId, documentId, tx);
     const live = (await tx.execute<{ id: string; file_number: string }>(sql`
       select id, file_number, coalesce(max(sequence_number) over (), 0) as _ignored
         from pay_run_bank_files
