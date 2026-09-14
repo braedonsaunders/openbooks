@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { functionalReportReader } from "./currency-basis";
 import { bucketSubsidiaryFilter, glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
@@ -56,6 +56,8 @@ export async function generalLedger(
   const orgId = await resolveOrgId(opts.orgId)
   const maxLines = opts.maxLines ?? 5000
   const acctFilter = opts.accountId ? sql` and l.account_id = ${opts.accountId}` : sql``
+  const reportDb = functionalReportReader(orgId, sql`e.posting_date <= ${to}
+    and e.book_id = ${statementBookExpr(orgId, opts.bookId)} and ${dimWhere(opts.dims)} ${acctFilter}`)
 
   // Opening balances (debit-signed) per account before the period. Without a
   // dimension slice this is inception-to-date over the whole ledger, so it
@@ -64,7 +66,7 @@ export async function generalLedger(
   const summaryOpening = glSummaryEligibleDims(opts.dims)
   const openingSql = summaryOpening
     ? sql`
-        select x.account_id, coalesce(sum(x.amt), 0) as bal from (
+        select ${reportDb.censusColumn}, x.account_id, coalesce(sum(x.amt), 0) as bal from (
             select g.account_id, (g.debit_total - g.credit_total) as amt
               from gl_month_activity g
            where g.org_id = ${orgId}
@@ -83,23 +85,23 @@ export async function generalLedger(
            where l.org_id = ${orgId} and ${dimWhere(opts.dims)}${acctFilter}
         ) x group by x.account_id`
     : sql`
-        select l.account_id, coalesce(sum(l.amount), 0) as bal
+        select ${reportDb.censusColumn}, l.account_id, coalesce(sum(l.amount), 0) as bal
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
           and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.posting_date < ${from} and ${dimWhere(opts.dims)}${acctFilter}
          group by l.account_id`
-  const opening = (await db.execute<{ account_id: string; bal: string }>(openingSql))
+  const opening = (await reportDb.execute<{ account_id: string; bal: string }>(openingSql))
   const openingByAcct = new Map(opening.rows.map((r) => [r.account_id, r.bal]))
 
-  const lines = (await db.execute<{
+  const lines = (await reportDb.execute<{
       account_id: string; number: string | null; name: string; type: string
       entry_id: string; entry_number: string | null; date: string
       memo: string | null; party: string | null; amount: string
       doc_kind: string | null; doc_id: string | null
     }>(sql`
-    select l.account_id, a.number, a.name, a.type,
+    select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type,
            e.id as entry_id, e.entry_number, e.posting_date::text as date,
            l.memo, p.display_name as party, l.amount,
            d.kind as doc_kind, d.id as doc_id
@@ -184,6 +186,8 @@ export async function journalReport(
 ): Promise<JournalReportResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const maxLines = opts.maxLines ?? 4000
+  const reportDb = functionalReportReader(orgId, sql`e.posting_date >= ${from} and e.posting_date <= ${to}
+    and e.book_id = ${statementBookExpr(orgId, opts.bookId)} and ${dimWhere(opts.dims)}`)
   // Without a line-level dimension slice, every entry in the window
   // contributes at least one line, so the first `maxLines` lines can only come
   // from the first `maxLines` entries in the same order. Narrowing to those
@@ -208,12 +212,12 @@ export async function journalReport(
            and book_id = ${statementBookExpr(orgId, opts.bookId)}
            and posting_date >= ${from} and posting_date <= ${to}
       )`
-  const r = (await db.execute<{
+  const r = (await reportDb.execute<{
       id: string; entry_number: string | null; date: string; entry_memo: string | null; origin: string
       acct_number: string | null; acct_name: string; party: string | null; line_memo: string | null; amount: string
       doc_kind: string | null; doc_id: string | null
     }>(sql`
-    select e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
+    select ${reportDb.censusColumn}, e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
            a.number as acct_number, a.name as acct_name, p.display_name as party,
            l.memo as line_memo, l.amount,
            d.kind as doc_kind, d.id as doc_id

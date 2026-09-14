@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { functionalReportReader } from "./currency-basis";
 import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
@@ -68,7 +69,13 @@ export async function accountRegister(
       : sql` and false`
     : sql``;
   const bookFilter = sql` and e.book_id = ${statementBookExpr(orgId, bookId)}`;
-  const r = (await db.execute<AccountRegisterLine>(sql`
+  const reportDb = functionalReportReader(orgId, sql`l.account_id in (
+    with recursive account_scope as (
+      select id from accounts where id = ${accountId} and org_id = ${orgId}
+      union select child.id from accounts child join account_scope parent on child.parent_id = parent.id where child.org_id = ${orgId}
+    ) select id from account_scope
+  ) ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}`);
+  const r = (await reportDb.execute<AccountRegisterLine>(sql`
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
       union
@@ -77,7 +84,7 @@ export async function accountRegister(
         join account_scope parent on child.parent_id = parent.id
        where child.org_id = ${orgId}
     )
-    select e.id as entry_id, e.entry_number, e.posting_date::text as posting_date, e.memo as entry_memo,
+    select ${reportDb.censusColumn}, e.id as entry_id, e.entry_number, e.posting_date::text as posting_date, e.memo as entry_memo,
            l.line_number, l.amount, l.memo, p.display_name as party,
            d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number
       from journal_lines l
@@ -89,7 +96,7 @@ export async function accountRegister(
      order by e.posting_date desc, e.entry_number desc, l.line_number
      limit ${limit} offset ${offset}
   `));
-  const c = (await db.execute<{ n: string; bal: string }>(sql`
+  const c = (await reportDb.execute<{ n: string; bal: string }>(sql`
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
       union
@@ -98,7 +105,7 @@ export async function accountRegister(
         join account_scope parent on child.parent_id = parent.id
        where child.org_id = ${orgId}
     )
-    select count(*) as n, coalesce(sum(amount),0) as bal
+    select ${reportDb.censusColumn}, count(*) as n, coalesce(sum(amount),0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
@@ -158,9 +165,10 @@ export async function partyRegister(
   // parallel book's mirror entries fuse into the register while the sibling
   // statement readers stay primary-only.
   const bookFilter = sql` and e.book_id = ${statementBookExpr(resolvedOrgId, opts.bookId)}`
+  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${opts.to} and a.type = ${acctType} and ${dimWhere(opts.dims)} ${partyFilter} ${bookFilter}`)
 
-  const opening = (await db.execute<{ party_id: string | null; bal: string }>(sql`
-    select l.party_id, coalesce(sum(l.amount), 0) as bal
+  const opening = (await reportDb.execute<{ party_id: string | null; bal: string }>(sql`
+    select ${reportDb.censusColumn}, l.party_id, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -170,12 +178,12 @@ export async function partyRegister(
   `))
   const openingByParty = new Map(opening.rows.map((r) => [r.party_id, r.bal]))
 
-  const lines = (await db.execute<{
+  const lines = (await reportDb.execute<{
       party_id: string | null; party_name: string | null
       entry_id: string; entry_number: string | null; date: string; memo: string | null; amount: string
       doc_kind: string | null; doc_id: string | null
     }>(sql`
-    select l.party_id, pt.display_name as party_name,
+    select ${reportDb.censusColumn}, l.party_id, pt.display_name as party_name,
            e.id as entry_id, e.entry_number, e.posting_date::text as date, l.memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
       from journal_lines l
