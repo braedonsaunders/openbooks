@@ -178,3 +178,127 @@ test(
     }
   },
 );
+
+test(
+  "employer levies: an uncommitted draft consumes no per-employee WCB cap",
+  { skip: !DB },
+  async () => {
+    // The CPP/EI doctrine (proven in payroll-controls.test.ts) is that
+    // calculated runs are drafts that may be abandoned, so only committed
+    // stubs consume annual room. The WCB accumulator read
+    // calculated-OR-committed stubs instead: calculate run 1 as a draft, and
+    // run 2's premium is computed against money nobody has been paid — and
+    // recalculating run 1 afterwards moves its own premium, because each
+    // draft sees the other's. Recalculating an uncommitted run must be safe.
+    //
+    // The per-employee cap is what makes committed-only safe here: any race
+    // that consumes this employee's room shares the employee, so the ytd
+    // staleness arm forces a recalculation before the second commit. The
+    // employer-level EHT exemption deliberately keeps seeing drafts (its
+    // consumers share no employee for that arm to fire on) — pinned by the D6
+    // test in payroll-multi-employee.integration.test.ts, not changed here.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const account = async (number: string, name: string, type: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                                reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+                  '[]'::jsonb, '{}'::jsonb, true)`);
+        return id;
+      };
+      const wageExpense = await account("6000", "Wages expense", "expense");
+      const burdenExpense = await account("6010", "Payroll burden", "expense");
+      const netPayable = await account("2300", "Wages payable", "liability_current");
+      const craPayable = await account("2310", "CRA remittances payable", "liability_current");
+      const wcbPayable = await account("2330", "WSIB payable", "liability_current");
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          payroll: {
+            wageExpenseAccountId: wageExpense,
+            burdenExpenseAccountId: burdenExpense,
+            netPayAccountId: netPayable,
+            cppPayableAccountId: craPayable,
+            eiPayableAccountId: craPayable,
+            taxPayableAccountId: craPayable,
+            wagesTo: "expense",
+          },
+        })}::jsonb where id = ${org.orgId}`);
+
+      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await setPackSlotAccount(org.orgId, actorId, "CA", "wcb", wcbPayable);
+
+      const wcbGroupId = randomUUID();
+      await db.execute(sql`
+        insert into worker_comp_groups (id, org_id, code, name, rate_percent, max_assessable, is_active)
+        values (${wcbGroupId}, ${org.orgId}, 'CLASS-A', 'Construction class A', '2', '2000', true)`);
+
+      const employeeId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Dana Draft', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into employee_roles (id, org_id, party_id, worker_comp_group_id)
+        values (${randomUUID()}, ${org.orgId}, ${employeeId}, ${wcbGroupId})`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                      is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
+                ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                               pay_basis, federal_claim_code, provincial_claim_code,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+                true, ${actorId}, ${actorId})`);
+      const jobA = randomUUID();
+      await db.execute(sql`
+        insert into projects (id, org_id, name, code, is_active, custom)
+        values (${jobA}, ${org.orgId}, 'Job A', 'Job A', true, '{}'::jsonb)`);
+      const hours = async (workedOn: string, amount: number) => {
+        await db.execute(sql`
+          insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id, status,
+                                    is_billable, billing_status, costing_basis, created_by, updated_by)
+          values (${org.orgId}, ${employeeId}, ${workedOn}, ${amount}, ${jobA}, 'approved', false,
+                  'unbilled', 'actual', ${actorId}, ${actorId})`);
+      };
+      // Run 1: $2,400 gross — calculated and LEFT as a draft, never committed.
+      await hours("2026-07-06", 40);
+      await hours("2026-07-08", 40);
+      const run1 = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      const calc1 = await calculatePayRun({ orgId: org.orgId, documentId: run1.documentId, actorId });
+      assert.deepEqual(calc1.errors, []);
+      const stub1 = ((await db.execute<{ factors: Record<string, string> }>(sql`
+        select factors from pay_stubs
+         where org_id = ${org.orgId} and pay_run_document_id = ${run1.documentId}
+      `))).rows[0]!;
+      assert.equal(stub1.factors.WCB_EARN, "2000.0000");
+
+      // Run 2: $600 gross in the next period. Nothing is committed, so the
+      // whole $2,000 of cap room is still available to it.
+      await hours("2026-07-22", 20);
+      const run2 = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId });
+      const calc2 = await calculatePayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
+      assert.deepEqual(calc2.errors, []);
+      const stub2 = ((await db.execute<{ factors: Record<string, string> }>(sql`
+        select factors from pay_stubs
+         where org_id = ${org.orgId} and pay_run_document_id = ${run2.documentId}
+      `))).rows[0]!;
+      assert.equal(stub2.factors.WCB_EARN, "600.0000",
+        "a draft run's assessable earnings must not consume the WCB cap");
+      assert.equal(stub2.factors.WCB, "12.0000");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);

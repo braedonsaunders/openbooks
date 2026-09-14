@@ -38,13 +38,18 @@ export async function applyCaEmployerLevies(
   `));
   const wcb = wcbGroup.rows[0];
   if (wcb?.rate_percent && cmp(wcb.rate_percent, "0") > 0) {
+    // Committed stubs only. A calculated run is a draft that may be abandoned
+    // or recalculated, and counting its assessable earnings lets unpaid
+    // figures consume the annual cap — the same doctrine `employeeYtd` states
+    // for CPP/EI. (The run being calculated keeps its own-document arm below
+    // so the exemption still sequences across its own employees.)
     const priorAssessable = ((await tx.execute<{ prior: string }>(sql`
       select coalesce(sum((s.factors->>'WCB_EARN')::numeric), 0) as prior
         from pay_stubs s
         join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
        where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
          and s.tax_year = ${taxYear}
-         and (r.run_status in ('calculated', 'committed')
+         and (r.run_status = 'committed'
               or s.pay_run_document_id = ${documentId})
     `))).rows[0]!.prior;
     const gross = grossEarnings();
@@ -90,6 +95,12 @@ export async function applyCaEmployerLevies(
   if (eht) {
     ehtEarnings = grossEarnings();
     if (cmp(ehtEarnings, "0") > 0) {
+      // Calculated runs count here, unlike the WCB accumulator above: the
+      // exemption is employer-level per province, and the ytd staleness arm
+      // only fires on a SHARED employee — two drafts on disjoint rosters
+      // would otherwise each claim the full exemption and both commit cleanly
+      // (payroll-multi-employee D6 pins this). The own-document arm sequences
+      // the exemption across the employees of the run being calculated.
       const priorInProvince = ((await tx.execute<{ prior: string }>(sql`
         select coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0) as prior
           from pay_stubs s

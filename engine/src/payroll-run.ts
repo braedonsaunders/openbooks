@@ -3346,8 +3346,11 @@ async function calculateStub(
 
   // ---- Phase 8: pack-declared earnings-assessed employer levies ----------
   // WCB/WSIB and provincial EHT for the CA pack; other packs omit this hook.
-  // Both accumulators consume against CALCULATED-OR-COMMITTED stubs — see
-  // the pack's employer-levies module.
+  // The per-employee WCB cap consumes COMMITTED stubs only (a draft may be
+  // abandoned; same-employee races are caught by the ytd staleness arm), while
+  // the employer-level EHT exemption also sees calculated drafts (disjoint
+  // rosters share no employee for that arm to fire on) — see the pack's
+  // employer-levies module.
   const employerLevies = await pack.applyEmployerLevies?.({
     tx, orgId, documentId, employeePartyId,
     employeeName: emp.display_name ?? employeePartyId,
