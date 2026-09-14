@@ -5,6 +5,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { uploadAndAttach } from '../../../../lib/file-cabinet'
 import { resolveFieldTicketLockId } from '../../../../lib/field-ticket-lock'
 import { validateSigningRequest, verifySigningToken } from '../../../../lib/field-ticket-token'
+import { isFeatureEnabled } from '../../../../lib/features'
 
 export const runtime = 'nodejs'
 
@@ -51,6 +52,13 @@ export async function POST(req: Request) {
   }
 
   return withOrgTransaction(verified.orgId, async () => {
+    // The public link is possession-authenticated, but it is still a Projects
+    // capability. Keep an already-issued link from mutating a ticket after
+    // Field Tickets (or its Projects parent) has been disabled; historical
+    // signatures remain stored and auditable.
+    if (!(await isFeatureEnabled(verified.orgId, 'fieldTickets'))) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
     // Serialize signers of this request BEFORE any check or write; the lock is
     // transaction-scoped on the pinned connection, so it holds until commit.
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${resolveFieldTicketLockId('sign', verified.orgId, verified.ticketId, verified.requestId)}, 0))`)
