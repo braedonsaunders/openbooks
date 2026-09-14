@@ -6,6 +6,7 @@ import { PostingError } from '@openbooks/engine/src/posting.ts'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '@/lib/authz'
+import { isUuid } from '../../../lib/list-params'
 
 /** ap.pay for vendor payments, ar.pay for customer receipts. */
 export function paymentPermission(kind: PaymentKind): 'ap.pay' | 'ar.pay' {
@@ -53,6 +54,13 @@ export async function assertAllocationTargetsInScope(
   openLineIds: readonly string[],
 ): Promise<NextResponse | null> {
   if (!authz.allowedSubsidiaryIds || openLineIds.length === 0) return null
+  // Malformed ids fail closed exactly like unresolvable ones: the uuid[]
+  // interpolation below would otherwise surface a Postgres cast error as a
+  // 500. The payment-run bill selection keeps the same boundary (uuidId at
+  // the schema, not-found below).
+  for (const lineId of openLineIds) {
+    if (!isUuid(lineId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
     select jl.id, jl.subsidiary_id as "subsidiaryId"
       from journal_lines jl
