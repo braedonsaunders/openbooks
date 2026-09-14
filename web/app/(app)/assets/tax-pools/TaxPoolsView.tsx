@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Play, Settings2 } from 'lucide-react'
 import { Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
+import { decimalCmp } from '../../../../lib/statement-format'
 
 type Line = {
   classCode: string
@@ -19,6 +20,10 @@ type Line = {
   terminalLoss: string
 }
 type RunResult = { taxYear: number; lines: Line[]; totals: { allowance: string; recapture: string; terminalLoss: string } }
+
+export function formatTaxPoolAmount(value: string, locale: string): string {
+  return new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value as never)
+}
 
 export function TaxPoolsView({
   canRun,
@@ -40,7 +45,7 @@ export function TaxPoolsView({
   const [result, setResult] = useState<RunResult | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const fmt = (v: string) => Number(v).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const fmt = (v: string) => formatTaxPoolAmount(v, locale)
 
   async function run() {
     setBusy(true)
@@ -128,8 +133,8 @@ export function TaxPoolsView({
                       <td className={col}>{fmt(l.dispositions)}</td>
                       <td className={`${col} font-semibold`}>{fmt(l.allowance)}</td>
                       <td className={col}>{fmt(l.closingBalance)}</td>
-                      <td className={col}>{Number(l.recapture) ? fmt(l.recapture) : '—'}</td>
-                      <td className={col}>{Number(l.terminalLoss) ? fmt(l.terminalLoss) : '—'}</td>
+                      <td className={col}>{decimalCmp(l.recapture, '0') !== 0 ? fmt(l.recapture) : '—'}</td>
+                      <td className={col}>{decimalCmp(l.terminalLoss, '0') !== 0 ? fmt(l.terminalLoss) : '—'}</td>
                     </tr>
                   ))}
                   <tr className="font-semibold text-slate-900 dark:text-slate-100">
@@ -137,8 +142,8 @@ export function TaxPoolsView({
                     <td className={col} colSpan={3}></td>
                     <td className={col}>{fmt(result.totals.allowance)}</td>
                     <td className={col}></td>
-                    <td className={col}>{Number(result.totals.recapture) ? fmt(result.totals.recapture) : '—'}</td>
-                    <td className={col}>{Number(result.totals.terminalLoss) ? fmt(result.totals.terminalLoss) : '—'}</td>
+                    <td className={col}>{decimalCmp(result.totals.recapture, '0') !== 0 ? fmt(result.totals.recapture) : '—'}</td>
+                    <td className={col}>{decimalCmp(result.totals.terminalLoss, '0') !== 0 ? fmt(result.totals.terminalLoss) : '—'}</td>
                   </tr>
                 </tbody>
               </table>
