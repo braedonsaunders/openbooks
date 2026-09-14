@@ -8,6 +8,7 @@ import { db, withBypass, withOrgContext } from "./db.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import { dropScratchOrg } from "./test-fixtures.ts";
 import {
+  quoteFromRate,
   readTaxRateProviderConfigView,
   quoteViaAvalara,
   quoteViaCustomHttp,
@@ -331,6 +332,18 @@ test("provider error statuses surface as TaxRateProviderError without leaking cr
   } finally {
     await close(errors);
   }
+});
+
+test("quoteFromRate rejects over-precision rates with the module error type", () => {
+  // The rate-provider route maps TaxRateProviderError to 422; the decimal
+  // normalization fault escaped as a plain Error (a 500) on rates finer than
+  // the 4-decimal percent scale.
+  assert.throws(
+    () => quoteFromRate("100.0000", "8.25333", "LOCAL"),
+    (e: unknown) => e instanceof TaxRateProviderError && /exact decimal/.test((e as Error).message),
+  );
+  // Sanity: a 4-decimal rate still quotes exactly (8.25% of 100 = 8.25).
+  assert.equal(quoteFromRate("100.0000", "8.25", "LOCAL").taxAmount, "8.2500");
 });
 
 // ---------------------------------------------------------------------------
