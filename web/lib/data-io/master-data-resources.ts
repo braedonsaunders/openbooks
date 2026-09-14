@@ -3,6 +3,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { canonicalDecimal } from '../exact-decimal'
 import { toSnake } from '../setup/registry'
 import { coerceBoolean, UUID_RE } from '../setup/coerce'
 import { loadFieldDefs, validateCustomValues, type CustomFieldDef } from '../custom-fields'
@@ -363,11 +365,28 @@ async function writeMaster(
           err = `${c.key}: invalid value "${String(raw)}"`
           break
         }
-        if ((c.kind === 'number' || c.kind === 'currency' || c.kind === 'percent') && !Number.isFinite(Number(raw))) {
-          err = `${c.key} must be a number`
-          break
+        if (c.kind === 'number' || c.kind === 'currency' || c.kind === 'percent') {
+          // Exact-decimal boundary, matching the interactive/API writers
+          // (exactMoney): Number() accepts hex, exponents, and over-scale
+          // fractions that PostgreSQL then silently rounds into numeric(19,4)
+          // ('12.345678' stores as 12.3457), so the canonical text form is
+          // validated and stored instead of the raw input.
+          const exact = canonicalDecimal(raw, 4)
+          let normalized: string | null = null
+          if (exact !== null) {
+            try {
+              normalized = normalizeMoney(exact)
+            } catch {
+              normalized = null
+            }
+          }
+          if (normalized === null) {
+            err = `${c.key} must be an exact decimal with at most 4 decimal places`
+            break
+          }
+          setCols.push({ column: c.column, value: normalized })
+          continue
         }
-        setCols.push({ column: c.column, value: c.kind === 'currency' ? String(raw) : raw })
       }
       if (err) {
         outcome.failed++
