@@ -548,6 +548,45 @@ test(
 );
 
 test(
+  "editing a union fringe rate after Calculate makes the run stale",
+  { skip: !DB },
+  async () => {
+    // Union fringes and dues are read fresh for every stub
+    // (fringesForEmployee over union_fringes / union_agreements), but no
+    // staleness arm watched those tables — and the component-definition arm
+    // does not fire on a pure rate change, which touches only the fringe row.
+    // Correcting a $2.50 pension fringe after Calculate left the wizard green
+    // and committed every stub priced on the old rate.
+    const run = await seedPayRun();
+    try {
+      const agreementId = randomUUID();
+      await db.execute(sql`
+        insert into union_agreements (id, org_id, name, is_active, created_by, updated_by)
+        values (${agreementId}, ${run.orgId}, 'Construction template', true,
+                ${run.actorId}, ${run.actorId})`);
+      await db.execute(sql`
+        update employee_payroll_profiles set union_agreement_id = ${agreementId}
+         where org_id = ${run.orgId} and employee_party_id = ${run.employeeId}`);
+
+      await db.execute(sql`
+        update pay_runs set calculated_at = now() where document_id = ${run.documentId}`);
+      assert.deepEqual((await payRunStaleness(run.orgId, run.documentId)).reasons, []);
+      await db.execute(sql`
+        insert into union_fringes (org_id, agreement_id, code, name, calc, value, paid_by,
+                                   is_active, created_by, updated_by)
+        values (${run.orgId}, ${agreementId}, 'PENSION', 'Pension fringe', 'per_hour_worked',
+                '2.50', 'employer', true, ${run.actorId}, ${run.actorId})`);
+      assert.ok(
+        (await payRunStaleness(run.orgId, run.documentId)).reasons.includes("unionFringes"),
+        "union fringe rates price stub lines the run already computed",
+      );
+    } finally {
+      await dropScratchOrgReporting(run.orgId);
+    }
+  },
+);
+
+test(
   "another run committing against the same employee's tax year makes this run stale",
   { skip: !DB },
   async () => {
