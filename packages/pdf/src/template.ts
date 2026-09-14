@@ -7,13 +7,16 @@
 //   {{#if path}}…{{else}}…{{/if}}  conditional (empty array / 0 / '' / null = false)
 //
 // Safety model:
-//   • Authored template HTML is sanitized ONCE at SAVE time via
-//     `sanitizeTemplateHtml` — NOT on every render.
+//   • Authored template HTML is sanitized at SAVE time via
+//     `sanitizeTemplateHtml`.
 //   • Merge values are record DATA and are HTML-escaped at interpolation time
-//     (`escapeHtml: true`), so render-time injection is impossible.
-//   • The builder marks repeating table rows with `data-each="collection"` and
-//     conditional rows with `data-if="path"`; `expandRepeatMarkers` expands
-//     them into `{{#each}}` / `{{#if}}` blocks at compile time.
+//     (`escapeHtml: true`). Escaping alone cannot cover attribute context (a
+//     token placed in an attribute takes the value's scheme), so the print
+//     path sanitizes the merged BODY again (`sanitizeRenderedHtml`).
+//   • The builder marks repeating elements with `data-each="collection"` and
+//     conditional elements with `data-if="path"`; `expandRepeatMarkers`
+//     expands them into `{{#each}}` / `{{#if}}` blocks at compile time, capped
+//     at `nestingDepth` nested markers like the renderer itself.
 
 import DOMPurify from 'isomorphic-dompurify'
 
@@ -432,8 +435,8 @@ function assertTemplatePath(path: string): void {
   }
 }
 
-function readRepeatMarker(openTag: string): RepeatMarker | null {
-  let cursor = 3 // immediately after "<tr"
+function readRepeatMarker(openTag: string, tagName: string): RepeatMarker | null {
+  let cursor = 1 + tagName.length // immediately after "<name"
   let marker: RepeatMarker | null = null
 
   while (cursor < openTag.length) {
@@ -507,22 +510,29 @@ function readRepeatMarker(openTag: string): RepeatMarker | null {
 /**
  * Expand `data-each` / `data-if` builder markers into mustache blocks:
  *   <tr data-each="lines">…</tr>   → {{#each lines}}<tr>…</tr>{{/each}}
- *   <tr data-if="memo">…</tr>      → {{#if memo}}<tr>…</tr>{{/if}}
- * Only `<tr>` is supported. A quote-aware linear scanner pairs each marked row
- * with its closing tag and rejects invalid nested rows. The marker attribute
- * is stripped from the emitted row.
+ *   <div data-if="memo">…</div>    → {{#if memo}}<div>…</div>{{/if}}
+ * Any element may carry a marker (the builder marks table rows, but section
+ * wrappers like `<div>` / `<table>` need conditionals too). A quote-aware
+ * linear scanner pairs each marked element with its own closing tag: every
+ * open element is tracked, so same-name nesting — marked or unmarked — pairs
+ * with the nearest close, marked elements may nest inside each other (up to
+ * `nestingDepth`, enforced before each push), and overlapping or unclosed
+ * markers are refused. The marker attribute is stripped from the emitted
+ * element.
  */
 export function expandRepeatMarkers(html: string): string {
   assertLength(html, TEMPLATE_RENDER_LIMITS.templateChars, 'Document template')
   const operations: { start: number; end: number; value: string }[] = []
-  let active:
-    | {
-        marker: RepeatMarker
-        openStart: number
-        openEnd: number
-        openTag: string
-      }
-    | undefined
+  type Active = {
+    marker: RepeatMarker
+    /** Index into `opens` of this frame's own open tag. */
+    level: number
+  }
+  // Every open element, marked or not: the close pairing consults this, never
+  // the marker frames, so an unmarked inner element of the same name can
+  // never steal its marked parent's closing tag (nor vice versa).
+  const opens: string[] = []
+  const stack: Active[] = []
   let cursor = 0
 
   while (cursor < html.length) {
@@ -534,37 +544,67 @@ export function expandRepeatMarkers(html: string): string {
       continue
     }
     cursor = tag.end
-    if (tag.name !== 'tr') continue
+    if (!tag.name) continue
 
-    if (!tag.closing) {
-      if (active) throw new Error('Repeat rows must not contain nested table rows.')
+    if (!tag.closing && !tag.selfClosing) {
       const openTag = html.slice(start, tag.end)
-      const marker = readRepeatMarker(openTag)
+      const marker = readRepeatMarker(openTag, tag.name)
+      opens.push(tag.name)
       if (marker) {
-        if (tag.selfClosing) throw new Error('Repeat row must have a closing </tr> tag.')
-        active = { marker, openStart: start, openEnd: tag.end, openTag }
+        if (stack.length >= TEMPLATE_RENDER_LIMITS.nestingDepth) {
+          throw new Error(
+            `Document template exceeded ${TEMPLATE_RENDER_LIMITS.nestingDepth} nested blocks.`,
+          )
+        }
+        stack.push({ marker, level: opens.length - 1 })
+        const withoutMarker = openTag.slice(0, marker.removeStart) + openTag.slice(marker.removeEnd)
+        operations.push({
+          start,
+          end: tag.end,
+          value: `{{#${marker.block} ${marker.expr}}}${withoutMarker}`,
+        })
       }
       continue
     }
 
-    if (active) {
-      const { marker, openStart, openEnd, openTag } = active
-      const withoutMarker = openTag.slice(0, marker.removeStart) + openTag.slice(marker.removeEnd)
-      operations.push({
-        start: openStart,
-        end: openEnd,
-        value: `{{#${marker.block} ${marker.expr}}}${withoutMarker}`,
-      })
+    if (!tag.closing) {
+      // Self-closing (`<br/>`, `<img/>` …): never pairable.
+      const openTag = html.slice(start, tag.end)
+      if (readRepeatMarker(openTag, tag.name)) {
+        throw new Error('Repeat element must have a closing tag.')
+      }
+      continue
+    }
+
+    // Closing tag: closes the innermost open element of its name. A marked
+    // element closes only when the match is its own open tag; closing an
+    // outer element while a marked inner one is still open is overlap.
+    let level = -1
+    for (let i = opens.length - 1; i >= 0; i--) {
+      if (opens[i] === tag.name) {
+        level = i
+        break
+      }
+    }
+    if (level === -1) continue
+    for (const frame of stack) {
+      if (frame.level > level) {
+        throw new Error('Repeat elements must not overlap.')
+      }
+    }
+    opens.length = level
+    const frame = stack[stack.length - 1]
+    if (frame && frame.level === level) {
+      stack.pop()
       operations.push({
         start: tag.end,
         end: tag.end,
-        value: `{{/${marker.block}}}`,
+        value: `{{/${frame.marker.block}}}`,
       })
-      active = undefined
     }
   }
 
-  if (active) throw new Error('Repeat row must have a closing </tr> tag.')
+  if (stack.length > 0) throw new Error('Repeat element must have a closing tag.')
   if (operations.length === 0) return html
 
   const out = new BoundedStringBuilder(
@@ -862,8 +902,8 @@ const SANITIZE_TEMPLATE_OPTIONS = {
   ALLOW_DATA_ATTR: false,
 }
 
-function sanitizeMarkup(html: string, wholeDocument: boolean): string {
-  assertLength(html, TEMPLATE_RENDER_LIMITS.templateChars, 'Authored template HTML')
+function sanitizeMarkup(html: string, wholeDocument: boolean, inputLimit: number, inputLabel: string): string {
+  assertLength(html, inputLimit, inputLabel)
   const sanitized = String(
     DOMPurify.sanitize(html, {
       ...SANITIZE_TEMPLATE_OPTIONS,
@@ -875,12 +915,22 @@ function sanitizeMarkup(html: string, wholeDocument: boolean): string {
 }
 
 export function sanitizeTemplateHtml(html: string): string {
-  return sanitizeMarkup(html, true)
+  return sanitizeMarkup(html, true, TEMPLATE_RENDER_LIMITS.templateChars, 'Authored template HTML')
+}
+
+/**
+ * Sanitize MERGED output (post-`renderTemplate`) with the rendered-output
+ * size policy. Authored templates are capped at `templateChars`, but a valid
+ * merge legitimately repeats content up to `renderOutputChars` — reusing the
+ * authored guard here would reject real documents between the two limits.
+ */
+export function sanitizeRenderedHtml(html: string): string {
+  return sanitizeMarkup(html, true, TEMPLATE_RENDER_LIMITS.renderOutputChars, 'Rendered HTML')
 }
 
 /** Sanitize an embeddable fragment without adding document wrappers. */
 export function sanitizeTemplateFragment(html: string): string {
-  return sanitizeMarkup(html, false)
+  return sanitizeMarkup(html, false, TEMPLATE_RENDER_LIMITS.templateChars, 'Authored template HTML')
 }
 
 function assertTemplateTokensAreTextOnly(html: string): void {

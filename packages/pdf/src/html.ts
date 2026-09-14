@@ -2,11 +2,13 @@
 // org-authored PDF document templates; the pdfkit renderers in document.ts /
 // statement.ts stay the engine for programmatic reports.
 //
-// Safety model: authored HTML is sanitized at save time (template.ts) and merge
-// values are escaped at render time. Belt-and-braces here anyway: JavaScript is
-// disabled in the print page and subresource loading is restricted to inline
-// data URLs for images, fonts and stylesheets. Template-authored network URLs
-// are never fetched by the renderer.
+// Safety model: authored HTML is sanitized at save time (template.ts), merge
+// values are escaped at render time, and the merged body is sanitized again
+// (`sanitizeRenderedHtml`) so record data can never supply an attribute
+// scheme. Belt-and-braces here anyway: JavaScript is disabled in the print
+// page and subresource loading is restricted to inline data URLs for images,
+// fonts and stylesheets. Template-authored network URLs are never fetched by
+// the renderer.
 
 import puppeteer, { type Browser, type Page } from 'puppeteer-core'
 import type { PdfPaperSize } from './types'

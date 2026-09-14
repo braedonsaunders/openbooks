@@ -55,9 +55,10 @@ const harness = {
     }
     if (text.includes('select coalesce(sum(s.gross)')) {
       state.ytdQuery = text
-      // Model the pre-fix production behavior: if FIT is not part of the
-      // aggregation, a US-only stub has no Canadian T factor and reads as 0.
-      const tax = text.includes("factors->>'FIT'") ? '312.3100' : '0'
+      // YTD income tax aggregates the persisted income-tax component lines
+      // (never an enumerated factor list): without the lines join the stub's
+      // federal withholding reads as 0.
+      const tax = text.includes('pay_stub_lines') && text.includes('system_key') ? '312.3100' : '0'
       return { rows: [{ gross: '4000.0000', net: '3281.6900', tax }] }
     }
     if (text.includes('select name, base_currency')) {
@@ -169,11 +170,17 @@ registerHooks({
 const valuesUrl = new URL('./values.ts?us-ytd-tax-test', import.meta.url).href
 const { loadPdfRecordValues } = (await import(valuesUrl)) as typeof import('./values.ts')
 
-test('US pay-stub YTD income tax includes federal FIT and preserves pay totals', async () => {
+test('US pay-stub YTD income tax aggregates persisted income-tax lines and preserves pay totals', async () => {
   const record = await loadPdfRecordValues('pay_stub', 'org-1', state.stub.id)
 
   assert.ok(record)
-  assert.match(state.ytdQuery, /factors->>'FIT'/)
+  // The closed, schema-enumerated income-tax system keys — no factor names.
+  assert.match(state.ytdQuery, /pay_stub_lines/)
+  assert.match(state.ytdQuery, /income_tax/)
+  assert.match(state.ytdQuery, /qc_income_tax/)
+  assert.match(state.ytdQuery, /state_income_tax/)
+  assert.match(state.ytdQuery, /local_income_tax/)
+  assert.doesNotMatch(state.ytdQuery, /factors->>/)
   assert.equal(record.values.ytd_tax, '$312.31')
   assert.equal(record.values.ytd_gross, '$4,000.00')
   assert.equal(record.values.ytd_net, '$3,281.69')

@@ -41,9 +41,9 @@ registerHooks({
       return {
         format: 'module',
         source: `
-          import { renderTemplate } from ${JSON.stringify(templateUrl)}
+          import { renderTemplate, sanitizeRenderedHtml } from ${JSON.stringify(templateUrl)}
           const state = globalThis[Symbol.for('openbooks.pdf-render-sanitization-test')]
-          export { renderTemplate }
+          export { renderTemplate, sanitizeRenderedHtml }
           export function renderHtmlDocumentPdf(input) {
             state.input = input
             return Promise.resolve(Buffer.from('%PDF-1.4 test'))
@@ -77,8 +77,11 @@ test('the live PDF body path cannot emit triple-brace record markup', async () =
   )
 
   assert.equal(pdf.toString(), '%PDF-1.4 test')
+  // Delta (safer output): the merged body is sanitized again after merging,
+  // so Chromium receives a whole-document body. Escaped record text passes
+  // through byte-identical; only the document wrapper is added.
   assert.deepEqual(state.input, {
-    bodyHtml: '<p>Ada &amp; Co</p><p>Visible note</p>',
+    bodyHtml: '<html><head></head><body><p>Ada &amp; Co</p><p>Visible note</p></body></html>',
     paperSize: 'letter',
     orientation: 'portrait',
     marginMm: 14,
@@ -113,4 +116,80 @@ test('header and footer escape record values while keeping the live page counter
   assert.equal(captured.footerHtml, '<div>Page {{page}} of {{pages}} — &lt;img src=&quot;https://attacker.example/pixel&quot; onerror=&quot;steal()&quot;&gt;Visible note</div>')
   assert.doesNotMatch(String(captured.headerHtml), /<img/i)
   assert.doesNotMatch(String(captured.footerHtml), /<img/i)
+})
+
+test('a record value cannot set an attribute scheme in the printed body', async () => {
+  state.input = null
+  await mergeAndPrintPdf(
+    {
+      compiledHtml: '<p><a href="{{website}}">site</a></p><p><a href="{{pay_link}}">pay</a></p><p><img src="{{seal}}"></p>',
+      paperSize: 'letter',
+      orientation: 'portrait',
+      marginMm: 14,
+      headerHtml: null,
+      footerHtml: null,
+    },
+    {
+      // Save-time sanitization sees the inert `{{token}}` and keeps the
+      // attribute; the scheme arrives only at merge time, so escaping (which
+      // cannot touch `:`) lets it through — the post-merge sanitize is what
+      // stops it reaching Chromium as a live link annotation.
+      website: 'javascript:alert(1)',
+      pay_link: 'https://example.com/pay',
+      seal: 'data:image/png;base64,iVBORw0KGgo=',
+    },
+  )
+
+  const captured = readCapturedInput()
+  assert.equal(
+    captured.bodyHtml,
+    '<html><head></head><body><p><a>site</a></p><p><a href="https://example.com/pay">pay</a></p>' +
+      '<p><img src="data:image/png;base64,iVBORw0KGgo="></p></body></html>',
+  )
+  assert.doesNotMatch(String(captured.bodyHtml), /javascript:/i)
+})
+
+test('a large legitimate merge is not refused at the authored size ceiling', async () => {
+  state.input = null
+  // 1.2MB of repeated safe rows: past the 1MB authored-template guard, well
+  // under the 4MB rendered-output ceiling the print path enforces.
+  const row = `<tr><td>${'A'.repeat(120)}</td></tr>`
+  const compiledHtml = `<table><tbody>{{#each lines}}${row}{{/each}}</tbody></table>`
+  const lines = Array.from({ length: 9500 }, (_, i) => ({ junk: `r${i}` }))
+  await mergeAndPrintPdf(
+    { compiledHtml, paperSize: 'letter', orientation: 'portrait', marginMm: 14, headerHtml: null, footerHtml: null },
+    { lines },
+  )
+  const captured = readCapturedInput()
+  assert.ok(String(captured.bodyHtml).length > 1_000_000)
+  assert.ok(String(captured.bodyHtml).includes('<tr><td>AAAA'))
+  assert.ok(String(captured.bodyHtml).includes('</tbody></table>'))
+})
+
+test('data:-document hrefs from record values are stripped; safe text survives', async () => {
+  state.input = null
+  await mergeAndPrintPdf(
+    {
+      compiledHtml: '<p><a href="{{doc}}">doc</a></p><div title="{{note}}">x</div>',
+      paperSize: 'letter',
+      orientation: 'portrait',
+      marginMm: 14,
+      headerHtml: null,
+      footerHtml: null,
+    },
+    {
+      doc: 'data:text/html,<script>alert(1)</script>',
+      // Quote-breakout was already dead at merge time (`"` escapes); the
+      // attribute stays inert text through the post-merge sanitize too.
+      note: '" onmouseover="alert(1)',
+    },
+  )
+
+  const captured = readCapturedInput()
+  assert.equal(
+    captured.bodyHtml,
+    '<html><head></head><body><p><a>doc</a></p><div title="&quot; onmouseover=&quot;alert(1)">x</div></body></html>',
+  )
+  assert.doesNotMatch(String(captured.bodyHtml), /<script/i)
+  assert.doesNotMatch(String(captured.bodyHtml), /onmouseover="alert/i)
 })
