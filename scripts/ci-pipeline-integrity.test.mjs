@@ -250,11 +250,10 @@ test('every workflow step that runs the test suite supplies the trusted-bypass c
 })
 
 
-test('the coverage run executes the canonical test command, not a parallel glob list', () => {
+test('the coverage run executes the canonical integration partition, not a parallel glob list', () => {
   // This job used to maintain its own copy of the test globs, drifted from the
   // canonical list, and published an lcov artifact for a suite it had not run.
-  // Coverage is now produced by the same `npm test` invocation that gates the
-  // merge, so the two cannot diverge by construction. Assert exactly that.
+  // Coverage uses the same manifest-owned integration partition as push CI.
   const workflow = readFileSync(join(WORKFLOW_DIR, 'test.yml'), 'utf8')
   const blocks = runBlocks(workflow)
   const covering = blocks.filter((b) => /--experimental-test-coverage/.test(withoutComments(b.body)))
@@ -266,8 +265,8 @@ test('the coverage run executes the canonical test command, not a parallel glob 
   const body = withoutComments(covering[0].body)
   assert.match(
     body,
-    /npm test\b/,
-    'the coverage step must run the canonical `npm test` script so its membership cannot drift from the merge gate',
+    /npm run test:integration\b/,
+    'coverage must run the canonical integration partition used by the merge gate',
   )
   assert.ok(
     !/engine\/src\/\*\*|web\/\*\*|packages\/\*\*/.test(body),
@@ -410,7 +409,7 @@ test('every step that invokes the sim CLI arms its OPENBOOKS_SIM interlock', () 
   }
 })
 
-test('the merge-gating workflow runs the golden harness, after real activity, in the full-suite job', () => {
+test('the merge-gating workflow runs the golden harness, after real activity, in its required simulation job', () => {
   // test.yml is the workflow pull requests actually merge against, so this is
   // where "runs the golden harness as part of its check command" has to hold.
   const source = readFileSync(join(WORKFLOW_DIR, 'test.yml'), 'utf8')
@@ -456,23 +455,12 @@ test('the merge-gating workflow runs the golden harness, after real activity, in
 
   // The simulation refuses to run without its explicit opt-in; pin it so the
   // activity step cannot be silently disarmed by an env tidy-up.
+  const simulation = topLevelBlock(source, 'simulation')
+  assert.match(simulation, /OPENBOOKS_SIM:\s*"1"/, 'the sim opt-in interlock must be set')
+  assert.ok(simulation.includes(harnessCode.trim().split('\n')[0]), 'simulation must own the golden harness')
   const integration = topLevelBlock(source, 'integration')
-  assert.match(integration, /OPENBOOKS_SIM:\s*"1"/, 'the sim opt-in interlock must be set for the activity step')
-
-  // "as part of its check command": the harness rides in the same job as the
-  // full database-backed suite, so one green check covers both.
-  // Match the invocation, not a literal `run: npm test` line: the step is a
-  // block scalar now because it also emits lcov, and pinning the exact text
-  // made an unrelated formatting change look like a removed test run.
-  assert.match(
-    integration,
-    /\bnpm test\b/,
-    'this contract pins the integration job, the one that runs the full suite',
-  )
-  assert.ok(
-    integration.includes(harnessCode.trim().split('\n')[0]),
-    'the golden harness must run in the same job as the full suite, not in a workflow merges do not wait for',
-  )
+  assert.match(integration, /needs: \[unit, database, simulation\]/, 'the required gate must wait for every test partition and the simulation')
+  assert.doesNotMatch(simulation, /continue-on-error/)
 
   // The gate only blocks merges while the workflow fires on pull requests.
   const on = source.slice(source.indexOf('\non:'), source.indexOf('\njobs:'))

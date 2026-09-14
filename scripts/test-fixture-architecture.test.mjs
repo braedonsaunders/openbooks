@@ -136,7 +136,7 @@ const SCRIPTS_RUNNING_SUITE = Object.entries(JSON.parse(readFileSync("package.js
   .filter(([, body]) => /npm test\b/.test(body))
   .map(([name]) => name);
 const SUITE_ENTRYPOINTS = new RegExp(
-  ["npm (?:run )?test(?![:\\w-])", "test-suite\\.mjs integration", ...SCRIPTS_RUNNING_SUITE.map((n) => `npm run ${n}\\b`)].join("|"),
+  ["npm (?:run )?test(?![:\\w-])", "test-suite\\.mjs integration", "npm run test:integration", ...SCRIPTS_RUNNING_SUITE.map((n) => `npm run ${n}\\b`)].join("|"),
 );
 
 test("every workflow job that runs the integration suite claims its database as throwaway", () => {
