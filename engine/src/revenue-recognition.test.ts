@@ -17,6 +17,8 @@ import {
   RevenueRecognitionError,
   runRevenueRecognition,
   separateFinancingComponent,
+  MAX_FINANCING_DEFERRAL_YEARS,
+  TransactionPriceError,
   type RecognitionInput,
 } from "./revenue-recognition.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
@@ -376,6 +378,46 @@ test("financing accretion absorbs rounding in the final year and still lands on 
   assert.equal(last.closing, "50000.0000");
   const interestSum = f.accretion.reduce((a, p) => a + toUnits(p.interest), 0n);
   assert.equal(interestSum, toUnits(f.financingComponent));
+});
+
+test("financing deferral rejects non-whole years instead of mis-discounting", () => {
+  // The defect: only years <= 0 was refused. years = 1.5 discounted over two
+  // exponents (1000/1.21 = 826.4463) while accreting over a single period, and
+  // years = NaN discounted nothing yet persisted a zero-effect financing block.
+  for (const years of [0, -1, 1.5, NaN, Infinity, 2147483648]) {
+    assert.throws(
+      () => separateFinancingComponent({ consideration: "1000", annualRatePercent: "10", years }),
+      TransactionPriceError,
+      `years=${String(years)} must be refused`,
+    );
+  }
+  // Whole years still separate exactly: discount and accretion agree.
+  const f = separateFinancingComponent({ consideration: "1000", annualRatePercent: "10", years: 1 });
+  assert.equal(f.accretion.length, 1);
+  assert.equal(f.cashSellingPrice, "909.0909");
+});
+
+test("financing horizon caps at the named limit and the boundary stays cheap", () => {
+  // Beyond-limit values must be refused WITHOUT executing the loop: a throw
+  // that returns at all proves no billion-iteration BigInt schedule was built.
+  assert.equal(MAX_FINANCING_DEFERRAL_YEARS, 100);
+  // Refused before the per-year loop runs, so even 2^31-1 returns at once.
+  for (const years of [101, 1000, 2147483647]) {
+    assert.throws(
+      () => separateFinancingComponent({ consideration: "1000", annualRatePercent: "10", years }),
+      /from 1 through 100/,
+      `years=${years} must be refused without looping`,
+    );
+  }
+  // The boundary itself is inclusive and fast: 100 yearly periods landing
+  // exactly on the billed amount.
+  const century = separateFinancingComponent({
+    consideration: "1000",
+    annualRatePercent: "5",
+    years: MAX_FINANCING_DEFERRAL_YEARS,
+  });
+  assert.equal(century.accretion.length, MAX_FINANCING_DEFERRAL_YEARS);
+  assert.equal(century.accretion[MAX_FINANCING_DEFERRAL_YEARS - 1]!.closing, "1000.0000");
 });
 
 // ---------------------------------------------------------------------------
