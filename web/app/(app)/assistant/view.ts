@@ -33,6 +33,7 @@ import { listConversations } from '../../../lib/ai-conversations'
 export interface AssistantData {
   conversations: { id: string; title: string; updatedAt: string }[]
   canWrite: boolean
+  canConfigureAi: boolean
   aiEnabled: boolean
   initialPrompt?: string
 }
@@ -50,6 +51,7 @@ export async function loadAssistant(
   return {
     conversations,
     canWrite: can(authz, 'assistant.write'),
+    canConfigureAi: can(authz, 'admin.ai.manage'),
     aiEnabled: getModel(aiConfig, 'smart') !== null,
     // Single-valued ?q= only; an array (or absent) prompt is no prompt.
     ...(typeof q === 'string' ? { initialPrompt: q } : {}),
@@ -70,6 +72,7 @@ export function assistantSpec(data: AssistantData): PageSpec {
         activeId: null,
         initialMessages: [],
         canWrite: data.canWrite,
+        canConfigureAi: data.canConfigureAi,
         aiEnabled: data.aiEnabled,
         // Omitted when absent: passing `undefined` would arrive as an
         // explicit prop the component treats the same, but a missing key

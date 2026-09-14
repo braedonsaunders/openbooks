@@ -50,7 +50,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'assets-doc-link': { props: ['label'] },
   'assets-equipment-link': { props: ['label'] },
   'assets-tabs': { props: ['tabs'] },
-  'assistant-app': { props: ['activeId', 'aiEnabled', 'canWrite', 'conversations', 'initialMessages', 'initialPrompt'] },
+  'assistant-app': { props: ['activeId', 'aiEnabled', 'canConfigureAi', 'canWrite', 'conversations', 'initialMessages', 'initialPrompt'] },
   'attention-list': { props: ['allClear', 'items'] },
   'audit-docs-link': { props: ['href', 'label'] },
   'audit-event-drawer': { props: ['drawer'] },

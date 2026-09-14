@@ -48,6 +48,7 @@ export interface AssistantConversationData {
     data: { parts?: unknown[] } | null
   }[]
   canWrite: boolean
+  canConfigureAi: boolean
   aiEnabled: boolean
 }
 
@@ -77,6 +78,7 @@ export async function loadAssistantConversation(id: string): Promise<AssistantCo
       data: (m.data ?? null) as { parts?: unknown[] } | null,
     })),
     canWrite: can(authz, 'assistant.write'),
+    canConfigureAi: can(authz, 'admin.ai.manage'),
     aiEnabled: getModel(aiConfig, 'smart') !== null,
   }
 }
@@ -95,6 +97,7 @@ export function assistantConversationSpec(data: AssistantConversationData): Page
         activeId: data.activeId,
         initialMessages: data.initialMessages,
         canWrite: data.canWrite,
+        canConfigureAi: data.canConfigureAi,
         aiEnabled: data.aiEnabled,
       }),
     ],
