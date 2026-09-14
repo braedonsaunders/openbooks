@@ -945,6 +945,7 @@ export const STALENESS_INPUT_CLASSES = [
   "adjustments",
   "time",
   "wages",
+  "schedule",
   "roster",
   "components",
   "componentDefinitions",
@@ -954,6 +955,7 @@ export const STALENESS_INPUT_CLASSES = [
   "timeTypes",
   "settings",
   "ytd",
+  "openingBalances",
 ] as const;
 
 /**
@@ -977,7 +979,8 @@ export async function payRunStaleness(
       calculated_at: Date | string | null; never_calculated: boolean;
       calculation_source_snapshot: unknown; calculation_source_digest: string | null;
       adjustments_changed: boolean; time_changed: boolean;
-      wages_changed: boolean; roster_changed: boolean; employment_changed: boolean;
+      wages_changed: boolean; schedule_changed: boolean;
+      roster_changed: boolean; employment_changed: boolean;
       components_changed: boolean; component_definitions_changed: boolean;
       derived_rules_changed: boolean; entitlements_changed: boolean;
       worker_comp_changed: boolean; time_types_changed: boolean;
@@ -997,6 +1000,15 @@ export async function payRunStaleness(
            exists (
              select 1 from labor_cost_rates w
               where w.org_id = r.org_id and w.updated_at > r.calculated_at) as wages_changed,
+           -- The run's own pay calendar. calculateStub re-reads
+           -- periods_per_year from it on every pass (factor P annualizes
+           -- every statutory withholding), so a count corrected after
+           -- Calculate restates the whole stub. Scoped to the run's schedule:
+           -- another calendar's edit is not this run's news.
+           exists (
+             select 1 from pay_schedules sch
+              where sch.org_id = r.org_id and sch.id = r.pay_schedule_id
+                and sch.updated_at > r.calculated_at) as schedule_changed,
            -- Roster: the payroll profile (TD1/W-4, exemptions, schedule) and
            -- the employment record the run reads for termination, job title,
            -- trade and WCB class.
@@ -1161,6 +1173,7 @@ export async function payRunStaleness(
     row.adjustments_changed ? "adjustments" : null,
     row.time_changed || exactTimeChanged ? "time" : null,
     row.wages_changed || exactWagesChanged ? "wages" : null,
+    row.schedule_changed ? "schedule" : null,
     row.roster_changed || row.employment_changed ? "roster" : null,
     row.components_changed ? "components" : null,
     row.component_definitions_changed ? "componentDefinitions" : null,
