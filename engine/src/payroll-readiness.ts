@@ -947,6 +947,7 @@ export const STALENESS_INPUT_CLASSES = [
   "wages",
   "schedule",
   "statutoryRates",
+  "unionFringes",
   "roster",
   "components",
   "componentDefinitions",
@@ -981,6 +982,7 @@ export async function payRunStaleness(
       calculation_source_snapshot: unknown; calculation_source_digest: string | null;
       adjustments_changed: boolean; time_changed: boolean;
       wages_changed: boolean; schedule_changed: boolean; statutory_rates_changed: boolean;
+      union_fringes_changed: boolean;
       roster_changed: boolean; employment_changed: boolean;
       components_changed: boolean; component_definitions_changed: boolean;
       derived_rules_changed: boolean; entitlements_changed: boolean;
@@ -1024,6 +1026,28 @@ export async function payRunStaleness(
                      and prof.pay_schedule_id = r.pay_schedule_id
                      and prof.is_active and prof.country = sr.country)
            ) as statutory_rates_changed,
+           -- Union agreements and fringe rates price stub lines fresh on
+           -- every pass, and a pure rate change touches only the fringe row
+           -- (the component-definition arm never fires). Scoped to the
+           -- agreements on the run's schedule: another bargaining unit's new
+           -- fringe is not this run's news.
+           (exists (
+              select 1 from union_fringes f
+               where f.org_id = r.org_id and f.updated_at > r.calculated_at
+                 and exists (
+                   select 1 from employee_payroll_profiles prof
+                    where prof.org_id = r.org_id
+                      and prof.pay_schedule_id = r.pay_schedule_id
+                      and prof.is_active and prof.union_agreement_id = f.agreement_id))
+            or exists (
+              select 1 from union_agreements a
+               where a.org_id = r.org_id and a.updated_at > r.calculated_at
+                 and exists (
+                   select 1 from employee_payroll_profiles prof
+                    where prof.org_id = r.org_id
+                      and prof.pay_schedule_id = r.pay_schedule_id
+                      and prof.is_active and prof.union_agreement_id = a.id)))
+             as union_fringes_changed,
            -- Roster: the payroll profile (TD1/W-4, exemptions, schedule) and
            -- the employment record the run reads for termination, job title,
            -- trade and WCB class.
@@ -1190,6 +1214,7 @@ export async function payRunStaleness(
     row.wages_changed || exactWagesChanged ? "wages" : null,
     row.schedule_changed ? "schedule" : null,
     row.statutory_rates_changed ? "statutoryRates" : null,
+    row.union_fringes_changed ? "unionFringes" : null,
     row.roster_changed || row.employment_changed ? "roster" : null,
     row.components_changed ? "components" : null,
     row.component_definitions_changed ? "componentDefinitions" : null,
