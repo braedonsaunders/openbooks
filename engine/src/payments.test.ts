@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildCpa005File,
+  buildSepaFile,
   carryingAmountForSettlement,
   type Cpa005Run,
   type EftSettings,
@@ -125,6 +126,62 @@ test("composing the item trace number leaves every other credit-segment offset a
   const records = buildCpa005File(cpa005Run()).split("\r\n").filter((r) => r !== "");
   assert.deepEqual(records.map((r) => r[0]), ["A", "C", "Z"]);
   for (const record of records) assert.equal(record.length, 1464);
+});
+
+// ---------------------------------------------------------------------------
+// SEPA pain.001 credit file — exact 2dp amounts, positive credits only
+// ---------------------------------------------------------------------------
+
+const SEPA_SETTINGS = {
+  originatorName: "ACME CONSTRUCTION LIMITED",
+  originatorIban: "DE89370400440532013000",
+  originatorBic: "COBADEFFXXX",
+};
+
+function sepaPayment(amount: string) {
+  return {
+    endToEndId: "E2E-BILL-0001",
+    amount,
+    creditorName: "FIRST PAYEE",
+    creditorIban: "FR1420041010050500013M02606",
+    remittance: "BILL-0001",
+  };
+}
+
+function sepaFile(amounts: string[]): string {
+  return buildSepaFile({
+    settings: SEPA_SETTINGS,
+    messageId: "MSG-0001",
+    creationDateTime: "2026-03-03T00:00:00",
+    executionDate: "2026-03-05",
+    payments: amounts.map(sepaPayment),
+  });
+}
+
+test("the SEPA credit file carries exact instruction amounts in CtrlSum and InstdAmt", () => {
+  const content = sepaFile(["125.00", "49.99"]);
+
+  assert.match(content, /<NbOfTxs>2<\/NbOfTxs>/);
+  assert.match(content, /<CtrlSum>174.99<\/CtrlSum>/);
+  assert.match(content, /<InstdAmt Ccy="EUR">125.00<\/InstdAmt>/);
+  assert.match(content, /<InstdAmt Ccy="EUR">49.99<\/InstdAmt>/);
+});
+
+test("the SEPA credit file refuses non-positive payments instead of emitting them", () => {
+  for (const amount of ["-5.00", "0.00"]) {
+    assert.throws(
+      () => sepaFile([amount]),
+      (error: Error) => error instanceof PaymentError && /payment amounts must be positive/.test(error.message),
+      `amount "${amount}" must not reach the bank`,
+    );
+  }
+});
+
+test("the SEPA credit file refuses sub-cent precision instead of rounding it", () => {
+  assert.throws(
+    () => sepaFile(["10.005"]),
+    (error: Error) => error instanceof PaymentError && /sub-cent precision/.test(error.message),
+  );
 });
 
 test("a data centre that cannot form a valid trace number refuses to write a file", () => {
