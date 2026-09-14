@@ -389,6 +389,11 @@ export async function updateDraftPayment(
     validateAllocationInputs(creditAllocations.map((a) => sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount)));
     const discountUnits = toUnits(discountAmount);
     if (discountUnits < 0n) throw new PaymentError("discount amount cannot be negative");
+    // Early-payment discounts settle against the payable: the vendor_payment
+    // kernel rule carries the discount leg, while customer_payment has none —
+    // accepting one here would post a short AR credit against full
+    // applications (caught only later at the posting cross-foot).
+    if (discountUnits > 0n && doc.kind !== "vendor_payment") throw new PaymentError("discounts only apply to vendor payments");
     if (discountUnits > 0n && !discountAccountId) throw new PaymentError("select a discount account before applying a discount");
     const feeUnits = toUnits(feeAmount);
     if (feeUnits < 0n) throw new PaymentError("fee amount cannot be negative");

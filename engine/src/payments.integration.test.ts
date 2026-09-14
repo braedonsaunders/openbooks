@@ -2226,6 +2226,85 @@ test("customer-payment surcharge posting rejects a non-income fee account", { sk
   }
 });
 
+test("customer receipts refuse a vendor-style early-payment discount", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Discount kind guard", "admin");
+
+    const invoiceId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-DISCOUNT-KIND',
+              ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
+              '100', '0', '100', ${userId})`);
+    await db.execute(sql`
+      insert into document_lines
+        (org_id, document_id, line_number, account_id, quantity, unit_price,
+         amount, tax_amount)
+        values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100',
+              '100', '0')`);
+    await db.execute(sql`
+      update documents set status = 'approved', updated_at = now()
+       where id = ${invoiceId} and org_id = ${org.orgId}`);
+    const invoiceEntryId = await postDocument(invoiceId, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    });
+    const openLineId = (await db.execute<{ id: string }>(sql`
+      select id from journal_lines
+       where entry_id = ${invoiceEntryId} and org_id = ${org.orgId}
+         and is_open_item
+    `)).rows[0]!.id;
+
+    const payment = await createPaymentDocument({
+      orgId: org.orgId,
+      kind: "customer_payment",
+      createdBy: userId,
+      partyId: org.customerId,
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      documentDate: org.date,
+      currency: "CAD",
+    });
+    // Fully allocated, so the only admissible refusal is the kind guard —
+    // the kernel's customer_payment rule has no discount leg, and posting
+    // this draft would leave the invoice fully applied against a short AR
+    // credit (today it dies later at the cross-foot with a cryptic error).
+    await assert.rejects(
+      updateDraftPayment(
+        payment.id,
+        {
+          partyId: org.customerId,
+          bankAccountId: org.accounts.bank,
+          allocations: [{
+            openLineId,
+            sourceTransactionAmount: "100",
+            targetTransactionAmount: "100",
+            settlementRate: "1",
+            settlementRateSource: "same_currency" as const,
+            settlementRateReference: "same transaction currency",
+          }],
+          discountAmount: "10",
+          discountAccountId: org.accounts.cogs,
+        },
+        userId,
+        org.orgId,
+      ),
+      (error: unknown) => error instanceof PaymentError && /discounts only apply to vendor payments/.test(error.message),
+    );
+    const unchanged = await db.execute<{ status: string; total: string; lines: number }>(sql`
+      select d.status, d.total,
+             (select count(*)::int from document_lines l where l.org_id = d.org_id and l.document_id = d.id) as lines
+        from documents d
+       where d.org_id = ${org.orgId} and d.id = ${payment.id}
+    `);
+    assert.deepEqual(unchanged.rows[0], { status: "draft", total: "0.0000", lines: 0 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("an in-flight automatic remittance decision holds the run against a concurrent bank return", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   let releaseProfileTable!: () => void;
