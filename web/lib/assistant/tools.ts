@@ -954,7 +954,9 @@ const projectProfitability: AssistantToolDef = {
     const a = raw as { projectId?: string; query?: string; limit?: number };
     if (a.projectId) {
       const exists = (await db.execute<{ id: string; name: string; status: string }>(sql`
-        select id, name, status from projects where id = ${a.projectId} and org_id = ${authz.user.orgId}
+        select id, name, status from projects
+         where id = ${a.projectId} and org_id = ${authz.user.orgId}
+           ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
       `));
       if (!exists.rows[0]) return { ok: false, error: "project_not_found" };
       return { ok: true, data: { project: exists.rows[0], ...(await projectCostSummary(authz.user.orgId, a.projectId)), href: `/projects?project=${a.projectId}` } };
@@ -963,8 +965,9 @@ const projectProfitability: AssistantToolDef = {
     const like = a.query ? `%${a.query}%` : null;
     const rows = (await db.execute<Record<string, unknown>>(sql`
       select p.id, p.name, p.status, p.starts_on, p.ends_on, c.display_name as customer
-        from projects p left join parties c on c.id = p.customer_id and c.org_id = p.org_id
+       from projects p left join parties c on c.id = p.customer_id and c.org_id = p.org_id
        where p.org_id = ${authz.user.orgId}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
          ${like ? sql`and (p.name ilike ${like} or c.display_name ilike ${like})` : sql``}
        order by case p.status when 'active' then 0 when 'awarded' then 1 else 2 end, p.name
        limit ${limit}
