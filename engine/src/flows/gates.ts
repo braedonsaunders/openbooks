@@ -192,9 +192,10 @@ export interface DecideGateResult {
  * raise authority). Quorum satisfied → resume the branch on the same run.
  *
  * On-behalf-of audit: a delegated decision records decidedBy = the DELEGATE
- * and prefixes the row's comment with `[on behalf of <principal>]` — chosen
- * over a new column so 0027 stays a single-table migration and the existing
- * delegate-gate hand-off audit (also comment-based) stays consistent.
+ * with the principal in the structured on_behalf_of_user_id column (and a
+ * delegated hand-off keeps its origin in delegated_from_user_id) — the
+ * decision comment carries only the decider's own words, never a forged
+ * provenance marker.
  */
 export async function decideGate(args: {
   gateId: string;
@@ -867,7 +868,7 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
             gateTitle: gate.title,
             subjectLabel,
             // One-click signed decision links (email-tokens.ts) — bound to
-            // this gate row + this assignee, 7-day expiry.
+            // this gate row + this assignee, 72-hour expiry.
             ...emailActionUrls(gate.id, assignee.id),
           })
         : emails.flowApprovalEscalationEmail({ orgName: brand, gateTitle: gate.title, subjectLabel });
@@ -918,19 +919,28 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
   const values = subject?.values ?? {};
   const targetCtx = { orgId: gate.orgId, submitterUserId, values };
 
-  // escalateTo → submitter's supervisor → org admins.
+  // escalateTo → submitter's supervisor → org admins. Each stage skips the
+  // submitter whenever separation of duties would block them (the same
+  // predicate decideGate enforces): a replacement the submitter could never
+  // decide would strand the gate — replacements carry escalateAt=null, so
+  // nothing would ever re-fire it and the run would wait forever.
+  const sodApplies =
+    adapter?.selfApprovalPolicy === "forbidden" ||
+    !nodeGate ||
+    nodeGate.preventSelfApproval !== false;
+  const eligible = (users: ResolvedUser[]) => users.filter((user) =>
+    user.id !== gate.assigneeUserId &&
+    !(sodApplies && submitterUserId && user.id === submitterUserId));
   let replacements = nodeGate?.escalateTo
-    ? await resolveAssigneeUsers([nodeGate.escalateTo], targetCtx)
+    ? eligible(await resolveAssigneeUsers([nodeGate.escalateTo], targetCtx))
     : [];
   if (replacements.length === 0) {
     const sup = await supervisorOf(gate.orgId, submitterUserId);
-    if (sup) replacements = [sup];
+    replacements = sup ? eligible([sup]) : [];
   }
   if (replacements.length === 0) {
-    replacements = await roleUsers(gate.orgId, GATE_ADMIN_ROLE);
+    replacements = eligible(await roleUsers(gate.orgId, GATE_ADMIN_ROLE));
   }
-  // Never escalate a gate to the person already sitting on it.
-  replacements = replacements.filter((u) => u.id !== gate.assigneeUserId);
 
   if (replacements.length === 0) {
     // Unresolvable: tell the admins, stop re-scanning, keep the gate actionable.
