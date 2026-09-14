@@ -54,6 +54,13 @@ test("login identifiers and return paths are normalized safely", () => {
   assert.equal(safeReturnTo("/reports/pnl?period=1"), "/reports/pnl?period=1");
   assert.equal(safeReturnTo("//evil.example"), "/");
   assert.equal(safeReturnTo("https://evil.example"), "/");
+  // WHATWG URL parsing treats backslash as a path separator for http(s)
+  // URLs, so a leading "/\" is a protocol-relative open redirect once the
+  // value is resolved against the app origin (e.g. the OIDC callback
+  // redirect). The login page's safeNextPath already rejects these.
+  assert.equal(safeReturnTo("/\\evil.example"), "/");
+  assert.equal(safeReturnTo("/\\/evil.example"), "/");
+  assert.equal(safeReturnTo("/\\evil.example\\@x"), "/");
 });
 
 test("browser mutations reject a cross-origin Origin header", () => {
