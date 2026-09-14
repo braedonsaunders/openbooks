@@ -61,6 +61,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Install qpdf
+        run: sudo apt-get update && sudo apt-get install -y qpdf
       - name: Unit test shard
         shell: bash
         run: |
