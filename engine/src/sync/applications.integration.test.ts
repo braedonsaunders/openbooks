@@ -285,3 +285,139 @@ test(
     }
   },
 );
+
+test(
+  "application reconciliation gives each realized-FX group its own entry number",
+  { skip: !DB },
+  async () => {
+    // One foreign-currency payment settles two parties whose carrying rates
+    // both drifted, so two FX groups carry nonzero adjustments for the same
+    // payment document. Naming every realized-FX entry `${documentId}-FX`
+    // posts the second group onto the first group's entry number, violating
+    // journal_entries_org_number and rolling back the entire reconciliation.
+    const org = await createScratchOrg();
+    const paymentDocumentId = randomUUID();
+    const invoiceAId = randomUUID();
+    const invoiceBId = randomUUID();
+    const paymentEntryId = randomUUID();
+    const entryAId = randomUUID();
+    const entryBId = randomUUID();
+    const partyBId = randomUUID();
+    try {
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${partyBId}, ${org.orgId}, 'customer', 'FX Party B', true, '{}'::jsonb)
+      `);
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, status, subtotal, tax_total,
+           total, custom)
+        values
+          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-FX2',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'EUR', 'approved', 200, 0, 200, '{"sourceId":"payment-fx2"}'::jsonb),
+          (${invoiceAId}, ${org.orgId}, 'customer_invoice', 'INV-FX2A',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'EUR', 'approved', 100, 0, 100, '{"sourceId":"invoice-fx2a"}'::jsonb),
+          (${invoiceBId}, ${org.orgId}, 'customer_invoice', 'INV-FX2B',
+           ${partyBId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'EUR', 'approved', 100, 0, 100, '{"sourceId":"invoice-fx2b"}'::jsonb)
+      `);
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin)
+        values
+          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'PAY-FX2', ${org.date}, ${org.periodId}, 'Two-party foreign payment',
+           'draft', ${paymentDocumentId}, 'document'),
+          (${entryAId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'INV-FX2A', ${org.date}, ${org.periodId}, 'Foreign invoice A',
+           'draft', ${invoiceAId}, 'document'),
+          (${entryBId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'INV-FX2B', ${org.date}, ${org.periodId}, 'Foreign invoice B',
+           'draft', ${invoiceBId}, 'document')
+      `);
+      await db.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+        values
+          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, 120, 'EUR', 100, 1.2, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.ar},
+           ${org.subsidiaryId}, 125, 'EUR', 100, 1.25, ${partyBId}, true),
+          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 3, ${org.accounts.bank},
+           ${org.subsidiaryId}, -245, 'CAD', -245, 1, null, false),
+          (${randomUUID()}, ${org.orgId}, ${entryAId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, -110, 'EUR', -100, 1.1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${entryAId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, 110, 'CAD', 110, 1, null, false),
+          (${randomUUID()}, ${org.orgId}, ${entryBId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, -115, 'EUR', -100, 1.15, ${partyBId}, true),
+          (${randomUUID()}, ${org.orgId}, ${entryBId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, 115, 'CAD', 115, 1, null, false)
+      `);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now()
+         where id in (${paymentEntryId}, ${entryAId}, ${entryBId})
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${paymentDocumentId}
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${entryAId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${invoiceAId}
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${entryBId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${invoiceBId}
+      `);
+
+      const result = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "payment-fx2", appliedRef: "invoice-fx2a", amount: "120" },
+        { paymentRef: "payment-fx2", appliedRef: "invoice-fx2b", amount: "125" },
+      ]);
+      assert.deepEqual(result, {
+        pairs: 2,
+        inserted: 2,
+        insertedAmount: "225.0000",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+
+      const fxNumbers = await db.execute<{ entryNumber: string }>(sql`
+        select e.entry_number as "entryNumber"
+          from journal_entries e
+         where e.org_id = ${org.orgId} and e.origin = 'fx_settlement'
+         order by e.entry_number
+      `);
+      assert.equal(fxNumbers.rows.length, 2);
+      assert.notEqual(fxNumbers.rows[0]!.entryNumber, fxNumbers.rows[1]!.entryNumber);
+
+      // A re-run settles nothing new and mints no further FX entries, so the
+      // stepped numbering cannot drift across runs.
+      const rerun = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "payment-fx2", appliedRef: "invoice-fx2a", amount: "120" },
+        { paymentRef: "payment-fx2", appliedRef: "invoice-fx2b", amount: "125" },
+      ]);
+      assert.deepEqual(rerun, {
+        pairs: 2,
+        inserted: 0,
+        insertedAmount: "0.0000",
+        alreadySettled: 2,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
