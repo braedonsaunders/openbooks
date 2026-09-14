@@ -418,14 +418,9 @@ for (const mode of ["subtree", "list"] as const) {
 test("module permission declarations are tenant-scoped, explicitly grantable inside the ceiling, and withdrawn without erasing stored grants", { skip }, async () => {
   const f = await seed(["*"]);
   const other = await createScratchOrg();
-  const { requestModuleInstallApproval, decideModuleApproval } = await import("@openbooks/engine/src/modules/lifecycle.ts");
-  const { uninstallModule } = await import("@openbooks/engine/src/modules/installer.ts");
+  const { installTestExtension, disableTestExtension } = await import("@openbooks/engine/src/test-extension-packages.ts");
   try {
-    const requesterId = await createScratchUser(f.orgId, "Module requester", "roles_admin");
-    const staged = await requestModuleInstallApproval({ orgId: f.orgId, requesterId,
-      manifest: { key: "role-addon", name: "Role addon", version: "1.0.0", permissions: ["admin.roles.manage"], contributions: [{ kind: "permission", key: "role_addon.read", label: "Read role addon" }] },
-      installerEffectivePermissions: ["*"], assignees: [{ type: "user", userId: f.actorId }], reason: "Add governed permission" });
-    await decideModuleApproval({ gateId: staged.gateIds[0]!, userId: f.actorId, decision: "approved", signature: "Roles admin", approverEffectivePermissions: ["*"] });
+    await installTestExtension({orgId:f.orgId,actorId:f.actorId,manifest:{key:'role-addon',name:'Role addon',version:'1.0.0',permissions:['admin.roles.manage'],contributions:[{kind:'permission',key:'role_addon.read',label:'Read role addon'}]}});
     const available = await (await GET()).json();
     assert.ok(available.permissions.some((permission: { key: string }) => permission.key === "role_addon.read"));
     const created = await call("POST", { name: "Addon reader", permissions: ["role_addon.read"] });
@@ -437,7 +432,7 @@ test("module permission declarations are tenant-scoped, explicitly grantable ins
     assert.deepEqual((await (await GET()).json()).permissions, []);
     routeState.authz!.user.orgId = f.orgId;
     routeState.authz!.permissions = new Set(["*"]);
-    await uninstallModule({ orgId: f.orgId, actorId: f.actorId, key: "role-addon", reason: "Withdraw addon" });
+    await disableTestExtension({ orgId: f.orgId, actorId: f.actorId, key: "role-addon" });
     assert.deepEqual((await (await GET()).json()).permissions, []);
     assert.deepEqual(await rolePermissions(id), ["role_addon.read"]);
     assert.equal((await call("POST", { name: "Inactive permission", permissions: ["role_addon.read"] })).status, 400);

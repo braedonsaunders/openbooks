@@ -23,7 +23,7 @@ registerHooks({
 })
 
 const storeSource = readFileSync(new URL('./store.ts', import.meta.url), 'utf8')
-const routeSource = readFileSync(new URL('../../app/api/apps/[key]/route.ts', import.meta.url), 'utf8')
+const routeSource = readFileSync(new URL('../../app/api/extensions/[key]/route.ts', import.meta.url), 'utf8')
 
 function functionBody(source: string, name: string): string {
   const exported = source.indexOf(`export async function ${name}`)
@@ -63,7 +63,7 @@ function registerSourceTests(): void {
     assert.match(body, /runs: runs\.rows/)
     assert.match(body, /storage: storage\.rows/)
     assert.match(body, /before:\s*\{/)
-    assert.match(body, /after:\s*null/)
+    assert.match(body, /after: preserveHistory \? \{ status: 'disabled', historyPreserved: true \} : null/)
     assert.match(body, /actor_id\)/)
   })
 
@@ -80,21 +80,12 @@ function registerSourceTests(): void {
     assert.match(routeSource, /setAppStatus\(gate\.user\.orgId, gate\.user\.id, key, body\.status\)/)
   })
 
-  test('authoring entry points create a new active version and leave the prior version untouched', () => {
-    assert.match(storeSource, /async function snapshotActiveVersion\(/)
-    const snapshot = functionBody(storeSource, 'snapshotActiveVersion')
-    assert.match(snapshot, /insert into app_versions[\s\S]*?'active'/)
-    assert.match(snapshot, /insert into app_files[\s\S]*?select org_id, app_id, \$\{versionId\}/)
-    assert.match(snapshot, /update app_versions[\s\S]*?set status = 'superseded'/)
-    assert.match(snapshot, /update apps[\s\S]*?set active_version_id = \$\{versionId\}/)
-
-    for (const name of ['updateAppMeta', 'writeAppFile', 'deleteAppFile']) {
-      const body = functionBody(storeSource, name)
-      assert.match(body, /await db\.transaction\(async \(tx\) =>/)
-      assert.match(body, /snapshotActiveVersion\(/, `${name} must snapshot before authoring`)
-    }
-    assert.match(routeSource, /deleteApp\(gate\.user\.orgId, gate\.user\.id, key\)/)
+  test('package versions have one installer and no activated-source editing entry points', () => {
+    for (const name of ['createAppScaffold','updateAppMeta','writeAppFile','deleteAppFile']) assert.doesNotMatch(storeSource,new RegExp(`export async function ${name}\\(`))
+    assert.match(functionBody(storeSource,'installApp'),/insert into app_versions/)
+    assert.match(routeSource,/setAppStatus/)
   })
+
 }
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
@@ -107,12 +98,9 @@ if (DB) {
   )
   const {
     deleteApp,
-    deleteAppFile,
     getAppByKey,
     installApp,
     setAppStatus,
-    updateAppMeta,
-    writeAppFile,
   } = await import('./store.ts')
 
   // Register the entire queue after imports; --test-force-exit must not
@@ -281,61 +269,29 @@ if (DB) {
     }
   })
 
-  test('metadata and file authoring preserve historical versions and their executed files', async () => {
-    const fx = await seedApp()
+  test('reviewed package revisions preserve historical metadata and executed files', async () => {
+    const fx=await seedApp()
     try {
-      const original = (await withBypass(() => getAppByKey(fx.org.orgId, fx.key)))!
-      const originalVersionId = original.activeVersionId!
-      const originalManifest = original.manifest!
-      await updateAppMeta(fx.org.orgId, fx.actorId, fx.key, { name: 'Renamed Proof' })
-      const renamed = (await withBypass(() => getAppByKey(fx.org.orgId, fx.key)))!
-      assert.notEqual(renamed.activeVersionId, originalVersionId)
-      assert.equal(renamed.name, 'Renamed Proof')
-
-      const oldVersion = await withBypass(() =>
-        db.execute<{ status: string; manifest: { name: string } }>(sql`
-          select status, manifest from app_versions where id = ${originalVersionId}`),
-      )
-      assert.equal(oldVersion.rows[0]!.status, 'superseded')
-      assert.equal(oldVersion.rows[0]!.manifest.name, originalManifest.name)
-
-      const oldCss = await withBypass(() =>
-        db.execute<{ content: string }>(sql`
-          select content from app_files where version_id = ${originalVersionId} and path = 'frontend/styles.css'`),
-      )
-      await writeAppFile(fx.org.orgId, fx.actorId, fx.key, 'frontend/styles.css', 'body { color: blue }')
-      const edited = (await withBypass(() => getAppByKey(fx.org.orgId, fx.key)))!
-      assert.notEqual(edited.activeVersionId, renamed.activeVersionId)
-      const historicalCss = await withBypass(() =>
-        db.execute<{ content: string }>(sql`
-          select content from app_files where version_id = ${originalVersionId} and path = 'frontend/styles.css'`),
-      )
-      const activeCss = await withBypass(() =>
-        db.execute<{ content: string }>(sql`
-          select content from app_files where version_id = ${edited.activeVersionId} and path = 'frontend/styles.css'`),
-      )
-      assert.equal(historicalCss.rows[0]!.content, oldCss.rows[0]!.content)
-      assert.equal(activeCss.rows[0]!.content, 'body { color: blue }')
-
-      await deleteAppFile(fx.org.orgId, fx.key, 'frontend/styles.css')
-      const afterDelete = (await withBypass(() => getAppByKey(fx.org.orgId, fx.key)))!
-      assert.notEqual(afterDelete.activeVersionId, edited.activeVersionId)
-      const historicalAfterDelete = await withBypass(() =>
-        db.execute<{ n: string }>(sql`
-          select count(*)::text as n from app_files
-           where version_id = ${edited.activeVersionId} and path = 'frontend/styles.css'`),
-      )
-      assert.equal(historicalAfterDelete.rows[0]!.n, '1')
-      const activeAfterDelete = await withBypass(() =>
-        db.execute<{ n: string }>(sql`
-          select count(*)::text as n from app_files
-           where version_id = ${afterDelete.activeVersionId} and path = 'frontend/styles.css'`),
-      )
-      assert.equal(activeAfterDelete.rows[0]!.n, '0')
-    } finally {
-      await withBypass(() => dropScratchOrg(fx.org.orgId))
-    }
+      const original=(await withBypass(()=>getAppByKey(fx.org.orgId,fx.key)))!
+      const files=(await withBypass(()=>db.execute<{path:string;content:string;isBinary:boolean}>(sql`select path,content,is_binary as "isBinary" from app_files where org_id=${fx.org.orgId} and version_id=${original.activeVersionId}`))).rows
+      const before=files.find(file=>file.path==='frontend/styles.css')!.content
+      const editedFiles=files.map(file=>file.path==='frontend/styles.css'?{...file,content:'body { color: blue }'}:file)
+      await withBypass(()=>installApp(fx.org.orgId,fx.actorId,{manifest:{...original.manifest!,name:'Renamed Proof',version:'2.0.0'},files:editedFiles}))
+      const edited=(await withBypass(()=>getAppByKey(fx.org.orgId,fx.key)))!
+      assert.notEqual(edited.activeVersionId,original.activeVersionId)
+      assert.equal(edited.name,'Renamed Proof')
+      const historical=(await withBypass(()=>db.execute<{status:string;manifest:{name:string}}>(sql`select status,manifest from app_versions where id=${original.activeVersionId}`))).rows[0]!
+      assert.equal(historical.status,'superseded');assert.equal(historical.manifest.name,original.name)
+      const css=(await withBypass(()=>db.execute<{version_id:string;content:string}>(sql`select version_id,content from app_files where org_id=${fx.org.orgId} and path='frontend/styles.css'`))).rows
+      assert.equal(css.find(file=>file.version_id===original.activeVersionId)!.content,before)
+      assert.equal(css.find(file=>file.version_id===edited.activeVersionId)!.content,'body { color: blue }')
+      await withBypass(()=>installApp(fx.org.orgId,fx.actorId,{manifest:{...edited.manifest!,version:'3.0.0'},files:editedFiles.filter(file=>file.path!=='frontend/styles.css')}))
+      const removed=(await withBypass(()=>getAppByKey(fx.org.orgId,fx.key)))!
+      const retained=(await withBypass(()=>db.execute<{version_id:string}>(sql`select version_id from app_files where org_id=${fx.org.orgId} and path='frontend/styles.css'`))).rows
+      assert.ok(retained.some(file=>file.version_id===edited.activeVersionId));assert.ok(!retained.some(file=>file.version_id===removed.activeVersionId))
+    } finally { await withBypass(()=>dropScratchOrg(fx.org.orgId)) }
   })
+
 } else {
   registerSourceTests()
 }

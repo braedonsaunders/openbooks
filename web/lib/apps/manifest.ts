@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { extensionContributionsSchema, EXTENSION_CONTRIBUTION_PERMISSIONS } from './contributions'
 import { API_RECORD_TYPES } from '../api/registry-data'
 
 /**
@@ -40,6 +41,7 @@ export const APP_PLATFORM_PERMISSIONS = [
     APP_CAPABILITIES.RECORDS_READ,
     APP_CAPABILITIES.RECORDS_CREATE,
     APP_CAPABILITIES.GL_POST,
+    ...Object.values(EXTENSION_CONTRIBUTION_PERMISSIONS),
     'ap.post',
     'ar.post',
     ...API_RECORD_TYPES.flatMap((type) => [type.readPermission, type.writePermission].filter((p): p is string => !!p)),
@@ -69,10 +71,11 @@ export const manifestSchema = z.object({
   frontend: z.object({
     /** Bundle path to the HTML entry point served into the sandboxed iframe. */
     entry: z.string().regex(BUNDLE_PATH, 'invalid frontend entry path'),
-    /** Native JSON screens use house components; omitted preserves sandboxed HTML. */
-    renderer: z.enum(['native', 'sandbox']).optional(),
+    /** Native JSON screens use house components; sandbox rendering isolates custom HTML and JavaScript. */
+    renderer: z.enum(['native', 'sandbox']).default('sandbox'),
   }),
   endpoints: z.array(endpointSchema).max(50).default([]),
+  contributions: extensionContributionsSchema.optional(),
   nav: z
     .object({
       label: z.string().max(120).optional(),
@@ -101,6 +104,10 @@ export function parseManifest(raw: unknown): ManifestResult {
   }
   const manifest = res.data
   const errors: string[] = []
+  for (const contribution of manifest.contributions ?? []) {
+    const permission = EXTENSION_CONTRIBUTION_PERMISSIONS[contribution.kind]
+    if (!manifest.permissions.includes(permission)) errors.push(`${contribution.kind} contribution requires ${permission}`)
+  }
   // Endpoint names must be unique.
   const seen = new Set<string>()
   for (const e of manifest.endpoints) {

@@ -12,8 +12,8 @@ export const apps: DocArticle = {
   body: `# Apps and the App Library
 
 Apps extend the platform with organization-specific workflows, screens, records,
-and governed backend actions. Every installed app runs in an isolated sandbox and
-can use only the permissions granted to it by an administrator.
+and governed backend actions. Workspaces use shared native screens or an isolated sandbox frontend. Their backend actions
+use only the intersection of the package grants and the calling user’s permissions.
 
 ## Open an installed app
 
@@ -47,12 +47,12 @@ Users with **Install and manage apps** permission can select **App Library** fro
 the Apps page. The library shows extensions that are available to the deployment.
 Use search to narrow the list by name, key, or description.
 
-- **Install** copies the published app package into your organization.
-- **Update** installs the library version over an older installed version.
+- **Review installation** prepares an unpublished draft of the library package.
+- **Review update** prepares a new revision of an installed package.
 - **Installed** means your organization already has the current library version.
 
-An install or update validates the package and its requested capabilities before
-making the new version active. Installed app settings and permissions remain
+Review the draft, preview it, and approve its requested capabilities to activate it.
+Preparing a library draft does not change the installed version. Installed app settings and permissions remain
 scoped to your organization.
 
 ## Build and administer apps

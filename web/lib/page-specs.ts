@@ -26,12 +26,12 @@ import { validateAgainstRegistries, type SpecRejection } from './page-spec-valid
  * answer instead of reimplementing it.
  *
  * Module-projected rows share this table: the installer writes one row per
- * page contribution with `module_version_id` set, and resolution treats those
- * as the weakest stored layer — any tenant layout wins over every module row.
+ * page contribution with `extension_version_id` set, and resolution treats those
+ * as the weakest stored layer — any tenant layout wins over every extension row.
  * The two provenances coexist while both are active (migration 0111 gives
  * each its own partial unique index), so a tenant save SHADOWS a module
  * projection by precedence instead of deactivating it, and a clear falls
- * back to the still-active module row naturally. Writes never SET the
+ * back to the still-active extension row naturally. Writes never SET the
  * pointer and never deactivate the other provenance's rows; the installer
  * owns its rows' lifecycle, the tenant owns theirs, and read-time ordering
  * settles every route they share.
@@ -59,9 +59,9 @@ export type LayoutScope = 'org' | 'user'
 /**
  * One active `page_specs` row competing to render a route.
  *
- * `module_version_id` is the provenance pointer only the module installer
+ * `extension_version_id` is the provenance pointer only the extension installer
  * sets: null means someone in this org authored the row, non-null means an
- * installed module version projected it. `is_current` tells whether a module
+ * installed extension version projected it. `is_current` tells whether a module
  * row backs its module's active version (meaningless for tenant rows, which
  * read it as false and never consult it).
  */
@@ -69,7 +69,7 @@ type PageSpecCandidate = {
   id: string
   spec: unknown
   user_id: string | null
-  module_version_id: string | null
+  extension_version_id: string | null
   is_current: boolean
   updated_at: string | Date
 }
@@ -82,7 +82,7 @@ type PageSpecCandidate = {
  */
 function pageSpecRank(row: PageSpecCandidate): number {
   if (row.user_id !== null) return 0
-  if (row.module_version_id === null) return 1
+  if (row.extension_version_id === null) return 1
   return row.is_current ? 2 : 3
 }
 
@@ -122,7 +122,7 @@ export function pickPageSpecRow(rows: PageSpecCandidate[]): PageSpecCandidate | 
  * three are the active `page_specs` rows for the route; the last is this
  * function's null, which is what "renders the built-in page" means.
  * Tenant customization always wins: a personal layout beats the org's, and
- * any tenant layout beats every installed module's. Among module rows the
+ * any tenant layout beats every installed module's. Among extension rows the
  * projection behind the module's active version wins.
  *
  * Returns null rather than throwing when the stored document does not
@@ -138,7 +138,7 @@ export async function loadPageSpec(
   registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> },
   /** When given, this reader's personal layout is preferred over the org's. */
   userId?: string,
-): Promise<{ spec: PageSpec; id: string; scope: LayoutScope; moduleVersionId: string | null } | null> {
+): Promise<{ spec: PageSpec; id: string; scope: LayoutScope; extensionVersionId: string | null } | null> {
   // Every candidate, not just the winner. Two round trips would be a second
   // chance to get the precedence wrong, and LIMIT 1 would split the decision
   // between SQL and `pickPageSpecRow`; the ORDER BY lists the static layers
@@ -147,16 +147,16 @@ export async function loadPageSpec(
   // module's own active_version_id chain, so a superseded version's row
   // ranks below the current projection even when both are active.
   const rows = await db.execute<PageSpecCandidate>(sql`
-    select p.id, p.spec, p.user_id, p.module_version_id, p.updated_at,
-           (case when p.module_version_id is null then false
-                 else m.active_version_id is not distinct from p.module_version_id end) as is_current
+    select p.id, p.spec, p.user_id, p.extension_version_id, p.updated_at,
+           (case when p.extension_version_id is null then false
+                 else m.active_version_id is not distinct from p.extension_version_id end) as is_current
       from page_specs p
-      left join module_versions mv on mv.org_id = p.org_id and mv.id = p.module_version_id
-      left join modules m on m.org_id = mv.org_id and m.id = mv.module_id
+      left join app_versions mv on mv.org_id = p.org_id and mv.id = p.extension_version_id
+      left join apps m on m.org_id = mv.org_id and m.id = mv.app_id
      where p.org_id = ${orgId} and p.route = ${route} and p.is_active
-       and (p.module_version_id is null or (m.status = 'installed' and mv.status = 'active' and m.active_version_id = mv.id))
+       and (p.extension_version_id is null or (m.status = 'installed' and (select settings->'features'->'apps' from orgs where id=${orgId}) is distinct from 'false'::jsonb and mv.status = 'active' and m.active_version_id = mv.id))
        and (p.user_id is null ${userId ? sql`or p.user_id = ${userId}` : sql``})
-     order by p.user_id nulls last, p.module_version_id nulls first, p.updated_at desc, p.id`)
+     order by p.user_id nulls last, p.extension_version_id nulls first, p.updated_at desc, p.id`)
   const winner = pickPageSpecRow(rows.rows)
   if (!winner) return null
 
@@ -182,10 +182,10 @@ export async function loadPageSpec(
   return {
     spec: checked.spec,
     id: winner.id,
-    // A module customizes the org, never one person, so a module row reads as
-    // 'org'; `moduleVersionId` carries whose module it is.
+    // A module customizes the org, never one person, so a extension row reads as
+    // 'org'; `extensionVersionId` carries whose module it is.
     scope: winner.user_id ? 'user' : 'org',
-    moduleVersionId: winner.module_version_id,
+    extensionVersionId: winner.extension_version_id,
   }
 }
 
@@ -261,7 +261,7 @@ export async function savePageSpec(opts: {
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
          and user_id is not distinct from ${owner}
-         and module_version_id is null
+         and extension_version_id is null
       returning id`)
     for (const row of superseded.rows) {
       await tx.execute(sql`
@@ -373,7 +373,7 @@ export async function restorePageSpec(opts: {
     const superseded = await tx.execute<{ id: string }>(sql`
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
-         and module_version_id is null
+         and extension_version_id is null
       returning id`)
     for (const previous of superseded.rows) {
       await tx.execute(sql`
@@ -503,7 +503,7 @@ export async function clearPageSpec(opts: {
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
          and user_id is not distinct from ${owner}
-         and module_version_id is null
+         and extension_version_id is null
       returning id`)
     for (const row of rows.rows) {
       await tx.execute(sql`

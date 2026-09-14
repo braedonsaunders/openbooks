@@ -1,7 +1,7 @@
 /** Setup-registry import/export resources. */
 
 import 'server-only'
-import { loadModuleSettingRows } from '../setup/module-settings'
+import { loadExtensionSettingRows } from '../setup/extension-settings'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { COUNTRY_CODES } from '../countries'
@@ -107,8 +107,8 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
       const fields = setupFields(await gatedSetupEntity(entity, orgId))
       const resolver = new RefResolver(orgId)
       const cols = fields.map((f) => sql.raw(toSnake(f.key)))
-      const result = entity.dataSource === 'module-settings'
-        ? { rows: (await loadModuleSettingRows(orgId)).slice(0, MAX_EXPORT_ROWS) as Record<string, unknown>[] }
+      const result = entity.dataSource === 'extension-settings'
+        ? { rows: (await loadExtensionSettingRows(orgId)).slice(0, MAX_EXPORT_ROWS) as Record<string, unknown>[] }
         : (await db.execute(sql`
         select ${sql.join(cols, sql`, `)}
           from ${sql.raw(entity.table)}

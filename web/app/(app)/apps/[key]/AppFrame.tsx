@@ -19,7 +19,7 @@ import {
  * sandboxed iframe (sandbox="allow-scripts", deliberately no allow-same-origin).
  * The App therefore runs with no cookies, no parent-DOM access, and no network
  * of its own — its only capability is bridge calls, which this component relays
- * to the permission-checked /api/apps/<key>/bridge route on the user's behalf.
+ * to the permission-checked /api/extensions/<key>/bridge route on the user's behalf.
  */
 
 export interface BundleResponse {
@@ -49,7 +49,7 @@ export function AppFrame({
     let cancelled = false
     setBundle(null)
     setError(null)
-    fetch(`/api/apps/${encodeURIComponent(appKey)}/bundle`, { credentials: 'same-origin' })
+    fetch(`/api/extensions/${encodeURIComponent(appKey)}/bundle`, { credentials: 'same-origin' })
       .then(async (r) => {
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `bundle load failed (${r.status})`)
         return (await r.json()) as BundleResponse
@@ -85,7 +85,7 @@ export function AppFrame({
         return
       }
       try {
-        const res = await fetch(`/api/apps/${encodeURIComponent(appKey)}/bridge`, {
+        const res = await fetch(`/api/extensions/${encodeURIComponent(appKey)}/bridge`, {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },

@@ -124,18 +124,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/admin/apps': {
-    route: '/admin/apps',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/admin/apps/view')
-      return {
-        load: (input) => m.loadAdminApps(input.searchParams ?? {}),
-        spec: (data) => m.adminAppsSpec(data as never),
-      }
-    },
-  },
   '/admin/audit': {
     route: '/admin/audit',
     segments: [],
@@ -208,6 +196,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/extensions': {
+    route: '/admin/extensions',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/admin/extensions/view')
+      return {
+        load: (input) => m.loadAdminExtensions(input.searchParams ?? {}),
+        spec: (data) => m.adminExtensionsSpec(data as never),
+      }
+    },
+  },
   '/admin/flows': {
     route: '/admin/flows',
     segments: [],
@@ -229,18 +229,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadFlowBuilder(segment(input, 'id')),
         spec: (data) => m.flowBuilderSpec(data as never),
-      }
-    },
-  },
-  '/admin/modules': {
-    route: '/admin/modules',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/admin/modules/view')
-      return {
-        load: (input) => m.loadAdminModules(input.searchParams ?? {}),
-        spec: (data) => m.adminModulesSpec(data as never),
       }
     },
   },

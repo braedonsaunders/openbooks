@@ -61,7 +61,7 @@ const GROUPS: { key: string; labelKey: string; accent: Accent; cards: Card[] }[]
         featureKey: 'flows',
       },
       {
-        href: '/admin/modules',
+        href: '/admin/extensions',
         iconKey: 'blocks',
         cardKey: 'apps',
         permission: 'apps.manage',

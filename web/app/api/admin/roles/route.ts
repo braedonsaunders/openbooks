@@ -6,7 +6,7 @@ import { seedDashboardDefaultsForOrg } from "@openbooks/engine/src/dashboard-def
 import { permissionsOutsideCeiling } from "@openbooks/engine/src/permissions.ts";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { type Authz, guardPermission } from "../../../../lib/authz";
-import { listActiveModuleContributions } from "@openbooks/engine/src/modules/projections.ts";
+import { listActiveExtensionContributions } from "@openbooks/engine/src/extensions/projections.ts";
 import { PERMISSION_CATALOGUE } from "../../../../lib/permissions";
 import { isUuid } from "../../../../lib/list-params";
 
@@ -39,7 +39,7 @@ function slugify(name: string): string {
 
 /** Validate + normalize a permissions payload to deduped catalogue keys in catalogue order. */
 async function normalizePermissions(input: unknown, orgId: string, preserved: readonly string[] = []): Promise<string[] | null> {
-  const contributions = await listActiveModuleContributions(orgId);
+  const contributions = await listActiveExtensionContributions(orgId);
   const catalogue = [...PERMISSION_CATALOGUE, ...contributions.flatMap((entry) => entry.contribution.kind === "permission" ? [entry.contribution.key] : []), ...preserved];
   if (!Array.isArray(input)) return null;
   const set = new Set<string>();
@@ -175,7 +175,7 @@ export async function POST(req: Request) {
   }
 
   return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
-    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`module-projections:${actor.orgId}`}, 0))`);
+    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${actor.orgId}`}, 0))`);
     if (!await normalizePermissions(permissions, actor.orgId)) return NextResponse.json({ error: "A module permission is no longer active" }, { status: 409 });
     const inserted = await db.execute<{ id: string }>(sql`
       insert into app_roles (org_id, key, name, description, is_built_in, permissions,
@@ -228,7 +228,7 @@ export async function PATCH(req: Request) {
   }
   const id = body.id;
   return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
-    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`module-projections:${actor.orgId}`}, 0))`);
+    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${actor.orgId}`}, 0))`);
     const existing = ((await db.execute(sql`
       select id, key, name, description, is_built_in, permissions, subsidiary_restriction
         from app_roles where id = ${id} and org_id = ${actor.orgId} for update`)));
@@ -450,6 +450,6 @@ export async function DELETE(req: Request) {
 export async function GET() {
   const gate = await guardPermission("admin.roles.manage");
   if (gate instanceof NextResponse) return gate;
-  const contributions = await listActiveModuleContributions(gate.user.orgId);
-  return NextResponse.json({ permissions: contributions.flatMap((entry) => entry.contribution.kind === "permission" ? [{ moduleKey: entry.moduleKey, ...entry.contribution }] : []) });
+  const contributions = await listActiveExtensionContributions(gate.user.orgId);
+  return NextResponse.json({ permissions: contributions.flatMap((entry) => entry.contribution.kind === "permission" ? [{ extensionKey: entry.extensionKey, ...entry.contribution }] : []) });
 }

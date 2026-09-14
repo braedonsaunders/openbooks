@@ -79,7 +79,6 @@ import { BuildHubCard } from '../../app/(app)/admin/build/sections'
 import { MatchWorkspace } from '../../app/(app)/banking/match/MatchWorkspace'
 import { BalanceCheck } from '../../app/(app)/reports/balance-sheet/sections'
 import { Library, ArrowLeft } from 'lucide-react'
-import { AppsToolbar, AppDrawer } from '../../app/(app)/admin/apps/AppDrawer'
 import { CrmSetupWorkspace } from '../../app/(app)/admin/setup/crm/CrmSetupWorkspace'
 import { ArCockpit } from '../../app/(app)/ar/cockpit/ArCockpit'
 import { DocsHome } from '../../app/(app)/docs/sections'
@@ -177,7 +176,7 @@ import {
 } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/sections'
 import { ReconcileWorkspace } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/ReconcileWorkspace'
 import { PropertyManagementWorkspace } from '../../app/(app)/property-management/PropertyManagementWorkspace'
-import { AppKeyCell } from '../../app/(app)/admin/apps/sections'
+import { AppKeyCell } from '../../app/(app)/admin/extensions/sections'
 import { CaptureList } from '../../app/(app)/ap/capture/sections'
 import { CaptureReviewDrawer } from '../../app/(app)/ap/capture/CaptureReviewDrawer'
 import { CaptureUploadButton } from '../../app/(app)/ap/capture/CaptureUploadButton'
@@ -1847,16 +1846,11 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       </Button>
     )
   },
-  'apps-toolbar': () => <AppsToolbar />,
   'app-key-cell': (props) => <AppKeyCell appKey={str(props, 'appKey') ?? ''} />,
   /** The whole app flyout stays one widget: its body is three tabs of per-row
    *  client state (dirty flags, selected file, open dirs) — a workspace, not a
    *  spec. */
-  'app-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof AppDrawer> | null
-    if (!drawer) return null
-    return <AppDrawer {...drawer} />
-  },
+
 
   /* --- AP capture ------------------------------------------------------------ */
   /** Diffed against `plain-link-button` (Link outside Button, no icon) and

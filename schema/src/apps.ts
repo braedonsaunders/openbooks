@@ -12,23 +12,15 @@ import {
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
- * Apps — installable packages. An App is an org-installed
- * package that bundles a sandboxed frontend (HTML/JS/CSS) with a backend
- * (server-side endpoint scripts), built on this platform's existing primitives: the QuickJS
- * sandbox (backend isolation), custom records (data), and — critically — an
- * opaque-origin sandboxed iframe for the frontend, so uploaded HTML/JS/CSS
- * runs with no cookies, no parent DOM access, and no ambient network. Every
- * capability an App reaches goes through an audited postMessage bridge that is
- * permission-checked against what the installing admin granted.
+ * Extension packages: one organization-scoped ownership and version authority.
+ * Apps launches their native or sandbox workspaces; Extensions manages drafts,
+ * review, activation, contributions, and governed object provisioning.
  *
- * Lifecycle:
- *   apps (installed app: slug + status + granted permissions + active version)
- *     └─ app_versions (immutable bundle metadata: version + manifest)
- *          └─ app_files (the actual frontend/backend/asset files)
- *     └─ app_storage (the App's own governed KV store — its backend's writes)
- *
- * Distribution is per-org for v1: an org authors/uploads/installs Apps for
- * itself. A cross-org marketplace (signed, published bundles) is future work.
+ * apps -> app_versions -> app_files holds immutable package source.
+ * app_storage and app_runs hold governed state and execution evidence.
+ * app_listings distributes immutable snapshots through the same review flow.
+ * Backend handlers have no database, filesystem, or network access: all writes
+ * pass through the platform adapters and the caller/package permission intersection.
  */
 
 export const APP_STATUSES = ["installed", "disabled"] as const;
@@ -96,6 +88,8 @@ export const appVersions = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("app_versions_org_id_unique").on(t.orgId, t.id),
+    uniqueIndex("app_versions_org_app_id_unique").on(t.orgId, t.appId, t.id),
     uniqueIndex("app_versions_app_version").on(t.appId, t.version),
     index("app_versions_org_app").on(t.orgId, t.appId),
   ],

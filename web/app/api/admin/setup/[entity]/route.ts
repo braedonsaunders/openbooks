@@ -1,5 +1,5 @@
 import { jsonObject, parseJsonBody, uuidId } from "@/lib/api/json";
-import { saveModuleSettingRow } from '../../../../../lib/setup/module-settings'
+import { saveExtensionSettingRow } from '../../../../../lib/setup/extension-settings'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { CurrencyError, updateFxRate } from '@openbooks/engine/src/currencies.ts'
@@ -871,8 +871,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   const id = String(body.id ?? '')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-  if (entity.dataSource === 'module-settings') {
-    try { return NextResponse.json(await saveModuleSettingRow(orgId, actorId, [...gate.permissions], body)) }
+  if (entity.dataSource === 'extension-settings') {
+    try { return NextResponse.json(await saveExtensionSettingRow(orgId, actorId, [...gate.permissions], body)) }
     catch (error) {
       const status = error instanceof Error && 'status' in error && error.status === 409 ? 409 : 400
       return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid module setting' }, { status })
