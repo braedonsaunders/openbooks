@@ -41,7 +41,7 @@ export async function loadFilingDetail(id: string): Promise<FilingDetailData> {
   const orgId = authz.user.orgId
   await requireComplianceFeature(orgId)
   if (!isUuid(id)) notFound()
-  const filing = await loadFiling(orgId, id)
+  const filing = await loadFiling(orgId, id, authz.allowedSubsidiaryIds)
   if (!filing) notFound()
   const t = await getTranslations('compliance')
   const form = formDefinition(filing.formType)
