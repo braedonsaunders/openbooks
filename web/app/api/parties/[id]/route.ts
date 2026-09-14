@@ -9,6 +9,7 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../lib/countries'
+import { isIsoCalendarDate } from '../../../../lib/crm-dates'
 import { loadParty } from '../_lib'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/exact-decimal'
 
@@ -18,7 +19,6 @@ class PartyLifecycleError extends Error {}
 
 const PARTY_KINDS = ['company', 'person'] as const
 const PAYMENT_METHODS = ['eft', 'cheque', 'card', 'cash', 'other'] as const
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const CURRENCY_RE = /^[A-Za-z]{3}$/
 
 function bad(error: string, fieldErrors?: Record<string, string>) {
@@ -361,6 +361,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         if (live.rows[0]?.documents) throw new PartyLifecycleError('resolve in-flight transactions and open balances before deactivating this party')
         if (live.rows[0]?.opportunities) throw new PartyLifecycleError('resolve open opportunities before deactivating this party')
       }
+      // Validated custom values replace the free-form payload, but the
+      // reserved 'source' sync-identity bridge (unique
+      // parties_org_source_identity) is server-owned: a routine party save
+      // must not destroy the dedup identity a sync/migration established.
       const updatedParty = await tx.execute<{ id: string }>(sql`
       update parties set
         kind = coalesce(${body.kind ?? null}, kind),
@@ -371,7 +375,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         email = ${body.email !== undefined ? strOrNull(body.email) : sql`email`},
         phone = ${body.phone !== undefined ? strOrNull(body.phone) : sql`phone`},
         website = ${website !== undefined ? website : sql`website`},
-        custom = coalesce(${cleanedCustom ? JSON.stringify(cleanedCustom) : null}::jsonb, custom),
+        custom = ${cleanedCustom
+          ? sql`(${JSON.stringify(cleanedCustom)}::jsonb || case when custom ? 'source' then jsonb_build_object('source', custom->'source') else '{}'::jsonb end)`
+          : sql`custom`},
         subsidiary_id = ${subsidiaryId !== undefined ? subsidiaryId : sql`subsidiary_id`},
         is_active = ${body.isActive !== undefined ? body.isActive : completesPlaceholder ? true : sql`is_active`},
         updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
@@ -557,7 +563,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             throwBad('Invalid worker-comp group')
           }
           const hiredOn = strOrNull(e.hiredOn)
-          if (hiredOn && !DATE_RE.test(hiredOn)) throwBad('Hired-on must be a date (YYYY-MM-DD)')
+          if (hiredOn && !isIsoCalendarDate(hiredOn)) throwBad('Hired-on must be a valid calendar date (YYYY-MM-DD)')
           await tx.execute(sql`
             insert into employee_roles (org_id, party_id, employee_number, job_title, department_id, trade_id,
                                         worker_comp_group_id, hired_on, created_by, updated_by)

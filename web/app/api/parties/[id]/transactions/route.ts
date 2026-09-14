@@ -66,7 +66,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       select array_remove(array_agg(distinct d.kind order by d.kind), null) as kinds,
              array_remove(array_agg(distinct d.status order by d.status), null) as statuses
         from documents d
-       where d.org_id = ${gate.user.orgId} and d.party_id = ${id} ${hiddenKindFilter}`),
+       where d.org_id = ${gate.user.orgId} and d.party_id = ${id} ${hiddenKindFilter}
+        ${documentScope}`),
   ]))
 
   return NextResponse.json({
