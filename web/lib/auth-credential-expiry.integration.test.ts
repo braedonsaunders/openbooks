@@ -33,12 +33,15 @@ for (const method of ["reset", "begin MFA", "confirm MFA"] as const) {
         const rawToken = randomBytes(32).toString("base64url");
         const secret = generateTotpSecret();
         const duration = expires ? "1 second" : "30 minutes";
+        // MFA enrollment checks use the application clock; reset consumption
+        // is checked in SQL. Seed each credential in its consumer's domain.
+        const sessionExpiry = new Date(Date.now() + (expires ? 1000 : 30 * 60_000));
         if (method !== "reset") {
           await db.execute(sql`insert into auth_sessions(id,user_id,token_hash,auth_method,expires_at)
-            values (${sessionId},${userId},${createHash("sha256").update(rawToken).digest("hex")},'password',clock_timestamp()+${duration}::interval)`);
+            values (${sessionId},${userId},${createHash("sha256").update(rawToken).digest("hex")},'password',${sessionExpiry})`);
           if (method === "confirm MFA") await db.execute(sql`
             insert into auth_mfa_factors(user_id,secret_encrypted,setup_session_id,setup_expires_at)
-            values (${userId},${sealSecret(secret)},${sessionId},now()+interval '30 minutes')`);
+            values (${userId},${sealSecret(secret)},${sessionId},${new Date(Date.now()+30*60_000)})`);
         } else {
           await db.execute(sql`insert into auth_password_resets(user_id,token_hash,expires_at)
             values (${userId},${createHash("sha256").update(rawToken).digest("hex")},clock_timestamp()+${duration}::interval)`);
@@ -74,11 +77,11 @@ for (const method of ["reset", "begin MFA", "confirm MFA"] as const) {
           while (Date.now() < deadline) {
             expired = (await db.execute<{ expired: boolean }>(method === "reset"
               ? sql`select expires_at <= clock_timestamp() as expired from auth_password_resets where user_id=${userId}`
-              : sql`select expires_at <= clock_timestamp() as expired from auth_sessions where id=${sessionId}`)).rows[0]!.expired;
+              : sql`select expires_at <= ${new Date()} as expired from auth_sessions where id=${sessionId}`)).rows[0]!.expired;
             if (expired) break;
             await new Promise(resolve => setTimeout(resolve, 20));
           }
-          assert.ok(expired, "release only after PostgreSQL confirms real credential expiry");
+          assert.ok(expired, "release only after the credential expires in its authoritative clock domain");
         }
         release();
         await holder;

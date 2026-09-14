@@ -30,13 +30,13 @@ for (const action of ["mfa_enabled", "mfa_disabled", "mfa_recovery_rotated"] as 
         const otherSessionId = randomUUID();
         for (const id of [sessionId, otherSessionId]) await db.execute(sql`
           insert into auth_sessions(id,user_id,token_hash,auth_method,expires_at)
-          values (${id},${userId},${randomBytes(32).toString("hex")},'password',now()+interval '1 day')`);
+          values (${id},${userId},${randomBytes(32).toString("hex")},'password',${new Date(Date.now()+86_400_000)})`);
         const secret = generateTotpSecret();
         const previousCodes = action === "mfa_enabled" ? [] : generateRecoveryCodes().slice(0, 2);
         const previousHashes = previousCodes.map(code => hashRecoveryCode(userId, normalizeRecoveryCode(code)!));
         await db.execute(sql`insert into auth_mfa_factors(user_id,secret_encrypted,recovery_code_hashes,enabled_at,setup_session_id,setup_expires_at)
           values (${userId},${sealSecret(secret)},${JSON.stringify(previousHashes)}::jsonb,${action === "mfa_enabled" ? sql`null` : sql`now()`},
-            ${action === "mfa_enabled" ? sessionId : null},${action === "mfa_enabled" ? sql`now()+interval '30 minutes'` : sql`null`})`);
+            ${action === "mfa_enabled" ? sessionId : null},${action === "mfa_enabled" ? new Date(Date.now()+30*60_000) : null})`);
         const factorBefore = (await db.execute(sql`select * from auth_mfa_factors where user_id=${userId}`)).rows[0]!;
         const sessionsBefore = (await db.execute(sql`select * from auth_sessions where user_id=${userId} order by id`)).rows;
         if (failAudit) {
