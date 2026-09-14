@@ -127,6 +127,37 @@ test('party_concentration scopes posted documents to the caller subsidiary', { s
   }
 });
 
+test('project_profitability scopes projects to the caller subsidiary', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // project_profitability listed every project and opened any of them by id
+  // with no subsidiary predicate, while the UI project loader scopes every
+  // surface to the caller's allowlist.
+  const { org, hidden } = await seedScopedOrg();
+  try {
+    const ids: Record<string, string> = {};
+    for (const [label, sub] of [['VISIBLE', org.subsidiaryId], ['HIDDEN', hidden]] as const) {
+      const id = randomUUID();
+      await db.execute(sql`insert into projects(id,org_id,subsidiary_id,name) values (${id},${org.orgId},${sub},${`${label} Project`})`);
+      ids[label] = id;
+    }
+    await withOrgContext(org.orgId, async () => {
+      const authz = await getAuthz();
+      assert.ok(authz);
+      const list = await executeAssistantTool(authz, 'project_profitability', {});
+      assert.equal(list.ok, true, JSON.stringify(list));
+      assert.ok(list.ok);
+      const names = ((list.data as { projects: { name: string }[] }).projects).map((p) => p.name);
+      assert.deepEqual(names, ['VISIBLE Project']);
+      const hiddenSingle = await executeAssistantTool(authz, 'project_profitability', { projectId: ids['HIDDEN'] });
+      assert.equal(hiddenSingle.ok, false, `hidden project must read as missing, got ${JSON.stringify(hiddenSingle)}`);
+      const visibleSingle = await executeAssistantTool(authz, 'project_profitability', { projectId: ids['VISIBLE'] });
+      assert.equal(visibleSingle.ok, true, JSON.stringify(visibleSingle));
+    });
+  } finally {
+    state.user = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test('get_document hides a hidden-subsidiary document from a restricted caller', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const { org, hidden } = await seedScopedOrg();
   try {
