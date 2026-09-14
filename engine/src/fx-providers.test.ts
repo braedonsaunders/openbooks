@@ -748,3 +748,65 @@ test(
     }
   },
 );
+
+// A "test" synchronization applies no rates and owns no success, so the
+// production schedule cursor is not its to move. Recomputing next_sync_at
+// from the probe time silently skips the next due sync (a probe fired after
+// today's slot pushes the real run out by a day).
+test(
+  "a test synchronization preserves the production schedule cursor",
+  { skip: !DB },
+  async () => {
+    const provider = createServer((req, res) => {
+      const url = new URL(req.url ?? "", "http://localhost");
+      const end = url.searchParams.get("end_date") ?? new Date().toISOString().slice(0, 10);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        observations: [{ d: end, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
+      }));
+    });
+    const providerOrigin = await listen(provider);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (requested.host === "www.bankofcanada.ca") {
+        requested.protocol = "http:";
+        requested.host = new URL(providerOrigin).host;
+      }
+      return originalFetch(requested, init);
+    }) as typeof fetch;
+
+    const org = await setupManualFxScratchOrg();
+    try {
+      await db.execute(sql`
+        update fx_provider_configs
+           set schedule = 'daily', sync_hour_utc = 22, is_enabled = true,
+               next_sync_at = '2026-01-01T00:00:00Z'
+         where id = ${org.configId}`);
+      const before = (await db.execute<{ next_sync_at: string; last_success_at: Date | null }>(sql`
+        select next_sync_at::text as next_sync_at, last_success_at
+          from fx_provider_configs where id = ${org.configId}`)).rows[0]!;
+      const result = await runFxProvider(org.orgId, "test");
+      assert.equal(result.observationsReceived, 1);
+      const after = (await db.execute<{ next_sync_at: string; last_success_at: Date | null }>(sql`
+        select next_sync_at::text as next_sync_at, last_success_at
+          from fx_provider_configs where id = ${org.configId}`)).rows[0]!;
+      assert.equal(after.next_sync_at, before.next_sync_at, "a test probe must not move the schedule cursor");
+      assert.equal(after.last_success_at, before.last_success_at, "a test probe owns no success");
+
+      // A failed probe must not move the cursor either: the recovery retry
+      // belongs to the production schedule, not to the probe.
+      globalThis.fetch = (() => Promise.reject(new Error("probe transport down"))) as typeof fetch;
+      await assert.rejects(runFxProvider(org.orgId, "test"), /probe transport down/);
+      const afterFailure = (await db.execute<{ next_sync_at: string }>(sql`
+        select next_sync_at::text as next_sync_at
+          from fx_provider_configs where id = ${org.configId}`)).rows[0]!;
+      assert.equal(afterFailure.next_sync_at, before.next_sync_at, "a failed test probe must not move the schedule cursor");
+    } finally {
+      globalThis.fetch = originalFetch;
+      await close(provider);
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

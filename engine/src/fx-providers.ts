@@ -587,7 +587,7 @@ export async function runFxProvider(
         update fx_provider_configs set
           last_success_at = ${trigger === "test" ? sql`last_success_at` : sql`now()`},
           last_observation_date = ${trigger === "test" ? sql`last_observation_date` : latestObservationDate},
-          last_error = null, next_sync_at = ${next}, updated_at = now()
+          last_error = null, next_sync_at = ${trigger === "test" ? sql`next_sync_at` : next}, updated_at = now()
          where id = ${config.id} and org_id = ${orgId}
       `);
     });
@@ -608,7 +608,8 @@ export async function runFxProvider(
         `);
         if (!stamped.rowCount) return;
         await tx.execute(sql`
-          update fx_provider_configs set last_error = ${message.slice(0, 1000)}, next_sync_at = ${retryAt},
+          update fx_provider_configs set last_error = ${message.slice(0, 1000)},
+                 next_sync_at = ${trigger === "test" ? sql`next_sync_at` : retryAt},
                  updated_at = now() where id = ${config.id} and org_id = ${orgId}
         `);
       });
