@@ -951,6 +951,24 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
     await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId} and ${disposableOrgPredicate(kind)}`);
     await tx.execute(sql`update users set is_active = false where org_id = ${orgId}`);
     await tx.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId} and status = 'posted'`);
+    // Remove capture evidence before its protected source files. These guards
+    // are unconditional; use the same exact-trigger, scoped transaction as
+    // other immutable fixture evidence. The locked disposable-org identity
+    // above applies to every delete, and ALTER locks hide the gap from writers.
+    const captureItems = await tx.execute(sql`select 1 from ap_capture_items where org_id = ${orgId} limit 1`);
+    if (captureItems.rows.length > 0) {
+      for (const [table, trigger] of [
+        ["ap_capture_fields", "ap_capture_fields_append_only"],
+        ["ap_capture_runs", "ap_capture_runs_immutable"],
+        ["ap_capture_corrections", "ap_capture_corrections_append_only"],
+        ["ap_capture_events", "ap_capture_events_append_only"],
+      ] as const) {
+        await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
+        await tx.execute(sql`delete from ${qualified(table)} where org_id = ${orgId}`);
+        await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
+      }
+      await tx.execute(sql`delete from ap_capture_items where org_id = ${orgId}`);
+    }
     // Payroll bank files are money-moving evidence with UNCONDITIONAL guards
     // (no sandbox-wipe bypass): pay_run_bank_file_immutable forbids their
     // delete outright, and payroll_bank_file_blob_immutable blocks deleting
