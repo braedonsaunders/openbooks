@@ -16,7 +16,10 @@ import {
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 /** A crashed claim's durable shape: a running row whose worker died mid-run.
- * A `null` lease token / lock timestamp models pre-migration stuck rows. */
+ * A `null` lease token / lock timestamp models pre-migration stuck rows.
+ * `locked_at` is computed from SQL `now()` — never the host clock, which can
+ * run hours ahead of the database (a host-stamped "20 minutes ago" is then
+ * still in the future per SQL `now()`, so stale-takeover never fires). */
 async function seedCrashedClaim(args: {
   orgId: string;
   ruleId: string;
@@ -29,16 +32,16 @@ async function seedCrashedClaim(args: {
 }): Promise<string> {
   const token =
     args.leaseToken === null ? null : (args.leaseToken ?? randomUUID());
-  const lockedAt =
-    args.lockedAtMinutesAgo === null
-      ? null
-      : new Date(Date.now() - (args.lockedAtMinutesAgo ?? 20) * 60_000);
+  const lockedAtMinutesAgo =
+    args.lockedAtMinutesAgo === null ? null : (args.lockedAtMinutesAgo ?? 20);
   const inserted = (await db.execute<{ id: string }>(sql`
     insert into close_automation_executions
       (org_id, rule_id, run_id, task_id, trigger, event_key, status,
        attempt_count, lease_token, locked_at, created_by, updated_by)
     values (${args.orgId}, ${args.ruleId}, ${args.runId}, ${args.taskId ?? null}, 'run_started',
-            ${args.eventKey}, 'running', 0, ${token}, ${lockedAt}, null, null)
+            ${args.eventKey}, 'running', 0, ${token},
+            ${lockedAtMinutesAgo === null ? null : sql`now() - make_interval(mins => ${lockedAtMinutesAgo})`},
+            null, null)
     returning id
   `));
   const executionId = inserted.rows[0]!.id;

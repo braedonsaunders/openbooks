@@ -52,7 +52,7 @@ export interface ParsedStatement {
 export type StatementSource = "ofx" | "csv" | "camt053" | "bai2" | "mt940" | "feed_api" | "manual";
 
 /** Increment whenever statement-to-line normalization semantics change. */
-export const BANK_STATEMENT_PARSER_VERSION = "2026.08.2";
+export const BANK_STATEMENT_PARSER_VERSION = "2026.08.5";
 
 export type StatementSourceContent = string | Uint8Array;
 type StatementTextSource = Extract<StatementSource, "ofx" | "csv" | "camt053" | "bai2" | "mt940">;
@@ -336,6 +336,21 @@ function assertRealDate(y: string, mo: string, d: string, label: string): string
     throw new BankingError(`${label} is not a real calendar date`);
   }
   return `${y}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/**
+ * Expand a two-digit BAI2/MT940 year onto the fixed supported window
+ * 1969–2068 (POSIX pivot 69: 00–68 → 2000s, 69–99 → 1900s). The pivot is a
+ * constant, never the current year: reparsing the same file always yields the
+ * same dates. These formats cannot express a century, so statements outside
+ * the window must arrive as OFX or CAMT.053 instead of guessing.
+ */
+function expandTwoDigitYear(yy: string): string {
+  const twoDigit = Number(yy);
+  if (!Number.isInteger(twoDigit) || twoDigit < 0 || twoDigit > 99) {
+    throw new BankingError(`Unparseable two-digit year "${yy}"`);
+  }
+  return String((twoDigit <= 68 ? 2000 : 1900) + twoDigit);
 }
 
 /** Normalize a raw amount ("1,234.56", "(45.00)", "45.00-", "1.234,56") to a signed decimal string. */
@@ -695,14 +710,40 @@ export function parseBai2(source: StatementSourceContent): ParsedStatement {
   let statementDate: string | undefined;
   let currency: string | undefined;
   let closingBalance: string | undefined;
+  const accountNumbers = new Set<string>();
   let lineNo = 0;
   for (const rec of records) {
     const f = rec.split(",");
     if (f[0] === "02") {
       const d = f[4]; // YYMMDD
       const m = d?.match(/^(\d{2})(\d{2})(\d{2})$/);
-      if (m) statementDate = assertRealDate("20" + m[1]!, m[2]!, m[3]!, `BAI2 date "${d}"`);
+      if (m) statementDate = assertRealDate(expandTwoDigitYear(m[1]!), m[2]!, m[3]!, `BAI2 date "${d}"`);
     } else if (f[0] === "03") {
+      // One file routinely carries several accounts (one 03 record each), but
+      // this parser produces a single statement with one currency, one closing
+      // balance, and lines stripped of account identity. Merging accounts would
+      // quietly aggregate — or currency-corrupt — other accounts' money, so
+      // at most one identified account section is accepted per file: a missing account
+      // number leaves lines unidentifiable, a repeated 03 re-states the
+      // currency/balance evidence (last write wins), and a second distinct
+      // account mixes two ledgers. Split one statement per account instead.
+      const accountNumber = (f[1] ?? "").trim();
+      if (!accountNumber) {
+        throw new BankingError(
+          "BAI2 account record is missing its account number — lines without account identity cannot be imported",
+        );
+      }
+      if (accountNumbers.has(accountNumber)) {
+        throw new BankingError(
+          `BAI2 file repeats account ${accountNumber} — import one statement per account section so each keeps its own currency, balance, and lines`,
+        );
+      }
+      accountNumbers.add(accountNumber);
+      if (accountNumbers.size > 1) {
+        throw new BankingError(
+          `BAI2 file contains multiple accounts (${[...accountNumbers].join(", ")}) — import one account per file so each statement keeps its own currency, balance, and lines`,
+        );
+      }
       if (f[2]) currency = f[2];
       // status/summary type codes follow in groups of (code, amount, ...)
       for (let i = 3; i + 1 < f.length; i += 1) {
@@ -759,6 +800,25 @@ export function parseMt940(source: StatementSourceContent): ParsedStatement {
     if (m) fields.push({ tag: m[1]!, value: m[2]! });
     else if (fields.length && ln.trim() && ln.trim() !== "-") fields[fields.length - 1]!.value += "\n" + ln;
   }
+  // One parse produces one statement with one account, one currency, and one
+  // closing balance. A file carrying several :20: statements (or several :25:
+  // accounts) would otherwise merge their lines while the account identity is
+  // dropped and the later balance/currency silently wins — the same quiet
+  // aggregation the BAI2 parser refuses. Split one statement per message.
+  const statementCount = fields.filter((field) => field.tag === "20").length;
+  if (statementCount > 1) {
+    throw new BankingError(
+      "MT940 message contains multiple statements — import one statement per message so each keeps its own account, balance, and lines",
+    );
+  }
+  const messageAccounts = new Set(
+    fields.map((field) => (field.tag === "25" ? field.value.trim() : "")).filter((value) => value !== ""),
+  );
+  if (messageAccounts.size > 1) {
+    throw new BankingError(
+      `MT940 message contains multiple accounts (${[...messageAccounts].join(", ")}) — import one account per message so each statement keeps its own currency, balance, and lines`,
+    );
+  }
   const lines: ParsedStatementLine[] = [];
   let currency: string | undefined;
   let closingBalance: string | undefined;
@@ -775,12 +835,16 @@ export function parseMt940(source: StatementSourceContent): ParsedStatement {
       const m = value.match(/^(\d{6})(\d{4})?(R?[DC])([A-Z])?([\d.,]+)/);
       if (!m) throw new BankingError(`MT940: unparseable :61: line "${value.slice(0, 40)}"`);
       const dm = m[1]!.match(/^(\d{2})(\d{2})(\d{2})$/)!;
-      const debit = /D/.test(m[3]!);
+      // Subfield 3 names the mark, not the resulting direction: C/D are plain
+      // credit/debit, while RC/RD name what is being reversed — a reversal of
+      // a credit takes money out (debit) and a reversal of a debit puts it
+      // back (credit), per the SWIFT MT940 debit/credit-mark contract.
+      const debit = m[3] === "D" || m[3] === "RC";
       const amount = normalizeAmount((debit ? "-" : "") + m[5], "MT940 amount");
       const rest = value.slice(m[0].length);
       const ref = rest.split("//")[0]?.replace(/^N[A-Z]{3}/, "").trim() || null;
       pending = {
-        postedOn: assertRealDate("20" + dm[1]!, dm[2]!, dm[3]!, `MT940 date "${m[1]}"`),
+        postedOn: assertRealDate(expandTwoDigitYear(dm[1]!), dm[2]!, dm[3]!, `MT940 date "${m[1]}"`),
         amount,
         description: null,
         counterpartyRef: ref,
@@ -788,16 +852,23 @@ export function parseMt940(source: StatementSourceContent): ParsedStatement {
       };
     } else if (tag === "86" && pending) {
       pending.description = value.replace(/\n/g, " ").replace(/[?>]\d{2}/g, " ").replace(/\s+/g, " ").trim() || null;
-    } else if (tag === "25") {
-      const cm = value.match(/([A-Z]{3})\s*$/);
-      if (cm) currency = cm[1];
-    } else if (tag === "62F" || tag === "62M") {
+    } else if (tag === "60F" || tag === "60M" || tag === "62F" || tag === "62M") {
+      // Balance fields carry the authoritative statement currency. The :25:
+      // account reference never does — inferring a code from its suffix once
+      // let an account like ACC…USD override the explicit CAD on the balances.
+      // Opening and closing balances must agree; contradiction fails closed.
       const m = value.match(/^([DC])(\d{6})([A-Z]{3})([\d.,]+)/);
-      if (m) {
+      const balanceCurrency = m?.[3];
+      if (balanceCurrency && currency !== undefined && currency !== balanceCurrency) {
+        throw new BankingError(
+          `MT940: contradictory balance currencies ${currency} and ${balanceCurrency} — split the statements instead of merging them`,
+        );
+      }
+      if (balanceCurrency) currency = balanceCurrency;
+      if ((tag === "62F" || tag === "62M") && m) {
         closingBalance = normalizeAmount((m[1] === "D" ? "-" : "") + m[4], "MT940 closing balance");
-        currency = currency ?? m[3];
         const dm = m[2]!.match(/^(\d{2})(\d{2})(\d{2})$/)!;
-        statementDate = assertRealDate("20" + dm[1]!, dm[2]!, dm[3]!, "MT940 balance date");
+        statementDate = assertRealDate(expandTwoDigitYear(dm[1]!), dm[2]!, dm[3]!, "MT940 balance date");
       }
     }
   }

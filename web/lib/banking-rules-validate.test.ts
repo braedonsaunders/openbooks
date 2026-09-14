@@ -55,3 +55,38 @@ test('outcomes reject silent defaults and malformed dimensions', () => {
   assert.equal(validateOutcome(outcome({ accountId, portion: { kind: 'remainder' }, projectId: 'bad-id' })).ok, false)
   assert.equal(validateOutcome({ ...outcome({ accountId, portion: { kind: 'remainder' } }), mode: 'automatic' }).ok, false)
 })
+
+test('outcomes reject percent portions totalling more than 100', () => {
+  const outcome = (lines: Record<string, unknown>[]) => ({
+    action: 'categorize',
+    version: 2,
+    mode: 'auto',
+    lines,
+  })
+  const over = outcome([
+    { accountId, portion: { kind: 'percent', value: 60 } },
+    { accountId, portion: { kind: 'percent', value: 60 } },
+    { accountId, portion: { kind: 'remainder' } },
+  ])
+  assert.equal(validateOutcome(over).ok, false)
+  // No remainder to absorb the overrun either: the last line would flip sign.
+  const overNoRemainder = outcome([
+    { accountId, portion: { kind: 'percent', value: 50 } },
+    { accountId, portion: { kind: 'percent', value: 60 } },
+  ])
+  assert.equal(validateOutcome(overNoRemainder).ok, false)
+  const exact = outcome([
+    { accountId, portion: { kind: 'percent', value: 33.333 } },
+    { accountId, portion: { kind: 'percent', value: 66.667 } },
+  ])
+  assert.equal(validateOutcome(exact).ok, true)
+  // Float-hostile inputs that still total exactly 100 are accepted.
+  const exactDecimals = outcome([
+    { accountId, portion: { kind: 'percent', value: 33.33 } },
+    { accountId, portion: { kind: 'percent', value: 33.33 } },
+    { accountId, portion: { kind: 'percent', value: 33.34 } },
+  ])
+  assert.equal(validateOutcome(exactDecimals).ok, true)
+  const singleHundred = outcome([{ accountId, portion: { kind: 'percent', value: 100 } }])
+  assert.equal(validateOutcome(singleHundred).ok, true)
+})

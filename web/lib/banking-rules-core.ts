@@ -134,7 +134,10 @@ export function evaluateCondition(line: BankLine, cond: RuleCondition, now: numb
           if (!Number.isFinite(days)) return false
           const ageMs = Date.parse(`${on}T00:00:00Z`)
           const cutoff = now - days * 86400000
-          return Number.isFinite(ageMs) && ageMs >= cutoff
+          // A line dated after the evaluation clock is not "within the last N
+          // days" — without the upper bound, future-dated lines matched every
+          // withinDays rule.
+          return Number.isFinite(ageMs) && ageMs >= cutoff && ageMs <= now
         }
         default: return false
       }
@@ -206,7 +209,8 @@ export function firstMatchingRule(line: BankLine, accountId: string, rules: Rule
  * absorbs whatever is left, keeping the entry balanced exactly at the ledger's
  * numeric(19,4) scale — cents-only rounding here could strand sub-cent deltas
  * outside the posting. If no remainder line exists, the last line absorbs the
- * rounding delta.
+ * rounding delta. Portions that over-allocate the line total throw instead of
+ * booking a flipped-sign remainder.
  */
 export function resolveSplitAmounts(
   bankAmount: string,
@@ -234,6 +238,15 @@ export function resolveSplitAmounts(
   })
 
   const remainderMagnitude = add(absGross, neg(sum(allocated)))
+  // Refuse any over-allocation against the actual line total: a negative
+  // remainder would otherwise book a flipped-sign line that still balances
+  // numerically. Even dust-scale overruns refuse — controlled refusal at
+  // preview/post time beats a wrong-sign posting of any size.
+  if (cmp(remainderMagnitude, '0') < 0) {
+    throw new Error(
+      `bank rule over-allocates the line total of ${formatMoney(absGross, 4)} by ${formatMoney(moneyAbs(remainderMagnitude), 4)} — reduce fixed or percent portions`,
+    )
+  }
   if (remainderIdx >= 0) {
     resolved[remainderIdx]!.amount = offsetNegative ? neg(remainderMagnitude) : remainderMagnitude
   } else if (resolved.length > 0) {
