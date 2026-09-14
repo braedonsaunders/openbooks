@@ -22,6 +22,7 @@ import {
 } from "./context";
 import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
+import { inTypeAudience, loadRecordTypeByKey } from "../records";
 
 export interface RecordListInput {
   typeKey: string;
@@ -41,6 +42,22 @@ export interface RecordListResult {
 interface RecordScope {
   resolved: ResolvedApiType;
   schema: ApiRecordTypeSchema;
+}
+
+async function typeAudienceVisible(
+  context: ApplicationContext,
+  schema: ApiRecordTypeSchema,
+): Promise<boolean> {
+  if (!schema.dynamic) return true;
+  const type = await loadRecordTypeByKey(context.authz.user.orgId, schema.key);
+  return Boolean(
+    type &&
+      type.status === "published" &&
+      inTypeAudience(
+        context.authz.user.roles.map(({ key }) => key),
+        type.allowed_roles,
+      ),
+  );
 }
 
 export { normalizeDocumentRecordRevisions } from "../documents";
@@ -67,6 +84,7 @@ async function scopeFor(
   }
   const schema = schemas.find((candidate) => candidate.key === resolved.key);
   if (!schema) throw notFound("record type schema");
+  if (!(await typeAudienceVisible(context, schema))) throw notFound("record type");
   const permission = operation === "list" || operation === "get"
     ? resolved.readPermission
     : resolved.writePermission;
@@ -181,14 +199,16 @@ export async function listRecordTypes(
   context: ApplicationContext,
 ): Promise<ApiRecordTypeSchema[]> {
   const schemas = await loadApiSchema(context.authz.user.orgId);
-  return schemas.filter((schema) => {
+  const visible = await Promise.all(schemas.map(async (schema) => {
+    if (!(await typeAudienceVisible(context, schema))) return null;
     try {
       assertApplicationPermission(context, schema.readPermission);
-      return true;
+      return schema;
     } catch {
-      return false;
+      return null;
     }
-  });
+  }));
+  return visible.flatMap((schema) => schema ? [schema] : []);
 }
 
 export async function listRecords(
