@@ -57,10 +57,10 @@ scoped to your organization.
 
 ## Build and administer apps
 
-Go to **Settings → Extend → App Builder** to create an app, import a package, edit
-its files, review execution logs, control permissions, enable or disable it, and
-publish an active version to the App Library. Authoring access is separate from
-ordinary app use.
+Use **Settings → Extensions** to describe a new extension to an agent, review
+and preview its draft, and activate a version. This is the management inventory
+for the same packages opened from Apps. See [Build extensions with an agent](/docs/extensions).
+Authoring access is separate from ordinary app use.
 
 Before enabling an app, review its requested permissions and grant only the
 capabilities it needs. Use the app's run history to investigate failed backend

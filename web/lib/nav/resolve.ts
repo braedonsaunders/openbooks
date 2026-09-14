@@ -13,6 +13,7 @@ import {
   NAV_MODULES,
   NAV_SUBGROUPS,
   defaultNavConfig,
+  normalizeExtensionNavigation,
   type NavGroupKey,
   type NavAppOption,
   type OrgNavConfig,
@@ -54,7 +55,7 @@ export async function resolveNav(
     listActiveModuleContributions(orgId),
   ])
   const saved = r.rows[0]?.config
-  const baseConfig = saved?.version === 2 ? layerInNewModules(saved) : defaultNavConfig()
+  const baseConfig = saved?.version === 2 ? layerInNewModules(normalizeExtensionNavigation(saved)) : defaultNavConfig()
   const config = baseConfig
   const appByKey = new Map(appResult.rows.map((app) => [app.key, app]))
   const featureHiddenModules = hiddenNavModules(featureState)

@@ -1,6 +1,6 @@
 {
   "title": "Apps",
-  "description": "Installed apps you can open.",
+  "description": "Open the workspaces provided by your installed extensions. Manage their packages and drafts in Settings → Extensions.",
   "searchPlaceholder": "Search installed apps…",
   "version": "Version {version}",
   "noDescription": "No description provided.",
@@ -8,7 +8,8 @@
     "library": "App Library",
     "documentation": "Documentation",
     "open": "Open app",
-    "openAria": "Open {name}"
+    "openAria": "Open {name}",
+    "manage": "Manage extensions"
   },
   "empty": {
     "title": "No apps installed",

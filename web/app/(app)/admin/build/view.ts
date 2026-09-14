@@ -75,7 +75,7 @@ const GROUPS: Group[] = [
         featureKey: 'scripts',
       },
       {
-        href: '/admin/apps',
+        href: '/admin/modules',
         iconKey: 'blocks',
         cardKey: 'apps',
         permission: 'apps.manage',

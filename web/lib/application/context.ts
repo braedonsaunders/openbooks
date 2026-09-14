@@ -43,7 +43,7 @@ export function applicationContextFromApiKey(
 /** Session-authenticated adapter used by the in-app assistant. */
 export function applicationContextFromSession(
   authz: Authz,
-  source: "assistant",
+  source: "assistant" | "api",
   requestId: string,
 ): ApplicationContext {
   return { authz, source, requestId, apiKeyId: null };

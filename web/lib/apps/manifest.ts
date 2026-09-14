@@ -69,6 +69,8 @@ export const manifestSchema = z.object({
   frontend: z.object({
     /** Bundle path to the HTML entry point served into the sandboxed iframe. */
     entry: z.string().regex(BUNDLE_PATH, 'invalid frontend entry path'),
+    /** Native JSON screens use house components; omitted preserves sandboxed HTML. */
+    renderer: z.enum(['native', 'sandbox']).optional(),
   }),
   endpoints: z.array(endpointSchema).max(50).default([]),
   nav: z

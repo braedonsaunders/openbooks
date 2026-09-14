@@ -6,7 +6,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { frame, grid, page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { currentUser } from '../../../../lib/auth'
 import { listApps } from '../../../../lib/apps/store'
-import { defaultNavConfig, type NavAppOption, type OrgNavConfig } from '../../../../lib/nav/registry'
+import { defaultNavConfig, normalizeExtensionNavigation, type NavAppOption, type OrgNavConfig } from '../../../../lib/nav/registry'
 
 /**
  * The navigation editor, split into a loader and a spec.
@@ -51,7 +51,7 @@ export async function loadNavigationAdmin(
       name: app.manifest?.nav?.label?.trim() || app.name,
       iconKey: app.manifest?.nav?.icon?.trim() || app.iconKey,
     }))
-  const config = saved?.version === 2 ? saved : defaultNavConfig()
+  const config = saved?.version === 2 ? normalizeExtensionNavigation(saved) : defaultNavConfig()
 
   return {
     title: t('title'),

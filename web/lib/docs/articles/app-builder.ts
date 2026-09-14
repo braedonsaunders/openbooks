@@ -2,7 +2,7 @@ import type { DocArticle } from '../types'
 
 export const appBuilder: DocArticle = {
   slug: 'app-builder',
-  title: 'App Builder',
+  title: 'Advanced sandbox package reference',
   category: 'apps',
   order: 2,
   summary:
@@ -22,7 +22,9 @@ export const appBuilder: DocArticle = {
     'sandbox',
   ],
   related: ['apps', 'app-api-reference', 'scripting-engine', 'scripting-api-reference', 'record-customization'],
-  body: `# App Builder
+  body: `# Advanced sandbox package reference
+
+For the current creation and review flow, see [Build extensions with an agent](/docs/extensions). The legacy /admin/apps address now redirects to the unified Extensions inventory.
 
 **Settings → Extend → App Builder** (route **/admin/apps**) is where an
 administrator authors, packages, secures, and publishes apps. It requires the

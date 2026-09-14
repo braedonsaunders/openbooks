@@ -117,7 +117,7 @@ export const FEATURES: FeatureDef[] = [
   { key: 'advancedClose', defaultEnabled: false, category: 'accounting', parentKey: 'flows' },
   // Platform
   { key: 'flows', defaultEnabled: true, category: 'platform', navModules: ['flows', 'approvals'] },
-  { key: 'apps', defaultEnabled: true, category: 'platform', navModules: ['apps', 'admin-apps'] },
+  { key: 'apps', defaultEnabled: true, category: 'platform', navModules: ['apps'] },
   { key: 'scripts', defaultEnabled: false, category: 'platform', navModules: ['admin-scripts'] },
   { key: 'apiAccess', defaultEnabled: false, category: 'platform', navModules: ['admin-api-keys', 'api-docs'] },
   { key: 'mcpAccess', defaultEnabled: false, category: 'platform', requiresAll: ['apiAccess'] },

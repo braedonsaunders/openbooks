@@ -22,6 +22,7 @@ import { requestHash } from '@/lib/application/idempotency-core'
 import { parseManifest, validateBundle, contentTypeFor, type AppManifest } from './manifest'
 import { projectAppManifestToModuleManifest } from '@openbooks/engine/src/modules/absorb-apps.ts'
 import { APP_CAPABILITIES } from './manifest'
+import { parseNativeExtension } from './native-ui'
 import { parseObjectSpecs, type ParsedObjects } from './objects'
 import { createAppPlatformAdapter, AppPlatformError } from './platform'
 import type { SessionUser } from '@/lib/auth'
@@ -30,7 +31,7 @@ import { lockCustomFieldKeys } from '../custom-field-write-lock'
 import { validateCustomFieldDefinition, type ExistingFieldDef } from '../custom-field-definition'
 import { normalizeCustomFieldConfig } from '../custom-field-config'
 import { isCustomFieldTargetEnabled } from '../customization/gates'
-import { featureGateLockKey } from '../features'
+import { featureGateLockKey, isFeatureEnabled } from '../features'
 import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 
 /**
@@ -150,7 +151,7 @@ function sameAbsorbedRelease(a: ComparableAbsorbedManifest, b: ComparableAbsorbe
   return stableStringify(release(a)) === stableStringify(release(b))
 }
 
-export async function installApp(orgId: string, userId: string, bundle: UploadBundle): Promise<{ key: string }> {
+export async function installApp(orgId: string, userId: string, bundle: UploadBundle, draft?: { id: string; hash: string }): Promise<{ key: string }> {
   const parsed = parseManifest(bundle.manifest)
   if (!parsed.ok || !parsed.manifest) throw new AppError(`invalid manifest: ${parsed.errors.join('; ')}`)
   const manifest = parsed.manifest
@@ -173,9 +174,40 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     field.config = normalizeCustomFieldConfig(field.config)
   }
 
+  if (manifest.frontend.renderer === 'native') {
+    const entry = bundle.files.find(file => file.path === manifest.frontend.entry)
+    if (!entry || entry.isBinary) throw new AppError('Native UI entry must be a JSON text file')
+    try {
+      const ui = parseNativeExtension(entry.content)
+      if (ui.screens.some(screen => screen.kind === 'records') && !manifest.permissions.includes('records.read')) {
+        throw new AppError('Native record screens require records.read')
+      }
+    } catch (error) {
+      if (error instanceof AppError) throw error
+      throw new AppError(`invalid native UI: ${error instanceof Error ? error.message : 'invalid JSON'}`)
+    }
+  }
+
   const manifestJson = JSON.stringify(manifest)
 
   await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'extension-package:' + orgId + ':' + manifest.key}, 0))`)
+    let draftReason: string | null = null
+    if (draft) {
+      const proposal = (await tx.execute<{ bundle: unknown; content_hash: string; base_version_id: string | null; status: string; reason: string }>(sql`
+        select bundle, content_hash, base_version_id, status, reason from extension_drafts
+        where org_id=${orgId} and id=${draft.id} and created_by=${userId} for update
+      `)).rows[0]
+      if (!proposal || proposal.content_hash !== draft.hash || requestHash(bundle) !== proposal.content_hash) throw new AppError('The reviewed extension draft does not match', 409)
+      draftReason = proposal.reason
+      if (proposal.status === 'applied') return
+      if (proposal.status !== 'draft') throw new AppError('This extension draft is no longer available', 409)
+      const current = (await tx.execute<{ active_version_id: string | null }>(sql`select active_version_id from apps where org_id=${orgId} and key=${manifest.key} for update`)).rows[0]
+      if ((current?.active_version_id ?? null) !== proposal.base_version_id) throw new AppError('The installed extension changed after this draft was created; create and review a new draft', 409)
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
+      if (!(await isFeatureEnabled(orgId, 'apps', tx))) throw new AppError('Extensions are disabled', 404)
+    }
+
     if (objects.customFields.length) {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
       for (const field of objects.customFields) {
@@ -252,6 +284,13 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
       await adoptUninstalledProvenance(tx, orgId, userId, appId, manifest.key, objects, owned)
     }
     const provisioned = await provisionObjects(tx, orgId, userId, objects, owned, { appKey: manifest.key, appVersionId: versionId })
+    if (manifest.frontend.renderer === 'native') {
+      const ui = parseNativeExtension(bundle.files.find(file => file.path === manifest.frontend.entry)!.content)
+      for (const screen of ui.screens) if (screen.kind === 'records') {
+        const type = (await tx.execute(sql`select id from custom_record_types where org_id=${orgId} and key=${screen.typeKey} and status='published'`)).rows[0]
+        if (!type) throw new AppError(`Native screen ${screen.key} requires a published record type: ${screen.typeKey}`, 409)
+      }
+    }
     await tx.execute(sql`update apps set provisioned = ${JSON.stringify(provisioned)}::jsonb where id = ${appId} and org_id = ${orgId}`)
 
     // Supersede the previous active version, then activate the new one.
@@ -380,6 +419,12 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
           ${userId})`)
     }
     await tx.execute(sql`update modules set active_version_id = ${moduleVersionId}, updated_at = now(), updated_by = ${userId} where id = ${moduleId} and org_id = ${orgId}`)
+    if (draft) {
+      await tx.execute(sql`update extension_drafts set status='applied', applied_at=now() where org_id=${orgId} and id=${draft.id}`)
+      await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+        values(${orgId},'extension_drafts',${draft.id},'update',${JSON.stringify({ event: 'extension_draft_applied', reason: draftReason, contentHash: draft.hash, appKey: manifest.key, before: { status: 'draft' }, after: { status: 'applied' } })}::jsonb,${userId})`)
+    }
+
   })
 
   return { key: manifest.key }
@@ -1212,6 +1257,7 @@ export async function updateAppMeta(orgId: string, userId: string, key: string, 
   await db.transaction(async (tx) => {
     const app = await loadMutableApp(tx, orgId, key)
     if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
+    if (app.manifest.frontend.renderer === 'native') throw new AppError('Prepare and review an extension draft to change a native package', 409)
 
     const manifest: AppManifest = { ...app.manifest }
     if (meta.name !== undefined) {
@@ -1324,6 +1370,7 @@ export async function writeAppFile(
   await db.transaction(async (tx) => {
     const app = await loadMutableApp(tx, orgId, key)
     if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
+    if (app.manifest.frontend.renderer === 'native') throw new AppError('Prepare and review an extension draft to change a native package', 409)
 
     const backendFiles = new Set(app.manifest.endpoints.map((e) => e.file))
     const kind = backendFiles.has(path)
@@ -1348,6 +1395,7 @@ export async function deleteAppFile(orgId: string, key: string, path: string, us
   await db.transaction(async (tx) => {
     const app = await loadMutableApp(tx, orgId, key)
     if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
+    if (app.manifest.frontend.renderer === 'native') throw new AppError('Prepare and review an extension draft to change a native package', 409)
     if (path === app.manifest.frontend.entry) throw new AppError('cannot delete the frontend entry file', 409)
     const endpoint = app.manifest.endpoints.find((e) => e.file === path)
     if (endpoint) throw new AppError(`cannot delete: endpoint "${endpoint.name}" uses this file`, 409)

@@ -37,6 +37,8 @@ export interface AppRuntimeData {
   notFound: boolean
   disabled: boolean
   live: boolean
+  native?: boolean
+  searchParams?: Record<string, string | string[] | undefined>
   noticeTitle: string
   noticeDescription: string
   backHref: string
@@ -94,7 +96,8 @@ export async function loadAppRuntime(key: string): Promise<AppRuntimeData> {
     ...base,
     notFound: false,
     disabled: false,
-    live: true,
+    live: app.manifest?.frontend.renderer !== 'native',
+    native: app.manifest?.frontend.renderer === 'native',
     noticeTitle: '',
     noticeDescription: '',
     appKey: app.key,
@@ -137,6 +140,7 @@ export function appRuntimeSpec(data: AppRuntimeData): PageSpec {
         }),
         when: { $: 'disabled' },
       },
+      { ...widgetBlock('native-extension', { appKey: data.appKey, sp: data.searchParams ?? {} }), when: { $: 'native' } },
       {
         ...widgetBlock('app-runtime-chrome', {
           appKey: data.appKey,

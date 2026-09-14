@@ -93,7 +93,7 @@ export interface RecordModuleData {
   basePath: string
   typeKey: string
   typeName: string
-  newRecordProps: { typeKey: string; typeName: string }
+  newRecordProps: { typeKey: string; typeName: string; basePath: string; currentParams: Record<string, string | string[] | undefined> }
   title: string
   description: string
   canCreate: boolean
@@ -122,12 +122,22 @@ export interface RecordModuleData {
     sections: FormSection[]
     record: { id: string; recordNumber: string; data: FieldValueMap; status: RecordStatus }
     canEdit: boolean
+    closeHref: string
   } & { remountKey: string }) | null
 }
 
 export async function loadRecordModule(
   sp: Record<string, string | string[] | undefined>,
   typeKey: string,
+): Promise<RecordModuleData> {
+  return loadRecordWorkspace(sp, typeKey)
+}
+
+/** The same governed loader can render inside an extension without losing its route. */
+export async function loadRecordWorkspace(
+  sp: Record<string, string | string[] | undefined>,
+  typeKey: string,
+  workspacePath?: string,
 ): Promise<RecordModuleData> {
   const authz = await requirePermission('records.read')
   const display = await getMoneyFormatter(authz.user.orgId)
@@ -145,7 +155,7 @@ export async function loadRecordModule(
   const sections = lint.sections
   const canCreate = can(authz, 'records.create')
 
-  const basePath = `/records/${typeKey}`
+  const basePath = workspacePath ?? `/records/${typeKey}`
   const columns = listableFields(sections).slice(0, 5)
   const filterFields = columns
     .filter((f) => (f.type === 'select' || f.type === 'radio') && (f.validation?.options?.length ?? 0) > 0)
@@ -241,7 +251,7 @@ export async function loadRecordModule(
     basePath,
     typeKey,
     typeName: type.name,
-    newRecordProps: { typeKey, typeName: type.name },
+    newRecordProps: { typeKey, typeName: type.name, basePath, currentParams: sp },
     title: type.plural_name,
     description: type.description ?? t('module.defaultDescription', { pluralName: type.plural_name }),
     canCreate,
@@ -317,6 +327,7 @@ export async function loadRecordModule(
             status: openRecord.status,
           },
           canEdit: canCreate,
+          closeHref: basePath,
         }
       : null,
   }

@@ -33,12 +33,14 @@ export function RecordDrawer({
   sections,
   record,
   canEdit,
+  closeHref = `/records/${typeKey}`,
 }: {
   typeKey: string
   typeName: string
   sections: FormSection[]
   record: { id: string; recordNumber: string; data: FieldValueMap; status: RecordStatus }
   canEdit: boolean
+  closeHref?: string
 }) {
   const router = useRouter()
   const t = useTranslations('records.recordDrawer')
@@ -53,7 +55,6 @@ export function RecordDrawer({
   const canEditStatus = canEdit && status !== 'inactive'
   const [mode, setMode] = useState<'view' | 'edit'>('view')
   const editable = mode === 'edit' && canEditStatus
-  const closeHref = `/records/${typeKey}`
 
   // -- explicit save (no autosave) -------------------------------------------
   const first = useRef(true)

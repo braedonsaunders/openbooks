@@ -7,6 +7,7 @@ import {
   NAV_GROUPS,
   NAV_MODULES,
   defaultNavConfig,
+  normalizeExtensionNavigation,
 } from './registry'
 
 test('default navigation is a complete version-two workspace configuration', () => {
@@ -143,4 +144,14 @@ test('every module and group carries a translated label', () => {
   const keys = new Set(NAV_MODULES.map((module) => module.key))
   const orphaned = Object.keys(nav.modules).filter((key) => !keys.has(key))
   assert.deepEqual(orphaned, [], 'these nav.modules labels name no module')
+})
+
+test('legacy app management navigation resolves once and preserves custom placement', () => {
+  const old = { version: 2 as const, groups: [{ id: 'custom', label: 'Custom', items: [{ kind: 'module' as const, moduleKey: 'admin-apps', hidden: true }] }] }
+  const migrated = normalizeExtensionNavigation(old)
+  assert.equal(migrated.groups[0]!.items[0]!.hidden, true)
+  assert.equal((migrated.groups[0]!.items[0] as { moduleKey: string }).moduleKey, 'admin-modules')
+  old.groups[0]!.items.push({ kind: 'module', moduleKey: 'admin-modules', hidden: false })
+  assert.equal(normalizeExtensionNavigation(old).groups[0]!.items.length, 1)
+  assert.equal(old.groups[0]!.items.length, 2)
 })

@@ -1,4 +1,5 @@
 import "server-only";
+import { activateExtensionDraft, discardExtensionDraft, describeExtensionVocabulary, draftExtension, getExtensionDraft, getExtensionPackage } from "./extensions";
 import { z, type ZodTypeAny } from "zod";
 import { can, type Authz } from "../authz";
 import {
@@ -363,6 +364,51 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     readOnly: false, destructive: true, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await clearLayout(context, input) }),
+  }),
+  definition({
+    name: "describe_extension_vocabulary", title: "Describe Extension Capabilities",
+    description: "Start here to build an extension. Returns the native screen and package contract, governed objects and backend capabilities, an example, and the draft → preview → approve workflow.",
+    inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async context => ({ ok: true, ...await describeExtensionVocabulary(context) }),
+  }),
+  definition({
+    name: "draft_extension", title: "Prepare Extension Draft",
+    description: "Save an immutable unpublished extension package for this author. No installation, object creation, backend execution or activation occurs. Returns the human review URL, preview URL and exact content hash. A revision is a new draft; keep all intended files and definitions.",
+    inputSchema: z.object({ bundle: z.unknown(), reason: z.string().trim().min(1).max(2000) }),
+    readOnly: false, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await draftExtension(context, input as never) }),
+  }),
+  definition({
+    name: "get_extension_draft", title: "Read Extension Draft",
+    description: "Read this author's exact unpublished package, base version and hash for revision or review. Other authors' drafts are unavailable.",
+    inputSchema: z.object({ draftId: UUID }), readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, draft: await getExtensionDraft(context, input.draftId as string) }),
+  }),
+  definition({
+    name: "get_extension_package", title: "Read Installed Extension Package",
+    description: "Read the installed package or one of its historical versions before preparing an upgrade or rollback. Preserve owned object definitions and use a new version label, then draft and review it.",
+    inputSchema: z.object({ key: MODULE_KEY, versionId: UUID.optional() }), readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await getExtensionPackage(context, input as never) }),
+  }),
+  definition({
+    name: "discard_extension_draft", title: "Discard Extension Draft",
+    description: "Discard this author's unpublished draft while preserving its source and audit evidence. Activated versions cannot be discarded.",
+    inputSchema: z.object({ draftId: UUID, contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
+    readOnly: false, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await discardExtensionDraft(context, input as never) }),
+  }),
+  definition({
+    name: "activate_extension_draft", title: "Activate Reviewed Extension",
+    description: "Activate only the exact author-owned draft the human reviewed and explicitly approved. Bind draftId and contentHash. Refuses stale base versions or unavailable permissions. Provisioning, version activation and audit commit atomically.",
+    inputSchema: z.object({ draftId: UUID, contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
+    readOnly: false, destructive: false, openWorld: false,
+    assistantConfirmation: "always", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...await activateExtensionDraft(context, input as never) }),
   }),
   definition({
     name: "describe_module_vocabulary", title: "Describe Module Vocabulary",

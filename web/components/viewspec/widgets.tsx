@@ -1,3 +1,4 @@
+import { NativeExtension } from '../../app/(app)/apps/[key]/NativeExtension'
 import { Fragment, type ComponentProps, type ReactNode } from 'react'
 import type { WidgetRef } from '@braedonsaunders/appkit-viewspec'
 import { isFieldRef, resolvePath } from '@braedonsaunders/appkit-viewspec'
@@ -533,7 +534,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     if (!href) return null
     // Icons are components, so the spec names one from a closed map — the same
     // rule the empty state follows.
-    const icons: Record<string, ReactNode> = { settings: <Settings size={14} /> }
+    const icons: Record<string, ReactNode> = { settings: <Settings size={14} />, plus: <Plus size={16} /> }
     const iconKey = str(props, 'iconKey')
     const variant = str(props, 'variant') as ComponentProps<typeof Button>['variant']
     const size = str(props, 'size') as ComponentProps<typeof Button>['size']
@@ -1335,6 +1336,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   /** `context` is plain data — app id/key/name plus the caller's id, name and
    *  role KEYS — not an `Authz`. The sandbox that consumes it lives inside
    *  `AppFrame`. */
+  'native-extension': props => <NativeExtension appKey={str(props, 'appKey') ?? ''} searchParams={(props.sp as Record<string, string | string[] | undefined>) ?? {}} />,
   'app-runtime-chrome': (props) => (
     <AppRuntimeChrome
       appKey={str(props, 'appKey') ?? ''}
@@ -2914,7 +2916,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
 
   /* --- custom record modules ----------------------------------------------- */
   'new-record': (props) => (
-    <NewRecordButton typeKey={str(props, 'typeKey') ?? ''} typeName={str(props, 'typeName') ?? ''} />
+    <NewRecordButton typeKey={str(props, 'typeKey') ?? ''} typeName={str(props, 'typeName') ?? ''} basePath={str(props, 'basePath')} currentParams={props.currentParams as Record<string, string | string[] | undefined> | undefined} />
   ),
   'record-drawer': (props) => {
     const drawer = props.drawer as (ComponentProps<typeof RecordDrawer> & { remountKey: string }) | null
