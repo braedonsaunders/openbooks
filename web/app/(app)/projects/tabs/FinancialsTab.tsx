@@ -30,6 +30,10 @@ const SIGNED_GOOD = new Set(['gross_profit', 'could_be_invoiced', 'remaining_bud
 /** Measures that carry an explanatory hint. */
 const HINTED = new Set(['invoiced_to_date', 'could_be_invoiced', 'committed_cost', 'total_price', 'total_cost', 'overhead'])
 
+export function shouldHideFinancialLine(hideWhenZero: boolean, value: string | number): boolean {
+  return hideWhenZero && cmp(String(value), '0') === 0
+}
+
 function Line({ label, hint, value, variant, tone }: {
   label: string; hint?: string; value: ReactNode; variant: 'line' | 'subtotal' | 'total'; tone?: 'good' | 'bad'
 }) {
@@ -122,7 +126,7 @@ export function FinancialsTab({ data }: {
           <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {visibleLayout.map((line, i) => {
               const v = m[line.measure] ?? 0
-              if (line.hideWhenZero && v === 0) return null
+              if (shouldHideFinancialLine(line.hideWhenZero === true, v)) return null
               return (
                 <Line
                   key={`${line.measure}-${i}`}
