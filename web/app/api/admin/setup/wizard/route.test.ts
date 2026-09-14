@@ -171,3 +171,20 @@ test('explicit currency reconfiguration updates the root currency', async () => 
   const update = rootUpdate()
   assert.equal(update.values.includes('USD'), true, 'an explicit currency change must reach the root update')
 })
+
+test('the wizard takes the feature-gate fence before any gate reads or row locks', async () => {
+  reset()
+  const response = await PUT(new Request('http://openbooks.test/api/admin/setup/wizard', {
+    method: 'PUT',
+    body: JSON.stringify({ ...baseBody, name: 'Renamed Company' }),
+  }))
+
+  assert.equal(response.status, 200)
+  const fenceIndex = routeState.queries.findIndex(
+    ({ text, values }) =>
+      text.includes('pg_advisory_xact_lock') && values.some((v) => typeof v === 'string' && v.startsWith('openbooks:feature-gate:')),
+  )
+  assert.ok(fenceIndex > -1, 'the wizard must take the feature-gate fence inside its transaction')
+  const orgLockIndex = routeState.queries.findIndex(({ text }) => text.includes('from orgs where id') && text.includes('for update'))
+  assert.ok(orgLockIndex > fenceIndex, 'the fence must precede the org row lock, like the Features switchboard')
+})
