@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { toUnits } from "./money.ts";
 import {
+  assertLeaseCommencementOn,
   assertLeaseTimingSupported,
   classifyLease,
   classifyLessorLease,
@@ -12,7 +13,12 @@ import {
   salesTypeCommencement,
   shortTermExemptionEligible,
 } from "./leases.ts";
-import { periodRateFromAnnualPercent, presentValueOfLevelStream } from "./present-value.ts";
+import {
+  accreteToZero,
+  periodRateFromAnnualPercent,
+  presentValueOfLevelStream,
+  PresentValueError,
+} from "./present-value.ts";
 
 // The worked example used throughout: five annual payments of 20,000 in
 // arrears at 5%. Annuity factor 4.3294766708… → liability 86,589.5334.
@@ -217,4 +223,87 @@ test("monthly compounding uses the exact annual/12 rational, not a truncated dec
     model: "finance",
   });
   assert.equal(m.schedule[23]!.closing, "0.0000");
+});
+
+test("present value rejects fractional and unbounded horizons instead of mis-splitting the denominator", () => {
+  const rate = periodRateFromAnnualPercent("6", 12);
+  const pvError = (e: unknown) => e instanceof PresentValueError && /whole number of periods/.test(e.message);
+  // Fractional horizons previously computed without throwing: the visit loop
+  // ran whole t while pow() iterated `exp` times, silently mis-splitting the
+  // common denominator (periods=2.5 returned 1985.0994 — neither the 2- nor
+  // the 3-period value).
+  assert.throws(
+    () => presentValueOfLevelStream({ payment: "1000", periods: 2.5, rate, timing: "arrears" }),
+    pvError,
+  );
+  assert.throws(
+    () => presentValueOfLevelStream({ payment: "1000", periods: 1201, rate, timing: "arrears" }),
+    pvError,
+  );
+  assert.throws(
+    () => presentValueOfLevelStream({ payment: "1000", periods: Number.MAX_SAFE_INTEGER, rate, timing: "arrears" }),
+    pvError,
+  );
+  assert.throws(
+    () => accreteToZero({ opening: "2970.2481", payment: "1000", periods: 2.5, rate }),
+    pvError,
+  );
+  // The supported boundary stays usable without running a giant loop: the
+  // zero-rate path is O(1), proving 1200 is accepted exactly at the cap.
+  assert.equal(
+    presentValueOfLevelStream({ payment: "1000", periods: 1200, rate: { num: 0n, den: 1n }, timing: "arrears" }),
+    "1200000.0000",
+  );
+});
+
+test("period rates require a positive whole periods-per-year (no raw BigInt RangeError)", () => {
+  const rateError = (e: unknown) => e instanceof PresentValueError && /positive whole number/.test(e.message);
+  // Non-integer counts previously escaped as `RangeError: ... cannot be
+  // converted to a BigInt`, which callers catching PresentValueError miss.
+  assert.throws(() => periodRateFromAnnualPercent("5", 2.5), rateError);
+  assert.throws(() => periodRateFromAnnualPercent("5", 0), rateError);
+  assert.throws(() => periodRateFromAnnualPercent("5", -4), rateError);
+});
+
+test("measureLesseeLease enforces a whole period count inside the 100-year horizon", () => {
+  const base = {
+    payment: "1000",
+    annualRatePercent: "6",
+    periodsPerYear: 12,
+    timing: "arrears" as const,
+    model: "finance" as const,
+  };
+  assert.throws(
+    () => measureLesseeLease({ ...base, periods: 2.5 }),
+    (e) => e instanceof LeaseError && /whole number of periods/.test(e.message),
+  );
+  // 1201 monthly periods = just over 100 years; 101 annual periods likewise.
+  assert.throws(
+    () => measureLesseeLease({ ...base, periods: 1201 }),
+    (e) => e instanceof LeaseError && /100-year horizon/.test(e.message),
+  );
+  assert.throws(
+    () => measureLesseeLease({ ...base, periodsPerYear: 1, periods: 101 }),
+    (e) => e instanceof LeaseError && /100-year horizon/.test(e.message),
+  );
+  assert.throws(
+    () => measureLesseeLease({ ...base, periodsPerYear: 2.5, periods: 12 }),
+    (e) => e instanceof LeaseError && /positive whole number/.test(e.message),
+  );
+});
+
+test("commencement dates are gated to real calendar dates (YYYY-MM-DD)", () => {
+  assert.throws(
+    () => assertLeaseCommencementOn("not-a-date"),
+    (e) => e instanceof LeaseError && /calendar date/.test(e.message),
+  );
+  assert.throws(
+    () => assertLeaseCommencementOn("2026-02-30"),
+    (e) => e instanceof LeaseError && /calendar date/.test(e.message),
+  );
+  assert.throws(
+    () => assertLeaseCommencementOn("2026-7-1"),
+    (e) => e instanceof LeaseError && /calendar date/.test(e.message),
+  );
+  assert.doesNotThrow(() => assertLeaseCommencementOn("2026-07-01"));
 });

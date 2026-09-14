@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
+  AssetLifecycleError,
   disposeAsset,
   remeasureAsset,
   reverseAssetLifecycleEvent,
@@ -389,6 +390,78 @@ test(
       await quietly(`drop trigger if exists "${guard}_trg" on depreciation_schedule_lines`);
       await quietly(`drop function if exists "${guard}"()`);
       await quietly(`drop sequence if exists "${guard}_seq"`);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a write-off with proceeds is refused without mutating asset state",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const categoryId = randomUUID();
+    const assetId = randomUUID();
+    try {
+      await db.execute(sql`
+        insert into asset_categories
+          (id, org_id, name, asset_account_id,
+           accumulated_depreciation_account_id,
+           depreciation_expense_account_id, gain_loss_account_id,
+           default_method, default_life_months, default_convention,
+           tax_attributes, is_active, created_by, updated_by)
+        values
+          (${categoryId}, ${org.orgId}, 'Write-off guard equipment',
+           ${org.accounts.invAsset}, ${org.accounts.clearing},
+           ${org.accounts.adjustment}, ${org.accounts.adjustment},
+           'straight_line', 10, 'full_month', '{}'::jsonb, true,
+           ${actorId}, ${actorId})
+      `);
+      await db.execute(sql`
+        insert into fixed_assets
+          (id, org_id, subsidiary_id, category_id, asset_number, name, status,
+           acquired_on, in_service_on, acquisition_cost, salvage_value,
+           depreciation_method, useful_life_months, depreciation_convention,
+           custom, created_by, updated_by)
+        values
+          (${assetId}, ${org.orgId}, ${org.subsidiaryId}, ${categoryId},
+           'ASSET-WO-GUARD', 'Write-off guard asset', 'in_service',
+           ${org.date}, ${org.date}, 1000, 0, 'straight_line', 10,
+           'full_month', '{}'::jsonb, ${actorId}, ${actorId})
+      `);
+      const snapshot = async () => ({
+        status: (await db.execute<{ status: string }>(sql`
+          select status from fixed_assets where org_id = ${org.orgId} and id = ${assetId}`)).rows[0]!.status,
+        events: (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from asset_events where org_id = ${org.orgId} and asset_id = ${assetId}`)).rows[0]!.n,
+        entries: (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from journal_entries where org_id = ${org.orgId}`)).rows[0]!.n,
+      });
+      const before = await snapshot();
+      // The guard throws before the transaction opens, so the contradictory
+      // proceeds are refused rather than silently coerced to zero.
+      await assert.rejects(
+        disposeAsset(org.orgId, assetId, {
+          writeOff: true,
+          proceeds: "500",
+          proceedsAccountId: org.accounts.bank,
+          date: "2026-07-31",
+          actorId,
+        }),
+        (e) => e instanceof AssetLifecycleError && /write-off takes no proceeds/.test(e.message),
+      );
+      await assert.rejects(
+        disposeAsset(org.orgId, assetId, {
+          proceeds: "-100",
+          proceedsAccountId: org.accounts.bank,
+          date: "2026-07-31",
+          actorId,
+        }),
+        (e) => e instanceof AssetLifecycleError && /non-negative/.test(e.message),
+      );
+      assert.deepEqual(await snapshot(), before, "refused disposals mutate no asset, event, or journal state");
+    } finally {
       await dropScratchOrg(org.orgId);
     }
   },

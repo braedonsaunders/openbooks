@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { AssetLifecycleError, computeDisposal, computeRemeasurement, type DisposalAccounts } from "./asset-lifecycle.ts";
+import { AssetLifecycleError, computeDisposal, computeRemeasurement, disposeAsset, remeasureAsset, type DisposalAccounts } from "./asset-lifecycle.ts";
 import { add, isZero } from "./money.ts";
 
 const lifecycleSource = readFileSync(new URL("./asset-lifecycle.ts", import.meta.url), "utf8");
@@ -104,6 +104,45 @@ test("INVARIANT: every remeasurement entry balances to zero", () => {
     const r = computeRemeasurement({ cost: "10000", accumulated: accum, newCarryingValue: newCv, ...rm });
     assert.ok(isZero(r.lines.reduce((a, l) => add(a, l.amount), "0")));
   }
+});
+
+test("a write-off with proceeds is rejected before anything posts (proceeds would be silently dropped)", () => {
+  // Validation sits ahead of the transaction, so no database is touched: with
+  // no OPENBOOKS_DB_URL any reach-through to the database would throw a
+  // non-lifecycle error and fail this validator instead.
+  return assert.rejects(
+    disposeAsset("org", "asset", {
+      writeOff: true,
+      proceeds: "500",
+      proceedsAccountId: "cash",
+      date: "2026-07-31",
+      actorId: "actor",
+    }),
+    (e) => e instanceof AssetLifecycleError && /write-off takes no proceeds/.test(e.message),
+  );
+});
+
+test("a disposal with negative proceeds is rejected (sale proceeds are never negative)", () => {
+  return assert.rejects(
+    disposeAsset("org", "asset", {
+      proceeds: "-100",
+      proceedsAccountId: "cash",
+      date: "2026-07-31",
+      actorId: "actor",
+    }),
+    (e) => e instanceof AssetLifecycleError && /non-negative/.test(e.message),
+  );
+});
+
+test("a remeasurement to a negative carrying value is rejected (recoverable amounts cannot be negative)", () => {
+  return assert.rejects(
+    remeasureAsset("org", "asset", {
+      newCarryingValue: "-100",
+      date: "2026-07-31",
+      actorId: "actor",
+    }),
+    (e) => e instanceof AssetLifecycleError && /non-negative/.test(e.message),
+  );
 });
 
 test("INVARIANT: every disposal entry balances to zero", () => {

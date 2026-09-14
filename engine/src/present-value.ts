@@ -20,6 +20,27 @@ export class PresentValueError extends Error {
   readonly name = "PresentValueError";
 }
 
+/**
+ * Supported horizon for a level stream, in periods: 100 years at monthly
+ * frequency. Coordinated with revenue's MAX_FINANCING_DEFERRAL_YEARS = 100 —
+ * the longest supported financing horizon, not a statutory calendar rule.
+ * The summation is O(T²) exact-BigInt work over (den+num)^T, and every
+ * downstream consumer (accretion loop, apportion weights, schedule rows)
+ * scales with the period count, so an unbounded horizon is a hang/OOM vector.
+ */
+export const MAX_PRESENT_VALUE_PERIODS = 1200;
+
+/** Whole period counts only: fractional horizons silently mis-split the
+ *  common denominator (the loop visits whole t while pow() iterates `exp`
+ *  times), and unbounded counts hang. Fail closed before any arithmetic. */
+function assertPeriodCount(periods: number): void {
+  if (!Number.isSafeInteger(periods) || periods < 1 || periods > MAX_PRESENT_VALUE_PERIODS) {
+    throw new PresentValueError(
+      `periods must be a whole number of periods from 1 through ${MAX_PRESENT_VALUE_PERIODS}`,
+    );
+  }
+}
+
 /** An exact per-period rate num/den. */
 export interface PeriodRate {
   num: bigint;
@@ -33,7 +54,9 @@ export function periodRateFromAnnualPercent(percent: string, periodsPerYear = 1)
   if (!/^\d+(\.\d+)?$/.test(trimmed)) {
     throw new PresentValueError(`invalid rate percent: ${percent}`);
   }
-  if (periodsPerYear <= 0) throw new PresentValueError("periodsPerYear must be positive");
+  if (!Number.isSafeInteger(periodsPerYear) || periodsPerYear <= 0) {
+    throw new PresentValueError("periodsPerYear must be a positive whole number");
+  }
   const [whole, frac = ""] = trimmed.split(".");
   if (frac.length > 10) {
     throw new PresentValueError("rate percent precision is limited to 10 decimal places");
@@ -66,7 +89,7 @@ export interface LevelPaymentStream {
  */
 export function presentValueOfLevelStream(stream: LevelPaymentStream): string {
   const { periods, rate, timing } = stream;
-  if (periods <= 0) throw new PresentValueError("periods must be positive");
+  assertPeriodCount(periods);
   const paymentUnits = toUnits(stream.payment);
   if (paymentUnits <= 0n) throw new PresentValueError("payment must be positive");
   if (rate.num === 0n) return fromUnits(paymentUnits * BigInt(periods));
@@ -114,7 +137,7 @@ export function accreteToZero(args: {
   rate: PeriodRate;
 }): AccretionPeriod[] {
   const { periods, rate } = args;
-  if (periods <= 0) throw new PresentValueError("periods must be positive");
+  assertPeriodCount(periods);
   const paymentUnits = toUnits(args.payment);
   const out: AccretionPeriod[] = [];
   let opening = toUnits(args.opening);
