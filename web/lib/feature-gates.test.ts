@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { readingPagePairs } from './page-source'
 import test from 'node:test'
+import ts from 'typescript'
 import { FEATURES } from '@openbooks/engine/src/feature-registry.ts'
 
 /**
@@ -1336,11 +1337,13 @@ test('the surfaces this test was written for are covered', () => {
     /status: 404/,
     'recurring run-now must 404 — not mint — when the template kind is off',
   )
-  assert.match(
-    read('../engine/src/property-management.ts'),
-    /export async function addLeaseCharge[\s\S]{0,1500}await assertEnabled\(tx, input\.orgId\)/,
-    'lease-charge writes must refuse when Property Management is off — existing charges stay',
-  )
+  const propertySource = ts.createSourceFile('property-management.ts', read('../engine/src/property-management.ts'), ts.ScriptTarget.Latest, true)
+  const addCharge = propertySource.statements.find((node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === 'addLeaseCharge')
+  assert.ok(addCharge?.body, 'lease-charge service must exist')
+  const chargeBody = addCharge.body.getText(propertySource)
+  assert.match(chargeBody, /db\.transaction\(async \(tx\) => \{\s*await assertEnabled\(tx, input\.orgId\)/,
+    'lease-charge transaction must check Property Management before reading or writing lease data')
   assert.match(
     read('../engine/src/property-management.ts'),
     /export async function scheduleLeaseCharges[\s\S]{0,200}await assertEnabled\(db, orgId\)/,

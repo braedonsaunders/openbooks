@@ -460,7 +460,11 @@
     "entities": {
       "ledger_lines": {
         "label": "元帳明細",
-        "description": "仕訳、勘定、取引先、ディメンションを含むすべての仕訳明細 — 記帳済みまたは下書きの総勘定元帳の全明細。"
+        "description": "仕訳、勘定、取引先、ディメンションを含むすべての仕訳明細 — 記帳済みまたは下書きの総勘定元帳の全明細。",
+        "base_currency": "機能通貨",
+        "book": "会計帳簿",
+        "book_code": "帳簿コード",
+        "book_id": "帳簿ID"
       },
       "documents": {
         "label": "取引",
@@ -476,11 +480,15 @@
       },
       "transaction_lines": {
         "label": "取引明細",
-        "description": "すべての種別にわたる明細レベルの取引詳細 — 品目、勘定、数量、金額、請求状態、ディメンション。"
+        "description": "すべての種別にわたる明細レベルの取引詳細 — 品目、勘定、数量、金額、請求状態、ディメンション。",
+        "currency": "通貨"
       },
       "journal_entries": {
         "label": "仕訳",
-        "description": "仕訳ヘッダー — 番号、記帳日、ステータス、発生元、摘要。"
+        "description": "仕訳ヘッダー — 番号、記帳日、ステータス、発生元、摘要。",
+        "book": "会計帳簿",
+        "book_code": "帳簿コード",
+        "book_id": "帳簿ID"
       },
       "items": {
         "label": "品目",

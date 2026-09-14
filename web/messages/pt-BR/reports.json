@@ -460,7 +460,11 @@
     "entities": {
       "ledger_lines": {
         "label": "Linhas do razão",
-        "description": "Cada linha de lançamento com seu lançamento, conta, parte e dimensões — o detalhamento completo do razão geral, lançado ou em rascunho."
+        "description": "Cada linha de lançamento com seu lançamento, conta, parte e dimensões — o detalhamento completo do razão geral, lançado ou em rascunho.",
+        "base_currency": "Moeda funcional",
+        "book": "Livro contábil",
+        "book_code": "Código do livro",
+        "book_id": "ID do livro"
       },
       "documents": {
         "label": "Transações",
@@ -476,11 +480,15 @@
       },
       "transaction_lines": {
         "label": "Linhas de transação",
-        "description": "Detalhe de transação em nível de linha para todos os tipos — item, conta, quantidades, valores, estado de faturamento e dimensões."
+        "description": "Detalhe de transação em nível de linha para todos os tipos — item, conta, quantidades, valores, estado de faturamento e dimensões.",
+        "currency": "Moeda"
       },
       "journal_entries": {
         "label": "Lançamentos contábeis",
-        "description": "Cabeçalhos de lançamento contábil — número, data de lançamento, status, origem e memorando."
+        "description": "Cabeçalhos de lançamento contábil — número, data de lançamento, status, origem e memorando.",
+        "book": "Livro contábil",
+        "book_code": "Código do livro",
+        "book_id": "ID do livro"
       },
       "items": {
         "label": "Itens",
