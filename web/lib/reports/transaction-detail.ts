@@ -91,7 +91,7 @@ export async function transactionDetail(opts: {
       ? sql`e.posting_date <= ${opts.to}`
       : sql`e.posting_date >= ${opts.from ?? "0001-01-01"} and e.posting_date <= ${opts.to}`
   const cashFilter =
-    opts.basis === "cash" || opts.cashOnly
+    opts.cashOnly
       ? sql` and e.id in (select l2.entry_id from journal_lines l2 join accounts a2 on a2.id = l2.account_id and a2.org_id = l2.org_id where l2.org_id = ${orgId} and a2.type = 'asset_bank')`
       : sql``
   const partyFilter = opts.partyIds?.length ? sql` and l.party_id in ${opts.partyIds}` : sql``
@@ -123,22 +123,89 @@ export async function transactionDetail(opts: {
     : sql``
 
   const bookFilter = sql`e.book_id = ${statementBookExpr(orgId, opts.bookId)}`
-  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${bookFilter} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${partyFilter}${projectCustomerFilter}${projectSearchFilter}${activeProjectFilter}`
+  // Cash-basis statements recognize accrual documents at their settled share
+  // (see statementMatrix): bank-backed and settlement-FX entries count in
+  // full, a settled document counts at min(settled share, 1), everything else
+  // contributes zero. The drill must value lines the same way or its net
+  // cannot tie to the cell. This is deliberately separate from `cashOnly`
+  // (the cash-flow section drill, which keeps the bank-touch filter).
+  const cashBasis = opts.basis === "cash" && !opts.cashOnly
+  const cashCtes = cashBasis
+    ? sql`with bank_entries as materialized (
+          select distinct bl.entry_id
+            from journal_lines bl
+            join accounts ba on ba.id = bl.account_id and ba.org_id = bl.org_id
+           where bl.org_id = ${orgId} and ba.type = 'asset_bank'
+        ),
+        cash_settled as materialized (
+          select ctl.entry_id,
+                 sum(app.amount)::numeric /
+                   nullif((select coalesce(sum(abs(cl.amount)), 0)
+                             from journal_lines cl
+                             join accounts ca on ca.id = cl.account_id and ca.org_id = cl.org_id
+                            where cl.entry_id = ctl.entry_id and cl.org_id = ctl.org_id
+                              and ca.type in ('asset_receivable', 'liability_payable')
+                              and cl.is_open_item), 0) as share
+            from applications app
+            join journal_lines ctl on ctl.id = app.to_line_id and ctl.org_id = app.org_id
+            join accounts cta on cta.id = ctl.account_id and cta.org_id = ctl.org_id
+            join journal_lines src on src.id = app.from_line_id and src.org_id = app.org_id
+           where app.org_id = ${orgId}
+             and app.unapplied_at is null
+             and cta.type in ('asset_receivable', 'liability_payable')
+             and exists (
+               select 1 from journal_lines sb
+                 join accounts sba on sba.id = sb.account_id and sba.org_id = sb.org_id
+                where sb.entry_id = src.entry_id and sb.org_id = src.org_id
+                  and sba.type = 'asset_bank')
+           group by ctl.entry_id, ctl.org_id
+        ),
+        settlement_fx_entries as materialized (
+          select distinct app.fx_gain_loss_entry_id as entry_id
+            from applications app
+            join journal_lines src on src.id = app.from_line_id and src.org_id = app.org_id
+           where app.org_id = ${orgId}
+             and app.unapplied_at is null
+             and app.fx_gain_loss_entry_id is not null
+             and exists (
+               select 1 from journal_lines sb
+                 join accounts sba on sba.id = sb.account_id and sba.org_id = sb.org_id
+                where sb.entry_id = src.entry_id and sb.org_id = src.org_id
+                  and sba.type = 'asset_bank')
+        )`
+    : sql``
+  const cashJoins = cashBasis
+    ? sql`
+            left join bank_entries bn on bn.entry_id = e.id
+            left join cash_settled cs on cs.entry_id = e.id
+            left join settlement_fx_entries sf on sf.entry_id = e.id`
+    : sql``
+  const cashValue = cashBasis
+    ? sql`(case
+            when bn.entry_id is not null or sf.entry_id is not null then l.amount
+            else l.amount * least(coalesce(cs.share, 0::numeric), 1::numeric)
+          end)`
+    : sql`l.amount`
+  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${bookFilter} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${partyFilter}${projectCustomerFilter}${projectSearchFilter}${activeProjectFilter}${cashBasis ? sql` and ${cashValue} <> 0` : sql``}`
+  // Cash-basis lines are valued at their recognized (settled-share) amount so
+  // the debit/credit/net split ties to the matrix cell, not to gross lines.
+  const v = cashBasis ? cashValue : sql`l.amount`
   const readerNet = opts.profitSigned
-    ? sql`-l.amount`
-    : sql`case when a.type in ${[...CREDIT_NORMAL]} then -l.amount else l.amount end`
+    ? sql`-${v}`
+    : sql`case when a.type in ${[...CREDIT_NORMAL]} then -${v} else ${v} end`
 
   // Totals over the FULL set (independent of the display limit), so `net` ties
   // out to the clicked cell even when the line list is truncated. `net` is
   // reader-signed by default; profit subtotals instead negate every included
   // line so debit-normal costs subtract from credit-normal revenue.
   const agg = (await db.execute<{ n: number; debit: string; credit: string; net: string }>(sql`
+    ${cashCtes}
     select count(*)::int as n,
-           coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as debit,
-           coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0) as credit,
+           coalesce(sum(case when ${v} > 0 then ${v} else 0 end), 0) as debit,
+           coalesce(sum(case when ${v} < 0 then -${v} else 0 end), 0) as credit,
            coalesce(sum(${readerNet}), 0) as net
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')${cashJoins}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where ${where}
   `))
@@ -150,12 +217,13 @@ export async function transactionDetail(opts: {
       party: string | null; memo: string | null; amount: string
       doc_kind: string | null; doc_id: string | null
     }>(sql`
+    ${cashCtes}
     select l.id as line_id, e.id as entry_id, e.entry_number, e.posting_date::text as date,
            a.number as acct_number, a.name as acct_name, a.type as acct_type,
-           p.display_name as party, l.memo, l.amount,
+           p.display_name as party, l.memo, ${v} as amount,
            d.kind as doc_kind, d.id as doc_id
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')${cashJoins}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
