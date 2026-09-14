@@ -1,13 +1,14 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
 import { isUuid } from '../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { initialEntryStatus, loadTimePolicy } from '../../../lib/time-policy'
+import { runTimeApprovalEffects } from '../../../lib/time-approval'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 import { isIsoDate, loadWeek, pinTimesheetEmployee, pinTimesheetLineRefs, weekStart, weekWindow } from './_lib'
 
@@ -123,6 +124,11 @@ async function save(req: Request) {
   const newStatus = initialEntryStatus(policy)
   const toPersist: Persist[] = []
   for (const r of body.rows) {
+    if (r == null || typeof r !== 'object' || Array.isArray(r)) return bad('Each row must be an object')
+    if (!Array.isArray(r.hours) || r.hours.length > 7) {
+      return bad('Hours must be a list of at most seven day cells')
+    }
+    if (r.isBillable != null && typeof r.isBillable !== 'boolean') return bad('Invalid billable flag')
     const projectId = uuidOrNull(r.projectId)
     if (projectId === 'invalid') return bad('Invalid project')
     const itemId = uuidOrNull(r.itemId)
@@ -215,7 +221,8 @@ async function save(req: Request) {
   // this employee+week's draft/rejected rows, then re-insert from the grid.
   // Approved/submitted entries are untouched — the grid already reflected them
   // read-only when the week wasn't a draft.
-  await db.transaction(async (tx) => {
+  await withOrgTransaction(orgId, async () => {
+    const tx = db
     // When approval is not required, saved entries land already approved, so
     // the replaceable set has to include those too — otherwise every save would
     // insert a second copy of the week's hours alongside the first. Entries any
@@ -247,8 +254,9 @@ async function save(req: Request) {
                and billing_status = 'unbilled')
          )
     `)
+    const savedIds: string[] = []
     for (const p of toPersist) {
-      await tx.execute(sql`
+      const saved = await tx.execute<{ id: string }>(sql`
         insert into time_entries
           (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
            project_id, department_id, memo, is_billable, status, custom,
@@ -258,8 +266,13 @@ async function save(req: Request) {
            ${p.itemId}, ${p.projectId}, ${p.departmentId}, ${p.memo},
            ${p.isBillable}, ${newStatus}, ${JSON.stringify(p.custom)}::jsonb,
            ${user.id}, ${user.id})
+        returning id
       `)
+      savedIds.push(saved.rows[0]!.id)
     }
+    // Disabling the manual sign-off changes who authorizes availability, not
+    // the rate evidence or accounting required when hours become usable.
+    if (newStatus === 'approved') await runTimeApprovalEffects(orgId, user.id, savedIds)
   })
 
   const payload = await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds)
