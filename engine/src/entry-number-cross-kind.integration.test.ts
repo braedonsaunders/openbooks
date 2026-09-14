@@ -30,6 +30,14 @@ async function ctx(): Promise<ScratchOrg> {
   return org;
 }
 
+// The canonical fixture owner releases leases after each top-level test.
+// Never retain an organization handle after its lease has been returned.
+test.afterEach(async () => {
+  const current = org;
+  org = null;
+  if (current) await dropScratchOrg(current.orgId);
+});
+
 const control = (o: ScratchOrg) => ({
   control: { ar: o.accounts.ar, ap: o.accounts.ap, bank: o.accounts.bank },
 });
