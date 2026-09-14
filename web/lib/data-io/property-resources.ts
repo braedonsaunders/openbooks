@@ -48,9 +48,12 @@ export async function propertyManagementEnabled(orgId: string): Promise<boolean>
 async function naturalId(orgId: string, table: string, column: string, value: unknown): Promise<string | null> {
   const human = String(value ?? '').trim()
   if (!human) return null
-  if (UUID_RE.test(human)) return human
+  // Every table resolved here is org-scoped: a UUID must belong to THIS org,
+  // otherwise a file carrying another tenant's id would attach to a foreign
+  // subsidiary, location, asset, property, or item.
+  const idColumn = UUID_RE.test(human) ? 'id' : column
   const found = (await db.execute(sql`
-    select id from ${sql.raw(table)} where org_id=${orgId} and ${sql.raw(column)}=${human} limit 1`)) as { rows: { id: string }[] }
+    select id from ${sql.raw(table)} where org_id=${orgId} and ${sql.raw(idColumn)}=${human} limit 1`)) as { rows: { id: string }[] }
   return found.rows[0]?.id ?? null
 }
 
