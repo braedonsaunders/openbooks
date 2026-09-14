@@ -30,6 +30,10 @@ export interface ChargeRow {
 
 const field = 'space-y-1.5'
 
+export function preserveChargeRate(value: unknown): string {
+  return value == null ? '' : String(value)
+}
+
 export function ChargesSection({
   projectId,
   charges,
@@ -84,8 +88,8 @@ export function ChargesSection({
     setItemId(id)
     const it = itemById.get(id)
     if (it) {
-      if (!costRate && it.defaultCost != null) setCostRate(Number(it.defaultCost).toString())
-      if (!billRate && it.defaultRate != null) setBillRate(Number(it.defaultRate).toString())
+      if (!costRate && it.defaultCost != null) setCostRate(preserveChargeRate(it.defaultCost))
+      if (!billRate && it.defaultRate != null) setBillRate(preserveChargeRate(it.defaultRate))
     }
   }
 
