@@ -1,3 +1,4 @@
+import { queryAppRecords } from './query'
 import 'server-only'
 
 import { sql, type SQL } from 'drizzle-orm'
@@ -124,7 +125,13 @@ function quoteIdentifier(identifier: string): SQL {
 
 function fieldExpression(resolved: ResolvedApiType, field: ApiField | null, name: string): SQL {
   if (resolved.dynamic && !CUSTOM_RECORD_BASE_FIELDS.has(name)) {
-    return sql`data ->> ${name}`
+    const text = sql`nullif(data ->> ${name}, '')`
+    if (field?.type === 'number') return sql`(${text})::numeric`
+    if (field?.type === 'boolean') return sql`(${text})::boolean`
+    if (field?.type === 'string (date)') return sql`(${text})::date`
+    if (field?.type === 'string (date-time)') return sql`(${text})::timestamptz`
+    if (field?.type === 'string (uuid)') return sql`(${text})::uuid`
+    return text
   }
   if (!resolved.dynamic && field?.custom && name.startsWith('cf_')) {
     return sql`custom ->> ${name.slice(3)}`
@@ -332,6 +339,7 @@ async function assertSubsidiaryWriteScope(
 
 export function createAppPlatformAdapter(ctx: AppPlatformContext): AppPlatformAdapter {
   return {
+    query: (plan) => queryAppRecords(ctx, plan),
     schema: () => schemaForContext(ctx),
     list: (typeKey, options) => listRecords(ctx, typeKey, options),
     get: (typeKey, id) => getRecord(ctx, typeKey, id),

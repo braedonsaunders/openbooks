@@ -1,3 +1,4 @@
+import { reportEntityCatalog, validateCatalogReportQuery } from './custom-record-report-catalog'
 import 'server-only'
 import { trueCostExportData } from './analytics/true-cost-report'
 import { sql } from 'drizzle-orm'
@@ -5,7 +6,6 @@ import { db } from '@openbooks/engine/src/db.ts'
 import {
   applyBuiltInUrlFilters,
   BUILT_IN_REPORT_DEFINITION_MAP,
-  validateCustomQuery,
   type ReportRuleGroup,
 } from '@openbooks/reports'
 import {
@@ -380,12 +380,13 @@ export async function resolveDefinitionToExportData(
   // the request replaces the plan's stored date window (same as the report
   // screen's picker); absent params — e.g. scheduled runs — keep the plan.
   if (!row.query) throw new Error('report has no query')
-  let query = mergeReportFilters(validateCustomQuery(row.query), options.extraFilters)
+  const entityMap = await reportEntityCatalog(authz)
+  let query = mergeReportFilters(validateCatalogReportQuery(row.query, entityMap), options.extraFilters, entityMap)
   const periodTouched = p.has('period') || p.has('from') || p.has('to')
   // Derive the native period field before URL-backed built-in filters land.
   // expiresOnOrBefore is an intentional recall cutoff, not permission to turn
   // the entire recall into an implicit fiscal-period report.
-  const periodField = periodTouched ? reportPeriodField(query) : null
+  const periodField = periodTouched ? reportPeriodField(query, entityMap) : null
   const builtIn = row.kind === 'built_in'
     ? BUILT_IN_REPORT_DEFINITION_MAP[row.slug]
     : undefined

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, UrlDrawer, cn } from '@openbooks/ui'
+import { Badge, Button, UrlDrawer } from '@openbooks/ui'
 import { Download, Pencil } from 'lucide-react'
 import { parseManifest, type AppManifest } from '@/lib/apps/manifest'
 import {
@@ -14,6 +14,7 @@ import {
 import { confirmDialog } from '@/lib/confirm'
 import { AppPackageEditor } from './AppPackageEditor'
 import { AppHistory } from './AppHistory'
+import { AppWorkspaceTabs } from './sections'
 
 export function ExtensionDrawer({
   app,
@@ -113,41 +114,9 @@ export function ExtensionDrawer({
       beforeClose={leave}
     >
       <div className="space-y-5">
-        <div
-          className="flex flex-wrap gap-2 border-b"
-          role="tablist"
-          aria-label={t('workspace')}
-        >
-          {(
-            [
-              'overview',
-              ...(canAuthor ? (['package'] as const) : []),
-              'versions',
-              'runs',
-              'storage',
-              'audit',
-            ] as const
-          ).map((value) => (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={tab === value}
-              onClick={() => {
-                if (value === 'package' && !editing) void edit()
-                else setTab(value)
-              }}
-              className={cn(
-                '-mb-px border-b-2 px-3 py-2 text-sm font-medium',
-                tab === value
-                  ? 'border-teal-500 text-teal-700 dark:text-teal-300'
-                  : 'border-transparent text-slate-500',
-              )}
-            >
-              {t(value)}
-            </button>
-          ))}
-        </div>
+        <AppWorkspaceTabs label={t('workspace')} selected={tab}
+          tabs={(['overview', ...(canAuthor ? ['package' as const] : []), 'versions', 'runs', 'storage', 'audit'] as const).map(key => ({ key, label: t(key) }))}
+          onSelect={value => { if (value === 'package' && !editing) void edit(); else setTab(value) }} />
         {tab === 'overview' ? (
           <div className="space-y-5">
             <div className="flex items-start justify-between gap-4">

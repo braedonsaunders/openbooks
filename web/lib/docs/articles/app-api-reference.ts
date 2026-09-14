@@ -107,6 +107,61 @@ Example:
 }
 ~~~
 
+## Joined record queries
+
+Both **await openbooks.platform.query(plan)** in HTML apps and **ob.platform.query(plan)**
+in backend endpoints use the same governed query compiler. Sources are record-type keys
+returned by **platform.schema()**. Every source requires its own app grant and user read
+permission, enabled feature, custom-type audience, and tenant/subsidiary scope.
+
+~~~js
+const result = await openbooks.platform.query({
+  from: { type: "maintenance-work-order", as: "work" },
+  joins: [{
+    type: "parties", as: "person", kind: "left",
+    on: {
+      left: { source: "work", field: "assigned_to" },
+      right: { source: "person", field: "id" }
+    }
+  }],
+  select: [
+    { source: "work", field: "record_number" },
+    { source: "work", field: "title" },
+    { source: "person", field: "display_name" }
+  ],
+  filters: { combinator: "and", rules: [
+    { field: "work.workflow_status", op: "eq", value: "open" }
+  ] },
+  sorts: [{ column: "work.record_number", direction: "asc" }],
+  limit: 100
+});
+// result.records: [{ "work.record_number": "…", "work.title": "…", "person.display_name": "…" }]
+~~~
+
+Use **inner** or **left** equality joins between matching scalar field types.
+Each join connects an earlier alias to the new alias; self-joins are supported.
+Multiple matching right-hand records produce multiple result rows. Left joins retain
+unmatched left-hand rows with null right-hand fields; inaccessible rows never match.
+The API accepts at most four joins, fifty selected fields, three sort levels and
+1,000 result rows, with a five-second database statement limit and a 2 MB result limit. **hasMore** reports
+truncation; narrow the filters instead of treating a truncated result as complete.
+Numeric custom fields compare numerically, and exact decimals are returned as strings.
+No raw SQL, cross joins, arbitrary expressions, writes, or aggregation are accepted.
+Use Report Builder for grouped summaries and aggregates.
+
+## Custom record reports
+
+Published custom record types appear automatically in the existing Report Builder's
+source picker, subject to **records.read** and the type's role audience. Saving,
+previewing, running, exporting, scheduling and drilling use the same current catalog
+and permission checks. Archived or inaccessible types cannot be run from saved plans.
+Header fields use **field_**-prefixed query keys; repeating sections have separate
+line-grained sources, with parent fields plus **line_** fields. Parent amounts repeat
+per line in those sources. Number/date/boolean/reference fields are typed; JSON
+containers and presentation-only controls are not scalar report columns. Currency
+fields contain numeric values, not an implicit exchange-rate conversion: define and
+group by an explicit currency field when your record type carries multiple currencies.
+
 ## Permission evaluation
 
 Access is the intersection of three gates:
@@ -137,13 +192,19 @@ The host injects **window.openbooks** before the App's entry scripts execute.
 
 ~~~text
 openbooks.context: {
+  preview: boolean,
   app: { id: string, key: string, name: string },
-  user: { id: string, name: string, role: string } | null
+  user: { id: string, name: string, roles: string[] } | null
 }
 ~~~
 
 The embedded context value. Treat it as informational identity, not as an
 authorization grant. Server-side permission checks still apply to every call.
+
+**preview** is true for an unpublished draft and false for an installed app.
+Draft previews reject all host bridge calls. Build interactive previews with
+explicitly fictional, in-memory samples; never seed these into live storage or
+fall back to samples when a live request fails.
 
 ## openbooks.getContext()
 
@@ -491,7 +552,7 @@ The request is recursively frozen before the handler receives it:
   path?: string,
   query: Record<string, string>,
   body: any,
-  user: { id: string, name: string, role: string } | null
+  user: { id: string, name: string, roles: string[] } | null
 }
 ~~~
 

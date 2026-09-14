@@ -23,6 +23,8 @@ export const securityHeaders = [
 
 /** @type {import('next').NextConfig} */
 const config = {
+  // Both loopback names serve the same local development instance.
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   transpilePackages: ["@openbooks/engine", "@openbooks/schema"],
   serverExternalPackages: [
     "quickjs-emscripten",

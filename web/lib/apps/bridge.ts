@@ -19,6 +19,7 @@ export const BRIDGE_METHODS = [
   'callBackend',
   'records.list',
   'records.get',
+  'platform.query',
   'platform.schema',
   'platform.list',
   'platform.get',
@@ -29,6 +30,8 @@ export const BRIDGE_METHODS = [
 export type BridgeMethod = (typeof BRIDGE_METHODS)[number]
 
 export interface BridgeContext {
+  /** Informational sample-mode flag; the host independently refuses preview bridge calls. */
+  preview?: boolean
   app: { id: string; key: string; name: string; versionId?: string }
   user: { id: string; name: string; roles: string[] } | null
 }
@@ -121,6 +124,7 @@ export function bridgeClientSource(context: BridgeContext): string {
       get: function(typeKey, id){ return call('records.get', { typeKey: typeKey, id: id }); }
     },
     platform: {
+      query: function(plan){ return call('platform.query', { plan: plan }); },
       schema: function(){ return call('platform.schema', {}); },
       list: function(typeKey, options){ return call('platform.list', { typeKey: typeKey, options: options || {} }); },
       get: function(typeKey, id){ return call('platform.get', { typeKey: typeKey, id: id }); },

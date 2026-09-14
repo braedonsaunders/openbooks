@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { Alert, AlertDescription } from '@openbooks/ui'
+import { DetailPageLayout } from '@/components/page-layout'
 import { requirePermission } from '@/lib/authz'
 import { applicationContextFromSession } from '@/lib/application/context'
 import { getExtensionDraft, validateExtensionBundle } from '@/lib/application/extensions'
@@ -28,6 +29,6 @@ export default async function ExtensionPreview({ params, searchParams }: {
   const entry = bundle.files.find(file => file.path === manifest.frontend.entry)!
   const t = await getTranslations('admin.extensions.draft')
   const notice = <Alert variant="info"><AlertDescription>{t('previewNotice')}</AlertDescription></Alert>
-  if (manifest.frontend.renderer === 'native') return <>{notice}<NativeScreens ui={parseNativeExtension(entry.content)} appKey={manifest.key} name={manifest.name} description={manifest.description ?? null} grants={[]} searchParams={await searchParams} preview={{ id, objects: parseObjectSpecs(bundle.files) }} /></>
-  return <>{notice}<AppFrame appKey={manifest.key} context={{ app: { id, key: manifest.key, name: manifest.name }, user: { id: authz.user.id, name: authz.user.name, roles: authz.user.roles.map(role => role.key) } }} previewDraftId={id} /></>
+  if (manifest.frontend.renderer === 'native') return <NativeScreens ui={parseNativeExtension(entry.content)} appKey={manifest.key} name={manifest.name} description={manifest.description ?? null} grants={[]} searchParams={await searchParams} preview={{ id, objects: parseObjectSpecs(bundle.files) }} />
+  return <DetailPageLayout header={notice}><AppFrame appKey={manifest.key} context={{ app: { id, key: manifest.key, name: manifest.name }, user: { id: authz.user.id, name: authz.user.name, roles: authz.user.roles.map(role => role.key) } }} previewDraftId={id} /></DetailPageLayout>
 }

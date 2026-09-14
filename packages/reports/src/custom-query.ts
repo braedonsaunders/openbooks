@@ -1,5 +1,6 @@
+import { queryIdentifier } from './custom-record-entities'
 // Compiler for user-built custom reports. SQL-injection-safe: every identifier
-// comes from the entity catalog (compile-time constants) and all values bind
+// comes from the server-resolved entity catalog and all filter values bind
 // as numbered parameters.
 //
 // Two modes:
@@ -361,7 +362,7 @@ function compileRows(
   const page = opts.page ? resolveReportPage(entity, opts.page, opts.maxRows) : null
 
   const selectList = [
-    ...selectKeys.map((c) => `${columnRef(entity, c)} AS "${c}"`),
+    ...selectKeys.map((c) => `${columnRef(entity, c)} AS ${queryIdentifier(c)}`),
     ...(page ? [`COUNT(*) OVER() AS "${REPORT_TOTAL_ROWS_COLUMN}"`] : []),
   ].join(', ')
   // Every sort column resolves through the catalog; unknowns are dropped.

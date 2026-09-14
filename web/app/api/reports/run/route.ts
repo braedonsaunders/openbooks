@@ -1,6 +1,6 @@
+import { validateOrgReportQuery } from '@/lib/custom-record-report-catalog'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { validateCustomQuery } from '@openbooks/reports'
 import { guardPermission } from '../../../../lib/authz'
 import { guardReportEntity } from '../../../../lib/report-authz'
 import {
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
   // Ad-hoc plan → validate + execute, no run record (this is the live preview).
   let query
   try {
-    query = validateCustomQuery(body.query)
+    query = await validateOrgReportQuery(gate, body.query)
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Invalid report query' },

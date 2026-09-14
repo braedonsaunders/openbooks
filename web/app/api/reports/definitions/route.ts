@@ -1,8 +1,9 @@
+import { validateOrgReportQuery } from '@/lib/custom-record-report-catalog'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { validateCustomQuery, validateReportLayout } from '@openbooks/reports'
+import { validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../lib/authz'
 import { canRunReportEntity, canRunReportStatement, guardReportEntity } from '../../../../lib/report-authz'
 import { slugifyReportName, uniqueReportSlug } from '../../../../lib/custom-reports'
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
 
   let query
   try {
-    query = validateCustomQuery(body.query)
+    query = await validateOrgReportQuery(gate, body.query)
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Invalid report query' },

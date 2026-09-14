@@ -50,18 +50,19 @@ export async function NativeScreens({ ui, appKey, name, description, grants, sea
   const screen = ui.screens.find(item => item.key === selected)
   if (!screen) notFound()
   const t = await getTranslations('admin.extensions.native')
+  const td = await getTranslations('admin.extensions.draft')
+  const notice = preview ? <Alert variant="info"><AlertDescription>{td('previewNotice')}</AlertDescription></Alert> : null
   const tabs = <ModuleHomeTabs tabs={ui.screens.map(item => ({ href: `${preview ? '/admin/apps/preview/' + preview.id : '/apps/' + appKey}?screen=${encodeURIComponent(item.key)}`, label: item.title, active: item.key === selected }))} />
-  if (screen.kind === 'action') return <DetailPageLayout header={<>{tabs}<PageHeader title={screen.title} description={screen.description} /></>}>
+  if (screen.kind === 'action') return <DetailPageLayout header={<>{notice}{tabs}<PageHeader title={screen.title} description={screen.description} /></>}>
     <NativeActionForm key={`${versionId ?? preview?.id}:${screen.key}`} appKey={appKey} versionId={versionId} screen={screen} preview={!!preview} />
   </DetailPageLayout>
   if (screen.kind === 'records') {
     if (preview) {
       const type = preview.objects.recordTypes.find(item => item.key === screen.typeKey)
       const fields = type ? lintRecordFields(type.fields, type.name) : null
-      return <ListPageLayout header={<>{tabs}<PageHeader title={screen.title} /></>}>
-        <Alert variant="info"><AlertDescription>{t('previewRecords')}</AlertDescription></Alert>
-        {fields?.success ? <DraftRecordPreview sections={fields.sections} /> : <p>{t('existingRecordsPreview')}</p>}
-      </ListPageLayout>
+      if (fields?.success) return <DraftRecordPreview sections={fields.sections} typeKey={screen.typeKey} typeName={type!.name}
+        title={screen.title} basePath={`/admin/apps/preview/${preview.id}`} searchParams={{ ...searchParams, screen: selected }} header={<>{notice}{tabs}</>} />
+      return <ListPageLayout header={<>{notice}{tabs}<PageHeader title={screen.title} /></>}><p>{t('existingRecordsPreview')}</p></ListPageLayout>
     }
     if (!grants.includes('records.read') || !can(authz, 'records.read')) notFound()
     const data = await loadRecordWorkspace(searchParams, screen.typeKey, `/apps/${appKey}`)
@@ -72,7 +73,7 @@ export async function NativeScreens({ ui, appKey, name, description, grants, sea
     return <ListPageLayout header={<>{tabs}<BlockList blocks={spec.header} scope={data} searchParams={searchParams} /></>}><BlockList blocks={spec.body} scope={data} searchParams={searchParams} /></ListPageLayout>
   }
   const scope = { name, description, key: appKey }
-  const header = <>{tabs}<BlockList blocks={screen.spec.header} scope={scope} searchParams={searchParams} /></>
+  const header = <>{notice}{tabs}<BlockList blocks={screen.spec.header} scope={scope} searchParams={searchParams} /></>
   const body = <BlockList blocks={screen.spec.body} scope={scope} searchParams={searchParams} />
   if (screen.spec.layout === 'bare') return <>{header}{body}</>
   const Layout = screen.spec.layout === 'detail' ? DetailPageLayout : ListPageLayout

@@ -1,4 +1,5 @@
 import 'server-only'
+import { reportEntityCatalog, validateCatalogReportQuery } from './custom-record-report-catalog'
 import { requireReportAuthz, snapshotReportAuthorization, withReportAuthz } from './report-execution-context'
 import { canRunReportEntity } from './report-authz'
 import { sql } from 'drizzle-orm'
@@ -10,6 +11,7 @@ import {
   validateCustomQuery,
   type ReportCustomQuery,
   type ReportGroup,
+  type ReportEntity,
   type ReportPageRequest,
   type ReportRule,
   type ReportRuleGroup,
@@ -50,8 +52,8 @@ const TEMPORAL_OPS = new Set([
  * implicit period (lot recall may filter expiry on purpose, but an unfiltered
  * recall must remain complete history rather than silently becoming fiscal).
  */
-export function reportPeriodField(query: ReportCustomQuery): string | null {
-  const entity = REPORT_ENTITY_MAP[query.entity]
+export function reportPeriodField(query: ReportCustomQuery, entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP): string | null {
+  const entity = entityMap[query.entity]
   if (!entity) return null
   const dateColumns = new Set(
     entity.columns.filter((c) => c.kind === 'date').map((c) => c.key),
@@ -203,6 +205,7 @@ export async function loadReportDefinition(
 export function mergeReportFilters(
   base: ReportCustomQuery,
   extra: ReportRuleGroup | null | undefined,
+  entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP,
 ): ReportCustomQuery {
   if (!extra || !Array.isArray(extra.rules) || extra.rules.length === 0) return base
   const rules: NonNullable<ReportRuleGroup['rules']> = []
@@ -210,7 +213,7 @@ export function mergeReportFilters(
     rules.push(base.filters)
   }
   rules.push(extra)
-  return validateCustomQuery({ ...base, filters: { combinator: 'and', rules } })
+  return validateCustomQuery({ ...base, filters: { combinator: 'and', rules } }, entityMap)
 }
 
 /**
@@ -359,6 +362,8 @@ async function prepareReportExecution(
   labels?: ReportRunLabels,
 ) {
   const authz = await requireReportAuthz(orgId)
+  const entityMap = await reportEntityCatalog(authz)
+  query = validateCatalogReportQuery(query, entityMap)
   if (!(await canRunReportEntity(authz, query))) throw new Error('Report access denied')
   const featureKey = reportEntityFeatureKey(query)
   if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
@@ -375,7 +380,7 @@ async function prepareReportExecution(
     query: resolved,
     options: {
       orgId,
-      entityMap: REPORT_ENTITY_MAP,
+      entityMap,
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds],
       allowedBookIds,
       fiscalStartMonth: startMonth,

@@ -97,6 +97,8 @@ export interface RecordModuleData {
   title: string
   description: string
   canCreate: boolean
+  previewNewLabel?: string
+  previewNewHref?: string
   searchPlaceholder: string
   statusLabel: string
   statusOptions: { value: string; label: string; count: number }[]
@@ -122,6 +124,7 @@ export interface RecordModuleData {
     sections: FormSection[]
     record: { id: string; recordNumber: string; data: FieldValueMap; status: RecordStatus }
     canEdit: boolean
+    preview?: boolean
     closeHref: string
   } & { remountKey: string }) | null
 }
@@ -347,7 +350,9 @@ export function recordModuleSpec(data: RecordModuleData): PageSpec {
         description: f('description'),
         // WidgetSlot renders a bare Fragment, so a `when`-off widget leaves no
         // wrapper div behind — matching the native header with no actions.
-        actions: [widget('new-record', data.newRecordProps, f('canCreate'))],
+        actions: data.previewNewHref
+          ? [widget('link-button', { href: data.previewNewHref, label: data.previewNewLabel ?? data.typeName, iconKey: 'plus' })]
+          : [widget('new-record', data.newRecordProps, f('canCreate'))],
       }),
       grid('flex flex-wrap items-center gap-2', [
         widgetBlock('search-input', { placeholder: data.searchPlaceholder }),

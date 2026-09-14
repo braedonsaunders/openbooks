@@ -30,7 +30,7 @@ test('definition exports apply catalog URL filters and collect the full paged po
   assert.match(resolver, /executeReportAllPages\(orgId, query\)/)
   assert.match(
     resolver,
-    /reportPeriodField\(query\)[\s\S]*applyBuiltInUrlFilters/,
+    /reportPeriodField\(query, entityMap\)[\s\S]*applyBuiltInUrlFilters/,
     'expiry cutoff filters must not manufacture an implicit fiscal period',
   )
 })

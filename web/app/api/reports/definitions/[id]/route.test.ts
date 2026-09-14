@@ -108,6 +108,7 @@ const mockSources = new Map<string, string>([
       export async function uniqueReportSlug(_orgId, slug) { return slug }
     `,
   ],
+  ["mock:catalog", `import { validateCustomQuery } from "@openbooks/reports"; export async function validateOrgReportQuery(_authz, query) { return validateCustomQuery(query) }`],
   ["mock:server-only", ""],
 ]);
 
@@ -115,6 +116,7 @@ const selfUrl = new URL(import.meta.url).href;
 const mockUrl = (name: string) => `${selfUrl}?report-definition-mock=${name}`;
 const mockUrls = new Map<string, string>([
   ["@/lib/api/json", mockUrl("json")],
+  ["@/lib/custom-record-report-catalog", mockUrl("catalog")],
   ["@openbooks/engine/src/db.ts", mockUrl("db")],
   ["../../../../../lib/authz", mockUrl("authz")],
   ["../../../../../lib/report-authz", mockUrl("reports-authz")],

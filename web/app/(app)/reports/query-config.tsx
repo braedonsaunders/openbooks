@@ -50,7 +50,7 @@ export function RowsConfig({
   const tReports = useTranslations('reports')
   const selected = query.columns ?? []
   const labels = query.columnLabels ?? {}
-  const defaultLabel = (key: string) => tReports(`catalog.columns.${entity.key}.${key}`)
+  const defaultLabel = (key: string) => (entity.key.startsWith('custom:') ? entity.columns.find(c => c.key === key)?.label ?? key : tReports(`catalog.columns.${entity.key}.${key}`))
 
   const setColumns = (next: string[]) => {
     // Drop label overrides for columns no longer selected.
@@ -148,7 +148,7 @@ export function RowsConfig({
           <option value="">{t('noSections')}</option>
           {entity.columns.map((c) => (
             <option key={c.key} value={c.key}>
-              {tReports(`catalog.columns.${entity.key}.${c.key}`)}
+              {(entity.key.startsWith('custom:') ? c.label : tReports(`catalog.columns.${entity.key}.${c.key}`))}
             </option>
           ))}
         </Select>
@@ -215,7 +215,7 @@ export function SortConfig({
           <option value="">{t('sortDefault')}</option>
           {entity.columns.map((c) => (
             <option key={c.key} value={c.key}>
-              {tReports(`catalog.columns.${entity.key}.${c.key}`)}
+              {(entity.key.startsWith('custom:') ? c.label : tReports(`catalog.columns.${entity.key}.${c.key}`))}
             </option>
           ))}
         </Select>
@@ -233,7 +233,7 @@ export function SortConfig({
             >
               {entity.columns.map((c) => (
                 <option key={c.key} value={c.key} disabled={usedColumns.has(c.key) && c.key !== s.column}>
-                  {tReports(`catalog.columns.${entity.key}.${c.key}`)}
+                  {(entity.key.startsWith('custom:') ? c.label : tReports(`catalog.columns.${entity.key}.${c.key}`))}
                 </option>
               ))}
             </Select>
@@ -326,7 +326,7 @@ export function SummarizeConfig({
               >
                 {entity.columns.map((c) => (
                   <option key={c.key} value={c.key}>
-                    {tReports(`catalog.columns.${entity.key}.${c.key}`)}
+                    {(entity.key.startsWith('custom:') ? c.label : tReports(`catalog.columns.${entity.key}.${c.key}`))}
                   </option>
                 ))}
               </Select>
@@ -409,7 +409,7 @@ export function SummarizeConfig({
                 >
                   {cols.map((c) => (
                     <option key={c.key} value={c.key}>
-                      {tReports(`catalog.columns.${entity.key}.${c.key}`)}
+                      {(entity.key.startsWith('custom:') ? c.label : tReports(`catalog.columns.${entity.key}.${c.key}`))}
                     </option>
                   ))}
                 </Select>

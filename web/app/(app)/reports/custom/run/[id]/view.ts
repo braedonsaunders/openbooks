@@ -1,3 +1,4 @@
+import { reportEntityCatalog } from '@/lib/custom-record-report-catalog'
 import 'server-only'
 
 import { notFound, redirect } from 'next/navigation'
@@ -19,7 +20,6 @@ import {
 import {
   applyBuiltInUrlFilters,
   BUILT_IN_REPORT_DEFINITION_MAP,
-  REPORT_ENTITY_MAP,
   type ReportRunResult,
 } from '@openbooks/reports'
 import { requirePermission } from '../../../../../../lib/authz'
@@ -113,7 +113,8 @@ export async function loadReportRun(
 
   // Sensitive / optional-module entities carry their own permission and
   // Features switch on top of reports.read — same gate as /api/reports/run.
-  const entity = REPORT_ENTITY_MAP[(definition.query as { entity?: string }).entity ?? '']
+  const entityMap = await reportEntityCatalog(authz)
+  const entity = entityMap[(definition.query as { entity?: string }).entity ?? '']
   if (!(await canRunReportEntity(authz, definition.query))) notFound()
 
   const pagination = entity?.pagination
@@ -150,7 +151,7 @@ export async function loadReportRun(
   // field. URL bindings such as expiresOnOrBefore are independent controls;
   // feeding those back into period detection would replace the user's cutoff
   // with an implicit fiscal window.
-  const periodField = reportPeriodField(definition.query)
+  const periodField = reportPeriodField(definition.query, entityMap)
   let query = definition.query
   let periodPhrase: string | undefined
   let periodLabel: string | undefined

@@ -1,3 +1,4 @@
+import { customRecordReportCatalog } from '@/lib/custom-record-report-catalog'
 import 'server-only'
 
 import { notFound, redirect } from 'next/navigation'
@@ -8,7 +9,7 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { loadReportDefinition } from '../../../../../../lib/custom-reports'
 import { orgBranding } from '../../../../../../lib/report-pdf'
 import { statementPageHref } from '../../../../../../lib/report-run'
-import { hiddenReportEntityKeys } from '../../../../../../lib/report-authz'
+import { canRunReportEntity, hiddenReportEntityKeys } from '../../../../../../lib/report-authz'
 import type { ReportBuilder } from './ReportBuilder'
 
 /**
@@ -32,6 +33,7 @@ import type { ReportBuilder } from './ReportBuilder'
 type BuilderProps = Parameters<typeof ReportBuilder>[0]
 
 export interface ReportBuilderData {
+  customEntities: BuilderProps['customEntities']
   hiddenEntityKeys: BuilderProps['hiddenEntityKeys']
   inventoryEnabled: boolean
   company: string
@@ -50,9 +52,10 @@ export async function loadReportBuilder(id: string): Promise<ReportBuilderData> 
   // Standard statement reports keep their rich drill-through pages — the entity
   // query-builder edits `query` definitions only.
   if (definition.report_type === 'statement') redirect(statementPageHref(definition.statement))
-  if (!definition.query) notFound()
+  if (!definition.query || !(await canRunReportEntity(authz, definition.query))) notFound()
 
   return {
+    customEntities: Object.values(await customRecordReportCatalog(authz)),
     hiddenEntityKeys: await hiddenReportEntityKeys(authz),
     inventoryEnabled,
     company: branding.orgName,
@@ -76,6 +79,7 @@ export function reportBuilderSpec(data: ReportBuilderData): PageSpec {
     header: [],
     body: [
       widgetBlock('report-builder', {
+        customEntities: data.customEntities,
         hiddenEntityKeys: data.hiddenEntityKeys,
         inventoryEnabled: data.inventoryEnabled,
         company: data.company,

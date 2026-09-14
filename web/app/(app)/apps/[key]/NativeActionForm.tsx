@@ -1,10 +1,10 @@
 'use client'
 import { useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Alert, AlertDescription, Button } from '@openbooks/ui'
+import { Alert, AlertDescription, Button, Drawer } from '@openbooks/ui'
 import type { FieldValueMap } from '@openbooks/forms-core'
 import type { NativeExtension } from '@/lib/apps/native-ui'
-import { RecordFields } from '@/components/record-fields'
+import { RecordFields, RecordPreviewOptions } from '@/components/record-fields'
 import { validateRecordData, withComputedFormulas } from '@/lib/record-schema'
 import { confirmDialog } from '@/lib/confirm'
 
@@ -15,6 +15,7 @@ export function NativeActionForm({ appKey, versionId, screen, preview }: {
   appKey: string; versionId?: string; screen: ActionScreen; preview: boolean
 }) {
   const t = useTranslations('admin.extensions.native')
+  const [open, setOpen] = useState(false)
   const [values, setValues] = useState<FieldValueMap>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -49,15 +50,21 @@ export function NativeActionForm({ appKey, versionId, screen, preview }: {
       setError(failure instanceof Error ? failure.message : t('actionFailed'))
     } finally { submitting.current = false; setBusy(false) }
   }
-  return <form onSubmit={submit} className="space-y-6">
-    {preview && <Alert variant="info"><AlertDescription>{t('previewAction')}</AlertDescription></Alert>}
+  return <>
+    <Button onClick={() => setOpen(true)}>{screen.title}</Button>
+    <Drawer open={open} onClose={() => setOpen(false)} title={screen.title} description={screen.description} size="lg"
+      footer={<Button type="submit" form={`action-${screen.key}`} disabled={preview || !versionId || busy}>{busy ? t('actionRunning') : screen.submitLabel}</Button>}>
+    <form id={`action-${screen.key}`} onSubmit={submit} className="space-y-6">
     <fieldset disabled={busy} className="min-w-0">
-      <RecordFields sections={screen.fields} values={values} disabled={preview} onChange={(field, value) => {
+      <RecordPreviewOptions.Provider value={preview ? [{ value: 'preview-reference', label: t('sampleReference') }] : null}>
+      <RecordFields sections={screen.fields} values={values} onChange={(field, value) => {
         setValues(current => ({ ...current, [field]: value })); invocation.current = null; setError(''); setMessage('')
       }} />
+      </RecordPreviewOptions.Provider>
     </fieldset>
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
     {message && <p role="status">{message}</p>}
-    <Button type="submit" disabled={preview || !versionId || busy}>{busy ? t('actionRunning') : screen.submitLabel}</Button>
   </form>
+  </Drawer>
+  </>
 }

@@ -9,7 +9,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, Select, cn } from '@openbooks/ui'
 import {
   REPORT_ENTITIES,
-  REPORT_ENTITY_MAP,
+  type ReportEntity,
   defaultColumnsFor,
   isOperationalColumn,
   resolveReportLayout,
@@ -28,6 +28,7 @@ type Tab = 'data' | 'filter' | 'format'
 export function ReportBuilder({
   definition,
   company,
+  customEntities = [],
   hiddenEntityKeys = [],
   inventoryEnabled,
 }: {
@@ -41,9 +42,12 @@ export function ReportBuilder({
   }
   company: string
   /** Entities the user lacks permission for (e.g. payroll wages) — hidden from the picker. */
+  customEntities?: ReportEntity[]
   hiddenEntityKeys?: string[]
   inventoryEnabled: boolean
 }) {
+  const entities = useMemo(() => [...REPORT_ENTITIES, ...customEntities], [customEntities])
+  const entityMap = useMemo(() => Object.fromEntries(entities.map(e => [e.key,e])), [entities])
   const t = useTranslations('reports.custom.builder')
   const tk = useTranslations('reports.custom')
   const ta = useTranslations('reports.custom.actions')
@@ -90,7 +94,7 @@ export function ReportBuilder({
     return revision
   }, [definition.id])
 
-  const entity = REPORT_ENTITY_MAP[query.entity] ?? REPORT_ENTITY_MAP.ledger_lines!
+  const entity = entityMap[query.entity] ?? entityMap.ledger_lines!
   const mode = query.mode ?? 'rows'
 
   const patch = useCallback((next: Partial<ReportCustomQuery>) => {
@@ -99,7 +103,7 @@ export function ReportBuilder({
 
   // -- entity change resets column/breakout/measure/sort selections ----------
   function changeEntity(key: string) {
-    const e = REPORT_ENTITY_MAP[key]
+    const e = entityMap[key]
     if (!e) return
     setQuery({
       entity: key,
@@ -336,13 +340,13 @@ export function ReportBuilder({
               <div className={field}>
                 <Label>{t('source')}</Label>
                 <Select value={query.entity} onChange={(e) => changeEntity(e.target.value)}>
-                  {REPORT_ENTITIES.filter((e) => !hiddenEntityKeys.includes(e.key)).map((e) => (
+                  {entities.filter((e) => !hiddenEntityKeys.includes(e.key)).map((e) => (
                     <option key={e.key} value={e.key}>
-                      {tReports(`catalog.entities.${e.key}.label`)}
+                      {e.key.startsWith('custom:') ? e.label : tReports(`catalog.entities.${e.key}.label`)}
                     </option>
                   ))}
                 </Select>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{tReports(`catalog.entities.${entity.key}.description`)}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{entity.key.startsWith('custom:') ? entity.description : tReports(`catalog.entities.${entity.key}.description`)}</p>
               </div>
 
               <div className={field}>

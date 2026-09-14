@@ -310,7 +310,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'relationships-section': { props: ['crmEnabled', 'empty', 'rows'] },
   'remittance-ap-note': { props: ['linkLabel', 'note'] },
   'remittance-cockpit': { props: ['canCreate', 'from', 'groups', 'populationRefusal', 'to'] },
-  'report-builder': { props: ['company', 'definition', 'hiddenEntityKeys', 'inventoryEnabled'] },
+  'report-builder': { props: ['company', 'customEntities', 'definition', 'hiddenEntityKeys', 'inventoryEnabled'] },
   'report-name-cell': { props: ['href', 'name', 'summary'] },
   'report-period-filter': { props: [] },
   'reports-card-heading': { props: ['description', 'title'] },
