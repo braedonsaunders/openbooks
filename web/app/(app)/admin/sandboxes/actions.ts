@@ -73,9 +73,32 @@ export async function deleteSandboxAction(sandboxId: string): Promise<void> {
 
 export async function setScheduleAction(sandboxId: string, cadence: string | null): Promise<void> {
   const authz = await requireManager();
-  const orgId = await ownedSandbox(sandboxId, authz.user.productionOrgId);
   const value = cadence && ["hourly", "daily", "weekly"].includes(cadence) ? cadence : null;
-  await db.execute(sql`update sandboxes set refresh_schedule = ${value} where id = ${sandboxId} and org_id = ${orgId}`);
+  await db.transaction(async (tx) => {
+    const existing = await tx.execute<{ orgId: string; refreshSchedule: string | null }>(sql`
+      select org_id as "orgId", refresh_schedule as "refreshSchedule"
+        from sandboxes
+       where id = ${sandboxId} and production_org_id = ${authz.user.productionOrgId}
+       for update
+    `);
+    const before = existing.rows[0];
+    if (!before) throw new Error("sandbox not found");
+    const updated = await tx.execute(sql`
+      update sandboxes
+         set refresh_schedule = ${value}, updated_at = now(), updated_by = ${authz.user.id}
+       where id = ${sandboxId} and org_id = ${before.orgId}
+       returning id
+    `);
+    if (!updated.rows.length) throw new Error("sandbox not found");
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${authz.user.productionOrgId}, 'sandboxes', ${sandboxId}, 'update',
+              ${JSON.stringify({
+                before: { refresh_schedule: before.refreshSchedule },
+                after: { refresh_schedule: value },
+              })}::jsonb, ${authz.user.id})
+    `);
+  });
   revalidatePath("/admin/sandboxes");
 }
 
