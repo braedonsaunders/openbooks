@@ -117,6 +117,18 @@ export function testManifest() {
   return { all, unit, integration, restore }
 }
 
+/** Partition whole files across independent databases; never share fixture owners. */
+export function shardFiles(files, shard) {
+  if (shard === undefined || shard === '') return files
+  const match = /^([1-9]\d*)\/([1-9]\d*)$/.exec(shard)
+  if (!match) throw new Error('OPENBOOKS_TEST_SHARD must be index/count, starting at 1')
+  const index = Number(match[1]), count = Number(match[2])
+  if (!Number.isSafeInteger(count) || index > count || count > files.length) {
+    throw new Error('Invalid or empty test shard')
+  }
+  return files.filter((_, position) => position % count === index - 1)
+}
+
 function printManifest() {
   process.stdout.write(`${JSON.stringify(testManifest(), null, 2)}\n`)
 }
@@ -247,9 +259,14 @@ export async function stopFixtureOwner(handle, { timeoutMs = 120_000 } = {}) {
 
 async function runSuite(suite, forwarded, envOverrides = {}) {
   const manifest = testManifest()
-  const files = manifest[suite]
+  let files = manifest[suite]
   if (!files) {
     throw new Error(`unknown test suite ${JSON.stringify(suite)}; expected unit, integration, or all`)
+  }
+  if (process.env.OPENBOOKS_TEST_SHARD) {
+    if (suite !== 'integration') throw new Error('Sharding is supported only for the integration partition')
+    if (forwarded.some((argument) => argument.startsWith('--test-shard'))) throw new Error('Cannot shard a partition twice')
+    files = shardFiles(files, process.env.OPENBOOKS_TEST_SHARD)
   }
   if (files.length === 0) throw new Error(`${suite} suite resolved to no test files`)
   if ((suite === 'integration' || suite === 'restore' || suite === 'all') && !process.env.OPENBOOKS_DB_URL?.trim()) {
@@ -261,6 +278,9 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
   if ((suite === 'restore' || suite === 'all') && process.env.OPENBOOKS_RESTORE_DRILL !== '1') {
     throw new Error(`${suite} suite requires OPENBOOKS_RESTORE_DRILL=1; refusing to report an unrun restore drill`)
   }
+
+  mkdirSync(resolve(ROOT, '.local'), { recursive: true })
+  writeFileSync(resolve(ROOT, '.local/test-selection.json'), JSON.stringify({ suite, shard: process.env.OPENBOOKS_TEST_SHARD ?? null, files }, null, 2) + '\n')
 
   const pooled = suite === 'integration'
   const childEnv = {

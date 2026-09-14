@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { createServer } from 'node:net'
 import test from 'node:test'
-import { testManifest, stopFixtureOwner, literalTestPath } from './test-suite.mjs'
+import { testManifest, stopFixtureOwner, literalTestPath, shardFiles } from './test-suite.mjs'
 
 test('every tracked supported test belongs to exactly one canonical suite', () => {
   const manifest = testManifest()
@@ -64,4 +64,18 @@ test('a bracketed route path executes its actual tests', () => {
     const output = execFileSync(process.execPath, ['--test', literalTestPath(file)], { encoding: 'utf8', env: { ...process.env, NODE_TEST_CONTEXT: undefined } })
     assert.match(output, /BRACKET_TEST_EXECUTED/)
   } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
+
+test('independent database shards cover the complete manifest exactly once', () => {
+  const files = testManifest().integration
+  const shards = Array.from({ length: 8 }, (_, index) => shardFiles(files, `${index + 1}/8`))
+  assert.deepEqual(shards.flat().sort(), [...files].sort())
+  assert.equal(new Set(shards.flat()).size, files.length)
+  assert.ok(shards.every((shard) => shard.length > 0))
+  assert.ok(Math.max(...shards.map((shard) => shard.length)) - Math.min(...shards.map((shard) => shard.length)) <= 1)
+  for (const invalid of ['0/8', '9/8', '1/0', '1/99999', '1/8junk', '1.5/8']) {
+    assert.throws(() => shardFiles(files, invalid))
+  }
+  assert.deepEqual(shardFiles(files), files)
 })

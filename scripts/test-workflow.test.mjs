@@ -30,30 +30,29 @@ function topLevelJob(name) {
   return workflow.slice(start, next === -1 ? workflow.length : start + marker.length + next)
 }
 
-test('no separate unit job duplicates the suite; integration owns the canonical concurrency', () => {
-  // The old unit job ran the identical `npm test` with an empty
-  // OPENBOOKS_DB_URL (every DB file self-skips): a strict file-for-file
-  // subset of the integration run, paying a second checkout + npm ci + runner
-  // per push. Deleted 2026-09. This pins the deletion AND the concurrency
-  // consequence: with the `--test-concurrency=4` override gone, the whole
-  // suite reverts to the canonical --test-concurrency=1 from package.json.
-  assert.equal(
-    workflow.indexOf('\n  unit:\n'),
-    -1,
-    'test.yml must not contain a top-level unit job: it duplicated the integration suite',
-  )
-  const integration = topLevelJob('integration')
-  assert.match(integration, /\bnpm test\b/, 'the integration job must still run the full suite')
-  assert.ok(
-    !integration.includes('--test-concurrency=4'),
-    'no job may reintroduce the concurrency-4 override; the canonical --test-concurrency=1 from package.json is the single flake-surface owner',
-  )
+test('units, database shards and simulation run independently without omitted test partitions', () => {
+  const unit = topLevelJob('unit')
+  const integration = topLevelJob('database')
+  const simulation = topLevelJob('simulation')
+  assert.match(unit, /npm run test:unit/)
+  assert.match(integration, /npm run test:integration/)
+  assert.doesNotMatch(integration, /npm test\b|npm run test:unit/)
+  assert.match(integration, /shard: \[1, 2, 3, 4, 5, 6, 7, 8\]/)
+  assert.match(integration, /OPENBOOKS_TEST_SHARD: \$\{\{ matrix.shard \}\}\/8/)
+  assert.match(integration, /fail-fast: false/)
+  assert.match(integration, /timeout-minutes: 30/)
+  assert.doesNotMatch(integration, /--test-concurrency|continue-on-error/)
+  assert.match(integration, /name: coverage-\$\{\{ matrix.shard \}\}/)
+  assert.match(integration, /COLLECT_COVERAGE:.*github.event_name == 'workflow_dispatch'/)
+  assert.match(simulation, /sim -- run/)
+  assert.match(simulation, /harness --/)
+  assert.match(simulation, /services:/)
 })
 
 test('test workflow propagates tee producer failures and retains its failure guards', (t) => {
   const pipelines = [
     { stepName: 'Integration canary', logFile: 'canary.tap' },
-    { stepName: 'Full test suite (with database)', logFile: 'coverage.txt' },
+    { stepName: 'Database test shard', logFile: 'coverage.txt' },
   ]
   const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-test-workflow-'))
   t.after(() => rmSync(tempDirectory, { recursive: true, force: true }))
@@ -120,4 +119,12 @@ test('test workflow propagates tee producer failures and retains its failure gua
     'trusted test bypass must be limited to the restore drill step that imports its guard',
   )
   assert.equal(occurrenceCount(restoreDrill, bypass), 1)
+})
+
+
+test('CI has no scheduled runs on unchanged source', () => {
+  for (const name of ['test.yml', 'trust.yml', 'security.yml']) {
+    const source = readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8')
+    assert.doesNotMatch(source, /^  schedule:|^\s+- cron:/m)
+  }
 })

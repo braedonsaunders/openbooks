@@ -1,23 +1,13 @@
 name: test
 
-# Test gate for the monorepo. Jobs:
-#   typecheck   — fast, no database; fails on any workspace tsc error or a
-#                 product-neutrality violation so broken code cannot reach main
-#   integration — full suite against a throwaway postgres:16, with a canary
-#                 that fails the job if the DB-backed tests silently skipped.
-#                 This job runs the unit suite too: a database-less run is a
-#                 strict file-for-file subset of this one (every DB file
-#                 self-skips on an empty OPENBOOKS_DB_URL), so splitting it
-#                 out would buy a second checkout and npm ci for no coverage.
-#   e2e         — Playwright browser smoke against the real app + real DB
+# All tests remain release gates. Units, isolated database shards, browser tests,
+# and the accounting simulation run independently. Coverage instrumentation is
+# manual so per-push latency measures tests rather than tracing overhead.
 
 on:
   push:
     branches: [main]
   pull_request:
-  schedule:
-    # Nightly, for the disaster-recovery drill only.
-    - cron: "17 7 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -53,12 +43,27 @@ jobs:
         # workspaces without one are skipped by --if-present.
         run: npm run typecheck --workspaces --if-present
 
-  integration:
+  unit:
     runs-on: ubuntu-latest
-    # Hosted d319 accounted for 3,366 unit cases; 3,257/3,263 integrations
-    # passed before the 90m cap. Allow the full run plus simulation and
-    # harness to finish with margin; per-test limits/concurrency stay fixed.
-    timeout-minutes: 120
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run test:unit
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     services:
       postgres:
         image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
@@ -79,6 +84,7 @@ jobs:
           --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
+      OPENBOOKS_TEST_SHARD: ${{ matrix.shard }}/8
       OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
@@ -136,18 +142,18 @@ jobs:
             engine/src/kernel-constraints.integration.test.ts 2>&1 | tee canary.tap
           node -e 'const s=require("fs").readFileSync("canary.tap","utf8"); if (/# SKIP(?:\s|$)/im.test(s)) { console.error("FATAL: integration tests skipped — DB wiring is broken"); process.exit(1); } if (/^not ok \d+ - /m.test(s)) { console.error("FATAL: canary recorded a failing test"); process.exit(1); } if (!/^# fail 0$/m.test(s)) { console.error("FATAL: canary did not report zero failures"); process.exit(1); } if (!/^ok \d+ - /m.test(s)) { console.error("FATAL: canary ran zero tests"); process.exit(1); } console.log("canary ok: integration tests executed against the database");'
 
-      - name: Full test suite (with database)
+      - name: Database test shard
         shell: bash
+        env:
+          COLLECT_COVERAGE: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
-          # The canonical `npm test` script fans out to the manifest-owned
-          # unit and integration partitions (the integration partition runs
-          # under the single fixture owner). Flags appended here reach the
-          # integration run, which produces the lcov artifact and the
-          # owner lifecycle receipt verified by the step below.
           set -o pipefail
-          npm test -- --experimental-test-coverage \
-            --test-reporter=spec --test-reporter-destination=stdout \
-            --test-reporter=lcov --test-reporter-destination=lcov.info 2>&1 | tee coverage.txt
+          coverage=()
+          if [ "$COLLECT_COVERAGE" = true ]; then
+            coverage=(--experimental-test-coverage --test-reporter=lcov --test-reporter-destination=lcov.info)
+          fi
+          npm run test:integration -- "${coverage[@]}" \
+            --test-reporter=spec --test-reporter-destination=stdout 2>&1 | tee coverage.txt
 
       - name: Verify bounded fixture lifecycle receipt
         # The single aggregator owner emits one immutable receipt after every
@@ -193,11 +199,66 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: coverage
+          name: coverage-${{ matrix.shard }}
+          include-hidden-files: true
           path: |
             lcov.info
             coverage.txt
+            .local/test-selection.json
+            .local/fixture-lifecycle-receipt.txt
           if-no-files-found: ignore
+
+  simulation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
+        env:
+          POSTGRES_USER: openbooks
+          POSTGRES_PASSWORD: openbooks
+          POSTGRES_DB: openbooks_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks -d openbooks_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7.4.5-alpine3.21@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
+      OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
+      OPENBOOKS_REDIS_URL: redis://localhost:6379/0
+      PGPASSWORD: openbooks
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Parts of the suite read the repository's own history; a shallow
+          # checkout leaves them nothing to inspect and they degrade into
+          # passes that assert nothing.
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install qpdf
+        # Payroll ciphertext certification shells out to the real qpdf binary;
+        # without it the sender fail-closes on spawn ENOENT and the suite can
+        # never exercise the verified-ciphertext contract.
+        run: sudo apt-get update && sudo apt-get install -y qpdf
+
+      - name: Load schema
+        # The production bootstrap is the authoritative provisioner: tracked
+        # canonical baseline, row-level security, and base seeds.
+        run: npx tsx scripts/bootstrap.ts
+
       - name: Drive a seeded company through real activity
         # The golden harness below is only meaningful over a ledger that real
         # activity has stressed. The simulation provisions a deterministic,
@@ -266,10 +327,51 @@ jobs:
           if-no-files-found: ignore
 
 
+  integration:
+    # Preserve the required check name and verify complete, disjoint execution.
+    needs: [unit, database, simulation]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every test partition
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node -e 'const jobs=JSON.parse(process.env.RESULTS); if(Object.values(jobs).some(job=>job.result!=="success")) process.exit(1)'
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: coverage-*
+          path: integration-evidence
+      - name: Verify every database file ran exactly once
+        run: |
+          node --input-type=module - <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync, readdirSync } from 'node:fs';
+          import { testManifest, shardFiles } from './scripts/test-suite.mjs';
+          const files = testManifest().integration;
+          const dirs = readdirSync('integration-evidence').sort();
+          assert.deepEqual(dirs, Array.from({length:8}, (_,i)=>`coverage-${i+1}`));
+          const actual = [];
+          for (let i=1; i<=8; i++) {
+            const selection = JSON.parse(readFileSync(`integration-evidence/coverage-${i}/.local/test-selection.json`, 'utf8'));
+            assert.equal(selection.suite, 'integration');
+            assert.equal(selection.shard, `${i}/8`);
+            assert.deepEqual(selection.files, shardFiles(files, `${i}/8`));
+            actual.push(...selection.files);
+          }
+          assert.deepEqual(actual.sort(), files);
+          console.log(`All ${files.length} database files completed exactly once across 8 isolated runners.`);
+          NODE
+
   restore-drill:
     # A backup export/destroy/restore rehearsal is a disaster-recovery drill,
-    # not a per-commit gate. Nightly and on demand.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # not a per-commit gate. On demand only.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:

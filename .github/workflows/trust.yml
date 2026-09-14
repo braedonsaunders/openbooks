@@ -17,9 +17,6 @@ on:
       - "docs/trust/**"
   pull_request:
   workflow_dispatch:
-  schedule:
-    # Nightly, so the evidence has a time series even in a quiet week.
-    - cron: "17 6 * * *"
   workflow_run:
     workflows: ["test"]
     types: [completed]
