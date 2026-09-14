@@ -114,6 +114,71 @@ test("a taxable-base box sums only its declared side and nets credit memos", { s
   }
 });
 
+test("a tax journal in a secondary book does not leak into the return", { skip: !DB }, async () => {
+  // Live-Postgres regression: the journal-backed boxes (tax_collected /
+  // tax_paid / tax_amount) summed EVERY book, so a tax journal in a secondary
+  // book leaked into the return while the filing gate only fences the primary
+  // book. The return now reads the primary book, like every sibling engine.
+  const org = await createScratchOrg();
+  try {
+    const codeId = randomUUID();
+    await db.execute(sql`
+      insert into tax_codes
+        (id, org_id, code, name, applies_to, calculation_type, collected_account_id, paid_account_id, is_active)
+      values (${codeId}, ${org.orgId}, 'TAX-SEC', 'Secondary-book probe', 'both', 'standard',
+              ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
+
+    const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank };
+    await postDocument(
+      await seedTaxedDocument(org, "customer_invoice", "INV-BOOK", codeId, "200.0000", "20.0000"),
+      { control },
+    );
+
+    // A balanced tax journal posted to a SECONDARY book: a ghost liability
+    // the primary-book filing fence never covers.
+    const book2 = randomUUID();
+    await db.execute(sql`
+      insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+      values (${book2}, ${org.orgId}, 'SEC', 'Secondary', false, true, true)`);
+    const entryId = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+      values (${entryId}, ${org.orgId}, ${book2}, ${org.subsidiaryId}, 'SEC-1',
+              ${org.date}, ${org.periodId}, 'secondary-book tax', 'draft', 'manual')`);
+    await db.execute(sql`
+      insert into journal_lines
+        (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, tax_code_id)
+      values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.cogs}, ${org.subsidiaryId},
+              '20.0000', 'CAD', '20.0000', 1, null),
+             (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.taxOutput}, ${org.subsidiaryId},
+              '-20.0000', 'CAD', '-20.0000', 1, ${codeId})`);
+    await db.execute(sql`
+      update journal_entries set status = 'posted'
+       where id = ${entryId} and org_id = ${org.orgId}`);
+
+    const formCode = "BOOK-SCOPE";
+    await db.execute(sql`
+      insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${formCode}, 'Book scope probe', 'portal_manual', true)`);
+    await db.execute(sql`
+      insert into tax_report_lines
+        (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
+      values
+        (${randomUUID()}, ${org.orgId}, ${formCode}, '1', 'Tax collected', ${codeId}, 'tax_collected', -1, 10),
+        (${randomUUID()}, ${org.orgId}, ${formCode}, '5', 'Tax amount', ${codeId}, 'tax_amount', 1, 20)`);
+
+    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+    const values = new Map(result.boxes.map((box) => [box.lineCode, box.value]));
+    // Primary-book invoice only: 20 collected, ledger sign kept on tax_amount.
+    // Before the fix the secondary journal doubled both (40.0000 / -40.0000).
+    assert.equal(values.get("1"), "20.0000");
+    assert.equal(values.get("5"), "-20.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("an undescribed box takes its side from a one-sided code", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
