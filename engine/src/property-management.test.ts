@@ -6,7 +6,15 @@ import { fileURLToPath } from "node:url";
 import {
   PropertyManagementError,
   addLeaseCharge,
+  addLeaseEscalation,
+  createCamPool,
+  updateCamPool,
+  createManagedProperty,
+  createPropertyLease,
+  createPropertyUnit,
+  terminatePropertyLease,
   depositBalance,
+  isSecurityDepositImportConflict,
   depositReversalKind,
   depositPostingShape,
   escalatedRent,
@@ -168,6 +176,179 @@ test("CAM overlap is inclusive and excludes non-overlapping occupancy", () => {
   assert.equal(overlapDayCount("2026-01-15", "2026-03-15", "2026-01-01", "2026-12-31"), 60);
   assert.equal(overlapDayCount("2025-01-01", "2025-12-31", "2026-01-01", "2026-12-31"), 0);
   assert.equal(overlapDayCount("2026-12-31", "2027-01-31", "2026-01-01", "2026-12-31"), 1);
+});
+
+test("escalation and schedule helpers reject unknown policies instead of miscomputing", () => {
+  // Before the guard, an unknown method fell through to the new_amount
+  // branch: escalatedRent("2000", "bogus", "50") silently returned "50.0000".
+  assert.throws(
+    () => escalatedRent("2000", "bogus" as never, "50"),
+    (error: unknown) => error instanceof PropertyManagementError && /Invalid escalation method/.test(error.message),
+  );
+  // Before the guard, an unknown frequency fell through to the annual
+  // branch and materialised one twelve-month period.
+  assert.throws(
+    () => leaseChargeSchedule({
+      amount: "1200",
+      frequency: "bogus" as never,
+      effectiveFrom: "2026-01-01",
+      leaseStartsOn: "2026-01-01",
+      throughOn: "2026-12-31",
+      billingDay: 1,
+    }),
+    (error: unknown) => error instanceof PropertyManagementError && /Invalid charge frequency/.test(error.message),
+  );
+  // The enum is validated before the empty-window early return: an unknown
+  // frequency with no overlapping window still throws instead of [].
+  assert.throws(
+    () => leaseChargeSchedule({
+      amount: "1200",
+      frequency: "bogus" as never,
+      effectiveFrom: "2027-01-01",
+      leaseStartsOn: "2026-01-01",
+      throughOn: "2026-12-31",
+      billingDay: 1,
+    }),
+    (error: unknown) => error instanceof PropertyManagementError && /Invalid charge frequency/.test(error.message),
+  );
+});
+
+test("the import-conflict mapper only recognises the known deposit backstop", () => {
+  const conflict = new Error("duplicate key value violates unique constraint", {
+    cause: Object.assign(new Error("duplicate key"), { constraint: "security_deposits_import_key_once" }),
+  });
+  assert.equal(isSecurityDepositImportConflict(conflict), true);
+  const other = new Error("duplicate key value violates unique constraint", {
+    cause: Object.assign(new Error("duplicate key"), { constraint: "security_deposits_entry" }),
+  });
+  assert.equal(isSecurityDepositImportConflict(other), false);
+  assert.equal(isSecurityDepositImportConflict(new Error("plain failure")), false);
+  assert.equal(isSecurityDepositImportConflict(null), false);
+});
+
+const CREATE_IDS = {
+  orgId: "00000000-0000-0000-0000-000000000000",
+  actorId: "00000000-0000-0000-0000-000000000001",
+  propertyId: "00000000-0000-0000-0000-000000000002",
+  tenantId: "00000000-0000-0000-0000-000000000003",
+  leaseId: "00000000-0000-0000-0000-000000000004",
+  subsidiaryId: "00000000-0000-0000-0000-000000000005",
+  poolId: "00000000-0000-0000-0000-000000000006",
+};
+
+function validLeaseInput() {
+  return {
+    ...CREATE_IDS,
+    leaseNumber: "L-1",
+    startsOn: "2026-01-01",
+    endsOn: "2026-12-31",
+    baseRent: "1000",
+    billingDay: 1,
+    paymentTermsDays: 0,
+    securityDepositRequired: "0",
+    camMethod: "none" as const,
+    lateFeeType: "none" as const,
+    lateFeeValue: "0",
+    graceDays: 0,
+    autoInvoice: true,
+    autoPost: false,
+  };
+}
+
+test("lease creation validates billing, terms, deposit, CAM, and late-fee policy before touching storage", async () => {
+  // With no database configured any storage touch fails with a connection
+  // error, so a PropertyManagementError proves the guard fired first.
+  const cases: Array<[string, Record<string, unknown>, RegExp]> = [
+    ["billing day 99", { billingDay: 99 }, /Billing day must be between 1 and 31/],
+    ["billing day 0", { billingDay: 0 }, /Billing day must be between 1 and 31/],
+    ["negative payment terms", { paymentTermsDays: -7 }, /Payment terms and grace days/],
+    ["negative grace days", { graceDays: -2 }, /Payment terms and grace days/],
+    ["negative deposit", { securityDepositRequired: "-5" }, /Security deposit cannot be negative/],
+    ["unknown CAM method", { camMethod: "bogus" }, /Invalid CAM method/],
+    ["unknown late-fee type", { lateFeeType: "bogus", lateFeeValue: "5" }, /Invalid late-fee type/],
+    ["late-fee percent over 100", { lateFeeType: "percent", lateFeeValue: "150" }, /Late-fee percent cannot exceed 100/],
+    ["zero fixed late fee", { lateFeeType: "fixed", lateFeeValue: "0" }, /Late-fee value must be positive/],
+  ];
+  for (const [label, override, pattern] of cases) {
+    await assert.rejects(
+      () => createPropertyLease({ ...validLeaseInput(), ...override } as never),
+      (error: unknown) => error instanceof PropertyManagementError && pattern.test(error.message),
+      label,
+    );
+  }
+});
+
+test("property, unit, charge, escalation, and CAM creation validate enums, dates, and windows before touching storage", async () => {
+  await assert.rejects(
+    () => createManagedProperty({ ...CREATE_IDS, code: "P-1", name: "Bogus", propertyType: "castle" }),
+    (error: unknown) => error instanceof PropertyManagementError && /Invalid property type/.test(error.message),
+  );
+  await assert.rejects(
+    () => createPropertyUnit({ ...CREATE_IDS, code: "U-1", bedrooms: -2 }),
+    (error: unknown) => error instanceof PropertyManagementError && /Bedrooms must be a non-negative whole number/.test(error.message),
+  );
+  const chargeBase = {
+    ...CREATE_IDS,
+    chargeType: "other",
+    description: "Extra",
+    amount: "10",
+    frequency: "monthly",
+    effectiveFrom: "2026-05-01",
+  };
+  await assert.rejects(
+    () => addLeaseCharge({ ...chargeBase, effectiveFrom: "not-a-date" }),
+    (error: unknown) => error instanceof PropertyManagementError && /Charge start is invalid/.test(error.message),
+  );
+  await assert.rejects(
+    () => addLeaseCharge({ ...chargeBase, effectiveFrom: "" }),
+    (error: unknown) => error instanceof PropertyManagementError && /Charge start is required/.test(error.message),
+  );
+  await assert.rejects(
+    () => addLeaseCharge({ ...chargeBase, effectiveTo: "2026-04-01" }),
+    (error: unknown) => error instanceof PropertyManagementError && /Charge end cannot precede start/.test(error.message),
+  );
+  await assert.rejects(
+    () => addLeaseCharge({ ...chargeBase, frequency: "bogus" }),
+    (error: unknown) => error instanceof PropertyManagementError && /Invalid charge frequency/.test(error.message),
+  );
+  await assert.rejects(
+    () => addLeaseCharge({ ...chargeBase, chargeType: "bogus" }),
+    (error: unknown) => error instanceof PropertyManagementError && /Invalid charge type/.test(error.message),
+  );
+  await assert.rejects(
+    () => addLeaseEscalation({ ...CREATE_IDS, effectiveOn: "2026-07-01", method: "bogus" as never, value: "50" }),
+    (error: unknown) => error instanceof PropertyManagementError && /Invalid escalation method/.test(error.message),
+  );
+  await assert.rejects(
+    () => addLeaseEscalation({ ...CREATE_IDS, effectiveOn: "", method: "percent", value: "50" }),
+    (error: unknown) => error instanceof PropertyManagementError && /Escalation date is required/.test(error.message),
+  );
+  const poolBase = {
+    ...CREATE_IDS,
+    name: "FY26",
+    fiscalYear: 2026,
+    periodStartsOn: "2026-07-01",
+    periodEndsOn: "2026-07-31",
+    allocationBasis: "bogus" as never,
+    budgetAmount: "100",
+    expenseAccountIds: ["00000000-0000-0000-0000-000000000007"],
+  };
+  await assert.rejects(
+    () => createCamPool({ ...poolBase }),
+    (error: unknown) => error instanceof PropertyManagementError && /Invalid CAM allocation basis/.test(error.message),
+  );
+  await assert.rejects(
+    () => updateCamPool({ ...poolBase, poolId: CREATE_IDS.poolId }),
+    (error: unknown) => error instanceof PropertyManagementError && /Invalid CAM allocation basis/.test(error.message),
+  );
+});
+
+test("lease termination requires an explicit date before touching storage", async () => {
+  // A blank date previously terminated the lease with a null move-out date.
+  await assert.rejects(
+    () => terminatePropertyLease(CREATE_IDS.orgId, CREATE_IDS.actorId, CREATE_IDS.leaseId, "", "Tenant left"),
+    (error: unknown) => error instanceof PropertyManagementError && /Termination date is required/.test(error.message),
+  );
 });
 
 test("the generic lease-charge API refuses base_rent before touching storage", async () => {
