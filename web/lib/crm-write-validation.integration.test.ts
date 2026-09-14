@@ -32,7 +32,7 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } =
+const { db, pool, withBypassContext, withOrgContext } =
   await import('@openbooks/engine/src/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
@@ -40,7 +40,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } =
 const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm.ts')
 const { PATCH: opportunityEdit } =
   await import('../app/api/crm/opportunities/[id]/route')
-const { PATCH: activityEdit } =
+const { PATCH: activityEdit, DELETE: activityDelete } =
   await import('../app/api/crm/activities/[id]/route')
 const { POST: activityDraft } =
   await import('../app/api/crm/activities/draft/route')
@@ -288,3 +288,178 @@ test(
     }
   },
 )
+
+test(
+  'activity PATCH audit chains predecessors and DELETE writes delete evidence',
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, actor } = await fixture()
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const draft = await activityDraft(
+          new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task' }) }),
+        )
+        assert.equal(draft.status, 200)
+        const activityId = (await draft.json()).id
+        const audits = async () =>
+          (await db.execute<{ action: string; actor_id: string; changes: { before: { subject: string } } }>(
+            sql`select action, actor_id, changes from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId} order by at, id`,
+          )).rows
+        const first = await activityEdit(request({ subject: 'First save' }), params(activityId))
+        assert.equal(first.status, 200, JSON.stringify(await first.clone().json()))
+        const second = await activityEdit(request({ subject: 'Second save' }), params(activityId))
+        assert.equal(second.status, 200)
+        const updates = (await audits()).filter((row) => row.action === 'update')
+        assert.equal(updates.length, 2)
+        assert.equal(updates[0]!.changes.before.subject, 'New activity')
+        assert.equal(updates[0]!.actor_id, actor)
+        assert.equal(updates[1]!.changes.before.subject, 'First save')
+        const deleted = await activityDelete(
+          new Request('http://crm.local', { method: 'DELETE' }),
+          params(activityId),
+        )
+        assert.equal(deleted.status, 200, JSON.stringify(await deleted.clone().json()))
+        const removal = (await audits()).find((row) => row.action === 'delete')
+        assert.ok(removal, 'DELETE recorded audit evidence')
+        assert.equal(removal!.changes.before.subject, 'Second save')
+        assert.equal(removal!.actor_id, actor)
+      })
+    } finally {
+      state.user = null
+      await withBypassContext(() => dropScratchOrg(org.orgId))
+    }
+  },
+)
+
+test(
+  'activity PATCH refuses non-boolean isPrivate and null link/participant elements with 422',
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org } = await fixture()
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const draft = await activityDraft(
+          new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task' }) }),
+        )
+        assert.equal(draft.status, 200)
+        const activityId = (await draft.json()).id
+        for (const body of [
+          { isPrivate: 'yes' },
+          { isPrivate: 1 },
+          { links: [null] },
+          { links: ['not-an-object'] },
+          { participants: [null] },
+          { participants: [42] },
+        ]) {
+          const response = await activityEdit(request(body), params(activityId))
+          assert.equal(response.status, 422, JSON.stringify(body))
+        }
+        const applied = await activityEdit(request({ isPrivate: true }), params(activityId))
+        assert.equal(applied.status, 200, JSON.stringify(await applied.clone().json()))
+        const stored = (await db.execute<{ is_private: boolean }>(
+          sql`select is_private from crm_activities where org_id=${org.orgId} and id=${activityId}`,
+        )).rows[0]!
+        assert.equal(stored.is_private, true)
+        // The six refusals above all fired before the transaction, so exactly
+        // one update audit row exists: refused writes leave no evidence.
+        const updates = (await db.execute<{ action: string }>(
+          sql`select action from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId}`,
+        )).rows
+        assert.equal(updates.length, 1)
+      })
+    } finally {
+      state.user = null
+      await withBypassContext(() => dropScratchOrg(org.orgId))
+    }
+  },
+)
+
+test(
+  'activity PATCH audit records the actual after state and child evidence',
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, actor } = await fixture()
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const draft = await activityDraft(
+          new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task' }) }),
+        )
+        assert.equal(draft.status, 200)
+        const activityId = (await draft.json()).id
+        const edited = await activityEdit(
+          request({ subject: 'Evidence save', participants: [{ userId: actor }] }),
+          params(activityId),
+        )
+        assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()))
+        const rows = (await db.execute<{ changes: {
+          before: { subject: string }
+          after: { subject: string }
+          links?: { before: unknown[]; after: unknown[] }
+          participants?: { before: unknown[]; after: Array<{ user_id: string | null; contact_id: string | null; email: string | null; response: string }> }
+        } }>(
+          sql`select changes from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId} and action='update'`,
+        )).rows
+        assert.equal(rows.length, 1)
+        const changes = rows[0]!.changes
+        assert.equal(changes.before.subject, 'New activity')
+        assert.equal(changes.after.subject, 'Evidence save')
+        assert.ok(!('links' in changes), 'unrequested children leave no evidence key')
+        assert.deepEqual(changes.participants!.before, [])
+        assert.equal(changes.participants!.after.length, 1)
+        assert.equal(changes.participants!.after[0]!.user_id, actor)
+      })
+    } finally {
+      state.user = null
+      await withBypassContext(() => dropScratchOrg(org.orgId))
+    }
+  },
+)
+
+
+test('activity audit uses the serialized predecessor and preserves deleted children',
+  { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const { org, actor } = await fixture()
+    const writer = await pool.connect()
+    let pending: Promise<Response> | undefined
+    try {
+      const draft = await withOrgContext(org.orgId, () => activityDraft(
+        new NextRequest('http://crm.local', {method:'POST',body:JSON.stringify({kind:'task'})}),
+      ))
+      assert.equal(draft.status,200)
+      const id = (await draft.json()).id as string
+      await writer.query('begin')
+      await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)")
+      const pid = (await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid
+      await writer.query('update crm_activities set subject=$1 where id=$2 and org_id=$3',['Concurrent predecessor',id,org.orgId])
+      pending = withOrgContext(org.orgId, () => activityEdit(request({subject:'Final save',participants:[{userId:actor}]}),params(id)))
+      let blocked=false
+      for(let n=0;n<200;n++) {
+        blocked=!!(await pool.query('select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))',[pid])).rowCount
+        if(blocked) break
+        await new Promise(resolve=>setTimeout(resolve,10))
+      }
+      assert.ok(blocked,'PATCH read its preflight and waits on the locked predecessor')
+      await writer.query('commit')
+      const response=await pending
+      assert.equal(response.status,200)
+      await withOrgContext(org.orgId,async()=>{
+        const update=(await db.execute<{changes:{before:{subject:string};after:{subject:string}}}>(sql`
+          select changes from audit_log where org_id=${org.orgId} and row_id=${id} and table_name='crm_activities' and action='update'`)).rows[0]!
+        assert.equal(update.changes.before.subject,'Concurrent predecessor')
+        assert.equal(update.changes.after.subject,'Final save')
+        const result=await activityDelete(new Request('http://crm.local',{method:'DELETE'}),params(id))
+        assert.equal(result.status,200)
+        const removed=(await db.execute<{changes:{after:null;participants:{user_id:string}[];links:unknown[]}}>(sql`
+          select changes from audit_log where org_id=${org.orgId} and row_id=${id} and table_name='crm_activities' and action='delete'`)).rows[0]!
+        assert.equal(removed.changes.after,null)
+        assert.deepEqual(removed.changes.participants.map(p=>p.user_id),[actor])
+        assert.deepEqual(removed.changes.links,[])
+      })
+    } finally {
+      await writer.query('rollback').catch(()=>{})
+      await pending?.catch(()=>{})
+      writer.release()
+      state.user=null
+      await withBypassContext(()=>dropScratchOrg(org.orgId))
+    }
+  })

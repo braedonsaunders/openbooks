@@ -299,6 +299,33 @@ test("save-team refuses duplicate members instead of tripping the unique index",
   assert.equal(state.outsideWrites.length, 0);
 });
 
+test("save-quota refuses impossible calendar dates before any write", async () => {
+  for (const body of [
+    {
+      action: "save-quota",
+      ownerUserId: USER_ID,
+      periodStart: "2026-02-30",
+      periodEnd: "2026-12-31",
+      amount: "1000.25",
+    },
+    {
+      action: "save-quota",
+      ownerUserId: USER_ID,
+      periodStart: "2026-01-01",
+      periodEnd: "2026-13-01",
+      amount: "1000.25",
+    },
+  ]) {
+    reset();
+
+    const response = await post(body);
+
+    assert.equal(response.status, 422);
+    assert.equal(state.committed.length, 0);
+    assert.equal(state.outsideWrites.length, 0);
+  }
+});
+
 test("save-team refuses a manager duplicated in the member list under another role", async () => {
   reset();
 
