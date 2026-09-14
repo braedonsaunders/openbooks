@@ -329,3 +329,36 @@ test("open-item verification distinguishes a closed zero balance from a missing 
     mismatches: [{ ref: "missing", ours: "missing", theirs: "0.0000" }],
   });
 });
+
+test("open-item verification flags a nonzero balance the source never lists", () => {
+  assert.deepEqual(
+    verifyOpenItems(
+      [{ ref: "a", unpaid: "10.0000" }],
+      [
+        { ref: "a", unpaid: "10.0000" },
+        { ref: "ghost", unpaid: "500.0000" },
+      ],
+    ),
+    {
+      checked: 2,
+      matches: 1,
+      mismatches: [{ ref: "ghost", ours: "500.0000", theirs: "not_in_source" }],
+    },
+  );
+});
+
+test("open-item verification ignores a zero balance the source no longer reports", () => {
+  // A closed, paid, or voided document the source omits is complete, not
+  // divergent: its stored balance is already exactly zero.
+  assert.deepEqual(
+    verifyOpenItems(
+      [{ ref: "a", unpaid: "10.0000" }],
+      [
+        { ref: "a", unpaid: "10.0000" },
+        { ref: "paid", unpaid: "0.0000" },
+        { ref: "voided", unpaid: "0" },
+      ],
+    ),
+    { checked: 1, matches: 1, mismatches: [] },
+  );
+});

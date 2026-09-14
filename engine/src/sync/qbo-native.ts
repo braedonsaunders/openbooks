@@ -80,7 +80,44 @@ export interface QboBuildOpts {
   taxSuspenseRef?: string;
 }
 
-const isVoided = (t: QboTxnBase) => /voided/i.test(t.PrivateNote ?? "");
+/**
+ * QBO void contract (Intuit: void zeroes all amounts, clears all lines, and
+ * injects exactly "Voided" into PrivateNote — a custom memo is overwritten).
+ * Cancellation therefore requires the exact provider marker AND corroborating
+ * zeroed financials. A free-text memo that merely mentions void ("avoided",
+ * "not voided", "previous invoice voided") on a nonzero transaction is a live
+ * document, never a cancellation — the reverse error auto-voids live books.
+ */
+export function qboVoidNote(note: string | null | undefined): boolean {
+  return (note ?? "").trim().toLowerCase() === "voided";
+}
+
+export interface QboVoidEvidence {
+  PrivateNote?: string | null;
+  TotalAmt?: number | null;
+  Line?: { Amount?: number | null }[] | null;
+}
+
+export function isQboVoided(t: QboVoidEvidence): boolean {
+  if (!qboVoidNote(t.PrivateNote)) return false;
+  if (t.TotalAmt != null && Number(t.TotalAmt) !== 0) return false;
+  let observedZero = t.TotalAmt != null;
+  if (t.Line != null) {
+    for (const line of t.Line) {
+      // A populated line without an observed amount proves nothing and vetoes:
+      // missing-only (or mixed-missing) arrays must not establish zero.
+      if (line.Amount == null || Number(line.Amount) !== 0) return false;
+    }
+    // Observed lines, every amount an observed zero; empty means cleared.
+    observedZero = true;
+  }
+  // Missing financials corroborate nothing: a marker with neither an observed
+  // total nor observed lines is unproven, never a cancellation. It stays live
+  // (and fails verification loudly if it disagrees) instead of auto-voiding.
+  return observedZero;
+}
+
+const isVoided = (t: QboTxnBase) => isQboVoided(t);
 
 export function buildNativeFromQbo(
   ctx: NativeContext,
