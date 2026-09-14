@@ -196,12 +196,12 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/admin/extensions': {
-    route: '/admin/extensions',
+  '/admin/apps': {
+    route: '/admin/apps',
     segments: [],
     searchParams: true,
     module: async () => {
-      const m = await import('../app/(app)/admin/extensions/view')
+      const m = await import('../app/(app)/admin/apps/view')
       return {
         load: (input) => m.loadAdminExtensions(input.searchParams ?? {}),
         spec: (data) => m.adminExtensionsSpec(data as never),

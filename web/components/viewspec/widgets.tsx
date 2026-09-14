@@ -176,7 +176,7 @@ import {
 } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/sections'
 import { ReconcileWorkspace } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/ReconcileWorkspace'
 import { PropertyManagementWorkspace } from '../../app/(app)/property-management/PropertyManagementWorkspace'
-import { AppKeyCell } from '../../app/(app)/admin/extensions/sections'
+import { AppKeyCell } from '../../app/(app)/admin/apps/sections'
 import { CaptureList } from '../../app/(app)/ap/capture/sections'
 import { CaptureReviewDrawer } from '../../app/(app)/ap/capture/CaptureReviewDrawer'
 import { CaptureUploadButton } from '../../app/(app)/ap/capture/CaptureUploadButton'
@@ -1834,12 +1834,12 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
 
   /* --- admin apps ------------------------------------------------------------ */
   /** Not `link-button` (solid, no icon) and not `docs-link-button` (BookOpen):
-   *  the native action is outline-small with a 15px Library icon. Diffed. */
+   *  the library action uses the same default size as the primary New button. */
   'apps-library-button': (props) => {
     const href = str(props, 'href')
     if (!href) return null
     return (
-      <Button asChild variant="outline" size="sm">
+      <Button asChild variant="outline">
         <Link href={href as never}>
           <Library size={15} /> {str(props, 'label') ?? ''}
         </Link>

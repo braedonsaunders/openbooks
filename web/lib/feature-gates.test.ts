@@ -13,8 +13,8 @@ import { FEATURES } from '@openbooks/engine/src/feature-registry.ts'
  * An earlier version of this test asked only whether a feature key appeared in
  * SOME gate call anywhere under web/. That is far too weak, and it produced
  * exactly the false confidence it was written to prevent: `apps` counted as
- * gated because /apps had a layout gate, while /admin/extensions and all nine
- * /api/extensions routes stayed permission-only. A test that reports "gated" for an
+ * gated because /apps had a layout gate, while /admin/apps and all nine
+ * /api/apps routes stayed permission-only. A test that reports "gated" for an
  * ungated surface is worse than no test.
  *
  * So coverage is checked PER SURFACE:
@@ -72,10 +72,10 @@ function routeGateState(href: string): 'gated' | 'ungated' | null {
 /**
  * API surfaces per feature. Not derivable from nav, so it is explicit — and
  * being explicit is the point: adding a module's API without listing it here is
- * the omission that let /api/extensions ship ungated.
+ * the omission that let /api/apps ship ungated.
  */
 const FEATURE_API_DIRS: Record<string, string[]> = {
-  apps: ['app/api/extensions'],
+  apps: ['app/api/apps'],
   continuousClose: ['app/api/continuous-close'],
   equipment: ['app/api/equipment'],
   expenses: ['app/api/expenses'],
@@ -182,11 +182,11 @@ test('every API route serving a feature consults a gate', () => {
 test('the surfaces this test was written for are covered', () => {
   // Pinned by name so a future refactor of the scans above cannot quietly stop
   // covering the cases that motivated them.
-  assert.equal(routeGateState('/admin/extensions'), 'gated')
+  assert.equal(routeGateState('/admin/apps'), 'gated')
   assert.equal(routeGateState('/apps'), 'gated')
   assert.equal(routeGateState('/continuous-close'), 'gated')
   assert.equal(routeGateState('/expenses/reports'), 'gated')
-  for (const file of routeFilesUnder('app/api/extensions')) {
+  for (const file of routeFilesUnder('app/api/apps')) {
     assert.match(read(file), GATE, `${file} lost its feature gate`)
   }
   assert.match(

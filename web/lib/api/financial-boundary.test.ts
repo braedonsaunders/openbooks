@@ -27,6 +27,7 @@ const { jsonObject, nullableUuidId, parseJsonBody } = await import("./json");
  * this is the only escape hatch from the shared zod request boundary.
  */
 const EXEMPT_ROUTES: Readonly<Record<string, string>> = {
+  "web/app/api/apps/import/route.ts": "size-capped binary ZIP upload; parseZipBundle limits archive expansion and draftExtension validates the decoded package with zod",
   "web/app/api/admin/ai/test/route.ts": "bodyless connectivity test using saved configuration",
   "web/app/api/admin/backups/run/route.ts": "bodyless queue action",
   "web/app/api/admin/scripts/[id]/run/route.ts": "bodyless execution action; script id is a path parameter",

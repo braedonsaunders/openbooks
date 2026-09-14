@@ -50,7 +50,7 @@ export async function NativeScreens({ ui, appKey, name, description, grants, sea
   const screen = ui.screens.find(item => item.key === selected)
   if (!screen) notFound()
   const t = await getTranslations('admin.extensions.native')
-  const tabs = <ModuleHomeTabs tabs={ui.screens.map(item => ({ href: `${preview ? '/admin/extensions/preview/' + preview.id : '/apps/' + appKey}?screen=${encodeURIComponent(item.key)}`, label: item.title, active: item.key === selected }))} />
+  const tabs = <ModuleHomeTabs tabs={ui.screens.map(item => ({ href: `${preview ? '/admin/apps/preview/' + preview.id : '/apps/' + appKey}?screen=${encodeURIComponent(item.key)}`, label: item.title, active: item.key === selected }))} />
   if (screen.kind === 'action') return <DetailPageLayout header={<>{tabs}<PageHeader title={screen.title} description={screen.description} /></>}>
     <NativeActionForm key={`${versionId ?? preview?.id}:${screen.key}`} appKey={appKey} versionId={versionId} screen={screen} preview={!!preview} />
   </DetailPageLayout>

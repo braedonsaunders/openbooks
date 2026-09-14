@@ -378,6 +378,7 @@ export function UrlDrawer({
   stacked,
   initialFullscreen,
   contextualReturn = true,
+  beforeClose,
 }: {
   open: boolean
   closeHref: string
@@ -396,6 +397,8 @@ export function UrlDrawer({
   /** Whether this drawer should consume nested-record URL context. Base
    * drawers set this false so only the child transaction becomes stacked. */
   contextualReturn?: boolean
+  /** Optional guard for unsaved edits, before navigation or exit animation. */
+  beforeClose?: () => boolean | Promise<boolean>
 }) {
   const navigate = React.useContext(DrawerNavigateContext)
   const [nestedContext, setNestedContext] = React.useState<{ closeHref: string; stacked: boolean } | null>(null)
@@ -443,7 +446,8 @@ export function UrlDrawer({
   // component, unmounts the drawer, and the exit animation never plays.
   const [show, setShow] = React.useState(open)
   React.useEffect(() => setShow(open), [open])
-  function close() {
+  async function close() {
+    if (beforeClose && !(await beforeClose())) return
     setShow(false)
   }
   function afterExit() {

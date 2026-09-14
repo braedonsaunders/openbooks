@@ -103,7 +103,7 @@ export async function loadAppRuntime(key: string): Promise<AppRuntimeData> {
     appKey: app.key,
     appName: app.name,
     context: {
-      app: { id: app.id, key: app.key, name: app.name },
+      app: { id: app.id, key: app.key, name: app.name, versionId: app.activeVersionId },
       user: {
         id: authz.user.id,
         name: authz.user.name,

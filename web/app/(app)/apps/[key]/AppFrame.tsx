@@ -1,11 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useEffect, useRef } from 'react'
 import {
-  APP_CSP,
-  bridgeClientSource,
-  inlineDocument,
   makeBridgeResult,
   parseBridgeRequest,
   isBridgeMethod,
@@ -13,62 +9,25 @@ import {
 } from '@/lib/apps/bridge'
 
 /**
- * AppFrame — the host side of an installed App's frontend. Fetches the bundle,
+ * AppFrame — the host side of an installed App's separately served document.
  * assembles a single self-contained HTML document (assets inlined as data:
  * URLs, CSP + bridge SDK injected), and renders it in an OPAQUE-ORIGIN
  * sandboxed iframe (sandbox="allow-scripts", deliberately no allow-same-origin).
  * The App therefore runs with no cookies, no parent-DOM access, and no network
  * of its own — its only capability is bridge calls, which this component relays
- * to the permission-checked /api/extensions/<key>/bridge route on the user's behalf.
+ * to the permission-checked /api/apps/<key>/bridge route on the user's behalf.
  */
-
-export interface BundleResponse {
-  entry: string
-  entryHtml: string
-  /** path → data: URL for every non-entry asset (css/js/img/font). */
-  replacements: Record<string, string>
-}
 
 export function AppFrame({
   appKey,
   context,
-  previewBundle,
+  previewDraftId,
 }: {
   appKey: string
   context: BridgeContext
-  previewBundle?: BundleResponse
+  previewDraftId?: string
 }) {
-  const t = useTranslations('apps.frame')
   const iframeRef = useRef<HTMLIFrameElement>(null)
-  const [bundle, setBundle] = useState<BundleResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  // Fetch + assemble the sandboxed document.
-  useEffect(() => {
-    if (previewBundle) { setBundle(previewBundle); return }
-    let cancelled = false
-    setBundle(null)
-    setError(null)
-    fetch(`/api/extensions/${encodeURIComponent(appKey)}/bundle`, { credentials: 'same-origin' })
-      .then(async (r) => {
-        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `bundle load failed (${r.status})`)
-        return (await r.json()) as BundleResponse
-      })
-      .then((b) => !cancelled && setBundle(b))
-      .catch((e) => !cancelled && setError((e as Error).message))
-    return () => {
-      cancelled = true
-    }
-  }, [appKey, previewBundle])
-
-  const srcDoc = useMemo(() => {
-    if (!bundle) return null
-    const head =
-      `<meta http-equiv="Content-Security-Policy" content="${APP_CSP}">` +
-      `<script>${bridgeClientSource(context)}</script>`
-    return inlineDocument(bundle.entryHtml, bundle.replacements, head)
-  }, [bundle, context])
-
   // Relay bridge calls from THIS iframe to the server, post results back.
   useEffect(() => {
     async function onMessage(e: MessageEvent) {
@@ -79,17 +38,17 @@ export function AppFrame({
       const post = (ok: boolean, payload: unknown) =>
         iframe.contentWindow?.postMessage(makeBridgeResult(req.id, ok, payload), '*')
 
-      if (previewBundle) { post(false, 'Draft preview does not execute backend actions or access live data'); return }
+      if (previewDraftId) { post(false, 'Draft preview does not execute backend actions or access live data'); return }
       if (!isBridgeMethod(req.method)) {
         post(false, `unknown bridge method: ${req.method}`)
         return
       }
       try {
-        const res = await fetch(`/api/extensions/${encodeURIComponent(appKey)}/bridge`, {
+        const res = await fetch(`/api/apps/${encodeURIComponent(appKey)}/bridge`, {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ method: req.method, payload: req.payload }),
+          body: JSON.stringify({ method: req.method, payload: req.payload, versionId: context.app.versionId }),
         })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || json?.ok === false) post(false, json?.error || `bridge call failed (${res.status})`)
@@ -99,29 +58,20 @@ export function AppFrame({
       }
     }
     window.addEventListener('message', onMessage)
+    // Start the document only after the bridge listener exists. Warm responses
+    // may otherwise execute before React hydrates and lose the first request.
+    if (iframeRef.current) iframeRef.current.src = `/api/apps/${encodeURIComponent(appKey)}/sandbox${previewDraftId ? `?draft=${encodeURIComponent(previewDraftId)}` : context.app.versionId ? `?versionId=${encodeURIComponent(context.app.versionId)}` : ''}`
     return () => window.removeEventListener('message', onMessage)
-  }, [appKey, previewBundle])
+  }, [appKey, previewDraftId, context.app.versionId])
 
-  if (error) {
-    return (
-      <div style={{ padding: 24 }}>
-        <strong>{t('failedTitle')}</strong>
-        <div style={{ marginTop: 8, opacity: 0.7, fontSize: 13 }}>{t('failedHint')}</div>
-        <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, opacity: 0.45 }}>{error}</div>
-      </div>
-    )
-  }
-  if (!srcDoc) {
-    return <div style={{ padding: 24, opacity: 0.6 }}>{t('loading')}</div>
-  }
   return (
     <iframe
       ref={iframeRef}
-      title={`app-${appKey}`}
+      title={context.app.name}
       // Opaque origin: allow-scripts ONLY. No allow-same-origin (that would
       // re-grant the parent origin and defeat the whole isolation model).
       sandbox="allow-scripts"
-      srcDoc={srcDoc}
+      key={`${appKey}:${previewDraftId ?? context.app.versionId ?? 'active'}`}
       style={{ width: '100%', height: '100%', minHeight: 'calc(100vh - 8rem)', border: '0', display: 'block' }}
     />
   )

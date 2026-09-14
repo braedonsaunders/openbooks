@@ -29,7 +29,7 @@ export const BRIDGE_METHODS = [
 export type BridgeMethod = (typeof BRIDGE_METHODS)[number]
 
 export interface BridgeContext {
-  app: { id: string; key: string; name: string }
+  app: { id: string; key: string; name: string; versionId?: string }
   user: { id: string; name: string; roles: string[] } | null
 }
 
@@ -93,7 +93,7 @@ export const APP_CSP =
  */
 export function bridgeClientSource(context: BridgeContext): string {
   return `(function(){
-  var CTX = ${JSON.stringify(context)};
+  var CTX = ${JSON.stringify(context).replace(/</g, '\\u003c')};
   var pending = {};
   var seq = 0;
   window.addEventListener('message', function(e){
@@ -145,14 +145,20 @@ export function inlineDocument(
   entryHtml: string,
   replacements: Record<string, string>,
   headHtml: string,
+  entry = '',
 ): string {
-  let html = entryHtml
-  for (const [path, url] of Object.entries(replacements)) {
-    for (const v of [path, './' + path, '/' + path]) {
-      html = html.split('"' + v + '"').join('"' + url + '"')
-      html = html.split("'" + v + "'").join("'" + url + "'")
+  const directory = entry.includes('/') ? entry.slice(0, entry.lastIndexOf('/') + 1) : ''
+  let html = entryHtml.replace(/\b(src|href)\s*=\s*(["'])([^"']+)\2/gi, (attribute, name: string, quote: string, reference: string) => {
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(reference)) return attribute
+    const path = reference.split(/[?#]/)[0]!
+    const parts: string[] = []
+    for (const part of (path.startsWith('/') ? path.slice(1) : directory + path).split('/')) {
+      if (!part || part === '.') continue
+      if (part === '..') { if (!parts.length) return attribute; parts.pop() } else parts.push(part)
     }
-  }
+    const resolved = replacements[parts.join('/')] ?? replacements[path.replace(/^\.?\//, '')]
+    return resolved ? `${name}=${quote}${resolved}${quote}` : attribute
+  })
   if (/<head[^>]*>/i.test(html)) {
     html = html.replace(/<head[^>]*>/i, (m) => m + headHtml)
   } else if (/<html[^>]*>/i.test(html)) {

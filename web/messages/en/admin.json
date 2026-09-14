@@ -49,8 +49,8 @@
         "description": "Sandboxed automation that runs on ledger events"
       },
       "apps": {
-        "title": "Extensions",
-        "description": "Build with an agent, review drafts, and manage installed extensions."
+        "title": "Apps",
+        "description": "Build with an agent, review drafts, and manage installed apps."
       },
       "sandboxes": {
         "title": "Environments",
@@ -432,8 +432,8 @@
       "subsidiarySearchPlaceholder": "Search subsidiaries…",
       "subsidiaryRequired": "Choose a subsidiary",
       "subsidiaryListRequired": "Select at least one subsidiary",
-      "permissionsLoadFailed": "Unable to load extension permissions",
-      "inactivePermissions": "Inactive extension permissions"
+      "permissionsLoadFailed": "Unable to load app permissions",
+      "inactivePermissions": "Inactive app permissions"
     }
   },
   "scripts": {
@@ -1912,8 +1912,8 @@
         "description": "Which optional statutory holidays you observe, and the company closures you add. Mandatory statutory holidays come from the country pack and cannot be removed here."
       },
       "extension-settings": {
-        "title": "Extension settings",
-        "description": "Configure settings declared by installed extensions. Changes preserve prior values and their effective dates."
+        "title": "App settings",
+        "description": "Configure settings declared by installed apps. Changes preserve prior values and their effective dates."
       }
     },
     "fields": {
@@ -2169,7 +2169,7 @@
       "isObserved": "Observed",
       "isPaid": "Paid",
       "equipmentUnitId": "Equipment unit",
-      "extensionKey": "Extension",
+      "extensionKey": "App",
       "settingKey": "Setting",
       "reason": "Reason for change"
     },
@@ -3639,7 +3639,7 @@
     },
     "apps": {
       "title": "Apps",
-      "description": "Installable extensions and the app marketplace."
+      "description": "App packages and the App Library."
     },
     "scripts": {
       "title": "Scripts",
@@ -3869,9 +3869,9 @@
     }
   },
   "extensions": {
-    "title": "Extensions",
-    "description": "Create with an agent, review a draft, and manage installed extensions.",
-    "searchPlaceholder": "Search extensions…",
+    "title": "Apps",
+    "description": "Create, import, edit, and manage apps for your organization.",
+    "searchPlaceholder": "Search apps…",
     "status": "Status",
     "statuses": {
       "installed": "Installed",
@@ -3886,27 +3886,28 @@
       "status": "Status",
       "updated": "Updated"
     },
-    "empty": "No extensions match. Create an extension to get started.",
+    "empty": "No apps match. Create an app to get started.",
     "actions": {
-      "new": "New extension",
+      "new": "New app",
       "deactivate": "Deactivate",
       "reactivate": "Reactivate",
       "publish": "Publish to library",
       "advanced": "Advanced package source",
-      "updateListing": "Update library listing"
+      "updateListing": "Update library listing",
+      "drafts": "Drafts awaiting review"
     },
     "request": {
-      "help": "Describe what your team needs. The assistant will build an extension using the shared screens and controls in OpenBooks.",
+      "help": "Describe the app you need and build it with the assistant, or start from a package below.",
       "brief": "What would you like to build?",
       "placeholder": "For example: an equipment inspection workspace with checklists, notes, and an inspection history.",
-      "reviewHelp": "You can preview and request changes before activating anything. Connected agents can also prepare drafts through the extension tools.",
+      "reviewHelp": "You can preview and request changes before activating anything. Connected agents can also prepare drafts through the app tools.",
       "start": "Build with assistant",
-      "agentInstruction": "Build an extension for this request. Start with describe_extension_vocabulary. Use draft_extension to prepare an unpublished package and give me its review and preview links. Ask only for missing business requirements. Do not activate it until I have reviewed it.",
-      "agentHelp": "How connected agents build extensions"
+      "agentInstruction": "Build an app for this request. Start with describe_app_vocabulary. Use draft_app to prepare an unpublished package and give me its review and preview links. Ask only for missing business requirements. Do not activate it until I have reviewed it.",
+      "agentHelp": "App authoring guide"
     },
     "draft": {
       "title": "Draft review",
-      "failed": "The extension could not be activated.",
+      "failed": "The app could not be activated.",
       "previewNotice": "Unpublished preview. Backend actions and live record access are unavailable. No data will be changed.",
       "unpublished": "This proposal is not active. Review its screens, requested access, and changes before activating it.",
       "preview": "Preview",
@@ -3920,10 +3921,10 @@
       "noPermissions": "No platform permissions requested.",
       "source": "Advanced: package source and fingerprint",
       "confirm": "I have reviewed this version and its requested access.",
-      "activate": "Activate extension",
+      "activate": "Activate app",
       "closed": "This draft has already been applied or replaced.",
       "changes": "Changes from the installed version",
-      "newPackage": "New extension",
+      "newPackage": "New app",
       "added": "Added",
       "changed": "Changed",
       "removed": "Removed",
@@ -3933,7 +3934,12 @@
       "nav": "Navigation entry: {name}",
       "setting": "Setting: {name}",
       "permission": "Permission: {name}",
-      "previewPage": "Preview page: {route}"
+      "previewPage": "Preview page: {route}",
+      "editPackage": "Edit package",
+      "backToReview": "Back to review",
+      "discardEdits": "Discard unsaved package changes?",
+      "saveEditsFirst": "Save your package changes as a new draft before activating.",
+      "grants": "Grants for this version: {permissions}"
     },
     "native": {
       "actionFailed": "The action could not be completed. Retry to check the same submission.",

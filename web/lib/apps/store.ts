@@ -593,6 +593,7 @@ export async function deleteApp(orgId: string, userId: string, key: string): Pro
 export async function getFrontendBundle(
   orgId: string,
   key: string,
+  expectedVersionId?: string,
 ): Promise<{ entry: string; entryHtml: string; replacements: Record<string, string> }> {
   const app = await getAppByKey(orgId, key)
   if (!app) throw new AppError('app not found', 404)
@@ -604,6 +605,7 @@ export async function getFrontendBundle(
       from app_files
      where org_id = ${orgId} and version_id = ${app.activeVersionId} and kind in ('frontend', 'asset')`)
 
+  if (expectedVersionId && expectedVersionId !== app.activeVersionId) throw new AppError('This app version changed. Reload the app before continuing.',409)
   const entry = app.manifest.frontend.entry
   const entryFile = files.find((f) => f.path === entry)
   if (!entryFile) throw new AppError('frontend entry missing from bundle', 500)
@@ -683,12 +685,14 @@ export async function runBridgeMethod(opts: {
   key: string
   method: string
   payload: any
+  expectedVersionId?: string
   userCan: (perm: string) => boolean
   allowedSubsidiaryIds: ReadonlySet<string> | null
 }): Promise<{ ok: true; result: unknown } | { ok: false; error: string; status: number }> {
   const app = await getAppByKey(opts.orgId, opts.key)
   if (!app || !app.manifest) return { ok: false, error: 'app not found', status: 404 }
   if (app.status !== 'installed') return { ok: false, error: 'app is disabled', status: 403 }
+  if (opts.expectedVersionId && opts.expectedVersionId !== app.activeVersionId) return { ok:false,error:'This app version changed. Reload the app before continuing.',status:409 }
 
   const recordsGranted =
     permissionSetCovers(new Set(app.grantedPermissions), APP_CAPABILITIES.RECORDS_READ) &&
@@ -995,11 +999,11 @@ export async function listListings({
 }
 
 /** Whether an active marketplace listing exists for an app key. */
-export async function isAppPublished(key: string): Promise<boolean> {
+export async function isAppPublished(key: string, publisherOrgId?: string): Promise<boolean> {
   const found = await rows<{ found: boolean }>(sql`
     select true as found
       from app_listings
-     where key = ${key} and is_active = true
+     where key = ${key} and is_active = true ${publisherOrgId ? sql`and publisher_org_id=${publisherOrgId}` : sql``}
      limit 1`)
   return found.length > 0
 }
@@ -1009,6 +1013,8 @@ export async function isAppPublished(key: string): Promise<boolean> {
  * app key deployment-wide; only the original publisher org may update it.
  */
 export async function publishApp(orgId: string, userId: string, key: string): Promise<{ id: string }> {
+  return db.transaction(async tx => {
+  await tx.execute(sql`select id from apps where org_id=${orgId} and key=${key} for share`)
   const app = await getAppByKey(orgId, key)
   if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found or has no active version', 404)
 
@@ -1026,7 +1032,8 @@ export async function publishApp(orgId: string, userId: string, key: string): Pr
   if (existing[0] && !existing[0].isApp) throw new AppError(`"${key}" is already published as a module`, 409)
   const filesJson = JSON.stringify(files)
   const manifestJson = JSON.stringify(app.manifest)
-  const r = (await db.execute<{ id: string }>(sql`
+  const before = (await tx.execute(sql`select id,version,manifest,files,is_active from app_listings where key=${key} and publisher_org_id=${orgId} for update`)).rows[0] ?? null
+  const r = (await tx.execute<{ id: string }>(sql`
     insert into app_listings (publisher_org_id, key, name, description, icon_key, version, manifest, files, is_active, created_by, updated_by)
     values (${orgId}, ${key}, ${app.name}, ${app.description}, ${app.iconKey}, ${app.version},
             ${manifestJson}::jsonb, ${filesJson}::jsonb, true, ${userId}, ${userId})
@@ -1038,10 +1045,22 @@ export async function publishApp(orgId: string, userId: string, key: string): Pr
     returning id`))
   const id = r.rows[0]?.id
   if (!id) throw new AppError(`"${key}" is already published by another organization`, 409)
+  await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'app_listings',${id},${before ? 'update' : 'insert'},${JSON.stringify({ event:'app_listing_published', reason:'Publish active app version', appKey:key, versionId:app.activeVersionId, before, after:{version:app.version,manifest:app.manifest,files,is_active:true} })}::jsonb,${userId})`)
   return { id }
+  })
 }
 
 /** Install a marketplace listing into the caller's org via the normal path. */
 export class AppError extends Error {
   constructor(message: string, public readonly status = 400) { super(message); this.name = 'AppError' }
+}
+
+export async function unpublishApp(orgId: string, userId: string, key: string): Promise<void> {
+  await db.transaction(async tx => {
+    const listing = (await tx.execute<{ id: string; is_active: boolean; version: string }>(sql`select id,is_active,version from app_listings where key=${key} and publisher_org_id=${orgId} for update`)).rows[0]
+    if (!listing) throw new AppError('No app listing owned by this organization', 404)
+    if (!listing.is_active) return
+    await tx.execute(sql`update app_listings set is_active=false,updated_by=${userId},updated_at=now() where id=${listing.id} and publisher_org_id=${orgId}`)
+    await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'app_listings',${listing.id},'update',${JSON.stringify({ event:'app_listing_withdrawn',before:{isActive:true,version:listing.version},after:{isActive:false,version:listing.version} })}::jsonb,${userId})`)
+  })
 }

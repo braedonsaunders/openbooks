@@ -17,16 +17,16 @@ export interface McpSkill {
 
 export const MCP_SKILLS: readonly McpSkill[] = [
   {
-    slug: "build-an-extension", title: "Build and revise an extension",
+    slug: "build-an-app", title: "Build and revise an app",
     description: "Author a package, preview an unpublished draft, and activate its reviewed fingerprint.",
     body: [
-      "# Build an extension",
-      "1. Read describe_extension_vocabulary. Prefer native shared screens and governed records. Clarify missing business requirements; do not ask the user to write JSON or choose an internal renderer.",
-      "2. For an upgrade, read get_extension_package and preserve its owned definitions and files. Give the revision a new version label.",
-      "3. Call draft_extension with the complete bundle and an honest reason. This creates an author-owned unpublished proposal; it does not create live objects or execute backend code.",
-      "4. Present the returned review and preview links. Use get_extension_draft when revising. A revision is a new draft. Preview has no live record access or backend writes; rehearse stateful behavior in an organization sandbox.",
-      "5. After the user reviews and approves the exact draft, call activate_extension_draft with its draftId and contentHash. Never bypass a stale-base refusal with a direct install. Re-read the installed package and prepare a new draft instead.",
-      "6. Report the activated version and openUrl. Native and sandboxed frontends are two renderers of one extension, not separate installations.",
+      "# Build an app",
+      "1. Read describe_app_vocabulary. Prefer native shared screens and governed records. Clarify missing business requirements; do not ask the user to write JSON or choose an internal renderer.",
+      "2. For an upgrade, read get_app_package and preserve its owned definitions and files. Give the revision a new version label.",
+      "3. Call draft_app with the complete bundle and an honest reason. This creates an author-owned unpublished proposal; it does not create live objects or execute backend code.",
+      "4. Present the returned review and preview links. Use get_app_draft when revising. A revision is a new draft. Preview has no live record access or backend writes; rehearse stateful behavior in an organization sandbox.",
+      "5. After the user reviews and approves the exact draft, call activate_app_draft with its draftId and contentHash. Never bypass a stale-base refusal with a direct install. Re-read the installed package and prepare a new draft instead.",
+      "6. Report the activated version and openUrl. Native and sandboxed frontends are two renderers of one app, not separate installations.",
     ].join("\n"),
   },
   {

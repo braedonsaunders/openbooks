@@ -5,10 +5,10 @@ export const apps: DocArticle = {
   title: 'Apps and the App Library',
   category: 'apps',
   order: 1,
-  summary: 'Find, install, update, open, and administer extensions for your organization.',
+  summary: 'Find, install, update, open, and administer apps for your organization.',
   updated: '2026-07-31',
   related: ['app-builder', 'app-api-reference'],
-  keywords: ['apps', 'extensions', 'library', 'install', 'update', 'app builder', 'marketplace', 'dashboard', 'navigation'],
+  keywords: ['apps', 'apps', 'library', 'install', 'update', 'app builder', 'marketplace', 'dashboard', 'navigation'],
   body: `# Apps and the App Library
 
 Apps extend the platform with organization-specific workflows, screens, records,
@@ -44,7 +44,7 @@ permissions. Disabled or uninstalled apps disappear from these surfaces.
 ## Browse the App Library
 
 Users with **Install and manage apps** permission can select **App Library** from
-the Apps page. The library shows extensions that are available to the deployment.
+the Apps page. The library shows apps that are available to the deployment.
 Use search to narrow the list by name, key, or description.
 
 - **Review installation** prepares an unpublished draft of the library package.
@@ -57,9 +57,9 @@ scoped to your organization.
 
 ## Build and administer apps
 
-Use **Settings → Extensions** to describe a new extension to an agent, review
+Use **Settings → Apps** to describe a new app to an agent, review
 and preview its draft, and activate a version. This is the management inventory
-for the same packages opened from Apps. See [Build extensions with an agent](/docs/extensions).
+for the same packages opened from Apps. See [Build apps with an agent](/docs/apps).
 Authoring access is separate from ordinary app use.
 
 Before enabling an app, review its requested permissions and grant only the
