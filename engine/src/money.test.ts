@@ -94,7 +94,7 @@ test("scientific exponents beyond the shared resource bound are rejected before 
   // Guard: if the bound ever regresses, these inputs must fail here instead
   // of attempting a ~1GB pad/repeat allocation in the test runner.
   const prototype = String.prototype as unknown as Record<
-    string,
+    "padEnd" | "padStart" | "repeat",
     (this: string, ...args: unknown[]) => string
   >;
   const saved = {
