@@ -403,20 +403,26 @@ async function resolveProjectFinancialsInSnapshot(
   const overhead = add(calculatedOverhead, overheadAdjustment)
 
   // billable value: what's invoiceable across all work (time + cost lines).
+  // A cost-times-markup profile prices at the job's markup, or at the
+  // profile default when the job carries none — the same fallback the WIP
+  // prebill pricer applies, so Financials and WIP can never disagree.
+  const billableMarkupPercent = profile.totalPrice.defaultMarkupPercent != null && cmp(projectMarkupPercent, '0') === 0
+    ? String(profile.totalPrice.defaultMarkupPercent)
+    : projectMarkupPercent
   const totalTimeBill = profile.billableValue.timeRate === 'cost_times_markup'
-    ? add(amount(billableTimeRes.rows[0]?.total_cost), mulPercent(amount(billableTimeRes.rows[0]?.total_cost), projectMarkupPercent))
+    ? add(amount(billableTimeRes.rows[0]?.total_cost), mulPercent(amount(billableTimeRes.rows[0]?.total_cost), billableMarkupPercent))
     : amount(billableTimeRes.rows[0]?.total_bill)
   const totalLineBill = profile.billableValue.timeRate === 'cost_times_markup'
-    ? add(amount(billableLineRes.rows[0]?.total_cost), mulPercent(amount(billableLineRes.rows[0]?.total_cost), projectMarkupPercent))
+    ? add(amount(billableLineRes.rows[0]?.total_cost), mulPercent(amount(billableLineRes.rows[0]?.total_cost), billableMarkupPercent))
     : amount(billableLineRes.rows[0]?.total_bill)
   const unbTimeBill = profile.billableValue.includeUnbilledTime
     ? (profile.billableValue.timeRate === 'cost_times_markup'
-        ? add(amount(billableTimeRes.rows[0]?.unbilled_cost), mulPercent(amount(billableTimeRes.rows[0]?.unbilled_cost), projectMarkupPercent))
+        ? add(amount(billableTimeRes.rows[0]?.unbilled_cost), mulPercent(amount(billableTimeRes.rows[0]?.unbilled_cost), billableMarkupPercent))
         : amount(billableTimeRes.rows[0]?.unbilled_bill))
     : '0.0000'
   const unbLineBill = profile.billableValue.includeUnbilledCostLines
     ? (profile.billableValue.timeRate === 'cost_times_markup'
-        ? add(amount(billableLineRes.rows[0]?.unbilled_cost), mulPercent(amount(billableLineRes.rows[0]?.unbilled_cost), projectMarkupPercent))
+        ? add(amount(billableLineRes.rows[0]?.unbilled_cost), mulPercent(amount(billableLineRes.rows[0]?.unbilled_cost), billableMarkupPercent))
         : amount(billableLineRes.rows[0]?.unbilled_bill))
     : '0.0000'
   const unbilledBillable = add(unbTimeBill, unbLineBill)
