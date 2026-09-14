@@ -381,7 +381,7 @@ jobs:
           for (const [suite, count, root, prefix] of [['integration',16,'integration-evidence','coverage'], ['unit',4,'unit-evidence','unit']]) {
             const files = manifest[suite];
             const dirs = readdirSync(root).sort();
-            assert.deepEqual(dirs, Array.from({length:count}, (_,i)=>`${prefix}-${i+1}`));
+            assert.deepEqual(dirs, Array.from({length:count}, (_,i)=>`${prefix}-${i+1}`).sort());
             const actual = [];
             for (let i=1; i<=count; i++) {
               const selection = JSON.parse(readFileSync(`${root}/${prefix}-${i}/.local/test-selection.json`, 'utf8'));
