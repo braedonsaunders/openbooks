@@ -56,6 +56,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     notes?: string | null
   }
   const action: Action = body.action ?? 'update'
+  if (!['verify', 'reject', 'reopen', 'update'].includes(action)) {
+    return NextResponse.json({ error: 'unknown certificate action' }, { status: 400 })
+  }
   const needed = action === 'update' ? 'compliance.manage' : 'compliance.verify'
   if (!can(authz, needed)) {
     return NextResponse.json({ error: `missing permission: ${needed}` }, { status: 403 })
