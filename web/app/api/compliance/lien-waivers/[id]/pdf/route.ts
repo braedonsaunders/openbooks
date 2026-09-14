@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '@/lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardLienWaiverFeature } from '@/lib/compliance'
 import { renderLienWaiverPdf } from '@/lib/lien-waiver-pdf'
 import type { LienWaiverType } from '@/lib/lien-waiver-form'
@@ -39,6 +39,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       signature: { method?: string; attestedAt?: string } | null
       claimant_name: string
       project_name: string
+      project_subsidiary_id: string | null
       project_address: string | null
       owner_name: string | null
       bill_number: string | null
@@ -49,6 +50,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
            lw.signed_at, lw.notarized, lw.signature,
            claimant.display_name as claimant_name,
            coalesce(pj.code || ' · ' || pj.name, pj.name) as project_name,
+           pj.subsidiary_id as project_subsidiary_id,
            coalesce(nullif(concat_ws(', ', addr.line1, addr.city, addr.region, addr.postal_code), ''), null) as project_address,
            owner.display_name as owner_name,
            bill.document_number as bill_number,
@@ -68,6 +70,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   `))
   const w = r.rows[0]
   if (!w) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, w.project_subsidiary_id)
+  if (denied) return denied
 
   // Who releases and who pays flips with direction: a waiver we RECEIVE is the
   // subcontractor releasing us; one we ISSUE is us releasing the owner.
