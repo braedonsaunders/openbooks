@@ -7,6 +7,7 @@ import {
   groupRemittanceRows,
   pickRemittanceSequence,
   remittanceBillLockKey,
+  remittanceGroupUsesQuebecCalendar,
   type RemittanceRow,
 } from "./payroll-remittance.ts";
 import { renderT4Xml, type T4ReturnWithSins } from "./payroll-t4xml.ts";
@@ -90,6 +91,29 @@ test("different destinations under one account remain separate groups", () => {
     row({ component_id: "c9", code: "DUES", name: "Union dues", system_key: null, remittance_party_id: "local-1", amount: "30.00" }),
   ]);
   assert.equal(groups.size, 2);
+});
+
+test("remittance groups carry their stub provinces for the due-date calendar", () => {
+  const groups = group([
+    row({ amount: "100.00", filing_account_id: RP1.id, province: "QC" }),
+    row({ component_id: "c2", code: "CPP", name: "CPP", system_key: "cpp", amount: "40.00", filing_account_id: RP1.id, province: "QC" }),
+    row({ amount: "60.00", filing_account_id: RP2.id, province: "ON" }),
+  ]);
+  const byAccount = new Map([...groups.values()].map((g) => [g.filingAccount.accountNumber, g]));
+  assert.deepEqual(byAccount.get("123456789RP0001")!.provinces, ["QC"]);
+  assert.deepEqual(byAccount.get("123456789RP0002")!.provinces, ["ON"]);
+});
+
+test("the CRA Quebec calendar governs exactly the all-Quebec payrolls", () => {
+  // Saint-Jean-Baptiste Day moves a Quebec deadline and the Civic Holiday
+  // moves everyone else's; the bill must ask which calendar its payroll is
+  // on. A mixed payroll keeps the federal calendar (the employer's province
+  // of record decides, which the product does not model) — never a guess.
+  assert.equal(remittanceGroupUsesQuebecCalendar(["QC"]), true);
+  assert.equal(remittanceGroupUsesQuebecCalendar(["QC", "QC"]), true);
+  assert.equal(remittanceGroupUsesQuebecCalendar(["ON"]), false);
+  assert.equal(remittanceGroupUsesQuebecCalendar(["QC", "ON"]), false);
+  assert.equal(remittanceGroupUsesQuebecCalendar([]), false);
 });
 
 test("filingAccountRef labels a known account and degrades honestly", () => {
