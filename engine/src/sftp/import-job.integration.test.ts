@@ -372,3 +372,46 @@ test(
     }
   },
 );
+
+test(
+  "scheduled SFTP imports decode non-UTF8 statement bytes like interactive uploads",
+  { skip: !DB },
+  async () => {
+    const f = await seedSftpFixture();
+    try {
+      // UTF-16LE with BOM and no conflicting encoding declarations — the
+      // interactive upload path decodes these exact bytes; the scheduled path
+      // must not corrupt them through a lossy UTF-8 string coercion first.
+      const utf16 = Buffer.concat([
+        Buffer.from([0xff, 0xfe]),
+        Buffer.from(
+          "<OFX><CURDEF>CAD" +
+          "<STMTTRN><DTPOSTED>20260715</DTPOSTED><TRNAMT>-42.50</TRNAMT>" +
+          "<NAME>UTF16 Vendor</NAME><FITID>sftp-utf16-a</FITID></STMTTRN>" +
+          "</OFX>",
+          "utf16le",
+        ),
+      ]);
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into sftp_import_schedules (id, org_id, sftp_server_id, account_id, format, folder, is_active, created_by)
+        values (${scheduleId}, ${f.org.orgId}, ${f.serverId}, ${f.org.accounts.bank}, 'auto', 'inbound-utf16', true, ${f.authorId})
+      `);
+      stageFile(f.rootPrefix, "inbound-utf16", "utf16.ofx", utf16);
+
+      const runs = await runDueSftpImports(f.org.orgId);
+      const mine = runs.find((run) => run.scheduleId === scheduleId)!;
+      assert.ok(mine, "the utf16 schedule must be scanned");
+      assert.deepEqual(mine.errors, [], `scan errors surfaced: ${JSON.stringify(mine.errors)}`);
+      assert.equal(mine.imported, 1);
+      const lines = await db.execute<{ amount: string }>(sql`
+        select amount from bank_statement_lines
+         where org_id = ${f.org.orgId} and bank_transaction_id = 'sftp-utf16-a'
+      `);
+      assert.equal(lines.rows.length, 1);
+      assert.equal(lines.rows[0]!.amount, "-42.5000");
+    } finally {
+      await dropScratchOrgReporting(f.org.orgId);
+    }
+  },
+);
