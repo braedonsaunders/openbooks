@@ -403,17 +403,29 @@ export async function runOwnershipConsolidation(
   }
 }
 
-/** Currency pairs needed to translate every subsidiary into every ancestor. */
+/** Currency pairs needed to translate every subsidiary into every ancestor —
+ *  plus every subsidiary into the elimination subsidiary. The ownership and
+ *  auto-elimination phases translate source activity into the elimination
+ *  entity, which is almost never an ancestor of its sources: ancestor chains
+ *  alone can never derive those pairs, and the phases would refuse with
+ *  "derive rates first" no matter how often rates are derived. */
 async function neededPairs(orgId: string, runner: Runner): Promise<{ from: string; to: string }[]> {
   const ctx = await loadSubsidiaryContext(runner, orgId);
   const pairs = new Map<string, { from: string; to: string }>();
+  const add = (from: string, to: string) => {
+    if (from !== to) pairs.set(`${from}→${to}`, { from, to });
+  };
   for (const s of ctx.byId.values()) {
     let p = s.parentId ? ctx.byId.get(s.parentId) : null;
     while (p) {
-      if (s.baseCurrency !== p.baseCurrency) {
-        pairs.set(`${s.baseCurrency}→${p.baseCurrency}`, { from: s.baseCurrency, to: p.baseCurrency });
-      }
+      add(s.baseCurrency, p.baseCurrency);
       p = p.parentId ? ctx.byId.get(p.parentId) : null;
+    }
+  }
+  for (const elimination of ctx.byId.values()) {
+    if (!elimination.isElimination || !elimination.isActive) continue;
+    for (const s of ctx.byId.values()) {
+      add(s.baseCurrency, elimination.baseCurrency);
     }
   }
   return [...pairs.values()];
