@@ -52,7 +52,7 @@ export interface ParsedStatement {
 export type StatementSource = "ofx" | "csv" | "camt053" | "bai2" | "mt940" | "feed_api" | "manual";
 
 /** Increment whenever statement-to-line normalization semantics change. */
-export const BANK_STATEMENT_PARSER_VERSION = "2026.08.5";
+export const BANK_STATEMENT_PARSER_VERSION = "2026.08.6";
 
 export type StatementSourceContent = string | Uint8Array;
 type StatementTextSource = Extract<StatementSource, "ofx" | "csv" | "camt053" | "bai2" | "mt940">;
@@ -659,12 +659,18 @@ export function parseCamt053(source: StatementSourceContent): ParsedStatement {
       null;
     const ref =
       xmlTag(txDtls, "EndToEndId") ?? xmlTag(txDtls, "TxId") ?? xmlTag(txDtls, "AcctSvcrRef") ?? null;
+    // Dedupe identity must be the bank's per-entry reference: the
+    // originator-set EndToEndId is reused on every execution of a standing
+    // order or recurring collection, so keying by it silently drops every
+    // execution after the first at import.
+    const bankRef =
+      xmlTag(txDtls, "AcctSvcrRef") ?? xmlTag(txDtls, "TxId") ?? xmlTag(txDtls, "EndToEndId") ?? null;
     lines.push({
       postedOn: assertRealDate(iso[1]!, iso[2]!, iso[3]!, `CAMT.053 date "${dt}"`),
       amount: signed,
       description,
       counterpartyRef: ref,
-      bankTransactionId: ref,
+      bankTransactionId: bankRef,
     });
     lineNo++;
   }
