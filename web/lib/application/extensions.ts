@@ -1,14 +1,17 @@
 import 'server-only'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
-import { db, withTransactionSavepoint } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction, withTransactionSavepoint } from '@openbooks/engine/src/db.ts'
 import { can } from '../authz'
 import { isFeatureEnabled } from '../features'
 import { parseManifest, validateBundle, APP_PLATFORM_PERMISSIONS } from '../apps/manifest'
 import { parseObjectSpecs } from '../apps/objects'
 import { parseNativeExtension } from '../apps/native-ui'
-import { AppError, getAppByKey, installApp, type UploadBundle } from '../apps/store'
+import { extensionContributionTargetErrors } from '../apps/contribution-targets'
+import { AppError, getAppByKey, listApps, installApp, type UploadBundle } from '../apps/store'
 import { requestHash } from './idempotency-core'
+import { previewLayout } from './page-layouts'
+import { ExtensionProjectionError } from '@openbooks/engine/src/extensions/pages.ts'
 import { conflict, forbidden, invalidInput, notFound } from './errors'
 import type { ApplicationContext } from './context'
 
@@ -32,7 +35,7 @@ export function validateExtensionBundle(input: unknown): UploadBundle {
   const parsed = parseManifest(bundle.manifest)
   if (!parsed.ok || !parsed.manifest) throw invalidInput(parsed.errors.join('; '))
   const manifest = parsed.manifest
-  const errors = validateBundle(manifest, bundle.files.map(file => file.path)).errors
+  const errors = [...validateBundle(manifest, bundle.files.map(file => file.path)).errors, ...extensionContributionTargetErrors(manifest.contributions ?? [])]
   if (new Set(bundle.files.map(file => file.path)).size !== bundle.files.length) errors.push('Duplicate file path')
   const objects = parseObjectSpecs(bundle.files)
   errors.push(...objects.errors)
@@ -40,7 +43,7 @@ export function validateExtensionBundle(input: unknown): UploadBundle {
     const entry = bundle.files.find(file => file.path === manifest.frontend.entry)
     if (!entry || entry.isBinary) errors.push('Native UI entry must be a JSON text file')
     else try {
-      const ui = parseNativeExtension(entry.content)
+      const ui = parseNativeExtension(entry.content, manifest)
       if (ui.screens.some(screen => screen.kind === 'records') && !manifest.permissions.includes('records.read')) errors.push('Native record screens require records.read')
     } catch (error) { errors.push(error instanceof Error ? error.message : 'Invalid native UI') }
   }
@@ -79,8 +82,6 @@ export async function draftExtension(context: ApplicationContext, input: { bundl
   const reason = input.reason.trim()
   if (!reason || reason.length > 2000) throw invalidInput('A 1–2000 character reason is required')
   const app = await getAppByKey(context.authz.user.orgId, manifest.key)
-  const nativeOwner = (await db.execute(sql`select id from modules where org_id=${context.authz.user.orgId} and key=${manifest.key} and kind <> 'app'`)).rows[0]
-  if (nativeOwner) throw conflict('This key belongs to an existing page-customization extension; use its module tools')
   const hash = requestHash(bundle)
   const row = await db.transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'extension-package:' + context.authz.user.orgId + ':' + manifest.key}, 0))`)
@@ -88,7 +89,7 @@ export async function draftExtension(context: ApplicationContext, input: { bundl
     return (await tx.execute<{ id: string }>(sql`insert into extension_drafts(org_id,created_by,extension_key,bundle,content_hash,base_version_id,reason)
       values(${context.authz.user.orgId},${context.authz.user.id},${manifest.key},${JSON.stringify(bundle)}::jsonb,${hash},${app?.activeVersionId ?? null},${reason}) returning id`)).rows[0]!
   })
-  return { draftId: row.id, contentHash: hash, key: manifest.key, status: 'draft', reviewUrl: `/admin/modules?draft=${row.id}`, previewUrl: `/admin/modules/preview/${row.id}`, requestedPermissions: manifest.permissions, activated: false }
+  return { draftId: row.id, contentHash: hash, key: manifest.key, status: 'draft', reviewUrl: `/admin/extensions?draft=${row.id}`, previewUrl: `/admin/extensions/preview/${row.id}`, requestedPermissions: manifest.permissions, activated: false }
 }
 
 export async function activateExtensionDraft(context: ApplicationContext, input: { draftId: string; contentHash: string }) {
@@ -98,10 +99,11 @@ export async function activateExtensionDraft(context: ApplicationContext, input:
   const manifest = parseManifest(bundle.manifest).manifest!
   for (const permission of manifest.permissions) if (!can(context.authz, permission)) throw forbidden(permission)
   try {
-    const installed = await db.transaction(tx => withTransactionSavepoint(tx, () => installApp(context.authz.user.orgId, context.authz.user.id, bundle, { id: draft.id, hash: draft.content_hash })))
-    return { ...installed, activated: true, reviewUrl: `/admin/modules?module=${installed.key}`, openUrl: `/apps/${installed.key}` }
+    const installed = await withOrgTransaction(context.authz.user.orgId, () => withTransactionSavepoint(db, () => installApp(context.authz.user.orgId, context.authz.user.id, bundle, { id: draft.id, hash: draft.content_hash })))
+    return { ...installed, activated: true, reviewUrl: `/admin/extensions?extension=${installed.key}`, openUrl: `/apps/${installed.key}` }
   } catch (error) {
-    if (error instanceof AppError) throw conflict(error.message)
+    if (error instanceof AppError || error instanceof ExtensionProjectionError) throw conflict(error.message)
+    if (error instanceof z.ZodError) throw conflict(error.issues.map(issue=>issue.message).join('; '))
     throw error
   }
 }
@@ -112,10 +114,15 @@ export async function describeExtensionVocabulary(context: ApplicationContext) {
     preferredRenderer: 'native',
     workflow: ['describe_extension_vocabulary', 'draft_extension', 'get_extension_draft', 'activate_extension_draft'],
     rules: [
+      'Use list_extensions to discover installed packages. There is one package store and one version/review lifecycle for every renderer and contribution.',
+      'manifest.contributions supports page (route, spec, scope org), nav (href, label, group), setting (key, label, valueType, defaultValue), and permission (key, label). Page and nav require admin.customization.manage; settings require admin.setup.manage; permission definitions require admin.roles.manage. Contributions and objects activate atomically with backend files. Do not invent unsupported contribution kinds.',
+      'To restore an earlier package, read its version with get_extension_package and prepare a new reviewed revision. Never mutate an active or historical version in place.',
       'Build an extension package, not a repository patch. It runs without a deployment of OpenBooks.',
       'Prefer native UI screens composed from the host page vocabulary and records workspaces. Only link-button widgets are supported in native page screens; record screens use the native records loader, permissions, audience, filters and drawers.',
-      'Native frontend entry is a JSON document with screens. Each screen has key, title and kind page (spec: PageSpec) or records (typeKey: a published custom-record key).',
+      'Native frontend entry is a JSON document with screens. Each screen has key, title and kind page (spec: PageSpec) or records (typeKey: a published custom-record key), or action (endpoint: declared POST/ANY endpoint name, fields: shared FormSection[], submitLabel, optional description and confirmation).',
       'objects/*.json files can provision owned record_type or custom_field definitions atomically with the package. Existing foreign-owned objects cannot be overwritten. Existing data is preserved during upgrades and removal.',
+      'Native action forms submit {input, invocationId} to the declared backend. Use ob.platform.create/update for governed records, ob.storage for package state and ob.journal for controlled posting. Return {message} for a user-readable result. Throw to roll back a failed operation; do not return an error status after writes. Transport retries replay the same invocation; another submission gets a new ID.',
+      'Record types use existing custom-record storage; never create SQL tables, run DDL, or request database credentials. Custom fields extend supported platform records through the same controlled definition system.',
       'Backend endpoints run in the existing sandbox and use the governed host API; they never receive direct database credentials. Sandboxed HTML UI remains available with frontend.renderer sandbox.',
       'draft_extension stores an immutable author-owned proposal and returns review/preview URLs. It does not install objects, run backend code, or activate anything.',
       'Preview uses local form samples for proposed record types and never executes draft backend actions or changes live records. Rehearse stateful backend behavior in a configured organization sandbox.',
@@ -124,9 +131,10 @@ export async function describeExtensionVocabulary(context: ApplicationContext) {
     ],
     permissions: APP_PLATFORM_PERMISSIONS,
     example: {
-      manifest: { key: 'equipment-checks', name: 'Equipment checks', version: '1.0.0', permissions: ['records.read', 'records.create'], frontend: { renderer: 'native', entry: 'frontend/ui.json' }, endpoints: [] },
+      manifest: { key: 'equipment-checks', name: 'Equipment checks', version: '1.0.0', permissions: ['records.read', 'records.create'], frontend: { renderer: 'native', entry: 'frontend/ui.json' }, endpoints: [{ name: 'create-check', file: 'backend/create-check.js', method: 'POST' }] },
       files: [
-        { path: 'frontend/ui.json', content: JSON.stringify({ screens: [{ key: 'checks', title: 'Equipment checks', kind: 'records', typeKey: 'equipment-check' }] }) },
+        { path: 'frontend/ui.json', content: JSON.stringify({ screens: [{ key: 'checks', title: 'Equipment checks', kind: 'records', typeKey: 'equipment-check' }, { key: 'new-check', title: 'New equipment check', kind: 'action', endpoint: 'create-check', submitLabel: 'Create check', fields: [{ id: 'details', fields: [{ id: 'equipment', type: 'text', label: 'Equipment', required: true }, { id: 'notes', type: 'long_text', label: 'Notes' }] }] }] }) },
+        { path: 'backend/create-check.js', content: "function handler(request) { var record = ob.platform.create('equipment-check', {data: request.body.input, status: 'active'}); ob.storage.set('last-check', record.record.id); return {message: 'Equipment check created'}; }" },
         { path: 'objects/checks.json', content: JSON.stringify({ type: 'record_type', key: 'equipment-check', name: 'Equipment check', pluralName: 'Equipment checks', fields: [{ id: 'details', title: 'Details', fields: [{ id: 'equipment', type: 'text', label: 'Equipment', required: true }, { id: 'notes', type: 'long_text', label: 'Notes' }] }] }) },
       ],
     },
@@ -156,4 +164,18 @@ export async function discardExtensionDraft(context: ApplicationContext, input: 
     else if ((await tx.execute<{ status: string }>(sql`select status from extension_drafts where org_id=${context.authz.user.orgId} and id=${draft.id}`)).rows[0]?.status !== 'discarded') throw conflict('An activated version cannot be discarded')
   })
   return { discarded: true }
+}
+
+export async function listExtensions(context: ApplicationContext) {
+  await requireExtensionAuthor(context)
+  return { extensions: (await listApps(context.authz.user.orgId)).map(app => ({ key: app.key, name: app.name, status: app.status, version: app.version, reviewUrl: `/admin/extensions?extension=${app.key}`, openUrl: `/apps/${app.key}` })) }
+}
+
+/** Reuse the author-scoped native page preview; never install the package to preview it. */
+export async function previewExtensionPage(context: ApplicationContext, input: { draftId: string; route: string; params?: Record<string,string> }) {
+  const draft = await getExtensionDraft(context,input.draftId)
+  const manifest = parseManifest(validateExtensionBundle(draft.bundle).manifest).manifest!
+  const page = manifest.contributions?.find(item=>item.kind==='page' && item.route===input.route)
+  if (!page || page.kind!=='page') throw notFound('extension page contribution')
+  return previewLayout(context,{route:page.route,spec:page.spec,params:input.params})
 }

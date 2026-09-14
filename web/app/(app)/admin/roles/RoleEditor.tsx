@@ -97,21 +97,21 @@ function RoleDrawer({
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
-  const [modulePermissions, setModulePermissions] = useState<{ moduleKey: string; key: string; label: string }[]>([])
+  const [extensionPermissions, setExtensionPermissions] = useState<{ extensionKey: string; key: string; label: string }[]>([])
   useEffect(() => {
     const controller = new AbortController()
     fetch('/api/admin/roles', { signal: controller.signal }).then(async (response) => {
       if (!response.ok) throw new Error(t('drawer.permissionsLoadFailed'))
       const payload = await response.json()
-      setModulePermissions(payload.permissions)
+      setExtensionPermissions(payload.permissions)
     }).catch((error: unknown) => { if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : t('drawer.permissionsLoadFailed')) })
     return () => controller.abort()
   }, [t])
   const permissionGroups = useMemo(() => [
     ...PERMISSION_GROUPS.map((group) => ({ ...group, label: tAdmin(group.labelKey), permissions: group.permissions.map((permission) => ({ ...permission, label: tAdmin(permission.labelKey) })) })),
-    ...[...new Set(modulePermissions.map((permission) => permission.moduleKey))].map((moduleKey) => ({ key: `module:${moduleKey}`, label: moduleKey, permissions: modulePermissions.filter((permission) => permission.moduleKey === moduleKey) })),
-    { key: 'inactive-modules', label: t('drawer.inactivePermissions'), permissions: (role?.permissions ?? []).filter((key) => !key.includes('*') && !PERMISSION_GROUPS.some((group) => group.permissions.some((permission) => permission.key === key)) && !modulePermissions.some((permission) => permission.key === key)).map((key) => ({ key, label: key })) },
-  ].filter((group) => group.permissions.length > 0), [modulePermissions, role?.permissions, t, tAdmin])
+    ...[...new Set(extensionPermissions.map((permission) => permission.extensionKey))].map((extensionKey) => ({ key: `extension:${extensionKey}`, label: extensionKey, permissions: extensionPermissions.filter((permission) => permission.extensionKey === extensionKey) })),
+    { key: 'inactive-extensions', label: t('drawer.inactivePermissions'), permissions: (role?.permissions ?? []).filter((key) => !key.includes('*') && !PERMISSION_GROUPS.some((group) => group.permissions.some((permission) => permission.key === key)) && !extensionPermissions.some((permission) => permission.key === key)).map((key) => ({ key, label: key })) },
+  ].filter((group) => group.permissions.length > 0), [extensionPermissions, role?.permissions, t, tAdmin])
   const selectedCount = useMemo(
     () =>
       permissionGroups.reduce(

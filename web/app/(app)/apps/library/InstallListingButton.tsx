@@ -27,15 +27,15 @@ export function InstallListingButton({
   async function install() {
     setBusy(true)
     try {
-      const response = await fetch('/api/apps/marketplace', {
+      const response = await fetch('/api/extensions/marketplace', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'install', listingId }),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || t('installFailed'))
-      toast.success(data.outcome === 'pending-approval' ? t('approvalPending', { name }) : installed ? t('updateSuccess', { name }) : t('installSuccess', { name }))
-      if (data.kind === 'module') router.push(`/admin/modules?module=${encodeURIComponent(data.key)}`)
+      toast.success(t('draftReady', { name }))
+      router.push(data.reviewUrl)
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('installFailed'))
@@ -47,7 +47,7 @@ export function InstallListingButton({
   return (
     <Button size="sm" variant={installed ? 'outline' : 'default'} disabled={busy || current || !canInstall} onClick={install}>
       {installed ? <RefreshCw size={14} aria-hidden /> : <Download size={14} aria-hidden />}
-      {busy ? t('installing') : current ? t('installed') : installed ? t('update') : t('install')}
+      {busy ? t('preparing') : current ? t('installed') : installed ? t('reviewUpdate') : t('reviewInstall')}
     </Button>
   )
 }

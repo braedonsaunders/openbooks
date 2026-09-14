@@ -21,6 +21,10 @@
     "description": "Try a different name, key, or description."
   },
   "library": {
+    "draftReady": "{name} is ready for review.",
+    "preparing": "Preparing…",
+    "reviewUpdate": "Review update",
+    "reviewInstall": "Review extension",
     "title": "App Library",
     "description": "Discover and install extensions for your organization.",
     "searchPlaceholder": "Search the App Library…",

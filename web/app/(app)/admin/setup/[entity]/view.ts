@@ -1,5 +1,5 @@
 import 'server-only'
-import { loadModuleSettingRows } from '../../../../../lib/setup/module-settings'
+import { loadExtensionSettingRows } from '../../../../../lib/setup/extension-settings'
 
 import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
@@ -226,8 +226,8 @@ export async function loadSetupEntity(
     ${entity.hasActive && !showInactive ? sql`and is_active` : sql``}
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
     : sql``
-  const moduleRows = entity?.dataSource === 'module-settings'
-    ? (await loadModuleSettingRows(orgId)).filter((row) => !list.q || Object.values(row).some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase()))) : null
+  const moduleRows = entity?.dataSource === 'extension-settings'
+    ? (await loadExtensionSettingRows(orgId)).filter((row) => !list.q || Object.values(row).some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase()))) : null
   const [rowsRes, countRes, refOptions, installedPackRows] = moduleRows
     ? [{ rows: moduleRows.slice((list.page - 1) * list.perPage, list.page * list.perPage) }, { rows: [{ n: moduleRows.length }] }, {}, { rows: [] }]
     : entity

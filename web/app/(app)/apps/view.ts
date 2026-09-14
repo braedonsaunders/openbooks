@@ -158,7 +158,7 @@ export function appsLauncherSpec(data: AppsLauncherData): PageSpec {
         title: f('title'),
         description: f('description'),
         actions: [
-          widget('link-button', { href: '/admin/modules', label: data.manageLabel, variant: 'outline', size: 'sm' }, f('canManage')),
+          widget('link-button', { href: '/admin/extensions', label: data.manageLabel, variant: 'outline', size: 'sm' }, f('canManage')),
           widget('apps-launcher-button', {
             href: data.docsHref,
             label: data.docsLabel,

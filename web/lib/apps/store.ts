@@ -1,5 +1,5 @@
+import { extensionContributionTargetErrors } from './contribution-targets'
 import 'server-only'
-import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import {
@@ -20,8 +20,11 @@ import {
 import { createScriptJournal, type ScriptJournalInput } from '@openbooks/engine/src/journal-writes.ts'
 import { requestHash } from '@/lib/application/idempotency-core'
 import { parseManifest, validateBundle, contentTypeFor, type AppManifest } from './manifest'
-import { projectAppManifestToModuleManifest } from '@openbooks/engine/src/modules/absorb-apps.ts'
 import { APP_CAPABILITIES } from './manifest'
+import { projectExtensionPage } from '@openbooks/engine/src/extensions/pages.ts'
+import { projectSupplementalContributions, withdrawSupplementalContributions } from '@openbooks/engine/src/extensions/projections.ts'
+import { EXTENSION_CONTRIBUTION_PERMISSIONS } from './contributions'
+import { actorHasPermission } from '@openbooks/engine/src/actor-permissions.ts'
 import { parseNativeExtension } from './native-ui'
 import { parseObjectSpecs, type ParsedObjects } from './objects'
 import { createAppPlatformAdapter, AppPlatformError } from './platform'
@@ -103,53 +106,10 @@ export async function getAppByKey(orgId: string, key: string): Promise<AppRow | 
  * recursively makes equal documents compare equal regardless of which side
  * (projector object or stored jsonb) they came from.
  */
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
-  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`
-}
 
 /** The reinstall-stable subset of an absorbed manifest: everything except
  *  the row-identity provenance (appId/appVersionId), which necessarily
  *  changes across reinstalls because the apps/version rows are new. */
-type ComparableAbsorbedManifest = {
-  key?: unknown
-  name?: unknown
-  version?: unknown
-  description?: unknown
-  permissions?: unknown
-  contributions?: unknown
-  provenance?: { kind?: unknown; appKey?: unknown; unmappedPermissions?: unknown }
-}
-
-/**
- * Whether two absorbed manifests declare the same release. Compares the
- * release content canonically and ignores reinstall-volatile provenance:
- * a reinstall mints new app/version rows, so appId/appVersionId always
- * differ — treating that as a content change would refuse every
- * convergent reinstall. The preserved row keeps its ORIGINAL bundle ids
- * by design (the manifest is immutable evidence); appKey re-links it
- * logically while modules.app_id points at the live app row.
- */
-function sameAbsorbedRelease(a: ComparableAbsorbedManifest, b: ComparableAbsorbedManifest): boolean {
-  const release = (m: ComparableAbsorbedManifest) => ({
-    key: m.key,
-    name: m.name,
-    version: m.version,
-    description: m.description ?? null,
-    permissions: [...new Set([
-      ...(Array.isArray(m.permissions) ? m.permissions : []),
-      ...(Array.isArray(m.provenance?.unmappedPermissions) ? m.provenance.unmappedPermissions : []),
-    ])].sort(),
-    contributions: m.contributions,
-    provenance: {
-      kind: m.provenance?.kind,
-      appKey: m.provenance?.appKey,
-    },
-  })
-  return stableStringify(release(a)) === stableStringify(release(b))
-}
 
 export async function installApp(orgId: string, userId: string, bundle: UploadBundle, draft?: { id: string; hash: string }): Promise<{ key: string }> {
   const parsed = parseManifest(bundle.manifest)
@@ -178,7 +138,7 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     const entry = bundle.files.find(file => file.path === manifest.frontend.entry)
     if (!entry || entry.isBinary) throw new AppError('Native UI entry must be a JSON text file')
     try {
-      const ui = parseNativeExtension(entry.content)
+      const ui = parseNativeExtension(entry.content, manifest)
       if (ui.screens.some(screen => screen.kind === 'records') && !manifest.permissions.includes('records.read')) {
         throw new AppError('Native record screens require records.read')
       }
@@ -188,9 +148,12 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     }
   }
 
+  const targetErrors = extensionContributionTargetErrors(manifest.contributions ?? [])
+  if (targetErrors.length) throw new AppError(targetErrors.join('; '))
   const manifestJson = JSON.stringify(manifest)
 
   await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`)
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'extension-package:' + orgId + ':' + manifest.key}, 0))`)
     let draftReason: string | null = null
     if (draft) {
@@ -216,9 +179,13 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
         }
       }
     }
+    for (const contribution of manifest.contributions ?? []) {
+      const permission = EXTENSION_CONTRIBUTION_PERMISSIONS[contribution.kind]
+      if (!granted.includes(permission) || !(await actorHasPermission(tx, orgId, userId, permission))) throw new AppError(`${permission} required for ${contribution.kind}`, 403)
+    }
     // Prior grants (absent on first install) become the audit "before" state.
-    const prior = (await tx.execute<{ grantedPermissions: string[] | null }>(sql`
-      select granted_permissions as "grantedPermissions" from apps
+    const prior = (await tx.execute<{ grantedPermissions: string[] | null; activeVersionId: string | null }>(sql`
+      select active_version_id as "activeVersionId", granted_permissions as "grantedPermissions" from apps
        where org_id = ${orgId} and key = ${manifest.key} limit 1`))
 
     // Upsert the app row (create, or update presentation on reinstall/upgrade).
@@ -236,8 +203,7 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     const appId = appRes.rows[0]!.id
 
     // Permission grants are audited with before/after evidence. Install keeps
-    // full-grant-at-install (the admin may narrow via bundle.grantedPermissions);
-    // a dedicated narrowing UI is follow-up work.
+    // the reviewed grants from the draft, bounded by its requested permissions.
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'apps', ${appId}, 'insert',
@@ -297,128 +263,14 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     await tx.execute(sql`update app_versions set status = 'superseded' where app_id = ${appId} and org_id = ${orgId} and id <> ${versionId} and status = 'active'`)
     await tx.execute(sql`update apps set active_version_id = ${versionId}, updated_at = now() where id = ${appId} and org_id = ${orgId}`)
 
-    // Mirror onto the modules lifecycle surface (kind 'app') in the SAME
-    // transaction: both surfaces commit or roll back together. The manifest
-    // is built by the absorb projector — reused here, never reimplemented —
-    // so the hook and the backfill project byte-identical provenance.
-    // Unreachable in practice (installApp already validated key/version
-    // against the same shapes), but an unprojectable app must fail closed,
-    // never install half-mirrored.
-    const projected = projectAppManifestToModuleManifest(
-      { id: appId, key: manifest.key, name: manifest.name, description: manifest.description ?? null, grantedPermissions: granted },
-      { id: versionId, version: manifest.version, permissions: manifest.permissions },
-    )
-    if (!projected.ok || !projected.manifest) throw new AppError(`cannot mirror app onto modules: ${projected.errors.join('; ')}`)
-    const moduleManifest = projected.manifest
-    const priorModule = (await tx.execute<{
-      id: string
-      status: 'installed' | 'disabled'
-      grantedPermissions: string[]
-      activeVersionId: string | null
-    }>(sql`
-      select id, status, granted_permissions as "grantedPermissions", active_version_id as "activeVersionId"
-        from modules where org_id = ${orgId} and (app_id = ${appId} or key = ${manifest.key}) limit 1`)).rows[0]
-    const moduleRes = (await tx.execute<{ id: string }>(sql`
-      insert into modules (org_id, key, name, description, icon_key, status, granted_permissions, kind, app_id, created_by, updated_by)
-      values (${orgId}, ${manifest.key}, ${manifest.name}, ${manifest.description ?? null},
-              ${manifest.icon ?? 'box'}, 'installed', ${JSON.stringify(granted)}::jsonb,
-              'app', ${appId}, ${userId}, ${userId})
-      on conflict (org_id, key) do update set
-        name = excluded.name, description = excluded.description, icon_key = excluded.icon_key,
-        granted_permissions = excluded.granted_permissions, kind = 'app', app_id = excluded.app_id,
-        status = 'installed', updated_at = now(), updated_by = ${userId}
-      where modules.org_id = ${orgId} and modules.kind = 'app'
-      returning id`))
-    const moduleId = moduleRes.rows[0]?.id
-    if (!moduleId) throw new AppError(`The key ${manifest.key} belongs to a native module`, 409)
-    await tx.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'modules', ${moduleId}, ${priorModule ? 'update' : 'insert'},
-        ${JSON.stringify({
-          event: 'app_absorbed',
-          appKey: manifest.key,
-          moduleVersion: manifest.version,
-          statusBefore: priorModule?.status ?? null,
-          statusAfter: 'installed',
-          permissionsBefore: priorModule?.grantedPermissions ?? null,
-          permissionsAfter: granted,
-          unmappedPermissions: moduleManifest.provenance.unmappedPermissions,
-        })}::jsonb,
-        ${userId})`)
-    // One active module version at a time, converging on reinstall:
-    // uninstall preserves version rows, so the row for this label may
-    // already exist. Same release → adopt it (status to active, move the
-    // pointer, audit the reactivation; never duplicate). Different release
-    // under a reused label → fail closed: ambiguous history, the same rule
-    // as the duplicate-label abort for app versions above. Same-release
-    // ignores reinstall-volatile provenance (see sameAbsorbedRelease);
-    // jsonb reorders keys on storage, so the comparison is canonical,
-    // not textual.
-    const supersedeActiveModuleVersion = async (prior: { id: string; version: string }): Promise<void> => {
-      await tx.execute(sql`update module_versions set status = 'superseded', updated_at = now(), updated_by = ${userId} where id = ${prior.id} and org_id = ${orgId}`)
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'module_versions', ${prior.id}, 'update',
-          ${JSON.stringify({
-            event: 'version_superseded',
-            before: { version: prior.version, status: 'active' },
-            after: { version: prior.version, status: 'superseded' },
-            supersededByVersion: manifest.version,
-          })}::jsonb,
-          ${userId})`)
+    const projectionReason = draftReason ?? `Install extension ${manifest.key} ${manifest.version}`
+    await withdrawExtensionPages(tx, orgId, userId, appId, projectionReason)
+    for (const contribution of manifest.contributions ?? []) if (contribution.kind === 'page') {
+      await projectExtensionPage(tx, { orgId, actorId: userId, extensionId: appId, extensionKey: manifest.key, version: manifest.version, versionId, contribution, reason: projectionReason })
     }
-    const sameLabel = (await tx.execute<{ id: string; version: string; status: string; manifest: unknown }>(sql`
-      select id, version, status, manifest from module_versions
-       where org_id = ${orgId} and module_id = ${moduleId} and version = ${manifest.version} limit 1`)).rows[0]
-    if (sameLabel && !sameAbsorbedRelease(sameLabel.manifest as ComparableAbsorbedManifest, moduleManifest)) {
-      throw new AppError(`version ${manifest.version} already exists for this module with different content; bump the version instead of reusing the label`)
-    }
-    let moduleVersionId: string
-    if (sameLabel) {
-      const otherActives = await tx.execute<{ id: string; version: string }>(sql`
-        select id, version from module_versions
-         where org_id = ${orgId} and module_id = ${moduleId} and status = 'active' and id <> ${sameLabel.id}`)
-      for (const prior of otherActives.rows) {
-        await supersedeActiveModuleVersion(prior)
-      }
-      if (sameLabel.status !== 'active') {
-        await tx.execute(sql`update module_versions set status = 'active', updated_at = now(), updated_by = ${userId} where id = ${sameLabel.id} and org_id = ${orgId}`)
-      }
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'module_versions', ${sameLabel.id}, 'update',
-          ${JSON.stringify({
-            event: 'version_reactivated',
-            before: { version: sameLabel.version, status: sameLabel.status },
-            after: { version: sameLabel.version, status: 'active' },
-            adoptedByAppVersion: versionId,
-          })}::jsonb,
-          ${userId})`)
-      moduleVersionId = sameLabel.id
-    } else {
-      const priorModuleVersions = await tx.execute<{ id: string; version: string }>(sql`
-        select id, version from module_versions
-         where org_id = ${orgId} and module_id = ${moduleId} and status = 'active'`)
-      for (const prior of priorModuleVersions.rows) {
-        await supersedeActiveModuleVersion(prior)
-      }
-      const moduleVersionRes = (await tx.execute<{ id: string }>(sql`
-        insert into module_versions (org_id, module_id, version, manifest, status, created_by, updated_by)
-        values (${orgId}, ${moduleId}, ${manifest.version}, ${JSON.stringify(moduleManifest)}::jsonb, 'active', ${userId}, ${userId})
-        returning id`))
-      moduleVersionId = moduleVersionRes.rows[0]!.id
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'module_versions', ${moduleVersionId}, 'insert',
-          ${JSON.stringify({
-            event: 'app_version_absorbed',
-            appKey: manifest.key,
-            version: manifest.version,
-            unmappedPermissions: moduleManifest.provenance.unmappedPermissions,
-          })}::jsonb,
-          ${userId})`)
-    }
-    await tx.execute(sql`update modules set active_version_id = ${moduleVersionId}, updated_at = now(), updated_by = ${userId} where id = ${moduleId} and org_id = ${orgId}`)
+    await projectSupplementalContributions(tx, { orgId, actorId: userId, extensionId: appId, extensionKey: manifest.key, versionId, previousVersionId: prior.rows[0]?.activeVersionId,
+      contributions: (manifest.contributions ?? []).filter(contribution => contribution.kind !== 'page'), reason: projectionReason })
+
     if (draft) {
       await tx.execute(sql`update extension_drafts set status='applied', applied_at=now() where org_id=${orgId} and id=${draft.id}`)
       await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
@@ -586,6 +438,13 @@ async function provisionObjects(
   return { recordTypes: [...recordTypes], customFields: [...customFields] }
 }
 
+async function withdrawExtensionPages(tx: { execute: typeof db.execute }, orgId: string, actorId: string, appId: string, reason: string) {
+  const changed = (await tx.execute<{ id: string; extension_version_id: string }>(sql`update page_specs set is_active=false,updated_at=now(),updated_by=${actorId}
+    where org_id=${orgId} and is_active and extension_version_id in (select id from app_versions where org_id=${orgId} and app_id=${appId}) returning id,extension_version_id`)).rows
+  for (const row of changed) await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+    values(${orgId},'page_specs',${row.id},'update',${JSON.stringify({ event:'extension_page_withdrawn',reason,before:{is_active:true,versionId:row.extension_version_id},after:{is_active:false,versionId:row.extension_version_id} })}::jsonb,${actorId})`)
+}
+
 export async function setAppStatus(
   orgId: string,
   userId: string,
@@ -593,6 +452,7 @@ export async function setAppStatus(
   status: 'installed' | 'disabled',
 ): Promise<void> {
   await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`)
     const existing = await tx.execute<{
       id: string
       key: string
@@ -606,6 +466,15 @@ export async function setAppStatus(
     const app = existing.rows[0]
     if (!app || app.status === status) return
 
+    const version = (await tx.execute<{ id: string; manifest: AppManifest }>(sql`select v.id,v.manifest from app_versions v join apps a on a.org_id=v.org_id and a.id=v.app_id where a.org_id=${orgId} and a.id=${app.id} and v.id=a.active_version_id`)).rows[0]
+    if (status === 'disabled') {
+      await withdrawExtensionPages(tx, orgId, userId, app.id, 'Disable extension')
+      await withdrawSupplementalContributions(tx, { orgId, actorId:userId,extensionId:app.id,extensionKey:key,reason:'Disable extension' })
+    } else if (version) {
+      for (const contribution of version.manifest.contributions ?? []) if (!(await actorHasPermission(tx, orgId, userId, EXTENSION_CONTRIBUTION_PERMISSIONS[contribution.kind]))) throw new AppError('Permission required to enable these extension contributions', 403)
+      for (const contribution of version.manifest.contributions ?? []) if (contribution.kind === 'page') await projectExtensionPage(tx, { orgId,actorId:userId,extensionId:app.id,extensionKey:key,version:version.manifest.version,versionId:version.id,contribution,reason:'Enable extension' })
+      await projectSupplementalContributions(tx,{orgId,actorId:userId,extensionId:app.id,extensionKey:key,versionId:version.id,previousVersionId:version.id,contributions:(version.manifest.contributions ?? []).filter(item=>item.kind!=='page'),reason:'Enable extension'})
+    }
     await tx.execute(sql`
       update apps
          set status = ${status}, updated_at = now(), updated_by = ${userId}
@@ -619,29 +488,13 @@ export async function setAppStatus(
           after: { key: app.key, name: app.name, status },
         })}::jsonb,
         ${userId})`)
-    // Mirror deactivation onto the modules surface (never delete it here —
-    // the row is the lifecycle evidence for the absorbed app). Apps without
-    // a module row predate the absorb wiring; absorbAppsForOrg repairs those.
-    const mirrored = (await tx.execute<{ id: string; status: string }>(sql`
-      update modules set status = ${status}, updated_at = now(), updated_by = ${userId}
-       where org_id = ${orgId} and app_id = ${app.id} and status <> ${status}
-       returning id, status`)).rows[0]
-    if (mirrored) {
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'modules', ${mirrored.id}, 'update',
-          ${JSON.stringify({
-            event: 'app_status_changed',
-            before: { key: app.key, status: app.status },
-            after: { key: app.key, status },
-          })}::jsonb,
-          ${userId})`)
-    }
+
   })
 }
 
 export async function deleteApp(orgId: string, userId: string, key: string): Promise<void> {
   await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`)
     const existing = await tx.execute<{
       id: string
       orgId: string
@@ -707,9 +560,10 @@ export async function deleteApp(orgId: string, userId: string, key: string): Pro
        where org_id = ${orgId} and app_id = ${app.id}
        order by namespace, key`)
 
+    const preserveHistory = versions.rows.some(version => Array.isArray((version.manifest as AppManifest | null)?.contributions) && ((version.manifest as AppManifest).contributions?.length ?? 0) > 0)
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'apps', ${app.id}, 'delete',
+      values (${orgId}, 'apps', ${app.id}, ${preserveHistory ? 'update' : 'delete'},
         ${JSON.stringify({
           event: 'app_uninstall',
           // Keep associated versions/files/runs under `before`; unlike the
@@ -721,31 +575,16 @@ export async function deleteApp(orgId: string, userId: string, key: string): Pro
             runs: runs.rows,
             storage: storage.rows,
           },
-          after: null,
+          after: preserveHistory ? { status: 'disabled', historyPreserved: true } : null,
         })}::jsonb,
         ${userId})`)
 
-    // Deactivate — never delete — the absorbed lifecycle row, and detach its
-    // provenance edge BEFORE the apps delete below: modules.app_id cascades,
-    // and the cascade must not take the evidence row with the app. The
-    // version manifests keep pointing at the app by id/key, so the audit
-    // trail stays readable after the edge is gone.
-    const detached = (await tx.execute<{ id: string; status: string }>(sql`
-      update modules set status = 'disabled', app_id = null, updated_at = now(), updated_by = ${userId}
-       where org_id = ${orgId} and app_id = ${app.id}
-       returning id, status`)).rows[0]
-    if (detached) {
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'modules', ${detached.id}, 'update',
-          ${JSON.stringify({
-            event: 'app_uninstall',
-            before: { key: app.key, status: detached.status },
-            after: { key: app.key, status: 'disabled' },
-          })}::jsonb,
-          ${userId})`)
+    await withdrawExtensionPages(tx,orgId,userId,app.id,'Uninstall extension')
+    await withdrawSupplementalContributions(tx,{orgId,actorId:userId,extensionId:app.id,extensionKey:key,reason:'Uninstall extension'})
+    if (preserveHistory) {
+      await tx.execute(sql`update apps set status='disabled',updated_at=now(),updated_by=${userId} where org_id=${orgId} and id=${app.id}`)
+      return
     }
-
     await tx.execute(sql`delete from apps where org_id = ${orgId} and id = ${app.id}`)
   })
 }
@@ -1080,246 +919,7 @@ async function insertAppRun(row: AppInvocationAuditRow): Promise<void> {
             ${JSON.stringify(row.logs)}::jsonb, ${row.errorMessage}, ${Math.round(row.durationMs)}, ${row.actorId})`)
 }
 
-// ---------------------------------------------------------------------------
-// Authoring — the in-app "New App" scaffold, form-driven manifest updates, and
-// file CRUD against the ACTIVE version. Users never see JSON: the manifest is
-// edited through form fields and files through the built-in file browser.
-// Marketplace publishes still snapshot immutably.
-// ---------------------------------------------------------------------------
-
-const SLUG_RE = /^[a-z][a-z0-9-]*$/
-const FILE_PATH_RE = /^(?!\/)(?!.*\.\.)[a-z0-9._\-/]+$/i
-
-function slugify(name: string): string {
-  const s = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48)
-  return SLUG_RE.test(s) ? s : `app-${s}`.replace(/^app--/, 'app-')
-}
-
-const SCAFFOLD_HTML = `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <link rel="stylesheet" href="frontend/styles.css">
-</head>
-<body>
-  <main>
-    <h1 id="title">My App</h1>
-    <p id="who">Loading…</p>
-    <button id="ping">Call backend</button>
-    <pre id="out"></pre>
-  </main>
-  <script>
-    const $ = (id) => document.getElementById(id);
-    openbooks.getContext().then((c) => {
-      $('title').textContent = c.app.name;
-      $('who').textContent = 'Signed in as ' + (c.user ? c.user.name : 'anonymous');
-    });
-    $('ping').addEventListener('click', async () => {
-      try {
-        const res = await openbooks.callBackend('hello', { at: new Date().toISOString() });
-        $('out').textContent = JSON.stringify(res.body, null, 2);
-      } catch (e) { $('out').textContent = 'error: ' + e.message; }
-    });
-  </script>
-</body>
-</html>
-`
-
-const SCAFFOLD_CSS = `body { font-family: system-ui, sans-serif; padding: 2rem; color: #111; }
-h1 { margin-top: 0; }
-button { padding: .5rem 1rem; border-radius: 8px; border: 1px solid #ccc; cursor: pointer; background: #fafafa; }
-pre { color: #555; background: #f6f6f6; padding: .75rem; border-radius: 8px; }
-`
-
-const SCAFFOLD_BACKEND = `// Backend endpoint — runs in the governed sandbox.
-// request = { method, endpoint, query, body, user }
-// ob.log(...), ob.storage.get/set/list/delete(key[, ns]) are always available.
-function handler(request) {
-  var calls = (ob.storage.get('calls') || 0) + 1;
-  ob.storage.set('calls', calls);
-  ob.log('hello from', request.user && request.user.name);
-  return { message: 'Hello from your app backend!', calls: calls, echo: request.body };
-}
-`
-
-/** Create a ready-to-open starter app. Returns its key. */
-export async function createAppScaffold(orgId: string, userId: string, name: string): Promise<{ key: string }> {
-  const trimmed = name.trim()
-  if (!trimmed) throw new AppError('name required')
-  let key = slugify(trimmed)
-  // Dedupe the slug if taken.
-  const taken = await rows<{ key: string }>(
-    sql`select key from apps where org_id = ${orgId} and key like ${key + '%'}`,
-  )
-  if (taken.some((r) => r.key === key)) {
-    let n = 2
-    while (taken.some((r) => r.key === `${key}-${n}`)) n++
-    key = `${key}-${n}`
-  }
-  return installApp(orgId, userId, {
-    manifest: {
-      key,
-      name: trimmed,
-      version: '0.1.0',
-      description: '',
-      permissions: [],
-      frontend: { entry: 'frontend/index.html' },
-      endpoints: [{ name: 'hello', file: 'backend/hello.js', method: 'ANY' }],
-    },
-    files: [
-      { path: 'frontend/index.html', content: SCAFFOLD_HTML },
-      { path: 'frontend/styles.css', content: SCAFFOLD_CSS },
-      { path: 'backend/hello.js', content: SCAFFOLD_BACKEND },
-    ],
-  })
-}
-
-export interface AppMetaUpdate {
-  name?: string
-  description?: string | null
-  iconKey?: string
-  grantedPermissions?: string[]
-  endpoints?: { name: string; file: string; method?: 'GET' | 'POST' | 'ANY' }[]
-}
-
-type MutableAppRow = Pick<AppRow, 'id' | 'key' | 'name' | 'description' | 'iconKey' | 'status' | 'activeVersionId' | 'grantedPermissions' | 'version' | 'manifest'>
-
-/** Load and lock the app + active version before authoring a new revision. */
-async function loadMutableApp(tx: SqlExecutor, orgId: string, key: string): Promise<MutableAppRow | null> {
-  const result = await tx.execute<MutableAppRow>(sql`
-    select a.id, a.key, a.name, a.description, a.icon_key as "iconKey", a.status,
-           a.active_version_id as "activeVersionId", a.granted_permissions as "grantedPermissions",
-           v.version, v.manifest
-      from apps a
-      left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
-     where a.org_id = ${orgId} and a.key = ${key}
-     for update of a`)
-  return result.rows[0] ?? null
-}
-
-/**
- * Copy the active bundle into a fresh version. Authoring never updates or
- * deletes rows belonging to a version that an earlier invocation could have
- * referenced; the new version becomes active only after its complete snapshot
- * exists. The generated prerelease label is valid manifest syntax and keeps
- * the user-authored release version visible as its base.
- */
-async function snapshotActiveVersion(
-  tx: SqlExecutor,
-  orgId: string,
-  userId: string | null,
-  app: MutableAppRow,
-  manifest: AppManifest,
-): Promise<{ id: string; version: string; manifest: AppManifest }> {
-  if (!app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
-
-  // Keep each authoring revision rooted in the release version instead of
-  // recursively growing labels such as `1.0.0-edit-…-edit-…`.
-  const baseVersion = (app.version ?? app.manifest.version).split('-edit-', 1)[0]!
-  const revisionVersion = `${baseVersion}-edit-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`
-  const revisionManifest: AppManifest = { ...manifest, version: revisionVersion }
-  const versionResult = await tx.execute<{ id: string }>(sql`
-    insert into app_versions (org_id, app_id, version, manifest, status, created_by, updated_by)
-    values (${orgId}, ${app.id}, ${revisionVersion}, ${JSON.stringify(revisionManifest)}::jsonb,
-            'active', ${userId}, ${userId})
-    returning id`)
-  const versionId = versionResult.rows[0]?.id
-  if (!versionId) throw new AppError('failed to create app version', 500)
-
-  await tx.execute(sql`
-    insert into app_files (
-      org_id, app_id, version_id, path, kind, content_type, content, is_binary, size,
-      created_at, created_by, updated_at, updated_by
-    )
-    select org_id, app_id, ${versionId}, path, kind, content_type, content, is_binary, size,
-           created_at, created_by, updated_at, updated_by
-      from app_files
-     where org_id = ${orgId} and app_id = ${app.id} and version_id = ${app.activeVersionId}`)
-
-  await tx.execute(sql`
-    update app_versions
-       set status = 'superseded'
-     where org_id = ${orgId} and app_id = ${app.id} and id = ${app.activeVersionId}`)
-  await tx.execute(sql`
-    update apps
-       set active_version_id = ${versionId}, updated_at = now(), updated_by = ${userId}
-     where org_id = ${orgId} and id = ${app.id}`)
-
-  return { id: versionId, version: revisionVersion, manifest: revisionManifest }
-}
-
-/**
- * Form-driven manifest + app-row update. Endpoints must reference existing
- * files; file kinds are re-classified afterward so the runtime picks up
- * endpoint changes immediately.
- */
-export async function updateAppMeta(orgId: string, userId: string, key: string, meta: AppMetaUpdate): Promise<void> {
-  await db.transaction(async (tx) => {
-    const app = await loadMutableApp(tx, orgId, key)
-    if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
-    if (app.manifest.frontend.renderer === 'native') throw new AppError('Prepare and review an extension draft to change a native package', 409)
-
-    const manifest: AppManifest = { ...app.manifest }
-    if (meta.name !== undefined) {
-      if (!meta.name.trim()) throw new AppError('name required')
-      manifest.name = meta.name.trim().slice(0, 120)
-    }
-    if (meta.description !== undefined) manifest.description = meta.description?.slice(0, 2000) || undefined
-    if (meta.iconKey !== undefined) manifest.icon = meta.iconKey
-    if (meta.grantedPermissions !== undefined) {
-      // Authoring flow: what you grant is what the manifest requests.
-      manifest.permissions = [...new Set(meta.grantedPermissions.filter((p) => typeof p === 'string' && p.length <= 80))]
-    }
-    if (meta.endpoints !== undefined) {
-      const seen = new Set<string>()
-      for (const e of meta.endpoints) {
-        if (!SLUG_RE.test(e.name)) throw new AppError(`endpoint name "${e.name}" must be a slug`)
-        if (seen.has(e.name)) throw new AppError(`duplicate endpoint name "${e.name}"`)
-        seen.add(e.name)
-        if (!FILE_PATH_RE.test(e.file)) throw new AppError(`invalid endpoint file path "${e.file}"`)
-      }
-      manifest.endpoints = meta.endpoints.map((e) => ({ name: e.name, file: e.file, method: e.method ?? 'ANY' }))
-    }
-
-    const paths = (await tx.execute<{ path: string }>(
-      sql`select path from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId}`,
-    )).rows.map((r) => r.path)
-    const vb = validateBundle(manifest, paths)
-    if (!vb.ok) throw new AppError(vb.errors.join('; '))
-
-    const granted = meta.grantedPermissions !== undefined ? manifest.permissions : app.grantedPermissions
-    const revision = await snapshotActiveVersion(tx, orgId, userId, app, manifest)
-
-    await tx.execute(sql`
-      update apps set
-        name = ${manifest.name}, description = ${manifest.description ?? null},
-        icon_key = ${manifest.icon ?? app.iconKey},
-        granted_permissions = ${JSON.stringify(granted)}::jsonb,
-        updated_at = now(), updated_by = ${userId}
-      where org_id = ${orgId} and key = ${key}`)
-    // Narrowing/expanding the granted set is a material security change —
-    // record before/after evidence whenever it actually changes.
-    if (
-      meta.grantedPermissions !== undefined &&
-      JSON.stringify([...app.grantedPermissions].sort()) !== JSON.stringify([...granted].sort())
-    ) {
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'apps', ${app.id}, 'update',
-          ${JSON.stringify({
-            appKey: key,
-            permissionsBefore: app.grantedPermissions,
-            permissionsAfter: granted,
-          })}::jsonb,
-          ${userId})`)
-    }
-    // Re-classify kinds so new/changed endpoints load their backend files.
-    for (const p of paths) {
-      await tx.execute(sql`update app_files set kind = ${vb.kinds[p]} where version_id = ${revision.id} and org_id = ${orgId} and path = ${p}`)
-    }
-  })
-}
-
+/** Read-only source inspection for installed package versions. */
 export type AppFileRow = {
   path: string
   kind: 'frontend' | 'backend' | 'asset'
@@ -1351,76 +951,7 @@ export async function readAppFile(
   return r[0]
 }
 
-const MAX_FILE_BYTES = 2 * 1024 * 1024
-
-/** Create or overwrite a file on the active version (text or base64 binary). */
-export async function writeAppFile(
-  orgId: string,
-  userId: string,
-  key: string,
-  path: string,
-  content: string,
-  isBinary = false,
-): Promise<void> {
-  if (!FILE_PATH_RE.test(path)) throw new AppError('invalid file path')
-  if (path === 'manifest.json') throw new AppError('the manifest is edited through the app settings, not as a file')
-  if (content.length > MAX_FILE_BYTES) throw new AppError('file too large (max 2 MB)')
-  const { contentType } = contentTypeFor(path)
-
-  await db.transaction(async (tx) => {
-    const app = await loadMutableApp(tx, orgId, key)
-    if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
-    if (app.manifest.frontend.renderer === 'native') throw new AppError('Prepare and review an extension draft to change a native package', 409)
-
-    const backendFiles = new Set(app.manifest.endpoints.map((e) => e.file))
-    const kind = backendFiles.has(path)
-      ? 'backend'
-      : path === app.manifest.frontend.entry || path.startsWith('frontend/')
-        ? 'frontend'
-        : 'asset'
-    const revision = await snapshotActiveVersion(tx, orgId, userId, app, app.manifest)
-
-    await tx.execute(sql`
-      insert into app_files (org_id, app_id, version_id, path, kind, content_type, content, is_binary, size, created_by, updated_by)
-      values (${orgId}, ${app.id}, ${revision.id}, ${path}, ${kind}, ${contentType},
-              ${content}, ${isBinary}, ${content.length}, ${userId}, ${userId})
-      on conflict (version_id, path) do update set
-        content = excluded.content, is_binary = excluded.is_binary, size = excluded.size,
-        content_type = excluded.content_type, kind = excluded.kind, updated_at = now(), updated_by = ${userId}
-      where app_files.org_id = ${orgId}`)
-  })
-}
-
-export async function deleteAppFile(orgId: string, key: string, path: string, userId?: string): Promise<void> {
-  await db.transaction(async (tx) => {
-    const app = await loadMutableApp(tx, orgId, key)
-    if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found', 404)
-    if (app.manifest.frontend.renderer === 'native') throw new AppError('Prepare and review an extension draft to change a native package', 409)
-    if (path === app.manifest.frontend.entry) throw new AppError('cannot delete the frontend entry file', 409)
-    const endpoint = app.manifest.endpoints.find((e) => e.file === path)
-    if (endpoint) throw new AppError(`cannot delete: endpoint "${endpoint.name}" uses this file`, 409)
-
-    // Preserve the old active version (and avoid creating a no-op revision)
-    // when the requested path is not present.
-    const existing = await tx.execute<{ id: string }>(sql`
-      select id
-        from app_files
-       where org_id = ${orgId} and version_id = ${app.activeVersionId} and path = ${path}
-       limit 1`)
-    if (!existing.rows[0]) return
-
-    const revision = await snapshotActiveVersion(tx, orgId, userId ?? null, app, app.manifest)
-    await tx.execute(sql`delete from app_files where org_id = ${orgId} and version_id = ${revision.id} and path = ${path}`)
-  })
-}
-
-// ---------------------------------------------------------------------------
-// Marketplace — cross-org distribution. A listing is a SNAPSHOT of a published
-// bundle (manifest + files), deployment-visible; installing copies the
-// snapshot through the normal installApp() path, so validation, permission
-// grants, and object provisioning apply identically.
-// ---------------------------------------------------------------------------
-
+/** Published, immutable library snapshots. */
 export type ListingRow = {
   id: string
   key: string
@@ -1430,7 +961,6 @@ export type ListingRow = {
   version: string
   publisherOrgId: string
   updatedAt: string
-  kind: 'app' | 'module'
 };
 
 export interface ListingPage {
@@ -1454,7 +984,6 @@ export async function listListings({
   const [listings, count] = await Promise.all([
     rows<ListingRow>(sql`
       select id, key, name, description, icon_key as "iconKey", version,
-             case when manifest ? 'contributions' and not (manifest ? 'frontend') then 'module' else 'app' end as kind,
              publisher_org_id as "publisherOrgId", updated_at as "updatedAt"
         from app_listings
        where ${where}
@@ -1505,28 +1034,14 @@ export async function publishApp(orgId: string, userId: string, key: string): Pr
       name = excluded.name, description = excluded.description, icon_key = excluded.icon_key,
       version = excluded.version, manifest = excluded.manifest, files = excluded.files,
       is_active = true, updated_at = now(), updated_by = ${userId}
-    where app_listings.publisher_org_id = ${orgId} and app_listings.manifest ? 'frontend'
+    where app_listings.publisher_org_id = ${orgId}
     returning id`))
   const id = r.rows[0]?.id
-  if (!id) throw new AppError(`"${key}" is already published by another org or as another kind`, 409)
+  if (!id) throw new AppError(`"${key}" is already published by another organization`, 409)
   return { id }
 }
 
 /** Install a marketplace listing into the caller's org via the normal path. */
-export async function installFromListing(orgId: string, userId: string, listingId: string): Promise<{ key: string }> {
-  const r = await rows<{ manifest: unknown; files: { path: string; content: string; isBinary?: boolean }[] }>(
-    sql`select manifest, files from app_listings where id = ${listingId} and is_active = true limit 1`,
-  )
-  if (!r[0]) throw new AppError('listing not found', 404)
-  return installApp(orgId, userId, { manifest: r[0].manifest, files: r[0].files })
-}
-
 export class AppError extends Error {
-  constructor(
-    message: string,
-    public readonly status = 400,
-  ) {
-    super(message)
-    this.name = 'AppError'
-  }
+  constructor(message: string, public readonly status = 400) { super(message); this.name = 'AppError' }
 }

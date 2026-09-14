@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { Alert, AlertDescription } from '@openbooks/ui'
 import { ModuleHomeTabs } from '@/components/module-home/ui'
+import { NativeActionForm } from './NativeActionForm'
 import { DraftRecordPreview } from './DraftRecordPreview'
 import { lintRecordFields } from '@/lib/record-schema'
 import type { ParsedObjects } from '@/lib/apps/objects'
@@ -35,20 +36,24 @@ export async function NativeExtension({ appKey, searchParams }: {
   const selected = typeof searchParams.screen === 'string' ? searchParams.screen : ui.screens[0]!.key
   const screen = ui.screens.find(item => item.key === selected)
   if (!screen) notFound()
-  return <NativeScreens ui={ui} appKey={appKey} name={app.name} description={app.description} grants={app.grantedPermissions} searchParams={searchParams} />
+  return <NativeScreens ui={ui} appKey={appKey} name={app.name} description={app.description} versionId={app.activeVersionId} grants={app.grantedPermissions} searchParams={searchParams} />
 }
 
-export async function NativeScreens({ ui, appKey, name, description, grants, searchParams, preview }: {
+export async function NativeScreens({ ui, appKey, name, description, grants, searchParams, preview, versionId }: {
   ui: NativeUI; appKey: string; name: string; description: string | null; grants: string[];
   searchParams: Record<string, string | string[] | undefined>;
+  versionId?: string;
   preview?: { id: string; objects: ParsedObjects }
 }) {
   const authz = await requirePermission(preview ? 'apps.manage' : 'apps.use')
   const selected = typeof searchParams.screen === 'string' ? searchParams.screen : ui.screens[0]!.key
   const screen = ui.screens.find(item => item.key === selected)
   if (!screen) notFound()
-  const t = await getTranslations('admin.modules.native')
-  const tabs = <ModuleHomeTabs tabs={ui.screens.map(item => ({ href: `${preview ? '/admin/modules/preview/' + preview.id : '/apps/' + appKey}?screen=${encodeURIComponent(item.key)}`, label: item.title, active: item.key === selected }))} />
+  const t = await getTranslations('admin.extensions.native')
+  const tabs = <ModuleHomeTabs tabs={ui.screens.map(item => ({ href: `${preview ? '/admin/extensions/preview/' + preview.id : '/apps/' + appKey}?screen=${encodeURIComponent(item.key)}`, label: item.title, active: item.key === selected }))} />
+  if (screen.kind === 'action') return <DetailPageLayout header={<>{tabs}<PageHeader title={screen.title} description={screen.description} /></>}>
+    <NativeActionForm key={`${versionId ?? preview?.id}:${screen.key}`} appKey={appKey} versionId={versionId} screen={screen} preview={!!preview} />
+  </DetailPageLayout>
   if (screen.kind === 'records') {
     if (preview) {
       const type = preview.objects.recordTypes.find(item => item.key === screen.typeKey)

@@ -184,7 +184,7 @@ export interface SetupEntity {
   /** Declaration-backed settings permit editing values but cannot be created/deleted here. */
   allowCreate?: boolean
   allowDelete?: boolean
-  dataSource?: 'module-settings'
+  dataSource?: 'extension-settings'
   /** Documentation-center article slug — renders a "Learn more" link on the tab. */
   docSlug?: string
   /** Parent setup entity that owns this configuration surface. Nested entities
@@ -628,11 +628,11 @@ const NCI_MEASUREMENTS = [
 
 export const SETUP_ENTITIES: SetupEntity[] = [
   {
-    key: 'module-settings', table: 'orgs', dataSource: 'module-settings', groupKey: 'company', iconKey: 'box',
+    key: 'extension-settings', table: 'orgs', dataSource: 'extension-settings', groupKey: 'company', iconKey: 'box',
     orgScoped: true, hasActive: false, allowCreate: false, allowDelete: false,
-    columns: [{ key: 'moduleKey', kind: 'code' }, { key: 'settingKey', kind: 'code' }, { key: 'name', kind: 'text' }, { key: 'value', kind: 'text' }],
+    columns: [{ key: 'extensionKey', kind: 'code' }, { key: 'settingKey', kind: 'code' }, { key: 'name', kind: 'text' }, { key: 'value', kind: 'text' }],
     fields: [
-      { key: 'moduleKey', kind: 'text', lockedOnEdit: true },
+      { key: 'extensionKey', kind: 'text', lockedOnEdit: true },
       { key: 'settingKey', kind: 'text', lockedOnEdit: true },
       { key: 'name', kind: 'text', lockedOnEdit: true },
       { key: 'description', kind: 'textarea', lockedOnEdit: true },

@@ -754,8 +754,8 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'flows.manage',
   },
   {
-    key: 'admin-modules',
-    href: '/admin/modules',
+    key: 'admin-extensions',
+    href: '/admin/extensions',
     label: 'Extensions',
     iconKey: 'package',
     group: 'settings',
@@ -892,7 +892,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'admin-pdf-templates',
     'flows',
     'admin-scripts',
-    'admin-modules',
+    'admin-extensions',
     'sql',
     'admin-api-keys',
     'api-docs',
@@ -922,7 +922,7 @@ export type NavItemConfig =
     }
   | {
       kind: 'link'
-      moduleKey?: string
+      extensionKey?: string
       requiredPermission?: string
       href: string
       label: string
@@ -947,24 +947,6 @@ export type NavAppOption = {
   name: string
   iconKey: string
 };
-
-/** Normalize saved navigation from before Apps and Modules shared one inventory. */
-export function normalizeExtensionNavigation(config: OrgNavConfig): OrgNavConfig {
-  const hasCanonical = config.groups.some(group => group.items.some(item => item.kind === 'module' && item.moduleKey === 'admin-modules'))
-  let migrated = false
-  return { ...config, groups: config.groups.map(group => ({ ...group, items: group.items.flatMap(item => {
-    if (item.kind === 'module' && item.moduleKey === 'admin-modules' && item.label === 'Modules') {
-      const current = { ...item }
-      delete current.label
-      return [current]
-    }
-    if (item.kind !== 'module' || item.moduleKey !== 'admin-apps') return [item]
-    if (hasCanonical || migrated) return []
-    migrated = true
-    const { label, ...rest } = item
-    return [{ ...rest, moduleKey: 'admin-modules', ...(label && label !== 'App Builder' ? { label } : {}) }]
-  }) })) }
-}
 
 /** Default layout computed from the registry (used when no org config). */
 export function defaultNavConfig(): OrgNavConfig {

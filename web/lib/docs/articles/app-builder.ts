@@ -24,12 +24,11 @@ export const appBuilder: DocArticle = {
   related: ['apps', 'app-api-reference', 'scripting-engine', 'scripting-api-reference', 'record-customization'],
   body: `# Advanced sandbox package reference
 
-For the current creation and review flow, see [Build extensions with an agent](/docs/extensions). The legacy /admin/apps address now redirects to the unified Extensions inventory.
+For the current creation and review flow, see [Build extensions with an agent](/docs/extensions).
 
-**Settings → Extend → App Builder** (route **/admin/apps**) is where an
-administrator authors, packages, secures, and publishes apps. It requires the
-**Install and manage apps** permission, which is separate from the everyday
-**Use apps** permission that lets people open installed apps.
+**Settings → Extensions** is the package inventory. An agent prepares a complete
+package revision for review and activation; **Apps** launches its active workspace.
+Sandbox and native frontends use the same package, permission, and version model.
 
 An app bundles a **sandboxed frontend** (HTML, JS, and CSS that render in an
 isolated iframe) with a **governed backend** (server-side endpoint scripts that
@@ -68,35 +67,20 @@ objects/customer-note.json (a provisioning spec)
 Files are classified automatically: the entry and anything under **frontend/**
 is frontend, endpoint files are backend, and everything else is an asset.
 
-## Create or import an app
+## Create and revise a package
 
-From the App Builder toolbar:
+Choose **New extension** in Settings → Extensions and describe the business
+requirement. The agent uses the extension vocabulary and draft tools to prepare
+screens, backend endpoints, records, fields, and optional page, navigation,
+setting, and permission contributions together. Review the draft and requested
+authority before activating it. For changes, request a new complete revision;
+activated manifests and files are immutable.
 
-- **New app** creates a starter app containing a frontend entry, a stylesheet,
-  and one backend endpoint for immediate editing.
-- **Import .zip** installs a package from a zip archive. The **manifest.json**
-  must be at the archive root. A single enclosing directory is removed during
-  import. Operating-system metadata such as **__MACOSX** and **.DS_Store** is
-  ignored. Archives are bounded by file count and size so an import cannot
-  exhaust resources.
+## Capabilities
 
-## Edit files
-
-The **Files** tab is a file tree with a code editor (JavaScript, HTML, CSS, and
-JSON syntax). Create, upload, edit, and delete files, and save with Cmd/Ctrl-S.
-Two files are structural and protected: **manifest.json** is edited through the
-Overview form rather than as raw text, and the frontend entry and endpoint files
-cannot be deleted while the manifest references them.
-
-## Configure capabilities and endpoints
-
-The **Overview** tab manages manifest settings through a form rather than direct
-JSON editing. It sets the name,
-description, navigation visibility, the **Backend endpoints** list, and the
-app's **Capabilities**. Capabilities cover the self-describing platform record
-API: ledger, payables, receivables, parties, items, projects, assets, and custom
-records each expose their relevant read and write permission. **Create & post
-journals** adds the dedicated balanced-journal writer.
+The manifest requests platform capabilities. These cover the self-describing
+record API, including journals, payables, receivables, parties, items, projects,
+assets, and custom records. Posting uses the existing balanced-journal writer.
 
 Capabilities not listed in the grant are denied by default. Grant only the
 permissions required by the app. Every backend and bridge call is checked
@@ -124,7 +108,7 @@ them**. Removing the app does not delete existing records.
 
 ## Run history
 
-The **Runs** tab is the backend execution log. Every endpoint call records its
+The **Run history** section is the backend execution log. Every endpoint call records its
 status (ok, error, timeout, or forbidden), timestamp, endpoint name, the
 **governance units** it consumed, its duration, any error message, and the log
 lines it emitted. Use it to investigate a failing action.
@@ -160,9 +144,9 @@ from the library runs the same validation, capability-grant, and provisioning
 path as any other installation. The installed copy has no access to the
 publisher's live data.
 
-## App Builder versus Scripts
+## Extensions and scripts
 
-The **Scripts** area (**Settings → Extend → Scripts**) and the App Builder share
+The **Scripts** area (**Settings → Extend → Scripts**) and extensions share
 the same sandbox engine and the same governed ledger-write path, but they support
 different extension models. Scripts are trigger-driven automation. They run on document
 lifecycle events (submit, post, void), on a schedule, or as standalone endpoints,

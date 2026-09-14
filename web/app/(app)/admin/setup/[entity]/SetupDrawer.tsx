@@ -167,9 +167,9 @@ export function SetupDrawer({
       }
     }
     if (!creating) body.id = row![idColumn]
-    if (!creating && entity.dataSource === 'module-settings') {
+    if (!creating && entity.dataSource === 'extension-settings') {
       body.expectedValue = row!.value
-      body.expectedModuleVersionId = row!.module_version_id
+      body.expectedExtensionVersionId = row!.extension_version_id
     }
     const res = await fetch(`/api/admin/setup/${entity.key}`, {
       method: creating ? 'POST' : 'PATCH',

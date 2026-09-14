@@ -177,7 +177,6 @@ async function finalizeRunStatus(runId: string, orgId: string, hadFailure: boole
 }
 
 export interface DecideGateResult {
-  moduleApproval?: import("../modules/lifecycle.ts").ModuleApprovalDecision;
   ok: true;
   /** Which branch resumed; null = quorum 'all' still waiting on siblings. */
   resumed: "approve" | "reject" | null;
@@ -207,13 +206,6 @@ export async function decideGate(args: {
   /** Typed attestation — required to approve a signature-required gate. */
   signature?: string | null;
 }): Promise<DecideGateResult> {
-  const gate = await loadGate(args.gateId);
-  if (gate?.subjectKind === "module_version") {
-    const { decideModuleApprovalGate } = await import("../modules/lifecycle.ts");
-    const result = await decideModuleApprovalGate({ ...args,
-      comment: args.comment ?? undefined, signature: args.signature ?? undefined }, decideGateCore);
-    return { ok: true, resumed: result.resumed, runStatus: result.runStatus, moduleApproval: result };
-  }
   return decideGateCore(args);
 }
 

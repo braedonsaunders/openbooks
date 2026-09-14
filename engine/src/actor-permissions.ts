@@ -1,4 +1,4 @@
-import { modulePermissionAvailability } from "./modules/permission-availability.ts";
+import { extensionPermissionAvailability } from "./extensions/permission-availability.ts";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, type SqlExecutor } from "./db.ts";
 import { isCataloguePermission, permissionSetCovers, resolveEffectivePermissions } from "./permissions.ts";
@@ -40,7 +40,7 @@ export async function actorHasPermission(
   actorId: string,
   permission: string,
 ): Promise<boolean> {
-  const modulePermissions = !isCataloguePermission(permission) ? await modulePermissionAvailability(orgId, exec) : null;
+  const modulePermissions = !isCataloguePermission(permission) ? await extensionPermissionAvailability(orgId, exec) : null;
   if (modulePermissions?.inactive.includes(permission)) return false;
   const row = await actorIdentity(exec, orgId, actorId);
   if (!row?.isActive) return false;
