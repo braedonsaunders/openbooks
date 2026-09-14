@@ -199,11 +199,14 @@ const CORPORATE_CLASSIFICATIONS: ReadonlySet<TaxClassification> = new Set<TaxCla
 ]);
 
 /**
- * Boxes that stay reportable for a corporation: attorney gross proceeds and
- * medical/health payments. Being explicit here is what keeps the exceptions list
- * from crying wolf on every incorporated law firm.
+ * Boxes that stay reportable for a corporation, per the IRS "Reportable
+ * payments to corporations" list: fish purchased for resale (box 11),
+ * medical/health payments (box 6), substitute payments (box 8), and attorney
+ * gross proceeds (box 10). Being explicit here is what keeps the exceptions
+ * list from crying wolf on every incorporated law firm — or clinic, broker
+ * nominee, or fish buyer.
  */
-const CORPORATE_REPORTABLE_BOXES: ReadonlySet<string> = new Set(["misc6", "misc10"]);
+const CORPORATE_REPORTABLE_BOXES: ReadonlySet<string> = new Set(["misc6", "misc8", "misc10", "misc11"]);
 
 // ---------------------------------------------------------------------------
 // Exact proportional allocation
