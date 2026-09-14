@@ -68,7 +68,7 @@ for(const scenario of cases){
     }
    }
    if(['disposal','write-off','reversed disposal','reversed write-off','impaired disposal'].includes(scenario)){
-    const posted=await disposeAsset(org.orgId,assetId,{...opts,proceeds:'300',proceedsAccountId:org.accounts.bank,writeOff:scenario.includes('write-off')});
+    const posted=await disposeAsset(org.orgId,assetId,{...opts,proceeds:scenario.includes('write-off')?'0':'300',proceedsAccountId:org.accounts.bank,writeOff:scenario.includes('write-off')});
     expectedValue='0.0000';expectedAccumulated='0.0000';
     if(scenario.startsWith('reversed')){
      await reverseAssetLifecycleEvent(org.orgId,await eventFor(org.orgId,posted.entryId),{...opts,reason:'Restore a mistakenly disposed asset'});
