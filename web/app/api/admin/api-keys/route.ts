@@ -245,6 +245,14 @@ export async function PATCH(req: Request) {
     }
     fields.rateLimitPerMin = rate;
   }
+  // isActive is a strict boolean: a truthy non-boolean (e.g. the string
+  // "true") would otherwise slip past the revoked-key reactivation guard below
+  // (which compares against `true`) while still being written to the boolean
+  // column, and any other non-boolean aborts the update with an unhandled
+  // storage error.
+  if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
+    return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
+  }
   const wantsReactivation = body.isActive === true;
   if (body.isActive !== undefined) fields.isActive = body.isActive;
   if (Object.values(fields).every((value) => value === undefined)) {

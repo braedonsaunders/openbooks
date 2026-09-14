@@ -8,6 +8,7 @@ const state = {
   entries: [{ id: 'file-1', path: 'file-1.bin' }],
   manifestCalls: 0,
   buildCalls: 0,
+  manifestIds: [] as string[],
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
@@ -45,8 +46,9 @@ const mockSources = new Map<string, string>([
           this.name = 'ZipSizeLimitError'
         }
       }
-      export async function filesZipManifest() {
+      export async function filesZipManifest(_orgId, fileIds) {
         state.manifestCalls += 1
+        state.manifestIds = fileIds
         return state.entries
       }
       export async function buildZip(_orgId, _viewer, entries) {
@@ -93,6 +95,7 @@ function reset(): void {
   state.entries = [{ id: 'file-1', path: 'file-1.bin' }]
   state.manifestCalls = 0
   state.buildCalls = 0
+  state.manifestIds = []
 }
 
 function post(fileIds: unknown): Promise<Response> {
@@ -109,7 +112,7 @@ test('bulk download maps the ZIP source limit to HTTP 413', async () => {
   reset()
   state.mode = 'limit'
 
-  const response = await post(['file-1'])
+  const response = await post(['123e4567-e89b-12d3-a456-426614174000'])
 
   assert.equal(response.status, 413)
   assert.deepEqual(await response.json(), { error: 'zip source exceeds 250 MB limit' })
@@ -120,7 +123,7 @@ test('bulk download maps the ZIP source limit to HTTP 413', async () => {
 test('bulk download permits a boundary-sized archive returned by buildZip', async () => {
   reset()
 
-  const response = await post(['file-1'])
+  const response = await post(['123e4567-e89b-12d3-a456-426614174000'])
 
   assert.equal(response.status, 200)
   assert.equal(response.headers.get('content-type'), 'application/zip')
@@ -129,7 +132,10 @@ test('bulk download permits a boundary-sized archive returned by buildZip', asyn
 
 test('bulk download keeps the MAX_ZIP_FILES guard before manifest and blob work', async () => {
   reset()
-  const ids = Array.from({ length: 301 }, (_, index) => `file-${index}`)
+  const ids = Array.from(
+    { length: 301 },
+    (_, index) => `123e4567-e89b-12d3-a456-42661417${String(index).padStart(4, '0')}`,
+  )
 
   const response = await post(ids)
 
@@ -137,4 +143,25 @@ test('bulk download keeps the MAX_ZIP_FILES guard before manifest and blob work'
   assert.match((await response.json()).error, /too many files/)
   assert.equal(state.manifestCalls, 0)
   assert.equal(state.buildCalls, 0)
+})
+
+test('bulk download rejects an all-malformed selection without touching the manifest', async () => {
+  reset()
+
+  const response = await post(['not-a-uuid', 42, null])
+
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), { error: 'no files selected' })
+  assert.equal(state.manifestCalls, 0)
+  assert.equal(state.buildCalls, 0)
+})
+
+test('bulk download strips malformed ids so one bad entry cannot poison the manifest query', async () => {
+  reset()
+  const good = '123e4567-e89b-12d3-a456-426614174000'
+
+  const response = await post([good, 'not-a-uuid'])
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(state.manifestIds, [good])
 })

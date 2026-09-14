@@ -265,6 +265,18 @@ test('update rejects clearing a key to an empty scope set before opening a trans
   assert.deepEqual(state.executed, [], 'invalid scope sets never reach storage')
 })
 
+test('update rejects a non-boolean isActive before opening a transaction', async () => {
+  for (const isActive of ['true', 1, 0]) {
+    reset()
+
+    const response = await patchKey({ id: KEY_ID, isActive })
+
+    assert.equal(response.status, 400)
+    assert.match((await response.json()).error, /isActive must be a boolean/)
+    assert.deepEqual(state.executed, [], 'a type-confused flag never reaches storage')
+  }
+})
+
 test('a forced audit failure leaves no created key or leaked plaintext behind', async () => {
   reset()
   state.failOnText = 'insert into audit_log'

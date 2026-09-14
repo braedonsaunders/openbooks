@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { isUuid } from '../../../../lib/list-params'
 import { buildZip, filesZipManifest, MAX_ZIP_FILES, ZipSizeLimitError } from '../../../../lib/file-zip'
 import { fileViewer } from '../lib'
 
@@ -15,8 +16,12 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { fileIds?: unknown } | null
+  // Drop non-UUID entries before the manifest: filesZipManifest binds every id
+  // through a `value::uuid` cast, so a single malformed string would abort the
+  // whole query with an unhandled error (HTTP 500). The sibling bulk-action
+  // route applies the same isUuid contract to its id lists.
   const fileIds = Array.isArray(body?.fileIds)
-    ? body!.fileIds.filter((x): x is string => typeof x === 'string')
+    ? body!.fileIds.filter((x): x is string => typeof x === 'string' && isUuid(x))
     : []
   if (fileIds.length === 0) return NextResponse.json({ error: 'no files selected' }, { status: 400 })
   if (fileIds.length > MAX_ZIP_FILES) {
