@@ -36,6 +36,25 @@ export function taxRatePercentProblem(raw: unknown): string | null {
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/**
+ * Strict YYYY-MM-DD calendar check: shape alone admits impossible dates
+ * ('2024-02-30', month 13) that PostgreSQL then refuses with a driver error
+ * instead of the field's documented client error. Same boundary as the
+ * custom-field date validator (isIsoCalendarDate) and the forms-core response
+ * validator. Pure — this module must stay free of db imports.
+ */
+function isCalendarDate(value: string): boolean {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return false
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (year < 1 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) return false
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]!
+  return day <= daysInMonth
+}
+
 export type Coerced = { column: string; value: unknown }
 
 export function idColumn(entity: SetupEntity): string {
@@ -95,7 +114,7 @@ export function coerceField(field: SetupField, raw: unknown): Coerced | { error:
     case 'date': {
       if (!present) return { column, value: null }
       const s = String(raw)
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return { error: `${field.key} must be a date` }
+      if (!isCalendarDate(s)) return { error: `${field.key} must be a date` }
       return { column, value: s }
     }
     case 'select': {
