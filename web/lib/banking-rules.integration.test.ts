@@ -272,3 +272,88 @@ test(
     `);
   },
 );
+
+test(
+  "rule preview flags an equal-priority saved rule as the winner",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    runIntegrationSource(`
+      import assert from "node:assert/strict";
+      import { randomUUID } from "node:crypto";
+      import { sql } from "drizzle-orm";
+      import { db } from "./engine/src/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+      import {
+        createScratchOrg,
+        dropScratchOrg,
+        seedFlowActors,
+      } from "./engine/src/test-fixtures.ts";
+      import { importStatement } from "./engine/src/banking.ts";
+      import { previewRules } from "./web/lib/banking-rules.ts";
+
+      installTrustedTestDatabaseBypass();
+      const org = await createScratchOrg();
+      try {
+        const actorId = (await seedFlowActors(org.orgId)).adminId;
+        await db.execute(sql\`
+          update accounts
+             set reconcilable = true, currency_restriction = 'CAD'
+           where id = \${org.accounts.bank} and org_id = \${org.orgId}
+        \`);
+
+        const imported = await importStatement({
+          accountId: org.accounts.bank,
+          source: "manual",
+          statementDate: org.date,
+          openingBalance: "0",
+          closingBalance: "50.0000",
+          currency: "CAD",
+          lines: [{
+            postedOn: org.date,
+            amount: "50.0000",
+            description: "Equal priority tug of war",
+            bankTransactionId: "bank-rule-priority-1",
+          }],
+        }, { orgId: org.orgId, userId: actorId });
+        assert.equal(imported.imported, 1);
+
+        await db.execute(sql\`
+          insert into bank_match_rules
+            (id, org_id, name, criteria, outcome, priority, is_active, created_by)
+          values
+            (\${randomUUID()}, \${org.orgId}, 'Incumbent rule',
+             \${JSON.stringify({
+               version: 2,
+               match: {
+                 combinator: "and",
+                 rules: [{ field: "description", op: "contains", value: "tug of war" }],
+               },
+             })}::jsonb,
+             '{"action": "exclude"}'::jsonb,
+             100, true, \${actorId})
+        \`);
+
+        const preview = await previewRules(org.orgId, org.accounts.bank, {
+          draftRule: {
+            criteria: {
+              version: 2,
+              match: {
+                combinator: "and",
+                rules: [{ field: "description", op: "contains", value: "tug of war" }],
+              },
+            },
+            outcome: { action: "exclude" },
+            priority: 100,
+          },
+        });
+        assert.equal(preview.matched, 1);
+        // A new draft sorts after every same-priority saved rule once saved,
+        // so the incumbent wins the line on apply and the preview must say so.
+        assert.equal(preview.conflicts, 1);
+        assert.equal(preview.matches[0]?.stolenBy, "Incumbent rule");
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    `);
+  },
+);
