@@ -173,3 +173,50 @@ test("paginated provider evidence keeps every response byte-for-byte recoverable
     pages,
   );
 });
+
+test("plaid adapter imports only settled transactions, never pending ones", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    transactions: [
+      {
+        transaction_id: "posted-1",
+        date: "2026-08-10",
+        amount: 42.5,
+        name: "SETTLED GROCER",
+        iso_currency_code: "CAD",
+        pending: false,
+      },
+      {
+        transaction_id: "pending-1",
+        date: "2026-08-11",
+        amount: 99.99,
+        name: "PENDING HOTEL HOLD",
+        iso_currency_code: "CAD",
+        pending: true,
+      },
+    ],
+    has_more: false,
+  }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+
+  const adapter = getBankFeedAdapter("plaid");
+  assert.ok(adapter);
+  const fetched = await adapter.fetch(
+    { clientId: "c", secret: "s", accessToken: "t", env: "sandbox" },
+    "external-account-1",
+    "2026-08-01",
+    "2026-08-23",
+  );
+  // Pending authorizations change amount, post under a new id, or vanish, so
+  // they must never become statement truth (GoCardless already takes booked
+  // only for exactly this reason).
+  assert.deepEqual(
+    fetched.lines.map((line) => line.bankTransactionId),
+    ["posted-1"],
+  );
+});

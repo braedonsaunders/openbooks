@@ -269,7 +269,11 @@ const plaid: BankFeedAdapter = {
       return body;
     });
     let currency: string | null = null;
-    const lines: ParsedStatementLine[] = transactions.map((t) => {
+    // Settled only: pending authorizations change amount, post under a new
+    // transaction id, or vanish, so importing them would leave statement
+    // evidence that can never reconcile at sign-off (same reason GoCardless
+    // takes booked transactions only).
+    const lines: ParsedStatementLine[] = transactions.filter((t) => !t?.pending).map((t) => {
       currency ??= t.iso_currency_code ?? null;
       // Plaid: positive amount = outflow. Bank convention wants −withdrawal.
       const signed = neg(exactFeedAmount(t.amount));
