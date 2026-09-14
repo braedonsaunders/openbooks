@@ -345,6 +345,16 @@ async function computeTaxReturnInSnapshot(
   from = window.from;
   to = window.to;
 
+  // The return reads the primary book only — the same book the filing gate
+  // (assertCoveredPeriodsClosed) fences. The kernel posts documents to the
+  // single primary posting book and every sibling engine scopes to
+  // is_primary; without this predicate a tax journal in any secondary book
+  // leaked into the return while no period fence covered it.
+  const bookRes = (await runner.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary limit 1`));
+  const primaryBookId = bookRes.rows[0]?.id ?? null;
+  if (!primaryBookId) throw new TaxReturnError("no primary accounting book");
+
   // Org control tax accounts — the fallback a tax code posts to when it has no
   // collected/paid account of its own.
   const ctrlRes = (await runner.execute<{ tax_collected: string | null; tax_paid: string | null }>(sql`
@@ -408,6 +418,7 @@ async function computeTaxReturnInSnapshot(
           join tax_codes tc on tc.id = l.tax_code_id and tc.org_id = l.org_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
            and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}
+           and e.book_id = ${primaryBookId}
            and (
              -- Posted document tax lines carry the immutable component account
              -- used by the kernel.  Match that evidence first so changing a
@@ -452,7 +463,8 @@ async function computeTaxReturnInSnapshot(
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
-           and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}`));
+           and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}
+           and e.book_id = ${primaryBookId}`));
       total = r.rows[0]?.total ?? "0";
     } else {
       continue; // taxable_base sources are summed once per box below.

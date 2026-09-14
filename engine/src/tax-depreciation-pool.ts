@@ -276,21 +276,27 @@ function persistMacrsBonusPercent(value: unknown): string {
  * determines the first/disposal/final-year fraction.
  */
 export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
+  // Bonus and business-use elections are percentages of basis: out-of-range
+  // values previously computed silently (bonus 200% deducted twice the basis,
+  // negative values wrote negative lines), so fail closed first — ahead of
+  // the date early-returns below, or an invalid election would be silently
+  // accepted on a pre-placement/disposed branch.
+  const businessUsePercent = persistMacrsBusinessUsePercent(input.businessUsePercent ?? "100");
+  if (cmp(businessUsePercent, "0") < 0 || cmp(businessUsePercent, "100") > 0) {
+    throw new Error("business use percent must be between 0 and 100");
+  }
+  const bonusPercent = persistMacrsBonusPercent(input.bonusPercent ?? "0");
+  if (cmp(bonusPercent, "0") < 0 || cmp(bonusPercent, "100") > 0) {
+    throw new Error("bonus percent must be between 0 and 100");
+  }
   const placed = parseIsoDate(input.placedInServiceOn);
   const disposed = input.disposedOn ? parseIsoDate(input.disposedOn) : null;
   if (!placed || input.taxYear < placed.year) return zeroMacrs("0");
   if (disposed && input.taxYear > disposed.year) return zeroMacrs("0");
-
-  const percent = (value: ExactDecimal | undefined, fallback: string): string => {
-    const normalized = normalizeMoney(value ?? fallback);
-    if (cmp(normalized, "0") < 0) return "0.0000";
-    return cmp(normalized, "100") > 0 ? "100.0000" : normalized;
-  };
-  const originalBasis = mulPercent(persistMacrsBasis(input.basis), persistMacrsBusinessUsePercent(input.businessUsePercent ?? "100"));
+  const originalBasis = mulPercent(persistMacrsBasis(input.basis), businessUsePercent);
   const section179Cap = minMoney(originalBasis, nonnegative(persistMacrsSection179(input.section179 ?? "0")));
   const elected179 = placed.year === input.taxYear ? section179Cap : "0.0000";
   const after179 = add(originalBasis, neg(section179Cap));
-  const bonusPercent = persistMacrsBonusPercent(input.bonusPercent ?? "0");
   const bonus = placed.year === input.taxYear ? mulPercent(after179, bonusPercent) : "0.0000";
   const macrsBasis = add(after179, neg(mulPercent(after179, bonusPercent)));
 
@@ -403,14 +409,14 @@ export interface PoolYearInput {
   additions: string;
   dispositions: string;
   rate: ExactDecimal;
-  /** Fraction of net additions in the year-1 base (1 = full, 0.5 = half-year). Default 1. */
+  /** Fraction of net additions in the year-1 base (1 = full, 0.5 = half-year). Default 1. Enforced to [0, 1]. */
   firstYearFraction?: ExactDecimal;
   /** Enhanced first-year multiplier (> 1 suspends the fraction and boosts the
    *  base by (m−1)×net additions — e.g. Canada AII). From dated config. */
   enhancedFirstYearMultiplier?: ExactDecimal;
   /** Immediate-expensing amount fully deducted before the rate (decimal string). */
   immediateExpense?: string;
-  /** Short fiscal year proration = days/365. Default 1. */
+  /** Short fiscal year proration = days/365. Default 1. Enforced to (0, 1]. */
   shortYearFactor?: ExactDecimal;
   /** True if the pool still holds assets at year-end (governs terminal loss). */
   poolHasAssetsAtYearEnd?: boolean;
@@ -506,11 +512,53 @@ function persistPoolEnhancedMultiplier(value: unknown): string {
   }
 }
 
+/** Factor-math domain (up to 10dp): range-check one factor through the shared
+ *  exact-decimal parser rather than a local duplicate of its semantics. */
+const FACTOR_SCALE = 10_000_000_000n;
+function factorUnits(value: ExactDecimal, label: string): bigint {
+  const canonical = canonicalDecimal(value, 10);
+  if (canonical === null) {
+    const raw = String(value ?? "").trim();
+    const fraction = raw.includes(".") ? raw.split(".")[1] ?? "" : "";
+    if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw) && fraction.length > 10) {
+      throw new Error(`${label} loses precision beyond 10 decimal places`);
+    }
+    throw new Error(`${label} must be an exact decimal`);
+  }
+  const negative = canonical.startsWith("-");
+  const [whole = "0", fraction = ""] = canonical.replace(/^[+-]/, "").split(".");
+  const units = BigInt(whole || "0") * FACTOR_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
+  return negative ? -units : units;
+}
+
 export function computePoolYear(input: PoolYearInput): PoolYearResult {
   const opening = persistPoolOpeningBalance(input.openingBalance);
   const additions = persistPoolAdditions(input.additions);
   const dispositions = persistPoolDispositions(input.dispositions);
   const requestedImmediateExpense = nonnegative(persistPoolImmediateExpense(input.immediateExpense ?? "0"));
+  // Out-of-domain scaling knobs previously computed silently: a short-year
+  // factor of 2 doubled the allowance, a negative one (or rate) claimed
+  // nothing, and a first-year fraction above 1 deducted more than the
+  // statutory rate allows. All three arrive from tenant configuration
+  // (pool classes, first-year rules, run options), so fail closed here —
+  // the one boundary every caller crosses — instead of posting the misstatement.
+  if (factorUnits(input.rate, "rate") < 0n) throw new Error("rate cannot be negative");
+  const shortYearUnits = factorUnits(input.shortYearFactor ?? 1, "short year factor");
+  if (shortYearUnits <= 0n || shortYearUnits > FACTOR_SCALE) {
+    throw new Error("short year factor must be greater than 0 and at most 1 (days/365)");
+  }
+  const firstYearUnits = factorUnits(input.firstYearFraction ?? 1, "first year fraction");
+  if (firstYearUnits < 0n || firstYearUnits > FACTOR_SCALE) {
+    throw new Error("first year fraction must be between 0 and 1");
+  }
+  // The claim cap is validated here — ahead of the recapture/terminal/zero
+  // early-returns below — so a negative cap cannot slip through on another
+  // branch. It is applied to the allowance at the end, unchanged.
+  let claimCap: string | null = null;
+  if (input.claimCap != null) {
+    claimCap = persistPoolClaimCap(input.claimCap);
+    if (cmp(claimCap, zeroMoney) < 0) throw new Error("claim cap cannot be negative");
+  }
   const shortYear = String(input.shortYearFactor ?? 1);
   const firstYearFraction = String(input.firstYearFraction ?? 1);
   const netAdditions = nonnegative(add(additions, neg(dispositions)));
@@ -543,7 +591,9 @@ export function computePoolYear(input: PoolYearInput): PoolYearResult {
 
   let allowance = roundMoney(mulDecimalFactors(base, [String(input.rate), shortYear]), 2);
   allowance = minMoney(nonnegative(allowance), roundMoney(afterIei, 2));
-  if (input.claimCap != null) allowance = minMoney(allowance, nonnegative(persistPoolClaimCap(input.claimCap)));
+  // A negative cap used to coerce to zero and silently disallow the whole
+  // claim; it is refused at the top instead, and the validated cap applies here.
+  if (claimCap !== null) allowance = minMoney(allowance, claimCap);
 
   return zero({
     immediateExpense: s(immediateExpense),

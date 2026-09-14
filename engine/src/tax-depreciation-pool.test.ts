@@ -120,6 +120,57 @@ test("discretionary claim cap limits the allowance and preserves the balance", (
   assert.equal(r.closingBalance, "9500.00");
 });
 
+test("out-of-domain scaling knobs fail closed instead of misstating the allowance", () => {
+  const base = { openingBalance: "10000", rate: 0.2 };
+  // A short-year factor above 1 used to double the allowance ($4000 for $2000
+  // of statutory depreciation); zero/negative silently claimed nothing.
+  assert.throws(() => run({ ...base, shortYearFactor: 2 }), /short year factor/);
+  assert.throws(() => run({ ...base, shortYearFactor: 0 }), /short year factor/);
+  assert.throws(() => run({ ...base, shortYearFactor: -0.5 }), /short year factor/);
+  // A first-year fraction above 1 deducted more than the rate allows
+  // ($6000 on a $20000 base at 20%); a negative one inflated the base.
+  assert.throws(
+    () => run({ ...base, additions: "10000", firstYearFraction: 2 }),
+    /first year fraction/,
+  );
+  assert.throws(() => run({ ...base, firstYearFraction: -0.5 }), /first year fraction/);
+  // A negative rate silently zeroed the allowance instead of refusing.
+  assert.throws(() => run({ ...base, rate: -0.05 }), /rate cannot be negative/);
+  // A negative claim cap silently disallowed the whole claim.
+  assert.throws(() => run({ ...base, claimCap: "-1" }), /claim cap cannot be negative/);
+  // The cap is validated ahead of the early returns: a negative cap on the
+  // recapture branch used to return recapture without ever refusing the cap.
+  assert.throws(
+    () => run({ openingBalance: "2000", dispositions: "5000", claimCap: "-1" }),
+    /claim cap cannot be negative/,
+  );
+  // Boundary values stay legal: full year, half-year rule, zero rate, zero cap.
+  assert.equal(run({ ...base, shortYearFactor: 1 }).allowance, "2000.00");
+  assert.equal(run({ ...base, shortYearFactor: 0.5 }).allowance, "1000.00");
+  assert.equal(run({ ...base, firstYearFraction: 0 }).allowance, "2000.00");
+  assert.equal(run({ ...base, rate: 0 }).allowance, "0.00");
+  assert.equal(run({ ...base, claimCap: "0" }).allowance, "0.00");
+});
+
+test("U.S. MACRS bonus and business-use percents fail closed outside 0..100", () => {
+  const base = {
+    basis: "10000", placedInServiceOn: "2025-04-01", taxYear: 2025,
+    recoveryPeriodYears: 5 as const, method: "200_db" as const, convention: "half_year" as const,
+  };
+  // A 200% bonus used to deduct twice the basis ($20,000 on $10,000).
+  assert.throws(() => computeMacrsYear({ ...base, bonusPercent: 200 }), /bonus percent/);
+  assert.throws(() => computeMacrsYear({ ...base, bonusPercent: -10 }), /bonus percent/);
+  assert.throws(() => computeMacrsYear({ ...base, businessUsePercent: 150 }), /business use percent/);
+  assert.throws(() => computeMacrsYear({ ...base, businessUsePercent: -5 }), /business use percent/);
+  // Elections are validated ahead of the date early-returns: a 200% bonus on
+  // a pre-placement year used to return zero without refusing the election.
+  assert.throws(() => computeMacrsYear({ ...base, taxYear: 2024, bonusPercent: 200 }), /bonus percent/);
+  // Boundaries stay legal: full bonus deducts the whole basis, zero business
+  // use deducts nothing.
+  assert.equal(computeMacrsYear({ ...base, bonusPercent: 100 }).allowance, "10000.00");
+  assert.equal(computeMacrsYear({ ...base, businessUsePercent: 0 }).allowance, "0.00");
+});
+
 test("regimes that disallow recapture (Canada Class 10.1) just zero the pool", () => {
   const r = run({ openingBalance: "1000", dispositions: "5000", allowRecapture: false });
   assert.equal(r.recapture, "0.00");
