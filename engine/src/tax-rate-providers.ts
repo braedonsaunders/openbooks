@@ -372,7 +372,15 @@ export function quoteFromRate(
   jurisdiction: string,
   name?: string,
 ): TaxQuoteResult {
-  const percentText = normalizeDecimal(ratePercent, 4);
+  // Fail closed with the module error type (which the route maps to 422),
+  // never a raw decimal-coercion fault: the sibling persistRatePercent above
+  // keeps the same contract.
+  let percentText: string;
+  try {
+    percentText = normalizeDecimal(ratePercent, 4);
+  } catch {
+    throw new TaxRateProviderError("rate percent must be an exact decimal with at most 4 decimal places");
+  }
   const [whole = "0", fraction = ""] = percentText.split(".");
   const numerator = BigInt(`${whole}${fraction}`);
   if (numerator < 0n) throw new TaxRateProviderError("tax rate cannot be negative");
