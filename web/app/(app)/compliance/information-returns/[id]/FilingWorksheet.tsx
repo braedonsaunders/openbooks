@@ -21,25 +21,21 @@ import {
   TableRow,
   Textarea,
 } from '@openbooks/ui'
+import { filedBoxAmounts } from '@openbooks/engine/src/information-returns.ts'
 import type { FormBox } from '@openbooks/engine/src/information-returns.ts'
 import { promptDialog } from '../../../../../lib/prompt'
 import type { FilingDetail, RecipientRow } from '../../../../../lib/compliance'
+import { formatBoxAmount } from '../../../../../lib/information-return-form'
 
 const FILING_CHANNELS = ['iris', 'fire', 'provider', 'paper', 'other'] as const
 
 function amount(value: string | undefined): string {
-  if (!value) return ''
-  const n = Number(value)
-  return Number.isFinite(n) && n !== 0
-    ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : ''
+  return formatBoxAmount(value)
 }
 
-function filed(recipient: RecipientRow, box: string): string {
-  const computed = Number(recipient.computedAmounts[box] ?? 0)
-  const adjustment = Number(recipient.adjustments[box] ?? 0)
-  const total = computed + adjustment
-  return total !== 0 ? total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
+export function filed(recipient: RecipientRow, box: string): string {
+  const amounts = filedBoxAmounts(recipient.computedAmounts, recipient.adjustments)
+  return formatBoxAmount(amounts[box])
 }
 
 /**
