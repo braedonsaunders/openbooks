@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import {
   postDocument,
+  PostingError,
   regenerateGlImpactTx,
   type PostingDeps,
 } from "./posting.ts";
@@ -296,6 +297,154 @@ test(
          where source_document_id = ${documentId}
       `);
       assert.equal((count.rows[0] as { entries: number }).entries, 3);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "source correction that shrinks a fully paid bill refuses with a controlled error and leaves the ledger untouched",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "Source Correction Controller", "admin");
+    const documentId = randomUUID();
+    const requestId = randomUUID();
+    const applicationId = randomUUID();
+    const settlementEntryId = randomUUID();
+    const settlementLineId = randomUUID();
+    const deps: PostingDeps = {
+      migration: true,
+      control: {
+        ar: org.accounts.ar,
+        ap: org.accounts.ap,
+        bank: org.accounts.bank,
+      },
+    };
+    try {
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, fx_rate, status, subtotal,
+           tax_total, total, custom, created_by, updated_by)
+        values (
+          ${documentId}, ${org.orgId}, 'vendor_bill', 'SOURCE-CORR-OVERAPPLY-1',
+          ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+          'CAD', 1, 'draft', 125, 0, 125,
+          '{"sourceId":"transaction-overapply"}'::jsonb, ${actorId}, ${actorId}
+        )
+      `);
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price,
+           amount, tax_amount, custom, created_by, updated_by)
+        values (
+          ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, 1, 125,
+          125, 0, '{}'::jsonb, ${actorId}, ${actorId}
+        )
+      `);
+      await db.execute(sql`
+        update documents set status = 'approved'
+         where id = ${documentId} and org_id = ${org.orgId}
+      `);
+      const originalEntryId = await postDocument(documentId, deps, {
+        audit: { actorId, source: "test" },
+      });
+      const originalOpenLine = (await db.execute<{ id: string }>(sql`
+        select id
+          from journal_lines
+         where entry_id = ${originalEntryId} and is_open_item
+      `));
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, origin, created_by, updated_by)
+        values (
+          ${settlementEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+          'SETTLEMENT-OVERAPPLY-1', ${org.date}, ${org.periodId}, 'Settlement source',
+          'draft', 'manual', ${actorId}, ${actorId}
+        )
+      `);
+      await db.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+        values
+          (
+            ${settlementLineId}, ${org.orgId}, ${settlementEntryId}, 1,
+            ${org.accounts.ap}, ${org.subsidiaryId}, 125, 'CAD', 125, 1,
+              ${org.vendorId}, true
+          ),
+          (
+            ${randomUUID()}, ${org.orgId}, ${settlementEntryId}, 2,
+            ${org.accounts.bank}, ${org.subsidiaryId}, -125, 'CAD', -125, 1,
+              null, false
+          )
+      `);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_by = ${actorId}
+         where id = ${settlementEntryId}
+      `);
+      await db.execute(sql`
+        insert into applications
+          (id, org_id, from_line_id, to_line_id, amount, source_amount,
+           source_transaction_amount, source_transaction_currency,
+           target_transaction_amount, target_transaction_currency,
+           settlement_rate, settlement_rate_source,
+           settlement_rate_reference, applied_on, created_by, updated_by)
+        values (
+          ${applicationId}, ${org.orgId}, ${settlementLineId},
+          ${originalOpenLine.rows[0]!.id}, 125, 125, 125, 'CAD', 125, 'CAD',
+          1, 'same_currency', 'source-application-overapply', ${org.date},
+          ${actorId}, ${actorId}
+        )
+      `);
+
+      // The source corrects the bill down below its settled amount. The 125
+      // payment evidence must survive verbatim, so it cannot move onto a 100
+      // open-item line — the engine must refuse like a void does instead of
+      // dying in the deferred application trigger with a raw database error.
+      await assert.rejects(
+        db.transaction(async (tx) => {
+          await tx.execute(sql`set local openbooks.amend = on`);
+          await tx.execute(sql`set local openbooks.migration = on`);
+          await tx.execute(sql`
+            update documents set subtotal = 100, total = 100, updated_at = now()
+             where id = ${documentId}
+          `);
+          await tx.execute(sql`
+            update document_lines set unit_price = 100, amount = 100, updated_at = now()
+             where document_id = ${documentId}
+          `);
+          return regenerateGlImpactTx(tx, documentId, deps, actorId, {
+            actorId,
+            requestId,
+            reason: "Source corrects the billed amount below its payment",
+          });
+        }),
+        (error: unknown) =>
+          error instanceof PostingError && /unapply/i.test(error.message),
+      );
+
+      const aftermath = (await db.execute<{
+        entries: number;
+        original_status: string;
+        posted_entry_id: string;
+      }>(sql`
+        select (select count(*)::int from journal_entries
+                 where source_document_id = ${documentId}) as entries,
+               (select status from journal_entries where id = ${originalEntryId}) as original_status,
+               (select posted_entry_id from documents where id = ${documentId}) as posted_entry_id
+      `));
+      assert.deepEqual(aftermath.rows, [
+        {
+          entries: 1,
+          original_status: "posted",
+          posted_entry_id: originalEntryId,
+        },
+      ]);
     } finally {
       await dropScratchOrg(org.orgId);
     }
