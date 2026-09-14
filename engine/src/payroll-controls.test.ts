@@ -517,6 +517,37 @@ test(
 );
 
 test(
+  "editing a tenant statutory rate after Calculate makes the run stale",
+  { skip: !DB },
+  async () => {
+    // SUI/EHT rates, FUTA credit-reduction overrides and tenant-entered
+    // municipal rates are read fresh on every statutory pass (caPayrollConfig
+    // / usPayrollConfig over payroll_statutory_rates), but no staleness arm
+    // watched that table — so an experience-rated SUI correction after
+    // Calculate left the wizard green and committed the employer's
+    // unemployment cost computed on the old rate.
+    const run = await seedPayRun();
+    try {
+      assert.deepEqual((await payRunStaleness(run.orgId, run.documentId)).reasons, []);
+
+      await db.execute(sql`
+        update pay_runs set calculated_at = now() where document_id = ${run.documentId}`);
+      await db.execute(sql`
+        insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                             rate_values, created_by, updated_by)
+        values (${run.orgId}, 'CA', 'ca_eht', 'ON', 2026, '{"rate": "1.95"}',
+                ${run.actorId}, ${run.actorId})`);
+      assert.ok(
+        (await payRunStaleness(run.orgId, run.documentId)).reasons.includes("statutoryRates"),
+        "tenant-entered statutory rates feed the pass the stub was computed on",
+      );
+    } finally {
+      await dropScratchOrgReporting(run.orgId);
+    }
+  },
+);
+
+test(
   "another run committing against the same employee's tax year makes this run stale",
   { skip: !DB },
   async () => {
