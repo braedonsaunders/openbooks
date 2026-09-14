@@ -460,11 +460,7 @@
     "entities": {
       "ledger_lines": {
         "label": "Lignes du grand livre",
-        "description": "Détail des lignes d’écriture joint à l’écriture, au compte, au tiers et aux dimensions — le grand livre brut. Une ligne par ligne d’écriture de journal comptabilisée (ou en brouillon).",
-        "base_currency": "Monnaie fonctionnelle",
-        "book": "Livre comptable",
-        "book_code": "Code du livre",
-        "book_id": "ID du livre"
+        "description": "Détail des lignes d’écriture joint à l’écriture, au compte, au tiers et aux dimensions — le grand livre brut. Une ligne par ligne d’écriture de journal comptabilisée (ou en brouillon)."
       },
       "documents": {
         "label": "Transactions",
@@ -480,15 +476,11 @@
       },
       "transaction_lines": {
         "label": "Lignes de transaction",
-        "description": "Détail des transactions au niveau ligne, tous types confondus — article, compte, quantités, montants, état de facturation et dimensions.",
-        "currency": "Devise"
+        "description": "Détail des transactions au niveau ligne, tous types confondus — article, compte, quantités, montants, état de facturation et dimensions."
       },
       "journal_entries": {
         "label": "Écritures de journal",
-        "description": "En-têtes d’écritures — numéro, date de comptabilisation, statut, origine et mémo.",
-        "book": "Livre comptable",
-        "book_code": "Code du livre",
-        "book_id": "ID du livre"
+        "description": "En-têtes d’écritures — numéro, date de comptabilisation, statut, origine et mémo."
       },
       "items": {
         "label": "Articles",
@@ -571,7 +563,11 @@
         "entry_id": "Écriture (id)",
         "account_id": "Compte (id)",
         "party_id": "Tiers (id)",
-        "equipment": "Équipement"
+        "equipment": "Équipement",
+        "base_currency": "Monnaie fonctionnelle",
+        "book": "Livre comptable",
+        "book_code": "Code du livre",
+        "book_id": "ID du livre"
       },
       "documents": {
         "kind": "Type",
@@ -660,7 +656,8 @@
         "cost_rate": "Taux de coût",
         "bill_rate": "Taux de facturation",
         "cost_amount": "Montant du coût",
-        "bill_amount": "Montant facturé"
+        "bill_amount": "Montant facturé",
+        "currency": "Devise"
       },
       "journal_entries": {
         "entry_number": "N° d’écriture",
@@ -670,7 +667,10 @@
         "memo": "Mémo",
         "created_at": "Créé le",
         "id": "Écriture (id)",
-        "source_document_id": "Transaction source (id)"
+        "source_document_id": "Transaction source (id)",
+        "book": "Livre comptable",
+        "book_code": "Code du livre",
+        "book_id": "ID du livre"
       },
       "items": {
         "code": "Code",
