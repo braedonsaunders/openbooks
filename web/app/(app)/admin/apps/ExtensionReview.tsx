@@ -18,10 +18,10 @@ import {
 import type { ExtensionDraft } from "@/lib/application/extensions";
 import { AppPackageEditor } from "./AppPackageEditor";
 import { AppWorkspaceTabs } from "./sections";
+import { AppOverviewHero } from "./AppOverviewHero";
 import { confirmDialog } from "@/lib/confirm";
 import { parseManifest } from "@/lib/apps/manifest";
 import {
-  Package,
   ArrowUpRight,
   ShieldCheck,
   GitCompareArrows,
@@ -187,60 +187,18 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
         ) : null}
         <div hidden={editing} className="space-y-5">
           <div hidden={tab !== "overview"} className="space-y-6">
-            <Card className="overflow-hidden border-teal-200 dark:border-teal-900">
-              <CardHeader className="bg-gradient-to-br from-teal-50 via-white to-sky-50 dark:from-teal-950/50 dark:via-slate-900 dark:to-sky-950/30">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <span className="grid h-12 w-12 place-items-center rounded-xl bg-teal-600 text-white shadow-sm">
-                    <Package size={24} aria-hidden />
-                  </span>
-                  <Badge variant="outline">
-                    {t(draft.status === "draft" ? "pending" : "closed")}
-                  </Badge>
-                </div>
-                <CardTitle className="text-2xl">{manifest.name}</CardTitle>
-                <CardDescription className="max-w-prose leading-relaxed">
-                  {manifest.description || t("unpublished")}
-                </CardDescription>
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  <Badge variant="outline">v{manifest.version}</Badge>
-                  <span>
-                    {t(
-                      manifest.frontend.renderer === "native"
-                        ? "nativeApp"
-                        : "customApp",
-                    )}
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent className="border-t pt-4">
-                <div className="grid grid-cols-3 gap-4">
-                  {[
-                    {
-                      label: t("screenCount"),
-                      value:
-                        manifest.frontend.renderer === "native"
-                          ? screens.length
-                          : 1,
-                    },
-                    {
-                      label: t("workspaceCount"),
-                      value: objects.recordTypes.length,
-                    },
-                    {
-                      label: t("actionCount"),
-                      value: manifest.endpoints.length,
-                    },
-                  ].map((item) => (
-                    <div key={item.label}>
-                      <div className="text-2xl font-semibold tabular-nums">
-                        {item.value}
-                      </div>
-                      <div className="text-xs text-slate-500">{item.label}</div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <AppOverviewHero
+              name={manifest.name}
+              description={manifest.description || t("unpublished")}
+              version={manifest.version}
+              renderer={manifest.frontend.renderer}
+              status={<Badge variant="outline">{t(draft.status === "draft" ? "pending" : "closed")}</Badge>}
+              stats={[
+                { label: t("screenCount"), value: manifest.frontend.renderer === "native" ? screens.length : 1 },
+                { label: t("workspaceCount"), value: objects.recordTypes.length },
+                { label: t("actionCount"), value: manifest.endpoints.length },
+              ]}
+            />
             <section className="space-y-3">
               <div>
                 <h3 className="text-sm font-semibold">{t("explore")}</h3>
