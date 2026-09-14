@@ -34,16 +34,17 @@ test('units, database shards and simulation run independently without omitted te
   const unit = topLevelJob('unit')
   const integration = topLevelJob('database')
   const simulation = topLevelJob('simulation')
-  assert.match(unit, /npm run test:unit/)
+  assert.match(unit, /timeout --signal=TERM --kill-after=10s 5m npm run test:unit/)
+  assert.match(unit, /timeout-minutes: 8/)
   assert.match(unit, /apt-get install -y qpdf/)
   assert.match(unit, /shard: \[1, 2, 3, 4\]/)
   assert.match(unit, /OPENBOOKS_TEST_SHARD: \$\{\{ matrix.shard \}\}\/4/)
   assert.match(integration, /npm run test:integration/)
   assert.doesNotMatch(integration, /npm test\b|npm run test:unit/)
-  assert.match(integration, /shard: \[1, 2, 3, 4, 5, 6, 7, 8\]/)
-  assert.match(integration, /OPENBOOKS_TEST_SHARD: \$\{\{ matrix.shard \}\}\/8/)
+  assert.match(integration, /shard: \[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16\]/)
+  assert.match(integration, /OPENBOOKS_TEST_SHARD: \$\{\{ matrix.shard \}\}\/16/)
   assert.match(integration, /fail-fast: false/)
-  assert.match(integration, /timeout-minutes: 30/)
+  assert.match(integration, /timeout-minutes: 15/)
   assert.doesNotMatch(integration, /--test-concurrency|continue-on-error/)
   assert.match(integration, /name: coverage-\$\{\{ matrix.shard \}\}/)
   assert.match(integration, /COLLECT_COVERAGE:.*github.event_name == 'workflow_dispatch'/)
@@ -131,3 +132,13 @@ test('CI has no scheduled runs on unchanged source', () => {
     assert.doesNotMatch(source, /^  schedule:|^\s+- cron:/m)
   }
 })
+
+
+test('the unit deadline kills an unresponsive test worker and stays failed', { skip: process.platform !== 'linux' }, () => {
+  const result = spawnSync('timeout', ['--signal=TERM', '--kill-after=0.1s', '1s',
+    process.execPath, '-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"],
+    { encoding: 'utf8', timeout: 5000 });
+  assert.equal(result.error, undefined, 'GNU timeout must finish without the probe timeout');
+  assert.ok(result.status === 137 || result.signal === 'SIGKILL',
+    `unresponsive worker must be killed, got ${result.status}/${result.signal}`);
+});

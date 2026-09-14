@@ -26,7 +26,7 @@ env:
 jobs:
   typecheck:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -45,7 +45,7 @@ jobs:
 
   unit:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 8
     strategy:
       fail-fast: false
       matrix:
@@ -67,7 +67,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          npm run test:unit 2>&1 | tee unit.txt
+          timeout --signal=TERM --kill-after=10s 5m npm run test:unit 2>&1 | tee unit.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -79,11 +79,11 @@ jobs:
 
   database:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     services:
       postgres:
         image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
@@ -104,7 +104,7 @@ jobs:
           --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
-      OPENBOOKS_TEST_SHARD: ${{ matrix.shard }}/8
+      OPENBOOKS_TEST_SHARD: ${{ matrix.shard }}/16
       OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
@@ -230,7 +230,7 @@ jobs:
 
   simulation:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
@@ -378,7 +378,7 @@ jobs:
           import { readFileSync, readdirSync } from 'node:fs';
           import { testManifest, shardFiles } from './scripts/test-suite.mjs';
           const manifest = testManifest();
-          for (const [suite, count, root, prefix] of [['integration',8,'integration-evidence','coverage'], ['unit',4,'unit-evidence','unit']]) {
+          for (const [suite, count, root, prefix] of [['integration',16,'integration-evidence','coverage'], ['unit',4,'unit-evidence','unit']]) {
             const files = manifest[suite];
             const dirs = readdirSync(root).sort();
             assert.deepEqual(dirs, Array.from({length:count}, (_,i)=>`${prefix}-${i+1}`));
@@ -438,7 +438,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
@@ -494,6 +494,14 @@ jobs:
           console.log(`::add-mask::${secret}`);
           appendFileSync(process.env.GITHUB_ENV, `SESSION_SECRET=${secret}\n`);
           NODE
+
+      - name: Restore Next compiler cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: web/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
 
       - name: Build browser application
         env:
