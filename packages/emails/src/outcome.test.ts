@@ -84,6 +84,47 @@ test("an attempt with confirmed acceptance completes the delivery idempotently",
   assert.deepEqual(noisy, { action: "complete", providerMessageId: "postmark_9" });
 });
 
+test("a sent record without a usable provider id suppresses instead of re-sending", () => {
+  // A "sent" outcome is acceptance evidence even when the provider id was
+  // lost (legacy row, truncated meta, foreign writer): the message may
+  // already be delivered, so a blind re-send could duplicate it. Fail closed
+  // like uncertainty — suppress until an operator reconciles it.
+  // An earlier id-less sent record must not shadow a later CONFIRMED one:
+  // the confirmed id proves acceptance and closes the delivery.
+  assert.deepEqual(
+    reconcileDeliveryAttempts([
+      { attempt: 1, outcome: "sent" as const },
+      { attempt: 2, outcome: "sent" as const, detail: "email_late_proof" },
+    ]),
+    { action: "complete", providerMessageId: "email_late_proof" },
+  );
+
+  // A usable id with surrounding padding completes under its trimmed form —
+  // the stored id, not the whitespace, is what downstream dedupes on.
+  assert.deepEqual(
+    reconcileDeliveryAttempts([
+      { attempt: 1, outcome: "sent" as const, detail: "  email_padded  " },
+    ]),
+    { action: "complete", providerMessageId: "email_padded" },
+  );
+
+  for (const lineage of [
+    [{ attempt: 1, outcome: "sent" as const }],
+    [{ attempt: 1, outcome: "sent" as const, detail: "" }],
+    [{ attempt: 1, outcome: "sent" as const, detail: "   " }],
+    [{ attempt: 1, outcome: "sent" as const, detail: null }],
+  ]) {
+    const decision = reconcileDeliveryAttempts(lineage);
+    assert.equal(decision.action, "suppress");
+    if (decision.action === "suppress") {
+      assert.match(decision.reason, /attempt 1/u);
+      assert.ok(decision.reason.includes(EMAIL_DELIVERY_ID_HEADER));
+      assert.match(decision.reason, /may\s+have\s+been\s+(accepted|delivered)/iu);
+      assert.match(decision.reason, /will\s+not\s+be\s+resent/iu);
+    }
+  }
+});
+
 test("network failures are classified by what could have been transmitted", () => {
   // Request never crossed to the provider — a fresh attempt is safe.
   const refused = classifyNetworkFailure(new Error("fetch failed", {
