@@ -5,6 +5,7 @@ import { addDays, addMonthsIso, fiscalMonthsBetween, fiscalQuartersBetween } fro
 import { resolveOrgId } from './org-scope'
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr, type ActivityBoundary } from './gl-summary'
 import { MissingRatesError } from './consolidation'
+import { fiscalStartMonth } from './fiscal'
 import {
   decimalAdd,
   decimalIsMaterial,
@@ -362,10 +363,13 @@ async function buildAmountColumns(opts: {
   const bookProbe = sql`and e.book_id = ${statementBookExpr(orgId, opts.bookId)}`
 
   if (breakout === 'month' || breakout === 'quarter') {
+    // Quarter columns follow the org's fiscal calendar (orgs.settings.
+    // fiscalYearStartMonth) like every other fiscal-aware surface — never a
+    // hardcoded January start. Month columns are calendar months either way.
     const ranges =
       breakout === 'month'
         ? fiscalMonthsBetween(period.from, period.to)
-        : fiscalQuartersBetween(period.from, period.to, 1)
+        : fiscalQuartersBetween(period.from, period.to, await fiscalStartMonth(orgId))
     const capped = ranges.slice(0, MAX_MATRIX_COLUMNS)
     return {
       cols: capped.map((r) => ({ key: r.label, label: r.label, from: r.from, to: r.to })),
