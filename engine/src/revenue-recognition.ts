@@ -361,10 +361,24 @@ export interface FinancingComponentResult {
  * discounted at the rate a separate financing would carry — and the difference
  * accretes as interest over the payment deferral.
  */
+export const MAX_FINANCING_DEFERRAL_YEARS = 100;
+
 export function separateFinancingComponent(
   input: FinancingComponentInput,
 ): FinancingComponentResult {
-  if (input.years <= 0) throw new TransactionPriceError("financing deferral must be at least one year");
+  // Whole years only: fractional years discount and accrete over different
+  // period counts, and each accepted year costs one loop iteration.
+  // The 100-year cap bounds that loop; setContractPricing delegates here,
+  // so the persisted path shares it.
+  if (
+    !Number.isSafeInteger(input.years) ||
+    input.years < 1 ||
+    input.years > MAX_FINANCING_DEFERRAL_YEARS
+  ) {
+    throw new TransactionPriceError(
+      `financing deferral must be a whole number of years from 1 through ${MAX_FINANCING_DEFERRAL_YEARS}`,
+    );
+  }
   if (cmp(input.consideration, "0") <= 0) {
     throw new TransactionPriceError("consideration must be positive");
   }
@@ -515,6 +529,9 @@ export interface RecognitionInput {
   events?: { periodMonth: string; amount: string }[];
 }
 
+/** Supported recognition schedule horizon: 100 years of monthly periods. */
+export const MAX_RECOGNITION_TERM_MONTHS = 1200;
+
 export interface RecognitionLinePlan {
   sequence: number;
   /** YYYY-MM-01 — the accounting month this recognition belongs to. */
@@ -570,8 +587,20 @@ function spreadWithInitial(input: RecognitionInput, start: string, weights: numb
 export function computeRecognitionSchedule(input: RecognitionInput): RecognitionLinePlan[] {
   recognitionDate(input.startOn, "recognition start");
   if (input.endOn != null) recognitionDate(input.endOn, "recognition end");
-  if (input.termPeriods != null) recognitionInteger(input.termPeriods, "recognition term", 1);
+  if (input.termPeriods != null) {
+    recognitionInteger(input.termPeriods, "recognition term", 1);
+    if (input.termPeriods > MAX_RECOGNITION_TERM_MONTHS) {
+      throw new RevenueRecognitionError(
+        `recognition term must be a whole number from 1 through ${MAX_RECOGNITION_TERM_MONTHS} months`,
+      );
+    }
+  }
   const periodOffset = recognitionInteger(input.periodOffset ?? 0, "period offset", 0);
+  if (periodOffset > MAX_RECOGNITION_TERM_MONTHS) {
+    throw new RevenueRecognitionError(
+      `period offset must be a whole number from 0 through ${MAX_RECOGNITION_TERM_MONTHS}`,
+    );
+  }
   const rawStart = addDays(input.startOn, input.startOffsetDays ?? 0);
   const start = monthStart(rawStart);
 
@@ -586,6 +615,13 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
     const end = resolveEnd(rawStart, input);
     if (epochDay(end) < epochDay(rawStart)) {
       throw new Error(`recognition end (${end}) precedes the recognition start (${rawStart})`);
+    }
+    // Cap explicit endOn spans too: without this, a centuries-wide date
+    // range allocates one array entry per month before anything else runs.
+    if (monthSpan(rawStart, end) > MAX_RECOGNITION_TERM_MONTHS) {
+      throw new RevenueRecognitionError(
+        `recognition schedule must span no more than ${MAX_RECOGNITION_TERM_MONTHS} months`,
+      );
     }
   }
 

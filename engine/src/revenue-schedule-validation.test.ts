@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { addDays, computeRecognitionSchedule, RevenueRecognitionError, type RecognitionInput } from './revenue-recognition.ts';
+import { addDays, computeRecognitionSchedule, MAX_RECOGNITION_TERM_MONTHS, RevenueRecognitionError, type RecognitionInput } from './revenue-recognition.ts';
 
 const base: RecognitionInput = { total: '1200', method: 'straight_line_even', startOn: '2026-01-01', termPeriods: 12 };
 
@@ -31,6 +31,32 @@ test('recognition events require real calendar month starts', () => {
   for (const periodMonth of ['2026-02-30', '2026-02-15', 'invalid', '0000-01-01']) {
     assert.throws(() => computeRecognitionSchedule({ ...base, method: 'usage', events: [{ periodMonth, amount: '100' }] }), RevenueRecognitionError);
   }
+});
+
+test('recognition schedules refuse terms beyond the supported horizon instead of building unbounded month arrays', () => {
+  assert.equal(MAX_RECOGNITION_TERM_MONTHS, 1200);
+  // Large finite terms are refused before any per-month array is allocated.
+  for (const termPeriods of [1201, 100000, 2147483647]) {
+    assert.throws(
+      () => computeRecognitionSchedule({ ...base, termPeriods }),
+      RevenueRecognitionError,
+      `termPeriods=${termPeriods} must be refused without allocating`,
+    );
+  }
+  // An explicit endOn spanning more than the horizon is refused the same way.
+  assert.throws(
+    () => computeRecognitionSchedule({ ...base, termPeriods: undefined, endOn: '2206-01-01' }),
+    RevenueRecognitionError,
+  );
+  // Far-future period offsets are refused before the schedule is shifted.
+  assert.throws(
+    () => computeRecognitionSchedule({ ...base, periodOffset: 1201 }),
+    RevenueRecognitionError,
+  );
+  // The boundary itself is inclusive and exact: 1200 months summing to total.
+  const century = computeRecognitionSchedule({ ...base, termPeriods: MAX_RECOGNITION_TERM_MONTHS });
+  assert.equal(century.length, MAX_RECOGNITION_TERM_MONTHS);
+  assert.equal(century[century.length - 1]!.cumulative, '1200.0000');
 });
 
 test('recognition percentages refuse out-of-range values instead of clamping financial instructions', () => {
