@@ -50,7 +50,19 @@ async function fixture() {
   const close = async () => {
     session.user = null
     await dropScratchOrg(org.orgId)
-    assert.equal((await db.execute(sql`select id from orgs where id=${org.orgId}`)).rows.length, 0)
+    // CI releases and resets pooled tenants; standalone runs delete them.
+    // In either mode every capture and its immutable evidence must be gone.
+    const remaining = await db.execute<{ count: string }>(sql`select (
+      (select count(*) from ap_capture_items where org_id=${org.orgId}) +
+      (select count(*) from ap_capture_runs where org_id=${org.orgId}) +
+      (select count(*) from ap_capture_fields where org_id=${org.orgId}) +
+      (select count(*) from ap_capture_corrections where org_id=${org.orgId}) +
+      (select count(*) from ap_capture_events where org_id=${org.orgId})
+    )::text as count`)
+    assert.equal(remaining.rows[0]!.count, '0')
+    if (process.env.OPENBOOKS_TEST_FIXTURE_POOL !== '1' && !process.env.OPENBOOKS_TEST_FIXTURE_OWNER_PORT) {
+      assert.equal((await db.execute(sql`select id from orgs where id=${org.orgId}`)).rows.length, 0)
+    }
     const guards = await db.execute<{ tgenabled: string }>(sql`select tgenabled from pg_trigger
       where tgrelid in ('public.ap_capture_fields'::regclass, 'public.ap_capture_runs'::regclass,
         'public.ap_capture_corrections'::regclass, 'public.ap_capture_events'::regclass)
