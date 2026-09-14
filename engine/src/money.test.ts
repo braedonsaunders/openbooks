@@ -90,6 +90,54 @@ test("div rejects only zero, and says what actually went wrong", () => {
   assert.throws(() => div("100", "0.0000"), /by zero/);
 });
 
+test("scientific exponents beyond the shared resource bound are rejected before allocation", () => {
+  // Guard: if the bound ever regresses, these inputs must fail here instead
+  // of attempting a ~1GB pad/repeat allocation in the test runner.
+  const prototype = String.prototype as unknown as Record<
+    string,
+    (this: string, ...args: unknown[]) => string
+  >;
+  const saved = {
+    padEnd: prototype.padEnd,
+    padStart: prototype.padStart,
+    repeat: prototype.repeat,
+  };
+  const failOnBulkAlloc = (label: "padEnd" | "padStart" | "repeat") =>
+    function (this: string, ...args: unknown[]): string {
+      if (Number(args[0]) > 1_000_000) {
+        throw new Error(`test guard: ${label}(${String(args[0])}) would allocate`);
+      }
+      return saved[label].call(this, ...args);
+    };
+  prototype.padEnd = failOnBulkAlloc("padEnd");
+  prototype.padStart = failOnBulkAlloc("padStart");
+  prototype.repeat = failOnBulkAlloc("repeat");
+  try {
+    for (const input of ["1e1000000000", "1e-1000000000", "1E1000000000", "1E-1000000000"]) {
+      assert.throws(() => toUnits(input), /supported range/, `toUnits(${input})`);
+      assert.throws(() => normalizeDecimal(input), /supported range/, `normalizeDecimal(${input})`);
+      assert.throws(() => normalizeDecimal(input, 10), /supported range/);
+    }
+    // Unsafe and infinite exponents never reach expansion either.
+    assert.throws(() => toUnits("1e99999999999999999"), /supported range/);
+    assert.throws(() => normalizeDecimal(`1e${"9".repeat(400)}`), /supported range/);
+    // Just past the bound fails closed — even for an exact zero.
+    assert.throws(() => toUnits("1e10001"), /supported range/);
+    assert.throws(() => normalizeDecimal("1e-10001", 10), /supported range/);
+    assert.throws(() => normalizeDecimal("0e1000000000", 8), /supported range/);
+  } finally {
+    prototype.padEnd = saved.padEnd;
+    prototype.padStart = saved.padStart;
+    prototype.repeat = saved.repeat;
+  }
+  // The bound itself and legitimate connector notation still expand exactly.
+  assert.equal(toUnits("1e10000"), 10n ** 10004n);
+  assert.equal(toUnits("1.2355303E7"), 123553030000n);
+  assert.equal(toUnits("-2.5e-3"), -25n);
+  assert.equal(normalizeDecimal("1e4", 8), "10000.00000000");
+  assert.equal(normalizeDecimal("-2.5e-3", 8), "-0.00250000");
+});
+
 test("div then mul returns the original within one rounding step", () => {
   // Compared in exact ledger units — a money test must not measure itself with
   // binary floats. Re-multiplying a rounded share can be off by at most half a

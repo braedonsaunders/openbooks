@@ -6,6 +6,23 @@
 const SCALE = 10_000n;
 const RATE_SCALE = 10_000_000_000n;
 
+/** Limit input-amplified string growth while leaving ample headroom beyond
+ * persisted decimal precision. This is an exponent bound, not a money-value
+ * cap; ordinary BigInt intermediate arithmetic is unchanged. */
+const MAX_SCIENTIFIC_EXPONENT = 10_000;
+
+/** Parse an explicit exponent, rejecting unsafe/infinite values and anything
+ * that would expand beyond MAX_SCIENTIFIC_EXPONENT before any allocation. */
+function parseBoundedExponent(text: string, original: string | number): number {
+  const exponent = Number(text);
+  if (!Number.isSafeInteger(exponent) || Math.abs(exponent) > MAX_SCIENTIFIC_EXPONENT) {
+    throw new Error(
+      `scientific exponent out of supported range (±${MAX_SCIENTIFIC_EXPONENT}): "${original}"`,
+    );
+  }
+  return exponent;
+}
+
 function decimalFactorUnits(value: string | number): bigint {
   const raw = String(value).trim();
   if (!/^[-+]?(\d+(\.\d*)?|\.\d+)$/.test(raw)) throw new Error(`not a decimal factor: "${value}"`);
@@ -40,7 +57,7 @@ export function toUnits(s: string | number): bigint {
   let exp = 0;
   const em = str.match(/[eE]([-+]?\d+)$/);
   if (em) {
-    exp = parseInt(em[1]!, 10);
+    exp = parseBoundedExponent(em[1]!, s);
     str = str.slice(0, em.index);
   }
   let [intPart = "", fracPart = ""] = str.split(".");
@@ -193,7 +210,7 @@ export function normalizeDecimal(
   let exponent = 0;
   const exponentMatch = raw.match(/[eE]([-+]?\d+)$/);
   if (exponentMatch) {
-    exponent = Number(exponentMatch[1]);
+    exponent = parseBoundedExponent(exponentMatch[1]!, value);
     raw = raw.slice(0, exponentMatch.index);
   }
   const [wholePart = "0", fractionPart = ""] = raw.split(".");
