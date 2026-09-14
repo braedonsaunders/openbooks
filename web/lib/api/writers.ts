@@ -633,7 +633,14 @@ async function updateEntity(
     const defs = visibleCustomFieldDefs(user, await loadFieldDefs(table));
     const deniedCustom = forbiddenCustomField(defs, v.customValues);
     if (deniedCustom) return deniedCustom;
-    const cv = validateCustomValues(defs, v.customValues);
+    // PATCH is partial: validate the effective custom bag so omitted required
+    // fields are satisfied by their already-persisted values. The supplied
+    // keys still win in the merge below, while unknown/hidden legacy keys are
+    // preserved exactly as before.
+    const cv = validateCustomValues(defs, {
+      ...((existing.rows[0].custom as Record<string, unknown>) ?? {}),
+      ...v.customValues,
+    });
     if (!cv.ok)
       return err(422, Object.values(cv.errors)[0]!, { fieldErrors: cv.errors });
     const merged = {

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import type { ApiField, ResolvedApiType } from "./registry-data.ts";
 
 // The writer imports server-only services. Shim the marker package so this
 // focused integration suite can load the production module under node:test.
@@ -20,7 +21,7 @@ registerHooks({
 });
 
 const { createApplicationRecord } = await import("../application/records.ts");
-const { createRecord } = await import("./writers.ts");
+const { createRecord, updateRecord } = await import("./writers.ts");
 const { db, env, withBypass, withOrgContext } =
   await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
@@ -195,6 +196,81 @@ test(
         `),
       );
       assert.equal(rows.rows[0]?.count, "0");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "an entity PATCH validates supplied custom fields without re-requiring omitted required fields",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId;
+    const requiredId = randomUUID();
+    const optionalId = randomUUID();
+    const itemId = randomUUID();
+    const user = {
+      id: actorId,
+      email: "writers-partial-patch@scratch.test",
+      name: "Writers Partial Patch Test",
+      roles: [{ key: "admin", name: "Admin" }],
+      orgId: org.orgId,
+      envKind: "production" as const,
+      productionOrgId: org.orgId,
+      isSuperAdmin: false,
+      homeUserId: actorId,
+      homeOrgId: org.orgId,
+    };
+    const resolved: ResolvedApiType = {
+      key: "items",
+      table: "items",
+      searchColumn: "name",
+      readPermission: "items.read",
+      writePermission: "items.manage",
+      operations: ["list", "get", "create", "update", "delete"],
+      writer: { kind: "entity", table: "items" },
+      dynamic: false,
+      documentKinds: null,
+    };
+    const fields: ApiField[] = [
+      { name: "kind", type: "string", required: true, writable: true, description: null, custom: false },
+      { name: "name", type: "string", required: true, writable: true, description: null, custom: false },
+      { name: "cf_required_code", type: "string", required: true, writable: true, description: "Required code", custom: true },
+      { name: "cf_optional_note", type: "string", required: false, writable: true, description: "Optional note", custom: true },
+    ];
+
+    try {
+      await withBypass(() => db.execute(sql`
+        insert into custom_field_defs
+          (id, org_id, target_table, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+        values
+          (${requiredId}, ${org.orgId}, 'items', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${actorId}, ${actorId}),
+          (${optionalId}, ${org.orgId}, 'items', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${actorId}, ${actorId})
+      `));
+      await withBypass(() => db.execute(sql`
+        insert into items (id, org_id, kind, name, custom, created_by, updated_by)
+        values (${itemId}, ${org.orgId}, 'service', 'Partial patch item', '{"required_code":"R-1"}'::jsonb, ${actorId}, ${actorId})
+      `));
+
+      const result = await withOrgContext(org.orgId, () =>
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          itemId,
+          { cf_optional_note: "updated" },
+          { allowedSubsidiaryIds: null },
+        ),
+      );
+      assert.equal(result.status, 200);
+      const stored = await withBypass(() =>
+        db.execute<{ custom: Record<string, unknown> }>(sql`
+          select custom from items where id = ${itemId} and org_id = ${org.orgId}
+        `),
+      );
+      assert.deepEqual(stored.rows[0]?.custom, { required_code: "R-1", optional_note: "updated" });
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
