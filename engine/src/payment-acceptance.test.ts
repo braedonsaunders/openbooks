@@ -10,8 +10,11 @@ import {
   providerPaymentMethod,
   resolveAcceptanceProviderApiBase,
   testAcceptanceConnection,
+  THREE_DECIMAL_CURRENCIES,
+  fromMinorUnits,
   toMinorUnits,
   type WebhookEvent,
+  ZERO_DECIMAL_CURRENCIES,
 } from "./payment-acceptance.ts";
 
 test("computeSurcharge: percent, fixed, combined, and cap are exact", () => {
@@ -37,8 +40,43 @@ test("toMinorUnits: cents, zero-decimal currencies, sub-minor rejection", () => 
   assert.equal(toMinorUnits("103.0000", "CAD"), "10300");
   assert.equal(toMinorUnits("0.0100", "USD"), "1");
   assert.equal(toMinorUnits("1500.0000", "JPY"), "1500");
+  assert.equal(toMinorUnits("1.0000", "BHD"), "1000");
   assert.throws(() => toMinorUnits("10.0050", "USD"), /sub-cent/);
   assert.throws(() => toMinorUnits("100.5000", "JPY"), /whole units/);
+  assert.throws(() => toMinorUnits("1.0005", "BHD"), /sub-fils/);
+});
+
+test("fromMinorUnits: cents and zero-decimal round-trip with toMinorUnits", () => {
+  assert.equal(fromMinorUnits(10300n, "CAD"), "103.0000");
+  assert.equal(fromMinorUnits(1n, "USD"), "0.0100");
+  assert.equal(fromMinorUnits(1500n, "JPY"), "1500.0000");
+  for (const code of ZERO_DECIMAL_CURRENCIES) {
+    assert.equal(fromMinorUnits(1500n, code), "1500.0000");
+  }
+});
+
+test("three-decimal minor units round-trip as fils with no 10x drift", () => {
+  // 1000 fils = BHD 1.0000 on every shared boundary: checkout, webhook, settlement.
+  for (const code of THREE_DECIMAL_CURRENCIES) {
+    assert.equal(fromMinorUnits(1000n, code), "1.0000");
+    assert.equal(toMinorUnits("1.0000", code), "1000");
+  }
+});
+
+test("authoritative minor-unit tables agree with checkout conversion and stay disjoint", () => {
+  // Every zero-decimal code converts whole major units through toMinorUnits,
+  // so settlement import (which shares these tables) cannot drift from
+  // checkout/webhook normalization.
+  for (const code of ZERO_DECIMAL_CURRENCIES) {
+    assert.equal(toMinorUnits("1500.0000", code), "1500");
+  }
+  assert.equal(toMinorUnits("103.0000", "CAD"), "10300");
+  for (const code of ZERO_DECIMAL_CURRENCIES) {
+    assert.ok(!THREE_DECIMAL_CURRENCIES.has(code), `${code} is in both scale tables`);
+  }
+  for (const code of THREE_DECIMAL_CURRENCIES) {
+    assert.ok(!ZERO_DECIMAL_CURRENCIES.has(code), `${code} is in both scale tables`);
+  }
 });
 
 test("providerPaymentMethod: hosted checkout takes cards on Stripe/Adyen, debits on GoCardless", () => {
@@ -79,6 +117,13 @@ test("stripe webhook: signature verified, tamper rejected", () => {
   assert.ok(zeroDecimal);
   assert.equal(zeroDecimal.paidCurrency, "JPY");
   assert.equal(zeroDecimal.paidAmount, "1000.0000", "Stripe zero-decimal amounts are already major units");
+
+  const threeDecimal = stripeEvent(secret, "checkout.session.completed", {
+    id: "cs_bhd_1", client_reference_id: "tok_bhd", amount_total: 1000, currency: "bhd",
+  });
+  assert.ok(threeDecimal);
+  assert.equal(threeDecimal.paidCurrency, "BHD");
+  assert.equal(threeDecimal.paidAmount, "1.0000", "Stripe three-decimal amounts are fils, not cents");
 
   const tamperedBody = JSON.stringify({
     id: "evt_1",

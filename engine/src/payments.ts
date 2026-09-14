@@ -3445,6 +3445,17 @@ export function buildSepaFile(opts: {
   }
   const s = settings.settings;
   if (opts.payments.length === 0) throw new PaymentError("run has no payments to export");
+  // pain.001 carries exact 2dp credit amounts: a non-positive payment is not
+  // a credit transfer, and anything finer than cents must fail here rather
+  // than be silently rounded into CtrlSum and InstdAmt (the CPA-005, NACHA,
+  // and SEPA-debit writers all refuse non-positive amounts the same way).
+  for (const payment of opts.payments) {
+    const units = toUnits(payment.amount);
+    if (units <= 0n) throw new PaymentError("payment amounts must be positive");
+    if (units % 100n !== 0n) {
+      throw new PaymentError(`payment amount ${payment.amount} has sub-cent precision`);
+    }
+  }
   const ctrlSum = formatMoney(sum(opts.payments.map((payment) => payment.amount)), 2);
   const nb = opts.payments.length;
   const tx = opts.payments.map((p) => {

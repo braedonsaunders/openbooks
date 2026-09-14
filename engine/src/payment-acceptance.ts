@@ -189,15 +189,54 @@ const ZERO_DECIMAL = new Set(["BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "
 const ADYEN_ZERO_DECIMAL = new Set(["CVE", "DJF", "GNF", "IDR", "JPY", "KMF", "KRW", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"]);
 const ADYEN_THREE_DECIMAL = new Set(["BHD", "IQD", "JOD", "KWD", "OMR", "TND"]);
 
+/**
+ * Authoritative Stripe-scale minor-unit table for every Stripe-money boundary
+ * (checkout, webhooks, payout import). This is Stripe's contract only:
+ * Chargebee names its own smaller zero-decimal set (JPY, KRW, XAF, XOF —
+ * see CHARGEBEE_ZERO_DECIMAL in psp-settlement.ts) and Adyen yet another
+ * (ADYEN_ZERO_DECIMAL below, plus ADYEN_THREE_DECIMAL: Adyen explicitly
+ * supports three-decimal minor units through its own table), so neither may
+ * reuse this list.
+ */
+export const ZERO_DECIMAL_CURRENCIES: ReadonlySet<string> = ZERO_DECIMAL;
+/** ISO 4217 three-decimal set: millis scale on Stripe boundaries (Stripe
+ * supports them), fail-closed rejection on Chargebee (contract unverified). */
+export const THREE_DECIMAL_CURRENCIES: ReadonlySet<string> = new Set([
+  "BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND",
+]);
+
 /** Major-unit money string → provider minor units (exact; rejects sub-minor precision). */
 export function toMinorUnits(amount: string, currency: string): string {
   const units = toUnits(amount); // 1e4 scale
-  if (ZERO_DECIMAL.has(currency.toUpperCase())) {
+  const code = currency.toUpperCase();
+  if (ZERO_DECIMAL.has(code)) {
     if (units % 10_000n !== 0n) throw new PaymentAcceptanceError(`${currency} amounts must be whole units`);
     return (units / 10_000n).toString();
   }
+  // Stripe supports three-decimal currencies (e.g. BHD in fils): converting
+  // them at two decimals would misstate every amount 10x.
+  if (THREE_DECIMAL_CURRENCIES.has(code)) {
+    if (units % 10n !== 0n) throw new PaymentAcceptanceError(`amount ${amount} has sub-fils precision`);
+    return (units / 10n).toString();
+  }
   if (units % 100n !== 0n) throw new PaymentAcceptanceError(`amount ${amount} has sub-cent precision`);
   return (units / 100n).toString();
+}
+
+/**
+ * Provider minor units → major-unit money string (exact). Single authoritative
+ * Stripe-scale conversion: zero-decimal currencies arrive as whole major
+ * units, three-decimal currencies (e.g. BHD fils) as millis, two-decimal
+ * currencies as cents; money uses 4dp of the major unit (123 cents = 1.2300
+ * → 12300 units; 1000 fils = 1.0000 → 10000 units). Shared with
+ * psp-settlement.ts so the checkout webhook and the payout importer cannot
+ * drift apart.
+ */
+export function fromMinorUnits(amount: bigint, currency: string): string {
+  const code = currency.toUpperCase();
+  if (ZERO_DECIMAL.has(code)) return fromUnits(amount * 10_000n);
+  if (THREE_DECIMAL_CURRENCIES.has(code)) return fromUnits(amount * 10n);
+  return fromUnits(amount * 100n);
 }
 
 function adyenMinorUnitDecimals(currency: string): 0 | 2 | 3 {
@@ -284,7 +323,7 @@ function normalizeStripeNotification(event: any): WebhookEvent | null {
       // both forms into OpenBooks' four-decimal money scale exactly.
       paidAmount:
         settled && obj.amount_total != null
-          ? fromUnits(BigInt(obj.amount_total) * (currency && ZERO_DECIMAL.has(currency) ? 10_000n : 100n))
+          ? fromMinorUnits(BigInt(obj.amount_total), currency ?? "USD")
           : null,
       paidCurrency: settled ? currency : null,
       raw: event,

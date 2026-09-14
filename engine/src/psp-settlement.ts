@@ -6,6 +6,7 @@ import { cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
 import { sealJson } from "./secrets.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
+import { fromMinorUnits, THREE_DECIMAL_CURRENCIES } from "./payment-acceptance.ts";
 
 /**
  * PSP settlement import — Stripe / Recurly / Chargebee payout batches post
@@ -46,18 +47,76 @@ export interface ParsedSettlement {
   raw?: Record<string, unknown>;
 }
 
+/**
+ * Chargebee's zero-decimal set is its own contract, NOT the Stripe-scale
+ * list: Chargebee "Currency support" (Handling currency units) names exactly
+ * KRW, JPY, XAF, XOF as regular-denomination; every other currency —
+ * including Stripe zero-decimal ones such as VND or CLP — is smallest-unit.
+ */
+const CHARGEBEE_ZERO_DECIMAL = new Set(["JPY", "KRW", "XAF", "XOF"]);
+
+/**
+ * Chargebee invoices always carry currency_code (Chargebee invoice docs:
+ * required ISO 4217 string), so a missing code is refused rather than
+ * guessed: defaulting a currency-less JPY payload to USD would convert
+ * whole-yen amounts as cents and misbook by 100x.
+ */
+function requireChargebeeCurrency(code: unknown): string {
+  const normalized = typeof code === "string" ? code.trim().toUpperCase() : "";
+  if (normalized === "") {
+    throw new PspSettlementError("Chargebee currency_code is required");
+  }
+  if (!/^[A-Z]{3}$/.test(normalized)) {
+    throw new PspSettlementError("Chargebee currency_code must be a three-letter currency code");
+  }
+  return normalized;
+}
+
+function rejectThreeDecimal(field: string, code: string): void {
+  if (THREE_DECIMAL_CURRENCIES.has(code)) {
+    throw new PspSettlementError(
+      `${field} currency ${code} uses three-decimal minor units and requires explicit conversion evidence`,
+    );
+  }
+}
+
 function fromPspMinorUnits(
   amount: number,
   field: string,
   absolute = false,
+  currency = "USD",
 ): string {
   if (!Number.isSafeInteger(amount)) {
     throw new PspSettlementError(
       `${field} must be a safe integer in provider minor units`,
     );
   }
+  const code = currency.toUpperCase();
   const units = BigInt(amount);
-  return fromUnits((absolute && units < 0n ? -units : units) * 100n);
+  const magnitude = absolute && units < 0n ? -units : units;
+  // Stripe-scale conversion is authoritative in payment-acceptance.ts: shared
+  // with the checkout webhook so payout import cannot drift from acceptance.
+  // Three-decimal currencies convert there too (Stripe supports them);
+  // Chargebee keeps its own fail-closed rejection below.
+  return fromMinorUnits(magnitude, code);
+}
+
+function fromChargebeeMinorUnits(
+  amount: number,
+  field: string,
+  absolute = false,
+  currency = "USD",
+): string {
+  if (!Number.isSafeInteger(amount)) {
+    throw new PspSettlementError(
+      `${field} must be a safe integer in provider minor units`,
+    );
+  }
+  const code = currency.toUpperCase();
+  rejectThreeDecimal(field, code);
+  const units = BigInt(amount);
+  const magnitude = absolute && units < 0n ? -units : units;
+  return fromUnits(magnitude * (CHARGEBEE_ZERO_DECIMAL.has(code) ? 10_000n : 100n));
 }
 
 /** Pure: roll line-level amounts into batch totals. */
@@ -128,19 +187,44 @@ export function parseStripeBalanceTransactions(
   payoutId: string,
   settlementDate: string,
 ): ParsedSettlement {
+  if (rows.length === 0) {
+    throw new PspSettlementError("settlement batch has no evidence lines");
+  }
   const lines: ParsedSettlementLine[] = [];
-  let currency = "USD";
+  let currency = "";
   for (const r of rows) {
-    currency = (r.currency ?? currency).toUpperCase();
-    // Stripe amounts are in the smallest currency unit (cents). money uses 4dp of major unit.
-    // 123 cents = 1.2300 → units = 12300 = cents * 100
-    const major = fromPspMinorUnits(r.amount, "Stripe amount");
+    // Every row carries its own explicit currency: inheriting a previous
+    // row's (or a USD default) would silently convert foreign amounts at the
+    // wrong scale, and rows of different currencies must never be summed as
+    // one batch — importSettlementBatch re-checks this before any write.
+    // Trim and validate BEFORE scaling: an untrimmed " jpy " would miss the
+    // zero-decimal table and convert as cents.
+    const raw = typeof r.currency === "string" ? r.currency.trim() : "";
+    if (raw === "") {
+      throw new PspSettlementError("Stripe transaction currency is required");
+    }
+    const rowCurrency = raw.toUpperCase();
+    if (!/^[A-Z]{3}$/.test(rowCurrency)) {
+      throw new PspSettlementError(
+        "Stripe transaction currency must be a three-letter currency code",
+      );
+    }
+    if (currency === "") currency = rowCurrency;
+    else if (rowCurrency !== currency) {
+      throw new PspSettlementError(
+        `mixed-currency Stripe transactions (${currency}, ${rowCurrency}) cannot settle as one batch`,
+      );
+    }
+    // Stripe amounts are in the smallest currency unit (cents), except
+    // zero-decimal currencies which arrive as whole major units. money uses
+    // 4dp of major unit: 123 cents = 1.2300 → units = 12300 = cents * 100.
+    const major = fromPspMinorUnits(r.amount, "Stripe amount", false, currency);
     const fee =
       r.fee == null
         ? null
-        : fromPspMinorUnits(r.fee, "Stripe fee", true);
+        : fromPspMinorUnits(r.fee, "Stripe fee", true, currency);
     if (r.net != null) {
-      fromPspMinorUnits(r.net, "Stripe net amount");
+      fromPspMinorUnits(r.net, "Stripe net amount", false, currency);
     }
     const kind: SettlementLineKind =
       r.type === "stripe_fee" || r.type === "fee"
@@ -269,16 +353,18 @@ export function parseChargebeeSettlement(payload: {
   }[];
   // taxes/fees may appear as special entity types
 }, fallbackDate?: string): ParsedSettlement {
-  const currency = (payload.currency_code ?? "USD").toUpperCase();
+  // Currency is never guessed: Chargebee always sends currency_code and its
+  // scaling follows its own zero-decimal contract, not the Stripe-scale table.
+  const currency = requireChargebeeCurrency(payload.currency_code);
   const total =
     payload.total == null
       ? null
-      : fromPspMinorUnits(payload.total, "Chargebee total");
+      : fromChargebeeMinorUnits(payload.total, "Chargebee total", false, currency);
   if (payload.amount_paid != null) {
-    fromPspMinorUnits(payload.amount_paid, "Chargebee amount paid");
+    fromChargebeeMinorUnits(payload.amount_paid, "Chargebee amount paid", false, currency);
   }
   if (payload.amount_adjusted != null) {
-    fromPspMinorUnits(payload.amount_adjusted, "Chargebee amount adjusted");
+    fromChargebeeMinorUnits(payload.amount_adjusted, "Chargebee amount adjusted", false, currency);
   }
   const settlementDate =
     typeof payload.date === "number"
@@ -295,9 +381,11 @@ export function parseChargebeeSettlement(payload: {
           : "charge";
       lines.push({
         kind,
-        amount: fromPspMinorUnits(
+        amount: fromChargebeeMinorUnits(
           li.amount ?? 0,
           "Chargebee line-item amount",
+          false,
+          currency,
         ),
         externalRef: li.id ?? null,
         description: li.description ?? et,
@@ -315,10 +403,11 @@ export function parseChargebeeSettlement(payload: {
   const creditsApplied =
     payload.credits_applied == null
       ? null
-      : fromPspMinorUnits(
+      : fromChargebeeMinorUnits(
           payload.credits_applied,
           "Chargebee credits applied",
           true,
+          currency,
         );
   if (creditsApplied != null && payload.credits_applied !== 0) {
     lines.push({
