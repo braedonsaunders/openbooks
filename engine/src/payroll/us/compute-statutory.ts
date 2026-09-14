@@ -175,6 +175,10 @@ export async function computeUsStatutory(
       taxQualifiedDeductions,
       certificateFor,
       regionTax,
+      // State engines annualize against the year's earlier supplemental pay
+      // (Massachusetts' surtax threshold is the live case); without this
+      // every bonus withholds as the year's first.
+      ytd: { supplemental: ytd.supplemental },
       socialInsuranceDeducted: {
         period: sum([statutory.ss, statutory.medicare, statutory.additionalMedicare]),
         yearToDate: ytd.fica_tax,
