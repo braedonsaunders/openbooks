@@ -16,7 +16,12 @@ import {
   resolveSurcharge,
 } from "./payment-acceptance.ts";
 import { postDocument } from "./posting.ts";
-import { createPaymentDocument } from "./payments.ts";
+import {
+  createPaymentDocument,
+  postPaymentWithApplications,
+  sameCurrencyAllocation,
+  updateDraftPayment,
+} from "./payments.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -521,6 +526,100 @@ test("payment link settles a signed webhook into an applied receipt with a surch
     // A forged signature never resolves an org.
     const forged = await handleProviderWebhook("stripe", { "stripe-signature": `t=${t},v1=${"0".repeat(64)}` }, body);
     assert.equal(forged, null);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a receipt keeps the over-collected remainder on-account when another channel paid first", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // Posted $100 invoice + stripe config + 3% rule + active link for $103.
+    const { userId, invoiceId, link } = await seedAcceptance(org, "INV-D2-OVER");
+
+    // Checkout fixes the provider collection at $100 + $3 fee. Another
+    // channel then collects $20 before the provider settles: the invoice has
+    // $80 open, but checkout already committed the attempt to the full $103.
+    await createCheckoutSession(link.token, "https://app.test/pay/" + link.token, async () => ({
+      status: 200,
+      json: async () => ({ id: "cs_test_d2over", url: "https://checkout.stripe.test/cs_test_d2over" }),
+    }));
+    const openLineId = (await db.execute<{ id: string }>(sql`
+      select jl.id from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id
+       where je.source_document_id = ${invoiceId} and jl.org_id = ${org.orgId}
+         and jl.is_open_item
+    `)).rows[0]!.id;
+    const first = await createPaymentDocument({
+      orgId: org.orgId,
+      kind: "customer_payment",
+      createdBy: userId,
+      partyId: org.customerId,
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      documentDate: org.date,
+      currency: "CAD",
+      fxRate: "1",
+    });
+    await updateDraftPayment(first.id, {
+      partyId: org.customerId,
+      bankAccountId: org.accounts.bank,
+      allocations: [sameCurrencyAllocation(openLineId, "20")],
+    }, userId, org.orgId);
+    await db.execute(sql`
+      update documents set status = 'approved', submitted_by = ${userId}, submitted_at = now()
+       where id = ${first.id} and org_id = ${org.orgId}`);
+    await postPaymentWithApplications(first.id, undefined, userId);
+
+    // Signed provider settlement for the full quoted $103.
+    const { body, headers } = signedStripeBody("whsec_INV-D2-OVER", "cs_test_d2over", link.token);
+    const result = await handleProviderWebhook("stripe", headers, body);
+    assert.ok(result);
+    assert.equal(result.status, "settled");
+
+    // The provider collected $103: the receipt must book all of it — $80
+    // applied to the invoice, $20 held on-account, $3 fee income — instead
+    // of posting only the $80 still open and dropping the $20 collected.
+    const receipt = (await db.execute<{ id: string; total: string }>(sql`
+      select id, total from documents
+       where org_id = ${org.orgId} and kind = 'customer_payment'
+         and memo like '%INV-D2-OVER%' and status = 'posted'
+    `));
+    assert.equal(receipt.rows.length, 1);
+    assert.equal(receipt.rows[0]!.total, "103.0000");
+    const legs = (await db.execute<{ leg: string; amount: string }>(sql`
+      select case when jl.account_id = ${org.accounts.bank} then 'bank'
+                  when jl.account_id = ${org.accounts.ar} then 'ar'
+                  else 'fee' end as leg, jl.amount
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id
+       where je.source_document_id = ${receipt.rows[0]!.id}
+       order by jl.line_number
+    `));
+    assert.deepEqual(
+      legs.rows.map((l) => [l.leg, l.amount]),
+      [["bank", "103.0000"], ["ar", "-100.0000"], ["fee", "-3.0000"]],
+    );
+    const invoice = (await db.execute<{ open_balance: string }>(sql`
+      select open_balance from documents where id = ${invoiceId}
+    `));
+    assert.equal(invoice.rows[0]!.open_balance, "0.0000");
+    // Both applications settle the invoice; the second receipt's source leg
+    // consumes only its $80 application, leaving the $20 remainder available
+    // as an on-account credit rather than absorbing it.
+    const apps = (await db.execute<{ target: string; source: string }>(sql`
+      select a.target_transaction_amount::text as target, a.source_amount::text as source
+        from applications a
+        join journal_lines jl on jl.id = a.to_line_id
+        join journal_entries je on je.id = jl.entry_id
+       where a.org_id = ${org.orgId} and a.unapplied_at is null
+         and je.source_document_id = ${invoiceId}
+       order by a.target_transaction_amount
+    `));
+    assert.deepEqual(
+      apps.rows.map((a) => [a.target, a.source]),
+      [["20.0000", "20.0000"], ["80.0000", "80.0000"]],
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

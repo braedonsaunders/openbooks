@@ -337,6 +337,9 @@ export async function updateDraftPayment(
      *  credited to a fee-income account (customer payments only). */
     feeAmount?: string;
     feeIncomeAccountId?: string | null;
+    /** Collected cash above the applications, held as an on-account AR credit
+     *  on the receipt (customer receipts only). */
+    onAccountAmount?: string;
   },
   userId: string | null,
   orgId: string,
@@ -356,6 +359,7 @@ export async function updateDraftPayment(
       controlAccountId?: string;
       feeAmount?: string;
       feeIncomeAccountId?: string;
+      onAccountAmount?: string;
     };
     const partyId = patch.partyId !== undefined ? patch.partyId : doc.partyId;
     const bankAccountId =
@@ -372,6 +376,7 @@ export async function updateDraftPayment(
     const controlAccountId = patch.controlAccountId !== undefined ? patch.controlAccountId : (custom.controlAccountId ?? null);
     const feeAmount = patch.feeAmount ?? custom.feeAmount ?? "0";
     const feeIncomeAccountId = patch.feeIncomeAccountId !== undefined ? patch.feeIncomeAccountId : (custom.feeIncomeAccountId ?? null);
+    const onAccountAmount = patch.onAccountAmount ?? custom.onAccountAmount ?? "0";
 
     const paymentReferenceIds = [
       bankAccountId,
@@ -399,6 +404,14 @@ export async function updateDraftPayment(
     if (feeUnits < 0n) throw new PaymentError("fee amount cannot be negative");
     if (feeUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("fees only apply to customer receipts");
     if (feeUnits > 0n && !feeIncomeAccountId) throw new PaymentError("a fee income account is required for a surcharge");
+    // Collected cash above the applications stays on the receipt as an
+    // on-account AR credit instead of being dropped: the bank line carries
+    // the full collected amount while the applications settle only what is
+    // still open. Vendor overpayments have no such representation and are
+    // refused here, like surcharges on the vendor side.
+    const onAccountUnits = toUnits(onAccountAmount);
+    if (onAccountUnits < 0n) throw new PaymentError("on-account amount cannot be negative");
+    if (onAccountUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("on-account residuals only apply to customer receipts");
 
     if (bankAccountId) {
       const bank = (await db.execute<{ id: string }>(sql`
@@ -452,10 +465,11 @@ export async function updateDraftPayment(
     });
     const grossApplied = sum(allocations.map((a) => a.sourceTransactionAmount));
     if (cmp(discountAmount, grossApplied) > 0) throw new PaymentError("discount cannot exceed the payment applications");
-    // Collected = applications − discount + surcharge fee; the bank line carries
-    // the full collected amount, AR settles the applications, fee income clears
-    // the surcharge leg (see the customer_payment posting rule).
-    const total = fromUnits(toUnits(grossApplied) - discountUnits + feeUnits);
+    // Collected = applications − discount + surcharge fee + on-account
+    // remainder; the bank line carries the full collected amount, AR settles
+    // the applications plus the on-account credit, fee income clears the
+    // surcharge leg (see the customer_payment posting rule).
+    const total = fromUnits(toUnits(grossApplied) - discountUnits + feeUnits + onAccountUnits);
 
     await db.transaction(async (tx) => {
       // The header was locked before reading the fields merged above. Check
@@ -494,7 +508,7 @@ export async function updateDraftPayment(
           document_date = coalesce(${patch.documentDate ?? null}, document_date),
           reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
           memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
-          custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId })}::jsonb,
+          custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId, onAccountAmount })}::jsonb,
           subtotal = ${total}, tax_total = '0', total = ${total},
           updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${userId}
         where id = ${id} and org_id = ${orgId}
@@ -921,6 +935,7 @@ export async function postPaymentWithApplications(
       creditAllocations?: CreditAllocationInput[];
       discountAmount?: string;
       controlAccountId?: string;
+      onAccountAmount?: string;
     };
     const storedAllocations = custom.allocations ?? [];
     const allocs = allocations ?? storedAllocations;
@@ -991,10 +1006,19 @@ export async function postPaymentWithApplications(
     const totalAlloc = sum(allocs.map((a) => a.sourceTransactionAmount));
     const discountAmount = custom.discountAmount ?? "0";
     const feeAmount = (custom as { feeAmount?: string }).feeAmount ?? "0";
+    // Fail closed on a stored on-account remainder the draft boundary never
+    // admitted: only a non-negative customer-receipt residual may widen the
+    // receipt beyond its applications.
+    const onAccountAmount = custom.onAccountAmount ?? "0";
+    const onAccountUnits = toUnits(onAccountAmount);
+    if (onAccountUnits < 0n) throw new PaymentError("on-account amount cannot be negative");
+    if (onAccountUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("on-account residuals only apply to customer receipts");
     // Applications settle the invoice portion: cash + early-payment discount
-    // (vendor side) − acceptance surcharge fee (customer side) = applications.
-    if (cmp(totalAlloc, fromUnits(toUnits(doc.total) + toUnits(discountAmount) - toUnits(feeAmount))) !== 0) {
-      throw new PaymentError(`cash ${doc.total} plus discount ${discountAmount} less fee ${feeAmount} must equal applications ${totalAlloc}`);
+    // (vendor side) − acceptance surcharge fee (customer side) = applications
+    // + on-account remainder (a customer receipt may collect more than is
+    // still open; the excess stays on the receipt as an AR credit).
+    if (cmp(add(totalAlloc, onAccountAmount), fromUnits(toUnits(doc.total) + toUnits(discountAmount) - toUnits(feeAmount))) !== 0) {
+      throw new PaymentError(`cash ${doc.total} plus discount ${discountAmount} less fee ${feeAmount} must equal applications ${totalAlloc} plus on-account ${onAccountAmount}`);
     }
 
     const deps = await paymentControlDeps(doc.orgId);
@@ -1042,7 +1066,7 @@ export async function postPaymentWithApplications(
     if (source.book_id !== bookId || source.party_id !== doc.partyId || source.subsidiary_id !== doc.subsidiaryId) {
       throw new PaymentError("posted payment source must preserve its party, subsidiary, and accounting book");
     }
-    if (source.currency !== doc.currency || cmp(fromUnits(toUnits(source.txn_amount) < 0n ? -toUnits(source.txn_amount) : toUnits(source.txn_amount)), totalAlloc) !== 0) {
+    if (source.currency !== doc.currency || cmp(fromUnits(toUnits(source.txn_amount) < 0n ? -toUnits(source.txn_amount) : toUnits(source.txn_amount)), add(totalAlloc, onAccountAmount)) !== 0) {
       throw new PaymentError("payment control line does not cross-foot to the transaction-currency applications");
     }
 
@@ -1062,7 +1086,11 @@ export async function postPaymentWithApplications(
     const targetById = new Map(targetsResult.rows.map((row) => [row.id, row]));
 
     let sourceBaseRemaining = fromUnits(toUnits(source.amount) < 0n ? -toUnits(source.amount) : toUnits(source.amount));
-    let sourceTransactionRemaining = totalAlloc;
+    // The source leg carries the applications plus any on-account remainder,
+    // so the proportional base split must consume from that same wider pool —
+    // otherwise the final application would absorb the remainder into its own
+    // source leg and the on-account credit could never be spent.
+    let sourceTransactionRemaining = add(totalAlloc, onAccountAmount);
     const applicationsToWrite: SettlementApplication[] = [];
     for (const allocation of allocs) {
       const target = targetById.get(allocation.openLineId);

@@ -1739,12 +1739,20 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
   const invoiceAlreadySettled = cmp(invoice.open_balance, "0") <= 0;
 
   let allocations: AllocationInput[] = [];
+  // The provider collected the full quoted amount even when another channel
+  // has since narrowed the invoice's open balance. The receipt books every
+  // unit of that collection: the still-open portion applies to the invoice
+  // and the excess rides the receipt as an on-account AR credit (never
+  // dropped, never forced onto an invoice that no longer owes it).
+  let onAccountAmount = "0.0000";
   if (!invoiceAlreadySettled) {
     // Auto-apply to the invoice's open-item line, capped at its open balance.
     const openItems = await openItemsForParty(a.party_id, "ar", orgId);
     const item = openItems.find((i) => i.documentId === invoice.id);
     if (!item) throw new PaymentAcceptanceError("invoice open item not found");
-    const invoicePortion = cmp(a.amount ?? invoice.open_balance, invoice.open_balance) < 0 ? (a.amount ?? invoice.open_balance) : invoice.open_balance;
+    const collected = a.amount ?? invoice.open_balance;
+    const invoicePortion = cmp(collected, invoice.open_balance) < 0 ? collected : invoice.open_balance;
+    onAccountAmount = fromUnits(toUnits(collected) - toUnits(invoicePortion));
     allocations = [sameCurrencyAllocation(item.lineId, invoicePortion)];
   }
 
@@ -1830,6 +1838,7 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
           referenceNumber: `link:${a.link_id.slice(0, 8)}`,
           feeAmount,
           feeIncomeAccountId,
+          onAccountAmount,
         },
         actorId,
         orgId,
