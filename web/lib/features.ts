@@ -4,6 +4,7 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 
 import { FEATURES, featureEnabled, type FeatureState } from '@openbooks/engine/src/feature-registry.ts'
+import { dataDependentFeatureDefault } from '@openbooks/engine/src/feature-defaults.ts'
 export { FEATURES, FEATURE_BY_KEY, featureEnabled, featureRequirements, type FeatureDef, type FeatureState } from '@openbooks/engine/src/feature-registry.ts'
 
 /** Load the org's feature state (raw overrides; combine with featureEnabled). */
@@ -12,24 +13,25 @@ export async function orgFeatureState(orgId: string, executor: SqlExecutor = db)
   return r.rows[0]?.f ?? {}
 }
 
-/** Server helper for route guards: is this feature on for the org? */
+/** Server helper for route guards: is this feature on for the org? Resolves
+ * the data-dependent defaults exactly like resolvedFeatureState, so guards
+ * agree with the Features page and the setup-entity gate. */
 export async function isFeatureEnabled(orgId: string, key: string, executor: SqlExecutor = db): Promise<boolean> {
-  return featureEnabled(await orgFeatureState(orgId, executor), key)
+  const state = await orgFeatureState(orgId, executor)
+  if (key === 'multiSubsidiary') return resolveMultiSubsidiary(orgId, state, executor)
+  if (key === 'multiCurrency') return resolveMultiCurrency(orgId, state, executor)
+  return featureEnabled(state, key)
 }
 
 /**
- * `multiSubsidiary` has a DATA-DEPENDENT default: on iff the org already runs
- * more than one subsidiary. This keeps existing multi-entity orgs working when
- * the flag was never explicitly set, and lets a single-entity org opt in to add
- * its first extra subsidiary. An explicit stored boolean always wins.
+ * `multiSubsidiary` has a DATA-DEPENDENT default resolved by the single
+ * engine helper: on iff the org already runs more than one subsidiary. This
+ * keeps existing multi-entity orgs working when the flag was never
+ * explicitly set, and lets a single-entity org opt in to add its first extra
+ * subsidiary. An explicit stored boolean always wins.
  */
 async function resolveMultiSubsidiary(orgId: string, state: FeatureState, executor: SqlExecutor = db): Promise<boolean> {
-  const v = state?.multiSubsidiary
-  if (typeof v === 'boolean') return v
-  const r = (await executor.execute<{ n: number }>(sql`
-    select count(*)::int as n from subsidiaries
-     where org_id = ${orgId} and is_active and not is_elimination`))
-  return (r.rows[0]?.n ?? 0) > 1
+  return dataDependentFeatureDefault(executor, orgId, 'multiSubsidiary', state)
 }
 
 /** Is multi-subsidiary on for this org (with the data-dependent default)? */
@@ -38,26 +40,19 @@ export async function subsidiaryFeatureEnabled(orgId: string, executor: SqlExecu
 }
 
 /**
- * `multiCurrency` default: on iff the org has already touched foreign currency —
- * either posted a foreign-currency line (fx_rate <> 1) or configured any FX rate.
- * Keeps existing multi-currency orgs working when the flag was never set; an
- * explicit stored boolean always wins.
+ * `multiCurrency` default resolved by the single engine helper: on iff the
+ * org has already touched foreign currency. Keeps existing multi-currency
+ * orgs working when the flag was never set; an explicit stored boolean
+ * always wins.
  */
 async function resolveMultiCurrency(orgId: string, state: FeatureState, executor: SqlExecutor = db): Promise<boolean> {
-  const v = state?.multiCurrency
-  if (typeof v === 'boolean') return v
-  const r = (await executor.execute<{ on: boolean }>(sql`
-    select (
-      exists(select 1 from journal_lines where org_id = ${orgId} and fx_rate <> 1)
-      or exists(select 1 from fx_rates where org_id = ${orgId})
-    ) as on`))
-  return Boolean(r.rows[0]?.on)
+  return dataDependentFeatureDefault(executor, orgId, 'multiCurrency', state)
 }
 
 /**
  * Feature state with data-dependent defaults resolved to explicit booleans
- * (currently just `multiSubsidiary`). Use this for the Features page and the
- * setup-rail gating so `featureEnabled` returns the correct value.
+ * (`multiSubsidiary`, `multiCurrency`). Use this for the Features page and
+ * the setup-rail gating so `featureEnabled` returns the correct value.
  */
 export async function resolvedFeatureState(orgId: string, executor: SqlExecutor = db): Promise<FeatureState> {
   const state = await orgFeatureState(orgId, executor)
@@ -389,12 +384,14 @@ export function featureGateLockKey(orgId: string): string {
 }
 
 /**
- * Acquire the org's feature-gate fence. MUST run inside `withOrgTransaction`:
- * the lock is transaction-scoped, so on a pooled autocommit connection it
- * would release instantly and fence nothing.
+ * Acquire the org's feature-gate fence. The lock is transaction-scoped, so it
+ * MUST be taken on the writer's transaction connection: inside
+ * `withOrgTransaction` the default `db` routes to the pinned transaction,
+ * otherwise pass that transaction's executor explicitly (on a pooled
+ * autocommit connection the lock would release instantly and fence nothing).
  */
-export async function acquireFeatureGateLock(orgId: string): Promise<void> {
-  await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
+export async function acquireFeatureGateLock(orgId: string, runner: SqlExecutor = db): Promise<void> {
+  await runner.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
 }
 
 /** Whether a single feature is hard-blocked from being disabled (PUT-route guard). */

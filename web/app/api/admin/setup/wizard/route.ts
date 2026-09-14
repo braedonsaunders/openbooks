@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
-import { FEATURE_BY_KEY, featureDisableBlocked, featureRequirements } from '../../../../../lib/features'
+import { FEATURE_BY_KEY, acquireFeatureGateLock, featureDisableBlocked, featureRequirements } from '../../../../../lib/features'
 import { INDUSTRY_BY_KEY, canSwitchIndustry } from '../../../../../lib/industries'
 import { normalizeCountryCode } from '../../../../../lib/countries'
 import {
@@ -161,6 +161,12 @@ export async function PUT(req: Request) {
 
   try {
   await db.transaction(async (tx) => {
+    // Serialize against the feature switchboard before any gate reads or row
+    // locks: the Features PUT and every operation that can establish a
+    // feature dependency (project activation/creation) take this same fence,
+    // so a disable evaluated below cannot race a blocker committing
+    // concurrently. Transaction-scoped, held to commit.
+    await acquireFeatureGateLock(orgId, tx)
     // Lock the org row and load current state.
     const cur = (
       (await tx.execute<{ name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }>(sql`
@@ -221,7 +227,10 @@ export async function PUT(req: Request) {
           'Cannot change industry after postings exist.',
         )
       }
-      if (inputCurrency !== cur.base_currency) {
+      // Omission is not a change: only a requested currency different from the
+      // stored one is a foundation mutation. Without the undefined guard every
+      // re-run of setup on a posted org 409s even when it asks for nothing.
+      if (inputCurrency !== undefined && inputCurrency !== cur.base_currency) {
         throw new WizardFoundationBlocked(
           'base-currency-locked',
           'Cannot change base currency after postings exist.',

@@ -354,6 +354,78 @@ test(
 );
 
 test(
+  "omitted base currency is not a foundation change on a posted org",
+  { skip: !DB },
+  async () => {
+    // Validation permits omitting baseCurrency (only validated/applied when
+    // present), so a re-run of setup that requests no currency change must
+    // succeed even after postings lock the foundation. The check used to
+    // compare undefined against the stored currency and 409 every time.
+    const fixture = await seed();
+    try {
+      // A balanced draft entry: journal_lines rows are what lock the
+      // accounting foundation (canSwitchIndustry probes that table).
+      const spine = await withBypassContext(() => db.execute<{
+        bookId: string;
+        subsidiaryId: string;
+        bankId: string;
+        revenueId: string;
+      }>(sql`
+        select (select id from accounting_books where org_id = ${fixture.orgId} and is_primary) as "bookId",
+               (select id from subsidiaries where org_id = ${fixture.orgId} and parent_id is null) as "subsidiaryId",
+               (select id from accounts where org_id = ${fixture.orgId} and number = '1000') as "bankId",
+               (select id from accounts where org_id = ${fixture.orgId} and number = '4000') as "revenueId"`));
+      const entryId = randomUUID();
+      await withBypassContext(() => db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, origin)
+        values (${entryId}, ${fixture.orgId}, ${spine.rows[0]!.bookId}, ${spine.rows[0]!.subsidiaryId},
+                'WIZARD-OMITTED-CURRENCY', '2026-07-15', ${fixture.periodId},
+                'omitted currency evidence', 'draft', 'manual')`));
+      await withBypassContext(() => db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount)
+        values (${fixture.orgId}, ${entryId}, 1, ${spine.rows[0]!.bankId}, ${spine.rows[0]!.subsidiaryId},
+                '1', 'CAD', '1'),
+               (${fixture.orgId}, ${entryId}, 2, ${spine.rows[0]!.revenueId}, ${spine.rows[0]!.subsidiaryId},
+                '-1', 'CAD', '-1')`));
+      routeState.authz = authorize(fixture);
+      routeState.authzQueue = [];
+      const response = await withOrgContext(fixture.orgId, () =>
+        PUT(new Request("http://localhost/api/admin/setup/wizard", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: "Scratch Company",
+            country: "CA",
+            fiscalYearStartMonth: 1,
+            industry: "general_business",
+            features: {},
+            workspaceProfile: {
+              teamSize: "solo",
+              complexity: "essentials",
+              bookStart: "fresh",
+              taxPosition: "unsure",
+              monthlyActivity: "light",
+              closeCadence: "monthly",
+            },
+          }),
+        })),
+      );
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+      const after = await withBypassContext(() => db.execute<{ base_currency: string }>(sql`
+        select base_currency from orgs where id = ${fixture.orgId}`));
+      assert.equal(after.rows[0]?.base_currency, "CAD");
+    } finally {
+      routeState.authz = null;
+      routeState.authzQueue = [];
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
   "accounting-foundation probe re-runs after the wizard waits for the org lock",
   { skip: !DB },
   async () => {

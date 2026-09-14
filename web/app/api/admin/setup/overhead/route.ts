@@ -1,12 +1,14 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import type { FinancialProfile } from '@openbooks/schema'
 import { backfillOverhead } from '@openbooks/engine/src/overhead-apply.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
 import { publishProjectFinancialProfileInTransaction } from '@openbooks/engine/src/project-financial-profile-versions.ts'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
+import { acquireFeatureGateLock } from '../../../../../lib/features'
 import { publishOverheadRates } from '../../../../../lib/overhead-publish'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
@@ -133,15 +135,42 @@ export async function POST(req: Request) {
   // publishes), scheduled (the worker publishes each period), live (project
   // types read the live engine; the card is advisory).
   if (body.action === 'set-lifecycle') {
-    const mode = ['manual', 'scheduled', 'live'].includes(body.mode) ? body.mode : 'manual'
-    const cadence = ['monthly', 'quarterly'].includes(body.cadence) ? body.cadence : 'monthly'
-    await db.execute(sql`
-      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{overheadRateLifecycle}',
-        ${JSON.stringify({ mode, cadence })}::jsonb)
-       where id = ${orgId}`)
-    await db.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({ overheadRateLifecycle: { mode, cadence } })}, ${gate.user.id})`)
+    const mode = body.mode === undefined ? 'manual' : body.mode
+    if (mode !== 'manual' && mode !== 'scheduled' && mode !== 'live') {
+      return NextResponse.json({ error: 'invalid mode' }, { status: 422 })
+    }
+    // Omission keeps the documented defaults; a SUPPLIED value outside the
+    // enum is a different policy than requested, not a default — refuse it
+    // before any write rather than silently storing manual/monthly.
+    const cadence = body.cadence === undefined ? 'monthly' : body.cadence
+    if (cadence !== 'monthly' && cadence !== 'quarterly') {
+      return NextResponse.json({ error: 'invalid cadence' }, { status: 422 })
+    }
+    // Existing lock order: feature-gate fence first, then the authoritative
+    // feature recheck, then the org row lock, then the write. Settings and
+    // the locked before/after audit evidence commit in ONE transaction: a
+    // failure past the write rolls the policy back, never an unevidenced
+    // change.
+    const lifecycleDenied = await withOrgTransaction(orgId, async () => {
+      await acquireFeatureGateLock(orgId)
+      if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
+        return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
+      }
+      const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
+        select settings from orgs where id = ${orgId} for update`)
+      const before = (current.rows[0]?.settings as Record<string, unknown> | undefined)?.overheadRateLifecycle ?? null
+      const after = { mode, cadence }
+      await db.execute(sql`
+        update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{overheadRateLifecycle}',
+          ${JSON.stringify(after)}::jsonb)
+         where id = ${orgId}`)
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'orgs', ${orgId}, 'update',
+                ${JSON.stringify({ overheadRateLifecycle: { before, after } })}, ${gate.user.id})`)
+      return null
+    })
+    if (lifecycleDenied) return lifecycleDenied
     return NextResponse.json({ ok: true })
   }
 
@@ -149,17 +178,55 @@ export async function POST(req: Request) {
   // net_zero_pair (DR overhead acct [project] / CR same acct untagged —
   // P&L nets to zero), or off.
   if (body.action === 'set-application') {
-    const mode = ['report_only', 'net_zero_pair', 'off'].includes(body.mode) ? body.mode : 'report_only'
+    // Omission keeps the documented default; a SUPPLIED value outside the
+    // enum is a different policy than requested — refuse it before any write.
+    const mode = body.mode === undefined ? 'report_only' : body.mode
+    if (mode !== 'report_only' && mode !== 'net_zero_pair' && mode !== 'off') {
+      return NextResponse.json({ error: 'invalid mode' }, { status: 422 })
+    }
     const accountId = body.accountId ?? null
     if (accountId !== null && !isUuid(accountId)) return NextResponse.json({ error: 'invalid accountId' }, { status: 422 })
     if (mode === 'net_zero_pair' && !accountId) return NextResponse.json({ error: 'net_zero_pair requires an overhead applied account' }, { status: 422 })
-    await db.execute(sql`
-      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{overheadApplication}',
-        ${JSON.stringify({ mode, accountId })}::jsonb)
-       where id = ${orgId}`)
-    await db.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({ overheadApplication: { mode, accountId } })}, ${gate.user.id})`)
+    // Existing lock order: feature-gate fence first, then the authoritative
+    // feature recheck, then row locks (org settings, then the referenced
+    // account shared), then the write. A referenced account must be a real,
+    // ACTIVE posting account in this org: the pair posts to it at
+    // time-approval, so a dangling id would only move the failure into the
+    // ledger (same boundary as labor-costing PUT and the payment-providers
+    // surcharge rule save). The locked before/after evidence commits with the
+    // settings or not at all.
+    const applicationDenied = await withOrgTransaction(orgId, async () => {
+      await acquireFeatureGateLock(orgId)
+      if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
+        return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
+      }
+      const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
+        select settings from orgs where id = ${orgId} for update`)
+      if (accountId !== null) {
+        const found = await db.execute<{ id: string }>(sql`
+          select id from accounts
+           where org_id = ${orgId} and id = ${accountId} and not is_summary and is_active
+           limit 1 for share`)
+        if (!found.rows[0]) {
+          return NextResponse.json(
+            { error: 'overhead applied account not found, inactive, or is a summary account' },
+            { status: 422 },
+          )
+        }
+      }
+      const before = (current.rows[0]?.settings as Record<string, unknown> | undefined)?.overheadApplication ?? null
+      const after = { mode, accountId }
+      await db.execute(sql`
+        update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{overheadApplication}',
+          ${JSON.stringify(after)}::jsonb)
+         where id = ${orgId}`)
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'orgs', ${orgId}, 'update',
+                ${JSON.stringify({ overheadApplication: { before, after } })}, ${gate.user.id})`)
+      return null
+    })
+    if (applicationDenied) return applicationDenied
     return NextResponse.json({ ok: true })
   }
 
