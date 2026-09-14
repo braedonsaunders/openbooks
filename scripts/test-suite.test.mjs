@@ -67,7 +67,7 @@ test('a bracketed route path executes its actual tests', () => {
 })
 
 
-for (const [suite, count] of [['unit', 4], ['integration', 8]]) test(`${suite} shards cover the complete manifest exactly once`, () => {
+for (const [suite, count] of [['unit', 4], ['integration', 16]]) test(`${suite} shards cover the complete manifest exactly once`, () => {
   const files = testManifest()[suite]
   const shards = Array.from({ length: count }, (_, index) => shardFiles(files, `${index + 1}/${count}`))
   assert.deepEqual(shards.flat().sort(), [...files].sort())
