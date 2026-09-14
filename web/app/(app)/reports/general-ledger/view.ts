@@ -26,6 +26,8 @@ import {
 import { getMoneyFormatter } from '@/lib/money-server'
 import { dimensionOptions, generalLedger } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
+import { resolveOrgId } from '../../../../lib/org-scope'
+import { reportBookSelection } from '../../../../lib/report-books'
 import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
 import { isReportUuidParam, parseReportQuery } from '../../../../lib/report-filters'
@@ -106,6 +108,8 @@ export interface GeneralLedgerData {
   accounts: LedgerAccount[]
   dimensions: DimensionOptions
   subsidiaries: SubsidiaryPicker
+  /** Only rendered when the org has more than one book. */
+  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
   scheduleDefId: string | null
   scheduleParams: Record<string, string>
   exportParams: Record<string, string>
@@ -117,18 +121,23 @@ export async function loadGeneralLedger(
   const { money: formatMoney } = await getMoneyFormatter()
   const t = await getTranslations('reports')
   const tc = await getTranslations('common')
+  // The book label reuses the budgets list's existing filter copy.
+  const tb = await getTranslations('budgets')
   const scheduleDefId = await reportScheduleAnchor('general-ledger')
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
+  const orgId = await resolveOrgId()
+  const { books, selectedBook } = await reportBookSelection(orgId, sp.book)
   const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
   const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
   const [gl, opts, org] = await Promise.all([
     generalLedger(period.from, period.to, {
       accountId: isReportUuidParam(sp.account) ? sp.account : undefined,
       dims,
+      bookId: selectedBook?.id,
     }),
     dimensionOptions(undefined, dims.projectId),
     orgInfo(),
@@ -145,7 +154,7 @@ export async function loadGeneralLedger(
     backHref: '/reports',
     backLabel: t('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: t('pnl.dateRange', { from: period.from, to: period.to }),
+    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
     periodFrom: period.from,
     periodTo: period.to,
     truncated: gl.truncated,
@@ -171,6 +180,7 @@ export async function loadGeneralLedger(
         to: openingDate,
         mode: 'balance',
         dims,
+        bookId: selectedBook.id,
       },
       closing: m(a.closing),
       closingTone: decimalCmp(a.closing, '0') < 0 ? 'negative' : 'default',
@@ -181,6 +191,7 @@ export async function loadGeneralLedger(
         to: period.to,
         mode: 'balance',
         dims,
+        bookId: selectedBook.id,
       },
       lines: a.lines.map((l, i) => ({
         key: `${l.entryId}-${i}`,
@@ -199,6 +210,15 @@ export async function loadGeneralLedger(
     })),
     dimensions: opts,
     subsidiaries: subView.picker,
+    primaryFilter:
+      books.length > 1
+        ? {
+            paramKey: 'book',
+            label: tb('list.bookFilter'),
+            value: selectedBook?.id ?? '',
+            options: books.map((b) => ({ value: b.id, label: b.name })),
+          }
+        : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: stringParams(sp),
@@ -257,6 +277,7 @@ export function generalLedgerSpec(data: GeneralLedgerData): PageSpec {
         {
           dimensions: f('dimensions'),
           subsidiaries: f('subsidiaries'),
+          primaryFilter: f('primaryFilter'),
           actions: [
             widget('schedule-report', {
               definitionId: data.scheduleDefId ?? '',

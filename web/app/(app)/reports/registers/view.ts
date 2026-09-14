@@ -1,4 +1,7 @@
 import 'server-only'
+import { reportBookSelection } from '../../../../lib/report-books'
+import { resolveOrgId } from '../../../../lib/org-scope'
+
 
 import { getTranslations } from 'next-intl/server'
 import {
@@ -81,6 +84,7 @@ export interface RegisterParty {
 }
 
 export interface RegistersData {
+  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
   title: string
   backHref: string
   backLabel: string
@@ -117,6 +121,8 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
   const tc = await getTranslations('common')
   const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
   const scheduleDefId = await reportScheduleAnchor('registers', { side })
+  const tb = await getTranslations('budgets')
+  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   // Legal-entity scope is enforced here, not by the picker: a restricted
@@ -125,12 +131,14 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
   const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
   const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
   const [reg, opts, org] = await Promise.all([
-    partyRegister(side, { from: period.from, to: period.to, dims }),
+    partyRegister(side, { bookId: selectedBook.id, from: period.from, to: period.to, dims }),
     dimensionOptions(),
     orgInfo(),
   ])
   const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
-  const keep = toSearchParams(q).toString()
+  const keepParams = toSearchParams(q)
+  keepParams.set('book', selectedBook.id)
+  const keep = keepParams.toString()
   const accountTypes = [side === 'ap' ? 'liability_payable' : 'asset_receivable']
   const openingTo = new Date(`${period.from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
@@ -143,7 +151,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
     backHref: '/reports',
     backLabel: t('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: t('pnl.dateRange', { from: period.from, to: period.to }),
+    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
     truncated: reg.truncated,
     truncatedLabel: t('registers.truncated'),
     emptyLabel: t('registers.empty'),
@@ -168,10 +176,10 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
         key: pt.partyId ?? 'none',
         partyId: pt.partyId,
         partyName: name,
-        statementHref: `/reports/statements/${pt.partyId}?side=${side}`,
+        statementHref: `/reports/statements/${pt.partyId}?side=${side}&${keep}`,
         opening: m(pt.opening),
         openingDrill: {
-          kind: 'ledger',
+          kind: 'ledger', bookId: selectedBook.id,
           label: `${name} · ${openingLabel}`,
           accountTypes,
           partyIds,
@@ -181,7 +189,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
         },
         closing: m(pt.closing),
         closingDrill: {
-          kind: 'ledger',
+          kind: 'ledger', bookId: selectedBook.id,
           label: name,
           accountTypes,
           partyIds,
@@ -207,6 +215,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
     }),
     dimensions: opts,
     subsidiaries: subView.picker,
+    primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: stringParams(sp),
@@ -256,6 +265,7 @@ export function registersSpec(data: RegistersData): PageSpec {
           },
           dimensions: f('dimensions'),
           subsidiaries: f('subsidiaries'),
+          primaryFilter: f('primaryFilter'),
           actions: [
             widget('schedule-report', {
               definitionId: data.scheduleDefId ?? '',

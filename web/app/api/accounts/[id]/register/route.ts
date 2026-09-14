@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { resolvePdfPageSetup } from '@openbooks/pdf'
-import { guardPermission } from '../../../../../lib/authz'
+import { withReportBookColumn } from '../../../../../lib/report-book-label'
+import { reportBookSelection } from '../../../../../lib/report-books'
+import { getAuthz, can } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { accountRegister } from '../../../../../lib/reports'
 import {
@@ -37,8 +39,11 @@ function isIsoDate(value: string): boolean {
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('gl.read')
-  if (gate instanceof NextResponse) return gate
+  const gate = await getAuthz()
+  if (!gate) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (!can(gate, 'gl.read') && !can(gate, 'reports.read')) {
+    return NextResponse.json({ error: 'missing permission: gl.read or reports.read' }, { status: 403 })
+  }
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
@@ -55,6 +60,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'invalid_period' }, { status: 400 })
   }
 
+  let bookId: string | undefined
+  let bookName: string | undefined
+  if (query.has('book')) {
+    try {
+      const selection = await reportBookSelection(gate.user.orgId, query.get('book'))
+      bookId = selection.selectedBook.id
+      bookName = `${selection.selectedBook.code} · ${selection.selectedBook.name}`
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'Accounting book unavailable' }, { status: 422 })
+    }
+  }
   const requestedFormat = query.get('format')
   if (requestedFormat) {
     if (!EXPORT_FORMATS.has(requestedFormat as AccountRegisterExportFormat)) {
@@ -70,6 +86,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       0,
       period,
       gate.allowedSubsidiaryIds,
+    bookId,
     )
     if (!result.account) return NextResponse.json({ error: 'not_found' }, { status: 404 })
     if (result.total > MAX_EXPORT_LINES) {
@@ -92,9 +109,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       getTranslations('accounts'),
       getTranslations('common'),
     ])
-    const dateRange = from || to
+    const periodLabel = from || to
       ? accountsT('register.periodFilter', { label: `${from ?? ''} → ${to ?? ''}` })
       : commonT('labels.all')
+    const dateRange = bookName ? `${bookName} · ${periodLabel}` : periodLabel
     const data = accountRegisterExportData(result, {
       register: accountsT('list.viewRegister'),
       date: commonT('labels.date'),
@@ -117,7 +135,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const format = requestedFormat as AccountRegisterExportFormat
     if (format === 'csv') {
       const { sectionHeader } = await reportCsvOptions()
-      return csvResponse(exportDataToCsv(data, { sectionHeader }), filename)
+      const csvData = bookName ? withReportBookColumn(data, { label: (await getTranslations('budgets'))('list.bookFilter'), value: bookName }) : data
+      return csvResponse(exportDataToCsv(csvData, { sectionHeader }), filename)
     }
     if (format === 'xlsx') {
       return xlsxResponse(
@@ -148,6 +167,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     (page - 1) * PER_PAGE,
     from || to || search ? { from: from || undefined, to: to || undefined, search } : undefined,
     gate.allowedSubsidiaryIds,
+    bookId,
   )
   if (!result.account) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   return NextResponse.json({ ...result, page, perPage: PER_PAGE })

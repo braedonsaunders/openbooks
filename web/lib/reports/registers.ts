@@ -64,7 +64,7 @@ export async function accountRegister(
     : sql``;
   const subsidiaryFilter = allowedSubsidiaryIds
     ? allowedSubsidiaryIds.size > 0
-      ? sql` and e.subsidiary_id in ${[...allowedSubsidiaryIds]}`
+      ? sql` and e.subsidiary_id in ${[...allowedSubsidiaryIds]} and l.subsidiary_id in ${[...allowedSubsidiaryIds]}`
       : sql` and false`
     : sql``;
   const bookFilter = sql` and e.book_id = ${statementBookExpr(orgId, bookId)}`;

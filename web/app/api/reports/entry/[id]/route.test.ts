@@ -9,12 +9,15 @@ import { NextResponse } from "next/server";
 
 interface RouteState {
   allowedSubsidiaryIds: Set<string> | null;
+  /** Null = legacy unrestricted caller (the pre-existing tests). */
+  permissions: string[] | null;
   queries: string[];
 }
 
 const stateKey = Symbol.for("openbooks.reports-entry-route-test");
 const routeState: RouteState = {
   allowedSubsidiaryIds: null,
+  permissions: null,
   queries: [],
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
@@ -48,11 +51,38 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.reports-entry-route-test')]
       const NextResponse = globalThis.openbooksReportsEntryNextResponse
-      export async function guardPermission() {
+      function grants(permission) {
+        // Null permissions = legacy unrestricted caller. Otherwise the role
+        // holds exactly the listed grants (plus '*' wildcard holders).
+        if (state.permissions === null) return true
+        const held = new Set(state.permissions)
+        if (held.has('*')) return true
+        if (held.has(permission)) return true
+        const [scope] = permission.split('.')
+        return held.has(scope + '.*')
+      }
+      function authz() {
         return {
           user: { orgId: 'org-1', id: 'user-1' },
+          permissions: new Set(state.permissions ?? ['*']),
           allowedSubsidiaryIds: state.allowedSubsidiaryIds,
         }
+      }
+      export async function guardPermission(permission) {
+        if (!grants(permission)) {
+          return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
+        }
+        return authz()
+      }
+      export async function getAuthz() {
+        return authz()
+      }
+      export function can(gate, permission) {
+        const held = gate.permissions
+        if (held.has('*')) return true
+        if (held.has(permission)) return true
+        const [scope] = permission.split('.')
+        return held.has(scope + '.*')
       }
       export function unauthorized() {
         return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -139,14 +169,15 @@ const routeUrl = "./route.ts?reports-entry-subsidiary-scope-test";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-function reset(allowedSubsidiaryIds: Set<string> | null): void {
+function reset(allowedSubsidiaryIds: Set<string> | null, permissions: string[] | null = null): void {
   routeState.allowedSubsidiaryIds = allowedSubsidiaryIds;
+  routeState.permissions = permissions;
   routeState.queries.length = 0;
 }
 
 function get(): Promise<Response> {
   return GET(new Request("http://openbooks.test/api/reports/entry/entry-1"), {
-    params: Promise.resolve({ id: "entry-1" }),
+    params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
   });
 }
 
@@ -171,6 +202,50 @@ test("restricted callers receive only lines from allowed subsidiaries", async ()
   );
 });
 
+test("reports.read-only roles can open the entry flyout data", async () => {
+  // Sales roles hold reports.read without gl.read and can already read every
+  // line of this entry on the journal page; the flyout must not 403 them.
+  reset(null, ["reports.read"]);
+
+  const response = await get();
+
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { lines: Array<{ memo: string }> };
+  assert.deepEqual(
+    body.lines.map((line) => line.memo),
+    ["visible line", "restricted line"],
+  );
+});
+
+test("reports.read roles keep line-level subsidiary scope", async () => {
+  reset(new Set(["sub-visible"]), ["reports.read"]);
+
+  const response = await get();
+
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { lines: Array<{ memo: string }> };
+  assert.deepEqual(
+    body.lines.map((line) => line.memo),
+    ["visible line"],
+  );
+});
+
+test("gl.read-only roles keep access", async () => {
+  reset(null, ["gl.read"]);
+
+  const response = await get();
+
+  assert.equal(response.status, 200);
+});
+
+test("callers with neither gl.read nor reports.read are refused", async () => {
+  reset(null, ["ap.read"]);
+
+  const response = await get();
+
+  assert.equal(response.status, 403);
+});
+
 test("unrestricted callers retain every journal line", async () => {
   reset(null);
 
@@ -190,4 +265,14 @@ test("unrestricted callers retain every journal line", async () => {
     ),
     "unrestricted callers must not receive a narrowed query",
   );
+});
+
+
+test("malformed entry ids refuse before PostgreSQL UUID casts", async () => {
+  reset(null, ["reports.read"]);
+  const response = await GET(new Request("http://openbooks.test/api/reports/entry/bad"), {
+    params: Promise.resolve({ id: "bad" }),
+  });
+  assert.equal(response.status, 404);
+  assert.equal(routeState.queries.length, 0);
 });
