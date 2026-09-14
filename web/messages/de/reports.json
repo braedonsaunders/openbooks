@@ -460,11 +460,7 @@
     "entities": {
       "ledger_lines": {
         "label": "Hauptbuchzeilen",
-        "description": "Jede Buchungszeile mit ihrer Buchung, ihrem Konto, Geschäftspartner und ihren Dimensionen – die vollständigen Hauptbuchdetails, gebucht oder Entwurf.",
-        "base_currency": "Funktionale Währung",
-        "book": "Rechnungslegungsbuch",
-        "book_code": "Buchcode",
-        "book_id": "Buch-ID"
+        "description": "Jede Buchungszeile mit ihrer Buchung, ihrem Konto, Geschäftspartner und ihren Dimensionen – die vollständigen Hauptbuchdetails, gebucht oder Entwurf."
       },
       "documents": {
         "label": "Transaktionen",
@@ -480,15 +476,11 @@
       },
       "transaction_lines": {
         "label": "Transaktionszeilen",
-        "description": "Transaktionsdetails auf Zeilenebene über alle Typen hinweg – Artikel, Konto, Mengen, Beträge, Abrechnungsstatus und Dimensionen.",
-        "currency": "Währung"
+        "description": "Transaktionsdetails auf Zeilenebene über alle Typen hinweg – Artikel, Konto, Mengen, Beträge, Abrechnungsstatus und Dimensionen."
       },
       "journal_entries": {
         "label": "Buchungen",
-        "description": "Buchungsköpfe – Nummer, Buchungsdatum, Status, Herkunft und Notiz.",
-        "book": "Rechnungslegungsbuch",
-        "book_code": "Buchcode",
-        "book_id": "Buch-ID"
+        "description": "Buchungsköpfe – Nummer, Buchungsdatum, Status, Herkunft und Notiz."
       },
       "items": {
         "label": "Artikel",
@@ -571,7 +563,11 @@
         "entry_id": "Buchung (ID)",
         "account_id": "Konto (ID)",
         "party_id": "Geschäftspartner (ID)",
-        "equipment": "Ausrüstung"
+        "equipment": "Ausrüstung",
+        "base_currency": "Funktionale Währung",
+        "book": "Rechnungslegungsbuch",
+        "book_code": "Buchcode",
+        "book_id": "Buch-ID"
       },
       "documents": {
         "kind": "Typ",
@@ -660,7 +656,8 @@
         "cost_rate": "Kostensatz",
         "bill_rate": "Verrechnungssatz",
         "cost_amount": "Kostenbetrag",
-        "bill_amount": "Verrechnungsbetrag"
+        "bill_amount": "Verrechnungsbetrag",
+        "currency": "Währung"
       },
       "journal_entries": {
         "entry_number": "Buchung Nr.",
@@ -670,7 +667,10 @@
         "memo": "Notiz",
         "created_at": "Erstellt am",
         "id": "Buchung (ID)",
-        "source_document_id": "Quelltransaktion (ID)"
+        "source_document_id": "Quelltransaktion (ID)",
+        "book": "Rechnungslegungsbuch",
+        "book_code": "Buchcode",
+        "book_id": "Buch-ID"
       },
       "items": {
         "code": "Code",

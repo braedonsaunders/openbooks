@@ -460,11 +460,7 @@
     "entities": {
       "ledger_lines": {
         "label": "Líneas del mayor",
-        "description": "Detalle de líneas de asiento unido a asiento, cuenta, tercero y dimensiones — el libro mayor en bruto. Una fila por línea de asiento contabilizada (o en borrador).",
-        "base_currency": "Moneda funcional",
-        "book": "Libro contable",
-        "book_code": "Código del libro",
-        "book_id": "ID del libro"
+        "description": "Detalle de líneas de asiento unido a asiento, cuenta, tercero y dimensiones — el libro mayor en bruto. Una fila por línea de asiento contabilizada (o en borrador)."
       },
       "documents": {
         "label": "Transacciones",
@@ -480,15 +476,11 @@
       },
       "transaction_lines": {
         "label": "Líneas de transacción",
-        "description": "Detalle de transacciones a nivel de línea para todos los tipos: artículo, cuenta, cantidades, importes, estado de facturación y dimensiones.",
-        "currency": "Moneda"
+        "description": "Detalle de transacciones a nivel de línea para todos los tipos: artículo, cuenta, cantidades, importes, estado de facturación y dimensiones."
       },
       "journal_entries": {
         "label": "Asientos de diario",
-        "description": "Encabezados de asientos: número, fecha de contabilización, estado, origen y nota.",
-        "book": "Libro contable",
-        "book_code": "Código del libro",
-        "book_id": "ID del libro"
+        "description": "Encabezados de asientos: número, fecha de contabilización, estado, origen y nota."
       },
       "items": {
         "label": "Artículos",
@@ -571,7 +563,11 @@
         "entry_id": "Asiento (id)",
         "account_id": "Cuenta (id)",
         "party_id": "Tercero (id)",
-        "equipment": "Equipo"
+        "equipment": "Equipo",
+        "base_currency": "Moneda funcional",
+        "book": "Libro contable",
+        "book_code": "Código del libro",
+        "book_id": "ID del libro"
       },
       "documents": {
         "kind": "Tipo",
@@ -660,7 +656,8 @@
         "cost_rate": "Tarifa de costo",
         "bill_rate": "Tarifa de facturación",
         "cost_amount": "Importe de costo",
-        "bill_amount": "Importe facturado"
+        "bill_amount": "Importe facturado",
+        "currency": "Moneda"
       },
       "journal_entries": {
         "entry_number": "N.º de asiento",
@@ -670,7 +667,10 @@
         "memo": "Nota",
         "created_at": "Creado el",
         "id": "Asiento (id)",
-        "source_document_id": "Transacción de origen (id)"
+        "source_document_id": "Transacción de origen (id)",
+        "book": "Libro contable",
+        "book_code": "Código del libro",
+        "book_id": "ID del libro"
       },
       "items": {
         "code": "Código",

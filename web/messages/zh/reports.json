@@ -460,11 +460,7 @@
     "entities": {
       "ledger_lines": {
         "label": "总账行",
-        "description": "每条分录行及其分录、科目、往来方和维度——完整的总账明细，含已过账或草稿。",
-        "base_currency": "记账本位币",
-        "book": "会计账簿",
-        "book_code": "账簿代码",
-        "book_id": "账簿ID"
+        "description": "每条分录行及其分录、科目、往来方和维度——完整的总账明细，含已过账或草稿。"
       },
       "documents": {
         "label": "交易",
@@ -480,15 +476,11 @@
       },
       "transaction_lines": {
         "label": "交易行",
-        "description": "跨所有类型的行级交易明细——项目、科目、数量、金额、开票状态和维度。",
-        "currency": "货币"
+        "description": "跨所有类型的行级交易明细——项目、科目、数量、金额、开票状态和维度。"
       },
       "journal_entries": {
         "label": "日记账分录",
-        "description": "日记账分录抬头——编号、过账日期、状态、来源和备注。",
-        "book": "会计账簿",
-        "book_code": "账簿代码",
-        "book_id": "账簿ID"
+        "description": "日记账分录抬头——编号、过账日期、状态、来源和备注。"
       },
       "items": {
         "label": "项目",
@@ -571,7 +563,11 @@
         "entry_id": "分录（ID）",
         "account_id": "科目（ID）",
         "party_id": "往来方（ID）",
-        "equipment": "设备"
+        "equipment": "设备",
+        "base_currency": "记账本位币",
+        "book": "会计账簿",
+        "book_code": "账簿代码",
+        "book_id": "账簿ID"
       },
       "documents": {
         "kind": "类型",
@@ -660,7 +656,8 @@
         "cost_rate": "成本费率",
         "bill_rate": "计费费率",
         "cost_amount": "成本金额",
-        "bill_amount": "计费金额"
+        "bill_amount": "计费金额",
+        "currency": "货币"
       },
       "journal_entries": {
         "entry_number": "分录号",
@@ -670,7 +667,10 @@
         "memo": "备注",
         "created_at": "创建时间",
         "id": "分录（ID）",
-        "source_document_id": "源交易（ID）"
+        "source_document_id": "源交易（ID）",
+        "book": "会计账簿",
+        "book_code": "账簿代码",
+        "book_id": "账簿ID"
       },
       "items": {
         "code": "编码",

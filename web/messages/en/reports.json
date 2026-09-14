@@ -465,11 +465,7 @@
     "entities": {
       "ledger_lines": {
         "label": "Ledger lines",
-        "description": "Every journal line with its entry, account, party and dimensions — the full general-ledger detail, posted or draft.",
-        "base_currency": "Functional currency",
-        "book": "Accounting book",
-        "book_code": "Book code",
-        "book_id": "Book ID"
+        "description": "Every journal line with its entry, account, party and dimensions — the full general-ledger detail, posted or draft."
       },
       "documents": {
         "label": "Transactions",
@@ -485,15 +481,11 @@
       },
       "transaction_lines": {
         "label": "Transaction lines",
-        "description": "Line-level transaction detail across every type — item, account, quantities, amounts, billing state and dimensions.",
-        "currency": "Currency"
+        "description": "Line-level transaction detail across every type — item, account, quantities, amounts, billing state and dimensions."
       },
       "journal_entries": {
         "label": "Journal entries",
-        "description": "Journal-entry headers — number, posting date, status, origin and memo.",
-        "book": "Accounting book",
-        "book_code": "Book code",
-        "book_id": "Book ID"
+        "description": "Journal-entry headers — number, posting date, status, origin and memo."
       },
       "items": {
         "label": "Items",
@@ -576,7 +568,11 @@
         "entry_id": "Entry (id)",
         "account_id": "Account (id)",
         "party_id": "Party (id)",
-        "equipment": "Equipment"
+        "equipment": "Equipment",
+        "base_currency": "Functional currency",
+        "book": "Accounting book",
+        "book_code": "Book code",
+        "book_id": "Book ID"
       },
       "documents": {
         "kind": "Type",
@@ -665,7 +661,8 @@
         "cost_rate": "Cost rate",
         "bill_rate": "Bill rate",
         "cost_amount": "Cost amount",
-        "bill_amount": "Bill amount"
+        "bill_amount": "Bill amount",
+        "currency": "Currency"
       },
       "journal_entries": {
         "entry_number": "Entry #",
@@ -675,7 +672,10 @@
         "memo": "Memo",
         "created_at": "Created at",
         "id": "Entry (id)",
-        "source_document_id": "Source transaction (id)"
+        "source_document_id": "Source transaction (id)",
+        "book": "Accounting book",
+        "book_code": "Book code",
+        "book_id": "Book ID"
       },
       "items": {
         "code": "Code",
