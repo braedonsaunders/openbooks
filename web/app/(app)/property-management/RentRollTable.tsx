@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 import { Badge, Input, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
+import { decimalCmp, decimalSum } from "../../../lib/statement-format";
 import { Empty, Field, Status } from "./workspace-ui";
 import type { LeaseRow, Money, PropertyRow, PropertyWorkspace, UnitRow } from "./types";
 
@@ -13,6 +14,28 @@ type RentRollRow = {
   unit: UnitRow | null;
   lease: LeaseRow | null;
 };
+
+export function monthlyCharges(data: Pick<PropertyWorkspace, "charges">, lease: LeaseRow | null, today: string): string {
+  if (!lease) return "0";
+  const current = data.charges.filter((charge) =>
+    charge.leaseId === lease.id && charge.frequency === "monthly" &&
+    charge.effectiveFrom <= today && (!charge.effectiveTo || charge.effectiveTo >= today),
+  );
+  if (current.length) return decimalSum(current.map((charge) => charge.amount));
+  return lease.status === "draft" ? lease.baseRent ?? "0" : "0";
+}
+
+export function pastDue(data: Pick<PropertyWorkspace, "schedules">, lease: LeaseRow | null, today: string): string {
+  if (!lease) return "0";
+  const invoices = new Map<string, string>();
+  for (const line of data.schedules) {
+    if (line.leaseId === lease.id && line.invoiceDocumentId &&
+        line.invoiceStatus === "posted" && line.invoiceDueOn && line.invoiceDueOn < today) {
+      invoices.set(line.invoiceDocumentId, line.invoiceOpenBalance ?? "0");
+    }
+  }
+  return decimalSum([...invoices.values()]);
+}
 
 export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
   data: PropertyWorkspace;
@@ -67,27 +90,6 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
       `${b.property?.name ?? ""}:${b.unit?.code ?? ""}:${b.lease?.leaseNumber ?? ""}`,
     ),
   );
-  const monthlyCharges = (lease: LeaseRow | null) => {
-    if (!lease) return 0;
-    const current = data.charges.filter((charge) =>
-      charge.leaseId === lease.id && charge.frequency === "monthly" &&
-      charge.effectiveFrom <= today && (!charge.effectiveTo || charge.effectiveTo >= today),
-    );
-    if (current.length)
-      return current.reduce((total, charge) => total + Number(charge.amount), 0);
-    return lease.status === "draft" ? Number(lease.baseRent ?? 0) : 0;
-  };
-  const pastDue = (lease: LeaseRow | null) => {
-    if (!lease) return 0;
-    const invoices = new Map<string, number>();
-    for (const line of data.schedules) {
-      if (line.leaseId === lease.id && line.invoiceDocumentId &&
-          line.invoiceStatus === "posted" && line.invoiceDueOn && line.invoiceDueOn < today) {
-        invoices.set(line.invoiceDocumentId, Number(line.invoiceOpenBalance ?? 0));
-      }
-    }
-    return [...invoices.values()].reduce((total, amount) => total + amount, 0);
-  };
   const rowStatus = (row: RentRollRow) => row.lease?.status ?? row.unit?.status ?? "vacant";
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = rows.filter((row) => {
@@ -147,7 +149,7 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
             </TableHeader>
             <TableBody>
               {filtered.map((row) => {
-                const overdueAmount = pastDue(row.lease);
+                const overdueAmount = pastDue(data, row.lease, today);
                 const open = () => row.lease ? onOpenLease(row.lease.id) :
                   row.unit ? onOpenUnit(row.unit.id) : undefined;
                 return (
@@ -174,12 +176,12 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
                     </TableCell>
                     <TableCell><Status value={rowStatus(row)} /></TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {row.lease ? money(monthlyCharges(row.lease), { currency: row.lease.currency }) : "—"}
+                      {row.lease ? money(monthlyCharges(data, row.lease, today), { currency: row.lease.currency }) : "—"}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {row.lease ? money(row.lease.depositBalance ?? 0, { currency: row.lease.currency }) : "—"}
                     </TableCell>
-                    <TableCell className={cn("text-right tabular-nums", overdueAmount > 0 && "font-medium text-red-600")}>
+                    <TableCell className={cn("text-right tabular-nums", decimalCmp(overdueAmount, "0") > 0 && "font-medium text-red-600")}>
                       {row.lease ? money(overdueAmount, { currency: row.lease.currency }) : "—"}
                     </TableCell>
                     <TableCell>
