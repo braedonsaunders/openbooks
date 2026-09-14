@@ -54,13 +54,14 @@ export function AccountRegisterDrawer() {
   const page = Math.max(1, Number(params.get('accountRegisterPage')) || 1)
   const from = params.get('accountRegisterFrom')
   const to = params.get('accountRegisterTo')
+  const book = params.get('book')
   const registerSearch = params.get('accountRegisterQ')
   const query = params.toString()
   const [data, setData] = useState<RegisterResponse | null>(null)
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
 
   const closeHref = useMemo(() => accountRegisterCloseHref(pathname, query), [pathname, query])
-  const requestKey = `${accountId ?? ''}:${page}:${from ?? ''}:${to ?? ''}:${registerSearch ?? ''}`
+  const requestKey = `${accountId ?? ''}:${page}:${from ?? ''}:${to ?? ''}:${registerSearch ?? ''}:${book ?? ''}`
 
   useEffect(() => {
     if (!accountId) {
@@ -70,6 +71,7 @@ export function AccountRegisterDrawer() {
     }
     const controller = new AbortController()
     const requestParams = new URLSearchParams({ page: String(page) })
+    if (book) requestParams.set('book', book)
     if (from) requestParams.set('from', from)
     if (to) requestParams.set('to', to)
     if (registerSearch) requestParams.set('q', registerSearch)
@@ -90,7 +92,7 @@ export function AccountRegisterDrawer() {
         router.replace(closeHref as never, { scroll: false })
       })
     return () => controller.abort()
-  }, [accountId, closeHref, from, page, registerSearch, requestKey, router, tc, to])
+  }, [accountId, book, closeHref, from, page, registerSearch, requestKey, router, tc, to])
 
   const ready = data && loadedKey === requestKey
   const periodLabel = from || to ? `${from ?? ''} → ${to ?? ''}` : null
@@ -111,7 +113,7 @@ export function AccountRegisterDrawer() {
       stacked={params.has('reportDrill') || params.has('account')}
       contextualReturn={false}
       headerActions={ready ? (
-        <AccountRegisterExportMenu accountId={accountId!} from={from} to={to} search={registerSearch} />
+        <AccountRegisterExportMenu accountId={accountId!} from={from} to={to} search={registerSearch} book={book} />
       ) : undefined}
     >
       <div className="space-y-3">

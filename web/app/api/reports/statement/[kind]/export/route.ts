@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
+import { withReportBookColumn } from '../../../../../../lib/report-book-label'
+import { reportBookSelection } from '../../../../../../lib/report-books'
 import { guardPermission } from '../../../../../../lib/authz'
 import {
   exportDataToCsv,
@@ -53,10 +55,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   const filename = `${safeName(kind)}-${stamp}`
   const branding = await orgBranding()
 
+  let csvBook: { label: string; value: string } | undefined
   const emitData = async (data: ExportData) => {
     if (format === 'csv') {
       const { sectionHeader } = await reportCsvOptions()
-      return csvResponse(exportDataToCsv(data, { sectionHeader }), filename)
+      const csvData = csvBook ? withReportBookColumn(data, csvBook) : data
+      return csvResponse(exportDataToCsv(csvData, { sectionHeader }), filename)
     }
     if (format === 'xlsx') {
       return xlsxResponse(await exportDataToXlsx(data, {
@@ -76,6 +80,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     const q = parseReportQuery(p)
     const period = await resolvePeriod(q.period, { customFrom: p.get('from'), customTo: p.get('to') })
     const resolved = await resolveReport(kind as ReportKind, p, { orgId: gate.user.orgId, t, period, query: q })
+    const bookKinds = new Set(['pnl', 'balance-sheet', 'general-ledger', 'journal', 'registers', 'partner-statement', 'project-profitability', 'trial-balance', 'partners', 'cash-flow', 'cash-flow-indirect'])
+    const selection = bookKinds.has(kind) ? await reportBookSelection(gate.user.orgId, p.get('book')) : null
+    if (selection && selection.books.length > 1) {
+      const { selectedBook } = selection
+      csvBook = { label: (await getTranslations('budgets'))('list.bookFilter'), value: `${selectedBook.code} · ${selectedBook.name}` }
+      if (resolved.render === 'data') resolved.data.dateRangeLabel = `${selectedBook.name} · ${resolved.data.dateRangeLabel}`
+    }
 
     if (resolved.render === 'view') {
       const { view, title, periodPhrase } = resolved

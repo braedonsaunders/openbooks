@@ -3,16 +3,20 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 const stateKey = Symbol.for('openbooks.account-register-route-test')
-const routeState = { accountRegisterCalls: 0 }
+const routeState = { accountRegisterCalls: 0, lastBook: undefined as string | undefined, permissions: ['gl.read'] }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
 const mockSources = new Map<string, string>([
+  ['mock:intl', `export async function getTranslations() { return (key) => key }`],
+  ['mock:report-books', `export async function reportBookSelection(org, id) { if (id !== 'tax-book') throw new Error('Accounting book unavailable'); return { selectedBook: { id, code: 'TAX', name: 'Tax book' } } }`],
   [
     'mock:authz',
     `
-      export async function guardPermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+      const state = globalThis[Symbol.for('openbooks.account-register-route-test')]
+      export async function getAuthz() {
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null, permissions: state.permissions }
       }
+      export function can(gate, permission) { return gate.permissions.includes(permission) }
     `,
   ],
   [
@@ -23,7 +27,8 @@ const mockSources = new Map<string, string>([
     'mock:reports',
     `
       const state = globalThis[Symbol.for('openbooks.account-register-route-test')]
-      export async function accountRegister() {
+      export async function accountRegister(...args) {
+        state.lastBook = args[6]
         state.accountRegisterCalls += 1
         return { account: { number: '1000', name: 'Cash' }, lines: [], total: 0, balance: '0' }
       }
@@ -33,7 +38,7 @@ const mockSources = new Map<string, string>([
     'mock:account-register-export',
     `
       export function accountRegisterDocTypeLabel() { return '' }
-      export function accountRegisterExportData() { return {} }
+      export function accountRegisterExportData() { return { title: 'Register', dateRangeLabel: '', groups: [], summary: [] } }
     `,
   ],
   [
@@ -76,6 +81,8 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
+  ['next-intl/server', 'mock:intl'],
+  ['../../../../../lib/report-books', 'mock:report-books'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../../../../lib/reports', 'mock:reports'],
@@ -140,3 +147,33 @@ test('GET accepts a real date and returns the register payload', async () => {
   assert.equal(routeState.accountRegisterCalls, 1)
   assert.equal((await response.json()).page, 1)
 })
+
+
+test('register JSON and export preserve an explicit book for reports-only callers', async () => {
+  routeState.permissions = ['reports.read'];
+  try {
+    for (const suffix of ['', '&format=csv']) {
+      routeState.lastBook = undefined;
+      const response = await GET(new Request(`http://openbooks.test/api/accounts/account/register?book=tax-book${suffix}`), {
+        params: Promise.resolve({ id: 'account' }),
+      });
+      assert.equal(response.status, 200);
+      assert.equal(routeState.lastBook, 'tax-book');
+    }
+  } finally { routeState.permissions = ['gl.read']; }
+});
+
+test('unavailable book and unrelated permissions refuse before ledger reads', async () => {
+  routeState.accountRegisterCalls = 0;
+  const response = await GET(new Request('http://openbooks.test/api/accounts/account/register?book=foreign'), {
+    params: Promise.resolve({ id: 'account' }),
+  });
+  assert.equal(response.status, 422);
+  assert.equal(routeState.accountRegisterCalls, 0);
+  routeState.permissions = ['ap.read'];
+  try {
+    const denied = await GET(new Request('http://openbooks.test/api/accounts/account/register'), { params: Promise.resolve({ id: 'account' }) });
+    assert.equal(denied.status, 403);
+    assert.equal(routeState.accountRegisterCalls, 0);
+  } finally { routeState.permissions = ['gl.read']; }
+});

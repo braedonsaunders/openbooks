@@ -1,4 +1,7 @@
 import 'server-only'
+import { reportBookSelection } from '../../../../lib/report-books'
+import { resolveOrgId } from '../../../../lib/org-scope'
+
 
 import { getTranslations } from 'next-intl/server'
 import { dimensionOptions, trialBalance } from '../../../../lib/reports'
@@ -24,6 +27,7 @@ import { filterBar, page, pageHeader, ref, widget, widgetBlock, type PageSpec } 
  */
 
 export interface TrialBalanceData {
+  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
   title: string
   backHref: string
   backLabel: string
@@ -43,12 +47,14 @@ export async function loadTrialBalance(
 ): Promise<TrialBalanceData> {
   const t = await getTranslations('reports')
   const scheduleDefId = await reportScheduleAnchor('trial-balance')
+  const tb = await getTranslations('budgets')
+  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const date = period.to
   const subView = await reportSubsidiaryView(q.subsidiaryId, date)
   const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
-  const [rows, opts, org, branding] = await Promise.all([trialBalance(date, dims), dimensionOptions(), orgInfo(), orgBranding()])
+  const [rows, opts, org, branding] = await Promise.all([trialBalance(date, dims, undefined, selectedBook.id), dimensionOptions(), orgInfo(), orgBranding()])
   const totalDebits = decimalSum(rows.map((r) => r.debits))
   const totalCredits = decimalSum(rows.map((r) => r.credits))
 
@@ -66,7 +72,7 @@ export async function loadTrialBalance(
   })
   const drills: (ReportDrillTarget | null)[][] = rows.map((r) => {
     const target: ReportDrillTarget = {
-      kind: 'ledger',
+      kind: 'ledger', bookId: selectedBook.id,
       label: `${r.number ?? ''} ${r.name}`.trim(),
       accountIds: [r.id],
       to: date,
@@ -78,7 +84,7 @@ export async function loadTrialBalance(
   })
   dataRows.push(['', t('trialBalance.totals'), totalDebits, totalCredits, decimalAdd(totalDebits, decimalNeg(totalCredits))])
   links.push([null, null, null, null, null])
-  const totalsTarget: ReportDrillTarget = { kind: 'ledger', label: t('trialBalance.totals'), to: date, mode: 'balance', dims, subsidiaryId: q.subsidiaryId }
+  const totalsTarget: ReportDrillTarget = { kind: 'ledger', bookId: selectedBook.id, label: t('trialBalance.totals'), to: date, mode: 'balance', dims, subsidiaryId: q.subsidiaryId }
   drills.push([null, null, totalsTarget, totalsTarget, totalsTarget])
 
 
@@ -88,6 +94,7 @@ export async function loadTrialBalance(
     backLabel: t('hub.title'),
     dimensions: opts,
     subsidiaries: subView.picker,
+    primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: sp,
@@ -96,7 +103,7 @@ export async function loadTrialBalance(
     emptyLabel: t('generalLedger.empty'),
     paper: {
       title: t('trialBalance.title'),
-      periodPhrase: t('trialBalance.description', { date, count: rows.length }),
+      periodPhrase: `${selectedBook.name} · ${t('trialBalance.description', { date, count: rows.length })}`,
       groups: [
         {
           columns: [
@@ -131,6 +138,7 @@ export function trialBalanceSpec(data: TrialBalanceData): PageSpec {
         {
           dimensions: f('dimensions'),
           subsidiaries: f('subsidiaries'),
+          primaryFilter: f('primaryFilter'),
           actions: [
             widget(
               'schedule-report',

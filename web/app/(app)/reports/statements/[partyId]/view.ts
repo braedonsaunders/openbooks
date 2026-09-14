@@ -1,4 +1,6 @@
 import 'server-only'
+import { reportBookSelection } from '../../../../../lib/report-books'
+
 
 import { getTranslations } from 'next-intl/server'
 import {
@@ -66,6 +68,7 @@ export interface StatementLine {
 }
 
 export interface StatementData {
+  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
   title: string
   backHref: string
   backLabel: string
@@ -107,10 +110,13 @@ export async function loadStatement(
   const tc = await getTranslations('common')
   const authz = await requirePermission('reports.read')
   const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
+  const tb = await getTranslations('budgets')
+  const { books, selectedBook } = await reportBookSelection(authz.user.orgId, sp.book)
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const [st, org] = await Promise.all([
     partnerStatement(partyId, authz.user.orgId, {
+      bookId: selectedBook.id,
       from: period.from,
       to: period.to,
       side,
@@ -122,7 +128,9 @@ export async function loadStatement(
     orgInfo(),
   ])
   const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
-  const keep = toSearchParams(q).toString()
+  const keepParams = toSearchParams(q)
+  keepParams.set('book', selectedBook.id)
+  const keep = keepParams.toString()
   const accountTypes = [side === 'ap' ? 'liability_payable' : 'asset_receivable']
   const openingTo = new Date(`${period.from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
@@ -144,7 +152,7 @@ export async function loadStatement(
     backHref: '/reports/registers',
     backLabel: t('registers.arTitle'),
     company: org?.name ?? '',
-    periodPhrase: t('pnl.dateRange', { from: period.from, to: period.to }),
+    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
     receivablesHref: `/reports/statements/${partyId}?side=ar&${keep}`,
     payablesHref: `/reports/statements/${partyId}?side=ap&${keep}`,
     receivablesLabel: t('registers.receivables'),
@@ -170,7 +178,7 @@ export async function loadStatement(
     openingLabel,
     opening: m(st.opening),
     openingDrill: {
-      kind: 'ledger',
+      kind: 'ledger', bookId: selectedBook.id,
       label: openingLabel,
       accountTypes,
       partyIds: [partyId],
@@ -181,7 +189,7 @@ export async function loadStatement(
     closing: m(st.closing),
     closingTone: decimalCmp(st.closing, '0') < 0 ? 'negative' : 'default',
     closingDrill: {
-      kind: 'ledger',
+      kind: 'ledger', bookId: selectedBook.id,
       label: closingLabel,
       accountTypes,
       partyIds: [partyId],
@@ -208,6 +216,7 @@ export async function loadStatement(
       balanceTone: decimalCmp(l.balance, '0') < 0 ? 'negative' : 'default',
       txn: { kind: 'transaction', entryId: l.entryId, docKind: l.docKind, docId: l.docId },
     })),
+    primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     exportParams: { ...stringParams(sp), party: partyId, side },
   }
 }
@@ -267,6 +276,7 @@ export function statementSpec(data: StatementData): PageSpec {
             ]),
             divider: true,
           },
+          primaryFilter: f('primaryFilter'),
           actions: [
             widget('save-view'),
             widget('export-menu', { kind: 'partner-statement', params: data.exportParams }),

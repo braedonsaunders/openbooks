@@ -1,4 +1,6 @@
 import 'server-only'
+import { reportBookSelection } from '../../../../lib/report-books'
+
 
 import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
@@ -63,6 +65,7 @@ export interface PartnersRow {
 }
 
 export interface PartnersData {
+  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
   title: string
   backHref: string
   backLabel: string
@@ -102,11 +105,13 @@ export async function loadPartners(
   const tr = await getTranslations('reports')
   const tc = await getTranslations('common')
 
+  const tb = await getTranslations('budgets')
+  const { books, selectedBook } = await reportBookSelection(authz.user.orgId, Array.isArray(sp.book) ? sp.book[0] : sp.book)
   const kind = sp.kind === 'receivable' ? 'receivable' : 'payable'
   const scheduleDefId = await reportScheduleAnchor('partners', { kind })
   const params = parseListParams(sp, { sort: 'balance', allowedSorts: ['balance'] as const, perPage: PER_PAGE })
   const [all, org] = await Promise.all([
-    partnerBalances(kind, authz.user.orgId, undefined, undefined, { subsidiaryIds: scope }),
+    partnerBalances(kind, authz.user.orgId, undefined, selectedBook.id, { subsidiaryIds: scope }),
     orgInfo(),
   ])
 
@@ -127,21 +132,21 @@ export async function loadPartners(
     backHref: '/reports',
     backLabel: tr('hub.title'),
     searchPlaceholder: t('searchPlaceholder'),
-    payableHref: '/reports/partners?kind=payable',
-    receivableHref: '/reports/partners?kind=receivable',
+    payableHref: `/reports/partners?kind=payable&book=${selectedBook.id}`,
+    receivableHref: `/reports/partners?kind=receivable&book=${selectedBook.id}`,
     payableLabel: t('payables'),
     receivableLabel: t('receivables'),
     isPayable: kind === 'payable',
     isReceivable: kind === 'receivable',
     totalLabel,
     total: m(total),
-    totalDrill: { kind: 'ledger', label: totalLabel, accountTypes, to: asOf, mode: 'balance' },
+    totalDrill: { kind: 'ledger', bookId: selectedBook.id, label: totalLabel, accountTypes, to: asOf, mode: 'balance' },
     noPartyLabel,
     columnParty: tc('labels.party'),
     columnOutstanding: t('columns.outstanding'),
     columnGlLines: t('columns.glLines'),
     company: org?.name ?? '',
-    periodPhrase: t('description'),
+    periodPhrase: `${selectedBook.name} · ${t('description')}`,
     rows: pageRows.map((row, index) => {
       const balance = presented(row.balance)
       return {
@@ -152,7 +157,7 @@ export async function loadPartners(
         balanceTone: decimalCmp(balance, '0') < 0 ? 'negative' : 'default',
         lineCount: row.line_count,
         drill: {
-          kind: 'ledger',
+          kind: 'ledger', bookId: selectedBook.id,
           label: row.display_name ?? noPartyLabel,
           accountTypes,
           partyIds: row.id ? [row.id] : undefined,
@@ -164,6 +169,7 @@ export async function loadPartners(
     totalRows: filtered.length,
     currentPage: params.page,
     perPage: PER_PAGE,
+    primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: { ...stringParams(sp), side: kind },
@@ -201,6 +207,7 @@ export function partnersSpec(data: PartnersData): PageSpec {
             { href: f('payableHref'), label: f('payableLabel'), activeWhen: f('isPayable') },
             { href: f('receivableHref'), label: f('receivableLabel'), activeWhen: f('isReceivable') },
           ]),
+          primaryFilter: f('primaryFilter'),
           actions: [
             widget('schedule-report', {
               definitionId: data.scheduleDefId ?? '',

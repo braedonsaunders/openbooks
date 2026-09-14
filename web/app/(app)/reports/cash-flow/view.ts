@@ -1,4 +1,7 @@
 import 'server-only'
+import { reportBookSelection } from '../../../../lib/report-books'
+import { resolveOrgId } from '../../../../lib/org-scope'
+
 
 import { getTranslations } from 'next-intl/server'
 import {
@@ -41,6 +44,7 @@ type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>
 type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
 
 export interface CashFlowData {
+  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
   title: string
   backHref: string
   backLabel: string
@@ -62,6 +66,8 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
   const t = await getTranslations('reports.cashFlow')
   const tr = await getTranslations('reports')
   const scheduleDefId = await reportScheduleAnchor('cash-flow')
+  const tb = await getTranslations('budgets')
+  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const from = period.from
@@ -71,7 +77,7 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
   // and every query below carries it — the same contract as the export path.
   const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
   const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
-  const [cf, opts, org] = await Promise.all([cashFlow(from, to, dims), dimensionOptions(), orgInfo()])
+  const [cf, opts, org] = await Promise.all([cashFlow(from, to, dims, undefined, selectedBook.id), dimensionOptions(), orgInfo()])
   const m = (v: ExactDecimal) => formatMoney(v, { currency: org?.base_currency })
   const openingTo = new Date(`${from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
@@ -122,7 +128,7 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
             valueClassName: 'text-right tabular-nums',
             tone: toneOf(l.amount),
             drill: {
-              kind: 'ledger',
+              kind: 'ledger', bookId: selectedBook.id,
               label: l.label,
               accountTypes: [l.type],
               from,
@@ -143,7 +149,7 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
         tone: toneOf(s.subtotal),
         rowClassName: reportSubtotalRowClass,
         drill: {
-          kind: 'ledger',
+          kind: 'ledger', bookId: selectedBook.id,
           label: subtotalLabel,
           accountTypes: s.lines.map((line) => line.type),
           from,
@@ -163,7 +169,7 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
       tone: toneOf(cf.netChange),
       rowClassName: reportSubtotalRowClass,
       drill: {
-        kind: 'ledger',
+        kind: 'ledger', bookId: selectedBook.id,
         label: t('netChange'),
         accountTypes: cf.sections.flatMap((s) => s.lines.map((line) => line.type)),
         from,
@@ -180,7 +186,7 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
       value: m(cf.openingCash),
       valueClassName: 'text-right tabular-nums text-slate-500 dark:text-slate-400',
       drill: {
-        kind: 'ledger',
+        kind: 'ledger', bookId: selectedBook.id,
         label: t('openingCash'),
         accountTypes: ['asset_bank'],
         to: openingDate,
@@ -197,7 +203,7 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
       tone: toneOf(cf.closingCash),
       rowClassName: reportTotalRowClass,
       drill: {
-        kind: 'ledger',
+        kind: 'ledger', bookId: selectedBook.id,
         label: t('closingCash'),
         accountTypes: ['asset_bank'],
         to,
@@ -212,13 +218,14 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
     backHref: '/reports',
     backLabel: tr('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: t('dateRange', { from, to }),
+    periodPhrase: `${selectedBook.name} · ${t('dateRange', { from, to })}`,
     reconciliationLabel: t('reconciliation'),
     reconciliationStatus: reconciled ? t('reconciled') : t('offBy', { amount: m(cf.reconciliationGap) }),
     reconciled,
     rows,
     dimensions: opts,
     subsidiaries: subView.picker,
+    primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: stringParams(sp),
@@ -246,6 +253,7 @@ export function cashFlowSpec(data: CashFlowData): PageSpec {
         {
           dimensions: f('dimensions'),
           subsidiaries: f('subsidiaries'),
+          primaryFilter: f('primaryFilter'),
           actions: [
             widget('schedule-report', {
               definitionId: data.scheduleDefId ?? '',

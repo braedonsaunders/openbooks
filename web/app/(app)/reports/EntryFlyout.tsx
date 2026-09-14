@@ -8,7 +8,8 @@ import { ArrowUpRight } from 'lucide-react'
 import { Badge, Button, Drawer, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { TxnLink } from './TxnLink'
 import { AccountRegisterLink } from '../../../components/account-register-link'
-import { decimalCmp, decimalNeg, decimalSum } from '../../../lib/statement-format'
+import { entryTotals } from './entry-totals'
+import { decimalCmp, decimalNeg } from '../../../lib/statement-format'
 
 type EntryData = {
   entry: {
@@ -58,16 +59,21 @@ export function EntryFlyout() {
 
   const [data, setData] = useState<EntryData | null>(null)
   const [loading, setLoading] = useState(false)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     if (!txn) return
     let active = true
     setLoading(true)
+    setFailed(false)
     setData(null)
     fetch(`/api/reports/entry/${txn}`)
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        if (!r.ok) throw new Error('entry load failed')
+        return r.json()
+      })
       .then((d) => active && (setData(d), setLoading(false)))
-      .catch(() => active && setLoading(false))
+      .catch(() => { if (active) { setFailed(true); setLoading(false) } })
     return () => {
       active = false
     }
@@ -82,7 +88,7 @@ export function EntryFlyout() {
   const entry = data?.entry
   const origin = entry?.origin ? (t.has(`origins.${entry.origin}`) ? t(`origins.${entry.origin}`) : entry.origin) : ''
 
-  const totalDebit = decimalSum((data?.lines ?? []).filter((line) => decimalCmp(line.amount, '0') > 0).map((line) => line.amount))
+  const { debit: totalDebit, credit: totalCredit } = entryTotals(data?.lines ?? [])
 
   return (
     <Drawer
@@ -122,7 +128,9 @@ export function EntryFlyout() {
         ) : undefined
       }
     >
-      {loading || !data ? (
+      {failed ? (
+        <p role="alert" className="text-sm text-destructive">{tc('feedback.loadFailed')}</p>
+      ) : loading || !data ? (
         <div className="space-y-2">
           <Skeleton className="h-8 w-full" />
           <Skeleton className="h-8 w-full" />
@@ -175,7 +183,7 @@ export function EntryFlyout() {
                 {t('detail.totals')}
               </TableCell>
               <TableCell className={cn('text-right font-semibold tabular-nums')}>{money(totalDebit)}</TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{money(totalDebit)}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(totalCredit)}</TableCell>
             </TableRow>
           </TableBody>
         </Table>

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { isReportUuidParam } from '../../../../../lib/report-filters'
+import { getAuthz, can } from '../../../../../lib/authz'
 
 export const runtime = 'nodejs'
 
@@ -13,9 +14,13 @@ export const runtime = 'nodejs'
  * enriched with account/party/dimension names.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await guardPermission('gl.read')
-  if (authz instanceof NextResponse) return authz
+  const authz = await getAuthz()
+  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (!can(authz, 'gl.read') && !can(authz, 'reports.read')) {
+    return NextResponse.json({ error: 'missing permission: gl.read or reports.read' }, { status: 403 })
+  }
   const { id } = await params
+  if (!isReportUuidParam(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const subsidiaryFilter = authz.allowedSubsidiaryIds
     ? authz.allowedSubsidiaryIds.size > 0
       ? sql`and e.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`

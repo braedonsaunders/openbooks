@@ -1,4 +1,7 @@
 import 'server-only'
+import { reportBookSelection } from '../../../../lib/report-books'
+import { resolveOrgId } from '../../../../lib/org-scope'
+
 
 import { getTranslations } from 'next-intl/server'
 import {
@@ -43,6 +46,7 @@ type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>
 type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
 
 export interface CashFlowIndirectData {
+  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
   title: string
   backHref: string
   backLabel: string
@@ -66,6 +70,8 @@ export async function loadCashFlowIndirect(
   const t = await getTranslations('reports.cashFlowIndirect')
   const tr = await getTranslations('reports')
   const scheduleDefId = await reportScheduleAnchor('cash-flow-indirect')
+  const tb = await getTranslations('budgets')
+  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const from = period.from
@@ -76,7 +82,7 @@ export async function loadCashFlowIndirect(
   const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
   const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
   const [cf, opts, org] = await Promise.all([
-    cashFlowIndirect(from, to, dims),
+    cashFlowIndirect(from, to, dims, undefined, selectedBook.id),
     dimensionOptions(),
     orgInfo(),
   ])
@@ -133,7 +139,7 @@ export async function loadCashFlowIndirect(
   } else {
     heading('operating-heading', t('sections.operating'))
     amount('net-income', t('netIncome'), cf.netIncome, {
-      kind: 'ledger',
+      kind: 'ledger', bookId: selectedBook.id,
       label: t('netIncome'),
       accountTypes: PNL_TYPES,
       from,
@@ -146,7 +152,7 @@ export async function loadCashFlowIndirect(
       cf.adjustments.forEach((a, i) => {
         const label = a.label ?? t(`adjustments.${a.key}`)
         amount(`adj-${a.accountId ?? `${a.key}-${i}`}`, label, a.amount, {
-          kind: 'ledger',
+          kind: 'ledger', bookId: selectedBook.id,
           label,
           accountTypes: PNL_TYPES,
           from,
@@ -160,7 +166,7 @@ export async function loadCashFlowIndirect(
       subheading('wc-heading', t('wcHeader'))
       for (const l of cf.workingCapital) {
         amount(`wc-${l.accountId}`, accountLabel(l), l.amount, {
-          kind: 'ledger',
+          kind: 'ledger', bookId: selectedBook.id,
           label: l.name,
           accountIds: [l.accountId],
           from,
@@ -171,7 +177,7 @@ export async function loadCashFlowIndirect(
       }
     }
     subtotal('operating-subtotal', t('subtotals.operating'), cf.operating, {
-      kind: 'ledger',
+      kind: 'ledger', bookId: selectedBook.id,
       label: t('subtotals.operating'),
       accountTypes: [...PNL_TYPES, ...cf.workingCapital.map((l) => l.type)],
       from,
@@ -194,7 +200,7 @@ export async function loadCashFlowIndirect(
       } else {
         for (const l of lines) {
           amount(`${section}-${l.accountId}`, accountLabel(l), l.amount, {
-            kind: 'ledger',
+            kind: 'ledger', bookId: selectedBook.id,
             label: l.name,
             accountIds: [l.accountId],
             from,
@@ -206,7 +212,7 @@ export async function loadCashFlowIndirect(
         }
       }
       subtotal(`${section}-subtotal`, t(`subtotals.${section}`), total, {
-        kind: 'ledger',
+        kind: 'ledger', bookId: selectedBook.id,
         label: t(`subtotals.${section}`),
         accountTypes: lines.map((l) => l.type),
         from,
@@ -232,7 +238,7 @@ export async function loadCashFlowIndirect(
       // No cashOnly here: the indirect statement's net change drills the bank
       // accounts' flow without the cash-only narrowing the section lines use.
       drill: {
-        kind: 'ledger',
+        kind: 'ledger', bookId: selectedBook.id,
         label: t('netChange'),
         accountTypes: ['asset_bank'],
         from,
@@ -248,7 +254,7 @@ export async function loadCashFlowIndirect(
       value: m(cf.openingCash),
       valueClassName: 'text-right tabular-nums text-slate-500 dark:text-slate-400',
       drill: {
-        kind: 'ledger',
+        kind: 'ledger', bookId: selectedBook.id,
         label: t('openingCash'),
         accountTypes: ['asset_bank'],
         to: openingDate,
@@ -265,7 +271,7 @@ export async function loadCashFlowIndirect(
       tone: toneOf(cf.closingCash),
       rowClassName: reportTotalRowClass,
       drill: {
-        kind: 'ledger',
+        kind: 'ledger', bookId: selectedBook.id,
         label: t('closingCash'),
         accountTypes: ['asset_bank'],
         to,
@@ -280,13 +286,14 @@ export async function loadCashFlowIndirect(
     backHref: '/reports',
     backLabel: tr('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: t('dateRange', { from, to }),
+    periodPhrase: `${selectedBook.name} · ${t('dateRange', { from, to })}`,
     reconciliationLabel: t('reconciliation'),
     reconciliationStatus: reconciled ? t('reconciled') : t('offBy', { amount: m(cf.reconciliationGap) }),
     reconciled,
     rows,
     dimensions: opts,
     subsidiaries: subView.picker,
+    primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: stringParams(sp),
@@ -314,6 +321,7 @@ export function cashFlowIndirectSpec(data: CashFlowIndirectData): PageSpec {
         {
           dimensions: f('dimensions'),
           subsidiaries: f('subsidiaries'),
+          primaryFilter: f('primaryFilter'),
           actions: [
             widget('schedule-report', {
               definitionId: data.scheduleDefId ?? '',

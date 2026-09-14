@@ -168,3 +168,11 @@ test('account register document type labels are localized with a safe fallback',
   )
   assert.equal(accountRegisterDocTypeLabel('custom_kind', t), 'Custom Kind')
 })
+
+
+test('account register exports retain the selected accounting book', () => {
+  const href = accountRegisterExportHref('account', 'csv', { book: 'tax-book', from: '2026-01-01' });
+  const query = new URL(href, 'http://openbooks.test').searchParams;
+  assert.equal(query.get('book'), 'tax-book');
+  assert.equal(query.get('from'), '2026-01-01');
+});
