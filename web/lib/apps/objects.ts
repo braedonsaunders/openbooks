@@ -69,7 +69,7 @@ export function parseObjectSpecs(files: { path: string; content: string; isBinar
       const pluralName = String(spec.pluralName ?? name).trim()
       if (!name) { out.errors.push(`${f.path}: record_type needs a name`); continue }
       const lint = lintRecordFields(spec.fields, name)
-      if (!lint.success) {
+      if (!lint.success || lint.issues.length > 0) {
         out.errors.push(`${f.path}: invalid fields — ${lint.issues[0]?.message ?? 'schema error'}`)
         continue
       }

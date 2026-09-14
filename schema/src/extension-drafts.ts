@@ -1,7 +1,10 @@
 import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { id, orgRef } from './helpers'
 
-/** Immutable, author-owned proposals; install is a separate reviewed operation. */
+/** Immutable, author-owned proposals; install is a separate reviewed operation.
+ * created_by references users.id globally (0140), like apps/app_versions: a
+ * platform administrator may author in another tenant without impersonation.
+ */
 export const extensionDrafts = pgTable('extension_drafts', {
   id: id(), orgId: orgRef(), createdBy: uuid('created_by').notNull(),
   extensionKey: text('extension_key').notNull(), bundle: jsonb('bundle').notNull(),

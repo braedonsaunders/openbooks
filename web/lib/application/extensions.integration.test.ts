@@ -26,6 +26,32 @@ async function fixture() {
   return { org, context, approver1Id }
 }
 
+test('platform administrators author tenant drafts using their real home identity', { skip: !env.OPENBOOKS_DB_URL }, async () => withBypassContext(async () => {
+  const home = await fixture()
+  const target = await fixture()
+  try {
+    await db.execute(sql`update users set is_super_admin=true where id=${home.context.authz.user.id}`)
+    const context: ApplicationContext = { ...home.context, authz: { ...home.context.authz,
+      user: { ...home.context.authz.user, orgId: target.org.orgId, productionOrgId: target.org.orgId, isSuperAdmin: true },
+    } }
+    const { example } = await describeExtensionVocabulary(context)
+    const result = await draftExtension(context, { bundle: example, reason: 'Review cross-tenant administrative authoring' })
+    const draft = await getExtensionDraft(context, result.draftId)
+    const stored = (await db.execute<{ created_by: string; org_id: string }>(sql`select created_by,org_id from extension_drafts where id=${result.draftId}`)).rows[0]!
+    assert.equal(stored.created_by, home.context.authz.user.id)
+    assert.equal(stored.org_id, target.org.orgId)
+    assert.equal(draft.status, 'draft')
+    assert.equal(await getAppByKey(target.org.orgId, example.manifest.key), null)
+    await assert.rejects(() => getExtensionDraft(home.context, result.draftId), /not found/)
+    await assert.rejects(() => getExtensionDraft(target.context, result.draftId), /not found/)
+    await discardExtensionDraft(context, result)
+    assert.equal((await getExtensionDraft(context, result.draftId)).status, 'discarded')
+  } finally {
+    await dropScratchOrg(target.org.orgId)
+    await dropScratchOrg(home.org.orgId)
+  }
+}))
+
 test('extension draft isolation, exact review, atomic activation and immutable revisions', { skip: !env.OPENBOOKS_DB_URL }, async () => withBypassContext(async () => {
   const { org, context, approver1Id } = await fixture()
   try {

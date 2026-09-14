@@ -19,6 +19,7 @@ import { REPORTING_TOOLS } from "./tools-reports";
 import { SETUP_TOOLS } from "./tools-setup";
 import { WRITE_TOOLS } from "./tools-write";
 import type { AssistantToolDef, ToolResult } from "./types";
+import { safeApplicationToolError } from "./tool-errors";
 
 /**
  * Builds the per-turn AI-SDK ToolSet. The model only
@@ -39,9 +40,9 @@ export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
 ];
 
 function safeErrorMessage(e: unknown): string {
-  // Never surface raw error text to the model — it could carry secrets/PII.
+  // Only controlled application feedback may reach the model, never raw exceptions.
   if (e instanceof ForbiddenError) return "forbidden";
-  return "tool_failed";
+  return safeApplicationToolError(e);
 }
 
 /** Execute one named tool through the same gates and error contract as AI SDK calls. */
