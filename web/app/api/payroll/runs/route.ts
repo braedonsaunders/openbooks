@@ -1,3 +1,4 @@
+import { isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
 import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll-scope.ts";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
@@ -23,8 +24,6 @@ export const dynamic = 'force-dynamic'
  *         run itself is a posting document and posts through the standard
  *         document actions route.
  */
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export async function GET() {
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
@@ -52,7 +51,7 @@ export async function POST(req: Request) {
   const body = parsedBody.data
   if (!isUuid(body.payScheduleId)) return NextResponse.json({ error: 'payScheduleId required' }, { status: 422 })
   for (const key of ['periodStart', 'periodEnd', 'payDate'] as const) {
-    if (body[key] != null && !DATE_RE.test(String(body[key]))) {
+    if (body[key] != null && !isIsoCalendarDate(body[key])) {
       return NextResponse.json({ error: `invalid ${key} (YYYY-MM-DD)` }, { status: 422 })
     }
   }
@@ -62,6 +61,9 @@ export async function POST(req: Request) {
   }
   // A final pay run pays out and clears every accrued bank, so it must name
   // the employees it pays; the engine refuses an unscoped one outright.
+  if (body.employeePartyIds != null && !Array.isArray(body.employeePartyIds)) {
+    return NextResponse.json({ error: 'invalid employeePartyIds' }, { status: 422 })
+  }
   const employeePartyIds: string[] = Array.isArray(body.employeePartyIds)
     ? body.employeePartyIds.map((id: unknown) => String(id))
     : []

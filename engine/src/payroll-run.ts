@@ -44,7 +44,7 @@ import { effectivePayRateSql, payRateIsUsable } from "./payroll-rate.ts";
 import { componentYearToDate as openingComponentYtd } from "./payroll-opening-balances.ts";
 import { effectiveFilingAccountSql } from "./payroll-filing.ts";
 import { convertLaborWage, laborCostingSettings } from "./labor-costing.ts";
-import { businessToday } from "./business-date.ts";
+import { businessToday, isIsoCalendarDate } from "./business-date.ts";
 import {
   loadActiveDerivedRules,
   resolveDerivedEarnings,
@@ -777,6 +777,19 @@ export async function createPayRun(input: {
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<{ documentId: string; documentNumber: string }> {
   const { orgId, actorId } = input;
+  for (const key of ["periodStart", "periodEnd", "payDate"] as const) {
+    if (input[key] != null && !isIsoCalendarDate(input[key])) {
+      throw new PayrollError(`invalid ${key} (YYYY-MM-DD calendar date required)`);
+    }
+  }
+  // Derive a schedule period only when BOTH endpoints were omitted. Never
+  // discard an explicit date and silently pay a different period.
+  if ((input.periodStart != null) !== (input.periodEnd != null)) {
+    throw new PayrollError("periodStart and periodEnd must be supplied together");
+  }
+  if (input.periodStart && input.periodEnd && input.periodEnd < input.periodStart) {
+    throw new PayrollError("periodEnd must not precede periodStart");
+  }
   return await db.transaction(async (tx) => {
     if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
     const s = (await tx.execute<(ScheduleRow & { subsidiary_id: string | null })>(sql`
@@ -799,6 +812,11 @@ export async function createPayRun(input: {
     }
     const payDate = input.payDate ??
       iso(new Date(at(periodEnd).getTime() + schedule.pay_date_offset_days * DAY));
+    if (!isIsoCalendarDate(periodStart) || !isIsoCalendarDate(periodEnd)
+        || !isIsoCalendarDate(payDate)) {
+      throw new PayrollError("pay schedule produced a date outside the supported calendar");
+    }
+    if (payDate < periodEnd) throw new PayrollError("payDate must not precede periodEnd");
 
     // Scoped schedules pin the run to their legal entity (and its currency);
     // org-wide schedules keep the historical root-subsidiary behaviour.

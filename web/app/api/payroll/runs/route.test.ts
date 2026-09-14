@@ -179,3 +179,19 @@ test('POST keeps unrestricted callers unrestricted', async () => {
   assert.equal(routeState.createCalls[0]!.allowedSubsidiaryIds, null)
   assert.deepEqual(routeState.queries, [])
 })
+
+
+test('POST refuses malformed dates and employee selections before entering payroll', async () => {
+  for (const fields of [
+    { periodStart: '2026-02-30', periodEnd: '2026-03-07' },
+    { payDate: '2026-02-30' },
+    { employeePartyIds: SCHEDULE_ID },
+    { employeePartyIds: {} },
+  ]) {
+    reset(null)
+    const response = await post({ payScheduleId: SCHEDULE_ID, ...fields })
+    assert.equal(response.status, 422, JSON.stringify(fields))
+    assert.equal(routeState.createCalls.length, 0)
+    assert.deepEqual(routeState.queries, [])
+  }
+})
