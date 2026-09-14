@@ -3,8 +3,90 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, env } from './db.ts'
-import { createPayRun } from './payroll-run.ts'
+import { allocateProportionally, createPayRun } from './payroll-run.ts'
+import { PayrollError } from './payroll-error.ts'
+import { abs, add, cmp, div, neg, sum } from './money.ts'
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from './test-fixtures.ts'
+
+test('allocateProportionally splits exactly with the remainder on the last bucket', () => {
+  const splits = allocateProportionally('100.0000', [
+    { weight: '1', target: 'a' },
+    { weight: '1', target: 'b' },
+    { weight: '1', target: 'c' },
+  ])
+  assert.deepEqual(splits.map((split) => split.amount), ['33.3300', '33.3300', '33.3400'])
+  assert.equal(sum(splits.map((split) => split.amount)), '100.0000')
+})
+
+test('allocateProportionally never emits a negative split on half-cent shares', () => {
+  // $0.02 across four equal jobs: every exact share is half a cent. Rounding
+  // each share up independently leaves the remainder bucket at -$0.01, which
+  // would land on the stub as a negative employer line.
+  const splits = allocateProportionally('0.0200', [
+    { weight: '1', target: 'a' },
+    { weight: '1', target: 'b' },
+    { weight: '1', target: 'c' },
+    { weight: '1', target: 'd' },
+  ])
+  assert.deepEqual(splits.map((split) => split.amount), ['0.0000', '0.0000', '0.0100', '0.0100'])
+  assert.equal(sum(splits.map((split) => split.amount)), '0.0200')
+})
+
+test('allocateProportionally pays a zero-weight bucket nothing, even last', () => {
+  // A job with no hours in the split population must never receive rounding
+  // money: the old last-absorbs-remainder design paid it the leftover cents.
+  const splits = allocateProportionally('100.0000', [
+    { weight: '1', target: 'a' },
+    { weight: '1', target: 'b' },
+    { weight: '0', target: 'c' },
+  ])
+  assert.deepEqual(splits.map((split) => split.amount), ['50.0000', '50.0000', '0.0000'])
+  const zeroFirst = allocateProportionally('100.0000', [
+    { weight: '0', target: 'a' },
+    { weight: '3', target: 'b' },
+  ])
+  assert.deepEqual(zeroFirst.map((split) => split.amount), ['0.0000', '100.0000'])
+})
+
+test('allocateProportionally keeps every share within one cent of its exact target', () => {
+  // Seven uneven jobs over a prime total: every exact share is fractional, so
+  // this exercises floors, remainders and tie-breaking together.
+  const weights = ['1', '2', '3', '4', '5', '6', '7']
+  const splits = allocateProportionally('123.4500', weights.map((weight, index) => ({ weight, target: index })))
+  assert.equal(sum(splits.map((split) => split.amount)), '123.4500')
+  const totalWeight = '28'
+  for (const [index, split] of splits.entries()) {
+    const exact = div('123.4500', div(totalWeight, weights[index]!))
+    const drift = abs(add(split.amount, neg(exact)))
+    assert.ok(cmp(drift, '0.01') < 0, `bucket ${index} drifts ${drift} from its exact share`)
+    assert.ok(cmp(split.amount, '0') >= 0, `bucket ${index} keeps the amount's sign`)
+  }
+})
+
+test('allocateProportionally preserves the sign of a negative amount', () => {
+  const splits = allocateProportionally('-0.0200', [
+    { weight: '1', target: 'a' },
+    { weight: '1', target: 'b' },
+    { weight: '1', target: 'c' },
+    { weight: '1', target: 'd' },
+  ])
+  for (const split of splits) {
+    assert.ok(cmp(split.amount, '0') <= 0, `split keeps the negative sign: ${split.amount}`)
+  }
+  assert.equal(sum(splits.map((split) => split.amount)), '-0.0200')
+})
+
+test('allocateProportionally refuses a sub-cent amount instead of misallocating it', () => {
+  // 1.90c over 19 equal jobs: the old dust handling parked the whole 1.90c
+  // on the last bucket (ideal share 0.10c), breaking the within-one-cent
+  // bound. Both native call sites pass cent-exact stub money, so a sub-cent
+  // input is a caller bug and must fail loudly and deterministically.
+  const buckets = Array.from({ length: 19 }, (_, index) => ({ weight: '1', target: index }))
+  assert.throws(
+    () => allocateProportionally('0.0190', buckets),
+    (error) => error instanceof PayrollError && /cent-exact/.test(error.message),
+  )
+})
 
 const DB = !!env.OPENBOOKS_DB_URL
 

@@ -349,6 +349,126 @@ test(
 );
 
 test(
+  "union fringe dust split: a two-cent job-costed fringe never posts a negative stub line",
+  { skip: !DB },
+  async () => {
+    // Reachable-behavior proof for the proportional allocator: $0.01/h across
+    // four jobs at half an hour each is $0.02 whose exact shares are half a
+    // cent each. Rounding every share up independently used to leave the last
+    // job at -$0.01 — a negative employer line on a real stub.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const account = async (number: string, name: string, type: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                                reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+                  '[]'::jsonb, '{}'::jsonb, true)`);
+        return id;
+      };
+      const wageExpense = await account("6000", "Wages expense", "expense");
+      const fringeExpense = await account("6020", "Union fringes", "expense");
+      const netPayable = await account("2300", "Wages payable", "liability_current");
+      const craPayable = await account("2310", "CRA payable", "liability_current");
+      const fringePayable = await account("2340", "Union fringes payable", "liability_current");
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          features: { payroll: true },
+          payroll: {
+            wageExpenseAccountId: wageExpense, burdenExpenseAccountId: fringeExpense,
+            netPayAccountId: netPayable, cppPayableAccountId: craPayable,
+            eiPayableAccountId: craPayable, taxPayableAccountId: craPayable,
+            vacationPayableAccountId: craPayable, wagesTo: "expense",
+          },
+        })}::jsonb where id = ${org.orgId}`);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
+
+      const agreementId = randomUUID();
+      await db.execute(sql`
+        insert into union_agreements (id, org_id, name, union_name, local_number, is_active,
+                                      created_by, updated_by)
+        values (${agreementId}, ${org.orgId}, 'IBEW 353 Inside Wire', 'IBEW', '353', true,
+                ${actorId}, ${actorId})`);
+      const classificationId = randomUUID();
+      await db.execute(sql`
+        insert into union_classifications (id, org_id, agreement_id, code, name, is_active,
+                                           created_by, updated_by)
+        values (${classificationId}, ${org.orgId}, ${agreementId}, 'JW', 'Journeyman', true,
+                ${actorId}, ${actorId})`);
+      await upsertUnionFringe(org.orgId, actorId, {
+        agreementId, code: "PENNY", name: "Penny fund", calc: "per_hour_worked",
+        value: "0.01", paidBy: "employer", jobCosted: true,
+        expenseAccountId: fringeExpense, liabilityAccountId: fringePayable,
+      });
+
+      const employeeId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Robin Hale', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                      is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '25', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Union weekly', 'weekly', 52, '2026-07-18', 5, true,
+                ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                               pay_basis, federal_claim_code, provincial_claim_code,
+                                               union_agreement_id, union_classification_id, is_active,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+                ${agreementId}, ${classificationId}, true, ${actorId}, ${actorId})`);
+
+      const projects = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+      for (const [index, id] of projects.entries()) {
+        await db.execute(sql`
+          insert into projects (id, org_id, name, code, is_active, custom)
+          values (${id}, ${org.orgId}, ${`Dust job ${index}`}, ${`Dust job ${index}`}, true, '{}'::jsonb)`);
+      }
+      // Half an hour on each of four jobs inside 2026-07-12..07-18.
+      for (const [workedOn, projectId] of [
+        ["2026-07-13", projects[0]], ["2026-07-14", projects[1]],
+        ["2026-07-15", projects[2]], ["2026-07-16", projects[3]],
+      ] as const) {
+        await db.execute(sql`
+          insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id, status,
+                                    is_billable, billing_status, costing_basis, created_by, updated_by)
+          values (${org.orgId}, ${employeeId}, ${workedOn}, '0.5', ${projectId}, 'approved',
+                  false, 'unbilled', 'actual', ${actorId}, ${actorId})`);
+      }
+
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-07-12", periodEnd: "2026-07-18",
+      });
+      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(result.errors, []);
+
+      const fringeLines = ((await db.execute<{ amount: string }>(sql`
+        select l.amount from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
+         where s.pay_run_document_id = ${run.documentId} and l.description = 'Penny fund'
+         order by l.amount
+      `))).rows;
+      // Two zero shares are correctly emitted as no line at all; the two
+      // leftover cents land on later jobs. No job is ever paid a negative cent.
+      assert.deepEqual(fringeLines.map((l) => l.amount), ["0.0100", "0.0100"]);
+      assert.equal(sum(fringeLines.map((l) => l.amount)), "0.0200");
+      for (const line of fringeLines) {
+        assert.ok(cmp(line.amount, "0") >= 0, `fringe split is not negative: ${line.amount}`);
+      }
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
   "US pay run end to end: salaried Texas employee, W-4 MFJ, FICA/FUTA/SUI, balanced GL",
   { skip: !DB },
   async () => {
