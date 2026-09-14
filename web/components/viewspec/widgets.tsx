@@ -1625,6 +1625,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
         (props.initialMessages as ComponentProps<typeof AssistantApp>['initialMessages']) ?? []
       }
       canWrite={props.canWrite === true}
+      canConfigureAi={props.canConfigureAi === true}
       aiEnabled={props.aiEnabled === true}
       initialPrompt={str(props, 'initialPrompt')}
     />

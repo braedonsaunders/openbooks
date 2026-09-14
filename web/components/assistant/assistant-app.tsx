@@ -73,6 +73,7 @@ export function AssistantApp({
   activeId,
   initialMessages,
   canWrite,
+  canConfigureAi = false,
   aiEnabled,
   initialPrompt,
 }: {
@@ -80,11 +81,14 @@ export function AssistantApp({
   activeId: string | null
   initialMessages: StoredMessage[]
   canWrite: boolean
+  canConfigureAi?: boolean
   aiEnabled: boolean
   /** Prompt passed via /assistant?q= (the ⌘K launcher); auto-sent once. */
   initialPrompt?: string
 }) {
   const t = useTranslations('assistant')
+  const admin = useTranslations('admin.ai')
+  const common = useTranslations('common.actions')
   const router = useRouter()
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages.map(toChatMessage))
   const [convos, setConvos] = useState(conversations)
@@ -436,9 +440,25 @@ export function AssistantApp({
         <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
           <div className="mx-auto w-full max-w-3xl">
             {!aiEnabled ? (
-              <p className="py-2 text-center text-sm text-slate-500 dark:text-slate-400">
-                {t('errors.notConfigured')}
-              </p>
+              <div className="space-y-3 py-2 text-center">
+                {messages.length > 0 ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {t('errors.notConfigured')}
+                  </p>
+                ) : null}
+                <div className="flex justify-center gap-2">
+                  {canConfigureAi ? (
+                    <Button asChild variant="outline">
+                      <Link href="/admin/ai" target="_blank" rel="noopener noreferrer">
+                        {admin('title')}
+                      </Link>
+                    </Button>
+                  ) : null}
+                  <Button variant="outline" onClick={() => router.refresh()}>
+                    {common('refresh')}
+                  </Button>
+                </div>
+              </div>
             ) : (
               <div className="flex items-center gap-1.5 rounded-2xl border border-slate-300 bg-white p-1.5 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950">
                 <textarea
