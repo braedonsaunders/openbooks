@@ -234,3 +234,181 @@ test("goods receipts bring stock in once, govern billing, and clear received-not
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /PURCHASE-RECEIPT-EXACTLY-ONCE/);
 });
+
+test("goods receipt rejects a non-calendar date without mutating the order", { skip: !DB }, () => {
+  const source = `
+    import assert from "node:assert/strict";
+    import { randomUUID } from "node:crypto";
+    import { sql } from "drizzle-orm";
+    import { db, withOrg } from "./engine/src/db.ts";
+    import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+    import { toUnits } from "./engine/src/money.ts";
+    import { createOrderDraft, receivePurchaseOrder } from "./web/lib/order-cycle.ts";
+    import { createScratchOrg, createScratchUser, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+
+    installTrustedTestDatabaseBypass();
+
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order"));
+      const sourceLineId = randomUUID();
+      await db.execute(sql\`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, account_id, description, quantity, unit,
+           unit_price, amount, tax_amount, quantity_fulfilled, quantity_billed, stock_location_id, custom)
+        values
+          (\${sourceLineId}, \${org.orgId}, \${order.id}, 1, \${org.items.fifo}, \${org.accounts.invAsset},
+           'Widget', '10', 'ea', '2', '20', '0', '0', '0', \${org.stockLocationId}, '{}'::jsonb)
+      \`);
+      await db.execute(sql\`
+        update documents
+           set status = 'approved', party_id = \${org.vendorId}, subsidiary_id = \${org.subsidiaryId},
+               document_date = \${org.date}, subtotal = '20', total = '20'
+         where id = \${order.id} and org_id = \${org.orgId}
+      \`);
+
+      await assert.rejects(
+        withOrg(org.orgId, () => receivePurchaseOrder(org.orgId, userId, order.id, {
+          receiptDate: "not-a-date", idempotencyKey: "bad-date",
+          lines: [{ sourceLineId, quantity: "1" }],
+        })),
+        /Receipt date must be YYYY-MM-DD/,
+      );
+      await assert.rejects(
+        withOrg(org.orgId, () => receivePurchaseOrder(org.orgId, userId, order.id, {
+          receiptDate: "2026-13-40", idempotencyKey: "impossible-date",
+          lines: [{ sourceLineId, quantity: "1" }],
+        })),
+        /Receipt date must be YYYY-MM-DD/,
+      );
+      const facts = (await db.execute(sql\`
+        select (select quantity_fulfilled::text from document_lines where id = \${sourceLineId}) as received,
+               (select count(*)::int from document_links
+                 where org_id = \${org.orgId} and from_document_id = \${order.id} and link_type = 'fulfills') as edges,
+               (select count(*)::int from documents
+                 where org_id = \${org.orgId} and kind = 'purchase_receipt') as receipts
+      \`)).rows[0];
+      assert.equal(toUnits(facts.received), toUnits("0"));
+      assert.equal(facts.edges, 0);
+      assert.equal(facts.receipts, 0);
+      console.log("PURCHASE-RECEIPT-DATE-FENCE");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  `;
+
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--conditions=react-server",
+      "--import",
+      "tsx",
+      "--import",
+      "./engine/src/test-database-bypass.ts",
+      "--input-type=module",
+      "-e",
+      source,
+    ],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /PURCHASE-RECEIPT-DATE-FENCE/);
+});
+
+test("voiding a goods receipt unwinds stock and restores counters, then the order voids", { skip: !DB }, () => {
+  const source = `
+    import assert from "node:assert/strict";
+    import { randomUUID } from "node:crypto";
+    import { sql } from "drizzle-orm";
+    import { db, withOrg } from "./engine/src/db.ts";
+    import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+    import { requestDocumentVoid } from "./engine/src/document-void.ts";
+    import { toUnits } from "./engine/src/money.ts";
+    import { createOrderDraft, receivePurchaseOrder } from "./web/lib/order-cycle.ts";
+    import { createScratchOrg, createScratchUser, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+
+    installTrustedTestDatabaseBypass();
+
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order"));
+      const sourceLineId = randomUUID();
+      await db.execute(sql\`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, account_id, description, quantity, unit,
+           unit_price, amount, tax_amount, quantity_fulfilled, quantity_billed, stock_location_id, custom)
+        values
+          (\${sourceLineId}, \${org.orgId}, \${order.id}, 1, \${org.items.fifo}, \${org.accounts.invAsset},
+           'Widget', '10', 'ea', '2', '20', '0', '0', '0', \${org.stockLocationId}, '{}'::jsonb)
+      \`);
+      await db.execute(sql\`
+        update documents
+           set status = 'approved', party_id = \${org.vendorId}, subsidiary_id = \${org.subsidiaryId},
+               document_date = \${org.date}, subtotal = '20', total = '20'
+         where id = \${order.id} and org_id = \${org.orgId}
+      \`);
+      const receipt = await withOrg(org.orgId, () => receivePurchaseOrder(org.orgId, userId, order.id, {
+        receiptDate: org.date, idempotencyKey: "unwound-receipt",
+        lines: [{ sourceLineId, quantity: "4" }],
+      }));
+
+      const voided = await withOrg(org.orgId, () => requestDocumentVoid({
+        documentId: receipt.id, orgId: org.orgId, actorId: userId,
+        reason: "delivery refused at dock", reversalDate: org.date,
+      }));
+      assert.equal(voided.status, "voided");
+      const facts = (await db.execute(sql\`
+        select (select status::text from documents where id = \${receipt.id} and org_id = \${org.orgId}) as receipt_status,
+               (select quantity_fulfilled::text from document_lines where id = \${sourceLineId}) as received,
+               (select coalesce(sum(m.quantity), 0)::text from inventory_movements m
+                 where m.org_id = \${org.orgId} and m.item_id = \${org.items.fifo}
+                   and m.status = 'posted') as on_hand,
+               (select count(*)::int from inventory_movements r
+                 where r.org_id = \${org.orgId} and r.kind = 'return'
+                   and r.reverses_movement_id in (
+                     select m.id from inventory_movements m
+                       join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
+                      where m.org_id = \${org.orgId} and l.document_id = \${receipt.id} and m.kind = 'receipt')) as reversals,
+               (select count(*)::int from inventory_movements m
+                 join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
+                where m.org_id = \${org.orgId} and l.document_id = \${receipt.id}
+                  and m.kind = 'receipt'
+                  and not exists (select 1 from inventory_movements r
+                    where r.org_id = m.org_id and r.reverses_movement_id = m.id)) as live_receipts
+      \`)).rows[0];
+      assert.equal(facts.receipt_status, "voided");
+      assert.equal(toUnits(facts.received), toUnits("0"));
+      assert.equal(toUnits(facts.on_hand), toUnits("0"));
+      assert.equal(facts.reversals, 1);
+      assert.equal(facts.live_receipts, 0);
+
+      const orderVoided = await withOrg(org.orgId, () => requestDocumentVoid({
+        documentId: order.id, orgId: org.orgId, actorId: userId,
+        reason: "order cancelled after receipt void", reversalDate: org.date,
+      }));
+      assert.equal(orderVoided.status, "voided");
+      console.log("PURCHASE-RECEIPT-VOID-UNWIND");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  `;
+
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--conditions=react-server",
+      "--import",
+      "tsx",
+      "--import",
+      "./engine/src/test-database-bypass.ts",
+      "--input-type=module",
+      "-e",
+      source,
+    ],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /PURCHASE-RECEIPT-VOID-UNWIND/);
+});

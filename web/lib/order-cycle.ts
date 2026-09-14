@@ -22,7 +22,7 @@ import {
   toQuantityUnits,
 } from './order-cycle-math'
 import { isFeatureEnabled } from './features'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { applyPurchaseReceiptInventory, applySalesFulfillmentInventoryIssues } from '@openbooks/engine/src/inventory.ts'
 import { issueSalesOrder } from '@openbooks/engine/src/sales-orders.ts'
 
@@ -215,6 +215,7 @@ export async function fulfillSalesOrder(
   if (idempotencyKey.length < 1 || idempotencyKey.length > 500) {
     throw new ConversionError('Fulfillment idempotency key must be between 1 and 500 characters')
   }
+  if (!isIsoCalendarDate(input.fulfillmentDate)) throw new ConversionError('Fulfillment date must be YYYY-MM-DD')
   const requested = canonicalFulfillmentLines(input.lines)
   const command = {
     fulfillmentDate: input.fulfillmentDate,
@@ -530,7 +531,7 @@ export async function receivePurchaseOrder(
   if (idempotencyKey.length < 1 || idempotencyKey.length > 500) {
     throw new ConversionError('Receipt idempotency key must be between 1 and 500 characters')
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.receiptDate)) throw new ConversionError('Receipt date must be YYYY-MM-DD')
+  if (!isIsoCalendarDate(input.receiptDate)) throw new ConversionError('Receipt date must be YYYY-MM-DD')
   const requested = canonicalFulfillmentLines(input.lines)
   const command = { receiptDate: input.receiptDate, lines: requested }
   return db.transaction(async (tx) => {
