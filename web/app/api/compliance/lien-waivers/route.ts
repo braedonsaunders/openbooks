@@ -66,6 +66,9 @@ export async function POST(req: Request) {
     payApplicationId?: string | null
     notes?: string | null
   }
+  if (body.direction !== undefined && body.direction !== 'received' && body.direction !== 'issued') {
+    return NextResponse.json({ error: 'direction must be "received" or "issued"' }, { status: 400 })
+  }
   const direction = body.direction === 'issued' ? 'issued' : 'received'
   if (!isUuid(body.partyId ?? '')) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
   if (!isUuid(body.projectId ?? '')) {
