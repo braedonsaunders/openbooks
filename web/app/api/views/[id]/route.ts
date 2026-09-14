@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../lib/authz'
+import { isUuid } from '../../../../lib/list-params'
 import {
   deleteView,
   loadView,
@@ -19,6 +20,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { user, permissions } = gate
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const view = await loadView(user.orgId, id, user.id, permissions)
   if (!view) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ view })
@@ -32,6 +34,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   const isAdmin = permissions.has('*')
 
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const existing = await loadView(user.orgId, id, user.id, permissions)
   if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
@@ -76,6 +79,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const { user, permissions } = gate
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const ok = await deleteView(user.orgId, id, user.id, permissions.has('*'))
   if (!ok) return NextResponse.json({ error: 'You can only delete your own views.' }, { status: 403 })
   return NextResponse.json({ ok: true })
