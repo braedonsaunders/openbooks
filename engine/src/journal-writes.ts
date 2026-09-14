@@ -162,6 +162,10 @@ export function validateJournalInput(input: ScriptJournalInput): {
     if (cmp(abs(amount), "10000000000000.0000") > 0) throw new JournalWriteError(`line ${i + 1}: amount out of range`);
     if (!l.accountId && !l.accountCode) throw new JournalWriteError(`line ${i + 1}: accountId or accountCode required`);
     if (l.accountId && !UUID_RE.test(l.accountId)) throw new JournalWriteError(`line ${i + 1}: invalid accountId`);
+    // Dimensions are fail-closed like accountId: a malformed id must never
+    // silently post without its dimension. Absent/empty stays null.
+    if (l.departmentId && !UUID_RE.test(l.departmentId)) throw new JournalWriteError(`line ${i + 1}: invalid departmentId`);
+    if (l.projectId && !UUID_RE.test(l.projectId)) throw new JournalWriteError(`line ${i + 1}: invalid projectId`);
     amounts.push(amount);
     if (cmp(amount, "0") > 0) debits.push(amount);
     return {
@@ -169,8 +173,8 @@ export function validateJournalInput(input: ScriptJournalInput): {
       accountCode: l.accountCode ? String(l.accountCode) : undefined,
       amount,
       description: l.description ? String(l.description).slice(0, 500) : null,
-      departmentId: l.departmentId && UUID_RE.test(l.departmentId) ? l.departmentId : null,
-      projectId: l.projectId && UUID_RE.test(l.projectId) ? l.projectId : null,
+      departmentId: l.departmentId ? l.departmentId : null,
+      projectId: l.projectId ? l.projectId : null,
     };
   });
   // Balanced to the 4dp the ledger stores.

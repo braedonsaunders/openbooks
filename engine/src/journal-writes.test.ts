@@ -85,6 +85,31 @@ test("a malformed accountId is refused", () => {
   );
 });
 
+test("malformed department/project ids are refused, never silently dropped", () => {
+  // A mistyped dimension used to validate to null, posting the line without
+  // its dimension. Fail closed like accountId instead.
+  assert.throws(
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: 5, departmentId: "not-a-uuid" }, { accountId: B, amount: -5 }] }),
+    (e: Error) => e instanceof JournalWriteError && /invalid departmentId/.test(e.message),
+  );
+  assert.throws(
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: 5, projectId: "also-bogus" }, { accountId: B, amount: -5 }] }),
+    (e: Error) => e instanceof JournalWriteError && /invalid projectId/.test(e.message),
+  );
+  // Well-formed ids pass through; absent/empty stays null.
+  const v = validateJournalInput({
+    documentDate: "2026-07-16",
+    lines: [
+      { accountId: A, amount: 5, departmentId: A, projectId: B },
+      { accountId: B, amount: -5 },
+    ],
+  });
+  assert.equal(v.lines[0]!.departmentId, A);
+  assert.equal(v.lines[0]!.projectId, B);
+  assert.equal(v.lines[1]!.departmentId, null);
+  assert.equal(v.lines[1]!.projectId, null);
+});
+
 test("bad dates are refused; a missing date is refused rather than defaulted to UTC today", () => {
   assert.throws(
     () => validateJournalInput({ documentDate: "07/16/2026", lines: [{ accountId: A, amount: 1 }, { accountId: B, amount: -1 }] }),

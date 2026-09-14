@@ -385,6 +385,29 @@ test("transfer moves exactly the entered amount between the two named accounts",
   );
 });
 
+test("payment discount/fee validation is PostingError, not a raw 500-class error", () => {
+  // API routes map PostingError to 422 and plain Error to 500. These guards
+  // reject caller-supplied custom amounts, so they must be PostingError like
+  // every other rule validation in this file.
+  const paymentLine = (lineNumber: number) =>
+    ({ id: `p${lineNumber}`, lineNumber, accountId: "bank", amount: "100.0000" }) as unknown as PostingDocumentLine;
+  const paymentDeps = { control: { ap: "ap", ar: "ar", bank: "bank" } };
+  const vendorBill = (custom: Record<string, unknown>) =>
+    ({ id: "vp", kind: "vendor_payment", partyId: "vendor", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom }) as unknown as PostingDocument;
+  const customerReceipt = (custom: Record<string, unknown>) =>
+    ({ id: "cp", kind: "customer_payment", partyId: "customer", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom }) as unknown as PostingDocument;
+  const cases: Array<[string, () => unknown, RegExp]> = [
+    ["negative discount", () => RULES.vendor_payment!(vendorBill({ discountAmount: "-5.0000", discountAccountId: "disc" }), [paymentLine(1)], paymentDeps), /discount cannot be negative/],
+    ["missing discount account", () => RULES.vendor_payment!(vendorBill({ discountAmount: "5.0000" }), [paymentLine(1)], paymentDeps), /discount account is required/],
+    ["negative fee", () => RULES.customer_payment!(customerReceipt({ feeAmount: "-5.0000", feeIncomeAccountId: "fee" }), [paymentLine(1)], paymentDeps), /fee cannot be negative/],
+    ["fee exceeding receipt", () => RULES.customer_payment!(customerReceipt({ feeAmount: "500.0000", feeIncomeAccountId: "fee" }), [paymentLine(1)], paymentDeps), /fee exceeds the receipt/],
+    ["missing fee account", () => RULES.customer_payment!(customerReceipt({ feeAmount: "5.0000" }), [paymentLine(1)], paymentDeps), /fee income account is required/],
+  ];
+  for (const [name, run, message] of cases) {
+    assert.throws(run, (error: Error) => error instanceof PostingError && message.test(error.message), name);
+  }
+});
+
 test("transfer rejects a full-amount source leg instead of summing both legs", () => {
   // The old drawer emitted the amount on BOTH lines; summing them posted a
   // $100 transfer as DR 200 / CR 200 while still balancing.
