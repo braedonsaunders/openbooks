@@ -182,7 +182,7 @@ function RuleRow({
       >
         {entity.columns.map((c) => (
           <option key={c.key} value={c.key}>
-            {tReports(`catalog.columns.${entity.key}.${c.key}`)}
+            {(entity.key.startsWith('custom:') ? c.label : tReports(`catalog.columns.${entity.key}.${c.key}`))}
           </option>
         ))}
       </Select>

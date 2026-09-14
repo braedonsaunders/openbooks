@@ -1550,6 +1550,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
    *  string array. The `Authz` it came from does not. */
   'report-builder': (props) => (
     <ReportBuilder
+      customEntities={props.customEntities as ComponentProps<typeof ReportBuilder>['customEntities']}
       hiddenEntityKeys={props.hiddenEntityKeys as ComponentProps<typeof ReportBuilder>['hiddenEntityKeys']}
       inventoryEnabled={props.inventoryEnabled === true}
       company={str(props, 'company') ?? ''}

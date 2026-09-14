@@ -175,13 +175,13 @@ test('legacy, native screen, saved-view and export paths share the built-in filt
   const screen = read('../app/(app)/reports/custom/run/[id]/page.tsx')
   assert.match(screen, /BUILT_IN_REPORT_DEFINITION_MAP/)
   assert.match(screen, /applyBuiltInUrlFilters/)
-  assert.match(screen, /reportPeriodField\(definition\.query\)[\s\S]*applyBuiltInUrlFilters/)
+  assert.match(screen, /reportPeriodField\(definition\.query, entityMap\)[\s\S]*applyBuiltInUrlFilters/)
   assert.match(screen, /key === 'page' \|\| key === 'perPage' \|\| key === 'format'/)
   // JSX or the `save-view` widget: the widget mounts the same button.
   assert.match(screen, /<SaveViewButton\b|widget\('save-view'\)/)
 
   const exportRun = read('./report-run.ts')
-  assert.match(exportRun, /reportPeriodField\(query\)[\s\S]*applyBuiltInUrlFilters/)
+  assert.match(exportRun, /reportPeriodField\(query, entityMap\)[\s\S]*applyBuiltInUrlFilters/)
   assert.match(exportRun, /executeReportAllPages\(orgId, query\)/)
 
   const executor = read('./custom-reports.ts')

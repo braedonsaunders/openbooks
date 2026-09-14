@@ -9,7 +9,7 @@ import type { FieldValueMap, FormSection } from '@openbooks/forms-core'
 import { Badge, Button, Popover, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { runClientScripts } from '@/lib/client-scripts'
-import { RecordFields } from '../../../../components/record-fields'
+import { RecordFields, RecordPreviewOptions } from '../../../../components/record-fields'
 import type { RecordStatus } from '../../../../lib/record-schema'
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
@@ -33,6 +33,7 @@ export function RecordDrawer({
   sections,
   record,
   canEdit,
+  preview = false,
   closeHref = `/records/${typeKey}`,
 }: {
   typeKey: string
@@ -40,11 +41,13 @@ export function RecordDrawer({
   sections: FormSection[]
   record: { id: string; recordNumber: string; data: FieldValueMap; status: RecordStatus }
   canEdit: boolean
+  preview?: boolean
   closeHref?: string
 }) {
   const router = useRouter()
   const t = useTranslations('records.recordDrawer')
   const tc = useTranslations('common')
+  const tp = useTranslations('admin.extensions.native')
   const [status, setStatus] = useState<RecordStatus>(record.status)
   const [values, setValues] = useState<FieldValueMap>(record.data ?? {})
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -53,7 +56,7 @@ export function RecordDrawer({
   const [actionsOpen, setActionsOpen] = useState(false)
 
   const canEditStatus = canEdit && status !== 'inactive'
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const [mode, setMode] = useState<'view' | 'edit'>(preview && record.id === 'new' ? 'edit' : 'view')
   const editable = mode === 'edit' && canEditStatus
 
   // -- explicit save (no autosave) -------------------------------------------
@@ -68,6 +71,7 @@ export function RecordDrawer({
   }, [values])
 
   async function save() {
+    if (preview) return
     setBusy(true)
     setSaveState('saving')
     // Client scripts scoped to this record type run in a sandboxed evaluator;
@@ -107,6 +111,7 @@ export function RecordDrawer({
   }
 
   async function transition(next: 'active' | 'inactive') {
+    if (preview) return
     setBusy(true)
     const res = await fetch(`/api/records/${typeKey}/${record.id}`, {
       method: 'PATCH',
@@ -136,6 +141,7 @@ export function RecordDrawer({
   }
 
   async function destroy() {
+    if (preview) return
     const ok = await confirmDialog({
       message: t('deleteConfirm', { number: record.recordNumber }),
       tone: 'danger',
@@ -177,7 +183,9 @@ export function RecordDrawer({
         </span>
       }
       description={
-        !canEdit
+        preview
+          ? tp('sampleOnly')
+          : !canEdit
           ? typeName
           : status === 'draft'
             ? t('descriptionDraft')
@@ -192,7 +200,7 @@ export function RecordDrawer({
               <Button variant="outline" disabled={busy} onClick={cancel}>
                 {tc('actions.cancel')}
               </Button>
-              <Button disabled={busy} onClick={save}>
+              <Button disabled={busy || preview} onClick={save}>
                 {busy ? tc('actions.saving') : tc('actions.save')}
               </Button>
             </>
@@ -203,7 +211,7 @@ export function RecordDrawer({
                   {tc('actions.edit')}
                 </Button>
               ) : null}
-              {canEdit ? <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-52 p-1.5" trigger={<Button variant="outline" onClick={() => setActionsOpen((open) => !open)}>{tc('labels.actions')}<ChevronDown className="ml-1 h-3.5 w-3.5" /></Button>}>
+              {canEdit && !preview ? <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-52 p-1.5" trigger={<Button variant="outline" onClick={() => setActionsOpen((open) => !open)}>{tc('labels.actions')}<ChevronDown className="ml-1 h-3.5 w-3.5" /></Button>}>
                 <div className="space-y-0.5 [&_button]:w-full [&_button]:justify-start">
                   {status === 'draft' ? <><Button variant="ghost" disabled={busy || saveState === 'saving'} onClick={() => { setActionsOpen(false); void transition('active') }}>{t('activate')}</Button><Button variant="ghost" className="text-red-600" disabled={busy} onClick={() => { setActionsOpen(false); void destroy() }}><Trash2 size={14} /> {t('deleteDraft')}</Button></> : null}
                   {status === 'active' ? <Button variant="ghost" disabled={busy} onClick={() => { setActionsOpen(false); void transition('inactive') }}>{t('deactivate')}</Button> : null}
@@ -217,7 +225,7 @@ export function RecordDrawer({
       footer={
         <div className="flex w-full items-center gap-3">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {mode === 'edit'
+            {preview ? tp('sampleOnly') : mode === 'edit'
               ? saveState === 'saving'
                 ? tc('actions.saving')
                 : saveState === 'dirty'
@@ -229,6 +237,7 @@ export function RecordDrawer({
       }
     >
       <div className="p-1">
+        <RecordPreviewOptions.Provider value={preview ? [{ value: 'preview-reference', label: tp('sampleReference') }] : null}>
         <RecordFields
           sections={sections}
           values={values}
@@ -236,6 +245,7 @@ export function RecordDrawer({
           disabled={!editable}
           errors={errors}
         />
+        </RecordPreviewOptions.Provider>
       </div>
     </UrlDrawer>
   )

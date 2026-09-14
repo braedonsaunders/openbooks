@@ -41,6 +41,7 @@ test('makeBridgeResult builds ok and error envelopes', () => {
 test('isBridgeMethod allowlists only known methods', () => {
   assert.equal(isBridgeMethod('callBackend'), true)
   assert.equal(isBridgeMethod('records.list'), true)
+  assert.equal(isBridgeMethod('platform.query'), true)
   assert.equal(isBridgeMethod('platform.schema'), true)
   assert.equal(isBridgeMethod('platform.create'), true)
   assert.equal(isBridgeMethod('storage.set'), false)
@@ -96,4 +97,11 @@ test('relative frontend references prefer their own directory over same-named ro
   assert.ok(result.includes('src="LOCAL"'))
   assert.ok(result.includes('src="ICON"'))
   assert.ok(result.includes('href="https://example.test"'))
+})
+
+ test('bridge context explicitly distinguishes draft samples from installed data', () => {
+  for (const preview of [true, false]) {
+    const source = bridgeClientSource({ preview, app: { id: 'a1', key: 'demo', name: 'Demo' }, user: null })
+    assert.ok(source.includes(`"preview":${preview}`))
+  }
 })

@@ -1,9 +1,10 @@
+import { validateOrgReportQuery } from '@/lib/custom-record-report-catalog'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { isDocumentRevisionToken } from '../../../../../lib/api/registry-data'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { validateCustomQuery, validateReportLayout } from '@openbooks/reports'
+import { validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../../lib/authz'
 import { canAccessReportDefinition } from '../../../../../lib/report-execution-context'
 import { canRunReportEntity, canRunReportStatement, guardReportEntity } from '../../../../../lib/report-authz'
@@ -91,7 +92,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let queryJson = JSON.stringify(existing.query)
   if (body.query !== undefined) {
     try {
-      const query = validateCustomQuery(body.query)
+      const query = await validateOrgReportQuery(gate, body.query)
       const denied = await guardReportEntity(gate, query)
       if (denied) return denied
       queryJson = JSON.stringify(query)

@@ -1,9 +1,10 @@
+import { reportEntityCatalog } from './custom-record-report-catalog'
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
-import { REPORT_ENTITY_MAP, defaultColumnsFor, validateCustomQuery, type ReportCustomQuery, type ReportRuleGroup } from '@openbooks/reports'
+import { defaultColumnsFor, validateCustomQuery, type ReportCustomQuery, type ReportRuleGroup } from '@openbooks/reports'
 import type { Authz } from './authz'
 import { canRunReportEntity } from './report-authz'
 import { executeReport, loadReportDefinition } from './custom-reports'
@@ -367,7 +368,8 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
     : await loadView(authz.user.orgId, target.id, authz.user.id, authz.permissions)
   const stored = source?.query
   if (!stored) throw new Error('report_not_found')
-  const entity = REPORT_ENTITY_MAP[stored.entity]
+  const entityMap = await reportEntityCatalog(authz)
+  const entity = entityMap[stored.entity]
   if (!entity) throw new Error('report_entity_not_found')
   // A drill returns the report's OWN supporting rows, so it owes the same
   // entity gate the runner and the export owe. `loadView` already applies it
@@ -407,7 +409,7 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
     measures: [],
     groupBy: null,
     limit: 10_000,
-  } satisfies ReportCustomQuery)
+  } satisfies ReportCustomQuery, entityMap)
   const { money } = await getMoneyFormatter(authz.user.orgId)
   const result = await executeReport(authz.user.orgId, detailQuery, 10_000)
   const allRows = result.groups.flatMap((group) => group.rows)

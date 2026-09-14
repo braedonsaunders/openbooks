@@ -1,5 +1,8 @@
+import { db } from '@openbooks/engine/src/db.ts'
+import { sql } from 'drizzle-orm'
 import 'server-only'
 import { NextResponse } from 'next/server'
+import { customRecordReportCatalog } from './custom-record-report-catalog'
 import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 import { can, type Authz } from './authz'
 import { isFeatureEnabled } from './features'
@@ -55,7 +58,9 @@ export function reportStatementFeatureKey(kind: string | null | undefined): stri
 /** True when `authz` may execute a plan against this entity. */
 export async function canRunReportEntity(authz: Authz, query: unknown): Promise<boolean> {
   const entity = (query as { entity?: string } | null)?.entity
-  if (!entity || !REPORT_ENTITY_MAP[entity]) return false
+  if (!entity) return false
+  if (entity.startsWith('custom:')) return Object.hasOwn(await customRecordReportCatalog(authz), entity)
+  if (!REPORT_ENTITY_MAP[entity]) return false
   const required = reportEntityPermission(query)
   if (required && !can(authz, required)) return false
   const featureKey = reportEntityFeatureKey(query)
@@ -79,6 +84,8 @@ export async function canRunReportStatement(authz: Authz, kind: string | null | 
  * disappears rather than advertising that it exists.
  */
 export async function guardReportEntity(authz: Authz, query: unknown): Promise<NextResponse | null> {
+  const key = (query as { entity?: unknown } | null)?.entity
+  if (typeof key === 'string' && key.startsWith('custom:') && !(await canRunReportEntity(authz, query))) return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
   const required = reportEntityPermission(query)
   if (required && !can(authz, required)) {
     return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
@@ -102,6 +109,10 @@ export async function hiddenReportEntityKeys(authz: Authz): Promise<string[]> {
       out.push(entity.key)
     }
   }
+  const custom = await customRecordReportCatalog(authz)
+  const stored = await db.execute<{ entity: string }>(sql`select distinct query->>'entity' as entity from report_definitions
+    where org_id=${authz.user.orgId} and query->>'entity' like 'custom:%'`)
+  out.push(...stored.rows.filter(r => !Object.hasOwn(custom, r.entity)).map(r => r.entity))
   return out
 }
 

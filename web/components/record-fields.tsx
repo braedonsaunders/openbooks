@@ -7,7 +7,7 @@
 // fields live, and feeds the gl_account/party pickers from
 // /api/forms/options (module-level cached per source).
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Star, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import {
@@ -28,6 +28,9 @@ import { useMoney } from './money-provider'
 import { ReadOnlyValue } from './read-only-value'
 
 // --- /api/forms/options cache ------------------------------------------------
+
+/** Preview lookups are supplied locally; the native pickers never fetch tenant data. */
+export const RecordPreviewOptions = createContext<SelectOption[] | null>(null)
 
 const optionsCache = new Map<string, Promise<SelectOption[]>>()
 
@@ -53,9 +56,11 @@ function fetchOptions(source: 'gl_accounts' | 'parties', partyKind?: PartyPicker
 }
 
 function useEntityOptions(source: 'gl_accounts' | 'parties', partyKind?: PartyPickerKind) {
+  const previewOptions = useContext(RecordPreviewOptions)
   const [options, setOptions] = useState<SelectOption[] | null>(null)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
+    if (previewOptions) return
     let alive = true
     setFailed(false)
     fetchOptions(source, partyKind).then(
@@ -65,8 +70,8 @@ function useEntityOptions(source: 'gl_accounts' | 'parties', partyKind?: PartyPi
     return () => {
       alive = false
     }
-  }, [source, partyKind])
-  return { options, failed }
+  }, [source, partyKind, previewOptions])
+  return { options: previewOptions ?? options, failed: previewOptions ? false : failed }
 }
 
 // --- Field sub-inputs ----------------------------------------------------------

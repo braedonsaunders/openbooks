@@ -255,6 +255,7 @@
   "editor": {
     "tabsLabel": "Package editor",
     "overview": "Configuration",
+    "sections": { "general": "General", "screens": "Screens", "data": "Data & contributions", "actions": "Actions", "access": "Access" },
     "files": "Files",
     "download": "Export package",
     "draftHelp": "Edit an unpublished package. Saving prepares a draft for validation, preview, and activation; it does not change the running app.",

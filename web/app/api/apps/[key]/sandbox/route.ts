@@ -86,6 +86,7 @@ export async function GET(
       app = { id: installed.id, key, name: installed.name }
     }
     const context = {
+      preview: Boolean(draftId),
       app,
       user: {
         id: gate.user.id,

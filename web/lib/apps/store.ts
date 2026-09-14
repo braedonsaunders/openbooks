@@ -719,6 +719,9 @@ export async function runBridgeMethod(opts: {
       try {
         let result: unknown
         switch (opts.method) {
+          case 'platform.query':
+            result = await platform.query!(opts.payload?.plan)
+            break
           case 'platform.schema':
             result = await platform.schema()
             break
@@ -770,7 +773,8 @@ export async function runBridgeMethod(opts: {
           method: opts.method,
           typeKey,
           id,
-          payload: opts.payload?.body ?? opts.payload?.options ?? null,
+          payload: opts.payload?.body ?? opts.payload?.options ?? opts.payload?.plan ?? null,
+          ...(opts.method === 'platform.query' ? { readInvocation: crypto.randomUUID() } : {}),
         }),
         requestHash: requestHash({ method: opts.method, typeKey, id, payload: opts.payload }),
         run: attemptDispatch,
@@ -872,6 +876,7 @@ export async function runBridgeMethod(opts: {
 }
 
 function platformBridgeUnits(method: string): number {
+  if (method === 'platform.query') return 80
   if (method === 'platform.schema' || method === 'platform.list') return 20
   if (method === 'platform.get') return 10
   if (method === 'platform.create' || method === 'platform.update' || method === 'platform.delete') return 50

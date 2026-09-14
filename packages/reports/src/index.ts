@@ -9,3 +9,5 @@ export * from './validate'
 export * from './schedule-policy'
 export * from './built-ins'
 export * from './standard-statements'
+
+export * from "./custom-record-entities"

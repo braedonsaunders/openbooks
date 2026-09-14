@@ -1,3 +1,4 @@
+import { reportEntityCatalog } from '@/lib/custom-record-report-catalog'
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
@@ -20,7 +21,7 @@ import {
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { REPORT_ENTITY_MAP, type ReportCustomQuery } from '@openbooks/reports'
+import { type ReportCustomQuery } from '@openbooks/reports'
 import { requirePermission } from '../../../../lib/authz'
 import { hiddenReportEntityKeys, hiddenReportStatementKinds } from '../../../../lib/report-authz'
 import { parseListParams, pickString } from '../../../../lib/list-params'
@@ -101,12 +102,13 @@ export async function loadCustomReports(
 
   /** One-line human summary of what a plan does, for the list. Entity labels
    *  resolve through the reports.catalog.* message catalog at render time. */
+  const entityMap = await reportEntityCatalog(authz)
   function summarizePlan(query: ReportCustomQuery | null): string {
     // Statement definitions intentionally store their governed statement plan
     // in `statement`, not the entity-query column used by custom reports.
     if (!query) return t('kind.builtIn')
-    const entity = REPORT_ENTITY_MAP[query.entity]
-    const source = entity ? tReports(`catalog.entities.${entity.key}.label`) : query.entity
+    const entity = entityMap[query.entity]
+    const source = entity ? (entity.key.startsWith('custom:') ? entity.label : tReports(`catalog.entities.${entity.key}.label`)) : query.entity
     if (query.mode === 'summarize') {
       return t('list.summarySummarize', {
         source,

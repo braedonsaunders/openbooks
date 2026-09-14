@@ -66,6 +66,7 @@ export interface AppJournalAdapter {
 
 /** Permission-scoped access to the platform's self-describing record API. */
 export interface AppPlatformAdapter {
+  query?(plan: unknown): Promise<unknown>;
   schema(): Promise<unknown>;
   list(typeKey: string, options: Record<string, unknown>): Promise<unknown>;
   get(typeKey: string, id: string): Promise<unknown>;
@@ -383,6 +384,10 @@ export async function runAppEndpoint(opts: {
         }
       });
 
+    const platformQuery = platformCall("__platform_query", 80, (plan) => {
+      if (!adapters.platform?.query) throw new Error("platform query unavailable");
+      return adapters.platform.query(JSON.parse(String(plan)));
+    });
     const platformSchema = platformCall("__platform_schema", COST.platformSchema, () => adapters.platform!.schema());
     const platformList = platformCall("__platform_list", COST.platformList, (typeH, optionsH) =>
       adapters.platform!.list(String(typeH), optionsH ? JSON.parse(String(optionsH)) : {}),
@@ -408,6 +413,7 @@ export async function runAppEndpoint(opts: {
     vm.setProp(obHandle, "__records_list", recordsList);
     vm.setProp(obHandle, "__records_get", recordsGet);
     vm.setProp(obHandle, "__journal_create", journalCreate);
+    vm.setProp(obHandle, "__platform_query", platformQuery);
     vm.setProp(obHandle, "__platform_schema", platformSchema);
     vm.setProp(obHandle, "__platform_list", platformList);
     vm.setProp(obHandle, "__platform_get", platformGet);
@@ -424,6 +430,7 @@ export async function runAppEndpoint(opts: {
       recordsList,
       recordsGet,
       journalCreate,
+      platformQuery,
       platformSchema,
       platformList,
       platformGet,
@@ -459,6 +466,7 @@ export async function runAppEndpoint(opts: {
         };
 
         ob.platform = {
+          query: function(plan) { return JSON.parse(ob.__platform_query(JSON.stringify(plan))); },
           schema: function() { return JSON.parse(ob.__platform_schema()); },
           list: function(typeKey, options) { return JSON.parse(ob.__platform_list(String(typeKey), JSON.stringify(options || {}))); },
           get: function(typeKey, id) { return JSON.parse(ob.__platform_get(String(typeKey), String(id))); },

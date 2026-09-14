@@ -326,3 +326,19 @@ test("an infinite loop is stopped by the deadline", async () => {
   });
   assert.equal(r.status, "timeout");
 });
+
+test('platform query plans round-trip through QuickJS without exposing SQL', async () => {
+  const adapters = withPlatform(fakeAdapters())
+  const plan = { from: { type: 'items', as: 'item' }, select: [{ source: 'item', field: 'id' }] }
+  adapters.platform!.query = async (received) => {
+    assert.deepEqual(received, plan)
+    return { records: [{ 'item.id': 'i1' }], hasMore: false }
+  }
+  const result = await runAppEndpoint({
+    source: 'function handler(request) { return ob.platform.query(request.body); }',
+    request: req({ body: plan }), adapters,
+  })
+  assert.equal(result.status, 'ok')
+  assert.deepEqual(result.response!.body, { records: [{ 'item.id': 'i1' }], hasMore: false })
+  assert.equal(result.units, 80)
+})

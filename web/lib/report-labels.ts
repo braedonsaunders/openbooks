@@ -1,6 +1,6 @@
 import "server-only";
 import { getTranslations } from "next-intl/server";
-import type { ReportRunLabels } from "@openbooks/reports";
+import type { ReportRunLabels, ReportEntity } from "@openbooks/reports";
 
 /**
  * Bridge between the request locale and the custom-report executor's
@@ -12,18 +12,18 @@ import type { ReportRunLabels } from "@openbooks/reports";
  */
 export async function reportRunLabels(): Promise<ReportRunLabels> {
   const t = await getTranslations("reports");
-  const column = (entityKey: string, key: string) => t(`catalog.columns.${entityKey}.${key}`);
+  const column = (entity: ReportEntity, key: string) => entity.key.startsWith('custom:') ? entity.columns.find(c => c.key === key)?.label ?? key : t(`catalog.columns.${entity.key}.${key}`);
   return {
-    column: (entity, key) => column(entity.key, key),
+    column: (entity, key) => column(entity, key),
     measure: (entity, m) => {
       if (m.label) return m.label;
       if (m.fn === "count" || !m.column) return t(`aggs.${m.fn}`);
-      return t("run.measureOf", { fn: t(`aggs.${m.fn}`), column: column(entity.key, m.column) });
+      return t("run.measureOf", { fn: t(`aggs.${m.fn}`), column: column(entity, m.column) });
     },
     breakout: (entity, b) =>
       b.bin
-        ? t("run.breakoutBy", { column: column(entity.key, b.column), bin: t(`run.bins.${b.bin}`) })
-        : column(entity.key, b.column),
+        ? t("run.breakoutBy", { column: column(entity, b.column), bin: t(`run.bins.${b.bin}`) })
+        : column(entity, b.column),
     resultsTitle: () => t("run.results"),
     summaryTitle: () => t("run.summary"),
     sectionTitle: (label, value) => t("run.section", { label, value }),
@@ -38,7 +38,7 @@ export async function reportRunLabels(): Promise<ReportRunLabels> {
     grandTotalsTitle: () => t("run.grandTotals"),
     bool: (v) => t(v ? "run.yes" : "run.no"),
     enumValue: (v) => (t.has(`catalog.enumValues.${v}`) ? t(`catalog.enumValues.${v}`) : null),
-    entityLabel: (entity) => t(`catalog.entities.${entity.key}.label`),
+    entityLabel: (entity) => entity.key.startsWith('custom:') ? entity.label : t(`catalog.entities.${entity.key}.label`),
   };
 }
 

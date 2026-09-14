@@ -53,6 +53,7 @@ import type { ExtensionDrawer } from './ExtensionDrawer'
 type ExtensionDrawerProps = Parameters<typeof ExtensionDrawer>[0]
 
 export interface AdminExtensionRow {
+  rowId: string
   key: string
   name: string
   href: string
@@ -66,9 +67,7 @@ export interface AdminExtensionRow {
 
 export interface AdminExtensionsData {
   canAuthor: boolean
-  drafts: { id: string; name: string; href: string }[]
   newLabel: string
-  draftLabel: string
   title: string
   description: string
   backHref: string
@@ -117,23 +116,32 @@ export async function loadAdminExtensions(
   const status = pickString(sp.status)
   const appKey = pickString(sp.app)
 
-  const where = sql`a.org_id = ${orgId}
+  // Pending proposals and installed versions share one filtered, paginated list.
+  // Draft ownership is identical to getExtensionDraft; never expose another author.
+  const candidates = sql`with candidates as (
+    select a.id::text as row_id, a.key, a.name, a.status, a.updated_at,
+      v.version, v.manifest, null::uuid as draft_id,
+      (select count(*) from app_runs r where r.app_id=a.id and r.org_id=a.org_id) as run_count
+    from apps a left join app_versions v on v.id=a.active_version_id and v.org_id=a.org_id
+    where a.org_id=${orgId}
+    union all
+    select d.id::text, d.bundle->'manifest'->>'key', d.bundle->'manifest'->>'name',
+      'pending', d.created_at, d.bundle->'manifest'->>'version', d.bundle->'manifest', d.id, 0
+    from extension_drafts d
+    where d.org_id=${orgId} and d.created_by=${authz.user.id}
+      and d.status='draft' and ${canAuthor}
+  )`
+  const where = sql`true
     ${status ? sql` and a.status = ${status}` : sql``}
     ${params.q ? sql` and (a.name ilike ${'%' + params.q + '%'} or a.key ilike ${'%' + params.q + '%'})` : sql``}`
-
   const [apps, statuses, totalRow] = await Promise.all([
-    (db.execute<{key:string;name:string;status:string;version:string|null;manifest:unknown;run_count:string;updatedAt:string}>(sql`
-      select a.key, a.name, a.description, a.status,
-             a.granted_permissions as "grantedPermissions", a.updated_at as "updatedAt",
-             v.version, v.manifest,
-             (select count(*) from app_runs r where r.app_id = a.id and r.org_id = a.org_id) as run_count
-        from apps a left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
-       where ${where}
-       order by a.name
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `)),
-    (db.execute<{status:string;n:string}>(sql`select status, count(*) as n from apps where org_id = ${orgId} group by 1`)),
-    (db.execute(sql`select count(*) as n from apps a where ${where}`)),
+    db.execute<{row_id:string;key:string;name:string;status:string;version:string|null;manifest:unknown;draft_id:string|null;run_count:string;updatedAt:string}>(sql`
+      ${candidates} select a.*, a.updated_at as "updatedAt" from candidates a
+      where ${where} order by a.name, a.row_id
+      limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
+    `),
+    db.execute<{status:string;n:string}>(sql`${candidates} select status,count(*) as n from candidates group by status`),
+    db.execute(sql`${candidates} select count(*) as n from candidates a where ${where}`),
   ])
 
   // Drawer payload for the selected app.
@@ -172,10 +180,9 @@ export async function loadAdminExtensions(
   const total = Number(totalRow.rows[0]?.n ?? 0)
   const endpointCount = (m: unknown) => (m as AppManifest | null)?.endpoints?.length ?? 0
 
-  const drafts = canAuthor ? (await db.execute<{ id: string; name: string }>(sql`select id,bundle->'manifest'->>'name' as name from extension_drafts where org_id=${orgId} and created_by=${authz.user.id} and status='draft' order by created_at desc`)).rows : []
+  const statusText = (value: string) => value === 'pending' ? tExtensions('draft.pending') : tAdminExtensions(`statuses.${value}`)
   return {
-    canAuthor, newLabel: tExtensions('actions.new'), draftLabel: tExtensions('actions.drafts'),
-    drafts: drafts.map(draft => ({ ...draft, href: `/admin/apps?draft=${draft.id}` })),
+    canAuthor, newLabel: tExtensions('actions.new'),
     title: tExtensions('title'),
     description: tExtensions('description'),
     backHref: '/admin',
@@ -186,7 +193,7 @@ export async function loadAdminExtensions(
     statusLabel: tAdminExtensions('status'),
     statusOptions: statuses.rows.map((r) => ({
       value: r.status,
-      label: tAdminExtensions(`statuses.${r.status}`),
+      label: statusText(r.status),
       count: Number(r.n),
     })),
     currentParams: sp,
@@ -199,13 +206,14 @@ export async function loadAdminExtensions(
     columnStatus: tAdminExtensions('columns.status'),
     columnUpdated: tAdminExtensions('columns.updated'),
     rows: apps.rows.map((a) => ({
+      rowId: a.row_id,
       key: String(a.key),
       name: String(a.name),
-      href: buildListDrawerHref('/admin/apps', sp, 'app', String(a.key)),
+      href: buildListDrawerHref('/admin/apps', sp, a.draft_id ? 'draft' : 'app', a.draft_id ?? String(a.key)),
       versionLabel: a.version ? `v${a.version}` : '—',
       endpointCount: endpointCount(a.manifest),
       runCount: Number(a.run_count),
-      statusLabel: tAdminExtensions(`statuses.${a.status}`),
+      statusLabel: statusText(a.status),
       statusVariant: (a.status === 'installed' ? 'success' : 'outline') as 'success' | 'outline',
       updated: dateTime(a.updatedAt),
     })),
@@ -262,11 +270,10 @@ export function adminExtensionsSpec(data: AdminExtensionsData): PageSpec {
       ]),
     ],
     body: [
-      ...(data.drafts.length ? [grid('space-y-2', [{ kind: 'text', content: data.draftLabel }, ...data.drafts.map(draft => widgetBlock('link-button', { href: draft.href, label: draft.name, variant: 'outline' }))])] : []),
       table({
         variant: 'app',
         rows: f('rows'),
-        rowKey: item('key'),
+        rowKey: item('rowId'),
         emptyRow: { text: f('emptyLabel'), colSpan: 7, className: EMPTY_ROW_CLASS },
         columns: [
           column(rootF('columnName'), link(item('name'), item('href'), LINK_CLASS)),
