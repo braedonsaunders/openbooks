@@ -7,6 +7,7 @@ import { isUuid } from '../../../../lib/list-params'
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { TIMESHEET_WEEK_SUBJECT_KIND } from '@openbooks/engine/src/flows/timesheet-weeks-adapter.ts'
 import {
+  assertWeekSubmittable,
   ensureTimesheetWeek,
   isIsoDate,
   loadWeek,
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
     // tenant transaction, so a failed dispatch rolls back every submission
     // write instead of compensating with a second, failure-prone update.
     flow = await withOrgTransaction(orgId, async () => {
-      await db.execute(sql`
+      const moved = await db.execute(sql`
         update time_entries
            set status = 'submitted', rejection_reason = null,
                updated_at = now(), updated_by = ${user.id}
@@ -86,6 +87,11 @@ export async function POST(req: Request) {
         user.id,
         gate.allowedSubsidiaryIds,
       )
+      // A resubmission while gates are open would raise a duplicate set of
+      // gates beside the live ones, and a submission with no movable entries
+      // would raise runs and gates for nothing. Refuse both before the
+      // header stamp and the dispatch; throwing rolls the flip back.
+      await assertWeekSubmittable(orgId, header.id, moved.rowCount ?? 0)
       await setTimesheetWeekStatus(
         orgId,
         ownedEmployee,
@@ -114,6 +120,13 @@ export async function POST(req: Request) {
         { error: 'The approval workflow for this timesheet could not start. Nothing was submitted.' },
         { status: 409 },
       )
+    }
+    const message = error instanceof Error ? error.message : String(error)
+    if (/pending approval workflow/i.test(message)) {
+      return NextResponse.json({ error: message }, { status: 409 })
+    }
+    if (/nothing to submit/i.test(message)) {
+      return NextResponse.json({ error: message }, { status: 422 })
     }
     throw error
   }
