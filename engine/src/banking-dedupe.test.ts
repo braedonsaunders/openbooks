@@ -220,3 +220,59 @@ test("plaid adapter imports only settled transactions, never pending ones", asyn
     ["posted-1"],
   );
 });
+
+test("gocardless adapter keys lines by the provider-unique transaction id", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = async (input) => {
+    if (String(input).endsWith("/token/new/")) {
+      return new Response(JSON.stringify({ access: "token" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({
+      transactions: {
+        booked: [
+          {
+            transactionId: "BANK-SHARED-REF",
+            internalTransactionId: "internal-aaa",
+            bookingDate: "2026-08-10",
+            transactionAmount: { amount: "-10.00", currency: "CAD" },
+            remittanceInformationUnstructured: "FIRST BOOKING",
+          },
+          {
+            transactionId: "BANK-SHARED-REF",
+            internalTransactionId: "internal-bbb",
+            bookingDate: "2026-08-11",
+            transactionAmount: { amount: "-20.00", currency: "CAD" },
+            remittanceInformationUnstructured: "SECOND BOOKING",
+          },
+        ],
+      },
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const adapter = getBankFeedAdapter("gocardless");
+  assert.ok(adapter);
+  const fetched = await adapter.fetch(
+    { secretId: "id", secretKey: "key" },
+    "external-account-1",
+    "2026-08-01",
+    "2026-08-23",
+  );
+  // The bank-supplied transactionId is not unique per booking; the provider's
+  // internal id is. Keying by the bank id silently drops the second booking.
+  assert.deepEqual(
+    fetched.lines.map((line) => line.bankTransactionId),
+    ["internal-aaa", "internal-bbb"],
+  );
+  const filtered = filterDuplicateStatementLines(fetched.lines, new Set());
+  assert.equal(filtered.lines.length, 2);
+  assert.equal(filtered.duplicates, 0);
+});
