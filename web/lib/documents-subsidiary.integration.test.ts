@@ -1,0 +1,55 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+
+// A document's subsidiary is structural: posting falls back to the root
+// entity when it is null, but every subsidiary-scoped list excludes null, so
+// clearing it hides a live document from restricted readers while its ledger
+// entries remain. The drawer sends `subsidiaryId: null` when its entity
+// picker is empty, and the service boundary must refuse that shape the same
+// way it refuses clearing a required party.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    if (specifier.startsWith("@/")) {
+      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const { sql } = await import("drizzle-orm");
+const { db } = await import("@openbooks/engine/src/db.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { applyDocumentEdit, DocumentEditError, loadDocumentEditCurrent } = await import("./documents.ts");
+
+const DB = !!process.env.OPENBOOKS_DB_URL;
+
+test("applyDocumentEdit refuses to clear a document's subsidiary", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Subsidiary keeper", "subsidiary_keeper");
+    const id = randomUUID();
+    await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
+      values (${id},${org.orgId},'vendor_bill','draft','NULL-SUB-1',${org.subsidiaryId},${org.vendorId},${org.date},'CAD','0','0','0',${actor})`);
+    const current = await loadDocumentEditCurrent(id, org.orgId);
+    assert.ok(current);
+    await assert.rejects(
+      applyDocumentEdit(
+        id,
+        current,
+        { subsidiaryId: null, expectedUpdatedAt: current.updatedAt },
+        { orgId: org.orgId, userId: actor, source: "api" },
+      ),
+      (error: unknown) => error instanceof DocumentEditError && error.status === 422,
+    );
+    const after = (await db.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from documents where id = ${id} and org_id = ${org.orgId}`));
+    assert.equal(after.rows[0]?.subsidiary_id, org.subsidiaryId);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

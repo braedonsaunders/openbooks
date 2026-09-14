@@ -715,6 +715,14 @@ export async function applyDocumentEdit(
   if (cfg.partyRole && body.partyId === null) {
     throw new DocumentEditError(422, `a ${current.kind} requires a ${cfg.partyRole}; the party cannot be removed`)
   }
+  // Every document carries its legal entity: posting falls back to the root
+  // when it is null, but every subsidiary-scoped list excludes null, so an
+  // explicit null would hide a live document from restricted readers while
+  // its ledger entries remain. Creation always assigns the root; null is
+  // never a legitimate assignment.
+  if (body.subsidiaryId === null) {
+    throw new DocumentEditError(422, `a ${current.kind} requires a subsidiary; the subsidiary cannot be removed`)
+  }
   if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
     const subsidiary = (await db.execute(sql`
       select 1 from subsidiaries
